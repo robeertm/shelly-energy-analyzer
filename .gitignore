@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# App runtime data (contains user-specific data)
+data/
+logs/
+*.log
+*.sqlite
+*.sqlite3
+
+# User config (contains secrets like Telegram token/chat id)
+config.json
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
