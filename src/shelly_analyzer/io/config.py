@@ -69,6 +69,12 @@ class UiConfig:
     live_smoothing_enabled: bool = False
     live_smoothing_seconds: int = 10
 
+    # Live plot filter by time-of-day: all|day|night
+    live_daynight_mode: str = "all"
+    # Day/Night split times (local time, HH:MM). Default: day 06:00-22:00.
+    live_day_start: str = "06:00"
+    live_night_start: str = "22:00"
+
     # Optional Telegram notifications for alerts
     telegram_enabled: bool = False
     telegram_bot_token: str = ""
@@ -509,6 +515,9 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "live_web_token": cfg.ui.live_web_token,
             "live_smoothing_enabled": getattr(cfg.ui, "live_smoothing_enabled", False),
             "live_smoothing_seconds": getattr(cfg.ui, "live_smoothing_seconds", 10),
+            "live_daynight_mode": getattr(cfg.ui, "live_daynight_mode", "all"),
+            "live_day_start": getattr(cfg.ui, "live_day_start", "06:00"),
+            "live_night_start": getattr(cfg.ui, "live_night_start", "22:00"),
             "telegram_enabled": getattr(cfg.ui, "telegram_enabled", False),
             "telegram_bot_token": getattr(cfg.ui, "telegram_bot_token", ""),
             "telegram_chat_id": getattr(cfg.ui, "telegram_chat_id", ""),

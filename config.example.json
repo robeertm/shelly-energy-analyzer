@@ -1,5 +1,5 @@
 {
-  "version": "5.8.14.37",
+  "version": "5.8.14.47",
   "devices": [
     {
       "key": "shelly1",
@@ -52,7 +52,10 @@
     "telegram_monthly_summary_time": "00:00",
     "telegram_daily_summary_last_sent": "",
     "telegram_monthly_summary_last_sent": "",
-    "telegram_summary_load_w": 200.0
+    "telegram_summary_load_w": 200.0,
+    "live_daynight_mode": "all",
+    "live_day_start": "06:00",
+    "live_night_start": "22:00"
   },
   "pricing": {
     "electricity_price_eur_per_kwh": 0.3265,

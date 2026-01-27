@@ -4128,6 +4128,14 @@ class App(tk.Tk):
         self.live_web_refresh_ctl = tk.DoubleVar(value=float(self.cfg.ui.live_web_refresh_seconds))
         self.live_smooth_ctl = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "live_smoothing_enabled", False)))
         self.live_smooth_sec_ctl = tk.IntVar(value=int(getattr(self.cfg.ui, "live_smoothing_seconds", 10)))
+        _dn_mode0 = str(getattr(self.cfg.ui, "live_daynight_mode", "all") or "all").strip().lower()
+        if _dn_mode0 == "day":
+            _dn_label0 = self.t('live.day')
+        elif _dn_mode0 == "night":
+            _dn_label0 = self.t('live.night')
+        else:
+            _dn_label0 = self.t('live.all')
+        self.live_daynight_ctl = tk.StringVar(value=_dn_label0)
 
         ctl = ttk.Frame(top2)
         ctl.pack(side="left")
@@ -4149,9 +4157,14 @@ class App(tk.Tk):
         cb_smooth = ttk.Combobox(ctl, width=3, state="readonly", textvariable=self.live_smooth_sec_ctl, values=[0, 3, 5, 10, 20, 30])
         cb_smooth.grid(row=0, column=8, padx=(0, 10))
 
+        ttk.Label(ctl, text=self.t('live.daynight')).grid(row=0, column=9, padx=(0, 4))
+        cb_dn = ttk.Combobox(ctl, width=6, state="readonly", textvariable=self.live_daynight_ctl,
+                            values=[self.t('live.all'), self.t('live.day'), self.t('live.night')])
+        cb_dn.grid(row=0, column=10, padx=(0, 10))
+
         # Open current log file (useful for debugging)
         try:
-            ttk.Button(ctl, text=self.t('live.open_log'), command=self._open_log_file).grid(row=0, column=10, padx=(6, 0))
+            ttk.Button(ctl, text=self.t('live.open_log'), command=self._open_log_file).grid(row=0, column=12, padx=(6, 0))
         except Exception:
             pass
 
@@ -4172,6 +4185,10 @@ class App(tk.Tk):
                 pass
             try:
                 self.live_smooth_ctl.trace_add('write', lambda *_a: self._schedule_apply_live_controls())
+            except Exception:
+                pass
+            try:
+                self.live_daynight_ctl.trace_add('write', lambda *_a: self._schedule_apply_live_controls())
             except Exception:
                 pass
         except Exception:
@@ -5982,6 +5999,22 @@ class App(tk.Tk):
         except Exception:
             smooth_sec = int(getattr(self.cfg.ui, 'live_smoothing_seconds', 10))
 
+        # Day/Night mode (UI theme) - stored internally as: all|day|night
+        try:
+            _dn_label = str(self.live_daynight_ctl.get() or "").strip()
+        except Exception:
+            _dn_label = ""
+        try:
+            if _dn_label == self.t('live.day'):
+                dn_mode = "day"
+            elif _dn_label == self.t('live.night'):
+                dn_mode = "night"
+            else:
+                dn_mode = "all"
+        except Exception:
+            dn_mode = "all"
+
+
         poll_s = max(0.2, float(poll_s))
         win_m = max(1, int(win_m))
         web_refresh_s = max(0.25, float(web_refresh_s))
@@ -6004,6 +6037,7 @@ class App(tk.Tk):
             bool(getattr(old_ui, 'live_smoothing_enabled', smooth_on)) != smooth_on
             or int(getattr(old_ui, 'live_smoothing_seconds', smooth_sec)) != smooth_sec
         )
+        changed_dn = str(getattr(old_ui, 'live_daynight_mode', 'all')) != str(dn_mode)
 
         # Persist config
         self.cfg = replace(
@@ -6017,6 +6051,7 @@ class App(tk.Tk):
                 live_web_refresh_seconds=web_refresh_s,
                 live_smoothing_enabled=smooth_on,
                 live_smoothing_seconds=smooth_sec,
+                live_daynight_mode=dn_mode,
             ),
         )
         try:
@@ -6068,7 +6103,7 @@ class App(tk.Tk):
         except Exception:
             pass
 
-        if changed_win or changed_smooth or changed_web_on or changed_web_refresh:
+        if changed_win or changed_smooth or changed_dn or changed_web_on or changed_web_refresh:
             try:
                 self._live_last_redraw = 0.0
             except Exception:
@@ -6587,6 +6622,127 @@ class App(tk.Tk):
             except Exception:
                 return ys_list
 
+                # Day/Night appearance for Live plots (theme).
+        # This control changes the *look* of the plots (light/dark), not the data selection.
+        try:
+            dn_pref = str(getattr(self.cfg.ui, "live_daynight_mode", "all") or "all").strip().lower()
+        except Exception:
+            dn_pref = "all"
+        if dn_pref not in ("all", "day", "night"):
+            dn_pref = "all"
+
+        def _parse_hhmm(s: str, default_minutes: int) -> int:
+            try:
+                s = str(s or "").strip()
+                hh, mm = s.split(":", 1)
+                h = max(0, min(23, int(hh)))
+                m = max(0, min(59, int(mm)))
+                return h * 60 + m
+            except Exception:
+                return int(default_minutes)
+
+        day_start_min = _parse_hhmm(getattr(self.cfg.ui, "live_day_start", "06:00"), 6 * 60)
+        night_start_min = _parse_hhmm(getattr(self.cfg.ui, "live_night_start", "22:00"), 22 * 60)
+
+        def _is_day_minutes(cur_min: int) -> bool:
+            # Day is [day_start, night_start). Handles wrap-around (e.g. 22:00–06:00).
+            if day_start_min < night_start_min:
+                return day_start_min <= cur_min < night_start_min
+            return cur_min >= day_start_min or cur_min < night_start_min
+
+        # Resolve effective theme (all=auto based on current local time)
+        try:
+            _now = datetime.now()
+            _cur_min = int(_now.hour) * 60 + int(_now.minute)
+        except Exception:
+            _cur_min = 12 * 60
+
+        if dn_pref == "all":
+            theme = "day" if _is_day_minutes(_cur_min) else "night"
+        else:
+            theme = dn_pref
+
+        def _apply_live_theme(fig, ax):
+            """Apply light/dark theme to a single matplotlib axis."""
+            try:
+                if theme == "night":
+                    bg = "#111111"
+                    fg = "#E6E6E6"
+                    grid = "#444444"
+                else:
+                    bg = "#FFFFFF"
+                    fg = "#000000"
+                    grid = "#BBBBBB"
+
+                try:
+                    fig.patch.set_facecolor(bg)
+                except Exception:
+                    pass
+                try:
+                    ax.set_facecolor(bg)
+                except Exception:
+                    pass
+                try:
+                    ax.tick_params(axis="both", colors=fg)
+                except Exception:
+                    pass
+                try:
+                    ax.xaxis.label.set_color(fg)
+                    ax.yaxis.label.set_color(fg)
+                except Exception:
+                    pass
+                try:
+                    if ax.title:
+                        ax.title.set_color(fg)
+                except Exception:
+                    pass
+                try:
+                    for spine in ax.spines.values():
+                        spine.set_color(fg)
+                except Exception:
+                    pass
+                try:
+                    ax.grid(True, axis="y", alpha=0.25)
+                    # Adjust grid color if possible
+                    for gl in ax.get_ygridlines():
+                        gl.set_color(grid)
+                except Exception:
+                    pass
+                try:
+                    leg = ax.get_legend()
+                    if leg is not None:
+                        try:
+                            leg.get_frame().set_facecolor(bg)
+                            leg.get_frame().set_edgecolor(grid)
+                        except Exception:
+                            pass
+                        try:
+                            for txt in leg.get_texts():
+                                try:
+                                    txt.set_color(fg)
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    # Any additional texts/annotations on the axis
+                    for txt in getattr(ax, "texts", []) or []:
+                        try:
+                            txt.set_color(fg)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            except Exception:
+                pass
+
+        # Backwards compat: keep calls in plot code harmless
+        def _filter_daynight(xs_dt, ys_list):
+            return xs_dt, ys_list
+
         def _slice_live(arr: List[Tuple[int, float]]) -> List[Tuple[int, float]]:
             if not arr:
                 return arr
@@ -6623,14 +6779,17 @@ class App(tk.Tk):
                 ax_p.clear()
                 ax_p.set_ylabel("W")
                 ax_p.set_xlabel(self.t('live.time'))
+                _apply_live_theme(self._live_figs[d.key]['power'], ax_p)
                 if arr:
                     xs = [datetime.fromtimestamp(t) for t, _ in arr]
                     ys = [v for _, v in arr]
+                    xs, ys = _filter_daynight(xs, ys)
                     ys = _maybe_smooth(xs, ys)
                     ax_p.plot(xs, ys)
                 ax_p.grid(True, axis="y", alpha=0.3)
                 self._configure_time_axis(ax_p, canvas_p.get_tk_widget(), win_m)
                 self._apply_axis_layout(self._live_figs[d.key]["power"], ax_p, canvas_p.get_tk_widget(), legend=False)
+                _apply_live_theme(self._live_figs[d.key]["power"], ax_p)
                 canvas_p.draw_idle()
 
             # Voltage (L1/L2/L3 in one plot)
@@ -6641,6 +6800,7 @@ class App(tk.Tk):
                 ax_v.clear()
                 ax_v.set_ylabel("V")
                 ax_v.set_xlabel(self.t('live.time'))
+                _apply_live_theme(self._live_figs[d.key]['voltage'], ax_v)
                 n_series = 0
                 ph = int(getattr(d, "phases", 3) or 3)
                 phase_keys = [("a_voltage", "L1")] if ph <= 1 else [("a_voltage", "L1"), ("b_voltage", "L2"), ("c_voltage", "L3")]
@@ -6650,6 +6810,7 @@ class App(tk.Tk):
                         continue
                     xs = [datetime.fromtimestamp(t) for t, _ in arr]
                     ys = [v for _, v in arr]
+                    xs, ys = _filter_daynight(xs, ys)
                     ys = _maybe_smooth(xs, ys)
                     ax_v.plot(xs, ys, label=label)
                     n_series += 1
@@ -6665,6 +6826,7 @@ class App(tk.Tk):
                 ax_v.grid(True, axis="y", alpha=0.3)
                 self._configure_time_axis(ax_v, canvas_v.get_tk_widget(), win_m)
                 self._apply_axis_layout(self._live_figs[d.key]["voltage"], ax_v, canvas_v.get_tk_widget(), legend=(n_series > 1))
+                _apply_live_theme(self._live_figs[d.key]["voltage"], ax_v)
                 canvas_v.draw_idle()
 
             # Current (L1/L2/L3 in one plot)
@@ -6675,6 +6837,7 @@ class App(tk.Tk):
                 ax_c.clear()
                 ax_c.set_ylabel("A")
                 ax_c.set_xlabel(self.t('live.time'))
+                _apply_live_theme(self._live_figs[d.key]['current'], ax_c)
                 n_series = 0
                 ph = int(getattr(d, "phases", 3) or 3)
                 phase_keys = [("a_current", "L1")] if ph <= 1 else [("a_current", "L1"), ("b_current", "L2"), ("c_current", "L3")]
@@ -6684,6 +6847,7 @@ class App(tk.Tk):
                         continue
                     xs = [datetime.fromtimestamp(t) for t, _ in arr]
                     ys = [v for _, v in arr]
+                    xs, ys = _filter_daynight(xs, ys)
                     ys = _maybe_smooth(xs, ys)
                     ax_c.plot(xs, ys, label=label)
                     n_series += 1
@@ -6699,6 +6863,7 @@ class App(tk.Tk):
                 ax_c.grid(True, axis="y", alpha=0.3)
                 self._configure_time_axis(ax_c, canvas_c.get_tk_widget(), win_m)
                 self._apply_axis_layout(self._live_figs[d.key]["current"], ax_c, canvas_c.get_tk_widget(), legend=(n_series > 1))
+                _apply_live_theme(self._live_figs[d.key]['current'], ax_c)
                 canvas_c.draw_idle()
 
     def _configure_time_axis(self, ax, widget: tk.Widget, window_minutes: int) -> None:
