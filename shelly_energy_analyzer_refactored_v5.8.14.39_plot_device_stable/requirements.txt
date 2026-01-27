@@ -1,0 +1,15 @@
+requests>=2.31
+pandas>=2.0
+numpy>=1.23
+matplotlib>=3.7
+openpyxl>=3.1
+reportlab>=4.0
+pillow>=10.0
+qrcode>=7.4
+# Provides /static/plotly.min.js (offline Plotly rendering in Safari/WebKit)
+plotly>=5.18
+# NOTE:
+# Plotly rendering is done in the browser (Safari/WebKit) via the local web dashboard.
+# We intentionally do NOT depend on kaleido/Chrome.
+pywebview>=5.0
+zeroconf>=0.131
