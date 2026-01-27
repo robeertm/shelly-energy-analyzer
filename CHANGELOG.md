@@ -1,4 +1,17 @@
+## 5.8.14.45
+
+## 5.8.14.47
+- Live: Day/Night 'Auto' mode clarified; plot label/legend colors now switch with theme.
+- Live: Theme is re-applied after legend/layout so all labels follow Day/Night.
+- Fix: Live Day/Night control now actually applies (persisted mode + immediate redraw).
+- Change: Live Day/Night now switches plot appearance (light/dark theme). `All` = auto by time.
+
 # Changelog
+## 5.8.14.44
+
+- Live: add Day/Night filter toggle for live plots (All/Day/Night), persisted in config.
+- Fix: keep repository GitHub-ready (no caches), keep release workflow intact.
+
 ## 5.8.14.40
 - Fixed: Startup crash due to indentation errors in plot UI helpers (Windows/macOS/Linux).
 - Fixed: Plot device-page cycle helpers correctly scoped inside the UI (no more IndentationError).

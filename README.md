@@ -3,6 +3,7 @@
 A desktop app that downloads CSV data from Shelly EM / 3EM devices, calculates energy (kWh), shows live power, and can send Telegram summaries and alerts.
 
 ## Features
+- Live plots: Day/Night toggle (All/Day/Night) to focus on daytime vs nighttime samples.
 
 - Download + merge Shelly EM/3EM CSV exports into local time series
 - kWh / W / V / A plots and reports
