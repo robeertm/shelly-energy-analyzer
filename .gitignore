@@ -1,0 +1,18 @@
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# App data / secrets
+config.json
+data/
+logs/
+*.log
+*.sqlite
+*.db
+
+# macOS
+.DS_Store
+
