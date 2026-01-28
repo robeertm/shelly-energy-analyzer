@@ -147,9 +147,21 @@ class App(tk.Tk):
         self.geometry("1400x900")
         self.project_root = Path.cwd()
         self.cfg_path = self.project_root / "config.json"
+        self._first_run = not self.cfg_path.exists()
         self.cfg = load_config(self.cfg_path)
+        # Setup wizard is shown when starting without a config or without any devices.
+        try:
+            self._setup_required = bool(self._first_run) or (len(getattr(self.cfg, 'devices', []) or []) == 0)
+        except Exception:
+            self._setup_required = bool(self._first_run)
+        self._tabs_built = False
         self.lang = normalize_lang(getattr(self.cfg.ui, "language", "de"))
         self.t = lambda k, **kw: _t(self.lang, k, **kw)
+        # UI variables that may be referenced before their tabs are built
+        # (e.g., during setup wizard / early autosync).
+        self.sync_summary = tk.StringVar(value=self.t("common.no_data"))
+        self.sync_log = None  # will be a tk.Text once the Sync tab is built
+        self._sync_log_buffer: List[str] = []
         self.title(f"{self.t('app.title')} {__version__}")
         # Web dashboard authentication is intentionally disabled (LAN-only use).
         self.storage = Storage(self.project_root / "data")
@@ -243,6 +255,12 @@ class App(tk.Tk):
         self._live_axes: Dict[str, Dict[str, any]] = {}
         self._live_canvases: Dict[str, Dict[str, FigureCanvasTkAgg]] = {}
         self._build_ui()
+        # On first run (no config yet), start in Settings → Devices.
+        try:
+            if bool(getattr(self, '_first_run', False)) or not list(getattr(self.cfg, 'devices', []) or []):
+                self.after(100, self._focus_settings_devices)
+        except Exception:
+            pass
         # Apply DPI/monitor-aware scaling for fonts and plots.
         self._init_ui_scaling()
         # Apply UI scaling for current monitor and watch for DPI changes.
@@ -1303,11 +1321,45 @@ class App(tk.Tk):
         self.notebook.add(self.tab_live, text=self.t("tabs.live"))
         self.notebook.add(self.tab_export, text=self.t("tabs.export"))
         self.notebook.add(self.tab_settings, text=self.t("tabs.settings"))
-        self._build_sync_tab()
-        self._build_plots_tab()
-        self._build_live_tab()
-        self._build_export_tab()
-        self._build_settings_tab()
+
+        # First-run / no-devices mode: show a guided Setup wizard and keep other tabs disabled
+        if bool(getattr(self, "_setup_required", False)):
+            self.tab_setup = ttk.Frame(self.notebook)
+            # Insert setup as the first tab for guidance
+            self.notebook.insert(0, self.tab_setup, text=self.t("tabs.setup"))
+
+            # Put placeholders into disabled tabs (avoid CSV warnings on first run)
+            for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_export):
+                try:
+                    ttk.Label(
+                        tab,
+                        text=self.t("setup.placeholder"),
+                        justify="left",
+                        wraplength=980,
+                    ).pack(anchor="nw", padx=18, pady=18)
+                except Exception:
+                    pass
+                try:
+                    self.notebook.tab(tab, state="disabled")
+                except Exception:
+                    pass
+
+            # Build wizard + settings
+            self._build_setup_wizard_tab()
+            self._build_settings_tab()
+            try:
+                self.notebook.select(self.tab_setup)
+            except Exception:
+                pass
+            self._tabs_built = False
+        else:
+            self._build_sync_tab()
+            self._build_plots_tab()
+            self._build_live_tab()
+            self._build_export_tab()
+            self._build_settings_tab()
+            self._tabs_built = True
+
         self._page_labels = []
         self._update_device_page_choices()
     # ---------------- Device paging (max 2 shown at once) ----------------
@@ -1479,13 +1531,34 @@ class App(tk.Tk):
         self.sync_log.pack(fill="both", expand=True)
         bottom = ttk.Frame(frm)
         bottom.pack(fill="x", padx=12, pady=(0, 12))
-        self.sync_summary = tk.StringVar(value="Noch keine Daten geladen.")
+        # Reuse pre-created StringVar so other code can safely write to it
+        # even before this tab exists.
+        try:
+            self.sync_summary.set(self.t('common.no_data'))
+        except Exception:
+            self.sync_summary = tk.StringVar(value=self.t('common.no_data'))
         ttk.Label(bottom, textvariable=self.sync_summary).pack(anchor="w")
+        # Flush buffered log lines collected before the Sync tab existed.
+        try:
+            if self._sync_log_buffer:
+                self.sync_log.insert("end", "\n".join(self._sync_log_buffer) + "\n")
+                self.sync_log.see("end")
+                self._sync_log_buffer.clear()
+        except Exception:
+            pass
         # init autosync status
         self.after(200, self._on_autosync_toggle)
     def _log_sync(self, msg: str) -> None:
         ts = time.strftime("%H:%M:%S")
-        self.sync_log.insert("end", f"[{ts}] {msg}\n")
+        line = f"[{ts}] {msg}"
+        # During first-run setup the Sync tab may not exist yet.
+        if getattr(self, "sync_log", None) is None:
+            self._sync_log_buffer.append(line)
+            # keep buffer bounded
+            if len(self._sync_log_buffer) > 500:
+                self._sync_log_buffer = self._sync_log_buffer[-500:]
+            return
+        self.sync_log.insert("end", line + "\n")
         self.sync_log.see("end")
     def _sync_range_override(self, mode: str) -> Optional[Tuple[int, int]]:
         now = int(time.time())
@@ -7359,7 +7432,11 @@ class App(tk.Tk):
         nb = ttk.Notebook(frm)
         nb.pack(fill="both", expand=True, padx=12, pady=10)
 
+        # Keep references so we can focus the Devices settings on first run.
+        self._settings_nb = nb
+
         tab_devices = ttk.Frame(nb)
+        self._settings_tab_devices = tab_devices
         tab_main = ttk.Frame(nb)
         tab_advanced = ttk.Frame(nb)
         tab_expert = ttk.Frame(nb)
@@ -7374,6 +7451,17 @@ class App(tk.Tk):
 
         # Scrollbar for small screens (Devices subtab can get very tall)
         devices_outer = ttk.Frame(tab_devices)
+        # First run onboarding: show a quiet hint instead of many warnings.
+        try:
+            if bool(getattr(self, '_first_run', False)) or not list(getattr(self.cfg, 'devices', []) or []):
+                banner = ttk.Label(
+                    devices_outer,
+                    text=self.t('first_run.hint'),
+                    justify='left'
+                )
+                banner.pack(fill='x', padx=8, pady=(0, 10))
+        except Exception:
+            pass
         devices_outer.pack(fill="both", expand=True)
 
         devices_canvas = tk.Canvas(devices_outer, highlightthickness=0)
@@ -11070,6 +11158,701 @@ telegram_monthly_summary_last_sent=str(getattr(self.cfg.ui, "telegram_monthly_su
                 self._build_settings_tab()
             except Exception:
                 pass
+
+
+
+    # ---------------- Setup wizard (first run / no devices) ----------------
+    def _build_setup_wizard_tab(self) -> None:
+        """Guided setup for first run (no config / no devices)."""
+        frm = getattr(self, "tab_setup", None)
+        if frm is None:
+            return
+
+        # Root layout
+        root = ttk.Frame(frm)
+        root.pack(fill="both", expand=True, padx=14, pady=12)
+
+        ttk.Label(root, text=self.t("setup.title"), font=("TkDefaultFont", 15, "bold")).pack(anchor="w", pady=(0, 6))
+        ttk.Label(root, text=self.t("setup.subtitle"), justify="left", wraplength=980).pack(anchor="w", pady=(0, 10))
+
+        nb = ttk.Notebook(root)
+        nb.pack(fill="both", expand=True)
+        self._wiz_nb = nb
+
+        # Steps
+        step_devices = ttk.Frame(nb)
+        step_telegram = ttk.Frame(nb)
+        step_finish = ttk.Frame(nb)
+        nb.add(step_devices, text=self.t("setup.step.devices"))
+        nb.add(step_telegram, text=self.t("setup.step.telegram"))
+        nb.add(step_finish, text=self.t("setup.step.finish"))
+
+        # ---- Step 1: Devices (auto-discovery) ----
+        self._wiz_found = {}  # host -> discovered dict
+        self._wiz_scan_cancel = False
+
+        dev_top = ttk.Frame(step_devices)
+        dev_top.pack(fill="x", padx=10, pady=10)
+
+        ttk.Label(dev_top, text=self.t("setup.devices.hint"), justify="left", wraplength=960).pack(anchor="w")
+
+        btn_row = ttk.Frame(step_devices)
+        btn_row.pack(fill="x", padx=10, pady=(0, 6))
+
+        self._wiz_status_var = tk.StringVar(value=self.t("setup.devices.status.idle"))
+        ttk.Label(btn_row, textvariable=self._wiz_status_var).pack(side="left")
+
+        ttk.Button(btn_row, text=self.t("setup.devices.btn.mdns"), command=self._wizard_discover_mdns).pack(side="right", padx=(6, 0))
+        ttk.Button(btn_row, text=self.t("setup.devices.btn.ipscan"), command=self._wizard_scan_ip).pack(side="right")
+
+        # Manual host/IP add (optional)
+        man_row = ttk.Frame(step_devices)
+        man_row.pack(fill="x", padx=10, pady=(0, 6))
+        ttk.Label(man_row, text=self.t("setup.devices.manual.label")).pack(side="left")
+        self._wiz_manual_hosts = tk.StringVar(value="")
+        ent = ttk.Entry(man_row, textvariable=self._wiz_manual_hosts)
+        ent.pack(side="left", fill="x", expand=True, padx=(6, 6))
+        ttk.Button(man_row, text=self.t("setup.devices.manual.btn.add"), command=self._wizard_add_manual_hosts).pack(side="right")
+
+        # List of found devices
+        tree_box = ttk.Frame(step_devices)
+        tree_box.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        cols = ("host", "model", "kind", "gen")
+        tv = ttk.Treeview(tree_box, columns=cols, show="headings", selectmode="extended")
+        self._wiz_tv = tv
+        for c, w in [("host", 200), ("model", 260), ("kind", 120), ("gen", 70)]:
+            tv.heading(c, text=self.t(f"setup.devices.col.{c}"))
+            tv.column(c, width=w, anchor="w")
+        tv.pack(side="left", fill="both", expand=True)
+        sb = ttk.Scrollbar(tree_box, orient="vertical", command=tv.yview)
+        sb.pack(side="right", fill="y")
+        tv.configure(yscrollcommand=sb.set)
+
+        # Add selected
+        add_row = ttk.Frame(step_devices)
+        add_row.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(add_row, text=self.t("setup.devices.btn.add"), command=self._wizard_add_selected).pack(side="right")
+        self._wiz_added_var = tk.StringVar(value="")
+        ttk.Label(add_row, textvariable=self._wiz_added_var).pack(side="left")
+
+        # ---- Step 2: Telegram (optional) ----
+        tg = ttk.Frame(step_telegram)
+        tg.pack(fill="both", expand=True, padx=12, pady=12)
+
+        ttk.Label(tg, text=self.t("setup.telegram.hint"), justify="left", wraplength=980).pack(anchor="w", pady=(0, 10))
+
+        self._wiz_tg_enabled = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "telegram_enabled", False)))
+        ttk.Checkbutton(tg, text=self.t("setup.telegram.enable"), variable=self._wiz_tg_enabled).pack(anchor="w")
+
+        form = ttk.Frame(tg)
+        form.pack(fill="x", pady=(10, 0))
+
+        ttk.Label(form, text=self.t("settings.telegram_bot_token")).grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+        self._wiz_tg_token = tk.StringVar(value=str(getattr(self.cfg.ui, "telegram_bot_token", "") or ""))
+        ttk.Entry(form, textvariable=self._wiz_tg_token, width=52).grid(row=0, column=1, sticky="w", pady=4)
+
+        ttk.Label(form, text=self.t("settings.telegram_chat_id")).grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        self._wiz_tg_chat = tk.StringVar(value=str(getattr(self.cfg.ui, "telegram_chat_id", "") or ""))
+        ttk.Entry(form, textvariable=self._wiz_tg_chat, width=52).grid(row=1, column=1, sticky="w", pady=4)
+
+        def _save_tg() -> None:
+            try:
+                self.cfg.ui.telegram_enabled = bool(self._wiz_tg_enabled.get())
+                self.cfg.ui.telegram_bot_token = str(self._wiz_tg_token.get() or "").strip()
+                self.cfg.ui.telegram_chat_id = str(self._wiz_tg_chat.get() or "").strip()
+                save_config(self.cfg, self.cfg_path)
+            except Exception:
+                pass
+
+        ttk.Button(tg, text=self.t("setup.telegram.save"), command=_save_tg).pack(anchor="e", pady=(10, 0))
+
+        # ---- Step 3: Finish ----
+        fin = ttk.Frame(step_finish)
+        fin.pack(fill="both", expand=True, padx=12, pady=12)
+        ttk.Label(fin, text=self.t("setup.finish.hint"), justify="left", wraplength=980).pack(anchor="w", pady=(0, 10))
+        self._wiz_finish_summary = tk.StringVar(value="")
+        ttk.Label(fin, textvariable=self._wiz_finish_summary, justify="left", wraplength=980).pack(anchor="w")
+
+        # Navigation buttons
+        nav = ttk.Frame(root)
+        nav.pack(fill="x", pady=(10, 0))
+
+        self._wiz_back_btn = ttk.Button(nav, text=self.t("setup.btn.back"), command=lambda: self._wizard_step(-1))
+        self._wiz_back_btn.pack(side="left")
+
+        self._wiz_next_btn = ttk.Button(nav, text=self.t("setup.btn.next"), command=lambda: self._wizard_step(+1))
+        self._wiz_next_btn.pack(side="right")
+
+        self._wiz_finish_btn = ttk.Button(nav, text=self.t("setup.btn.finish"), command=self._wizard_finish)
+        # Only show on last page
+        # We'll pack/unpack dynamically in _wizard_refresh_nav()
+
+        self._wizard_refresh_nav()
+
+    def _wizard_step(self, delta: int) -> None:
+        nb = getattr(self, "_wiz_nb", None)
+        if nb is None:
+            return
+
+        # Current index
+        try:
+            cur = int(nb.index("current"))
+        except Exception:
+            cur = 0
+
+        # If we are leaving the device step forward and nothing was added yet,
+        # auto-add the current selection from the found-device list (Treeview).
+        if int(delta) > 0 and cur == 0:
+            try:
+                has_devices = bool(getattr(self.cfg, "devices", []) or [])
+            except Exception:
+                has_devices = False
+
+            if not has_devices:
+                try:
+                    tv = getattr(self, "_wiz_tv", None)
+                    if tv is not None:
+                        # If nothing is selected but we discovered devices, auto-add all found.
+                        try:
+                            sel = list(tv.selection() or [])
+                        except Exception:
+                            sel = []
+                        if not sel:
+                            try:
+                                children = list(tv.get_children("") or [])
+                                if children:
+                                    tv.selection_set(children)
+                                    sel = list(tv.selection() or [])
+                            except Exception:
+                                sel = []
+                        if sel:
+                            self._wizard_add_selected()
+                            has_devices = bool(getattr(self.cfg, "devices", []) or [])
+                except Exception:
+                    pass
+
+            # Still nothing? Stay on step 1.
+            if not has_devices:
+                self._wizard_refresh_nav()
+                return
+
+        nxt = max(0, min(2, cur + int(delta)))
+
+        # Select by tab-id (more robust than numeric indices across Tk variants)
+        try:
+            tabs = list(nb.tabs())
+            if 0 <= nxt < len(tabs):
+                nb.select(tabs[nxt])
+        except Exception:
+            # fallback
+            try:
+                nb.select(nxt)
+            except Exception:
+                pass
+
+        self._wizard_refresh_nav()
+
+    def _wizard_refresh_nav(self) -> None:
+        nb = getattr(self, "_wiz_nb", None)
+        if nb is None:
+            return
+        try:
+            cur = nb.index("current")
+        except Exception:
+            cur = 0
+
+        # Back disabled on first step
+        try:
+            self._wiz_back_btn.configure(state=("disabled" if cur <= 0 else "normal"))
+        except Exception:
+            pass
+
+        # Next disabled if no devices on step 1
+        if cur == 0:
+            # Allow Next when at least one device is already configured OR the user selected
+            # one or more discovered devices (we will auto-add on Next).
+            has_devices = bool(getattr(self.cfg, "devices", []) or [])
+            if not has_devices:
+                try:
+                    tv = getattr(self, "_wiz_tv", None)
+                    has_devices = bool(tv is not None and tv.selection())
+                except Exception:
+                    has_devices = False
+            try:
+                self._wiz_next_btn.configure(state=("normal" if has_devices else "disabled"))
+            except Exception:
+                pass
+        else:
+            try:
+                self._wiz_next_btn.configure(state="normal")
+            except Exception:
+                pass
+
+        # Finish button only on last page
+        try:
+            if cur >= 2:
+                try:
+                    self._wiz_next_btn.pack_forget()
+                except Exception:
+                    pass
+                if not getattr(self, "_wiz_finish_btn_packed", False):
+                    self._wiz_finish_btn.pack(side="right")
+                    self._wiz_finish_btn_packed = True
+            else:
+                if getattr(self, "_wiz_finish_btn_packed", False):
+                    try:
+                        self._wiz_finish_btn.pack_forget()
+                    except Exception:
+                        pass
+                    self._wiz_finish_btn_packed = False
+                # Ensure next is visible
+                if not self._wiz_next_btn.winfo_ismapped():
+                    self._wiz_next_btn.pack(side="right")
+        except Exception:
+            pass
+
+        # Update finish summary
+        try:
+            if cur >= 2:
+                n = len(getattr(self.cfg, "devices", []) or [])
+                self._wiz_finish_summary.set(self.t("setup.finish.summary", n=n))
+        except Exception:
+            pass
+
+    def _wizard_discover_mdns(self) -> None:
+        """Discover Shelly devices via mDNS, then probe them for details."""
+        if getattr(self, "_wiz_scan_running", False):
+            return
+        self._wiz_scan_cancel = False
+
+        def _worker():
+            hosts = []
+            err = None
+            try:
+                md = discover_shelly_mdns(timeout_seconds=3.5)
+                for x in md:
+                    h = str(getattr(x, "host", "") or "").strip()
+                    if h and h not in hosts:
+                        hosts.append(h)
+            except Exception as e:
+                err = str(e)
+
+            def _ui_start():
+                if err:
+                    self._wiz_status_var.set(self.t("setup.devices.status.mdns_err", err=err))
+                else:
+                    self._wiz_status_var.set(self.t("setup.devices.status.mdns", n=len(hosts)))
+            try:
+                self.after(0, _ui_start)
+            except Exception:
+                _ui_start()
+
+            for h in hosts:
+                if self._wiz_scan_cancel:
+                    break
+                try:
+                    disc = probe_device(h, timeout_seconds=1.2)
+                except Exception:
+                    continue
+                try:
+                    self.after(0, lambda d=disc: self._wizard_add_found(d))
+                except Exception:
+                    self._wizard_add_found(disc)
+
+            def _done():
+                self._wiz_scan_running = False
+                self._wiz_status_var.set(self.t("setup.devices.status.done", n=len(getattr(self, "_wiz_found", {}) or {})))
+            try:
+                self.after(0, _done)
+            except Exception:
+                _done()
+
+        try:
+            self._wiz_scan_running = True
+            threading.Thread(target=_worker, daemon=True).start()
+        except Exception:
+            self._wiz_scan_running = False
+    def _local_subnet_prefix(self) -> str:
+        """Best-effort local /24 prefix (e.g. '192.168.1').
+
+        Used by the setup wizard IP scan. Falls back to '192.168.1' if
+        the local address cannot be determined.
+        """
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                # No packets are actually sent; this is a common trick to learn the
+                # preferred outbound interface IP.
+                s.connect(("8.8.8.8", 80))
+                ip = s.getsockname()[0]
+            finally:
+                try:
+                    s.close()
+                except Exception:
+                    pass
+            parts = str(ip).split(".")
+            if len(parts) == 4 and all(p.isdigit() for p in parts[:3]):
+                return ".".join(parts[:3])
+        except Exception:
+            pass
+        return "192.168.1"
+
+    def _wizard_scan_ip(self) -> None:
+        """Quick /24 scan by probing hosts with Shelly APIs (strict detection)."""
+        if getattr(self, "_wiz_scan_running", False):
+            return
+        self._wiz_scan_cancel = False
+
+        prefix = self._local_subnet_prefix()
+        hosts = [f"{prefix}.{i}" for i in range(1, 255)]
+
+        def _worker():
+            try:
+                import concurrent.futures
+
+                def _ui_start():
+                    self._wiz_status_var.set(self.t("setup.devices.status.ipscan", prefix=prefix))
+                try:
+                    self.after(0, _ui_start)
+                except Exception:
+                    _ui_start()
+
+                def _probe(h: str):
+                    if self._wiz_scan_cancel:
+                        return None
+                    try:
+                        return probe_device(h, timeout_seconds=0.8)
+                    except Exception:
+                        return None
+
+                max_workers = 64
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+                    futs = {ex.submit(_probe, h): h for h in hosts}
+                    for fut in concurrent.futures.as_completed(futs):
+                        if self._wiz_scan_cancel:
+                            break
+                        disc = fut.result()
+                        if disc is None:
+                            continue
+                        try:
+                            self.after(0, lambda d=disc: self._wizard_add_found(d))
+                        except Exception:
+                            self._wizard_add_found(disc)
+            except Exception:
+                pass
+
+            def _done():
+                self._wiz_scan_running = False
+                self._wiz_status_var.set(self.t("setup.devices.status.done", n=len(getattr(self, "_wiz_found", {}) or {})))
+            try:
+                self.after(0, _done)
+            except Exception:
+                _done()
+
+        try:
+            self._wiz_scan_running = True
+            threading.Thread(target=_worker, daemon=True).start()
+        except Exception:
+            self._wiz_scan_running = False
+
+    def _wizard_add_manual_hosts(self) -> None:
+        """Manually add one or multiple Shelly hosts/IPs (comma/space separated)."""
+        if getattr(self, "_wiz_scan_running", False):
+            return
+        raw = ""
+        try:
+            raw = str(getattr(self, "_wiz_manual_hosts", None).get() or "")
+        except Exception:
+            raw = ""
+        raw = raw.strip()
+        if not raw:
+            return
+
+        parts = [p.strip() for p in re.split(r"[\s,;]+", raw) if p.strip()]
+        if not parts:
+            return
+
+        self._wiz_scan_cancel = False
+
+        def _worker():
+            bad = []
+            for h in parts:
+                if self._wiz_scan_cancel:
+                    break
+                try:
+                    def _ui():
+                        self._wiz_status_var.set(self.t("setup.devices.status.manual", host=h))
+                    self.after(0, _ui)
+                except Exception:
+                    pass
+
+                try:
+                    disc = probe_device(h, timeout_seconds=1.5)
+                except Exception:
+                    bad.append(h)
+                    continue
+
+                try:
+                    self.after(0, lambda d=disc: self._wizard_add_found(d))
+                except Exception:
+                    self._wizard_add_found(disc)
+
+            def _done():
+                self._wiz_scan_running = False
+                if bad:
+                    self._wiz_status_var.set(self.t("setup.devices.status.not_shelly", host=", ".join(bad[:4]) + ("..." if len(bad) > 4 else "")))
+                else:
+                    self._wiz_status_var.set(self.t("setup.devices.status.done", n=len(getattr(self, "_wiz_found", {}) or {})))
+            try:
+                self.after(0, _done)
+            except Exception:
+                _done()
+
+        try:
+            self._wiz_scan_running = True
+            threading.Thread(target=_worker, daemon=True).start()
+        except Exception:
+            self._wiz_scan_running = False
+
+    def _wizard_add_found(self, disc) -> None:
+        try:
+            host = str(getattr(disc, "host", "") or "").strip()
+            if not host:
+                return
+            found = getattr(self, "_wiz_found", None)
+            if found is None:
+                self._wiz_found = {}
+                found = self._wiz_found
+            if host in found:
+                return
+            found[host] = {
+                "host": host,
+                "model": str(getattr(disc, "model", "") or ""),
+                "kind": str(getattr(disc, "kind", "") or "unknown"),
+                "gen": int(getattr(disc, "gen", 0) or 0),
+                "component_id": int(getattr(disc, "component_id", 0) or 0),
+                "phases": int(getattr(disc, "phases", 1) or 1),
+                "supports_emdata": bool(getattr(disc, "supports_emdata", False)),
+            }
+        except Exception:
+            return
+
+        # Update treeview in UI thread
+        def _ui():
+            try:
+                tv = getattr(self, "_wiz_tv", None)
+                if tv is None:
+                    return
+                # Insert
+                model = found[host]["model"]
+                kind = found[host]["kind"]
+                gen = str(found[host]["gen"])
+                tv.insert("", "end", iid=host, values=(host, model, kind, gen))
+                self._wiz_status_var.set(self.t("setup.devices.status.found", n=len(found)))
+            except Exception:
+                pass
+
+        try:
+            self.after(0, _ui)
+        except Exception:
+            _ui()
+
+    def _wizard_add_selected(self) -> None:
+        tv = getattr(self, "_wiz_tv", None)
+        if tv is None:
+            return
+        try:
+            sel = list(tv.selection() or [])
+        except Exception:
+            sel = []
+        if not sel:
+            try:
+                self._wiz_added_var.set(self.t("setup.devices.add.none"))
+            except Exception:
+                pass
+            return
+
+        existing = {str(d.host): d for d in (getattr(self.cfg, "devices", []) or [])}
+        devs = list(getattr(self.cfg, "devices", []) or [])
+        added = 0
+        # generate keys
+        used_keys = {d.key for d in devs}
+        def _next_key() -> str:
+            i = 1
+            while True:
+                k = f"shelly{i}"
+                if k not in used_keys:
+                    used_keys.add(k)
+                    return k
+                i += 1
+
+        found = getattr(self, "_wiz_found", {}) or {}
+        for host in sel:
+            if host in existing:
+                continue
+            info = found.get(host) or {}
+            key = _next_key()
+            name = (info.get("model") or "").strip() or f"Shelly {host}"
+            try:
+                devs.append(DeviceConfig(
+                    key=key,
+                    name=name,
+                    host=host,
+                    em_id=int(info.get("component_id") or 0),
+                    kind=str(info.get("kind") or "unknown"),
+                    gen=int(info.get("gen") or 0),
+                    model=str(info.get("model") or ""),
+                    phases=int(info.get("phases") or 1),
+                    supports_emdata=bool(info.get("supports_emdata", False)),
+                ))
+                added += 1
+            except Exception:
+                pass
+
+        if added <= 0:
+            try:
+                self._wiz_added_var.set(self.t("setup.devices.add.none"))
+            except Exception:
+                pass
+            return
+
+        try:
+            # AppConfig is frozen; mutate the devices list in-place.
+            if isinstance(getattr(self.cfg, "devices", None), list):
+                self.cfg.devices[:] = devs
+            save_config(self.cfg, self.cfg_path)
+        except Exception:
+            pass
+
+        # Update status + enable next
+        try:
+            self._wiz_added_var.set(self.t("setup.devices.add.ok", n=added))
+        except Exception:
+            pass
+
+        # Update device paging combobox + settings devices list
+        try:
+            self._update_device_page_choices()
+        except Exception:
+            pass
+
+        # Also refresh Settings tab if already built
+        try:
+            self._clear_frame(self.tab_settings)
+            self._build_settings_tab()
+        except Exception:
+            pass
+
+        self._wizard_refresh_nav()
+
+        # Best-effort probe to fill model/kind fields
+        try:
+            self._probe_devices_on_startup()
+        except Exception:
+            pass
+
+    def _wizard_finish(self) -> None:
+        """Finalize setup: enable tabs, build them and jump to Settings->Devices."""
+        # Save Telegram values from wizard
+        try:
+            self.cfg.ui.telegram_enabled = bool(getattr(self, "_wiz_tg_enabled", tk.BooleanVar(value=False)).get())
+            self.cfg.ui.telegram_bot_token = str(getattr(self, "_wiz_tg_token", tk.StringVar(value="")).get() or "").strip()
+            self.cfg.ui.telegram_chat_id = str(getattr(self, "_wiz_tg_chat", tk.StringVar(value="")).get() or "").strip()
+            save_config(self.cfg, self.cfg_path)
+        except Exception:
+            pass
+
+
+        # Best effort: if user did not explicitly add devices yet, but some are discovered,
+        # auto-add selected items (or all discovered) before validating.
+        try:
+            if not (getattr(self.cfg, "devices", []) or []):
+                tv = getattr(self, "_wiz_tv", None)
+                if tv is not None:
+                    try:
+                        sel = list(tv.selection() or [])
+                    except Exception:
+                        sel = []
+                    if not sel:
+                        try:
+                            children = list(tv.get_children("") or [])
+                            if children:
+                                tv.selection_set(children)
+                        except Exception:
+                            pass
+                    try:
+                        if tv.selection():
+                            self._wizard_add_selected()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        # Require at least one device
+        if not (getattr(self.cfg, "devices", []) or []):
+            try:
+                messagebox.showwarning(self.t("setup.title"), self.t("setup.finish.need_device"))
+            except Exception:
+                pass
+            return
+
+        # Enable tabs
+        try:
+            for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_export):
+                try:
+                    self.notebook.tab(tab, state="normal")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Build main tabs (only once)
+        if not bool(getattr(self, "_tabs_built", False)):
+            try:
+                self._clear_frame(self.tab_sync); self._build_sync_tab()
+            except Exception:
+                pass
+            try:
+                self._clear_frame(self.tab_plots); self._build_plots_tab()
+            except Exception:
+                pass
+            try:
+                self._clear_frame(self.tab_live); self._build_live_tab()
+            except Exception:
+                pass
+            try:
+                self._clear_frame(self.tab_export); self._build_export_tab()
+            except Exception:
+                pass
+            self._tabs_built = True
+
+        # Jump to Settings -> Devices for review
+        try:
+            self.notebook.select(self.tab_settings)
+            if hasattr(self, "_settings_nb") and hasattr(self, "_settings_tab_devices"):
+                try:
+                    self._settings_nb.select(self._settings_tab_devices)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Remove the setup tab to avoid clutter (user can always edit in Settings)
+        try:
+            if hasattr(self, "tab_setup"):
+                self.notebook.forget(self.tab_setup)
+        except Exception:
+            pass
+
+        # Setup is complete
+        self._setup_required = False
+
+        # Update combobox / paging
+        try:
+            self._update_device_page_choices()
+        except Exception:
+            pass
 
 
 def run_gui() -> None:

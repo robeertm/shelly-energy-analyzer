@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shelly-energy-analyzer"
-version = "5.8.14.45"
+version = "5.8.14.58"
 description = "Shelly EM/3EM Energy Analyzer (GUI + Export)"
 readme = "README.md"
 requires-python = ">=3.10"
