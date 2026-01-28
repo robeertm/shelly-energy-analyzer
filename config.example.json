@@ -1,5 +1,5 @@
 {
-  "version": "5.8.14.58",
+  "version": "5.9.0.8",
   "devices": [
     {
       "key": "shelly1",
@@ -92,5 +92,10 @@
     },
     "invoice_prefix": "INV",
     "payment_terms_days": 14
+  },
+  "demo": {
+    "enabled": false,
+    "scenario": "household",
+    "seed": 1234
   }
 }

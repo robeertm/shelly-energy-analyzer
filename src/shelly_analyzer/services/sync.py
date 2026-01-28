@@ -7,6 +7,7 @@ from typing import Callable, List, Optional, Tuple
 from shelly_analyzer.io.config import AppConfig, DeviceConfig
 from shelly_analyzer.io.http import HttpConfig, ShellyHttp, download_csv, get_emdata_records, get_earliest_emdata_ts
 from shelly_analyzer.io.storage import MetaState, Storage
+from shelly_analyzer.services.demo import ensure_demo_csv
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,30 @@ def sync_one_device(
             requested_range=(0, 0),
             chunks=[],
             updated_last_end_ts=None,
+        )
+
+
+    # DEMO MODE: do not perform HTTP calls. Ensure demo CSV exists and treat as synced.
+    if str(getattr(device, "host", "")).startswith("demo://"):
+        # Create demo CSV history on-demand (lightweight) so Plots/Export work.
+        try:
+            ensure_demo_csv(storage, [device], cfg.demo, days=fallback_last_days)
+        except Exception:
+            # Even if CSV generation fails, we still allow the app to run in Live demo mode.
+            pass
+        ended_at = int(time.time())
+        try:
+            storage.save_meta(device.key, MetaState(last_end_ts=ended_at, updated_at=ended_at))
+        except Exception:
+            pass
+        return SyncResult(
+            device_key=device.key,
+            device_name=device.name,
+            started_at=started_at,
+            ended_at=ended_at,
+            requested_range=(0, 0) if range_override is None else (int(range_override[0]), int(range_override[1])),
+            chunks=[ChunkResult(ts=0, end_ts=ended_at, ok=True)],
+            updated_last_end_ts=ended_at,
         )
 
     meta = storage.load_meta(device.key)

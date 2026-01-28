@@ -1,129 +1,81 @@
-# Shelly Energy Analyzer (Refactored)
+# Shelly Energy Analyzer
 
-A desktop app that downloads CSV data from Shelly EM / 3EM devices, calculates energy (kWh), shows live power, and can send Telegram summaries and alerts.
+A cross-platform desktop application to analyze, visualize and export energy data from Shelly devices (1‑phase and 3‑phase) — including live dashboards, historical plots, CSV/PDF exports and Telegram alerts.
 
-## Features
-- Live plots: Day/Night toggle (All/Day/Night) to focus on daytime vs nighttime samples.
+## Key Features
 
-- Download + merge Shelly EM/3EM CSV exports into local time series
-- kWh / W / V / A plots and reports
-- Live dashboard (background polling)
-- Telegram: daily/monthly summaries + alert triggers
+- 📊 **Live Monitoring**
+  - Real-time power, voltage and current
+  - 1‑phase and 3‑phase devices (L1 / L2 / L3 + total)
+  - Day / Night / Auto theme switching
 
-## Quick start
+- 📈 **Historical Analysis**
+  - Plots for W / V / A / kWh / VAR / cosφ
+  - Per-device and per-phase views
+  - CSV-based storage (offline-friendly)
+
+- 📤 **Exports**
+  - CSV export for further analysis
+  - PDF reports (daily / monthly)
+
+- 🔔 **Notifications**
+  - Telegram alerts
+  - Daily & monthly summaries
+  - Configurable thresholds
+
+- 🧙 **Setup Wizard**
+  - Automatic discovery (mDNS / IP scan)
+  - Manual IP/host entry
+  - Quiet first-run experience (no error spam)
+
+- 🎭 **Demo Mode**
+  - No Shelly devices required
+  - Realistic demo data (live + history CSVs)
+  - Great for testing and screenshots
+
+- 🖥 **Cross‑Platform**
+  - macOS / Windows / Linux
+  - One-click start scripts
+
+## Quick Start
 
 ### macOS
+- Double-click `start.command`
+- If macOS blocks it: run `chmod +x start.command` in the folder once.
 
-1. Install Python **3.10+** (recommended: from python.org, includes Tkinter on macOS).
-2. Unzip the project.
-3. Double-click **`start.command`**.
-
-The app creates a local virtualenv (`.venv`), installs dependencies, and starts the GUI.
-
-> If `start.command` is not executable after unzipping: `chmod +x start.command`.
-
-### Windows 10/11
-
-1. Install Python **3.10+** from python.org (check **"Add python.exe to PATH"**).
-2. Unzip the project.
-3. Double-click **`start.bat`**.
-
-First run creates `.venv` and installs dependencies.
+### Windows
+- Double-click `start.bat`
 
 ### Linux
-
-1. Install Python **3.10+**.
-2. Make sure Tkinter is installed:
-   - Debian/Ubuntu: `sudo apt-get install python3-tk`
-   - Fedora: `sudo dnf install python3-tkinter`
-3. Unzip the project.
-4. Run:
-
 ```bash
 chmod +x start.sh
 ./start.sh
 ```
 
-## Configuration
+## Demo Mode
 
-**Do not commit your real `config.json`** (it may contain secrets like Telegram bot token/chat id).
+Demo Mode lets you test the full application **without any Shelly devices**.
 
-1. Copy `config.example.json` to `config.json`
-2. Edit devices and options.
-
-Example (minimal):
-
+### Enable Demo Mode
+- On first start, choose **“Demo mode”** in the setup wizard  
+  **or**
+- Set in `config.json`:
 ```json
 {
-  "version": "4.1.0",
-  "devices": [
-    {"key": "shelly1", "name": "House", "host": "192.168.3.175", "em_id": 0},
-    {"key": "shelly2", "name": "Server", "host": "192.168.3.189", "em_id": 0}
-  ]
+  "demo": { "enabled": true }
 }
 ```
 
-## Data storage
+Demo Mode will generate:
+- realistic live data (with jitter + load spikes)
+- CSV history for plots and exports
 
-Runtime data is stored under:
-- `data/<device_key>/` (raw CSV chunks, merged files)
-- `meta.json` files track download progress
+## Languages
 
-> `data/` is in `.gitignore` because it is user-specific.
+The UI supports:
+- English
+- German
+- Spanish
 
-## Running without start scripts
-
-### macOS/Linux
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -U pip
-pip install -r requirements.txt
-pip install -e .
-python -m shelly_analyzer
-```
-
-### Windows (PowerShell)
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -U pip
-pip install -r requirements.txt
-pip install -e .
-python -m shelly_analyzer
-```
-
-## Publishing on GitHub
-
-This repository is licensed under **MIT** (see `LICENSE`).
-
-### What to commit
-
-✅ Commit:
-- Source code (`src/`)
-- `requirements.txt`, `pyproject.toml`
-- `start.command`, `start.bat`, `start.sh`
-- `config.example.json`
-- Documentation (`README.md`, `CHANGELOG.md`)
-
-❌ Do not commit:
-- `config.json` (secrets)
-- `.venv/`, `data/`, logs, `__pycache__/`
-
-### Automated GitHub Releases
-
-A ready-to-use GitHub Actions workflow is included:
-
-- Tag a version: `git tag v5.8.14.38 && git push origin v5.8.14.38`
-- The workflow builds ZIP artifacts and publishes a GitHub Release.
-
-Workflow file:
-- `.github/workflows/release.yml`
-
-Artifacts created:
-- `shelly_energy_analyzer_<TAG>_windows.zip`
-- `shelly_energy_analyzer_<TAG>_macos.zip`
-- `shelly_energy_analyzer_<TAG>_linux.zip`
-
+Change language in **Settings → Language**.  
+Demo Mode uses the same translation system as real devices.
