@@ -65,10 +65,11 @@ from shelly_analyzer.services.export import (
     export_to_excel,
     InvoiceLine,
 )
-from shelly_analyzer.services.live import LivePoller, MultiLivePoller, LiveSample
+from shelly_analyzer.services.live import LivePoller, MultiLivePoller, DemoMultiLivePoller, LiveSample
 from shelly_analyzer.services.sync import sync_all
 from shelly_analyzer.services.webdash import LivePoint, LiveStateStore, LiveWebDashboard
 from shelly_analyzer.services.discovery import probe_device
+from shelly_analyzer.services.demo import default_demo_devices, ensure_demo_csv
 from shelly_analyzer.services.mdns import discover_shelly_mdns
 PLOTS_MODES = [
     ("all", "All"),
@@ -140,6 +141,15 @@ def _period_bounds(anchor: pd.Timestamp, period: str) -> Tuple[pd.Timestamp, pd.
     # Fallback
     return t, t + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
 class App(tk.Tk):
+
+    def _disp_device_name(self, name: str) -> str:
+        """Translate demo device name keys like 'demo.device.*' when shown in UI."""
+        try:
+            if isinstance(name, str) and name.startswith("demo.device."):
+                return self.t(name)
+        except Exception:
+            pass
+        return name
     def __init__(self) -> None:
         super().__init__()
         # config loaded below; title set after language is known
@@ -172,6 +182,12 @@ class App(tk.Tk):
             keys = [d.key for d in getattr(self.cfg, "devices", []) if getattr(d, "key", None)]
             if keys:
                 self.storage.auto_import_from_previous_installs(keys)
+        except Exception:
+            pass
+        # Demo Mode: generate realistic demo CSV data so Plots/Exports work out-of-the-box.
+        try:
+            if bool(getattr(getattr(self.cfg, 'demo', None), 'enabled', False)) and getattr(self.cfg, 'devices', None):
+                ensure_demo_csv(self.storage, list(getattr(self.cfg, 'devices', []) or []), getattr(self.cfg, 'demo'))
         except Exception:
             pass
         # Computed data
@@ -4956,6 +4972,28 @@ class App(tk.Tk):
 
         def _worker() -> None:
             try:
+                # Demo mode: toggle without network
+                if str(getattr(dev, 'host', '')).startswith('demo://'):
+                    try:
+                        for pol in list(getattr(self, '_live_pollers', []) or []):
+                            if hasattr(pol, 'set_switch'):
+                                pol.set_switch(device_key, bool(target_on))
+                                break
+                    except Exception:
+                        pass
+                    on2 = bool(target_on)
+                    def _apply_demo():
+                        try:
+                            v = self._live_switch_vars.get(device_key)
+                            if v is not None:
+                                v.set(self.t('live.switch.on') if on2 else self.t('live.switch.off'))
+                        except Exception:
+                            pass
+                    try:
+                        self.after(0, _apply_demo)
+                    except Exception:
+                        _apply_demo()
+                    return
                 http = ShellyHttp(
                     HttpConfig(
                         timeout_seconds=float(self.cfg.download.timeout_seconds),
@@ -4969,7 +5007,8 @@ class App(tk.Tk):
                 on2 = self._extract_switch_on(st)
             except Exception as e:
                 try:
-                    self.after(0, lambda: self.live_status.set(f"{dev.name}: {e}"))
+                    msg = f"{dev.name}: {e}"
+                    self.after(0, lambda m=msg: self.live_status.set(m))
                 except Exception:
                     pass
                 return
@@ -6212,15 +6251,24 @@ class App(tk.Tk):
             self._ensure_live_series_capacity(max_points, devices=devs_all, reset=True)
 
             # Poll devices in parallel using a shared thread pool.
-            self._live_pollers = [
-                MultiLivePoller(devs_all, self.cfg.download, poll_seconds=self.cfg.ui.live_poll_seconds)
-            ]
+            # Poll devices (or generate demo samples) in the background.
+            if bool(getattr(getattr(self.cfg, 'demo', None), 'enabled', False)):
+                self._live_pollers = [
+                    DemoMultiLivePoller(devs_all, getattr(self.cfg, 'demo'), poll_seconds=self.cfg.ui.live_poll_seconds)
+                ]
+            else:
+                self._live_pollers = [
+                    MultiLivePoller(devs_all, self.cfg.download, poll_seconds=self.cfg.ui.live_poll_seconds)
+                ]
             for p in self._live_pollers:
                 p.start()
 
             # Start a fresh incremental sync in the background when Live starts,
             # so "today" calculations have a good baseline.
             try:
+                if bool(getattr(getattr(self.cfg, 'demo', None), 'enabled', False)):
+                    # Demo mode uses generated CSVs; no network sync required.
+                    raise RuntimeError('demo mode: skip sync')
                 if not (self._sync_thread and self._sync_thread.is_alive()):
                     self._start_sync("incremental", label=self.t("sync.auto_live"))
             except Exception:
@@ -11196,6 +11244,10 @@ telegram_monthly_summary_last_sent=str(getattr(self.cfg.ui, "telegram_monthly_su
 
         ttk.Label(dev_top, text=self.t("setup.devices.hint"), justify="left", wraplength=960).pack(anchor="w")
 
+        # Demo mode (for users without Shellys)
+        self._wiz_demo_var = tk.BooleanVar(value=bool(getattr(getattr(self.cfg, 'demo', None), 'enabled', False)))
+        ttk.Checkbutton(dev_top, text='Demo mode (fake but realistic data)', variable=self._wiz_demo_var, command=self._wizard_toggle_demo).pack(anchor='w', pady=(6, 0))
+
         btn_row = ttk.Frame(step_devices)
         btn_row.pack(fill="x", padx=10, pady=(0, 6))
 
@@ -11221,6 +11273,12 @@ telegram_monthly_summary_last_sent=str(getattr(self.cfg.ui, "telegram_monthly_su
         cols = ("host", "model", "kind", "gen")
         tv = ttk.Treeview(tree_box, columns=cols, show="headings", selectmode="extended")
         self._wiz_tv = tv
+        # If demo mode is already enabled (config.json), pre-fill the list.
+        try:
+            if bool(getattr(self, '_wiz_demo_var', None).get()):
+                self._wizard_toggle_demo()
+        except Exception:
+            pass
         for c, w in [("host", 200), ("model", 260), ("kind", 120), ("gen", 70)]:
             tv.heading(c, text=self.t(f"setup.devices.col.{c}"))
             tv.column(c, width=w, anchor="w")
@@ -11616,6 +11674,85 @@ telegram_monthly_summary_last_sent=str(getattr(self.cfg.ui, "telegram_monthly_su
         except Exception:
             self._wiz_scan_running = False
 
+
+    def _wizard_toggle_demo(self) -> None:
+        """Enable/disable Demo Mode (no Shellys needed)."""
+        try:
+            enabled = bool(getattr(self, '_wiz_demo_var', None).get())
+        except Exception:
+            enabled = False
+
+        if enabled:
+            # Create demo devices and persist them into config.json immediately
+            try:
+                devs = default_demo_devices()
+                object.__setattr__(self.cfg, 'devices', devs)
+            except Exception:
+                try:
+                    self.cfg.devices[:] = default_demo_devices()
+                except Exception:
+                    pass
+            try:
+                from shelly_analyzer.io.config import DemoConfig
+                object.__setattr__(self.cfg, 'demo', DemoConfig(enabled=True, seed=1234, scenario='household'))
+            except Exception:
+                pass
+            try:
+                save_config(self.cfg, self.cfg_path)
+            except Exception:
+                pass
+
+            # Populate the discovery list with demo devices so the UI stays consistent
+            try:
+                tv = getattr(self, '_wiz_tv', None)
+                if tv is not None:
+                    for iid in list(tv.get_children('') or []):
+                        tv.delete(iid)
+                    self._wiz_found = {}
+                    for d in (getattr(self.cfg, 'devices', []) or []):
+                        disc = {
+                            'host': d.host,
+                            'model': getattr(d, 'model', ''),
+                            'kind': getattr(d, 'kind', 'em'),
+                            'gen': getattr(d, 'gen', 2),
+                            'em_id': getattr(d, 'em_id', 0),
+                            'phases': getattr(d, 'phases', 1),
+                            'supports_emdata': getattr(d, 'supports_emdata', True),
+                            'name': getattr(d, 'name', d.key),
+                            'key': d.key,
+                        }
+                        self._wiz_found[str(d.host)] = disc
+                        tv.insert('', 'end', values=(disc['host'], disc['model'], disc['kind'], disc['gen']))
+                    try:
+                        children = list(tv.get_children('') or [])
+                        if children:
+                            tv.selection_set(children)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            try:
+                self._wiz_status_var.set('Demo mode enabled.')
+            except Exception:
+                pass
+        else:
+            # Disable demo mode (keep devices; user can scan/add real devices).
+            try:
+                from shelly_analyzer.io.config import DemoConfig
+                object.__setattr__(self.cfg, 'demo', DemoConfig(enabled=False, seed=1234, scenario='household'))
+                save_config(self.cfg, self.cfg_path)
+            except Exception:
+                pass
+            try:
+                self._wiz_status_var.set(self.t('setup.devices.status.idle'))
+            except Exception:
+                pass
+
+        try:
+            self._wizard_refresh_nav()
+        except Exception:
+            pass
     def _wizard_add_found(self, disc) -> None:
         try:
             host = str(getattr(disc, "host", "") or "").strip()

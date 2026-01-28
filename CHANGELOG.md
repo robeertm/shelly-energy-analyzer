@@ -1,3 +1,19 @@
+## 5.9.0.8
+- Fix demo sync: generate CSV locally (no HTTP to demo://)
+
+## 5.9.0.8
+
+
+## v5.9.0.8
+
+- Demo Mode: add realistic jitter/random-walk to live data and deterministic appliance bursts.
+- Demo Mode: generate demo CSV history (7 days) for plots/exports automatically (if no CSV exists).
+- Fix: Demo switch toggle in Live now works without network.
+- Fix: Tkinter callback NameError in live status error handler.
+
+- Add Demo Mode (no Shellys required): realistic fake devices, live data generator, and demo CSV data for plots.
+- Setup Wizard: option to enable Demo Mode.
+
 ## 5.8.14.55
 - Fix: Setup wizard now persists added devices (AppConfig is frozen).
 - Fix: ZIP start scripts ship with executable bits on macOS/Linux.
