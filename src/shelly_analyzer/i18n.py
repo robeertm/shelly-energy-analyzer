@@ -501,6 +501,9 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.err.plotly_timeout": "Plotly konnte nicht geladen werden. Bitte start.command ausführen (installiert plotly) oder /static/plotly.min.js prüfen.",
         "first_run.hint": "Willkommen! Bitte zuerst deine Shelly-Geräte hinzufügen/prüfen und dann speichern. Solange keine Geräte konfiguriert sind, werden keine CSVs geladen und es erscheinen keine Warn-Popups.",
         "first_run.status": "Erster Start: Bitte Geräte in Einstellungen → Geräte konfigurieren und speichern.",
+  "demo.device.house_3p": "Demo Haus (3-phasig)",
+  "demo.device.garage_1p": "Demo Garage (1-phasig)",
+  "demo.mode.active": "DEMO MODE aktiv — es werden keine echten Geräte genutzt",
     },
     "en": {
         # App
@@ -1003,6 +1006,9 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.err.plotly_timeout": "Plotly could not be loaded. Please run start.command (installs plotly) or check /static/plotly.min.js.",
         "first_run.hint": "Welcome! Please add/verify your Shelly devices first and click Save. While no devices are configured, the app will not load CSVs and will stay quiet (no warning popups).",
         "first_run.status": "First run: configure devices in Settings → Devices and click Save.",
+  "demo.device.house_3p": "Demo House (3-phase)",
+  "demo.device.garage_1p": "Demo Garage (1-phase)",
+  "demo.mode.active": "DEMO MODE active — no real devices are used",
     },
     "es": {
         # App
@@ -1489,6 +1495,9 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.err.plotly_timeout": "No se pudo cargar Plotly. Ejecuta start.command (instala plotly) o comprueba /static/plotly.min.js.",
         "first_run.hint": "¡Bienvenido! Primero añade/verifica tus dispositivos Shelly y pulsa Guardar. Mientras no haya dispositivos configurados, la app no cargará CSVs y no mostrará avisos emergentes.",
         "first_run.status": "Primer inicio: configura los dispositivos en Ajustes → Dispositivos y pulsa Guardar.",
+  "demo.device.house_3p": "Casa Demo (3 fases)",
+  "demo.device.garage_1p": "Garaje Demo (1 fase)",
+  "demo.mode.active": "MODO DEMO activo — no se usan dispositivos reales",
     },
 }
 

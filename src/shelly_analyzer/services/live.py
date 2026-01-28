@@ -148,6 +148,7 @@ class LivePoller:
         if not self._thread.is_alive():
             self._thread.start()
 
+
     def stop(self) -> None:
         self._stop.set()
 
@@ -329,3 +330,88 @@ class MultiLivePoller:
             sleep_s = max(0.05, poll - elapsed)
             if self._stop.wait(sleep_s):
                 break
+
+
+# ---------------- Demo poller (no network) ----------------
+
+from shelly_analyzer.services.demo import DemoState, gen_sample
+from shelly_analyzer.io.config import DemoConfig
+
+
+class DemoMultiLivePoller:
+    """Generate realistic live samples without Shelly devices (Demo Mode)."""
+
+    def __init__(
+        self,
+        devices: Iterable[DeviceConfig],
+        demo_cfg: DemoConfig,
+        poll_seconds: float = 1.0,
+    ) -> None:
+        self.devices: List[DeviceConfig] = list(devices)
+        self.poll_seconds = float(poll_seconds)
+        self.demo_cfg = demo_cfg
+        self.samples: "queue.Queue[LiveSample]" = queue.Queue()
+        self.errors: "queue.Queue[Dict[str, Any]]" = queue.Queue()
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._state = DemoState(seed=int(getattr(demo_cfg, "seed", 1234)), scenario=str(getattr(demo_cfg, "scenario", "household")))
+
+    def start(self) -> None:
+        if self._thread and self._thread.is_alive():
+            return
+
+        self._stop.clear()
+
+        def _run() -> None:
+            next_t = time.time()
+            while not self._stop.is_set():
+                now = time.time()
+                if now < next_t:
+                    time.sleep(min(0.05, max(0.0, next_t - now)))
+                    continue
+                ts = int(time.time())
+                try:
+                    for d in self.devices:
+                        fields = gen_sample(d, float(ts), self._state)
+                        self.samples.put(
+                            LiveSample(
+                                device_key=d.key,
+                                device_name=d.name,
+                                ts=ts,
+                                power_w=fields.get("power_w", {}),
+                                voltage_v=fields.get("voltage_v", {}),
+                                current_a=fields.get("current_a", {}),
+                                reactive_var=fields.get("reactive_var", {"a": 0.0, "b": 0.0, "c": 0.0, "total": 0.0}),
+                                cosphi=fields.get("cosphi", {"a": 0.0, "b": 0.0, "c": 0.0, "total": 0.0}),
+                                raw={
+                                    "demo": True,
+                                    "kind": str(getattr(d, "kind", "em")),
+                                    "output": bool(self._state.switches.get(d.key, True)),
+                                    "ts": ts,
+                                },
+                            )
+                        )
+                except Exception as e:
+                    self.errors.put({"error": str(e)})
+                next_t += self.poll_seconds
+                # avoid drift runaway
+                if next_t < time.time() - 5:
+                    next_t = time.time() + self.poll_seconds
+
+        self._thread = threading.Thread(target=_run, name="DemoMultiLivePoller", daemon=True)
+        self._thread.start()
+
+    def set_switch(self, device_key: str, on: bool) -> None:
+        """Set demo switch state (used by UI toggle)."""
+        try:
+            self._state.switches[str(device_key)] = bool(on)
+        except Exception:
+            pass
+
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def join(self, timeout: Optional[float] = None) -> None:
+        if self._thread:
+            self._thread.join(timeout=timeout)

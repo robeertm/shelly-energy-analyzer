@@ -106,6 +106,15 @@ class UiConfig:
 
 
 
+
+@dataclass(frozen=True)
+class DemoConfig:
+    enabled: bool = False
+    # Deterministic seed so demo behaviour is repeatable across restarts
+    seed: int = 1234
+    # One of: household|pv-home|heatpump|tenant-metering
+    scenario: str = "household"
+
 @dataclass(frozen=True)
 class AlertRule:
     """Simple local alert rule evaluated on live samples."""
@@ -211,6 +220,7 @@ class AppConfig:
     download: DownloadConfig = DownloadConfig()
     csv_pack: CsvPackConfig = CsvPackConfig()
     ui: UiConfig = UiConfig()
+    demo: DemoConfig = DemoConfig()
     pricing: PricingConfig = PricingConfig()
     billing: BillingConfig = BillingConfig()
     alerts: List[AlertRule] = field(default_factory=list)
@@ -366,6 +376,13 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         telegram_monthly_summary_last_sent=str(ui_raw.get("telegram_monthly_summary_last_sent", UiConfig.telegram_monthly_summary_last_sent) or ""),
     )
 
+    demo_raw = raw.get('demo', {}) if isinstance(raw.get('demo'), dict) else {}
+    demo = DemoConfig(
+        enabled=bool(demo_raw.get('enabled', False)),
+        seed=_coerce_int(demo_raw.get('seed', DemoConfig.seed), DemoConfig.seed),
+        scenario=str(demo_raw.get('scenario', DemoConfig.scenario) or DemoConfig.scenario),
+    )
+
 
     pricing_raw = raw.get("pricing", {}) if isinstance(raw.get("pricing"), dict) else {}
     pricing = PricingConfig(
@@ -440,6 +457,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         download=download,
         csv_pack=csv_pack,
         ui=ui,
+        demo=demo,
         pricing=pricing,
         billing=billing,
         alerts=alerts,
@@ -533,6 +551,11 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "telegram_monthly_summary_time": getattr(cfg.ui, "telegram_monthly_summary_time", "00:00"),
             "telegram_daily_summary_last_sent": getattr(cfg.ui, "telegram_daily_summary_last_sent", ""),
             "telegram_monthly_summary_last_sent": getattr(cfg.ui, "telegram_monthly_summary_last_sent", ""),
+        },
+        "demo": {
+            "enabled": bool(getattr(cfg.demo, "enabled", False)),
+            "seed": int(getattr(cfg.demo, "seed", 1234)),
+            "scenario": str(getattr(cfg.demo, "scenario", "household") or "household"),
         },
 
         "alerts": [
