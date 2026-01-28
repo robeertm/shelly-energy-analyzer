@@ -31,6 +31,54 @@ _I18N: Dict[str, Dict[str, str]] = {
         "tabs.live": "Live",
         "tabs.export": "Export",
         "tabs.settings": "Einstellungen",
+
+        "tabs.setup": "Setup",
+
+        # Setup wizard
+        "setup.title": "Ersteinrichtung",
+        "setup.subtitle": "Dieser Assistent hilft dir beim ersten Start: Geräte automatisch finden (mDNS/IP) und optional Telegram konfigurieren.",
+        "setup.placeholder": "Bitte zuerst das Setup abschließen (mindestens ein Gerät hinzufügen). Danach werden diese Tabs aktiviert.",
+
+        "setup.step.devices": "Geräte",
+        "setup.step.telegram": "Telegram (optional)",
+        "setup.step.finish": "Fertig",
+
+        "setup.btn.back": "Zurück",
+        "setup.btn.next": "Weiter",
+        "setup.btn.finish": "Fertigstellen",
+
+        "setup.devices.hint": "1) Suche Shelly-Geräte automatisch per mDNS (empfohlen) oder per IP-Scan im lokalen /24-Netz.\n2) Markiere gefundene Geräte und füge sie hinzu.\nDu kannst Namen/Keys später unter Einstellungen → Geräte anpassen.",
+        "setup.devices.status.idle": "Bereit.",
+        "setup.devices.status.mdns": "Suche per mDNS …",
+        "setup.devices.status.ipscan": "Scanne Netzwerk {prefix}.0/24 …",
+        "setup.devices.status.found": "{n} gefunden",
+        "setup.devices.status.done": "Fertig: {n} gefunden",
+        "setup.devices.status.mdns_err": "mDNS nicht verfügbar: {err}",
+
+        "setup.devices.btn.mdns": "Automatisch finden (mDNS)",
+        "setup.devices.btn.ipscan": "IP-Scan (/24)",
+        "setup.devices.manual.label": "Manuell IP/Host:",
+        "setup.devices.manual.btn.add": "Hinzufügen",
+        "setup.devices.status.manual": "Prüfe {host} ...",
+        "setup.devices.status.not_shelly": "Kein Shelly: {host}",
+
+        "setup.devices.btn.add": "Ausgewählte hinzufügen",
+
+        "setup.devices.col.host": "IP/Host",
+        "setup.devices.col.model": "Modell",
+        "setup.devices.col.kind": "Typ",
+        "setup.devices.col.gen": "Gen",
+
+        "setup.devices.add.ok": "{n} Gerät(e) hinzugefügt",
+        "setup.devices.add.none": "Nichts ausgewählt",
+
+        "setup.telegram.hint": "Telegram ist optional. Du kannst es auch später unter Einstellungen konfigurieren.",
+        "setup.telegram.enable": "Telegram aktivieren",
+        "setup.telegram.save": "Speichern",
+
+        "setup.finish.hint": "Setup abgeschlossen. Du kannst jetzt Sync/Plots/Live nutzen.",
+        "setup.finish.summary": "Geräte: {n}\nTipp: Öffne Einstellungen → Geräte, um Namen/Keys anzupassen.",
+        "setup.finish.need_device": "Bitte zuerst mindestens ein Gerät hinzufügen (Schritt 1).",
         "tabs.billing": "Rechnung",
 
         # Sync tab
@@ -451,6 +499,8 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.token.tip": "Tipp: In der App wird die vollständige URL angezeigt und als QR-Code bereitgestellt.",
         "web.err.start_command": "Bitte start.command ausführen.",
         "web.err.plotly_timeout": "Plotly konnte nicht geladen werden. Bitte start.command ausführen (installiert plotly) oder /static/plotly.min.js prüfen.",
+        "first_run.hint": "Willkommen! Bitte zuerst deine Shelly-Geräte hinzufügen/prüfen und dann speichern. Solange keine Geräte konfiguriert sind, werden keine CSVs geladen und es erscheinen keine Warn-Popups.",
+        "first_run.status": "Erster Start: Bitte Geräte in Einstellungen → Geräte konfigurieren und speichern.",
     },
     "en": {
         # App
@@ -474,6 +524,54 @@ _I18N: Dict[str, Dict[str, str]] = {
         "tabs.live": "Live",
         "tabs.export": "Export",
         "tabs.settings": "Settings",
+
+        "tabs.setup": "Setup",
+
+        # Setup wizard
+        "setup.title": "First-time setup",
+        "setup.subtitle": "This wizard helps you get started: auto-discover Shelly devices (mDNS/IP) and optionally configure Telegram.",
+        "setup.placeholder": "Please complete the setup first (add at least one device). These tabs will be enabled afterwards.",
+
+        "setup.step.devices": "Devices",
+        "setup.step.telegram": "Telegram (optional)",
+        "setup.step.finish": "Finish",
+
+        "setup.btn.back": "Back",
+        "setup.btn.next": "Next",
+        "setup.btn.finish": "Finish",
+
+        "setup.devices.hint": "1) Discover Shelly devices via mDNS (recommended) or by scanning your local /24 subnet.\n2) Select found devices and add them.\nYou can adjust names/keys later in Settings → Devices.",
+        "setup.devices.status.idle": "Ready.",
+        "setup.devices.status.mdns": "Discovering via mDNS …",
+        "setup.devices.status.ipscan": "Scanning network {prefix}.0/24 …",
+        "setup.devices.status.found": "{n} found",
+        "setup.devices.status.done": "Done: {n} found",
+        "setup.devices.status.mdns_err": "mDNS not available: {err}",
+
+        "setup.devices.btn.mdns": "Auto-discover (mDNS)",
+        "setup.devices.btn.ipscan": "IP scan (/24)",
+        "setup.devices.manual.label": "Manual IP/Host:",
+        "setup.devices.manual.btn.add": "Add",
+        "setup.devices.status.manual": "Probing {host} ...",
+        "setup.devices.status.not_shelly": "Not a Shelly: {host}",
+
+        "setup.devices.btn.add": "Add selected",
+
+        "setup.devices.col.host": "IP/Host",
+        "setup.devices.col.model": "Model",
+        "setup.devices.col.kind": "Type",
+        "setup.devices.col.gen": "Gen",
+
+        "setup.devices.add.ok": "Added {n} device(s)",
+        "setup.devices.add.none": "Nothing selected",
+
+        "setup.telegram.hint": "Telegram is optional. You can also configure it later in Settings.",
+        "setup.telegram.enable": "Enable Telegram",
+        "setup.telegram.save": "Save",
+
+        "setup.finish.hint": "Setup complete. You can now use Sync/Plots/Live.",
+        "setup.finish.summary": "Devices: {n}\nTip: Open Settings → Devices to adjust names/keys.",
+        "setup.finish.need_device": "Please add at least one device first (Step 1).",
         "tabs.billing": "Invoice",
 
         # Sync tab
@@ -903,6 +1001,8 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.token.tip": "Tip: The desktop app shows the full URL and provides it as a QR code.",
         "web.err.start_command": "Please run start.command.",
         "web.err.plotly_timeout": "Plotly could not be loaded. Please run start.command (installs plotly) or check /static/plotly.min.js.",
+        "first_run.hint": "Welcome! Please add/verify your Shelly devices first and click Save. While no devices are configured, the app will not load CSVs and will stay quiet (no warning popups).",
+        "first_run.status": "First run: configure devices in Settings → Devices and click Save.",
     },
     "es": {
         # App
@@ -926,6 +1026,54 @@ _I18N: Dict[str, Dict[str, str]] = {
         "tabs.live": "En vivo",
         "tabs.export": "Exportar",
         "tabs.settings": "Ajustes",
+
+        "tabs.setup": "Setup",
+
+        # Setup wizard
+        "setup.title": "Configuración inicial",
+        "setup.subtitle": "Este asistente te ayuda a empezar: descubrir dispositivos Shelly (mDNS/IP) y configurar Telegram opcionalmente.",
+        "setup.placeholder": "Completa primero la configuración (añade al menos un dispositivo). Después se activarán estas pestañas.",
+
+        "setup.step.devices": "Dispositivos",
+        "setup.step.telegram": "Telegram (opcional)",
+        "setup.step.finish": "Finalizar",
+
+        "setup.btn.back": "Atrás",
+        "setup.btn.next": "Siguiente",
+        "setup.btn.finish": "Finalizar",
+
+        "setup.devices.hint": "1) Descubre dispositivos Shelly por mDNS (recomendado) o escaneando tu subred local /24.\n2) Selecciona los dispositivos encontrados y añádelos.\nPuedes ajustar nombres/keys más tarde en Ajustes → Dispositivos.",
+        "setup.devices.status.idle": "Listo.",
+        "setup.devices.status.mdns": "Buscando por mDNS …",
+        "setup.devices.status.ipscan": "Escaneando red {prefix}.0/24 …",
+        "setup.devices.status.found": "{n} encontrados",
+        "setup.devices.status.done": "Hecho: {n} encontrados",
+        "setup.devices.status.mdns_err": "mDNS no disponible: {err}",
+
+        "setup.devices.btn.mdns": "Descubrir (mDNS)",
+        "setup.devices.btn.ipscan": "Escaneo IP (/24)",
+        "setup.devices.manual.label": "IP/Host manual:",
+        "setup.devices.manual.btn.add": "Añadir",
+        "setup.devices.status.manual": "Probando {host} ...",
+        "setup.devices.status.not_shelly": "No es Shelly: {host}",
+
+        "setup.devices.btn.add": "Añadir seleccionados",
+
+        "setup.devices.col.host": "IP/Host",
+        "setup.devices.col.model": "Modelo",
+        "setup.devices.col.kind": "Tipo",
+        "setup.devices.col.gen": "Gen",
+
+        "setup.devices.add.ok": "Añadido(s) {n} dispositivo(s)",
+        "setup.devices.add.none": "Nada seleccionado",
+
+        "setup.telegram.hint": "Telegram es opcional. También puedes configurarlo más tarde en Ajustes.",
+        "setup.telegram.enable": "Activar Telegram",
+        "setup.telegram.save": "Guardar",
+
+        "setup.finish.hint": "Configuración completa. Ya puedes usar Sync/Plots/Live.",
+        "setup.finish.summary": "Dispositivos: {n}\nConsejo: abre Ajustes → Dispositivos para ajustar nombres/keys.",
+        "setup.finish.need_device": "Primero añade al menos un dispositivo (Paso 1).",
         "tabs.billing": "Factura",
 
         # Sync tab
@@ -1339,6 +1487,8 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.token.tip": "Consejo: La app muestra la URL completa y la ofrece como código QR.",
         "web.err.start_command": "Ejecuta start.command.",
         "web.err.plotly_timeout": "No se pudo cargar Plotly. Ejecuta start.command (instala plotly) o comprueba /static/plotly.min.js.",
+        "first_run.hint": "¡Bienvenido! Primero añade/verifica tus dispositivos Shelly y pulsa Guardar. Mientras no haya dispositivos configurados, la app no cargará CSVs y no mostrará avisos emergentes.",
+        "first_run.status": "Primer inicio: configura los dispositivos en Ajustes → Dispositivos y pulsa Guardar.",
     },
 }
 

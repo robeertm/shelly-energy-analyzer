@@ -274,7 +274,10 @@ def _migrate_legacy(raw: Dict[str, Any]) -> Dict[str, Any]:
 def load_config(path: Optional[Path] = None) -> AppConfig:
     path = Path(path) if path else default_config_path()
     if not path.exists():
-        cfg = AppConfig()
+        # First run: create a minimal config without sample devices.
+        # This avoids confusing 'Haus/Server' defaults and prevents noisy
+        # startup logs about missing CSVs.
+        cfg = AppConfig(devices=[])
         save_config(cfg, path)
         return cfg
 
@@ -282,8 +285,9 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     raw = _migrate_legacy(raw_original)
 
     devices_raw = raw.get("devices")
-    if not isinstance(devices_raw, list) or not devices_raw:
-        raise ValueError("config.json: 'devices' must be a non-empty list")
+    if not isinstance(devices_raw, list):
+        raise ValueError("config.json: 'devices' must be a list")
+    # Allow empty device lists so the app can start in a 'first run' setup mode.
 
     devices: List[DeviceConfig] = []
     for i, d in enumerate(devices_raw):
