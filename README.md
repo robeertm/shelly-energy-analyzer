@@ -2,6 +2,8 @@
 
 A cross-platform desktop application to analyze, visualize and export energy data from Shelly devices (1‑phase and 3‑phase) — including live dashboards, historical plots, CSV/PDF exports and Telegram alerts.
 
+This repository is **GitHub-ready** (MIT license, clean structure, no secrets). Releases are intended to be published via **GitHub Releases** so the built‑in updater can find and download new versions.
+
 ## Key Features
 
 - 📊 **Live Monitoring**
@@ -37,11 +39,11 @@ A cross-platform desktop application to analyze, visualize and export energy dat
   - macOS / Windows / Linux
   - One-click start scripts
 
-## Quick Start
+## Quick Start (End Users)
 
 ### macOS
 - Double-click `start.command`
-- If macOS blocks it: run `chmod +x start.command` in the folder once.
+- If macOS blocks it once: in Terminal, run `chmod +x start.command` in the folder.
 
 ### Windows
 - Double-click `start.bat`
@@ -57,7 +59,7 @@ chmod +x start.sh
 Demo Mode lets you test the full application **without any Shelly devices**.
 
 ### Enable Demo Mode
-- On first start, choose **“Demo mode”** in the setup wizard  
+- On first start, choose **“Demo mode”** in the setup wizard
   **or**
 - Set in `config.json`:
 ```json
@@ -77,5 +79,66 @@ The UI supports:
 - German
 - Spanish
 
-Change language in **Settings → Language**.  
-Demo Mode uses the same translation system as real devices.
+Change language in **Settings → Language**.
+
+## Running From Source (Developers)
+
+Requirements:
+- Python 3.11+ (recommended)
+
+Install and run:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -U pip
+pip install -r requirements.txt
+python -m shelly_analyzer
+```
+
+## Updates (GitHub Releases)
+
+The built-in updater checks the latest release on GitHub.
+
+Notes:
+- If you are offline or GitHub is blocked by DNS/VPN/firewall, the app will show an “offline/timeout” message.
+- **Download & install** is only enabled when a newer version than the current one is available.
+
+To publish an update:
+1. Create a git tag (example: `v5.9.2.5`)
+2. Push the tag
+3. Create a GitHub Release for the tag and attach the release ZIP artifact
+
+## Upload to GitHub (Command Cheat Sheet)
+
+### 1) Create the repo locally and commit
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+```
+
+### 2) Connect to GitHub and push
+Create an empty repo on GitHub first, then:
+```bash
+git branch -M main
+git remote add origin <YOUR_GITHUB_REPO_URL>
+git push -u origin main
+```
+
+### 3) Tag a release (recommended)
+```bash
+git tag v5.9.2.5
+git push origin v5.9.2.5
+```
+
+### 4) Typical workflow afterwards
+```bash
+git status
+git add -A
+git commit -m "Fix updater behavior"
+git push
+```
+
+---
+
+License: MIT (see `LICENSE`).

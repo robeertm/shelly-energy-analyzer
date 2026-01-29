@@ -1,10 +1,26 @@
-## 5.9.0.8
+## 5.9.2.5
+- Docs: README updated (updater behavior + GitHub upload commands).
+
+## 5.9.2.2
+
+## v5.9.2.3
+- Fix: Update page buttons now work (GitHub check used undefined function before, always showed “GitHub not reachable”).  
+- UX: Immediate status feedback on update actions; “Open release page” now works even if no check result is available.
+
+- Fix: restore missing GUI entrypoint (`run_gui`) so `python -m shelly_analyzer` / start scripts work again.
+
+## 5.9.2.1
+- Add GitHub-based update checker and optional auto-update.
+- Non-blocking startup check with short timeout and clear offline message.
+- Updater helper replaces app files and restarts; preserves config/data.
+
+## 5.9.2.1
 - Fix demo sync: generate CSV locally (no HTTP to demo://)
 
-## 5.9.0.8
+## 5.9.2.1
 
 
-## v5.9.0.8
+## v5.9.2.1
 
 - Demo Mode: add realistic jitter/random-walk to live data and deterministic appliance bursts.
 - Demo Mode: generate demo CSV history (7 days) for plots/exports automatically (if no CSV exists).
@@ -55,6 +71,11 @@
 - Change: Live Day/Night now switches plot appearance (light/dark theme). `All` = auto by time.
 
 # Changelog
+
+## 5.9.2.4
+- Fix: Update page no longer installs when no newer release is available; Install button is disabled unless an update is actually newer.
+- Fix: Prevent stale/slow update checks from overwriting newer results (sequence id).
+
 ## 5.8.14.44
 
 - Live: add Day/Night filter toggle for live plots (All/Day/Night), persisted in config.

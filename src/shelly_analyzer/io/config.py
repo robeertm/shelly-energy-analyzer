@@ -208,21 +208,28 @@ class BillingConfig:
     payment_terms_days: int = 14
 
 
+@dataclass(frozen=False)
+class UpdatesConfig:
+    # GitHub repository in the form "owner/repo"
+    repo: str = "robeertm/shelly-energy-analyzer"
+    # Check for updates on startup (non-blocking)
+    check_on_start: bool = True
+    # Auto-install updates on startup (only if user enabled it)
+    auto_install: bool = False
+
+
 @dataclass(frozen=True)
 class AppConfig:
     version: str = __version__
-    devices: List[DeviceConfig] = field(
-        default_factory=lambda: [
-            DeviceConfig(key="shelly1", name="Haus", host="192.168.3.175", em_id=0),
-            DeviceConfig(key="shelly2", name="Server", host="192.168.3.189", em_id=0),
-        ]
-    )
-    download: DownloadConfig = DownloadConfig()
-    csv_pack: CsvPackConfig = CsvPackConfig()
-    ui: UiConfig = UiConfig()
-    demo: DemoConfig = DemoConfig()
-    pricing: PricingConfig = PricingConfig()
-    billing: BillingConfig = BillingConfig()
+    devices: List[DeviceConfig] = field(default_factory=list)
+
+    download: DownloadConfig = field(default_factory=DownloadConfig)
+    csv_pack: CsvPackConfig = field(default_factory=CsvPackConfig)
+    ui: UiConfig = field(default_factory=UiConfig)
+    updates: UpdatesConfig = field(default_factory=UpdatesConfig)
+    demo: DemoConfig = field(default_factory=DemoConfig)
+    pricing: PricingConfig = field(default_factory=PricingConfig)
+    billing: BillingConfig = field(default_factory=BillingConfig)
     alerts: List[AlertRule] = field(default_factory=list)
 
 
@@ -376,6 +383,13 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         telegram_monthly_summary_last_sent=str(ui_raw.get("telegram_monthly_summary_last_sent", UiConfig.telegram_monthly_summary_last_sent) or ""),
     )
 
+    updates_raw = raw.get("updates", {}) if isinstance(raw.get("updates"), dict) else {}
+    updates = UpdatesConfig(
+        repo=str(updates_raw.get("repo", UpdatesConfig.repo)),
+        check_on_start=bool(updates_raw.get("check_on_start", UpdatesConfig.check_on_start)),
+        auto_install=bool(updates_raw.get("auto_install", UpdatesConfig.auto_install)),
+    )
+
     demo_raw = raw.get('demo', {}) if isinstance(raw.get('demo'), dict) else {}
     demo = DemoConfig(
         enabled=bool(demo_raw.get('enabled', False)),
@@ -457,6 +471,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         download=download,
         csv_pack=csv_pack,
         ui=ui,
+        updates=updates,
         demo=demo,
         pricing=pricing,
         billing=billing,
@@ -551,7 +566,12 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "telegram_monthly_summary_time": getattr(cfg.ui, "telegram_monthly_summary_time", "00:00"),
             "telegram_daily_summary_last_sent": getattr(cfg.ui, "telegram_daily_summary_last_sent", ""),
             "telegram_monthly_summary_last_sent": getattr(cfg.ui, "telegram_monthly_summary_last_sent", ""),
+        },        "updates": {
+            "repo": getattr(getattr(cfg, "updates", UpdatesConfig()), "repo", UpdatesConfig.repo),
+            "check_on_start": bool(getattr(getattr(cfg, "updates", UpdatesConfig()), "check_on_start", True)),
+            "auto_install": bool(getattr(getattr(cfg, "updates", UpdatesConfig()), "auto_install", False)),
         },
+
         "demo": {
             "enabled": bool(getattr(cfg.demo, "enabled", False)),
             "seed": int(getattr(cfg.demo, "seed", 1234)),
