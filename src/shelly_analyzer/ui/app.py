@@ -48,6 +48,7 @@ from shelly_analyzer.io.config import (
     DownloadConfig,
     PricingConfig,
     UiConfig,
+    UpdatesConfig,
     AlertRule,
     load_config,
     save_config,
@@ -170,6 +171,10 @@ class App(tk.Tk):
         # UI variables that may be referenced before their tabs are built
         # (e.g., during setup wizard / early autosync).
         self.sync_summary = tk.StringVar(value=self.t("common.no_data"))
+        # Updates (GitHub Releases)
+        self.upd_status = tk.StringVar(value=self.t("updates.status.idle"))
+        self.upd_auto = tk.BooleanVar(value=bool(getattr(getattr(self.cfg, "updates", None), "auto_install", False)))
+        self._upd_latest: Optional[ReleaseInfo] = None
         self.sync_log = None  # will be a tk.Text once the Sync tab is built
         self._sync_log_buffer: List[str] = []
         self.title(f"{self.t('app.title')} {__version__}")
@@ -271,6 +276,8 @@ class App(tk.Tk):
         self._live_axes: Dict[str, Dict[str, any]] = {}
         self._live_canvases: Dict[str, Dict[str, FigureCanvasTkAgg]] = {}
         self._build_ui()
+        # Check for updates on startup (non-blocking)
+        self.after(500, self._updates_check_on_startup)
         # On first run (no config yet), start in Settings → Devices.
         try:
             if bool(getattr(self, '_first_run', False)) or not list(getattr(self.cfg, 'devices', []) or []):
@@ -7489,13 +7496,36 @@ class App(tk.Tk):
         tab_advanced = ttk.Frame(nb)
         tab_expert = ttk.Frame(nb)
         tab_billing = ttk.Frame(nb)
+        tab_updates = ttk.Frame(nb)
         nb.add(tab_devices, text=self.t('settings.devices'))
         nb.add(tab_main, text=self.t('settings.main'))
         nb.add(tab_advanced, text=self.t('settings.advanced'))
         nb.add(tab_expert, text=self.t('settings.expert'))
         nb.add(tab_billing, text=self.t('tabs.billing'))
+        nb.add(tab_updates, text=self.t('settings.updates'))
 
-        # ---------------- Geräte ----------------
+        
+        # ---------------- Updates ----------------
+        up_outer = ttk.Frame(tab_updates)
+        up_outer.pack(fill="both", expand=True, padx=12, pady=12)
+
+        ttk.Label(up_outer, text=self.t('settings.updates'), font=('TkDefaultFont', 14, 'bold')).pack(anchor='w', pady=(0, 10))
+        ttk.Label(up_outer, textvariable=self.upd_status, wraplength=900, justify='left').pack(anchor='w', pady=(0, 10))
+
+        row = ttk.Frame(up_outer)
+        row.pack(anchor='w', pady=(0, 10))
+
+        self.btn_upd_check = ttk.Button(row, text=self.t('updates.check_now'), command=lambda: self._updates_check_async(auto_install=False))
+        self.btn_upd_check.pack(side='left', padx=(0, 8))
+
+        self.btn_upd_install = ttk.Button(row, text=self.t('updates.install'), command=self._updates_install_latest, state="disabled")
+        self.btn_upd_install.pack(side='left', padx=(0, 8))
+
+        self.btn_upd_open = ttk.Button(row, text=self.t('updates.open_release'), command=self._updates_open_release)
+        self.btn_upd_open.pack(side='left')
+
+        ttk.Checkbutton(up_outer, text=self.t('updates.auto'), variable=self.upd_auto).pack(anchor='w', pady=(6, 0))
+# ---------------- Geräte ----------------
 
         # Scrollbar for small screens (Devices subtab can get very tall)
         devices_outer = ttk.Frame(tab_devices)
@@ -9022,12 +9052,19 @@ telegram_monthly_summary_last_sent=str(getattr(self.cfg.ui, "telegram_monthly_su
         except Exception:
             pass
 
+        
+        # Updates settings (persist auto-install checkbox)
+        try:
+            updates = replace(getattr(self.cfg, "updates", UpdatesConfig()), auto_install=bool(self.upd_auto.get()))
+        except Exception:
+            updates = UpdatesConfig(auto_install=bool(self.upd_auto.get()))
         self.cfg = AppConfig(
             version=__version__,
             devices=devs,
             download=download,
             csv_pack=csv_pack,
             ui=ui,
+            updates=updates,
             pricing=pricing,
             billing=billing,
             alerts=alerts,
@@ -11992,17 +12029,709 @@ telegram_monthly_summary_last_sent=str(getattr(self.cfg.ui, "telegram_monthly_su
             pass
 
 
-def run_gui() -> None:
-    # Initialize logging early so UI + background threads can report issues.
-    try:
-        from shelly_analyzer.io.logging_setup import setup_logging
-        lp = setup_logging(Path.cwd())
-    except Exception:
-        lp = None
 
-    app = App()
+    # ---------------- Updates ----------------
+
+    def _updates_repo(self) -> str:
+        try:
+            u = getattr(self.cfg, "updates", None)
+            if u and getattr(u, "repo", None):
+                return str(getattr(u, "repo"))
+        except Exception:
+            pass
+        return "robeertm/shelly-energy-analyzer"
+
+    def _updates_check_on_startup(self) -> None:
+        # Always check when the app opens (non-blocking). Auto-install only if user enabled it.
+        try:
+            self._updates_check_async(auto_install=bool(self.upd_auto.get()))
+        except Exception:
+            pass
+
+    def _updates_check_async(self, auto_install: bool = False) -> None:
+        """Non-blocking GitHub release check with immediate UI feedback.
+
+        Uses a sequence id so slow/failed older requests cannot overwrite newer results.
+        """
+        import threading
+        from types import SimpleNamespace
+
+        # Bump sequence id for race-free UI updates
+        try:
+            self._upd_check_seq = int(getattr(self, "_upd_check_seq", 0)) + 1
+        except Exception:
+            self._upd_check_seq = 1
+        seq = self._upd_check_seq
+
+        # Immediate feedback on click (runs on UI thread)
+        try:
+            self._updates_set_status(self.t("updates.searching"))
+        except Exception:
+            pass
+        try:
+            if hasattr(self, "btn_upd_install"):
+                self.btn_upd_install.configure(state="disabled")
+        except Exception:
+            pass
+
+        def worker() -> None:
+            repo = self._updates_repo()
+            try:
+                from shelly_analyzer.services.updater import check_latest_release, is_newer
+                info = check_latest_release(repo, timeout_s=10.0)
+            except Exception as e:
+                info = None
+                err = str(e)
+
+                def apply_err():
+                    if getattr(self, "_upd_check_seq", 0) != seq:
+                        return
+                    try:
+                        self._upd_latest = None
+                    except Exception:
+                        pass
+                    try:
+                        self._updates_set_status(f"{self.t('updates.status.unreachable')} ({err})")
+                    except Exception:
+                        pass
+                    try:
+                        if hasattr(self, "btn_upd_install"):
+                            self.btn_upd_install.configure(state="disabled")
+                    except Exception:
+                        pass
+
+                try:
+                    self.after(0, apply_err)
+                except Exception:
+                    apply_err()
+                return
+
+            def apply_ok():
+                if getattr(self, "_upd_check_seq", 0) != seq:
+                    return
+
+                if not info or not getattr(info, "reachable", False):
+                    try:
+                        self._upd_latest = None
+                    except Exception:
+                        pass
+                    try:
+                        msg = getattr(info, "status", None) or self.t("updates.status.unreachable")
+                        self._updates_set_status(msg)
+                    except Exception:
+                        pass
+                    try:
+                        if hasattr(self, "btn_upd_install"):
+                            self.btn_upd_install.configure(state="disabled")
+                    except Exception:
+                        pass
+                    return
+
+                tag = getattr(info, "latest_tag", None) or ""
+                asset_url = getattr(info, "asset_url", None)
+                html_url = f"https://github.com/{repo}/releases/tag/{tag}" if tag else f"https://github.com/{repo}/releases/latest"
+
+                # Only offer install if tag is newer than current version
+                try:
+                    if tag and is_newer(tag, f"v{__version__}"):
+                        self._upd_latest = SimpleNamespace(tag=tag, zip_url=asset_url, html_url=html_url)
+                        self._updates_set_status(self.t("updates.status.available", tag=tag))
+                        try:
+                            if hasattr(self, "btn_upd_install"):
+                                self.btn_upd_install.configure(state="normal" if asset_url else "disabled")
+                        except Exception:
+                            pass
+
+                        if auto_install and asset_url:
+                            try:
+                                self.after(0, self._updates_install_latest)
+                            except Exception:
+                                self._updates_install_latest()
+                    else:
+                        # Not newer → disable install
+                        self._upd_latest = SimpleNamespace(tag=tag, zip_url=None, html_url=html_url)
+                        self._updates_set_status(self.t("updates.status.none"))
+                        try:
+                            if hasattr(self, "btn_upd_install"):
+                                self.btn_upd_install.configure(state="disabled")
+                        except Exception:
+                            pass
+                except Exception:
+                    try:
+                        self._upd_latest = SimpleNamespace(tag=tag, zip_url=None, html_url=html_url)
+                    except Exception:
+                        pass
+                    try:
+                        self._updates_set_status(self.t("updates.status.none"))
+                    except Exception:
+                        pass
+                    try:
+                        if hasattr(self, "btn_upd_install"):
+                            self.btn_upd_install.configure(state="disabled")
+                    except Exception:
+                        pass
+
+            try:
+                self.after(0, apply_ok)
+            except Exception:
+                apply_ok()
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _updates_set_status(self, msg: str) -> None:
+        try:
+            print(f"[updates] status: {msg}")
+        except Exception:
+            pass
+        try:
+            self.after(0, lambda m=msg: self.upd_status.set(m))
+        except Exception:
+            try:
+                self.upd_status.set(msg)
+            except Exception:
+                pass
+
+    def _updates_open_release(self) -> None:
+        try:
+            rel = self._upd_latest
+            if rel and rel.html_url:
+                import webbrowser
+                webbrowser.open(rel.html_url)
+        except Exception:
+            pass
+
+    def _updates_install_latest(self) -> None:
+        rel = getattr(self, "_upd_latest", None)
+        # Safety guard: only install when we truly have a newer release
+        if not rel or not getattr(rel, "tag", None):
+            try:
+                self._updates_set_status(self.t("updates.status.none"))
+            except Exception:
+                pass
+            return
+        try:
+            from shelly_analyzer.services.updater import is_newer
+            if not is_newer(str(rel.tag), f"v{__version__}"):
+                try:
+                    self._updates_set_status(self.t("updates.status.none"))
+                except Exception:
+                    pass
+                try:
+                    if hasattr(self, "btn_upd_install"):
+                        self.btn_upd_install.configure(state="disabled")
+                except Exception:
+                    pass
+                return
+        except Exception:
+            # If version compare fails, be conservative and do not install
+            try:
+                self._updates_set_status(self.t("updates.status.none"))
+            except Exception:
+                pass
+            return
+
+        if not getattr(rel, "zip_url", None):
+            try:
+                self._updates_set_status(self.t("updates.no_download"))
+            except Exception:
+                pass
+            return
+
+        # Download to updates/ and stage unpack
+        import urllib.request
+        import zipfile
+        from pathlib import Path
+
+        app_dir = Path(self.project_root).resolve()
+        upd_dir = app_dir / "updates"
+        upd_dir.mkdir(parents=True, exist_ok=True)
+        zip_path = upd_dir / f"{rel.tag}.zip"
+        staging = upd_dir / "staging"
+        # clean staging
+    def _updates_open_release(self) -> None:
+        """Open GitHub release page (works even if check failed)."""
+        try:
+            import webbrowser
+            repo = self._updates_repo()
+            rel = getattr(self, "_upd_latest", None)
+            url = None
+            if rel and getattr(rel, "html_url", None):
+                url = rel.html_url
+            else:
+                url = f"https://github.com/{repo}/releases/latest"
+            webbrowser.open(url)
+            self._updates_set_status(self.t("updates.opened_browser"))
+        except Exception as e:
+            try:
+                self._updates_set_status(f"{self.t('updates.open_failed')}: {e}")
+            except Exception:
+                pass
+
+        try:
+            req = urllib.request.Request(rel.zip_url, headers={"User-Agent": "shelly-energy-analyzer"})
+            with urllib.request.urlopen(req, timeout=10.0) as resp:
+                data = resp.read()
+            zip_path.write_bytes(data)
+        except Exception:
+            self._updates_set_status(self.t("updates.status.unreachable"))
+            return
+    def _updates_install_latest(self) -> None:
+        """Download & install the latest ZIP via updater_helper (cross-platform)."""
+        rel = getattr(self, "_upd_latest", None)
+        if not rel or not getattr(rel, "zip_url", None) or not getattr(rel, "tag", None):
+            try:
+                self._updates_set_status(self.t("updates.not_checked"))
+            except Exception:
+                pass
+            try:
+                from tkinter import messagebox
+                messagebox.showinfo(self.t("updates.title"), self.t("updates.not_checked"))
+            except Exception:
+                pass
+            return
+
+        # Download to updates/ and stage unpack
+        import urllib.request
+        import zipfile
+        from pathlib import Path
+
+        app_dir = Path(self.project_root).resolve()
+        upd_dir = app_dir / "updates"
+        upd_dir.mkdir(parents=True, exist_ok=True)
+        zip_path = upd_dir / f"{rel.tag}.zip"
+        staging = upd_dir / "staging"
+
+        # clean staging
+        try:
+            import shutil
+            if staging.exists():
+                shutil.rmtree(staging)
+        except Exception:
+            pass
+        staging.mkdir(parents=True, exist_ok=True)
+
+        try:
+            self._updates_set_status(f"{self.t('updates.download_install')}…")
+        except Exception:
+            pass
+
+        try:
+            req = urllib.request.Request(str(rel.zip_url), headers={"User-Agent": "shelly-energy-analyzer"})
+            with urllib.request.urlopen(req, timeout=20.0) as resp:
+                data = resp.read()
+            zip_path.write_bytes(data)
+        except Exception as e:
+            try:
+                self._updates_set_status(f"{self.t('updates.status.unreachable')} ({e})")
+            except Exception:
+                pass
+            return
+
+        try:
+            with zipfile.ZipFile(zip_path, "r") as z:
+                z.extractall(staging)
+        except Exception as e:
+            try:
+                self._updates_set_status(f"ZIP extract failed: {e}")
+            except Exception:
+                pass
+            return
+
+        # If zip contains a single top folder, use it as staging root
+        staging_root = staging
+        try:
+            entries = [p for p in staging.iterdir() if p.name not in (".DS_Store",)]
+            if len(entries) == 1 and entries[0].is_dir():
+                staging_root = entries[0]
+        except Exception:
+            staging_root = staging
+
+        # Launch helper and exit app
+        try:
+            import subprocess
+            helper = [
+                sys.executable, "-m", "shelly_analyzer.updater_helper",
+                "--app-dir", str(app_dir),
+                "--staging-dir", str(staging_root),
+                "--restart", str(app_dir / ("start.bat" if os.name=="nt" else "start.command" if sys.platform=="darwin" else "start.sh")),
+                "--wait-pid", str(os.getpid()),
+                "--update-deps", "1",
+            ]
+            subprocess.Popen(helper, cwd=str(app_dir))
+        except Exception as e:
+            try:
+                self._updates_set_status(str(e))
+            except Exception:
+                pass
+            return
+
+        try:
+            self.destroy()
+        except Exception:
+            pass
+        raise SystemExit(0)
+
+        pass
     try:
-        app._log_path = lp  # type: ignore[attr-defined]
+        self._updates_download_install()
+    except Exception as e:
+        try:
+            self._updates_set_status(f"Update install error: {e}")
+        except Exception:
+            pass
+
+def _updates_on_open_clicked(self) -> None:
+    try:
+        self._updates_set_status("Clicked: open release page…")
     except Exception:
         pass
+    try:
+        print("[updates] clicked: open release page")
+    except Exception:
+        pass
+    try:
+        self._updates_open_release_page()
+    except Exception as e:
+        try:
+            self._updates_set_status(f"Open page error: {e}")
+        except Exception:
+            pass
+
+    def _updates_check_now(self) -> None:
+        import threading
+        self._updates_set_status(self.t("updates.searching"))
+        try:
+            from shelly_analyzer.services.updater import check_latest_release, is_newer
+        except Exception as e:
+            self._updates_set_status(f"Updater import error: {e}")
+            return
+
+        repo = None
+        try:
+            repo = getattr(self.cfg, "updates", None).repo if getattr(self.cfg, "updates", None) else None
+        except Exception:
+            repo = None
+        if not repo:
+            repo = "robeertm/shelly-energy-analyzer"
+
+        cur = f"v{self.version}" if not str(self.version).startswith("v") else str(self.version)
+
+        def worker():
+            info = check_latest_release(repo, timeout_s=3.0)
+            def apply():
+                self._updates_last_info = info
+                if not info.reachable:
+                    self._updates_set_status(info.status)
+                    try:
+                        self.btn_updates_download.configure(state="disabled")
+
+                    except Exception:
+                        pass
+                    return
+                if info.latest_tag and is_newer(info.latest_tag, cur):
+                    self._updates_set_status(f"Update available: {info.latest_tag}")
+                    try:
+                        self.btn_updates_download.configure(state="normal" if info.asset_url else "disabled")
+                    except Exception:
+                        pass
+                else:
+                    self._updates_set_status(f"No update found. Current: {cur}")
+                    try:
+                        self.btn_updates_download.configure(state="disabled")
+
+                    except Exception:
+                        pass
+            try:
+                self.after(0, apply)
+            except Exception:
+                apply()
+
+        threading.Thread(target=worker, daemon=True).start()
+        self._updates_set_status(self.t("updates.searching"))
+
+    def _updates_download_install(self) -> None:
+        import threading
+        self._updates_set_status(self.t("updates.downloading"))
+        info = getattr(self, "_updates_last_info", None)
+        if not info or not getattr(info, "asset_url", None):
+            self._updates_set_status("No downloadable update found. Click 'Check now' first.")
+            return
+
+        from pathlib import Path
+        import tempfile
+        import threading
+        from shelly_analyzer.services.updater import download_file, install_update_zip
+
+        url = info.asset_url
+
+        def worker():
+            try:
+                self.after(0, lambda: self._updates_set_status("Downloading update…"))
+                tmp = Path(tempfile.mkdtemp(prefix="sea_dl_"))
+                zpath = tmp / (info.asset_name or "update.zip")
+                download_file(url, zpath, timeout_s=15.0)
+                ok, msg = install_update_zip(zpath, Path(self.app_dir))
+                def apply():
+                    self._updates_set_status(msg)
+                    if ok:
+                        # optional: restart
+                        try:
+                            if getattr(self.cfg.updates, "auto_install", False):
+                                self.after(500, self._restart_app_safe)
+                        except Exception:
+                            pass
+                self.after(0, apply)
+            except Exception as e:
+                self.after(0, lambda m=str(e): self._updates_set_status(f"Update failed: {m}"))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _restart_app_safe(self) -> None:
+        # best-effort restart via start script
+        try:
+            import os, sys, subprocess
+            cwd = os.path.abspath(self.app_dir)
+            if sys.platform == "darwin":
+                subprocess.Popen(["/bin/bash", "-lc", f'cd "{cwd}" && ./start.command'], close_fds=True)
+            elif sys.platform.startswith("win"):
+                subprocess.Popen(["cmd", "/c", "start", "", "start.bat"], cwd=cwd, close_fds=True)
+            else:
+                subprocess.Popen(["/bin/bash", "-lc", f'cd "{cwd}" && ./start.sh'], close_fds=True)
+            self.after(100, self.destroy)
+        except Exception as e:
+            self._updates_set_status(f"Restart failed: {e}")
+        def on_toggle():
+            try:
+                self.cfg.updates.auto_install = bool(self.updates_auto_var.get())
+                from shelly_analyzer.io.config import save_config
+                save_config(self.cfg, self.cfg_path)
+            except Exception as e:
+                self._updates_set_status(f"Could not save config: {e}")
+
+        ttk.Checkbutton(frm, text=self.t("updates.auto_install"), variable=self.updates_auto_var, command=on_toggle).pack(anchor="w", pady=(10,0))
+        return frm
+
+
+
+    def _updates_open_release_page(self) -> None:
+        import webbrowser
+        info = getattr(self, "_updates_last_info", None)
+        repo = "robeertm/shelly-energy-analyzer"
+        try:
+            if getattr(self.cfg, "updates", None) and getattr(self.cfg.updates, "repo", None):
+                repo = self.cfg.updates.repo
+        except Exception:
+            pass
+        url = f"https://github.com/{repo}/releases"
+        try:
+            if info and getattr(info, "latest_tag", None):
+                url = f"https://github.com/{repo}/releases/tag/{info.latest_tag}"
+        except Exception:
+            pass
+        try:
+            webbrowser.open(url)
+            self._updates_set_status(self.t("updates.opened_browser"))
+        except Exception as e:
+            self._updates_set_status(f"{self.t('updates.open_failed')}: {e}")
+
+    # === Updates / Auto-updater (GitHub Releases) ===
+    def _updates_set_status(self, msg: str) -> None:
+        try:
+            self.updates_status_var.set(msg)
+        except Exception:
+            pass
+
+    def _build_updates_tab(self, parent):
+        import tkinter as tk
+        from tkinter import ttk
+
+        self.updates_status_var = tk.StringVar(value=self.t("updates.not_checked"))
+        self._updates_last_info = None
+
+        frm = ttk.Frame(parent)
+        frm.pack(fill="both", expand=True, padx=10, pady=10)
+
+        ttk.Label(frm, text=self.t("updates.title")).pack(anchor="w")
+        ttk.Label(frm, textvariable=self.updates_status_var).pack(anchor="w", pady=(6, 10))
+
+        btns = ttk.Frame(frm)
+        btns.pack(anchor="w")
+
+        self.btn_updates_check = ttk.Button(btns, text=self.t("updates.check_now"), command=self._updates_on_check_clicked)
+        self.btn_updates_check.grid(row=0, column=0, padx=(0, 6))
+
+        self.btn_updates_download = ttk.Button(btns, text=self.t("updates.download_install"), command=self._updates_on_download_clicked)
+        self.btn_updates_download.grid(row=0, column=1, padx=(0, 6))
+        self.btn_updates_download.configure(state="disabled")
+
+        self.btn_updates_open = ttk.Button(btns, text=self.t("updates.open_release"), command=self._updates_on_open_clicked)
+        self.btn_updates_open.grid(row=0, column=2, padx=(0, 6))
+
+        # Auto-install checkbox (default OFF)
+        try:
+            current = bool(getattr(self.cfg.updates, "auto_install", False))
+        except Exception:
+            current = False
+        self.updates_auto_var = tk.BooleanVar(value=current)
+
+        def on_toggle():
+            try:
+                self.cfg.updates.auto_install = bool(self.updates_auto_var.get())
+                from shelly_analyzer.io.config import save_config
+                save_config(self.cfg, self.cfg_path)
+            except Exception as e:
+                self._updates_set_status(f"{self.t('updates.save_failed')}: {e}")
+
+        ttk.Checkbutton(frm, text=self.t("updates.auto_install"), variable=self.updates_auto_var, command=on_toggle).pack(anchor="w", pady=(10, 0))
+
+        return frm
+
+    def _updates_check_now(self) -> None:
+        import threading
+        self._updates_set_status(self.t("updates.searching"))
+
+        try:
+            from shelly_analyzer.services.updater import check_latest_release, is_newer
+        except Exception as e:
+            self._updates_set_status(f"Updater import error: {e}")
+            return
+
+        repo = "robeertm/shelly-energy-analyzer"
+        try:
+            if getattr(self.cfg, "updates", None) and getattr(self.cfg.updates, "repo", None):
+                repo = self.cfg.updates.repo
+        except Exception:
+            pass
+
+        cur = f"v{self.version}" if not str(self.version).startswith("v") else str(self.version)
+
+        def worker():
+            info = check_latest_release(repo, timeout_s=3.0)
+            def apply():
+                self._updates_last_info = info
+                if not info.reachable:
+                    self._updates_set_status(info.status)
+                    try:
+                        self.btn_updates_download.configure(state="disabled")
+                    except Exception:
+                        pass
+                    return
+                if info.latest_tag and is_newer(info.latest_tag, cur):
+                    self._updates_set_status(f"{self.t('updates.available')}: {info.latest_tag}")
+                    try:
+                        self.btn_updates_download.configure(state="normal" if info.asset_url else "disabled")
+                    except Exception:
+                        pass
+                else:
+                    self._updates_set_status(f"{self.t('updates.none')} ({cur})")
+                    try:
+                        self.btn_updates_download.configure(state="disabled")
+                    except Exception:
+                        pass
+            try:
+                self.after(0, apply)
+            except Exception:
+                apply()
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _updates_download_install(self) -> None:
+        import threading
+        self._updates_set_status(self.t("updates.downloading"))
+
+        info = getattr(self, "_updates_last_info", None)
+        if not info or not getattr(info, "asset_url", None):
+            self._updates_set_status(self.t("updates.no_download"))
+            return
+
+        from pathlib import Path
+        import tempfile
+        from shelly_analyzer.services.updater import download_file, install_update_zip
+
+        url = info.asset_url
+
+        def worker():
+            try:
+                tmp = Path(tempfile.mkdtemp(prefix="sea_dl_"))
+                zpath = tmp / (info.asset_name or "update.zip")
+                download_file(url, zpath, timeout_s=15.0)
+                ok, msg = install_update_zip(zpath, Path(self.app_dir))
+                def apply():
+                    self._updates_set_status(msg)
+                    if ok:
+                        try:
+                            if getattr(self.cfg.updates, "auto_install", False):
+                                self.after(500, self._restart_app_safe)
+                        except Exception:
+                            pass
+                self.after(0, apply)
+            except Exception as e:
+                self.after(0, lambda m=str(e): self._updates_set_status(f"{self.t('updates.failed')}: {m}"))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _updates_open_release_page(self) -> None:
+        import webbrowser
+        info = getattr(self, "_updates_last_info", None)
+
+        repo = "robeertm/shelly-energy-analyzer"
+        try:
+            if getattr(self.cfg, "updates", None) and getattr(self.cfg.updates, "repo", None):
+                repo = self.cfg.updates.repo
+        except Exception:
+            pass
+
+        url = f"https://github.com/{repo}/releases"
+        try:
+            if info and getattr(info, "latest_tag", None):
+                url = f"https://github.com/{repo}/releases/tag/{info.latest_tag}"
+        except Exception:
+            pass
+
+        try:
+            webbrowser.open(url)
+            self._updates_set_status(self.t("updates.opened_browser"))
+        except Exception as e:
+            self._updates_set_status(f"{self.t('updates.open_failed')}: {e}")
+
+    def _restart_app_safe(self) -> None:
+        try:
+            import os, sys, subprocess
+            cwd = os.path.abspath(self.app_dir)
+            if sys.platform == "darwin":
+                subprocess.Popen(["/bin/bash", "-lc", f'cd "{cwd}" && ./start.command'], close_fds=True)
+            elif sys.platform.startswith("win"):
+                subprocess.Popen(["cmd", "/c", "start", "", "start.bat"], cwd=cwd, close_fds=True)
+            else:
+                subprocess.Popen(["/bin/bash", "-lc", f'cd "{cwd}" && ./start.sh'], close_fds=True)
+            self.after(100, self.destroy)
+        except Exception as e:
+            self._updates_set_status(f"Restart failed: {e}")
+
+
+def run_gui() -> None:
+    """Start the Tkinter GUI application.
+
+    This entrypoint is imported by `shelly_analyzer.__main__`.
+    It also configures logging so users can find crash logs under ./logs.
+    """
+    try:
+        from pathlib import Path
+        import logging
+
+        from shelly_analyzer.io.logging_setup import setup_logging
+
+        # Ensure logs are created next to the app folder (where config.json lives).
+        setup_logging(base_dir=Path.cwd(), level=logging.INFO)
+    except Exception:
+        # Never fail startup because of logging.
+        pass
+
+    app = App()
     app.mainloop()
+
+
+if __name__ == "__main__":
+    run_gui()
+
+
+
