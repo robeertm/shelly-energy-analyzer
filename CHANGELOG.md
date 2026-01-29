@@ -1,3 +1,8 @@
+## 5.9.2.9 - 2026-01-29
+
+- Refactor: split oversized `ui/app.py` into `ui/app_main.py` + mixins (`ui/mixins/*`) and shared helpers (`ui/_shared.py`) to improve maintainability.
+- No functional changes intended; `shelly_analyzer.ui.app:run_gui` remains the stable entrypoint.
+
 ## 5.9.2.8
 
 ## 5.9.2.8 - 2026-01-29
