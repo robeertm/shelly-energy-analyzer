@@ -104,7 +104,7 @@ Notes:
 - **Download & install** is only enabled when a newer version than the current one is available.
 
 To publish an update:
-1. Create a git tag (example: `v5.9.2.8`)
+1. Create a git tag (example: `v5.9.2.9`)
 2. Push the tag
 3. Create a GitHub Release for the tag and attach the release ZIP artifact
 
@@ -127,8 +127,8 @@ git push -u origin main
 
 ### 3) Tag a release (recommended)
 ```bash
-git tag v5.9.2.8
-git push origin v5.9.2.8
+git tag v5.9.2.9
+git push origin v5.9.2.9
 ```
 
 ### 4) Typical workflow afterwards
@@ -150,13 +150,13 @@ Run these commands **inside the extracted project folder** (where `README.md` an
 ```bash
 pwd
 ls
-# Make sure you are in the correct folder (should show version 5.9.2.8 in folder name)
+# Make sure you are in the correct folder (should show version 5.9.2.9 in folder name)
 
 git status
 git add .
-git commit -m "Release v5.9.2.8"
+git commit -m "Release v5.9.2.9"
 git push
 
-git tag v5.9.2.8
-git push origin v5.9.2.8
+git tag v5.9.2.9
+git push origin v5.9.2.9
 ```
