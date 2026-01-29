@@ -1,3 +1,7 @@
+## 5.9.2.6
+
+- Version bump + packaging (start.command/start.sh executable).
+
 ## 5.9.2.5
 - Docs: README updated (updater behavior + GitHub upload commands).
 
