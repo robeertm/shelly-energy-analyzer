@@ -96,17 +96,21 @@ def download_file(url: str, dst: Path, timeout_s: float = 10.0) -> None:
         dst.write_bytes(resp.read())
 
 def install_update_zip(zip_path: Path, app_dir: Path) -> Tuple[bool, str]:
-    """
-    Extract zip into staging dir, then copy into app_dir excluding user data.
-    This is 'in-process' install; best-effort for mac/linux. Windows may need helper.
+    """Install an update ZIP into the current app folder.
+
+    Extracts into a staging directory and then copies into app_dir excluding user data.
+    Notes:
+    - ZIP extraction may drop executable bits -> we re-add exec bits on start scripts.
+    - On macOS, Gatekeeper quarantine attributes may prevent auto-restart -> we clear them best-effort.
     """
     import zipfile
+
     staging = Path(tempfile.mkdtemp(prefix="sea_update_"))
     try:
         with zipfile.ZipFile(zip_path, "r") as z:
             z.extractall(staging)
 
-        # detect root folder (if zip contains a single top folder)
+        # Detect root folder (if zip contains a single top folder)
         entries = [p for p in staging.iterdir()]
         root = staging
         if len(entries) == 1 and entries[0].is_dir():
@@ -122,14 +126,35 @@ def install_update_zip(zip_path: Path, app_dir: Path) -> Tuple[bool, str]:
                 if dst.is_dir() and not dst.is_symlink():
                     shutil.rmtree(dst)
                 else:
-                    try: dst.unlink()
+                    try:
+                        dst.unlink()
                     except Exception:
                         pass
             if item.is_dir() and not item.is_symlink():
                 shutil.copytree(item, dst)
             else:
                 shutil.copy2(item, dst)
-        return True, "Update installed. Restart the app."
+
+        # Post-install: ensure start scripts are executable (ZIP may drop exec bits)
+        try:
+            import stat as _stat
+            for fname in ("start.command", "start.sh"):
+                sp = app_dir / fname
+                if sp.exists():
+                    sp.chmod(sp.stat().st_mode | _stat.S_IXUSR | _stat.S_IXGRP | _stat.S_IXOTH)
+        except Exception:
+            pass
+
+        # On macOS, updated files may carry Gatekeeper quarantine attributes.
+        try:
+            if sys.platform == "darwin":
+                import subprocess as _subprocess
+                _subprocess.run(["xattr", "-dr", "com.apple.quarantine", str(app_dir)], check=False)
+        except Exception:
+            pass
+
+        return True, "Update installed. Restarting…"
+
     except Exception as e:
         return False, f"Install failed: {e}"
     finally:
