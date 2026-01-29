@@ -1,3 +1,12 @@
+## 5.9.2.8
+
+## 5.9.2.8 - 2026-01-29
+
+- Fix: auto-restart after updates on macOS (ensure executable bits + clear quarantine; restart via bash).
+- Docs: clarify Git push workflow and avoiding wrong-folder pushes.
+
+- Fix: Auto-restart after updates on macOS/Linux (ensure executable bits, clear quarantine, restart via /bin/bash).
+
 ## 5.9.2.6
 
 - Version bump + packaging (start.command/start.sh executable).
