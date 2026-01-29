@@ -104,7 +104,7 @@ Notes:
 - **Download & install** is only enabled when a newer version than the current one is available.
 
 To publish an update:
-1. Create a git tag (example: `v5.9.2.5`)
+1. Create a git tag (example: `v5.9.2.6`)
 2. Push the tag
 3. Create a GitHub Release for the tag and attach the release ZIP artifact
 
@@ -127,8 +127,8 @@ git push -u origin main
 
 ### 3) Tag a release (recommended)
 ```bash
-git tag v5.9.2.5
-git push origin v5.9.2.5
+git tag v5.9.2.6
+git push origin v5.9.2.6
 ```
 
 ### 4) Typical workflow afterwards
