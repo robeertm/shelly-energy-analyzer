@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set version
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Create release ZIPs
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          echo "Building ZIPs for ${VERSION}"
+
+          # Common exclude patterns (no secrets, no venv, no caches, no data)
+          EXCLUDES=(
+            ".git/*"
+            ".github/*"
+            ".venv/*"
+            "**/__pycache__/*"
+            "**/*.pyc"
+            "data/*"
+            "logs/*"
+            "config.json"
+            "*.log"
+            "*.sqlite"
+            "*.db"
+            ".DS_Store"
+          )
+
+          # Build one source bundle and name it per platform (same content, different start script)
+          zip -r "shelly_energy_analyzer_${VERSION}_macos.zip" . -x "${EXCLUDES[@]}"
+          zip -r "shelly_energy_analyzer_${VERSION}_windows.zip" . -x "${EXCLUDES[@]}"
+          zip -r "shelly_energy_analyzer_${VERSION}_linux.zip" . -x "${EXCLUDES[@]}"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            shelly_energy_analyzer_${{ steps.ver.outputs.version }}_macos.zip
+            shelly_energy_analyzer_${{ steps.ver.outputs.version }}_windows.zip
+            shelly_energy_analyzer_${{ steps.ver.outputs.version }}_linux.zip

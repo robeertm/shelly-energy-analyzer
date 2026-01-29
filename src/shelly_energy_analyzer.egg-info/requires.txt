@@ -1,0 +1,11 @@
+requests>=2.31
+pandas>=2.0
+numpy>=1.23
+matplotlib>=3.7
+openpyxl>=3.1
+reportlab>=4.0
+pillow>=10.0
+qrcode>=7.4
+plotly>=5.18
+pywebview>=5.0
+zeroconf>=0.131
