@@ -12485,32 +12485,61 @@ def _updates_on_open_clicked(self) -> None:
                 self.after(0, lambda m=str(e): self._updates_set_status(f"Update failed: {m}"))
         threading.Thread(target=worker, daemon=True).start()
 
-    def _restart_app_safe(self) -> None:
-        # best-effort restart via start script
+def _restart_app_safe(self) -> None:
+    """Restart the app after an update (cross-platform, best-effort).
+
+    Why this exists:
+    - ZIP extraction often drops executable bits on .command/.sh files.
+    - On macOS, Gatekeeper quarantine attributes can block execution.
+    - Starting via /bin/bash works even if the executable bit is missing.
+    """
+    try:
+        import os, sys, subprocess, stat
+        from pathlib import Path
+
+        cwd = os.path.abspath(self.app_dir)
+        app_dir = Path(cwd)
+
+        # Best-effort: make start scripts executable
         try:
-            import os, sys, subprocess
-            cwd = os.path.abspath(self.app_dir)
+            for fname in ("start.command", "start.sh"):
+                sp = app_dir / fname
+                if sp.exists():
+                    sp.chmod(sp.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        except Exception:
+            pass
+
+        # Best-effort: clear quarantine on macOS
+        try:
             if sys.platform == "darwin":
-                subprocess.Popen(["/bin/bash", "-lc", f'cd "{cwd}" && ./start.command'], close_fds=True)
-            elif sys.platform.startswith("win"):
-                subprocess.Popen(["cmd", "/c", "start", "", "start.bat"], cwd=cwd, close_fds=True)
-            else:
-                subprocess.Popen(["/bin/bash", "-lc", f'cd "{cwd}" && ./start.sh'], close_fds=True)
-            self.after(100, self.destroy)
-        except Exception as e:
-            self._updates_set_status(f"Restart failed: {e}")
-        def on_toggle():
-            try:
-                self.cfg.updates.auto_install = bool(self.updates_auto_var.get())
-                from shelly_analyzer.io.config import save_config
-                save_config(self.cfg, self.cfg_path)
-            except Exception as e:
-                self._updates_set_status(f"Could not save config: {e}")
+                subprocess.run(["xattr", "-dr", "com.apple.quarantine", cwd], check=False)
+        except Exception:
+            pass
 
-        ttk.Checkbutton(frm, text=self.t("updates.auto_install"), variable=self.updates_auto_var, command=on_toggle).pack(anchor="w", pady=(10,0))
-        return frm
+        if sys.platform == "darwin":
+            subprocess.Popen(
+                ["/bin/bash", str(app_dir / "start.command")],
+                cwd=cwd,
+                close_fds=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        elif sys.platform.startswith("win"):
+            subprocess.Popen(["cmd", "/c", "start", "", "start.bat"], cwd=cwd, close_fds=True)
+        else:
+            subprocess.Popen(
+                ["/bin/bash", str(app_dir / "start.sh")],
+                cwd=cwd,
+                close_fds=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
 
-
+        self.after(100, self.destroy)
+    except Exception as e:
+        self._updates_set_status(f"Restart failed: {e}")
 
     def _updates_open_release_page(self) -> None:
         import webbrowser
@@ -12659,8 +12688,7 @@ def _updates_on_open_clicked(self) -> None:
                     self._updates_set_status(msg)
                     if ok:
                         try:
-                            if getattr(self.cfg.updates, "auto_install", False):
-                                self.after(500, self._restart_app_safe)
+                            self.after(500, self._restart_app_safe)
                         except Exception:
                             pass
                 self.after(0, apply)
@@ -12693,20 +12721,61 @@ def _updates_on_open_clicked(self) -> None:
         except Exception as e:
             self._updates_set_status(f"{self.t('updates.open_failed')}: {e}")
 
-    def _restart_app_safe(self) -> None:
-        try:
-            import os, sys, subprocess
-            cwd = os.path.abspath(self.app_dir)
-            if sys.platform == "darwin":
-                subprocess.Popen(["/bin/bash", "-lc", f'cd "{cwd}" && ./start.command'], close_fds=True)
-            elif sys.platform.startswith("win"):
-                subprocess.Popen(["cmd", "/c", "start", "", "start.bat"], cwd=cwd, close_fds=True)
-            else:
-                subprocess.Popen(["/bin/bash", "-lc", f'cd "{cwd}" && ./start.sh'], close_fds=True)
-            self.after(100, self.destroy)
-        except Exception as e:
-            self._updates_set_status(f"Restart failed: {e}")
+def _restart_app_safe(self) -> None:
+    """Restart the app after an update (cross-platform, best-effort).
 
+    Why this exists:
+    - ZIP extraction often drops executable bits on .command/.sh files.
+    - On macOS, Gatekeeper quarantine attributes can block execution.
+    - Starting via /bin/bash works even if the executable bit is missing.
+    """
+    try:
+        import os, sys, subprocess, stat
+        from pathlib import Path
+
+        cwd = os.path.abspath(self.app_dir)
+        app_dir = Path(cwd)
+
+        # Best-effort: make start scripts executable
+        try:
+            for fname in ("start.command", "start.sh"):
+                sp = app_dir / fname
+                if sp.exists():
+                    sp.chmod(sp.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        except Exception:
+            pass
+
+        # Best-effort: clear quarantine on macOS
+        try:
+            if sys.platform == "darwin":
+                subprocess.run(["xattr", "-dr", "com.apple.quarantine", cwd], check=False)
+        except Exception:
+            pass
+
+        if sys.platform == "darwin":
+            subprocess.Popen(
+                ["/bin/bash", str(app_dir / "start.command")],
+                cwd=cwd,
+                close_fds=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        elif sys.platform.startswith("win"):
+            subprocess.Popen(["cmd", "/c", "start", "", "start.bat"], cwd=cwd, close_fds=True)
+        else:
+            subprocess.Popen(
+                ["/bin/bash", str(app_dir / "start.sh")],
+                cwd=cwd,
+                close_fds=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+
+        self.after(100, self.destroy)
+    except Exception as e:
+        self._updates_set_status(f"Restart failed: {e}")
 
 def run_gui() -> None:
     """Start the Tkinter GUI application.
