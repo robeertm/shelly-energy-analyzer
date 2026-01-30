@@ -82,6 +82,9 @@ class UiConfig:
     telegram_verify_ssl: bool = True
     telegram_detail_level: str = "detailed"  # simple|detailed
 
+    # Include last-10-min W/V/A plots as images in Telegram alarm messages
+    telegram_alarm_plots_enabled: bool = True
+
     # Scheduled Telegram summaries
     telegram_daily_summary_enabled: bool = False
     telegram_daily_summary_time: str = "00:00"  # HH:MM, local time
@@ -374,6 +377,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         telegram_chat_id=str(ui_raw.get("telegram_chat_id", UiConfig.telegram_chat_id) or ""),
         telegram_verify_ssl=bool(ui_raw.get("telegram_verify_ssl", UiConfig.telegram_verify_ssl)),
         telegram_detail_level=str(ui_raw.get("telegram_detail_level", UiConfig.telegram_detail_level) or UiConfig.telegram_detail_level),
+        telegram_alarm_plots_enabled=bool(ui_raw.get("telegram_alarm_plots_enabled", UiConfig.telegram_alarm_plots_enabled)),
         telegram_daily_summary_enabled=bool(ui_raw.get("telegram_daily_summary_enabled", UiConfig.telegram_daily_summary_enabled)),
         telegram_daily_summary_time=str(ui_raw.get("telegram_daily_summary_time", UiConfig.telegram_daily_summary_time) or UiConfig.telegram_daily_summary_time),
         telegram_monthly_summary_enabled=bool(ui_raw.get("telegram_monthly_summary_enabled", UiConfig.telegram_monthly_summary_enabled)),
