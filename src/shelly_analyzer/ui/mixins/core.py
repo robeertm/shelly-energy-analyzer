@@ -4243,6 +4243,7 @@ class CoreMixin:
                 self._tg_token_var = tk.StringVar(value=str(getattr(self.cfg.ui, "telegram_bot_token", "") or ""))
                 self._tg_chatid_var = tk.StringVar(value=str(getattr(self.cfg.ui, "telegram_chat_id", "") or ""))
                 self._tg_verify_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "telegram_verify_ssl", True)))
+                self._tg_alarm_plots_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "telegram_alarm_plots_enabled", True)))
 
                 # Telegram detail level: simple|detailed (stored as code)
                 _tg_level = str(getattr(self.cfg.ui, "telegram_detail_level", "detailed") or "detailed").strip().lower()
@@ -4310,6 +4311,12 @@ class CoreMixin:
                 text=self.t("settings.alerts.telegram.verify_ssl"),
                 variable=self._tg_verify_var,
             ).grid(row=1, column=0, padx=8, pady=(0, 6), sticky="w")
+
+            ttk.Checkbutton(
+                tg_box,
+                text=self.t("settings.alerts.telegram.alarm_plots"),
+                variable=self._tg_alarm_plots_var,
+            ).grid(row=1, column=3, columnspan=2, padx=8, pady=(0, 6), sticky="w")
 
             ttk.Label(tg_box, text=self.t("settings.alerts.telegram.detail") + ":").grid(row=1, column=1, padx=(12, 6), pady=(0, 6), sticky="e")
             ttk.Combobox(
@@ -5439,6 +5446,7 @@ class CoreMixin:
             "detailed",
         )
     ),
+    telegram_alarm_plots_enabled=bool(getattr(self, "_tg_alarm_plots_var", tk.BooleanVar(value=True)).get()),
     telegram_daily_summary_enabled=bool(getattr(self, "_tg_daily_sum_var", tk.BooleanVar(value=False)).get()),
     telegram_daily_summary_time=str(getattr(self, "_tg_daily_time_var", tk.StringVar(value="00:00")).get() or "00:00"),
     telegram_monthly_summary_enabled=bool(getattr(self, "_tg_monthly_sum_var", tk.BooleanVar(value=False)).get()),
@@ -6101,19 +6109,888 @@ class CoreMixin:
                 # Fallback: treat any 200 with no JSON as success? better be conservative
                 return False, raw.decode("utf-8", errors="replace")[:200]
 
-    def _alerts_send_telegram(self, text: str) -> None:
-            """Send a Telegram message in the background (used by alert rules)."""
-            def _worker():
-                ok, err = self._telegram_send_sync(text)
-                if not ok and err:
-                    try:
-                        logging.getLogger(__name__).warning("Telegram send failed: %s", err)
-                    except Exception:
-                        pass
+
+    def _telegram_send_photo_sync(self, image_path: "Path", caption: str = "") -> tuple[bool, str]:
+            """Send a Telegram photo synchronously and return (ok, error_message)."""
             try:
-                threading.Thread(target=_worker, daemon=True).start()
+                if not bool(getattr(self.cfg.ui, "telegram_enabled", False)):
+                    return False, "Telegram ist deaktiviert"
+                token = str(getattr(self.cfg.ui, "telegram_bot_token", "") or "").strip()
+                chat_id = str(getattr(self.cfg.ui, "telegram_chat_id", "") or "").strip()
+                if not token or not chat_id:
+                    return False, "Bot-Token oder Chat-ID fehlt"
+            except Exception as e:
+                return False, str(e)
+
+            try:
+                from pathlib import Path
+                p = Path(image_path)
+                if not p.exists() or not p.is_file():
+                    return False, f"Bild nicht gefunden: {p}"
+            except Exception as e:
+                return False, str(e)
+
+            import uuid
+            boundary = "----shelly_analyzer_" + uuid.uuid4().hex
+            try:
+                img_bytes = p.read_bytes()
+            except Exception as e:
+                return False, str(e)
+
+            def _part(name: str, value: str) -> bytes:
+                return (
+                    f"--{boundary}\r\n"
+                    f'Content-Disposition: form-data; name="{name}"\r\n\r\n'
+                    f"{value}\r\n"
+                ).encode("utf-8")
+
+            filename = p.name or "plot.png"
+            head = (
+                f"--{boundary}\r\n"
+                f'Content-Disposition: form-data; name="photo"; filename="{filename}"\r\n'
+                f"Content-Type: image/png\r\n\r\n"
+            ).encode("utf-8")
+            tail = f"\r\n--{boundary}--\r\n".encode("utf-8")
+
+            body = b"".join([
+                _part("chat_id", chat_id),
+                _part("caption", (caption or "").strip()) if (caption or "").strip() else b"",
+                head,
+                img_bytes,
+                tail,
+            ])
+
+            url = f"https://api.telegram.org/bot{token}/sendPhoto"
+            req = urllib.request.Request(url, data=body, method="POST")
+            req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+            req.add_header("Content-Length", str(len(body)))
+
+            try:
+                verify_ssl = bool(getattr(self.cfg.ui, "telegram_verify_ssl", True))
+                ctx = None
+                if not verify_ssl:
+                    try:
+                        ctx = ssl._create_unverified_context()
+                    except Exception:
+                        ctx = None
+                with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:
+                    raw = resp.read()
+            except urllib.error.HTTPError as he:
+                try:
+                    raw = he.read()
+                except Exception:
+                    return False, f"HTTPError: {he}"
+            except Exception as e:
+                return False, str(e)
+
+            try:
+                payload = json.loads(raw.decode("utf-8", errors="replace") or "{}")
+                if bool(payload.get("ok", False)):
+                    return True, ""
+                return False, str(payload.get("description") or payload)
+            except Exception:
+                return False, raw.decode("utf-8", errors="replace")[:200]
+
+    def _telegram_plot_series_png(
+        self,
+        *,
+        x: "pd.DatetimeIndex",
+        y: "pd.Series",
+        title: str,
+        ylabel: str,
+        out_path: "Path",
+        style: str = "line",
+    ) -> "Path":
+        """Create a simple plot PNG for Telegram (headless-safe).
+
+        style:
+          - "line": time series line
+          - "bar":  bars (good for kWh buckets)
+        """
+        from pathlib import Path
+        out_path = Path(out_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            import matplotlib
+            matplotlib.use("Agg", force=True)
+            import matplotlib.pyplot as plt
+            import matplotlib.dates as mdates
+        except Exception:
+            # If matplotlib isn't available, create an empty placeholder
+            out_path.write_bytes(b"")
+            return out_path
+
+        fig = plt.figure(figsize=(10, 3.5))
+        ax = fig.add_subplot(1, 1, 1)
+
+        try:
+            style_l = (style or "line").strip().lower()
+        except Exception:
+            style_l = "line"
+
+        try:
+            # Convert datetimes to matplotlib numbers for robust bar widths
+            # Matplotlib can be picky about tz-aware timestamps; make them tz-naive (local time) first.
+            try:
+                import pandas as pd  # type: ignore
+            except Exception:
+                pd = None  # type: ignore
+
+            try:
+                if pd is not None:
+                    x_idx = pd.DatetimeIndex(x)
+                    if getattr(x_idx, "tz", None) is not None:
+                        try:
+                            x_idx = x_idx.tz_convert("Europe/Berlin")
+                        except Exception:
+                            pass
+                        try:
+                            x_idx = x_idx.tz_localize(None)
+                        except Exception:
+                            pass
+                    x_list = list(x_idx.to_pydatetime())
+                else:
+                    x_list = list(getattr(x, "to_pydatetime", lambda: x)())
+            except Exception:
+                x_list = list(x)
+
+            # Ensure y is numeric
+            try:
+                if pd is not None:
+                    y_vals = list(pd.to_numeric(getattr(y, "values", y), errors="coerce").fillna(0.0))
+                else:
+                    y_vals = list(getattr(y, "values", y))
+            except Exception:
+                y_vals = list(getattr(y, "values", y))
+
+            x_num = mdates.date2num(x_list)
+
+            if style_l == "bar":
+                if len(x_num) >= 2:
+                    w = (x_num[1] - x_num[0]) * 0.9
+                else:
+                    w = 0.03  # ~45 minutes in days
+                ax.bar(x_num, y_vals, width=w, align="center")
+                ax.xaxis_date()
+                try:
+                    ax.set_ylim(bottom=0.0)
+                except Exception:
+                    pass
+            else:
+                ax.plot(x_num, y_vals)
+                ax.xaxis_date()
+        except Exception:
+            # last resort
+            try:
+                ax.plot(list(x), list(getattr(y, "values", y)))
             except Exception:
                 pass
+
+        ax.set_title(title)
+        ax.set_ylabel(ylabel)
+        ax.grid(True, alpha=0.3)
+        try:
+            fig.autofmt_xdate()
+        except Exception:
+            pass
+        fig.savefig(out_path, dpi=180, bbox_inches="tight")
+        plt.close(fig)
+        return out_path
+
+
+    def _telegram_make_alarm_plots(self, device_key: str, end_ts: int, minutes: int = 10) -> list["Path"]:
+            """Create last-N-minutes plots for V/A/W for a device (used for Telegram alarms)."""
+            from pathlib import Path
+            import pandas as pd
+
+            out: list[Path] = []
+            try:
+                df = self.storage.read_device_df(device_key)
+            except Exception:
+                return out
+            if df is None or getattr(df, "empty", True):
+                return out
+
+            # Ensure timestamp
+            try:
+                if "timestamp" in df.columns:
+                    df = df.copy()
+                    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+                elif "ts" in df.columns:
+                    df = df.copy()
+                    df["timestamp"] = pd.to_datetime(pd.to_numeric(df["ts"], errors="coerce"), unit="s", errors="coerce")
+                else:
+                    # try index
+                    df = df.copy()
+                    df["timestamp"] = pd.to_datetime(df.index, errors="coerce")
+            except Exception:
+                return out
+            df = df.dropna(subset=["timestamp"])
+            if df.empty:
+                return out
+
+            end_dt = pd.to_datetime(int(end_ts), unit="s", errors="coerce")
+            if pd.isna(end_dt):
+                try:
+                    end_dt = df["timestamp"].max()
+                except Exception:
+                    return out
+            start_dt = end_dt - pd.Timedelta(minutes=int(minutes))
+
+            try:
+                m = (df["timestamp"] >= start_dt) & (df["timestamp"] <= end_dt)
+                dfw = df.loc[m].copy()
+            except Exception:
+                dfw = df.copy()
+
+            if dfw is None or dfw.empty:
+                return out
+
+            # output folder inside data/
+            try:
+                base = Path(getattr(self.storage, "base_dir", Path.cwd() / "data"))
+            except Exception:
+                base = Path.cwd() / "data"
+            out_dir = base / "_telegram"
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+            # Generate series for W/V/A (total)
+            for metric, ylabel in [("W", "W"), ("V", "V"), ("A", "A")]:
+                try:
+                    y, _ = self._wva_series(dfw, metric)
+                    if y is None or len(y) == 0:
+                        continue
+                    y = pd.to_numeric(y, errors="coerce")
+                    y = y.dropna()
+                    if y.empty:
+                        continue
+                    x = y.index
+                    fn = f"alarm_{device_key}_{metric}_{int(end_ts)}.png"
+                    p = out_dir / fn
+                    title = f"{device_key} – {metric} (letzte {int(minutes)} min)"
+                    self._telegram_plot_series_png(x=x, y=y, title=title, ylabel=ylabel, out_path=p)
+                    out.append(p)
+                except Exception:
+                    continue
+            return out
+
+    def _telegram_kwh_series(self, start: "datetime", end: "datetime", freq: str = "H", device_key: str | None = None) -> "pd.Series":
+        """Compute kWh grouped by hour ('H') or day ('D').
+    
+        - Uses Shelly CSVs and derives per-row interval energy (kWh) via calculate_energy().
+        - Robust against timestamp formats (epoch s/ms/ns or ISO) and mixed tz handling.
+        - If slicing with timezone-aware datetimes yields no rows, it falls back to naive slicing.
+        """
+        import pandas as pd
+        from zoneinfo import ZoneInfo
+        from shelly_analyzer.core.energy import calculate_energy
+    
+        tz_local = ZoneInfo("Europe/Berlin")
+        tz_utc = ZoneInfo("UTC")
+    
+        def _to_dt(series: "pd.Series") -> "pd.Series":
+            try:
+                if pd.api.types.is_datetime64_any_dtype(series):
+                    return series
+            except Exception:
+                pass
+            nums = None
+            try:
+                nums = pd.to_numeric(series, errors="coerce")
+            except Exception:
+                nums = None
+            if nums is not None and nums.notna().any():
+                try:
+                    med = float(nums.dropna().median())
+                except Exception:
+                    med = 0.0
+                if med > 1e15:
+                    out = pd.to_datetime(nums, errors="coerce", unit="ns")
+                elif med > 1e12:
+                    out = pd.to_datetime(nums, errors="coerce", unit="ms")
+                else:
+                    out = pd.to_datetime(nums, errors="coerce", unit="s")
+                try:
+                    if out.isna().mean() > 0.5:
+                        out = pd.to_datetime(series, errors="coerce")
+                except Exception:
+                    pass
+                return out
+            return pd.to_datetime(series, errors="coerce")
+    
+        def _ensure_local(ts: "pd.Series", start_dt: "pd.Timestamp", end_dt: "pd.Timestamp") -> "pd.Series":
+            """Ensure tz-aware Europe/Berlin.
+
+            Problem: some CSV timestamps are naive *local time* while others are naive *UTC/epoch*.
+            We pick the interpretation that yields more rows inside [start_dt, end_dt).
+            """
+            try:
+                if getattr(ts.dt, "tz", None) is not None:
+                    return ts.dt.tz_convert(tz_local)
+            except Exception:
+                pass
+
+            ts_dt = pd.to_datetime(ts, errors="coerce")
+
+            ts_as_utc = None
+            ts_as_local = None
+            try:
+                ts_as_utc = ts_dt.dt.tz_localize(tz_utc, ambiguous="NaT", nonexistent="shift_forward").dt.tz_convert(tz_local)
+            except Exception:
+                ts_as_utc = None
+            try:
+                ts_as_local = ts_dt.dt.tz_localize(tz_local, ambiguous="NaT", nonexistent="shift_forward")
+            except Exception:
+                ts_as_local = None
+
+            def _count_in(s):
+                if s is None:
+                    return -1
+                try:
+                    m = (s >= start_dt) & (s < end_dt)
+                    return int(m.sum())
+                except Exception:
+                    return -1
+
+            c_utc = _count_in(ts_as_utc)
+            c_loc = _count_in(ts_as_local)
+
+            # prefer the interpretation that yields more rows in the desired window
+            if c_loc > c_utc:
+                return ts_as_local
+            if ts_as_utc is not None:
+                return ts_as_utc
+            if ts_as_local is not None:
+                return ts_as_local
+            return ts_dt
+    
+        start_dt = pd.Timestamp(start)
+        end_dt = pd.Timestamp(end)
+        try:
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.tz_localize(tz_local)
+            else:
+                start_dt = start_dt.tz_convert(tz_local)
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.tz_localize(tz_local)
+            else:
+                end_dt = end_dt.tz_convert(tz_local)
+        except Exception:
+            pass
+    
+        if device_key:
+            class _D:
+                pass
+            _d = _D()
+            _d.key = str(device_key)
+            dev_iter = [_d]
+        else:
+            dev_iter = list(getattr(self.cfg, "devices", []) or [])
+    
+        agg: "pd.Series | None" = None
+    
+        for d in dev_iter:
+            try:
+                df = self.storage.read_device_df(str(d.key))
+            except Exception:
+                continue
+            if df is None or getattr(df, "empty", True):
+                continue
+    
+            try:
+                if "timestamp" in df.columns:
+                    ts = _to_dt(df["timestamp"])
+                else:
+                    ts = _to_dt(pd.Series(df.index))
+                tmpdf = df.copy()
+                tmpdf["timestamp"] = ts
+                tmpdf = tmpdf.dropna(subset=["timestamp"])
+            except Exception:
+                continue
+            if tmpdf.empty:
+                continue
+    
+            try:
+                tmpdf["timestamp"] = _ensure_local(pd.to_datetime(tmpdf["timestamp"], errors="coerce"), start_dt, end_dt)
+            except Exception:
+                pass
+    
+            df_use = None
+            try:
+                m = (tmpdf["timestamp"] >= start_dt) & (tmpdf["timestamp"] < end_dt)
+                df_use = tmpdf.loc[m].copy()
+            except Exception:
+                df_use = tmpdf.copy()
+    
+            if df_use is None or df_use.empty:
+                try:
+                    tsn = pd.to_datetime(tmpdf["timestamp"], errors="coerce")
+                    if getattr(tsn.dt, "tz", None) is not None:
+                        tsn = tsn.dt.tz_convert(tz_local).dt.tz_localize(None)
+                    s0 = pd.Timestamp(start_dt)
+                    e0 = pd.Timestamp(end_dt)
+                    try:
+                        if getattr(s0, "tzinfo", None) is not None:
+                            s0 = s0.tz_convert(tz_local).tz_localize(None)
+                        if getattr(e0, "tzinfo", None) is not None:
+                            e0 = e0.tz_convert(tz_local).tz_localize(None)
+                    except Exception:
+                        pass
+                    m0 = (tsn >= s0) & (tsn < e0)
+                    df_use = tmpdf.loc[m0].copy()
+                    df_use["timestamp"] = tsn.loc[m0].values
+                except Exception:
+                    df_use = tmpdf.copy()
+    
+            if df_use is None or df_use.empty:
+                continue
+
+            # Extra-robust daily slicing: when we build hourly buckets for exactly one
+            # calendar day, filter by the *local* calendar date. This avoids tz/naive
+            # edge cases where comparisons against [start_dt, end_dt) can yield an
+            # empty window even though data exists.
+            try:
+                if str(freq).upper().startswith("H"):
+                    tgt = pd.Timestamp(start_dt)
+                    try:
+                        tgt_date = (tgt.tz_convert(tz_local).date() if getattr(tgt, "tzinfo", None) is not None else tgt.date())
+                    except Exception:
+                        tgt_date = tgt.date()
+                    tloc = pd.to_datetime(df_use["timestamp"], errors="coerce")
+                    try:
+                        if getattr(tloc.dt, "tz", None) is None:
+                            tloc = tloc.dt.tz_localize(tz_utc).dt.tz_convert(tz_local)
+                        else:
+                            tloc = tloc.dt.tz_convert(tz_local)
+                    except Exception:
+                        pass
+                    mday = tloc.dt.date == tgt_date
+                    df_use = df_use.loc[mday].copy()
+                    df_use["timestamp"] = tloc.loc[mday].values
+            except Exception:
+                pass
+    
+            # --- Derive interval energy robustly ---
+            # EMData CSVs often contain per-interval *Wh* values per phase (a/b/c_total_act_energy).
+            # The generic calculate_energy(auto) may interpret these as cumulative counters and produce
+            # near-zero/empty results for hourly buckets. If these columns are present, we compute
+            # energy_kwh directly from them.
+            df_e = None
+            try:
+                phase_cols = [c for c in ("a_total_act_energy", "b_total_act_energy", "c_total_act_energy") if c in df_use.columns]
+                if phase_cols:
+                    tmp = df_use.copy()
+                    wh = tmp[phase_cols].sum(axis=1)
+                    tmp["energy_kwh"] = pd.to_numeric(wh, errors="coerce").fillna(0.0) / 1000.0
+                    df_e = tmp
+            except Exception:
+                df_e = None
+
+            if df_e is None:
+                try:
+                    df_e = calculate_energy(df_use, method="auto")
+                except Exception:
+                    df_e = df_use
+
+            if "energy_kwh" not in getattr(df_e, "columns", []):
+                continue
+
+            # Minimal diagnostics (helps debugging empty daily plots)
+            try:
+                if str(freq).upper().startswith("H") and (not device_key):
+                    _rows = int(len(df_use))
+                    _sum = float(pd.to_numeric(df_e["energy_kwh"], errors="coerce").fillna(0.0).sum())
+                    print(f"[telegram] daily window rows={_rows} total_kwh={_sum:.4f}")
+            except Exception:
+                pass
+
+            # Bucket using the filtered dataframe (timestamp + energy_kwh stay coupled).
+            # Use resample() instead of manual floor/groupby to avoid dtype/tz corner cases
+            # that could silently zero-out buckets (observed: total_kwh>0 but all buckets 0).
+            try:
+                tmpb = df_e[["timestamp", "energy_kwh"]].copy()
+                tmpb["timestamp"] = _to_dt(tmpb["timestamp"])
+                tmpb = tmpb.dropna(subset=["timestamp"])
+                # Map to Europe/Berlin (choose best interpretation for naive timestamps).
+                tmpb["timestamp"] = _ensure_local(pd.to_datetime(tmpb["timestamp"], errors="coerce"), start_dt, end_dt)
+
+                # Slice strictly inside the requested window (tz-aware).
+                try:
+                    m2 = (tmpb["timestamp"] >= start_dt) & (tmpb["timestamp"] < end_dt)
+                    tmpb = tmpb.loc[m2].copy()
+                except Exception:
+                    pass
+                if tmpb.empty:
+                    continue
+
+                # Convert to tz-naive local for deterministic resampling/bucketing.
+                try:
+                    tmpb["timestamp"] = tmpb["timestamp"].dt.tz_convert(tz_local).dt.tz_localize(None)
+                except Exception:
+                    tmpb["timestamp"] = pd.to_datetime(tmpb["timestamp"], errors="coerce")
+
+                tmpb["energy_kwh"] = pd.to_numeric(tmpb["energy_kwh"], errors="coerce").fillna(0.0)
+                tmpb = tmpb.dropna(subset=["timestamp"]).sort_values("timestamp")
+                if tmpb.empty:
+                    continue
+
+                ser = tmpb.set_index("timestamp")["energy_kwh"]
+
+                if str(freq).upper().startswith("H"):
+                    s = ser.resample("h").sum()
+                else:
+                    s = ser.resample("D").sum()
+
+                s = s.sort_index()
+
+                # Extra diagnostics: if raw window energy is >0 but buckets sum to 0, log bounds.
+                try:
+                    _raw_sum = float(pd.to_numeric(ser, errors="coerce").fillna(0.0).sum())
+                    _buck_sum = float(pd.to_numeric(s, errors="coerce").fillna(0.0).sum())
+                    if _raw_sum > 0.0 and _buck_sum == 0.0:
+                        try:
+                            _tmin = tmpb["timestamp"].min()
+                            _tmax = tmpb["timestamp"].max()
+                        except Exception:
+                            _tmin = None
+                            _tmax = None
+                        print(f"[telegram] WARN daily bucketing produced 0 although raw_sum={_raw_sum:.4f}; ts_range={_tmin}..{_tmax}; window={start_dt}..{end_dt}")
+                except Exception:
+                    pass
+
+                if agg is None:
+                    agg = s
+                else:
+                    agg = agg.add(s, fill_value=0.0)
+            except Exception:
+                continue
+
+    
+        if agg is None:
+            return pd.Series(dtype=float)
+    
+        agg = agg.sort_index()
+    
+        try:
+            st = pd.Timestamp(start_dt)
+            en = pd.Timestamp(end_dt)
+            # Normalize boundaries to tz-naive local time so the generated bucket index
+            # matches the tz-naive local buckets produced above.
+            try:
+                if getattr(st, "tzinfo", None) is not None:
+                    st = st.tz_convert(tz_local).tz_localize(None)
+                if getattr(en, "tzinfo", None) is not None:
+                    en = en.tz_convert(tz_local).tz_localize(None)
+            except Exception:
+                try:
+                    if getattr(st, "tzinfo", None) is not None:
+                        st = st.tz_localize(None)
+                    if getattr(en, "tzinfo", None) is not None:
+                        en = en.tz_localize(None)
+                except Exception:
+                    pass
+
+            if str(freq).upper().startswith("H"):
+                idx = pd.date_range(st.floor("H"), en.floor("H") - pd.Timedelta(hours=1), freq="H")
+            else:
+                idx = pd.date_range(st.floor("D"), en.floor("D") - pd.Timedelta(days=1), freq="D")
+            if len(idx) > 0:
+                # Ensure series index is tz-naive for matching.
+                try:
+                    agg.index = pd.DatetimeIndex(agg.index).tz_localize(None)
+                except Exception:
+                    pass
+                agg = agg.reindex(idx, fill_value=0.0)
+        except Exception:
+            pass
+    
+        return agg
+    
+    
+    def _telegram_make_summary_plots(self, kind: str, start_dt: "datetime", end_dt: "datetime") -> list["Path"]:
+        """Create kWh summary plots as PNGs for Telegram summaries.
+
+        - daily: previous calendar day (hourly buckets) for [start_dt, end_dt)
+        - monthly: last 30 days (daily buckets) ending at end_dt
+        Additionally, per-device bar plots are generated for each configured device.
+        """
+        from pathlib import Path
+        from datetime import timedelta
+        import pandas as pd
+
+        kind = (kind or "").strip().lower()
+        out: list[Path] = []
+
+        try:
+            base = Path(getattr(self.storage, "base_dir", Path.cwd() / "data"))
+        except Exception:
+            base = Path.cwd() / "data"
+
+        out_dir = base / "_telegram"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        # Ensure we never end up with "no images" just because plotting failed.
+        # We validate generated PNGs and, if needed, write a tiny valid placeholder PNG.
+        def _ensure_valid_png(p: Path) -> Path:
+            try:
+                if p.exists() and p.is_file() and p.stat().st_size > 200:
+                    return p
+            except Exception:
+                pass
+            # minimal 1x1 transparent PNG (base64)
+            try:
+                import base64
+                data = base64.b64decode(
+                    b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/1sQAAAAASUVORK5CYII="
+                )
+                p.write_bytes(data)
+            except Exception:
+                try:
+                    p.write_bytes(b"")
+                except Exception:
+                    pass
+            return p
+
+        # Price (€/kWh) from PricingConfig (gross)
+        unit_gross = None
+        try:
+            unit_gross = float(self.cfg.pricing.unit_price_gross())
+        except Exception:
+            try:
+                unit_gross = float(getattr(getattr(self.cfg, "pricing", None), "electricity_price_eur_per_kwh", None))
+            except Exception:
+                unit_gross = None
+
+        def _mk_title(prefix: str, total_kwh: float) -> str:
+            t = f"{prefix} · {total_kwh:.2f} kWh"
+            if unit_gross is not None:
+                t += f" · {(total_kwh * unit_gross):.2f} € ({unit_gross:.4f} €/kWh)"
+            return t
+
+        def _force_index(s: "pd.Series", start_ts: "pd.Timestamp", end_ts: "pd.Timestamp", freq: str) -> "pd.Series":
+            """Reindex to a full expected bucket index.
+
+            This must NEVER return an empty series just because timezone handling is tricky.
+            If we cannot build a tz-aware index, we fall back to tz-naive.
+            """
+            try:
+                s = s if s is not None else pd.Series(dtype=float)
+            except Exception:
+                s = pd.Series(dtype=float)
+
+            def _mk_idx(st: "pd.Timestamp", en: "pd.Timestamp") -> "pd.DatetimeIndex":
+                if freq.upper().startswith("H"):
+                    return pd.date_range(st.floor("H"), en.floor("H") - pd.Timedelta(hours=1), freq="H")
+                return pd.date_range(st.floor("D"), en.floor("D") - pd.Timedelta(days=1), freq="D")
+
+            try:
+                idx = _mk_idx(start_ts, end_ts)
+                if len(idx) > 0:
+                    return s.reindex(idx, fill_value=0.0)
+            except Exception:
+                pass
+
+            # tz-fallback: remove tz and try again
+            try:
+                st0 = start_ts.tz_localize(None) if getattr(start_ts, "tzinfo", None) is not None else start_ts
+                en0 = end_ts.tz_localize(None) if getattr(end_ts, "tzinfo", None) is not None else end_ts
+                idx = _mk_idx(st0, en0)
+                if len(idx) > 0:
+                    # also strip tz from series index for matching
+                    try:
+                        if getattr(getattr(s.index, "tz", None), "key", None) is not None:
+                            s = pd.Series(s.values, index=pd.DatetimeIndex(s.index).tz_localize(None))
+                    except Exception:
+                        pass
+                    return s.reindex(idx, fill_value=0.0)
+            except Exception:
+                pass
+
+            return s
+
+        try:
+            if kind == "daily":
+                # Daily = previous calendar day, hourly buckets.
+                s = self._telegram_kwh_series(start_dt, end_dt, freq="H")
+                try:
+                    s = pd.to_numeric(s, errors="coerce").fillna(0.0)
+                except Exception:
+                    s = pd.Series(dtype=float)
+
+                # Ensure tz-naive local index for plotting/reindexing.
+                try:
+                    _idx = pd.DatetimeIndex(s.index)
+                    if _idx.tz is not None:
+                        _idx = _idx.tz_convert("Europe/Berlin").tz_localize(None)
+                    s.index = _idx
+                except Exception:
+                    pass
+                try:
+                    s = s.sort_index()
+                except Exception:
+                    pass
+
+                # Diagnostics
+                try:
+                    total_kwh = float(pd.to_numeric(s, errors="coerce").fillna(0.0).sum())
+                    _nz = int((pd.to_numeric(s, errors="coerce").fillna(0.0) > 0).sum())
+                    print(f"[telegram] daily plot buckets nonzero={_nz} sum={total_kwh:.4f}")
+                except Exception:
+                    total_kwh = 0.0
+
+                end_ts = int(pd.Timestamp(end_dt).timestamp())
+
+                p = out_dir / f"summary_daily_total_kwh_{end_ts}.png"
+                try:
+                    self._telegram_plot_series_png(
+                        x=s.index,
+                        y=s,
+                        title=_mk_title("kWh – Vortag (pro Stunde, gesamt)", total_kwh),
+                        ylabel="kWh",
+                        out_path=p,
+                        style="bar",
+                    )
+                except Exception:
+                    pass
+                out.append(_ensure_valid_png(p))
+
+                for d in list(getattr(self.cfg, "devices", []) or []):
+                    try:
+                        sd = self._telegram_kwh_series(start_dt, end_dt, freq="H", device_key=str(getattr(d, "key", "")))
+                        sd = pd.to_numeric(sd, errors="coerce").fillna(0.0)
+                        try:
+                            sd = sd.sort_index()
+                        except Exception:
+                            pass
+                        if sd is None or len(sd) == 0:
+                            continue
+                        dkwh = float(sd.sum())
+                        if dkwh <= 0.0:
+                            continue
+                        pdv = out_dir / f"summary_daily_{str(d.key)}_kwh_{end_ts}.png"
+                        try:
+                            self._telegram_plot_series_png(
+                                x=sd.index,
+                                y=sd,
+                                title=_mk_title(f"kWh – Vortag (pro Stunde, {d.name})", dkwh),
+                                ylabel="kWh",
+                                out_path=pdv,
+                                style="bar",
+                            )
+                        except Exception:
+                            pass
+                        out.append(_ensure_valid_png(pdv))
+                    except Exception:
+                        continue
+
+                return out
+
+            if kind == "monthly":
+                s_start = pd.Timestamp(end_dt) - timedelta(days=30)
+                s = self._telegram_kwh_series(s_start, end_dt, freq="D")
+                s = pd.to_numeric(s, errors="coerce").fillna(0.0)
+                if s is None or len(s) == 0:
+                    return []
+
+                total_kwh = float(s.sum())
+                end_ts = int(pd.Timestamp(end_dt).timestamp())
+
+                p = out_dir / f"summary_30d_total_kwh_{end_ts}.png"
+                self._telegram_plot_series_png(
+                    x=s.index,
+                    y=s,
+                    title=_mk_title("kWh – letzte 30 Tage (gesamt)", total_kwh),
+                    ylabel="kWh",
+                    out_path=p,
+                    style="bar",
+                )
+                out.append(_ensure_valid_png(p))
+
+                for d in list(getattr(self.cfg, "devices", []) or []):
+                    try:
+                        sd = self._telegram_kwh_series(s_start, end_dt, freq="D", device_key=str(getattr(d, "key", "")))
+                        sd = pd.to_numeric(sd, errors="coerce").fillna(0.0)
+                        if sd is None or len(sd) == 0:
+                            continue
+                        dkwh = float(sd.sum())
+                        if dkwh <= 0.0:
+                            continue
+                        pdv = out_dir / f"summary_30d_{str(d.key)}_kwh_{end_ts}.png"
+                        self._telegram_plot_series_png(
+                            x=sd.index,
+                            y=sd,
+                            title=_mk_title(f"kWh – letzte 30 Tage ({d.name})", dkwh),
+                            ylabel="kWh",
+                            out_path=pdv,
+                            style="bar",
+                        )
+                        out.append(_ensure_valid_png(pdv))
+                    except Exception:
+                        continue
+
+                return out
+        except Exception:
+            return []
+
+        return out
+
+    def _telegram_send_with_images(self, text: str, image_paths: list["Path"], caption_prefix: str = "") -> tuple[bool, str]:
+        """Send a message and then multiple images.
+
+        Returns:
+            (ok, err)
+            - ok=True when the text was sent AND (if images were provided) at least one image was sent.
+            - err contains the last error message if something failed (empty on full success).
+        """
+        ok_text, err = self._telegram_send_sync(text)
+        if not ok_text:
+            return False, err
+
+        paths = list(image_paths or [])
+        if not paths:
+            return True, ""
+
+        any_ok = False
+        last_err = ""
+        for i, p in enumerate(paths):
+            try:
+                cap = ""
+                if caption_prefix and i == 0:
+                    cap = caption_prefix
+                ok2, err2 = self._telegram_send_photo_sync(p, caption=cap)
+                if ok2:
+                    any_ok = True
+                else:
+                    last_err = err2 or last_err
+            except Exception as e:
+                last_err = str(e)
+
+        if any_ok:
+            return True, last_err or ""
+        return False, last_err or "Keine Bilder gesendet"
+    def _alerts_send_telegram(self, text: str, image_paths: list["Path"] | None = None) -> None:
+        """Send a Telegram message in the background (used by alert rules)."""
+
+        def _worker():
+            try:
+                if image_paths:
+                    ok, err = self._telegram_send_with_images(text, list(image_paths))
+                else:
+                    ok, err = self._telegram_send_sync(text)
+            except Exception as e:
+                ok, err = False, str(e)
+
+            if not ok and err:
+                try:
+                    logging.getLogger(__name__).warning("Telegram send failed: %s", err)
+                except Exception:
+                    pass
+
+        try:
+            threading.Thread(target=_worker, daemon=True).start()
+        except Exception:
+            pass
 
     def _alerts_format_telegram_message(
             self,
@@ -6373,7 +7250,15 @@ class CoreMixin:
                             tg_msg = msg if level == "simple" else self._alerts_format_telegram_message(
                                 r, s, metric, val, op, thr, dur, cd, msg_custom or ""
                             )
-                            self._alerts_send_telegram(tg_msg)
+                            plots = []
+                            try:
+                                if bool(getattr(self.cfg.ui, "telegram_alarm_plots_enabled", True)):
+                                    plots = self._telegram_make_alarm_plots(str(getattr(s, "device_key", "") or devk), int(getattr(s, "ts", 0) or now_ts), minutes=10)
+                                else:
+                                    plots = []
+                            except Exception:
+                                plots = []
+
                         except Exception:
                             pass
 
@@ -6550,11 +7435,17 @@ class CoreMixin:
                             if attempt_key == key and attempt_ts and (now_ts - attempt_ts) < retry_every_s:
                                 pass
                             else:
-                                start_dt = due_end - timedelta(days=1)
-                                end_dt = due_end
+                                # Daily summary: previous *calendar day* (00:00..24:00 local)
+                                from zoneinfo import ZoneInfo
+                                tz = ZoneInfo('Europe/Berlin')
+                                now_tz = datetime.now(tz)
+                                y = (now_tz.date() - timedelta(days=1))
+                                start_dt = datetime.combine(y, datetime.min.time(), tzinfo=tz)
+                                end_dt = datetime.combine(now_tz.date(), datetime.min.time(), tzinfo=tz)
                                 try:
                                     msg = self._build_telegram_summary("daily", start_dt, end_dt)
-                                    ok, err = self._telegram_send_sync(msg)
+                                    imgs = self._telegram_make_summary_plots("daily", start_dt, end_dt)
+                                    ok, err = self._telegram_send_with_images(msg, imgs)
                                 except Exception as e:
                                     ok, err = False, str(e)
 
@@ -6633,8 +7524,8 @@ class CoreMixin:
                                 pass
                             else:
                                 # window is previous month
-                                start_dt = datetime(y0, m0, 1, hh, mm, 0)
-                                end_dt = due_end
+                                end_dt = now
+                                start_dt = end_dt - timedelta(days=30)
                                 try:
                                     msg = self._build_telegram_summary("month", start_dt, end_dt)
                                     ok, err = self._telegram_send_sync(msg)
@@ -6740,11 +7631,13 @@ class CoreMixin:
                             if attempt_key == key and attempt_ts and (now_ts - attempt_ts) < retry_every_s:
                                 pass
                             else:
-                                start_dt = due_end - timedelta(days=1)
-                                end_dt = due_end
+                                # Daily summary should cover the *last 24 hours* (rolling window).
+                                end_dt = now
+                                start_dt = end_dt - timedelta(hours=24)
                                 try:
                                     msg = self._build_telegram_summary("daily", start_dt, end_dt)
-                                    ok, err = self._telegram_send_sync(msg)
+                                    imgs = self._telegram_make_summary_plots("daily", start_dt, end_dt)
+                                    ok, err = self._telegram_send_with_images(msg, imgs)
                                 except Exception as e:
                                     ok, err = False, str(e)
                                 if ok:
@@ -6798,7 +7691,8 @@ class CoreMixin:
                                 end_dt = due_end
                                 try:
                                     msg = self._build_telegram_summary("monthly", start_dt, end_dt)
-                                    ok, err = self._telegram_send_sync(msg)
+                                    imgs = self._telegram_make_summary_plots("monthly", start_dt, end_dt)
+                                    ok, err = self._telegram_send_with_images(msg, imgs)
                                 except Exception as e:
                                     ok, err = False, str(e)
                                 if ok:
@@ -6820,7 +7714,8 @@ class CoreMixin:
 
     def _telegram_send_summary_daily(self, start_dt: datetime, end_dt: datetime, mark_sent: bool = True, sent_key: str = "") -> None:
             msg = self._build_telegram_summary("daily", start_dt, end_dt)
-            ok, err = self._telegram_send_sync(msg)
+            imgs = self._telegram_make_summary_plots("daily", start_dt, end_dt)
+            ok, err = self._telegram_send_with_images(msg, imgs)
             if ok and mark_sent:
                 key = sent_key or start_dt.strftime("%Y-%m-%d")
                 try:
@@ -6838,7 +7733,8 @@ class CoreMixin:
 
     def _telegram_send_summary_month(self, start_dt: datetime, end_dt: datetime, mark_sent: bool = True, sent_key: str = "") -> None:
             msg = self._build_telegram_summary("monthly", start_dt, end_dt)
-            ok, err = self._telegram_send_sync(msg)
+            imgs = self._telegram_make_summary_plots("monthly", start_dt, end_dt)
+            ok, err = self._telegram_send_with_images(msg, imgs)
             if ok and mark_sent:
                 key = sent_key or start_dt.strftime("%Y-%m")
                 try:
@@ -6867,6 +7763,22 @@ class CoreMixin:
             # normalize range
             start_dt = pd.Timestamp(start)
             end_dt = pd.Timestamp(end)
+
+            # Normalize range to Europe/Berlin (tz-aware) to avoid mixed tz comparisons
+            try:
+                from zoneinfo import ZoneInfo
+                tz = ZoneInfo("Europe/Berlin")
+                if getattr(start_dt, "tzinfo", None) is None:
+                    start_dt = start_dt.tz_localize(tz)
+                else:
+                    start_dt = start_dt.tz_convert(tz)
+                if getattr(end_dt, "tzinfo", None) is None:
+                    end_dt = end_dt.tz_localize(tz)
+                else:
+                    end_dt = end_dt.tz_convert(tz)
+            except Exception:
+                pass
+
 
             # threshold for cosφ/VAR statistics
             try:
@@ -6902,12 +7814,15 @@ class CoreMixin:
             max_v = None
             max_a = None
 
-            # Price (optional)
-            price_eur = None
+            # Price (€/kWh) from PricingConfig (gross)
+            unit_gross = None
             try:
-                price_eur = float(getattr(self.cfg.ui, "price_per_kwh", None))
+                unit_gross = float(self.cfg.pricing.unit_price_gross())
             except Exception:
-                price_eur = None
+                try:
+                    unit_gross = float(getattr(getattr(self.cfg, "pricing", None), "electricity_price_eur_per_kwh", None))
+                except Exception:
+                    unit_gross = None
 
             # iterate devices
             for d in list(getattr(self.cfg, "devices", []) or []):
@@ -6932,6 +7847,18 @@ class CoreMixin:
                     continue
 
                 df = df.dropna(subset=["timestamp"])
+
+                # ensure timestamp is timezone-aware for slicing (assume UTC when naive) and convert to Europe/Berlin
+                try:
+                    from zoneinfo import ZoneInfo
+                    tz = ZoneInfo("Europe/Berlin")
+                    utc = ZoneInfo("UTC")
+                    if df["timestamp"].dt.tz is None:
+                        df["timestamp"] = df["timestamp"].dt.tz_localize(utc)
+                    df["timestamp"] = df["timestamp"].dt.tz_convert(tz)
+                except Exception:
+                    pass
+
                 if df.empty:
                     continue
 
@@ -6947,10 +7874,24 @@ class CoreMixin:
                     continue
 
                 # Compute per-interval kWh + total_power
+                # NOTE: EMData CSVs often contain per-interval Wh per phase (a/b/c_total_act_energy).
+                # For summaries we must treat these as interval energy (not cumulative counters).
+                df_e = None
                 try:
-                    df_e = calculate_energy(df_use, method="auto")
+                    phase_cols = [c for c in ("a_total_act_energy", "b_total_act_energy", "c_total_act_energy") if c in df_use.columns]
+                    if phase_cols:
+                        tmp = df_use.copy()
+                        wh = tmp[phase_cols].sum(axis=1)
+                        tmp["energy_kwh"] = pd.to_numeric(wh, errors="coerce").fillna(0.0) / 1000.0
+                        df_e = tmp
                 except Exception:
-                    df_e = df_use.copy()
+                    df_e = None
+
+                if df_e is None:
+                    try:
+                        df_e = calculate_energy(df_use, method="auto")
+                    except Exception:
+                        df_e = df_use.copy()
 
                 # kWh
                 try:
@@ -7085,9 +8026,9 @@ class CoreMixin:
 
             # Build message
             if kind == "daily":
-                title = f"📊 Tages-Zusammenfassung {start_dt.date().isoformat()}"
+                title = "📊 Tages-Zusammenfassung (letzte 24h)"
             else:
-                title = f"📊 Monats-Zusammenfassung {start_dt.strftime('%Y-%m')}"
+                title = "📊 Monats-Zusammenfassung (letzte 30 Tage)"
 
             range_line = f"⏱ Zeitraum: {start_dt.strftime('%Y-%m-%d %H:%M')} – {end_dt.strftime('%Y-%m-%d %H:%M')}"
             lines = [title, "", range_line, ""]
@@ -7095,9 +8036,9 @@ class CoreMixin:
             # totals
             lines.append(f"⚡ Verbrauch: {total_kwh:.3f} kWh")
 
-            if price_eur is not None:
+            if unit_gross is not None:
                 try:
-                    cost = total_kwh * price_eur
+                    cost = total_kwh * unit_gross
                     lines.append(f"💶 Kosten: {cost:.2f} €")
                 except Exception:
                     pass
@@ -7121,7 +8062,10 @@ class CoreMixin:
             lines.append("🏠 Pro Gerät:")
             if per_dev_kwh:
                 for name, _key, kwh in per_dev_kwh:
-                    lines.append(f" - {name}: {kwh:.3f} kWh")
+                    if unit_gross is not None:
+                        lines.append(f" - {name}: {kwh:.3f} kWh · {(kwh * unit_gross):.2f} €")
+                    else:
+                        lines.append(f" - {name}: {kwh:.3f} kWh")
             else:
                 lines.append(" - (keine Daten)")
 
@@ -7419,7 +8363,15 @@ class CoreMixin:
                                         tg_msg = msg
                                     else:
                                         tg_msg = self._alerts_format_telegram_message(r, s, metric, val, op, thr, dur, cd, msg_custom or "")
-                                    self._alerts_send_telegram(tg_msg)
+                                    plots = []
+                                    try:
+                                        if bool(getattr(self.cfg.ui, "telegram_alarm_plots_enabled", True)):
+                                            plots = self._telegram_make_alarm_plots(str(getattr(s, "device_key", "") or devk), int(getattr(s, "ts", 0) or now_ts), minutes=10)
+                                        else:
+                                            plots = []
+                                    except Exception:
+                                        plots = []
+                                    self._alerts_send_telegram(tg_msg, plots)
                                 except Exception:
                                     pass
                             if bool(getattr(r, "action_beep", True)):
@@ -7491,7 +8443,7 @@ class CoreMixin:
                     pass
 
     def _telegram_send_daily_summary_now(self) -> None:
-            """Send the last complete daily window immediately (does not mark as sent)."""
+            """Send the previous calendar day immediately (does not mark as sent)."""
             if not bool(getattr(self.cfg.ui, "telegram_enabled", False)):
                 try:
                     self._show_msgbox(self.t("settings.alerts.telegram.disabled"), kind="warning")
@@ -7500,16 +8452,16 @@ class CoreMixin:
                 return
 
             try:
-                now = datetime.now()
-                hh, mm = self._parse_hhmm(str(getattr(self.cfg.ui, "telegram_daily_summary_time", "00:00") or "00:00"))
-                boundary = datetime.combine(now.date(), datetime.min.time()).replace(hour=hh, minute=mm)
-                if now < boundary:
-                    boundary -= timedelta(days=1)
-                end_dt = boundary
-                start_dt = end_dt - timedelta(days=1)
-
+                from zoneinfo import ZoneInfo
+                tz = getattr(self, '_tz_berlin', None) or ZoneInfo('Europe/Berlin')
+                now = datetime.now(tz)
+                # Daily summary must always be "previous calendar day" (00:00..24:00 local time)
+                prev_day = (now - timedelta(days=1)).date()
+                start_dt = datetime.combine(prev_day, datetime.min.time(), tzinfo=tz)
+                end_dt = start_dt + timedelta(days=1)
                 msg = self._build_telegram_summary("daily", start_dt, end_dt)
-                ok, err = self._telegram_send_sync(msg)
+                imgs = self._telegram_make_summary_plots("daily", start_dt, end_dt)
+                ok, err = self._telegram_send_with_images(msg, imgs)
                 if ok:
                     self._show_msgbox(self.t("settings.alerts.telegram.sent_ok"), kind="info")
                 else:
@@ -7521,7 +8473,7 @@ class CoreMixin:
                     pass
 
     def _telegram_send_monthly_summary_now(self) -> None:
-            """Send the last complete monthly window immediately (does not mark as sent)."""
+            """Send the last 30 days immediately (does not mark as sent)."""
             if not bool(getattr(self.cfg.ui, "telegram_enabled", False)):
                 try:
                     self._show_msgbox(self.t("settings.alerts.telegram.disabled"), kind="warning")
@@ -7530,28 +8482,14 @@ class CoreMixin:
                 return
 
             try:
-                now = datetime.now()
-                hh, mm = self._parse_hhmm(str(getattr(self.cfg.ui, "telegram_monthly_summary_time", "00:00") or "00:00"))
-
-                boundary = datetime(now.year, now.month, 1, hh, mm, 0)
-                if now < boundary:
-                    if now.month == 1:
-                        y, m = now.year - 1, 12
-                    else:
-                        y, m = now.year, now.month - 1
-                    boundary = datetime(y, m, 1, hh, mm, 0)
-
-                y, m = boundary.year, boundary.month
-                if m == 1:
-                    y0, m0 = y - 1, 12
-                else:
-                    y0, m0 = y, m - 1
-
-                start_dt = datetime(y0, m0, 1, hh, mm, 0)
-                end_dt = boundary
+                from zoneinfo import ZoneInfo
+                now = datetime.now(ZoneInfo('Europe/Berlin'))
+                end_dt = now
+                start_dt = end_dt - timedelta(days=30)
 
                 msg = self._build_telegram_summary("monthly", start_dt, end_dt)
-                ok, err = self._telegram_send_sync(msg)
+                imgs = self._telegram_make_summary_plots("monthly", start_dt, end_dt)
+                ok, err = self._telegram_send_with_images(msg, imgs)
                 if ok:
                     self._show_msgbox(self.t("settings.alerts.telegram.sent_ok"), kind="info")
                 else:
