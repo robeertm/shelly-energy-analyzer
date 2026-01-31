@@ -7250,17 +7250,30 @@ class CoreMixin:
                             tg_msg = msg if level == "simple" else self._alerts_format_telegram_message(
                                 r, s, metric, val, op, thr, dur, cd, msg_custom or ""
                             )
-                            plots = []
+
+                            plots: list[Path] = []
                             try:
                                 if bool(getattr(self.cfg.ui, "telegram_alarm_plots_enabled", True)):
-                                    plots = self._telegram_make_alarm_plots(str(getattr(s, "device_key", "") or devk), int(getattr(s, "ts", 0) or now_ts), minutes=10)
-                                else:
-                                    plots = []
+                                    plots = self._telegram_make_alarm_plots(
+                                        str(getattr(s, "device_key", "") or devk),
+                                        int(getattr(s, "ts", 0) or now_ts),
+                                        minutes=10,
+                                    )
                             except Exception:
                                 plots = []
 
-                        except Exception:
-                            pass
+                            # Actually send the Telegram notification (previous versions built the message but never sent it)
+                            try:
+                                if plots:
+                                    ok, err = self._telegram_send_with_images(tg_msg, plots)
+                                else:
+                                    ok, err = self._telegram_send_sync(tg_msg)
+                                if not ok:
+                                    print(f"[alerts][telegram] send failed: {err}")
+                            except Exception as e:
+                                print(f"[alerts][telegram] send error: {e}")
+                        except Exception as e:
+                            print(f"[alerts][telegram] build error: {e}")
 
                     if bool(getattr(r, "action_beep", True)):
                         try:
