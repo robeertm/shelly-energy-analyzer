@@ -348,7 +348,16 @@ class UpdatesMixin:
                     "--wait-pid", str(os.getpid()),
                     "--update-deps", "1",
                 ]
-                subprocess.Popen(helper, cwd=str(app_dir))
+                subprocess.Popen(
+                    helper,
+                    cwd=str(app_dir),
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=(os.name != "nt"),
+                    creationflags=(subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP) if os.name == "nt" else 0,
+                    close_fds=(os.name != "nt"),
+                )
             except Exception as e:
                 try:
                     self._updates_set_status(str(e))
