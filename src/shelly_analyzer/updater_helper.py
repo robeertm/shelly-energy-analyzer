@@ -8,6 +8,42 @@ import sys
 import time
 from pathlib import Path
 from typing import List
+def _ensure_executable(p: Path) -> None:
+    """Ensure a script is executable (macOS/Linux)."""
+    try:
+        if not p.exists():
+            return
+        # Add +x for user/group/other
+        mode = p.stat().st_mode
+        p.chmod(mode | 0o111)
+    except Exception:
+        pass
+
+
+def _clear_quarantine(target: Path) -> None:
+    """Best-effort remove Gatekeeper quarantine attributes on macOS."""
+    try:
+        if sys.platform != "darwin":
+            return
+        subprocess.run(["xattr", "-dr", "com.apple.quarantine", str(target)], check=False)
+    except Exception:
+        pass
+
+
+def _restart_app(restart: Path, app_dir: Path) -> None:
+    """Restart using a robust method (bash for .command/.sh)."""
+    if os.name == "nt":
+        subprocess.Popen(["cmd", "/c", "start", "", str(restart)], cwd=str(app_dir))
+        return
+    # Ensure exec bits and remove quarantine
+    _ensure_executable(restart)
+    _clear_quarantine(app_dir)
+    # On macOS, .command is typically a shell script; running via bash avoids relying on exec bit.
+    suffix = restart.suffix.lower()
+    if suffix in (".command", ".sh"):
+        subprocess.Popen(["/bin/bash", str(restart)], cwd=str(app_dir), start_new_session=True)
+    else:
+        subprocess.Popen([str(restart)], cwd=str(app_dir), start_new_session=True)
 
 
 EXCLUDE_NAMES = {
@@ -117,14 +153,12 @@ def main() -> int:
 
     # Restart app
     try:
-        if os.name == "nt":
-            subprocess.Popen(["cmd", "/c", "start", "", str(restart)], cwd=str(app_dir))
-        else:
-            subprocess.Popen([str(restart)], cwd=str(app_dir))
+        _restart_app(restart, app_dir)
     except Exception as e:
         print(f"[updater] restart failed: {e}", file=sys.stderr)
         return 2
     return 0
+
 
 
 if __name__ == "__main__":
