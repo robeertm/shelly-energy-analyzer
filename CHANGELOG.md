@@ -1,3 +1,7 @@
+## 5.9.2.33 - 2026-01-31
+
+- Fix: Telegram alerts were built but never sent; alarms now reliably send notifications (with optional plots).
+
 ## 5.9.2.32 - 2026-01-30
 
 - Fix: Telegram **daily** summary plot hourly bucketing could still become all-zero even though the daily window kWh was correct.
