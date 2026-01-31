@@ -1,3 +1,7 @@
+## 5.9.2.35 - 2026-01-31
+
+- Fix: updater helper restarts reliably even if start.command loses executable bit (resolve restart path relative to app dir, fallback to start scripts, chmod +x).
+
 ## 5.9.2.34 - 2026-01-31
 
 - Fix: After auto-updates on macOS/Linux, start scripts could lose executable permissions and the app would not restart. Updater helper now re-applies chmod +x, clears macOS quarantine best-effort, and restarts via /bin/bash for .command/.sh.

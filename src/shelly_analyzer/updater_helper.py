@@ -8,6 +8,8 @@ import sys
 import time
 from pathlib import Path
 from typing import List
+
+
 def _ensure_executable(p: Path) -> None:
     """Ensure a script is executable (macOS/Linux)."""
     try:
@@ -33,12 +35,31 @@ def _clear_quarantine(target: Path) -> None:
 def _restart_app(restart: Path, app_dir: Path) -> None:
     """Restart using a robust method (bash for .command/.sh)."""
     if os.name == "nt":
+        # Prefer start.bat inside app_dir if restart is missing
+        if not restart.exists():
+            cand = app_dir / "start.bat"
+            if cand.exists():
+                restart = cand
         subprocess.Popen(["cmd", "/c", "start", "", str(restart)], cwd=str(app_dir))
         return
-    # Ensure exec bits and remove quarantine
+
+    # Fallback to known start scripts if restart path is wrong/missing
+    if not restart.exists():
+        for cand_name in ("start.command", "start.sh"):  # macOS/Linux
+            cand = app_dir / cand_name
+            if cand.exists():
+                restart = cand
+                break
+
+    # Ensure exec bits on common start scripts (ZIP extraction may drop +x)
+    _ensure_executable(app_dir / "start.command")
+    _ensure_executable(app_dir / "start.sh")
     _ensure_executable(restart)
+
+    # Remove quarantine best-effort
     _clear_quarantine(app_dir)
-    # On macOS, .command is typically a shell script; running via bash avoids relying on exec bit.
+
+    # On macOS, .command/.sh are shell scripts; running via bash avoids relying on exec bit.
     suffix = restart.suffix.lower()
     if suffix in (".command", ".sh"):
         subprocess.Popen(["/bin/bash", str(restart)], cwd=str(app_dir), start_new_session=True)
@@ -117,10 +138,15 @@ def main() -> int:
     ap.add_argument("--wait-pid", type=int, default=0)
     ap.add_argument("--update-deps", type=int, default=1)
     args = ap.parse_args()
-
     app_dir = Path(args.app_dir).resolve()
     staging = Path(args.staging_dir).resolve()
-    restart = Path(args.restart).resolve()
+
+    # Resolve restart path robustly: if relative, interpret relative to app_dir
+    restart_arg = Path(args.restart)
+    if restart_arg.is_absolute():
+        restart = restart_arg.resolve()
+    else:
+        restart = (app_dir / restart_arg).resolve()
 
     _wait_for_pid(int(args.wait_pid or 0))
 
