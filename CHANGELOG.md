@@ -1,3 +1,8 @@
+## 5.9.2.36 - 2026-01-31
+
+- Fix: updater helper is now spawned detached; app restarts automatically after update on macOS/Linux.
+- Fix: restart process is started via nohup/bash with detached stdio, so it survives app shutdown.
+
 ## 5.9.2.35 - 2026-01-31
 
 - Fix: updater helper restarts reliably even if start.command loses executable bit (resolve restart path relative to app dir, fallback to start scripts, chmod +x).

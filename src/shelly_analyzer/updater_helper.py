@@ -22,6 +22,35 @@ def _ensure_executable(p: Path) -> None:
         pass
 
 
+
+def _spawn_detached(cmd: List[str], cwd: Path) -> None:
+    """Spawn a process fully detached from the current session (best-effort)."""
+    try:
+        if os.name == "nt":
+            # On Windows, use DETACHED_PROCESS + NEW_PROCESS_GROUP
+            subprocess.Popen(
+                cmd,
+                cwd=str(cwd),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                close_fds=False,
+            )
+        else:
+            # On macOS/Linux: nohup + new session + no stdio
+            subprocess.Popen(
+                cmd,
+                cwd=str(cwd),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+                close_fds=True,
+            )
+    except Exception:
+        pass
+
 def _clear_quarantine(target: Path) -> None:
     """Best-effort remove Gatekeeper quarantine attributes on macOS."""
     try:
@@ -60,11 +89,21 @@ def _restart_app(restart: Path, app_dir: Path) -> None:
     _clear_quarantine(app_dir)
 
     # On macOS, .command/.sh are shell scripts; running via bash avoids relying on exec bit.
+    # IMPORTANT: spawn fully detached so the restart survives the app shutdown / terminal closing.
     suffix = restart.suffix.lower()
     if suffix in (".command", ".sh"):
-        subprocess.Popen(["/bin/bash", str(restart)], cwd=str(app_dir), start_new_session=True)
+        if os.name == "nt":
+            _spawn_detached([str(restart)], cwd=app_dir)
+        else:
+            _spawn_detached(["/usr/bin/nohup", "/bin/bash", str(restart)], cwd=app_dir)
     else:
-        subprocess.Popen([str(restart)], cwd=str(app_dir), start_new_session=True)
+        _spawn_detached([str(restart)], cwd=app_dir)
+
+    # Give the child a moment to launch before we exit
+    try:
+        time.sleep(0.5)
+    except Exception:
+        pass
 
 
 EXCLUDE_NAMES = {
