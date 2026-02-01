@@ -469,7 +469,7 @@ class LiveWebMixin:
                 plots_dir = out_root / "web" / "plots"
                 plots_dir.mkdir(parents=True, exist_ok=True)
                 plot_pages: List[Tuple[str, Path]] = []
-                for d in self.cfg.devices[:2]:
+                for d in (self.cfg.devices or []):
                     cd = computed_local.get(d.key)
                     if cd is None:
                         continue
@@ -527,7 +527,7 @@ class LiveWebMixin:
                 due = issue + timedelta(days=int(self.cfg.billing.payment_terms_days))
                 ts = time.strftime("%Y%m%d")
                 files: List[Dict[str, str]] = []
-                for d in self.cfg.devices[:2]:
+                for d in (self.cfg.devices or []):
                     cd = load_device(self.storage, d)
                     df = filter_by_time(cd.df, start=start, end=end)
                     kwh, _avgp, _maxp = summarize(df)

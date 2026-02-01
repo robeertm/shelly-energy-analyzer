@@ -1,3 +1,7 @@
+## 5.9.2.38 - 2026-02-01
+- Fix: Expert → Invoices (PDF) per Shelly now exports reliably: per-device errors are logged, empty/missing timestamps are handled, and partial failures no longer abort the whole export.
+- Web export: invoices now generate for all configured devices (not just the first two).
+
 ## 5.9.2.37 - 2026-02-01
 - Fix: Telegram alarm plots now use live ring-buffer data first (last 10 minutes), so plots are reliably attached even if CSV lagged.
 - Fallback: If live buffer is unavailable, falls back to CSV as before.
