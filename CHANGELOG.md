@@ -1,3 +1,7 @@
+## 5.9.2.37 - 2026-02-01
+- Fix: Telegram alarm plots now use live ring-buffer data first (last 10 minutes), so plots are reliably attached even if CSV lagged.
+- Fallback: If live buffer is unavailable, falls back to CSV as before.
+
 ## 5.9.2.36 - 2026-01-31
 
 - Fix: updater helper is now spawned detached; app restarts automatically after update on macOS/Linux.
