@@ -165,6 +165,8 @@ def export_pdf_invoice(
     vat_enabled: bool,
     currency: str = "EUR",
     lines: Sequence[InvoiceLine],
+    period_label: Optional[str] = None,
+    device_label: Optional[str] = None,
     footer_note: Optional[str] = None,
     lang: str = "de",
 ) -> Path:
@@ -186,6 +188,18 @@ def export_pdf_invoice(
     c.drawString(2.0 * cm, y, t(lang, 'pdf.invoice'))
     c.setFont("Helvetica", 10)
     c.drawRightString(w - 2.0 * cm, y, f"{t(lang, 'pdf.invoice_no')}: {invoice_no}")
+
+    if period_label:
+        c.setFont("Helvetica", 10)
+        c.drawRightString(w - 2.0 * cm, y - 0.45 * cm, str(period_label))
+
+    if device_label:
+        c.setFont("Helvetica", 10)
+        # Place device label just below period label (or at the same slot if period label is missing)
+        dy = 0.70 if period_label else 0.45
+        c.drawRightString(w - 2.0 * cm, y - dy * cm, str(device_label))
+
+
 
     y -= 0.9 * cm
     c.drawRightString(w - 2.0 * cm, y, f"{t(lang, 'pdf.date')}: {format_date_local(lang, issue_date)}")

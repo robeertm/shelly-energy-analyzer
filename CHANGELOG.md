@@ -1,6 +1,21 @@
-## 5.9.2.38 - 2026-02-01
-- Fix: Expert → Invoices (PDF) per Shelly now exports reliably: per-device errors are logged, empty/missing timestamps are handled, and partial failures no longer abort the whole export.
-- Web export: invoices now generate for all configured devices (not just the first two).
+## 5.9.2.42 - 2026-02-01
+## 5.9.2.43 - 2026-02-01
+- Fix: invoice PDF export accepts `device_label` (and prints it in header).
+
+
+- Fix: PDF invoice export accepts `period_label` again (Expert → Rechnung PDF je Shelly).
+
+## 5.9.2.41 - 2026-02-01
+- Fix: invoice PDF export per Shelly: pricing base fee now supports method attributes (no TypeError).
+- Improvement: safer numeric pricing retrieval for vat/unit price/base fee.
+
+## 5.9.2.40 - 2026-02-01
+
+- Fix: invoice export period bounds now imports pandas (pd) to avoid NameError.
+
+## 5.9.2.39
+
+- Fix: Expert → Invoice PDF per Shelly export is robust again (no silent abort; per-device error logging).
 
 ## 5.9.2.37 - 2026-02-01
 - Fix: Telegram alarm plots now use live ring-buffer data first (last 10 minutes), so plots are reliably attached even if CSV lagged.
