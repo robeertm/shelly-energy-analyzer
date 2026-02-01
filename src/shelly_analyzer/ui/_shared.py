@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Any, Tuple, Optional
+import pandas as pd
 
 def _fmt_eur(x: float) -> str:
     return f"{x:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")

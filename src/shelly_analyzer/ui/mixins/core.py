@@ -3828,7 +3828,7 @@ class CoreMixin:
                 lang = "de"
 
             try:
-                vat = float(getattr(pricing, "vat_rate_percent", 0.0))
+                vat = _pricing_num("vat_rate_percent", 0.0)
             except Exception:
                 vat = 0.0
             try:
@@ -3844,7 +3844,7 @@ class CoreMixin:
                 net = float(pricing.unit_price_net())
             except Exception:
                 try:
-                    net = float(getattr(pricing, "unit_price_eur_per_kwh", 0.0) or 0.0)
+                    net = _pricing_num("unit_price_eur_per_kwh", 0.0)
                 except Exception:
                     net = 0.0
             try:
@@ -3862,21 +3862,19 @@ class CoreMixin:
                 return ""
 
     def _export_invoices(self) -> None:
-        """Export one invoice PDF per configured Shelly device.
+        """Export one PDF invoice per configured device (Shelly)."""
+        import traceback as _tb
 
-        Robust against missing/empty data and logs per-device failures to the export log.
-        """
         if not self._ensure_data_loaded():
             messagebox.showinfo(self.t("msg.export"), self.t("export.no_data"))
             return
 
-        import traceback
-
         period = str(self.invoice_period_var.get() if hasattr(self, "invoice_period_var") else "custom")
         start, end = self._parse_export_range()
-
         if period != "custom":
-            anchor = _parse_date_flexible(self.invoice_anchor_var.get() if hasattr(self, "invoice_anchor_var") else "")
+            anchor = _parse_date_flexible(
+                self.invoice_anchor_var.get() if hasattr(self, "invoice_anchor_var") else ""
+            )
             # If no explicit anchor provided, fall back to export start, else today.
             if anchor is None and start is not None:
                 anchor = start
@@ -3884,48 +3882,51 @@ class CoreMixin:
                 anchor = pd.Timestamp(date.today())
             start, end = _period_bounds(anchor, period)
 
-        out_dir = Path(self.export_dir.get() or ".")
+        out_dir = Path(self.export_dir.get())
         out_dir.mkdir(parents=True, exist_ok=True)
         inv_dir = out_dir / "invoices"
         inv_dir.mkdir(parents=True, exist_ok=True)
 
         pricing = self.cfg.pricing
-        try:
-            unit_net = float(pricing.unit_price_net())
-        except Exception:
-            unit_net = float(getattr(pricing, "electricity_price_eur_per_kwh", 0.0) or 0.0)
+        def _pricing_num(name: str, default: float = 0.0) -> float:
+            """Return numeric pricing attribute or method value safely."""
+            try:
+                v = getattr(pricing, name, default)
+                if callable(v):
+                    v = v()
+                return float(v or 0.0)
+            except Exception:
+                return float(default)
 
+        unit_net = float(pricing.unit_price_net())
+
+        # Issue/due dates
         issue = date.today()
-        due = issue + timedelta(days=int(getattr(self.cfg.billing, "payment_terms_days", 14) or 14))
+        due = issue + timedelta(days=int(self.cfg.billing.payment_terms_days))
         ts = time.strftime("%Y%m%d")
 
-        def _df_time_minmax(df: pd.DataFrame) -> tuple[pd.Timestamp | None, pd.Timestamp | None]:
-            try:
-                if df is None or df.empty:
-                    return None, None
-                if "timestamp" in df.columns:
-                    return pd.Timestamp(df["timestamp"].min()), pd.Timestamp(df["timestamp"].max())
-                # Fallback: datetime index
-                try:
-                    idx = pd.to_datetime(df.index, errors="coerce")
-                    if getattr(idx, "size", 0) == 0:
-                        return None, None
-                    return pd.Timestamp(idx.min()), pd.Timestamp(idx.max())
-                except Exception:
-                    return None, None
-            except Exception:
-                return None, None
-
-        errors: list[str] = []
         written = 0
+        errors: list[str] = []
 
-        for d in (self.cfg.devices or []):
+        # Clear log
+        try:
+            self.export_log.delete("1.0", "end")
+        except Exception:
+            pass
+
+        for d in self.cfg.devices:
             try:
-                cd = self.computed.get(d.key)
-                if cd is None or cd.df is None:
-                    raise RuntimeError(f"No computed data for device '{d.key}'")
+                df0 = self.computed[d.key].df
+                df = filter_by_time(df0, start=start, end=end)
 
-                df = filter_by_time(cd.df, start=start, end=end)
+                # If timestamp is in the index, normalize to a column for downstream funcs
+                if "timestamp" not in df.columns and isinstance(df.index, pd.DatetimeIndex):
+                    df = df.copy()
+                    df["timestamp"] = df.index
+
+                if df.empty:
+                    raise ValueError(self.t("export.no_data_for_device"))
+
                 kwh, _avgp, _maxp = summarize(df)
 
                 # Human label and invoice number suffix
@@ -3933,64 +3934,49 @@ class CoreMixin:
                     period_label = self.t("period.all")
                     suffix = "all"
                 else:
-                    period_label = f"{format_date_local(self.lang, start) if start is not None else '…'} {self.t('common.to')} {format_date_local(self.lang, end) if end is not None else '…'}"
-                    if period == "day" and start is not None:
-                        suffix = start.strftime("%Y%m%d")
-                    elif period == "week" and start is not None:
-                        iso = start.isocalendar()
-                        suffix = f"W{iso.week:02d}{iso.year}"
-                    elif period == "month" and start is not None:
-                        suffix = start.strftime("%Y%m")
-                    elif period == "year" and start is not None:
-                        suffix = start.strftime("%Y")
-                    else:
-                        sfx_a = (pd.Timestamp(start).date().isoformat() if start is not None else "x")
-                        sfx_b = (pd.Timestamp(end).date().isoformat() if end is not None else "y")
-                        suffix = f"{sfx_a}-{sfx_b}"
+                    s_eff = pd.Timestamp(start) if start is not None else pd.Timestamp(df["timestamp"].min())
+                    e_eff = pd.Timestamp(end) if end is not None else pd.Timestamp(df["timestamp"].max())
+                    suffix = f"{s_eff:%Y%m%d}-{e_eff:%Y%m%d}"
+                    period_label = f"{s_eff:%Y-%m-%d} – {e_eff:%Y-%m-%d}"
 
-                invoice_no = f"{self.cfg.billing.invoice_prefix}-{ts}-{d.key}-{period}-{suffix}"
-                safe_name = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in d.name).strip("_")
-                out = inv_dir / f"invoice_{invoice_no}_{safe_name or d.key}.pdf"
+                invoice_no = f"{self.cfg.billing.invoice_prefix}-{ts}-{d.key}"
+                out = inv_dir / f"invoice_{d.key}_{suffix}.pdf"
 
-                lines: list[InvoiceLine] = [
+                # Build invoice lines
+                lines: list[InvoiceLine] = []
+                # Energy line
+                lines.append(
                     InvoiceLine(
-                        description=self.t("pdf.invoice.line_energy", device=d.name, period=period_label),
+                        description=self.t("pdf.invoice.line_energy", device=d.name),
                         quantity=float(kwh),
                         unit="kWh",
-                        unit_price_net=unit_net,
+                        unit_price_net=float(unit_net),
                     )
-                ]
+                )
 
-                # Optional base fee (pro-rated)
-                try:
-                    base_year = float(getattr(pricing, "base_fee_eur_per_year", 0.0) or 0.0)
-                except Exception:
-                    base_year = 0.0
+                # Optional base fee
+                base_year = _pricing_num("base_fee_year_net", 0.0)
                 if base_year > 0:
-                    s_eff = pd.Timestamp(start).normalize() if start is not None else None
-                    e_eff = pd.Timestamp(end).normalize() if end is not None else None
-                    if s_eff is None or e_eff is None:
-                        mn, mx = _df_time_minmax(df)
-                        if s_eff is None and mn is not None:
-                            s_eff = pd.Timestamp(mn).normalize()
-                        if e_eff is None and mx is not None:
-                            e_eff = pd.Timestamp(mx).normalize()
-                    if s_eff is None:
-                        s_eff = pd.Timestamp(date.today()).normalize()
-                    if e_eff is None:
-                        e_eff = s_eff
-                    days = int((e_eff.date() - s_eff.date()).days) + 1
-                    days = max(1, days)
+                    # derive number of days in range
+                    if start is None and end is None:
+                        days = 365
+                    else:
+                        s_eff = pd.Timestamp(start) if start is not None else pd.Timestamp(df["timestamp"].min())
+                        e_eff = pd.Timestamp(end) if end is not None else pd.Timestamp(df["timestamp"].max())
+                        days = int((e_eff.date() - s_eff.date()).days) + 1
+                        days = max(1, days)
+
                     try:
                         base_day_net = float(pricing.base_fee_day_net())
                     except Exception:
                         base_day_net = float(base_year) / 365.0
+
                     lines.append(
                         InvoiceLine(
                             description=self.t("pdf.invoice.line_base_fee", days=days),
                             quantity=float(days),
                             unit=self.t("unit.days"),
-                            unit_price_net=base_day_net,
+                            unit_price_net=float(base_day_net),
                         )
                     )
 
@@ -4004,46 +3990,39 @@ class CoreMixin:
                         "address_lines": self.cfg.billing.issuer.address_lines,
                         "vat_id": self.cfg.billing.issuer.vat_id,
                         "email": self.cfg.billing.issuer.email,
-                        "phone": self.cfg.billing.issuer.phone,
-                        "iban": self.cfg.billing.issuer.iban,
-                        "bic": self.cfg.billing.issuer.bic,
                     },
                     customer={
                         "name": self.cfg.billing.customer.name,
                         "address_lines": self.cfg.billing.customer.address_lines,
-                        "vat_id": getattr(self.cfg.billing.customer, "vat_id", ""),
-                        "email": getattr(self.cfg.billing.customer, "email", ""),
-                        "phone": getattr(self.cfg.billing.customer, "phone", ""),
                     },
-                    vat_rate_percent=float(getattr(pricing, "vat_rate_percent", 0.0) or 0.0),
-                    vat_enabled=bool(getattr(pricing, "vat_enabled", False)),
+                    period_label=period_label,
+                    device_label=f"{d.name} ({d.key})",
+                    vat_rate_percent=float(pricing.vat_rate_percent),
+                    vat_enabled=bool(pricing.vat_enabled),
                     lines=lines,
                     footer_note=(self._pricing_footer_note()),
                     lang=self.lang,
                 )
 
                 written += 1
-                self.export_log.insert("end", self.t("export.invoice_written", path=str(out)) + "
-")
+                self.export_log.insert("end", self.t("export.invoice_written", path=str(out)) + "\n")
+
             except Exception as e:
                 errors.append(f"{d.key} ({d.name}): {e}")
                 self.export_log.insert(
                     "end",
-                    f"[ERROR] invoice for {d.key} ({d.name}) failed: {e}
-{traceback.format_exc()}
-",
+                    f"[ERROR] invoice for {d.key} ({d.name}) failed: {e}\n{_tb.format_exc()}\n",
                 )
 
         self.export_log.see("end")
 
         if written == 0:
-            messagebox.showerror(self.t("msg.export"), self.t("export.failed") + "
-" + "
-".join(errors[:5]))
+            messagebox.showerror(self.t("msg.export"), self.t("export.failed") + "\n" + "\n".join(errors[:5]))
         elif errors:
-            messagebox.showwarning(self.t("msg.export"), self.t("export.partial") + f" ({written} OK, {len(errors)} failed)")
-
-
+            messagebox.showwarning(
+                self.t("msg.export"),
+                self.t("export.partial") + f" ({written} OK, {len(errors)} failed)",
+            )
     def _build_settings_tab(self) -> None:
             frm = self.tab_settings
             # Split settings into subtabs to avoid overly tall pages (esp. on 14" screens).
