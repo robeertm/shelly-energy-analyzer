@@ -1,3 +1,18 @@
+## 5.9.2.47
+
+- Fix invoice PDF export: define totals (net_total/vat_amount/gross_total) for new layout.
+
+## 5.9.2.46 - 2026-02-01
+- Fix invoice PDF export: define missing _fmt_qty formatter (quantity column).
+
+## 5.9.2.45 - 2026-02-01
+- Fix: pyproject.toml formatting (version/description split) so pip install works.
+
+## 5.9.2.44 - 2026-02-01
+- Invoice PDF layout improved (address blocks, table alignment, totals).
+- Invoice lines now correctly include device + period placeholders.
+- Pricing footer VAT percent fixed.
+
 ## 5.9.2.42 - 2026-02-01
 ## 5.9.2.43 - 2026-02-01
 - Fix: invoice PDF export accepts `device_label` (and prints it in header).

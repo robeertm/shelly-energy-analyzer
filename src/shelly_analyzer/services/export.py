@@ -25,10 +25,50 @@ def _fmt_kwh(x: float, lang: str = "de") -> str:
     return format_number_local(lang, x, decimals=3)
 
 
+def _fmt_qty(x: float, lang: str = "de") -> str:
+    """Format quantity column (kWh) for invoice tables."""
+    return _fmt_kwh(x, lang)
+
+
 def _fmt_int(x: float, lang: str = "de") -> str:
     lang = normalize_lang(lang)
     return format_number_local(lang, x, decimals=0)
 
+
+
+
+def _wrap_text(c: canvas.Canvas, text: str, max_width: float, max_lines: int = 2) -> List[str]:
+    """Wrap text for canvas drawing based on current font.
+
+    Returns up to `max_lines` lines; last line is truncated with ellipsis if needed.
+    """
+    text = (text or "").strip()
+    if not text:
+        return [""]
+    words = text.split()
+    lines: List[str] = []
+    cur: List[str] = []
+    for w in words:
+        trial = (" ".join(cur + [w])).strip()
+        if c.stringWidth(trial) <= max_width or not cur:
+            cur.append(w)
+        else:
+            lines.append(" ".join(cur))
+            cur = [w]
+            if len(lines) >= max_lines:
+                break
+    if len(lines) < max_lines and cur:
+        lines.append(" ".join(cur))
+
+    # Truncate last line if still too long
+    if lines:
+        last = lines[-1]
+        if c.stringWidth(last) > max_width:
+            ell = "…"
+            while last and c.stringWidth(last + ell) > max_width:
+                last = last[:-1]
+            lines[-1] = (last + ell) if last else ell
+    return lines[:max_lines]
 
 
 @dataclass(frozen=True)
@@ -182,118 +222,150 @@ def export_pdf_invoice(
     c = canvas.Canvas(str(out_path), pagesize=A4)
     w, h = A4
 
-    # Header
+    # Header / title
     y = h - 2.0 * cm
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(2.0 * cm, y, t(lang, 'pdf.invoice'))
+    c.setFont("Helvetica-Bold", 18)
+    c.drawString(2.0 * cm, y, t(lang, "pdf.invoice"))
+    # Right header info block
     c.setFont("Helvetica", 10)
     c.drawRightString(w - 2.0 * cm, y, f"{t(lang, 'pdf.invoice_no')}: {invoice_no}")
-
-    if period_label:
-        c.setFont("Helvetica", 10)
-        c.drawRightString(w - 2.0 * cm, y - 0.45 * cm, str(period_label))
-
-    if device_label:
-        c.setFont("Helvetica", 10)
-        # Place device label just below period label (or at the same slot if period label is missing)
-        dy = 0.70 if period_label else 0.45
-        c.drawRightString(w - 2.0 * cm, y - dy * cm, str(device_label))
-
-
-
-    y -= 0.9 * cm
+    y -= 0.55 * cm
     c.drawRightString(w - 2.0 * cm, y, f"{t(lang, 'pdf.date')}: {format_date_local(lang, issue_date)}")
-    y -= 0.5 * cm
+    y -= 0.45 * cm
     c.drawRightString(w - 2.0 * cm, y, f"{t(lang, 'pdf.due')}: {format_date_local(lang, due_date)}")
 
-    # Issuer block
-    y -= 1.1 * cm
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(2.0 * cm, y, str(issuer.get("name", "")))
-    c.setFont("Helvetica", 10)
-    for ln in (issuer.get("address_lines") or []):
-        y -= 0.45 * cm
-        c.drawString(2.0 * cm, y, str(ln))
-    if issuer.get("vat_id"):
-        y -= 0.6 * cm
-        c.drawString(2.0 * cm, y, f"{t(lang, 'pdf.vat_id')}: {issuer.get('vat_id')}")
-    if issuer.get("email"):
-        y -= 0.45 * cm
-        c.drawString(2.0 * cm, y, f"{t(lang, 'pdf.email')}: {issuer.get('email')}")
-    if issuer.get("phone"):
-        y -= 0.45 * cm
-        c.drawString(2.0 * cm, y, f"{t(lang, 'pdf.phone')}: {issuer.get('phone')}")
+    # Horizontal rule
+    y -= 0.55 * cm
+    c.setLineWidth(0.6)
+    c.line(2.0 * cm, y, w - 2.0 * cm, y)
 
-    # Customer block
-    y_c = h - 4.2 * cm
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(11.0 * cm, y_c, t(lang, 'pdf.bill_to'))
-    y_c -= 0.55 * cm
-    c.drawString(11.0 * cm, y_c, str(customer.get("name", "")))
+    # Address blocks (issuer left, customer right)
+    y -= 0.9 * cm
+    box_h = 4.1 * cm
+    left_x = 2.0 * cm
+    right_x = w / 2.0 + 0.3 * cm
+    box_w = w / 2.0 - 2.3 * cm
+
+    # Issuer (left)
+    c.setLineWidth(0.4)
+    c.rect(left_x, y - box_h, box_w, box_h, stroke=1, fill=0)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(left_x + 0.25 * cm, y - 0.55 * cm, t(lang, "pdf.block.issuer"))
     c.setFont("Helvetica", 10)
+    yy = y - 1.1 * cm
+    if issuer.get("name"):
+        c.drawString(left_x + 0.25 * cm, yy, str(issuer.get("name")))
+        yy -= 0.45 * cm
+    for ln in (issuer.get("address_lines") or []):
+        c.drawString(left_x + 0.25 * cm, yy, str(ln))
+        yy -= 0.45 * cm
+    if issuer.get("email"):
+        c.drawString(left_x + 0.25 * cm, yy, f"{t(lang,'pdf.email')}: {issuer.get('email')}")
+        yy -= 0.45 * cm
+    if issuer.get("vat_id"):
+        c.drawString(left_x + 0.25 * cm, yy, f"{t(lang,'pdf.vat_id')}: {issuer.get('vat_id')}")
+        yy -= 0.45 * cm
+
+    # Customer (right)
+    c.rect(right_x, y - box_h, box_w, box_h, stroke=1, fill=0)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(right_x + 0.25 * cm, y - 0.55 * cm, t(lang, "pdf.block.customer"))
+    c.setFont("Helvetica", 10)
+    yy = y - 1.1 * cm
+    if customer.get("name"):
+        c.drawString(right_x + 0.25 * cm, yy, str(customer.get("name")))
+        yy -= 0.45 * cm
     for ln in (customer.get("address_lines") or []):
-        y_c -= 0.45 * cm
-        c.drawString(11.0 * cm, y_c, str(ln))
-    if customer.get("vat_id"):
-        y_c -= 0.55 * cm
-        c.drawString(11.0 * cm, y_c, f"{t(lang, 'pdf.vat_id')}: {customer.get('vat_id')}")
+        c.drawString(right_x + 0.25 * cm, yy, str(ln))
+        yy -= 0.45 * cm
+
+    # Device / period line
+    y = y - box_h - 0.8 * cm
+    c.setFont("Helvetica-Bold", 11)
+    if device_label:
+        c.drawString(2.0 * cm, y, str(device_label))
+        y -= 0.55 * cm
+    c.setFont("Helvetica", 10)
+    if period_label:
+        c.drawString(2.0 * cm, y, str(period_label))
+        y -= 0.5 * cm
 
     # Table header
-    y = h - 9.0 * cm
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(2.0 * cm, y, t(lang, 'pdf.col.description'))
-    c.drawRightString(12.5 * cm, y, t(lang, 'pdf.col.quantity'))
-    c.drawRightString(15.5 * cm, y, f"{t(lang, 'pdf.col.unit_price')} ({currency})")
-    c.drawRightString(w - 2.0 * cm, y, f"{t(lang, 'pdf.col.amount')} ({currency})")
-    y -= 0.25 * cm
+    y -= 0.2 * cm
+    c.setLineWidth(0.6)
     c.line(2.0 * cm, y, w - 2.0 * cm, y)
-    y -= 0.6 * cm
-    c.setFont("Helvetica", 10)
+    y -= 0.5 * cm
 
+    col_desc_x = 2.0 * cm
+    col_qty_x = 11.2 * cm
+    col_unit_x = 13.0 * cm
+    col_price_x = 14.5 * cm
+    col_amt_x = w - 2.0 * cm
+
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(col_desc_x, y, t(lang, "pdf.col.description"))
+    c.drawRightString(col_qty_x, y, t(lang, "pdf.col.quantity"))
+    c.drawString(col_unit_x, y, t(lang, "pdf.col.unit"))
+    c.drawRightString(col_price_x, y, t(lang, "pdf.col.unit_price"))
+    c.drawRightString(col_amt_x, y, t(lang, "pdf.col.amount"))
+    y -= 0.35 * cm
+    c.setLineWidth(0.4)
+    c.line(2.0 * cm, y, w - 2.0 * cm, y)
+
+    # Lines
     net_total = 0.0
+    c.setFont("Helvetica", 10)
+    y -= 0.55 * cm
     for ln in lines:
-        amount = float(ln.quantity) * float(ln.unit_price_net)
+        # Wrap long descriptions gently
+        desc = str(getattr(ln, "description", ""))
+        qty = float(getattr(ln, "quantity", 0.0) or 0.0)
+        unit = str(getattr(ln, "unit", "") or "")
+        unit_price = float(getattr(ln, "unit_price_net", 0.0) or 0.0)
+        amount = qty * unit_price
         net_total += amount
-        c.drawString(2.0 * cm, y, ln.description)
-        q = float(ln.quantity) if ln.quantity is not None else 0.0
-        unit_l = str(ln.unit or "").strip().lower()
-        if unit_l in ("day", "days", "tag", "tage", "jour", "jours", "día", "días", "dia", "dias", "giorno", "giorni", "dzień", "dni", "den", "dny", "день", "дни"):
-            qtxt = _fmt_int(q, lang)
-        else:
-            qtxt = _fmt_kwh(q, lang)
-        c.drawRightString(12.5 * cm, y, f"{qtxt} {ln.unit}")
-        c.drawRightString(15.5 * cm, y, _fmt_money(ln.unit_price_net, lang))
-        c.drawRightString(w - 2.0 * cm, y, _fmt_money(amount, lang))
-        y -= 0.6 * cm
-        if y < 5.0 * cm:
-            c.showPage()
-            y = h - 2.0 * cm
 
+        # Description wrapping (max 2 lines)
+        maxw = (col_qty_x - col_desc_x - 0.3 * cm)
+        parts = _wrap_text(c, desc, maxw, max_lines=2)
+
+        c.drawString(col_desc_x, y, parts[0])
+        if len(parts) > 1:
+            c.drawString(col_desc_x, y - 0.45 * cm, parts[1])
+
+        c.drawRightString(col_qty_x, y, _fmt_qty(qty, lang))
+        c.drawString(col_unit_x, y, unit)
+        c.drawRightString(col_price_x, y, _fmt_money(unit_price, lang))
+        c.drawRightString(col_amt_x, y, _fmt_money(amount, lang))
+
+        y -= 0.95 * cm if len(parts) > 1 else 0.55 * cm
+
+    # Totals
     vat_amount = net_total * vat_rate
     gross_total = net_total + vat_amount
 
-    # Totals block
-    y -= 0.2 * cm
-    c.line(11.0 * cm, y, w - 2.0 * cm, y)
+    # Totals box
+    y -= 0.15 * cm
+    c.setLineWidth(0.6)
+    c.line(2.0 * cm, y, w - 2.0 * cm, y)
     y -= 0.65 * cm
-    c.setFont("Helvetica-Bold", 10)
-    c.drawRightString(15.5 * cm, y, t(lang, 'pdf.subtotal'))
-    c.drawRightString(w - 2.0 * cm, y, _fmt_money(net_total, lang))
-    y -= 0.55 * cm
     c.setFont("Helvetica", 10)
+    c.drawRightString(15.5 * cm, y, t(lang, "pdf.subtotal"))
+    c.drawRightString(col_amt_x, y, _fmt_money(net_total, lang))
+    y -= 0.55 * cm
     if vat_enabled and vat_rate > 0:
         c.drawRightString(15.5 * cm, y, f"{t(lang, 'pdf.vat')} ({vat_rate_percent:.1f}%)")
-        c.drawRightString(w - 2.0 * cm, y, _fmt_money(vat_amount, lang))
+        c.drawRightString(col_amt_x, y, _fmt_money(vat_amount, lang))
         y -= 0.55 * cm
-        c.setFont("Helvetica-Bold", 10)
-        c.drawRightString(15.5 * cm, y, t(lang, 'pdf.total'))
-        c.drawRightString(w - 2.0 * cm, y, _fmt_money(gross_total, lang))
+        c.setFont("Helvetica-Bold", 11)
+        c.drawRightString(15.5 * cm, y, t(lang, "pdf.total"))
+        c.drawRightString(col_amt_x, y, _fmt_money(gross_total, lang))
     else:
-        c.setFont("Helvetica-Bold", 10)
-        c.drawRightString(15.5 * cm, y, t(lang, 'pdf.total'))
-        c.drawRightString(w - 2.0 * cm, y, _fmt_money(net_total, lang))
+        c.setFont("Helvetica-Bold", 11)
+        c.drawRightString(15.5 * cm, y, t(lang, "pdf.total"))
+        c.drawRightString(col_amt_x, y, _fmt_money(net_total, lang))
 
-    # Payment details
+# Payment details
     y -= 1.2 * cm
     c.setFont("Helvetica", 9)
     if issuer.get("iban"):

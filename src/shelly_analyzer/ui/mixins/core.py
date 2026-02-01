@@ -3817,50 +3817,63 @@ class CoreMixin:
             self.export_log.see("end")
 
     def _pricing_footer_note(self) -> str:
-            """Return a translated pricing note for invoice PDFs."""
-            try:
-                pricing = self.cfg.pricing
-            except Exception:
-                return ""
-            try:
-                lang = self.lang
-            except Exception:
-                lang = "de"
+        """Return a translated pricing note for invoice PDFs."""
+        try:
+            pricing = self.cfg.pricing
+        except Exception:
+            return ""
+        lang = getattr(self, "lang", "de") or "de"
 
+        def _num(name: str, default: float = 0.0) -> float:
             try:
-                vat = _pricing_num("vat_rate_percent", 0.0)
+                v = getattr(pricing, name, default)
+                if callable(v):
+                    v = v()
+                return float(v or 0.0)
             except Exception:
-                vat = 0.0
-            try:
-                vat_enabled = bool(getattr(pricing, "vat_enabled", False))
-            except Exception:
-                vat_enabled = False
-            try:
-                price_includes_vat = bool(getattr(pricing, "price_includes_vat", True))
-            except Exception:
-                price_includes_vat = True
+                return float(default)
 
-            try:
-                net = float(pricing.unit_price_net())
-            except Exception:
-                try:
-                    net = _pricing_num("unit_price_eur_per_kwh", 0.0)
-                except Exception:
-                    net = 0.0
-            try:
-                gross = float(pricing.unit_price_gross())
-            except Exception:
-                gross = net
+        try:
+            vat_enabled = bool(getattr(pricing, "vat_enabled", False))
+        except Exception:
+            vat_enabled = False
+        try:
+            price_includes_vat = bool(getattr(pricing, "price_includes_vat", True))
+        except Exception:
+            price_includes_vat = True
 
-            try:
-                if not vat_enabled:
-                    return self.t("pdf.pricing.no_vat", price=_fmt_eur(net))
-                if price_includes_vat:
-                    return self.t("pdf.pricing.gross_incl_vat", gross=_fmt_eur(gross), net=_fmt_eur(net), vat=f"{vat:.1f}")
-                return self.t("pdf.pricing.net_excl_vat", net=_fmt_eur(net), gross=_fmt_eur(gross), vat=f"{vat:.1f}")
-            except Exception:
-                return ""
+        vat = _num("vat_rate_percent", 0.0)
 
+        # Unit prices (net/gross)
+        try:
+            net = float(pricing.unit_price_net())
+        except Exception:
+            net = _num("unit_price_eur_per_kwh", 0.0)
+
+        try:
+            gross = float(pricing.unit_price_gross())
+        except Exception:
+            # derive gross if needed
+            gross = net * (1.0 + vat / 100.0) if vat_enabled else net
+
+        try:
+            if not vat_enabled:
+                return self.t("pdf.pricing.no_vat", price=_fmt_eur(net))
+            if price_includes_vat:
+                return self.t(
+                    "pdf.pricing.gross_incl_vat",
+                    gross=_fmt_eur(gross),
+                    net=_fmt_eur(net),
+                    vat=f"{vat:.1f}",
+                )
+            return self.t(
+                "pdf.pricing.net_excl_vat",
+                net=_fmt_eur(net),
+                gross=_fmt_eur(gross),
+                vat=f"{vat:.1f}",
+            )
+        except Exception:
+            return ""
     def _export_invoices(self) -> None:
         """Export one PDF invoice per configured device (Shelly)."""
         import traceback as _tb
@@ -3947,7 +3960,7 @@ class CoreMixin:
                 # Energy line
                 lines.append(
                     InvoiceLine(
-                        description=self.t("pdf.invoice.line_energy", device=d.name),
+                        description=self.t("pdf.invoice.line_energy", device=d.name, period=period_label),
                         quantity=float(kwh),
                         unit="kWh",
                         unit_price_net=float(unit_net),
@@ -3997,7 +4010,7 @@ class CoreMixin:
                     },
                     period_label=period_label,
                     device_label=f"{d.name} ({d.key})",
-                    vat_rate_percent=float(pricing.vat_rate_percent),
+                    vat_rate_percent=_pricing_num("vat_rate_percent", 0.0),
                     vat_enabled=bool(pricing.vat_enabled),
                     lines=lines,
                     footer_note=(self._pricing_footer_note()),

@@ -527,7 +527,10 @@ _I18N: Dict[str, Dict[str, str]] = {
     "updates.available": "Update verfügbar",
     "updates.none": "Kein Update gefunden",
     "updates.no_download": "Kein Download verfügbar. Bitte zuerst „Jetzt prüfen“.",
-    "updates.failed": "Update fehlgeschlagen",
+    "updates.failed": "Update fehlgeschlagen",    "pdf.block.issuer": "Rechnung von",
+    "pdf.block.customer": "Rechnung an",
+    "pdf.col.unit": "Einheit",
+
     },
     "en": {
         # App
@@ -1056,7 +1059,10 @@ _I18N: Dict[str, Dict[str, str]] = {
     "updates.available": "Update available",
     "updates.none": "No update found",
     "updates.no_download": "No downloadable update found. Click 'Check now' first.",
-    "updates.failed": "Update failed",
+    "updates.failed": "Update failed",    "pdf.block.issuer": "Issued by",
+    "pdf.block.customer": "Bill to",
+    "pdf.col.unit": "Unit",
+
     },
     "es": {
         # App
@@ -1569,7 +1575,10 @@ _I18N: Dict[str, Dict[str, str]] = {
     "updates.available": "Actualización disponible",
     "updates.none": "No hay actualización",
     "updates.no_download": "No hay descarga disponible. Primero pulsa “Comprobar ahora”.",
-    "updates.failed": "Falló la actualización",
+    "updates.failed": "Falló la actualización",    "pdf.block.issuer": "Emisor",
+    "pdf.block.customer": "Cliente",
+    "pdf.col.unit": "Unidad",
+
     },
 }
 
