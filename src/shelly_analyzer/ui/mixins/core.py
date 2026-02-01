@@ -6300,52 +6300,115 @@ class CoreMixin:
 
 
     def _telegram_make_alarm_plots(self, device_key: str, end_ts: int, minutes: int = 10) -> list["Path"]:
-            """Create last-N-minutes plots for V/A/W for a device (used for Telegram alarms)."""
+            """Create last-N-minutes plots for V/A/W for a device (used for Telegram alarms).
+
+            Prefer the in-memory live ring-buffer (last samples) so plots are attached reliably
+            even when CSV writing lags behind. Falls back to CSV if live buffer is unavailable.
+            """
             from pathlib import Path
             import pandas as pd
+            from zoneinfo import ZoneInfo
 
             out: list[Path] = []
             try:
-                df = self.storage.read_device_df(device_key)
+                end_ts_i = int(end_ts)
             except Exception:
-                return out
-            if df is None or getattr(df, "empty", True):
-                return out
-
-            # Ensure timestamp
+                end_ts_i = 0
             try:
-                if "timestamp" in df.columns:
-                    df = df.copy()
-                    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-                elif "ts" in df.columns:
-                    df = df.copy()
-                    df["timestamp"] = pd.to_datetime(pd.to_numeric(df["ts"], errors="coerce"), unit="s", errors="coerce")
-                else:
-                    # try index
-                    df = df.copy()
-                    df["timestamp"] = pd.to_datetime(df.index, errors="coerce")
+                minutes_i = int(minutes)
             except Exception:
-                return out
-            df = df.dropna(subset=["timestamp"])
-            if df.empty:
-                return out
-
-            end_dt = pd.to_datetime(int(end_ts), unit="s", errors="coerce")
-            if pd.isna(end_dt):
+                minutes_i = 10
+            if minutes_i <= 0:
+                minutes_i = 10
+            if end_ts_i <= 0:
                 try:
-                    end_dt = df["timestamp"].max()
+                    import time as _time
+                    end_ts_i = int(_time.time())
+                except Exception:
+                    end_ts_i = 0
+            start_ts_i = end_ts_i - (minutes_i * 60)
+
+            tz_local = ZoneInfo("Europe/Berlin")
+            dfw = None
+
+            # 1) Prefer live ring buffer (populated by LivePoller) to avoid CSV lag.
+            try:
+                live = getattr(self, "_live_series", {}) or {}
+                ser = live.get(str(device_key))
+                if isinstance(ser, dict) and ser:
+                    mappings = [
+                        ("total_power", "total_power"),
+                        ("a_voltage", "a_voltage"),
+                        ("b_voltage", "b_voltage"),
+                        ("c_voltage", "c_voltage"),
+                        ("a_current", "a_current"),
+                        ("b_current", "b_current"),
+                        ("c_current", "c_current"),
+                    ]
+                    frames = []
+                    for col, key in mappings:
+                        dq = ser.get(key)
+                        if not dq:
+                            continue
+                        try:
+                            pts = [(int(t), float(v)) for (t, v) in list(dq) if int(t) >= start_ts_i and int(t) <= end_ts_i]
+                        except Exception:
+                            pts = []
+                        if not pts:
+                            continue
+                        dfc = pd.DataFrame(pts, columns=["ts", col]).drop_duplicates("ts", keep="last")
+                        frames.append(dfc)
+                    if frames:
+                        d = frames[0]
+                        for other in frames[1:]:
+                            d = d.merge(other, on="ts", how="outer")
+                        d = d.sort_values("ts")
+                        # timestamp for _wva_series
+                        d["timestamp"] = pd.to_datetime(d["ts"], unit="s", utc=True, errors="coerce").dt.tz_convert(tz_local).dt.tz_localize(None)
+                        dfw = d.drop(columns=["ts"]).dropna(subset=["timestamp"])
+            except Exception:
+                dfw = None
+
+            # 2) Fallback to CSV if needed.
+            if dfw is None or getattr(dfw, "empty", True):
+                try:
+                    df = self.storage.read_device_df(device_key)
                 except Exception:
                     return out
-            start_dt = end_dt - pd.Timedelta(minutes=int(minutes))
+                if df is None or getattr(df, "empty", True):
+                    return out
 
-            try:
-                m = (df["timestamp"] >= start_dt) & (df["timestamp"] <= end_dt)
-                dfw = df.loc[m].copy()
-            except Exception:
-                dfw = df.copy()
+                # Ensure timestamp
+                try:
+                    if "timestamp" in df.columns:
+                        df = df.copy()
+                        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+                    elif "ts" in df.columns:
+                        df = df.copy()
+                        df["timestamp"] = pd.to_datetime(pd.to_numeric(df["ts"], errors="coerce"), unit="s", errors="coerce")
+                    else:
+                        df = df.copy()
+                        df["timestamp"] = pd.to_datetime(df.index, errors="coerce")
+                except Exception:
+                    return out
+                df = df.dropna(subset=["timestamp"])
+                if df.empty:
+                    return out
 
-            if dfw is None or dfw.empty:
-                return out
+                end_dt = pd.to_datetime(int(end_ts_i), unit="s", errors="coerce")
+                if pd.isna(end_dt):
+                    try:
+                        end_dt = df["timestamp"].max()
+                    except Exception:
+                        return out
+                start_dt = end_dt - pd.Timedelta(minutes=int(minutes_i))
+                try:
+                    msk = (df["timestamp"] >= start_dt) & (df["timestamp"] <= end_dt)
+                    dfw = df.loc[msk].copy()
+                except Exception:
+                    dfw = df.copy()
+                if dfw is None or dfw.empty:
+                    return out
 
             # output folder inside data/
             try:
@@ -6361,16 +6424,16 @@ class CoreMixin:
                     y, _ = self._wva_series(dfw, metric)
                     if y is None or len(y) == 0:
                         continue
-                    y = pd.to_numeric(y, errors="coerce")
-                    y = y.dropna()
+                    y = pd.to_numeric(y, errors="coerce").dropna()
                     if y.empty:
                         continue
                     x = y.index
-                    fn = f"alarm_{device_key}_{metric}_{int(end_ts)}.png"
+                    fn = f"alarm_{device_key}_{metric}_{int(end_ts_i)}.png"
                     p = out_dir / fn
-                    title = f"{device_key} – {metric} (letzte {int(minutes)} min)"
+                    title = f"{device_key} – {metric} (letzte {int(minutes_i)} min)"
                     self._telegram_plot_series_png(x=x, y=y, title=title, ylabel=ylabel, out_path=p)
-                    out.append(p)
+                    if p.exists() and p.stat().st_size > 0:
+                        out.append(p)
                 except Exception:
                     continue
             return out
