@@ -1,5 +1,22 @@
 # Changelog
 
+## 5.9.2.59 - 2026-03-08
+
+### Fixed
+- **Web cost panel redesigned for proper dark/light visibility**. Cost cards now use layered backgrounds: panel uses `var(--card)`, device sections use `var(--bg)`, inner metric cards use `var(--card)` again — creating visible contrast in both themes. Previously cards used `var(--chipbg)` which was invisible in dark mode.
+- Device names shown in accent color with separator line.
+- € amounts: large (20px), bold (800), centered, accent color.
+- Labels: uppercase, small, muted — matching the KV panel style.
+- Refresh button styled as a proper button matching the dashboard controls.
+- Proper responsive grid: 4 columns on desktop, 2×2 on phone, 1 column on small screens.
+
+## 5.9.2.58 - 2026-03-08
+
+### Fixed
+- **Web cost panel CSS was completely broken**: The `.kv` CSS block was not closed, causing all cost panel classes (`.cost-panel`, `.cost-card`, etc.) to be nested inside `.kv` and therefore invalid. This made the cost panel render as unstyled plain text. Fixed by properly closing `.kv` before the cost CSS. Also fixed the `.kv` block itself which lost its `color` and `margin` properties.
+- Cost panel now has proper card styling with rounded borders, uppercase labels, large € amounts in accent color, proper spacing and responsive grid layout matching the device cards above.
+- Refresh button uses the same `.navlink` pill style as the theme toggle and other controls.
+
 ## 5.9.2.57 - 2026-03-08
 
 ### Fixed
