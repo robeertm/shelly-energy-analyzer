@@ -93,15 +93,15 @@ def _local_ip_guess() -> str:
 class LivePoint:
     ts: int
     power_total_w: float
-    pa: float = 0.0
-    pb: float = 0.0
-    pc: float = 0.0
     va: float
     vb: float
     vc: float
     ia: float
     ib: float
     ic: float
+    pa: float = 0.0
+    pb: float = 0.0
+    pc: float = 0.0
     q_total_var: float = 0.0
     qa: float = 0.0
     qb: float = 0.0
