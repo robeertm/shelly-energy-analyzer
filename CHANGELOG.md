@@ -1,4 +1,15 @@
-## 5.9.2.47
+## 5.9.2.48 - 2026-03-08
+Fixed
+
+Critical: Telegram daily/monthly summaries now sync data from Shelly devices before sending. Previously, summaries at 00:00 missed the last hours of data because _build_telegram_summary() read stale CSV files without calling sync_all() first. New method _sync_before_telegram_summary() ensures fresh data for scheduled sends and "Jetzt senden" buttons.
+Critical: Removed duplicate _telegram_summary_tick() implementation (~400 lines). The method was defined twice; the second definition overwrote the first and bypassed the arm-logic state machine, which could cause retroactive or missed sends.
+Removed ~500 lines of dead code after the return statement in _build_telegram_summary() (unreachable re-definitions of _alerts_format_telegram_message, _alerts_value, _alerts_process_sample, _add_device_from_host).
+- Fix: self.log.warning() → logging.getLogger(__name__).warning() — self.log was never defined, causing AttributeError at runtime in Telegram tick and send methods.
+- Fix: Shadowed variable t in export_pdf_summary() (export.py) — the loop variable for t in totals: overwrote the imported t() translation function, causing TypeError on subsequent t(lang, ...) calls. Renamed to row.
+- Fix: self.root.after(0, _apply) → self.after(0, _apply) in liveweb.py — self.root is not defined; the app inherits from tk.Tk directly.
+- Fix: self._show_msgbox() → messagebox.showinfo()/messagebox.showwarning() in Telegram "Jetzt senden" handlers — _show_msgbox was never defined.
+- Fix: self._save_settings_devices() → self._save_settings() in Telegram test send — _save_settings_devices was never defined.
+- Fix: Optional[ReleaseInfo] → Optional[Any] for _upd_latest — ReleaseInfo type was not imported.## 5.9.2.47
 
 - Fix invoice PDF export: define totals (net_total/vat_amount/gross_total) for new layout.
 
