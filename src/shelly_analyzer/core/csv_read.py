@@ -106,6 +106,14 @@ def _read_one_csv(path: Path) -> Tuple[pd.DataFrame, str]:
     return df, "auto"
 
 
+def _find_ts_col(df: pd.DataFrame) -> "str | None":
+    """Return the first timestamp column found, or None."""
+    for c in TS_CANDIDATES:
+        if c in df.columns:
+            return c
+    return None
+
+
 def read_csv_files(paths: Iterable[Union[str, Path]]) -> pd.DataFrame:
     """Read and concat multiple CSV files.
 
@@ -120,14 +128,6 @@ def read_csv_files(paths: Iterable[Union[str, Path]]) -> pd.DataFrame:
             continue
         try:
             df, _sep = _read_one_csv(p)
-
-            # Backwards compatibility: accept legacy timestamp columns.
-            def _find_ts_col(_df: pd.DataFrame) -> str | None:
-                for c in TS_CANDIDATES:
-                    if c in _df.columns:
-                        return c
-                return None
-
             ts_col = _find_ts_col(df)
             if ts_col is None:
                 # Common issue: file is ';' separated -> pandas reads 1 big column.

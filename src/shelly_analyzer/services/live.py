@@ -132,8 +132,8 @@ class LivePoller:
         self.device = device
         self.poll_seconds = float(poll_seconds)
         self._stop = threading.Event()
-        self.samples: "queue.Queue[LiveSample]" = queue.Queue()
-        self.errors: "queue.Queue[str]" = queue.Queue()
+        self.samples: "queue.Queue[LiveSample]" = queue.Queue(maxsize=300)
+        self.errors: "queue.Queue[str]" = queue.Queue(maxsize=50)
 
         self._http = ShellyHttp(
             HttpConfig(
@@ -164,22 +164,27 @@ class LivePoller:
                 else:
                     data = get_em_status(self._http, self.device.host, self.device.em_id)
                     fields = parse_live_fields(data)
-                self.samples.put(
-                    LiveSample(
-                        device_key=self.device.key,
-                        device_name=self.device.name,
-                        ts=ts,
-                        power_w=fields["power_w"],
-                        voltage_v=fields["voltage_v"],
-                        current_a=fields["current_a"],
-                        reactive_var=fields.get("reactive_var", {"a":0.0,"b":0.0,"c":0.0,"total":0.0}),
-                        cosphi=fields.get("cosphi", {"a":0.0,"b":0.0,"c":0.0,"total":0.0}),
-                        raw=data,
-                    )
+                sample = LiveSample(
+                    device_key=self.device.key,
+                    device_name=self.device.name,
+                    ts=ts,
+                    power_w=fields["power_w"],
+                    voltage_v=fields["voltage_v"],
+                    current_a=fields["current_a"],
+                    reactive_var=fields.get("reactive_var", {"a":0.0,"b":0.0,"c":0.0,"total":0.0}),
+                    cosphi=fields.get("cosphi", {"a":0.0,"b":0.0,"c":0.0,"total":0.0}),
+                    raw=data,
                 )
+                try:
+                    self.samples.put_nowait(sample)
+                except queue.Full:
+                    pass  # drop if consumer is too slow
                 err_count = 0
             except Exception as e:
-                self.errors.put(f"{self.device.name}: {e}")
+                try:
+                    self.errors.put_nowait(f"{self.device.name}: {e}")
+                except queue.Full:
+                    pass
                 err_count += 1
                 try:
                     log.warning("Live poll failed for %s (%s): %s", self.device.name, self.device.host, e)
@@ -215,8 +220,8 @@ class MultiLivePoller:
         self.devices: List[DeviceConfig] = list(devices)
         self.poll_seconds = float(poll_seconds)
         self._stop = threading.Event()
-        self.samples: "queue.Queue[LiveSample]" = queue.Queue()
-        self.errors: "queue.Queue[Dict[str, Any]]" = queue.Queue()
+        self.samples: "queue.Queue[LiveSample]" = queue.Queue(maxsize=300)
+        self.errors: "queue.Queue[Dict[str, Any]]" = queue.Queue(maxsize=50)
 
         self._http_cfg = HttpConfig(
             timeout_seconds=download_cfg.timeout_seconds,
@@ -234,6 +239,11 @@ class MultiLivePoller:
             # Good default for network IO without overwhelming Shellys
             max_workers = min(8, max(1, len(self.devices)))
         self._max_workers = int(max_workers)
+        # Persistent executor — avoids recreating threads every poll cycle and
+        # avoids blocking shutdown(wait=True) on timed-out in-flight requests.
+        self._executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=self._max_workers, thread_name_prefix="MultiLivePoll"
+        )
 
         self._thread = threading.Thread(target=self._run, name="MultiLivePoller", daemon=True)
 
@@ -243,6 +253,7 @@ class MultiLivePoller:
 
     def stop(self) -> None:
         self._stop.set()
+        self._executor.shutdown(wait=False)
 
     def _http(self) -> ShellyHttp:
         http = getattr(self._thread_local, "http", None)
@@ -293,37 +304,42 @@ class MultiLivePoller:
                     due.append(d)
 
             if due:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=self._max_workers) as ex:
-                    futs = {ex.submit(self._fetch_one, d, ts): d for d in due}
-                    try:
-                        iterator = concurrent.futures.as_completed(futs, timeout=max(0.1, poll))
-                        for fut in iterator:
-                            d = futs[fut]
+                futs = {self._executor.submit(self._fetch_one, d, ts): d for d in due}
+                try:
+                    iterator = concurrent.futures.as_completed(futs, timeout=max(0.1, poll))
+                    for fut in iterator:
+                        d = futs[fut]
+                        try:
+                            s = fut.result()
                             try:
-                                s = fut.result()
-                                self.samples.put(s)
-                                self._err_count[d.key] = 0
-                                self._next_due_ts[d.key] = time.time() + poll
-                            except Exception as e:
-                                ec = int(self._err_count.get(d.key, 0)) + 1
-                                self._err_count[d.key] = ec
-                                backoff = self._backoff_seconds(poll, ec)
-                                self._next_due_ts[d.key] = time.time() + backoff
-                                self.errors.put(
+                                self.samples.put_nowait(s)
+                            except queue.Full:
+                                pass  # drop oldest; consumer is too slow
+                            self._err_count[d.key] = 0
+                            self._next_due_ts[d.key] = time.time() + poll
+                        except Exception as e:
+                            ec = int(self._err_count.get(d.key, 0)) + 1
+                            self._err_count[d.key] = ec
+                            backoff = self._backoff_seconds(poll, ec)
+                            self._next_due_ts[d.key] = time.time() + backoff
+                            try:
+                                self.errors.put_nowait(
                                     {
                                         "device_key": d.key,
                                         "device_name": d.name,
                                         "error": str(e),
                                     }
                                 )
-                                try:
-                                    log.warning("Live poll failed for %s (%s): %s", d.name, d.host, e)
-                                except Exception:
-                                    pass
-                    except concurrent.futures.TimeoutError:
-                        # Some Shellys didn't respond within the poll window.
-                        # They will be retried on the next tick; we keep the loop alive.
-                        pass
+                            except queue.Full:
+                                pass
+                            try:
+                                log.warning("Live poll failed for %s (%s): %s", d.name, d.host, e)
+                            except Exception:
+                                pass
+                except concurrent.futures.TimeoutError:
+                    # Some Shellys didn't respond within the poll window.
+                    # They will be retried on the next tick; we keep the loop alive.
+                    pass
 
             # Wait until next tick; keep stop responsive.
             elapsed = time.time() - started
