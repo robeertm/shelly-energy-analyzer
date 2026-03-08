@@ -1167,10 +1167,20 @@ class LiveWebMixin:
 
                             # Compact summary lines for the Live tab UI
                             try:
+                                # Compute today's cost from kWh × gross price
+                                cost_str = ""
+                                try:
+                                    if total_kwh is not None and total_kwh > 0:
+                                        ug = float(self.cfg.pricing.unit_price_gross())
+                                        cost_val = float(total_kwh) * ug
+                                        cost_str = f"   {self.t('live.cards.cost_today')}: {cost_val:.2f} €"
+                                except Exception:
+                                    cost_str = ""
+
                                 if total_kwh is None:
                                     line0 = f"{self.t('live.cards.power')}: {pw:.0f} W   {self.t('live.cards.updated')}: {stamp}"
                                 else:
-                                    line0 = f"{self.t('live.cards.power')}: {pw:.0f} W   {self.t('live.cards.kwh_today')}: {float(total_kwh):.3f} kWh   {self.t('live.cards.updated')}: {stamp}"
+                                    line0 = f"{self.t('live.cards.power')}: {pw:.0f} W   {self.t('live.cards.kwh_today')}: {float(total_kwh):.3f} kWh{cost_str}   {self.t('live.cards.updated')}: {stamp}"
                                 line1 = f"{self.t('live.cards.voltage')}: {volt_txt}   {self.t('live.cards.current')}: {curr_txt}"
 
                                 # VAR + cos φ
@@ -1239,6 +1249,7 @@ class LiveWebMixin:
                                 pfb=float(getattr(s, "cosphi", {}).get("b", 0.0)),
                                 pfc=float(getattr(s, "cosphi", {}).get("c", 0.0)),
                                 kwh_today=float(total_kwh),
+                                cost_today=float(total_kwh) * float(getattr(getattr(self.cfg, 'pricing', None), 'unit_price_gross', lambda: 0.0)()) if total_kwh else 0.0,
                             ),
                         )
                     except Exception:
