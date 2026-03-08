@@ -46,6 +46,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "costs.per_device": "Pro Gerät (dieser Monat)",
         "costs.refresh": "Aktualisieren",
         "costs.no_prev_data": "Keine Daten für Vormonat",
+        "costs.no_3phase": "Keine 3-Phasen-Geräte konfiguriert.",
 
         # Setup wizard
         "setup.title": "Ersteinrichtung",
@@ -586,6 +587,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "costs.per_device": "Per Device (this month)",
         "costs.refresh": "Refresh",
         "costs.no_prev_data": "No data for previous month",
+        "costs.no_3phase": "No 3-phase devices configured.",
 
         # Setup wizard
         "setup.title": "First-time setup",
@@ -1135,6 +1137,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "costs.per_device": "Por dispositivo (este mes)",
         "costs.refresh": "Actualizar",
         "costs.no_prev_data": "Sin datos del mes anterior",
+        "costs.no_3phase": "No hay dispositivos trifásicos configurados.",
 
         # Setup wizard
         "setup.title": "Configuración inicial",
