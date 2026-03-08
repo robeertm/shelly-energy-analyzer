@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.9.2.54 - 2026-03-08
+
+### Fixed
+- **Startup crash on Python 3.14**: `LivePoint` dataclass had default-valued fields (`pa`/`pb`/`pc`) before non-default fields (`va`/`vb`/`vc`), which is not allowed. Reordered fields so all non-default fields come first.
+
 ## 5.9.2.53 - 2026-03-08
 
 ### Added
