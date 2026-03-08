@@ -10,10 +10,11 @@ import math
 import pkgutil
 import threading
 import sys
+from collections import deque
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 from urllib.parse import urlparse, parse_qs
 
 from shelly_analyzer.i18n import get_lang_map, normalize_lang, t as _t
@@ -114,13 +115,19 @@ class LivePoint:
     cost_today: float = 0.0
 
 
+def _safe_f(v: float) -> float:
+    """Return v if finite, else 0.0. Fields are already float — no float() cast needed."""
+    return v if math.isfinite(v) else 0.0
+
+
 class LiveStateStore:
     """Thread-safe in-memory store for the web dashboard."""
 
     def __init__(self, max_points: int = 900) -> None:
         self.max_points = int(max_points)
         self._lock = threading.Lock()
-        self._by_device: Dict[str, List[LivePoint]] = {}
+        # deque with maxlen: O(1) append + automatic truncation, no manual slice needed.
+        self._by_device: Dict[str, Deque[LivePoint]] = {}
 
     def set_max_points(self, max_points: int) -> None:
         """Adjust the in-memory retention size.
@@ -130,50 +137,50 @@ class LiveStateStore:
         max_points = int(max(50, max_points))
         with self._lock:
             self.max_points = max_points
-            for k, arr in self._by_device.items():
-                if len(arr) > self.max_points:
-                    del arr[: len(arr) - self.max_points]
-
+            for k, dq in self._by_device.items():
+                if dq.maxlen != max_points:
+                    self._by_device[k] = deque(dq, maxlen=max_points)
 
     def update(self, device_key: str, point: LivePoint) -> None:
         with self._lock:
-            arr = self._by_device.setdefault(device_key, [])
-            arr.append(point)
-            if len(arr) > self.max_points:
-                del arr[: len(arr) - self.max_points]
+            if device_key not in self._by_device:
+                self._by_device[device_key] = deque(maxlen=self.max_points)
+            self._by_device[device_key].append(point)
 
     def snapshot(self) -> Dict[str, List[Dict[str, Any]]]:
+        # Hold lock only long enough to copy references — serialize outside.
         with self._lock:
-            out: Dict[str, List[Dict[str, Any]]] = {}
-            for k, arr in self._by_device.items():
-                out[k] = [
-                    {
-                        "ts": p.ts,
-                        # Ensure JSON-safe floats (no NaN/Inf) because browsers reject them.
-                        "power_total_w": (p.power_total_w if math.isfinite(float(p.power_total_w)) else 0.0),
-                        "pa": (p.pa if math.isfinite(float(p.pa)) else 0.0),
-                        "pb": (p.pb if math.isfinite(float(p.pb)) else 0.0),
-                        "pc": (p.pc if math.isfinite(float(p.pc)) else 0.0),
-                        "va": (p.va if math.isfinite(float(p.va)) else 0.0),
-                        "vb": (p.vb if math.isfinite(float(p.vb)) else 0.0),
-                        "vc": (p.vc if math.isfinite(float(p.vc)) else 0.0),
-                        "ia": (p.ia if math.isfinite(float(p.ia)) else 0.0),
-                        "ib": (p.ib if math.isfinite(float(p.ib)) else 0.0),
-                        "ic": (p.ic if math.isfinite(float(p.ic)) else 0.0),
-                        "q_total_var": (p.q_total_var if math.isfinite(float(p.q_total_var)) else 0.0),
-                        "qa": (p.qa if math.isfinite(float(p.qa)) else 0.0),
-                        "qb": (p.qb if math.isfinite(float(p.qb)) else 0.0),
-                        "qc": (p.qc if math.isfinite(float(p.qc)) else 0.0),
-                        "cosphi_total": (p.cosphi_total if math.isfinite(float(p.cosphi_total)) else 0.0),
-                        "pfa": (p.pfa if math.isfinite(float(p.pfa)) else 0.0),
-                        "pfb": (p.pfb if math.isfinite(float(p.pfb)) else 0.0),
-                        "pfc": (p.pfc if math.isfinite(float(p.pfc)) else 0.0),
-                        "kwh_today": (p.kwh_today if math.isfinite(float(p.kwh_today)) else 0.0),
-                        "cost_today": (p.cost_today if math.isfinite(float(p.cost_today)) else 0.0),
-                    }
-                    for p in arr
-                ]
-            return out
+            snap = {k: list(dq) for k, dq in self._by_device.items()}
+        out: Dict[str, List[Dict[str, Any]]] = {}
+        for k, arr in snap.items():
+            out[k] = [
+                {
+                    "ts": p.ts,
+                    # Ensure JSON-safe floats (no NaN/Inf) because browsers reject them.
+                    "power_total_w": _safe_f(p.power_total_w),
+                    "pa": _safe_f(p.pa),
+                    "pb": _safe_f(p.pb),
+                    "pc": _safe_f(p.pc),
+                    "va": _safe_f(p.va),
+                    "vb": _safe_f(p.vb),
+                    "vc": _safe_f(p.vc),
+                    "ia": _safe_f(p.ia),
+                    "ib": _safe_f(p.ib),
+                    "ic": _safe_f(p.ic),
+                    "q_total_var": _safe_f(p.q_total_var),
+                    "qa": _safe_f(p.qa),
+                    "qb": _safe_f(p.qb),
+                    "qc": _safe_f(p.qc),
+                    "cosphi_total": _safe_f(p.cosphi_total),
+                    "pfa": _safe_f(p.pfa),
+                    "pfb": _safe_f(p.pfb),
+                    "pfc": _safe_f(p.pfc),
+                    "kwh_today": _safe_f(p.kwh_today),
+                    "cost_today": _safe_f(p.cost_today),
+                }
+                for p in arr
+            ]
+        return out
 
 
 def _render_template(tpl: str, values: Dict[str, str]) -> str:
