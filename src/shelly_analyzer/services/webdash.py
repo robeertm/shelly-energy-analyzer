@@ -726,69 +726,87 @@ const threePhaseDevs = (DEVICES || []).filter(d => parseInt(d.phases || 3, 10) >
 
 function buildCostSummary() {{
   if (!costSumEl || threePhaseDevs.length === 0) return;
-  costSumEl.innerHTML = `<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 18px;">
-    <h2 style="margin:0 0 10px;font-size:1.1em;color:var(--fg);">${t('web.costs.title')}</h2>
-    <div id="cost_cards"></div>
+  costSumEl.innerHTML = `<div class="cost-panel" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:12px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <h2 style="margin:0;font-size:1.15em;color:var(--fg);">💰 ${t('web.costs.title')}</h2>
+      <button id="cost_refresh_btn" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--chipbg);color:var(--fg);cursor:pointer;font-size:.85em;">${t('web.costs.refresh')}</button>
+    </div>
+    <div id="cost_devices"></div>
   </div>`;
+  document.getElementById("cost_refresh_btn").addEventListener("click", fetchCosts);
+  fetchCosts();
 }}
 buildCostSummary();
 
-function updateCostSummary(stateData) {{
+async function fetchCosts() {{
   if (!costSumEl || threePhaseDevs.length === 0) return;
-  const container = document.getElementById("cost_cards");
+  try {{
+    const r = await fetch("/api/costs" + qs());
+    const data = await r.json();
+    if (data && data.ok) renderCosts(data.devices || []);
+  }} catch (e) {{}}
+}}
+
+function renderCosts(devices) {{
+  const container = document.getElementById("cost_devices");
   if (!container) return;
+  if (!devices.length) {{ container.innerHTML = `<div style="color:var(--muted);padding:8px;">No 3-phase devices.</div>`; return; }}
+
+  const labels = {{
+    today: t('web.costs.today'),
+    week: t('web.costs.week'),
+    month: t('web.costs.month'),
+    year: t('web.costs.year'),
+  }};
 
   let html = '';
-  threePhaseDevs.forEach(dev => {{
-    const arr = stateData[dev.key];
-    if (!arr || arr.length === 0) return;
-    const last = arr[arr.length - 1];
-    const kwh = last.kwh_today || 0;
-    const cost = last.cost_today || 0;
-    const pw = last.power_total_w || 0;
+  devices.forEach(dev => {{
+    html += `<div style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);">`;
+    html += `<div style="font-weight:700;font-size:1.05em;color:var(--fg);margin-bottom:8px;">⚡ ${{escapeHtml(dev.name)}} <span style="font-weight:400;color:var(--muted);font-size:.85em;">(${{escapeHtml(dev.host)}})</span></div>`;
 
-    // Phase balance
-    let balHtml = '';
-    const pa = Math.abs(last.pa || 0), pb = Math.abs(last.pb || 0), pc = Math.abs(last.pc || 0);
-    const active = [pa, pb, pc].filter(v => v > 5);
-    if (active.length >= 2) {{
-      const avg = active.reduce((a,b) => a+b, 0) / active.length;
-      const maxD = Math.max(...active.map(v => Math.abs(v - avg)));
-      const pct = avg > 0 ? Math.max(0, 100 - (maxD / avg * 100)) : 100;
-      const sym = pct >= 90 ? '✅' : pct >= 70 ? '⚠️' : '❌';
-      balHtml = `<span style="margin-left:12px;font-size:.85em;color:var(--muted);">${t('web.kv.balance')}: ${fmt(pct,0)}% ${sym} (${fmt(pa,0)}/${fmt(pb,0)}/${fmt(pc,0)} W)</span>`;
+    // Cards row: today / week / month / year
+    html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">`;
+    ['today','week','month','year'].forEach(k => {{
+      const kwh = dev[k + '_kwh'] || 0;
+      const eur = dev[k + '_eur'] || 0;
+      html += `<div style="background:var(--chipbg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
+        <div style="font-size:.8em;color:var(--muted);margin-bottom:4px;">${labels[k]}</div>
+        <div style="font-size:.9em;color:var(--fg);">${fmt(kwh,2)} kWh</div>
+        <div style="font-size:1.15em;font-weight:700;color:var(--accent);">${fmt(eur,2)} €</div>
+      </div>`;
+    }});
+    html += `</div>`;
+
+    // Row 2: Projection + vs last month
+    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">`;
+    // Projection
+    html += `<div style="background:var(--chipbg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
+      <div style="font-size:.8em;color:var(--muted);margin-bottom:4px;">${t('web.costs.projected')}</div>
+      <div style="font-size:.9em;color:var(--fg);">~${{fmt(dev.proj_kwh || 0, 1)}} kWh</div>
+      <div style="font-size:1.15em;font-weight:700;color:var(--accent);">~${{fmt(dev.proj_eur || 0, 2)}} €</div>
+    </div>`;
+    // vs last month
+    const vsPct = dev.vs_last_pct;
+    let vsText = '';
+    if (vsPct !== null && vsPct !== undefined) {{
+      const arrow = vsPct > 0 ? '📈' : '📉';
+      vsText = `${{arrow}} ${{vsPct > 0 ? '+' : ''}}${{fmt(vsPct,1)}}% (${{fmt(dev.last_month_kwh||0,1)}} kWh = ${{fmt(dev.last_month_eur||0,2)}} €)`;
+    }} else {{
+      vsText = t('web.costs.no_prev');
     }}
-
-    html += `<div style="display:flex;align-items:center;gap:16px;padding:8px 0;border-bottom:1px solid var(--border);color:var(--fg);">
-      <div style="min-width:160px;font-weight:600;">${escapeHtml(dev.name || dev.key)}</div>
-      <div style="min-width:80px;text-align:right;color:var(--muted);">${fmt(pw,0)} W</div>
-      <div style="min-width:100px;text-align:right;">${fmt(kwh,3)} kWh</div>
-      <div style="min-width:80px;text-align:right;font-weight:700;color:var(--accent);">${fmt(cost,2)} €</div>
-      ${balHtml}
+    html += `<div style="background:var(--chipbg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
+      <div style="font-size:.8em;color:var(--muted);margin-bottom:4px;">${t('web.costs.vs_last')}</div>
+      <div style="font-size:1em;font-weight:600;color:var(--fg);">${vsText}</div>
     </div>`;
-  }});
+    html += `</div>`;
 
-  // Total row
-  let totalKwh = 0, totalCost = 0, totalW = 0;
-  threePhaseDevs.forEach(dev => {{
-    const arr = stateData[dev.key];
-    if (!arr || arr.length === 0) return;
-    const last = arr[arr.length - 1];
-    totalKwh += (last.kwh_today || 0);
-    totalCost += (last.cost_today || 0);
-    totalW += (last.power_total_w || 0);
+    html += `</div>`;
   }});
-  if (threePhaseDevs.length > 1) {{
-    html += `<div style="display:flex;align-items:center;gap:16px;padding:8px 0;font-weight:700;color:var(--fg);">
-      <div style="min-width:160px;">${t('web.costs.total')}</div>
-      <div style="min-width:80px;text-align:right;color:var(--muted);">${fmt(totalW,0)} W</div>
-      <div style="min-width:100px;text-align:right;">${fmt(totalKwh,3)} kWh</div>
-      <div style="min-width:80px;text-align:right;color:var(--accent);">${fmt(totalCost,2)} €</div>
-    </div>`;
-  }}
-
   container.innerHTML = html;
 }}
+
+// Refresh costs every 60 seconds
+setInterval(fetchCosts, 60000);
 
 const winSel = document.getElementById("win_sel");
 
@@ -1167,7 +1185,7 @@ function renderState(data) {
   });
 
   // Update cost summary panel
-  try { updateCostSummary(data); } catch (e) {}
+  // (costs are fetched via /api/costs independently)
 }
 
 async function tick(force=false) {{
@@ -2740,6 +2758,20 @@ class _Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
 
+
+            if path_only.startswith("/api/costs"):
+                try:
+                    payload = self.dashboard.on_action("costs", {})
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
 
             if path_only.startswith("/api/config"):
                 payload = self.dashboard.get_config()

@@ -606,6 +606,89 @@ class LiveWebMixin:
 
                 return {"ok": True, "files": files}
 
+            # --- Cost data for web dashboard ---
+            if action == "costs":
+                try:
+                    from datetime import datetime as _dt, timedelta as _td
+                    from zoneinfo import ZoneInfo as _ZI
+                    _tz = _ZI("Europe/Berlin")
+                    _now = _dt.now(_tz)
+                    _today_start = _now.replace(hour=0, minute=0, second=0, microsecond=0)
+                    _week_start = _today_start - _td(days=_now.weekday())
+                    _month_start = _today_start.replace(day=1)
+                    _year_start = _today_start.replace(month=1, day=1)
+                    _last_month_start = (_month_start - _td(days=1)).replace(day=1)
+
+                    try:
+                        _unit = float(self.cfg.pricing.unit_price_gross())
+                    except Exception:
+                        _unit = float(getattr(getattr(self.cfg, "pricing", None), "electricity_price_eur_per_kwh", 0.30) or 0.30)
+
+                    _ranges = {
+                        "today": (_today_start, _now),
+                        "week": (_week_start, _now),
+                        "month": (_month_start, _now),
+                        "year": (_year_start, _now),
+                        "last_month": (_last_month_start, _month_start),
+                    }
+
+                    _three_phase = [d for d in (self.cfg.devices or [])
+                                    if int(getattr(d, "phases", 3) or 3) >= 3
+                                    and str(getattr(d, "kind", "em")) != "switch"]
+
+                    devices_out = []
+                    for d in _three_phase:
+                        dev_data = {"key": d.key, "name": d.name, "host": d.host}
+                        for rng_key, (rng_start, rng_end) in _ranges.items():
+                            kwh = 0.0
+                            try:
+                                cd = self.computed.get(d.key)
+                                if cd is not None:
+                                    df = cd.df.copy()
+                                    if "timestamp" in df.columns:
+                                        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+                                        df = df.dropna(subset=["timestamp"])
+                                        try:
+                                            if df["timestamp"].dt.tz is None:
+                                                df["timestamp"] = df["timestamp"].dt.tz_localize("UTC")
+                                            df["timestamp"] = df["timestamp"].dt.tz_convert(_tz)
+                                        except Exception:
+                                            pass
+                                        m = (df["timestamp"] >= rng_start) & (df["timestamp"] < rng_end)
+                                        kwh = float(pd.to_numeric(df.loc[m, "energy_kwh"], errors="coerce").fillna(0.0).sum())
+                            except Exception:
+                                pass
+                            dev_data[rng_key + "_kwh"] = round(kwh, 3)
+                            dev_data[rng_key + "_eur"] = round(kwh * _unit, 2)
+
+                        # Projection
+                        try:
+                            import calendar as _cal
+                            _dim = _cal.monthrange(_now.year, _now.month)[1]
+                            _elapsed = max(1, (_now - _month_start).total_seconds() / 86400.0)
+                            _mk = dev_data.get("month_kwh", 0.0)
+                            dev_data["proj_kwh"] = round(_mk / _elapsed * _dim, 1)
+                            dev_data["proj_eur"] = round(dev_data["proj_kwh"] * _unit, 2)
+                        except Exception:
+                            dev_data["proj_kwh"] = 0.0
+                            dev_data["proj_eur"] = 0.0
+
+                        # vs last month
+                        _lm = dev_data.get("last_month_kwh", 0.0)
+                        _cm = dev_data.get("month_kwh", 0.0)
+                        if _lm > 0:
+                            dev_data["vs_last_pct"] = round((_cm - _lm) / _lm * 100, 1)
+                        else:
+                            dev_data["vs_last_pct"] = None
+                        dev_data["last_month_kwh"] = round(_lm, 3)
+                        dev_data["last_month_eur"] = round(_lm * _unit, 2)
+
+                        devices_out.append(dev_data)
+
+                    return {"ok": True, "devices": devices_out, "unit_eur": _unit}
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
             # --- Etappe 6 (optional): Report Button im Web-Control ---
             if action == "report":
                 period = str(params.get("period") or params.get("kind") or "day").strip().lower()
