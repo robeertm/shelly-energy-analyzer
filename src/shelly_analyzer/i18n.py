@@ -29,10 +29,23 @@ _I18N: Dict[str, Dict[str, str]] = {
         "tabs.sync": "Sync",
         "tabs.plots": "Plots",
         "tabs.live": "Live",
+        "tabs.costs": "Kosten",
         "tabs.export": "Export",
         "tabs.settings": "Einstellungen",
 
         "tabs.setup": "Setup",
+
+        # Costs tab
+        "costs.title": "💰 Kosten-Übersicht",
+        "costs.today": "Heute",
+        "costs.this_week": "Diese Woche",
+        "costs.this_month": "Dieser Monat",
+        "costs.this_year": "Dieses Jahr",
+        "costs.projected_month": "Prognose (Monat)",
+        "costs.vs_last_month": "Vergleich Vormonat",
+        "costs.per_device": "Pro Gerät (dieser Monat)",
+        "costs.refresh": "Aktualisieren",
+        "costs.no_prev_data": "Keine Daten für Vormonat",
 
         # Setup wizard
         "setup.title": "Ersteinrichtung",
@@ -147,6 +160,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "live.cards.current": "Strom",
         "live.cards.kwh_today": "kWh heute",
         "live.cards.cost_today": "Kosten heute",
+        "live.cards.balance": "Phasen-Balance",
         "live.cards.updated": "Update",
         "live.cards.switch": "Schalter",
         "live.switch.toggle": "Ein/Aus",
@@ -373,6 +387,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "billing.field.bic": "BIC:",
         "billing.field.prefix": "Präfix:",
         "billing.field.payment_terms": "Zahlungsziel (Tage):",
+        "billing.field.logo": "Logo (PDF):",
 
         # Message titles
         "msg.settings": "Einstellungen",
@@ -554,10 +569,23 @@ _I18N: Dict[str, Dict[str, str]] = {
         "tabs.sync": "Sync",
         "tabs.plots": "Charts",
         "tabs.live": "Live",
+        "tabs.costs": "Costs",
         "tabs.export": "Export",
         "tabs.settings": "Settings",
 
         "tabs.setup": "Setup",
+
+        # Costs tab
+        "costs.title": "💰 Cost Overview",
+        "costs.today": "Today",
+        "costs.this_week": "This Week",
+        "costs.this_month": "This Month",
+        "costs.this_year": "This Year",
+        "costs.projected_month": "Projected (Month)",
+        "costs.vs_last_month": "vs. Last Month",
+        "costs.per_device": "Per Device (this month)",
+        "costs.refresh": "Refresh",
+        "costs.no_prev_data": "No data for previous month",
 
         # Setup wizard
         "setup.title": "First-time setup",
@@ -672,6 +700,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "live.cards.current": "Current",
         "live.cards.kwh_today": "kWh today",
         "live.cards.cost_today": "Cost today",
+        "live.cards.balance": "Phase balance",
         "live.cards.updated": "Updated",
         "live.cards.switch": "Switch",
         "live.switch.toggle": "Toggle",
@@ -904,6 +933,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "billing.field.bic": "BIC:",
         "billing.field.prefix": "Prefix:",
         "billing.field.payment_terms": "Payment terms (days):",
+        "billing.field.logo": "Logo (PDF):",
 
         # Message titles
         "msg.settings": "Settings",
@@ -1088,10 +1118,23 @@ _I18N: Dict[str, Dict[str, str]] = {
         "tabs.sync": "Sincronizar",
         "tabs.plots": "Gráficos",
         "tabs.live": "En vivo",
+        "tabs.costs": "Costos",
         "tabs.export": "Exportar",
         "tabs.settings": "Ajustes",
 
         "tabs.setup": "Setup",
+
+        # Costs tab
+        "costs.title": "💰 Resumen de costos",
+        "costs.today": "Hoy",
+        "costs.this_week": "Esta semana",
+        "costs.this_month": "Este mes",
+        "costs.this_year": "Este año",
+        "costs.projected_month": "Proyección (mes)",
+        "costs.vs_last_month": "vs. Mes anterior",
+        "costs.per_device": "Por dispositivo (este mes)",
+        "costs.refresh": "Actualizar",
+        "costs.no_prev_data": "Sin datos del mes anterior",
 
         # Setup wizard
         "setup.title": "Configuración inicial",
@@ -1206,6 +1249,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "live.cards.current": "Corriente",
         "live.cards.kwh_today": "kWh hoy",
         "live.cards.cost_today": "Costo hoy",
+        "live.cards.balance": "Balance de fases",
         "live.cards.updated": "Actualizado",
         "live.cards.switch": "Interruptor",
         "live.switch.toggle": "Alternar",
@@ -1425,6 +1469,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "billing.field.bic": "BIC:",
         "billing.field.prefix": "Prefijo:",
         "billing.field.payment_terms": "Plazo de pago (días):",
+        "billing.field.logo": "Logo (PDF):",
 
         # Message titles
         "msg.settings": "Ajustes",
@@ -1634,6 +1679,7 @@ _I18N["fr"] = _mk_lang({
     "tabs.sync": "Sync",
     "tabs.plots": "Graphiques",
     "tabs.live": "En direct",
+    "tabs.costs": "Coûts",
     "tabs.export": "Export",
     "tabs.settings": "Paramètres",
     "tabs.billing": "Facture",
@@ -1662,6 +1708,7 @@ _I18N["fr"] = _mk_lang({
     "live.cards.current": "Courant",
     "live.cards.kwh_today": "kWh aujourd'hui",
     "live.cards.cost_today": "Coût aujourd'hui",
+    "live.cards.balance": "Équilibre de phases",
     "live.cards.updated": "Mis à jour",
     "live.cards.switch": "Interrupteur",
     "live.switch.toggle": "Basculer",

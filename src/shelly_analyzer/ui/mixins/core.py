@@ -577,12 +577,14 @@ class CoreMixin:
             self.tab_sync = ttk.Frame(self.notebook)
             self.tab_plots = ttk.Frame(self.notebook)
             self.tab_live = ttk.Frame(self.notebook)
+            self.tab_costs = ttk.Frame(self.notebook)
             self.tab_export = ttk.Frame(self.notebook)
             self.tab_settings = ttk.Frame(self.notebook)
             # Notebook tab labels are translated based on the selected UI language.
             self.notebook.add(self.tab_sync, text=self.t("tabs.sync"))
             self.notebook.add(self.tab_plots, text=self.t("tabs.plots"))
             self.notebook.add(self.tab_live, text=self.t("tabs.live"))
+            self.notebook.add(self.tab_costs, text=self.t("tabs.costs"))
             self.notebook.add(self.tab_export, text=self.t("tabs.export"))
             self.notebook.add(self.tab_settings, text=self.t("tabs.settings"))
 
@@ -593,7 +595,7 @@ class CoreMixin:
                 self.notebook.insert(0, self.tab_setup, text=self.t("tabs.setup"))
 
                 # Put placeholders into disabled tabs (avoid CSV warnings on first run)
-                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_export):
+                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_export):
                     try:
                         ttk.Label(
                             tab,
@@ -620,6 +622,7 @@ class CoreMixin:
                 self._build_sync_tab()
                 self._build_plots_tab()
                 self._build_live_tab()
+                self._build_costs_tab()
                 self._build_export_tab()
                 self._build_settings_tab()
                 self._tabs_built = True
@@ -3651,6 +3654,191 @@ class CoreMixin:
             self._live_series = new_series
             self._live_max_points = max_points
 
+    def _build_costs_tab(self) -> None:
+            """Build the costs dashboard tab showing energy costs overview."""
+            frm = self.tab_costs
+
+            # Title
+            ttk.Label(frm, text=self.t("costs.title"), font=("", 14, "bold")).pack(anchor="w", padx=14, pady=(12, 4))
+
+            # Container for the cards
+            cards = ttk.Frame(frm)
+            cards.pack(fill="x", padx=14, pady=6)
+            cards.columnconfigure((0, 1, 2, 3), weight=1)
+
+            # Create StringVars for dynamic values
+            self._cost_vars = {}
+            labels_row0 = [
+                ("today", self.t("costs.today")),
+                ("week", self.t("costs.this_week")),
+                ("month", self.t("costs.this_month")),
+                ("year", self.t("costs.this_year")),
+            ]
+            for col, (key, label) in enumerate(labels_row0):
+                card = ttk.LabelFrame(cards, text=label)
+                card.grid(row=0, column=col, sticky="nsew", padx=4, pady=4)
+                v_kwh = tk.StringVar(value="– kWh")
+                v_eur = tk.StringVar(value="– €")
+                ttk.Label(card, textvariable=v_kwh, font=("", 11)).pack(anchor="w", padx=8, pady=(6, 0))
+                ttk.Label(card, textvariable=v_eur, font=("", 13, "bold")).pack(anchor="w", padx=8, pady=(2, 6))
+                self._cost_vars[key] = {"kwh": v_kwh, "eur": v_eur}
+
+            # Second row: projection + comparison
+            row2 = ttk.Frame(frm)
+            row2.pack(fill="x", padx=14, pady=6)
+            row2.columnconfigure((0, 1), weight=1)
+
+            proj_card = ttk.LabelFrame(row2, text=self.t("costs.projected_month"))
+            proj_card.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
+            self._cost_vars["proj_kwh"] = tk.StringVar(value="– kWh")
+            self._cost_vars["proj_eur"] = tk.StringVar(value="– €")
+            ttk.Label(proj_card, textvariable=self._cost_vars["proj_kwh"], font=("", 11)).pack(anchor="w", padx=8, pady=(6, 0))
+            ttk.Label(proj_card, textvariable=self._cost_vars["proj_eur"], font=("", 13, "bold")).pack(anchor="w", padx=8, pady=(2, 6))
+
+            cmp_card = ttk.LabelFrame(row2, text=self.t("costs.vs_last_month"))
+            cmp_card.grid(row=0, column=1, sticky="nsew", padx=4, pady=4)
+            self._cost_vars["cmp_text"] = tk.StringVar(value="–")
+            ttk.Label(cmp_card, textvariable=self._cost_vars["cmp_text"], font=("", 13, "bold")).pack(anchor="w", padx=8, pady=10)
+
+            # Per-device breakdown
+            dev_frame = ttk.LabelFrame(frm, text=self.t("costs.per_device"))
+            dev_frame.pack(fill="both", expand=True, padx=14, pady=6)
+            self._cost_dev_frame = dev_frame
+
+            # Refresh button
+            btn_frame = ttk.Frame(frm)
+            btn_frame.pack(fill="x", padx=14, pady=(0, 10))
+            ttk.Button(btn_frame, text=self.t("costs.refresh"), command=self._refresh_costs_tab).pack(side="right")
+
+            # Initial refresh
+            self.after(500, self._refresh_costs_tab)
+
+    def _refresh_costs_tab(self) -> None:
+            """Recalculate and display cost data."""
+            import logging as _log_m
+            _log = _log_m.getLogger(__name__)
+            try:
+                from datetime import datetime, timedelta
+                from zoneinfo import ZoneInfo
+                tz = ZoneInfo("Europe/Berlin")
+                now = datetime.now(tz)
+
+                # Unit price (gross)
+                try:
+                    unit = float(self.cfg.pricing.unit_price_gross())
+                except Exception:
+                    unit = float(getattr(getattr(self.cfg, "pricing", None), "electricity_price_eur_per_kwh", 0.30) or 0.30)
+
+                # Time ranges
+                today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                week_start = today_start - timedelta(days=now.weekday())  # Monday
+                month_start = today_start.replace(day=1)
+                year_start = today_start.replace(month=1, day=1)
+                last_month_start = (month_start - timedelta(days=1)).replace(day=1)
+
+                ranges = {
+                    "today": (today_start, now),
+                    "week": (week_start, now),
+                    "month": (month_start, now),
+                    "year": (year_start, now),
+                    "last_month": (last_month_start, month_start),
+                }
+
+                results = {}
+                per_device_month = []
+
+                for rng_key, (rng_start, rng_end) in ranges.items():
+                    rng_kwh = 0.0
+                    for d in list(getattr(self.cfg, "devices", []) or []):
+                        try:
+                            cd = self.computed.get(d.key)
+                            if cd is None:
+                                continue
+                            df = cd.df.copy()
+                            if "timestamp" not in df.columns:
+                                continue
+                            df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+                            df = df.dropna(subset=["timestamp"])
+                            try:
+                                if df["timestamp"].dt.tz is None:
+                                    df["timestamp"] = df["timestamp"].dt.tz_localize("UTC")
+                                df["timestamp"] = df["timestamp"].dt.tz_convert(tz)
+                            except Exception:
+                                pass
+                            m = (df["timestamp"] >= rng_start) & (df["timestamp"] < rng_end)
+                            kwh = float(pd.to_numeric(df.loc[m, "energy_kwh"], errors="coerce").fillna(0.0).sum())
+                            rng_kwh += kwh
+                            if rng_key == "month":
+                                per_device_month.append((d.name, kwh))
+                        except Exception:
+                            continue
+                    results[rng_key] = rng_kwh
+
+                # Update summary cards
+                for key in ("today", "week", "month", "year"):
+                    kwh = results.get(key, 0.0)
+                    if key in self._cost_vars:
+                        self._cost_vars[key]["kwh"].set(f"{kwh:.2f} kWh")
+                        self._cost_vars[key]["eur"].set(f"{kwh * unit:.2f} €")
+
+                # Projection: month_kwh / days_elapsed * days_in_month
+                try:
+                    import calendar
+                    days_in_month = calendar.monthrange(now.year, now.month)[1]
+                    days_elapsed = max(1, (now - month_start).total_seconds() / 86400.0)
+                    month_kwh = results.get("month", 0.0)
+                    proj_kwh = month_kwh / days_elapsed * days_in_month
+                    self._cost_vars["proj_kwh"].set(f"~{proj_kwh:.1f} kWh")
+                    self._cost_vars["proj_eur"].set(f"~{proj_kwh * unit:.2f} €")
+                except Exception:
+                    pass
+
+                # Comparison with last month
+                try:
+                    last_m_kwh = results.get("last_month", 0.0)
+                    cur_m_kwh = results.get("month", 0.0)
+                    if last_m_kwh > 0:
+                        delta = ((cur_m_kwh - last_m_kwh) / last_m_kwh) * 100.0
+                        arrow = "📈" if delta > 0 else "📉"
+                        self._cost_vars["cmp_text"].set(
+                            f"{arrow} {delta:+.1f}% vs. Vormonat ({last_m_kwh:.1f} kWh = {last_m_kwh * unit:.2f} €)"
+                        )
+                    else:
+                        self._cost_vars["cmp_text"].set(self.t("costs.no_prev_data"))
+                except Exception:
+                    pass
+
+                # Per-device breakdown
+                try:
+                    for w in self._cost_dev_frame.winfo_children():
+                        w.destroy()
+                    if per_device_month:
+                        per_device_month.sort(key=lambda x: x[1], reverse=True)
+                        total_m = sum(k for _, k in per_device_month) or 1.0
+                        for i, (name, kwh) in enumerate(per_device_month):
+                            pct = (kwh / total_m) * 100.0 if total_m > 0 else 0.0
+                            row_fr = ttk.Frame(self._cost_dev_frame)
+                            row_fr.pack(fill="x", padx=8, pady=2)
+                            ttk.Label(row_fr, text=f"{name}", width=25, anchor="w").pack(side="left")
+                            ttk.Label(row_fr, text=f"{kwh:.2f} kWh", width=14, anchor="e").pack(side="left", padx=(8, 0))
+                            ttk.Label(row_fr, text=f"{kwh * unit:.2f} €", width=10, anchor="e").pack(side="left", padx=(8, 0))
+                            ttk.Label(row_fr, text=f"({pct:.1f}%)", width=8, anchor="e").pack(side="left", padx=(8, 0))
+                            # Simple bar
+                            bar_fr = ttk.Frame(row_fr)
+                            bar_fr.pack(side="left", fill="x", expand=True, padx=(12, 8))
+                            try:
+                                bar_w = max(2, int(pct * 2))
+                                bar = tk.Canvas(bar_fr, height=14, width=200, highlightthickness=0)
+                                bar.pack(fill="x")
+                                bar.create_rectangle(0, 0, bar_w, 14, fill="#2E75B6", outline="")
+                            except Exception:
+                                pass
+                except Exception as e:
+                    _log.warning("Costs tab device breakdown error: %s", e)
+
+            except Exception as e:
+                _log.warning("Costs tab refresh error: %s", e)
+
     def _build_export_tab(self) -> None:
             frm = self.tab_export
             top = ttk.Frame(frm)
@@ -4015,6 +4203,7 @@ class CoreMixin:
                     lines=lines,
                     footer_note=(self._pricing_footer_note()),
                     lang=self.lang,
+                    logo_path=getattr(self.cfg.billing, "invoice_logo_path", ""),
                 )
 
                 written += 1
@@ -4974,6 +5163,20 @@ class CoreMixin:
             ttk.Label(inv_box, text=self.t('billing.field.payment_terms')).grid(row=0, column=2, padx=8, pady=6, sticky="w")
             ttk.Entry(inv_box, textvariable=self.bill_payment_terms, width=6).grid(row=0, column=3, padx=8, pady=6, sticky="w")
 
+            # Logo picker
+            self.bill_logo_path = tk.StringVar(value=str(getattr(self.cfg.billing, "invoice_logo_path", "") or ""))
+            ttk.Label(inv_box, text=self.t('billing.field.logo')).grid(row=1, column=0, padx=8, pady=6, sticky="w")
+            ttk.Entry(inv_box, textvariable=self.bill_logo_path, width=40).grid(row=1, column=1, columnspan=2, padx=8, pady=6, sticky="w")
+            def _pick_logo():
+                from tkinter import filedialog
+                fp = filedialog.askopenfilename(
+                    title=self.t("billing.field.logo"),
+                    filetypes=[("Images", "*.png *.jpg *.jpeg *.gif *.bmp"), ("All", "*.*")],
+                )
+                if fp:
+                    self.bill_logo_path.set(fp)
+            ttk.Button(inv_box, text="…", command=_pick_logo, width=3).grid(row=1, column=3, padx=8, pady=6, sticky="w")
+
             # bottom action bar (always visible)
             bottom = ttk.Frame(frm)
             bottom.pack(fill="x", padx=12, pady=(0, 12))
@@ -5564,6 +5767,7 @@ class CoreMixin:
                 customer=customer,
                 invoice_prefix=str(self.bill_invoice_prefix.get()).strip() or self.cfg.billing.invoice_prefix,
                 payment_terms_days=payment_terms,
+                invoice_logo_path=str(getattr(self, "bill_logo_path", tk.StringVar()).get()).strip(),
             )
 
             # Collect alert rules from the Settings UI (persisted in config.json)
@@ -8207,6 +8411,57 @@ class CoreMixin:
                 except Exception:
                     pass
 
+            # Comparison with previous period (Vortag / Vormonat)
+            try:
+                period_delta = end_dt - start_dt
+                prev_start = start_dt - period_delta
+                prev_end = start_dt
+                prev_kwh = 0.0
+                for d in list(getattr(self.cfg, "devices", []) or []):
+                    try:
+                        df_prev = self.storage.read_device_df(d.key)
+                        if df_prev is None or getattr(df_prev, "empty", True):
+                            continue
+                        df_prev = df_prev.copy()
+                        if "timestamp" not in df_prev.columns:
+                            continue
+                        df_prev["timestamp"] = pd.to_datetime(df_prev["timestamp"], errors="coerce")
+                        df_prev = df_prev.dropna(subset=["timestamp"])
+                        try:
+                            from zoneinfo import ZoneInfo
+                            _tz = ZoneInfo("Europe/Berlin")
+                            _utc = ZoneInfo("UTC")
+                            if df_prev["timestamp"].dt.tz is None:
+                                df_prev["timestamp"] = df_prev["timestamp"].dt.tz_localize(_utc)
+                            df_prev["timestamp"] = df_prev["timestamp"].dt.tz_convert(_tz)
+                        except Exception:
+                            pass
+                        m = (df_prev["timestamp"] >= prev_start) & (df_prev["timestamp"] < prev_end)
+                        df_p = df_prev.loc[m]
+                        if df_p.empty:
+                            continue
+                        phase_cols = [c for c in ("a_total_act_energy", "b_total_act_energy", "c_total_act_energy") if c in df_p.columns]
+                        if phase_cols:
+                            wh = df_p[phase_cols].sum(axis=1)
+                            prev_kwh += float(pd.to_numeric(wh, errors="coerce").fillna(0.0).sum()) / 1000.0
+                        elif "energy_kwh" in df_p.columns:
+                            prev_kwh += float(pd.to_numeric(df_p["energy_kwh"], errors="coerce").fillna(0.0).sum())
+                        else:
+                            from shelly_analyzer.core.energy import calculate_energy as _calc_e
+                            df_calc = _calc_e(df_p, method="auto")
+                            if "energy_kwh" in df_calc.columns:
+                                prev_kwh += float(pd.to_numeric(df_calc["energy_kwh"], errors="coerce").fillna(0.0).sum())
+                    except Exception:
+                        continue
+
+                if prev_kwh > 0:
+                    delta_pct = ((total_kwh - prev_kwh) / prev_kwh) * 100.0
+                    arrow = "📈" if delta_pct > 0 else "📉"
+                    prev_label = "Vortag" if kind == "daily" else "Vormonat"
+                    lines.append(f"{arrow} vs. {prev_label}: {prev_kwh:.3f} kWh ({delta_pct:+.1f}%)")
+            except Exception:
+                pass
+
             # power stats
             try:
                 if cnt_power > 0:
@@ -9264,7 +9519,7 @@ class CoreMixin:
 
             # Enable tabs
             try:
-                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_export):
+                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_export):
                     try:
                         self.notebook.tab(tab, state="normal")
                     except Exception:
@@ -9284,6 +9539,10 @@ class CoreMixin:
                     pass
                 try:
                     self._clear_frame(self.tab_live); self._build_live_tab()
+                except Exception:
+                    pass
+                try:
+                    self._clear_frame(self.tab_costs); self._build_costs_tab()
                 except Exception:
                     pass
                 try:

@@ -600,6 +600,7 @@ class LiveWebMixin:
                         vat_rate_percent=float(self.cfg.pricing.vat_rate_percent),
                         vat_enabled=bool(self.cfg.pricing.vat_enabled),
                         lang=self.lang,
+                        logo_path=getattr(self.cfg.billing, "invoice_logo_path", ""),
                     )
                     files.append({"name": out.name, "url": f"/files/web/invoices/{out.name}"})
 
@@ -1207,10 +1208,31 @@ class LiveWebMixin:
                                 if ph2 <= 1:
                                     q_txt = f"{q_total:.0f} VAR"
                                     pf_txt = f"{pf_total:.3f}"
+                                    line2 = f"{self.t('web.kv.var')}: {q_txt}   {self.t('web.kv.cosphi')}: {pf_txt}"
                                 else:
                                     q_txt = f"{q_total:.0f} VAR ({qa2:.0f}/{qb2:.0f}/{qc2:.0f})"
                                     pf_txt = f"{pf_total:.3f} ({pfa2:.3f}/{pfb2:.3f}/{pfc2:.3f})"
-                                line2 = f"{self.t('web.kv.var')}: {q_txt}   {self.t('web.kv.cosphi')}: {pf_txt}"
+                                    # Phase balance indicator (% symmetry)
+                                    balance_txt = ""
+                                    try:
+                                        pa2 = float(s.power_w.get("a", 0.0))
+                                        pb2 = float(s.power_w.get("b", 0.0))
+                                        pc2 = float(s.power_w.get("c", 0.0))
+                                        p_max = max(abs(pa2), abs(pb2), abs(pc2))
+                                        if p_max > 10:  # only show when meaningful load
+                                            p_avg = (abs(pa2) + abs(pb2) + abs(pc2)) / 3.0
+                                            p_dev = max(abs(abs(pa2) - p_avg), abs(abs(pb2) - p_avg), abs(abs(pc2) - p_avg))
+                                            bal_pct = max(0.0, 100.0 - (p_dev / p_avg * 100.0)) if p_avg > 0 else 100.0
+                                            if bal_pct >= 90:
+                                                sym = "✅"
+                                            elif bal_pct >= 70:
+                                                sym = "⚠️"
+                                            else:
+                                                sym = "❌"
+                                            balance_txt = f"   {self.t('live.cards.balance')}: {bal_pct:.0f}% {sym}"
+                                    except Exception:
+                                        pass
+                                    line2 = f"{self.t('web.kv.var')}: {q_txt}   {self.t('web.kv.cosphi')}: {pf_txt}{balance_txt}"
 
                                 if 'line0' in vars_:
                                     vars_['line0'].set(line0)
