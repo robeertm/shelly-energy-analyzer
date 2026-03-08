@@ -108,6 +108,7 @@ class LivePoint:
     pfb: float = 0.0
     pfc: float = 0.0
     kwh_today: float = 0.0
+    cost_today: float = 0.0
 
 
 class LiveStateStore:
@@ -162,6 +163,7 @@ class LiveStateStore:
                         "pfb": (p.pfb if math.isfinite(float(p.pfb)) else 0.0),
                         "pfc": (p.pfc if math.isfinite(float(p.pfc)) else 0.0),
                         "kwh_today": (p.kwh_today if math.isfinite(float(p.kwh_today)) else 0.0),
+                        "cost_today": (p.cost_today if math.isfinite(float(p.cost_today)) else 0.0),
                     }
                     for p in arr
                 ]
@@ -933,6 +935,7 @@ function kv(el, last, dev) {{
   el.innerHTML = `
     <b>${t('web.kv.power')}</b><span>${fmt(last.power_total_w, 0)} W</span>
     <b>${t('web.kv.kwh_today')}</b><span>${fmt(last.kwh_today, 3)} kWh</span>
+    <b>${t('web.kv.cost_today')}</b><span>${fmt(last.cost_today, 2)} €</span>
     <b>${t('web.kv.u')}</b><span>${u}</span>
     <b>${t('web.kv.i')}</b><span>${i}</span>
     <b>${t('web.kv.var')}</b><span>${q}</span>

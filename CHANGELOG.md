@@ -1,3 +1,14 @@
+## 5.9.2.49 - 2026-03-08
+
+### Added
+- **Live-Kosten-Anzeige**: Der Live-Tab und das Web-Dashboard zeigen jetzt neben "kWh heute" auch die geschätzten Tageskosten in € an (basierend auf dem konfigurierten Bruttostrompreis).
+- **Standby-Erkennung in Telegram-Zusammenfassungen**: Tägliche und monatliche Telegram-Berichte enthalten jetzt eine Standby-Grundlast-Analyse (10. Perzentil der Leistungswerte), hochgerechnet auf kWh/Jahr und €/Jahr.
+- **Logging-Rotation**: Log-Dateien werden jetzt automatisch rotiert (täglich) und nach 30 Tagen gelöscht. Beim Start werden alte Log-Dateien aufgeräumt.
+
+### Changed
+- i18n: Neue Übersetzungsschlüssel `live.cards.cost_today` und `web.kv.cost_today` für DE/EN/ES/FR.
+- Web-Dashboard: `LivePoint` enthält jetzt `cost_today`-Feld.
+
 ## 5.9.2.48 - 2026-03-08
 Fixed
 
