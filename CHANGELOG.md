@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.9.2.60 - 2026-03-08
+
+### Improved
+- **Performance & memory optimizations across core modules**:
+  - `live.py`: Persistent `ThreadPoolExecutor` — avoids recreating threads every poll cycle and blocking on timed-out HTTP requests. Bounded queues prevent unbounded memory growth.
+  - `webdash.py`: `LiveStateStore` uses `deque` (O(1) append) instead of list with O(n) slice. Lock released before JSON serialization to reduce contention.
+  - `energy.py`: Removed redundant DataFrame copy on every energy calculation.
+  - `csv_read.py`: Timestamp column detection moved to module-level function.
+  - `storage.py`: Deduplicated legacy glob results across case variants.
+
 ## 5.9.2.59 - 2026-03-08
 
 ### Fixed
