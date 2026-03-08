@@ -1260,6 +1260,9 @@ class LiveWebMixin:
                             LivePoint(
                                 ts=int(s.ts),
                                 power_total_w=float(s.power_w.get("total", 0.0)),
+                                pa=float(s.power_w.get("a", 0.0)),
+                                pb=float(s.power_w.get("b", 0.0)),
+                                pc=float(s.power_w.get("c", 0.0)),
                                 va=float(s.voltage_v.get("a", 0.0)),
                                 vb=float(s.voltage_v.get("b", 0.0)),
                                 vc=float(s.voltage_v.get("c", 0.0)),

@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.9.2.53 - 2026-03-08
+
+### Added
+- **Web dashboard: Phase balance indicator**. The live key-values section now shows phase balance for 3-phase devices (✅/⚠️/❌ with per-phase W breakdown), matching the desktop Live tab.
+- **Web dashboard: Cost summary panel**. A new "Cost Overview (today)" section appears below the device cards, showing per-device power (W), kWh today, and cost (€) for all 3-phase devices. Includes a total row when multiple 3-phase devices are present. Updates live with each refresh cycle.
+- **Per-phase power data** (`pa`/`pb`/`pc`) added to `LivePoint` and transmitted to the web dashboard for accurate balance calculation.
+
 ## 5.9.2.52 - 2026-03-08
 
 ### Changed
