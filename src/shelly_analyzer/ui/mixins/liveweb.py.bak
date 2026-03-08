@@ -165,7 +165,7 @@ class LiveWebMixin:
 
             # marshal into Tk thread
             try:
-                self.after(0, _apply)
+                self.root.after(0, _apply)
             except Exception:
                 _apply()
 

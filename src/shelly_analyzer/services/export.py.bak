@@ -136,12 +136,12 @@ def export_pdf_summary(
     c.line(2.0 * cm, y, w - 2.0 * cm, y)
 
     y -= 0.6 * cm
-    for row in totals:
-        c.drawString(2.0 * cm, y, row.name)
-        c.drawRightString(11.0 * cm, y, _fmt_kwh(row.kwh_total, lang))
-        c.drawRightString(13.5 * cm, y, _fmt_money(row.cost_eur, lang))
-        c.drawRightString(16.0 * cm, y, _fmt_int(row.avg_power_w, lang))
-        c.drawRightString(18.5 * cm, y, _fmt_int(row.max_power_w, lang))
+    for t in totals:
+        c.drawString(2.0 * cm, y, t.name)
+        c.drawRightString(11.0 * cm, y, _fmt_kwh(t.kwh_total, lang))
+        c.drawRightString(13.5 * cm, y, _fmt_money(t.cost_eur, lang))
+        c.drawRightString(16.0 * cm, y, _fmt_int(t.avg_power_w, lang))
+        c.drawRightString(18.5 * cm, y, _fmt_int(t.max_power_w, lang))
         y -= 0.6 * cm
         if y < 3.0 * cm:
             c.showPage()
