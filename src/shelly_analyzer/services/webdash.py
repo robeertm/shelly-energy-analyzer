@@ -398,39 +398,67 @@ _HTML_TEMPLATE = """<!doctype html>
       grid-template-columns: auto 1fr;
       gap: 6px 10px;
       font-size: 12px;
+      color: var(--muted);
+      margin: 8px 2px 2px;
+    }}
+    .kv b {{
+      color: var(--fg);
+      font-weight: 650;
+    }}
 
-    /* Cost panel responsive styles */
+    /* ---- Cost panel ---- */
     .cost-panel {{
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 14px 16px;
-      margin-bottom: 12px;
+      padding: 14px;
+      box-sizing: border-box;
     }}
     .cost-panel h2 {{
-      margin: 0 0 10px;
-      font-size: 1.1em;
+      margin: 0 0 14px;
+      font-size: 15px;
+      font-weight: 700;
       color: var(--fg);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }}
+    .cost-panel h2 button {{
+      padding: 5px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+    }}
+    .cost-panel h2 button:hover {{
+      color: var(--fg);
+      border-color: var(--accent);
     }}
     .cost-dev {{
-      margin-bottom: 14px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
     }}
     .cost-dev:last-child {{
-      border-bottom: none;
       margin-bottom: 0;
     }}
     .cost-dev-name {{
       font-weight: 700;
-      font-size: 1.05em;
-      color: var(--fg);
-      margin-bottom: 8px;
+      font-size: 14px;
+      color: var(--accent);
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
     }}
     .cost-dev-name span {{
       font-weight: 400;
       color: var(--muted);
-      font-size: .85em;
+      font-size: 12px;
     }}
     .cost-cards {{
       display: grid;
@@ -444,29 +472,37 @@ _HTML_TEMPLATE = """<!doctype html>
       gap: 8px;
     }}
     .cost-card {{
-      background: var(--chipbg);
+      background: var(--card);
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 10px 12px;
+      text-align: center;
     }}
     .cost-card-label {{
-      font-size: .78em;
+      font-size: 10px;
       color: var(--muted);
-      margin-bottom: 3px;
+      margin-bottom: 6px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }}
     .cost-card-kwh {{
-      font-size: .88em;
+      font-size: 13px;
       color: var(--fg);
+      margin-bottom: 2px;
     }}
     .cost-card-eur {{
-      font-size: 1.15em;
-      font-weight: 700;
+      font-size: 20px;
+      font-weight: 800;
       color: var(--accent);
+      line-height: 1.2;
     }}
     .cost-card-vs {{
-      font-size: .95em;
+      font-size: 13px;
       font-weight: 600;
       color: var(--fg);
+      line-height: 1.5;
+      text-align: left;
     }}
     @media (max-width: 600px) {{
       .cost-cards {{
@@ -475,11 +511,8 @@ _HTML_TEMPLATE = """<!doctype html>
       .cost-row2 {{
         grid-template-columns: 1fr;
       }}
-      .cost-card {{
-        padding: 8px 10px;
-      }}
       .cost-card-eur {{
-        font-size: 1.05em;
+        font-size: 16px;
       }}
     }}
     @media (max-width: 360px) {{
@@ -487,13 +520,7 @@ _HTML_TEMPLATE = """<!doctype html>
         grid-template-columns: 1fr;
       }}
     }}
-      color: var(--muted);
-      margin: 8px 2px 2px;
-    }}
-    .kv b {{
-      color: var(--fg);
-      font-weight: 650;
-    }}
+
     .pill {{
       display: inline-flex;
       gap: 8px;
@@ -816,13 +843,10 @@ const threePhaseDevs = (DEVICES || []).filter(d => parseInt(d.phases || 3, 10) >
 function buildCostSummary() {{
   if (!costSumEl || threePhaseDevs.length === 0) return;
   costSumEl.innerHTML = `<div class="cost-panel">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <h2>💰 ${t('web.costs.title')}</h2>
-      <button id="cost_refresh_btn" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--chipbg);color:var(--fg);cursor:pointer;font-size:.85em;">${t('web.costs.refresh')}</button>
-    </div>
-    <div id="cost_devices"></div>
+    <h2>💰 ${t('web.costs.title')} <button id="cost_refresh_btn">${t('web.costs.refresh')}</button></h2>
+    <div id="cost_devices"><div style="color:var(--muted);font-size:13px;padding:12px 0;">⏳ ...</div></div>
   </div>`;
-  document.getElementById("cost_refresh_btn").addEventListener("click", fetchCosts);
+  document.getElementById("cost_refresh_btn").addEventListener("click", (e) => {{ e.preventDefault(); fetchCosts(); }});
   fetchCosts();
 }}
 buildCostSummary();
