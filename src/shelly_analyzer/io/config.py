@@ -209,6 +209,7 @@ class BillingConfig:
     customer: BillingParty = BillingParty(name="Kunde", address_lines=["Kundenstraße 1", "12345 Kundenstadt"]) 
     invoice_prefix: str = "INV"
     payment_terms_days: int = 14
+    invoice_logo_path: str = ""
 
 
 @dataclass(frozen=False)
@@ -437,6 +438,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         customer=_party_from_raw(billing_raw.get("customer"), BillingConfig().customer),
         invoice_prefix=str(billing_raw.get("invoice_prefix", BillingConfig.invoice_prefix)),
         payment_terms_days=_coerce_int(billing_raw.get("payment_terms_days", BillingConfig.payment_terms_days), BillingConfig.payment_terms_days),
+        invoice_logo_path=str(billing_raw.get("invoice_logo_path", "") or ""),
     )
 
     alerts: List[AlertRule] = []
@@ -628,6 +630,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             },
             "invoice_prefix": cfg.billing.invoice_prefix,
             "payment_terms_days": cfg.billing.payment_terms_days,
+            "invoice_logo_path": cfg.billing.invoice_logo_path,
         },
     }
     path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

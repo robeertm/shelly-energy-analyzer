@@ -209,6 +209,7 @@ def export_pdf_invoice(
     device_label: Optional[str] = None,
     footer_note: Optional[str] = None,
     lang: str = "de",
+    logo_path: Optional[str] = None,
 ) -> Path:
     """Create a simple but professional A4 invoice PDF.
 
@@ -221,6 +222,25 @@ def export_pdf_invoice(
 
     c = canvas.Canvas(str(out_path), pagesize=A4)
     w, h = A4
+
+    # Logo (top right corner, if provided)
+    try:
+        if logo_path and str(logo_path).strip():
+            from pathlib import Path as _P
+            lp = _P(str(logo_path).strip())
+            if lp.exists() and lp.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".bmp"):
+                from reportlab.lib.utils import ImageReader
+                img = ImageReader(str(lp))
+                iw, ih = img.getSize()
+                # Scale to max 3cm height, keeping aspect ratio
+                max_h = 3.0 * cm
+                max_w = 5.0 * cm
+                scale = min(max_w / iw, max_h / ih, 1.0)
+                dw = iw * scale
+                dh = ih * scale
+                c.drawImage(str(lp), w - 2.0 * cm - dw, h - 1.5 * cm - dh, width=dw, height=dh, preserveAspectRatio=True, mask="auto")
+    except Exception:
+        pass  # Logo is optional; don't fail the invoice
 
     # Header / title
     y = h - 2.0 * cm

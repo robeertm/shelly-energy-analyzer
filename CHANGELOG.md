@@ -1,3 +1,16 @@
+## 5.9.2.50 - 2026-03-08
+
+### Added
+- **Kosten-Dashboard**: Neuer Tab "Kosten" mit Übersicht für heute/Woche/Monat/Jahr, Monats-Prognose, Vormonats-Vergleich und Aufschlüsselung pro Gerät mit Balkendiagramm.
+- **Phasen-Balance-Anzeige**: Im Live-Tab wird bei 3-Phasen-Geräten die Phasen-Symmetrie in % angezeigt (✅ ≥90%, ⚠️ ≥70%, ❌ <70%). Hilft Schieflasten zu erkennen.
+- **Telegram: Vergleich mit Vortag/Vormonat**: Tägliche und monatliche Zusammenfassungen zeigen jetzt den Verbrauch der Vorperiode und die prozentuale Änderung (📈/📉).
+- **PDF Logo-Upload**: In Einstellungen → Rechnung kann jetzt ein Firmenlogo (PNG/JPG) hinterlegt werden, das oben rechts auf PDF-Rechnungen erscheint.
+
+### Changed
+- i18n: Neue Übersetzungsschlüssel für Kosten-Tab, Phasen-Balance und Logo-Picker (DE/EN/ES/FR).
+- BillingConfig: Neues Feld `invoice_logo_path` für Logo-Pfad.
+- export_pdf_invoice: Neuer Parameter `logo_path`.
+
 ## 5.9.2.49 - 2026-03-08
 
 ### Added
