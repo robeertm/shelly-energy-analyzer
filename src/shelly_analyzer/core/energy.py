@@ -36,7 +36,7 @@ def calculate_energy(
     - If the CSV provides per-interval energy in Wh columns, we prefer them.
     - Otherwise we integrate power over the timestamp delta.
     """
-    out = df.copy().sort_values("timestamp")
+    out = df.sort_values("timestamp")
     out["delta_s"] = out["timestamp"].diff().dt.total_seconds().fillna(0).clip(lower=0)
 
     energy_cols = _find_interval_energy_cols(out)

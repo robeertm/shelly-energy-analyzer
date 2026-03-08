@@ -115,15 +115,20 @@ class Storage:
 
         # Legacy fallbacks (flat data directory)
         if not files:
+            seen: set = set()
             legacy: List[Path] = []
             # Single merged file
             p0 = self.base_dir / f"{device_key}.csv"
             if p0.exists() and p0.is_file():
                 legacy.append(p0)
-            # Historical chunk naming in base_dir (if any)
-            legacy.extend([p for p in self.base_dir.glob(f"emdata_{device_key}_*.csv") if p.is_file()])
-            legacy.extend([p for p in self.base_dir.glob(f"emdata_{device_key.lower()}_*.csv") if p.is_file()])
-            legacy.extend([p for p in self.base_dir.glob(f"emdata_{device_key.upper()}_*.csv") if p.is_file()])
+                seen.add(p0)
+            # Historical chunk naming in base_dir — deduplicate across case variants
+            # (device_key may already be lower/upper, so all three globs can overlap).
+            for variant in {device_key, device_key.lower(), device_key.upper()}:
+                for p in self.base_dir.glob(f"emdata_{variant}_*.csv"):
+                    if p.is_file() and p not in seen:
+                        legacy.append(p)
+                        seen.add(p)
             files = legacy
 
         files.sort(key=lambda x: x.name)
