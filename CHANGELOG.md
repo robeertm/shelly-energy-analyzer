@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.9.2.55 - 2026-03-08
+
+### Fixed
+- **Web dashboard cost summary: theme support**. The cost overview panel now uses CSS variables (`--card`, `--border`, `--fg`, `--muted`, `--accent`) instead of hardcoded white/gray colors. Correctly adapts to dark and light theme, matching the style of device cards.
+
 ## 5.9.2.54 - 2026-03-08
 
 ### Fixed

@@ -726,8 +726,8 @@ const threePhaseDevs = (DEVICES || []).filter(d => parseInt(d.phases || 3, 10) >
 
 function buildCostSummary() {{
   if (!costSumEl || threePhaseDevs.length === 0) return;
-  costSumEl.innerHTML = `<div style="background:var(--card-bg,#fff);border-radius:10px;padding:14px 18px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
-    <h2 style="margin:0 0 10px;font-size:1.1em;">${t('web.costs.title')}</h2>
+  costSumEl.innerHTML = `<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 18px;">
+    <h2 style="margin:0 0 10px;font-size:1.1em;color:var(--fg);">${t('web.costs.title')}</h2>
     <div id="cost_cards"></div>
   </div>`;
 }}
@@ -756,14 +756,14 @@ function updateCostSummary(stateData) {{
       const maxD = Math.max(...active.map(v => Math.abs(v - avg)));
       const pct = avg > 0 ? Math.max(0, 100 - (maxD / avg * 100)) : 100;
       const sym = pct >= 90 ? '✅' : pct >= 70 ? '⚠️' : '❌';
-      balHtml = `<span style="margin-left:12px;font-size:.85em;opacity:.8">${t('web.kv.balance')}: ${fmt(pct,0)}% ${sym} (${fmt(pa,0)}/${fmt(pb,0)}/${fmt(pc,0)} W)</span>`;
+      balHtml = `<span style="margin-left:12px;font-size:.85em;color:var(--muted);">${t('web.kv.balance')}: ${fmt(pct,0)}% ${sym} (${fmt(pa,0)}/${fmt(pb,0)}/${fmt(pc,0)} W)</span>`;
     }}
 
-    html += `<div style="display:flex;align-items:center;gap:16px;padding:8px 0;border-bottom:1px solid rgba(128,128,128,.15);">
+    html += `<div style="display:flex;align-items:center;gap:16px;padding:8px 0;border-bottom:1px solid var(--border);color:var(--fg);">
       <div style="min-width:160px;font-weight:600;">${escapeHtml(dev.name || dev.key)}</div>
-      <div style="min-width:80px;text-align:right;">${fmt(pw,0)} W</div>
+      <div style="min-width:80px;text-align:right;color:var(--muted);">${fmt(pw,0)} W</div>
       <div style="min-width:100px;text-align:right;">${fmt(kwh,3)} kWh</div>
-      <div style="min-width:80px;text-align:right;font-weight:700;color:#2E75B6;">${fmt(cost,2)} €</div>
+      <div style="min-width:80px;text-align:right;font-weight:700;color:var(--accent);">${fmt(cost,2)} €</div>
       ${balHtml}
     </div>`;
   }});
@@ -779,11 +779,11 @@ function updateCostSummary(stateData) {{
     totalW += (last.power_total_w || 0);
   }});
   if (threePhaseDevs.length > 1) {{
-    html += `<div style="display:flex;align-items:center;gap:16px;padding:8px 0;font-weight:700;">
+    html += `<div style="display:flex;align-items:center;gap:16px;padding:8px 0;font-weight:700;color:var(--fg);">
       <div style="min-width:160px;">${t('web.costs.total')}</div>
-      <div style="min-width:80px;text-align:right;">${fmt(totalW,0)} W</div>
+      <div style="min-width:80px;text-align:right;color:var(--muted);">${fmt(totalW,0)} W</div>
       <div style="min-width:100px;text-align:right;">${fmt(totalKwh,3)} kWh</div>
-      <div style="min-width:80px;text-align:right;color:#2E75B6;">${fmt(totalCost,2)} €</div>
+      <div style="min-width:80px;text-align:right;color:var(--accent);">${fmt(totalCost,2)} €</div>
     </div>`;
   }}
 
