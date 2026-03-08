@@ -1,15 +1,23 @@
 # Shelly Energy Analyzer
 
-A cross-platform desktop application to analyze, visualize and export energy data from Shelly devices (1‑phase and 3‑phase) — including live dashboards, historical plots, CSV/PDF exports and Telegram alerts.
+A cross-platform desktop application to analyze, visualize and export energy data from Shelly devices (1‑phase and 3‑phase) — including live dashboards, cost tracking, historical plots, CSV/PDF exports and Telegram alerts.
 
-This repository is **GitHub-ready** (MIT license, clean structure, no secrets). Releases are intended to be published via **GitHub Releases** so the built‑in updater can find and download new versions.
+This repository is **GitHub-ready** (MIT license, clean structure, no secrets). Releases are published via **GitHub Releases** so the built‑in updater can find and download new versions.
 
 ## Key Features
 
 - 📊 **Live Monitoring**
   - Real-time power, voltage and current
   - 1‑phase and 3‑phase devices (L1 / L2 / L3 + total)
+  - Live cost display (kWh × configured price)
+  - Phase balance indicator for 3-phase devices (detects imbalance)
   - Day / Night / Auto theme switching
+
+- 💰 **Cost Dashboard**
+  - Dedicated "Costs" tab with today / week / month / year overview
+  - Monthly cost projection based on current usage
+  - Previous month comparison (% change)
+  - Per-device breakdown with cost share and bar chart
 
 - 📈 **Historical Analysis**
   - Plots for W / V / A / kWh / VAR / cosφ
@@ -18,12 +26,14 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 
 - 📤 **Exports**
   - CSV export for further analysis
-  - PDF reports (daily / monthly)
+  - PDF energy reports (daily / monthly)
+  - PDF invoices with optional company logo
 
-- 🔔 **Notifications**
-  - Telegram alerts
-  - Daily & monthly summaries
-  - Configurable thresholds
+- 🔔 **Telegram Notifications**
+  - Configurable threshold alerts with optional plots
+  - Daily & monthly summaries with kWh bar charts
+  - Previous period comparison (vs. yesterday / last month)
+  - Standby base load detection (projected yearly cost)
 
 - 🧙 **Setup Wizard**
   - Automatic discovery (mDNS / IP scan)
@@ -38,6 +48,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - 🖥 **Cross‑Platform**
   - macOS / Windows / Linux
   - One-click start scripts
+  - Web dashboard (accessible from any device on the network)
 
 ## Quick Start (End Users)
 
@@ -59,7 +70,7 @@ chmod +x start.sh
 Demo Mode lets you test the full application **without any Shelly devices**.
 
 ### Enable Demo Mode
-- On first start, choose **“Demo mode”** in the setup wizard
+- On first start, choose **"Demo mode"** in the setup wizard
   **or**
 - Set in `config.json`:
 ```json
@@ -68,9 +79,7 @@ Demo Mode lets you test the full application **without any Shelly devices**.
 }
 ```
 
-Demo Mode will generate:
-- realistic live data (with jitter + load spikes)
-- CSV history for plots and exports
+Demo Mode will generate realistic live data (with jitter + load spikes) and CSV history for plots and exports.
 
 ## Languages
 
@@ -78,6 +87,7 @@ The UI supports:
 - English
 - German
 - Spanish
+- French (partial)
 
 Change language in **Settings → Language**.
 
@@ -100,63 +110,20 @@ python -m shelly_analyzer
 The built-in updater checks the latest release on GitHub.
 
 Notes:
-- If you are offline or GitHub is blocked by DNS/VPN/firewall, the app will show an “offline/timeout” message.
+- If you are offline or GitHub is blocked by DNS/VPN/firewall, the app will show an "offline/timeout" message.
 - **Download & install** is only enabled when a newer version than the current one is available.
 
 To publish an update:
-1. Create a git tag (example: `v5.9.2.9`)
-2. Push the tag
-3. Create a GitHub Release for the tag and attach the release ZIP artifact
-
-## Upload to GitHub (Command Cheat Sheet)
-
-### 1) Create the repo locally and commit
 ```bash
-git init
-git add .
-git commit -m "Initial commit"
-```
-
-### 2) Connect to GitHub and push
-Create an empty repo on GitHub first, then:
-```bash
-git branch -M main
-git remote add origin <YOUR_GITHUB_REPO_URL>
-git push -u origin main
-```
-
-### 3) Tag a release (recommended)
-```bash
-git tag v5.9.2.9
-git push origin v5.9.2.9
-```
-
-### 4) Typical workflow afterwards
-```bash
-git status
 git add -A
-git commit -m "Fix updater behavior"
+git commit -m "Description of changes"
 git push
+git tag v5.9.2.51
+git push origin v5.9.2.51
 ```
+
+The GitHub Actions workflow will automatically build the release ZIP and publish it.
 
 ---
 
 License: MIT (see `LICENSE`).
-
-## GitHub upload (commands)
-
-Run these commands **inside the extracted project folder** (where `README.md` and `src/` are):
-
-```bash
-pwd
-ls
-# Make sure you are in the correct folder (should show version 5.9.2.9 in folder name)
-
-git status
-git add .
-git commit -m "Release v5.9.2.9"
-git push
-
-git tag v5.9.2.9
-git push origin v5.9.2.9
-```
