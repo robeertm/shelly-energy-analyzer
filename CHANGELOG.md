@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.9.2.57 - 2026-03-08
+
+### Fixed
+- **Web cost panel: mobile responsive layout**. Cost cards now use CSS classes instead of inline styles. On phones (<600px): 2×2 grid for today/week/month/year cards, stacked projection/comparison. On very small screens (<360px): single column. Matches the responsive behavior of the rest of the web dashboard (device cards, plots).
+
 ## 5.9.2.56 - 2026-03-08
 
 ### Changed

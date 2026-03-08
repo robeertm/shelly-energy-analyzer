@@ -398,6 +398,95 @@ _HTML_TEMPLATE = """<!doctype html>
       grid-template-columns: auto 1fr;
       gap: 6px 10px;
       font-size: 12px;
+
+    /* Cost panel responsive styles */
+    .cost-panel {{
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }}
+    .cost-panel h2 {{
+      margin: 0 0 10px;
+      font-size: 1.1em;
+      color: var(--fg);
+    }}
+    .cost-dev {{
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }}
+    .cost-dev:last-child {{
+      border-bottom: none;
+      margin-bottom: 0;
+    }}
+    .cost-dev-name {{
+      font-weight: 700;
+      font-size: 1.05em;
+      color: var(--fg);
+      margin-bottom: 8px;
+    }}
+    .cost-dev-name span {{
+      font-weight: 400;
+      color: var(--muted);
+      font-size: .85em;
+    }}
+    .cost-cards {{
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 8px;
+    }}
+    .cost-row2 {{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }}
+    .cost-card {{
+      background: var(--chipbg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }}
+    .cost-card-label {{
+      font-size: .78em;
+      color: var(--muted);
+      margin-bottom: 3px;
+    }}
+    .cost-card-kwh {{
+      font-size: .88em;
+      color: var(--fg);
+    }}
+    .cost-card-eur {{
+      font-size: 1.15em;
+      font-weight: 700;
+      color: var(--accent);
+    }}
+    .cost-card-vs {{
+      font-size: .95em;
+      font-weight: 600;
+      color: var(--fg);
+    }}
+    @media (max-width: 600px) {{
+      .cost-cards {{
+        grid-template-columns: 1fr 1fr;
+      }}
+      .cost-row2 {{
+        grid-template-columns: 1fr;
+      }}
+      .cost-card {{
+        padding: 8px 10px;
+      }}
+      .cost-card-eur {{
+        font-size: 1.05em;
+      }}
+    }}
+    @media (max-width: 360px) {{
+      .cost-cards {{
+        grid-template-columns: 1fr;
+      }}
+    }}
       color: var(--muted);
       margin: 8px 2px 2px;
     }}
@@ -441,7 +530,7 @@ _HTML_TEMPLATE = """<!doctype html>
 
 
     <div class="grid" id="grid"></div>
-    <div id="cost_summary" style="margin:12px 12px 0;"></div>
+    <div id="cost_summary" style="margin:10px 12px 0;"></div>
   </div>
 
 <script>
@@ -726,9 +815,9 @@ const threePhaseDevs = (DEVICES || []).filter(d => parseInt(d.phases || 3, 10) >
 
 function buildCostSummary() {{
   if (!costSumEl || threePhaseDevs.length === 0) return;
-  costSumEl.innerHTML = `<div class="cost-panel" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:12px;">
+  costSumEl.innerHTML = `<div class="cost-panel">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <h2 style="margin:0;font-size:1.15em;color:var(--fg);">💰 ${t('web.costs.title')}</h2>
+      <h2>💰 ${t('web.costs.title')}</h2>
       <button id="cost_refresh_btn" style="padding:4px 12px;border-radius:6px;border:1px solid var(--border);background:var(--chipbg);color:var(--fg);cursor:pointer;font-size:.85em;">${t('web.costs.refresh')}</button>
     </div>
     <div id="cost_devices"></div>
@@ -761,31 +850,29 @@ function renderCosts(devices) {{
 
   let html = '';
   devices.forEach(dev => {{
-    html += `<div style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);">`;
-    html += `<div style="font-weight:700;font-size:1.05em;color:var(--fg);margin-bottom:8px;">⚡ ${{escapeHtml(dev.name)}} <span style="font-weight:400;color:var(--muted);font-size:.85em;">(${{escapeHtml(dev.host)}})</span></div>`;
+    html += `<div class="cost-dev">`;
+    html += `<div class="cost-dev-name">⚡ ${{escapeHtml(dev.name)}} <span>(${{escapeHtml(dev.host)}})</span></div>`;
 
     // Cards row: today / week / month / year
-    html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">`;
+    html += `<div class="cost-cards">`;
     ['today','week','month','year'].forEach(k => {{
       const kwh = dev[k + '_kwh'] || 0;
       const eur = dev[k + '_eur'] || 0;
-      html += `<div style="background:var(--chipbg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
-        <div style="font-size:.8em;color:var(--muted);margin-bottom:4px;">${labels[k]}</div>
-        <div style="font-size:.9em;color:var(--fg);">${fmt(kwh,2)} kWh</div>
-        <div style="font-size:1.15em;font-weight:700;color:var(--accent);">${fmt(eur,2)} €</div>
+      html += `<div class="cost-card">
+        <div class="cost-card-label">${labels[k]}</div>
+        <div class="cost-card-kwh">${fmt(kwh,2)} kWh</div>
+        <div class="cost-card-eur">${fmt(eur,2)} €</div>
       </div>`;
     }});
     html += `</div>`;
 
     // Row 2: Projection + vs last month
-    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">`;
-    // Projection
-    html += `<div style="background:var(--chipbg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
-      <div style="font-size:.8em;color:var(--muted);margin-bottom:4px;">${t('web.costs.projected')}</div>
-      <div style="font-size:.9em;color:var(--fg);">~${{fmt(dev.proj_kwh || 0, 1)}} kWh</div>
-      <div style="font-size:1.15em;font-weight:700;color:var(--accent);">~${{fmt(dev.proj_eur || 0, 2)}} €</div>
+    html += `<div class="cost-row2">`;
+    html += `<div class="cost-card">
+      <div class="cost-card-label">${t('web.costs.projected')}</div>
+      <div class="cost-card-kwh">~${{fmt(dev.proj_kwh || 0, 1)}} kWh</div>
+      <div class="cost-card-eur">~${{fmt(dev.proj_eur || 0, 2)}} €</div>
     </div>`;
-    // vs last month
     const vsPct = dev.vs_last_pct;
     let vsText = '';
     if (vsPct !== null && vsPct !== undefined) {{
@@ -794,9 +881,9 @@ function renderCosts(devices) {{
     }} else {{
       vsText = t('web.costs.no_prev');
     }}
-    html += `<div style="background:var(--chipbg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
-      <div style="font-size:.8em;color:var(--muted);margin-bottom:4px;">${t('web.costs.vs_last')}</div>
-      <div style="font-size:1em;font-weight:600;color:var(--fg);">${vsText}</div>
+    html += `<div class="cost-card">
+      <div class="cost-card-label">${t('web.costs.vs_last')}</div>
+      <div class="cost-card-vs">${vsText}</div>
     </div>`;
     html += `</div>`;
 
