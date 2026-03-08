@@ -111,7 +111,7 @@ class CoreMixin:
             # Updates (GitHub Releases)
             self.upd_status = tk.StringVar(value=self.t("updates.status.idle"))
             self.upd_auto = tk.BooleanVar(value=bool(getattr(getattr(self.cfg, "updates", None), "auto_install", False)))
-            self._upd_latest: Optional[Any] = None
+            self._upd_latest: Optional[ReleaseInfo] = None
             self.sync_log = None  # will be a tk.Text once the Sync tab is built
             self._sync_log_buffer: List[str] = []
             self.title(f"{self.t('app.title')} {__version__}")
@@ -4350,7 +4350,7 @@ class CoreMixin:
             def _tg_send_test() -> None:
                 try:
                     # Save UI values so the sender sees them
-                    self._save_settings()
+                    self._save_settings_devices()
                 except Exception:
                     pass
 
@@ -7591,8 +7591,6 @@ class CoreMixin:
                                 start_dt = datetime.combine(y, datetime.min.time(), tzinfo=tz)
                                 end_dt = datetime.combine(now_tz.date(), datetime.min.time(), tzinfo=tz)
                                 try:
-                                    # Sync data before building summary
-                                    self._sync_before_telegram_summary()
                                     msg = self._build_telegram_summary("daily", start_dt, end_dt)
                                     imgs = self._telegram_make_summary_plots("daily", start_dt, end_dt)
                                     ok, err = self._telegram_send_with_images(msg, imgs)
@@ -7621,7 +7619,7 @@ class CoreMixin:
                                     _state_set("daily_attempt_ts", str(now_ts))
                                     if err:
                                         try:
-                                            logging.getLogger(__name__).warning("Telegram daily summary failed: %s", err)
+                                            self.log.warning("Telegram daily summary failed: %s", err)
                                         except Exception:
                                             pass
                     else:
@@ -7677,8 +7675,6 @@ class CoreMixin:
                                 end_dt = now
                                 start_dt = end_dt - timedelta(days=30)
                                 try:
-                                    # Sync data before building summary
-                                    self._sync_before_telegram_summary()
                                     msg = self._build_telegram_summary("month", start_dt, end_dt)
                                     ok, err = self._telegram_send_sync(msg)
                                 except Exception as e:
@@ -7714,7 +7710,7 @@ class CoreMixin:
                                     _state_set("month_attempt_ts", str(now_ts))
                                     if err:
                                         try:
-                                            logging.getLogger(__name__).warning("Telegram monthly summary failed: %s", err)
+                                            self.log.warning("Telegram monthly summary failed: %s", err)
                                         except Exception:
                                             pass
                     else:
@@ -7801,7 +7797,7 @@ class CoreMixin:
                                     _state_set("daily_attempt_ts", str(int(time.time())))
                                     if err:
                                         try:
-                                            logging.getLogger(__name__).warning("Telegram daily summary failed: %s", err)
+                                            self.log.warning("Telegram daily summary failed: %s", err)
                                         except Exception:
                                             pass
                     else:
@@ -7842,8 +7838,6 @@ class CoreMixin:
                                 start_dt = datetime(y0, m0, 1, hh, mm, 0)
                                 end_dt = due_end
                                 try:
-                                    # Sync data before building summary
-                                    self._sync_before_telegram_summary()
                                     msg = self._build_telegram_summary("monthly", start_dt, end_dt)
                                     imgs = self._telegram_make_summary_plots("monthly", start_dt, end_dt)
                                     ok, err = self._telegram_send_with_images(msg, imgs)
@@ -7858,7 +7852,7 @@ class CoreMixin:
                                     _state_set("month_attempt_ts", str(int(time.time())))
                                     if err:
                                         try:
-                                            logging.getLogger(__name__).warning("Telegram monthly summary failed: %s", err)
+                                            self.log.warning("Telegram monthly summary failed: %s", err)
                                         except Exception:
                                             pass
                     else:
@@ -7881,7 +7875,7 @@ class CoreMixin:
                         pass
             if (not ok) and err:
                 try:
-                    logging.getLogger(__name__).warning("Telegram daily summary failed: %s", err)
+                    self.log.warning("Telegram daily summary failed: %s", err)
                 except Exception:
                     pass
 
@@ -7900,7 +7894,7 @@ class CoreMixin:
                         pass
             if (not ok) and err:
                 try:
-                    logging.getLogger(__name__).warning("Telegram monthly summary failed: %s", err)
+                    self.log.warning("Telegram monthly summary failed: %s", err)
                 except Exception:
                     pass
 
@@ -8272,58 +8266,329 @@ class CoreMixin:
 
             return "\n".join(lines).strip() + "\n"
 
-    def _sync_before_telegram_summary(self) -> None:
-        """Synchronize data from Shelly devices before building a Telegram summary.
+            def _alerts_format_telegram_message(self, r: Any, s: LiveSample, metric: str, val: float, op: str, thr: float, dur: int, cd: int, base_msg: str = "") -> str:
+                    """Build a detailed Telegram alert message (multi-line)."""
+                    try:
+                        ts_local = datetime.fromtimestamp(int(getattr(s, "ts", 0) or 0)).strftime("%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        ts_local = str(getattr(s, "ts", ""))
 
-        Runs synchronously because the summary must use fresh data.
-        Demo devices are skipped (they generate data locally).
-        """
-        import logging as _logging
-        _log = _logging.getLogger(__name__)
+                    devkey = str(getattr(s, "device_key", "") or "")
+                    devname = str(getattr(s, "device_name", devkey) or devkey)
 
-        try:
-            if bool(getattr(getattr(self.cfg, "demo", None), "enabled", False)):
+                    # Try to resolve IP/host from config
+                    host = ""
+                    try:
+                        for d in getattr(self.cfg, "devices", []) or []:
+                            if str(getattr(d, "key", "") or "") == devkey:
+                                host = str(getattr(d, "host", "") or "")
+                                break
+                    except Exception:
+                        host = ""
+
+                    m = (metric or "").strip().upper()
+                    phase = ""
+                    base = m
+                    if m.endswith("_L1"):
+                        phase = "L1"; base = m[:-3]
+                    elif m.endswith("_L2"):
+                        phase = "L2"; base = m[:-3]
+                    elif m.endswith("_L3"):
+                        phase = "L3"; base = m[:-3]
+
+                    unit = {"W": "W", "V": "V", "A": "A", "VAR": "var", "COSPHI": ""}.get(base, "")
+                    title = "🚨 Shelly Alarm"
+
+                    # Rule meta
+                    rid = str(getattr(r, "rule_id", "") or "")
+                    if not rid:
+                        try:
+                            rid = f"{getattr(r,'device_key','*')}:{getattr(r,'metric','')}"
+                        except Exception:
+                            rid = ""
+
+                    # Per-phase snapshot (if available)
+                    phase_line = ""
+                    try:
+                        # dict selection
+                        dct = None
+                        if base == "W":
+                            dct = getattr(s, "power_w", None)
+                        elif base == "V":
+                            dct = getattr(s, "voltage_v", None)
+                        elif base == "A":
+                            dct = getattr(s, "current_a", None)
+                        elif base == "VAR":
+                            dct = getattr(s, "reactive_var", None)
+                        elif base == "COSPHI":
+                            dct = getattr(s, "cosphi", None)
+
+                        if isinstance(dct, dict):
+                            a = float(dct.get("a", 0.0) or 0.0)
+                            b = float(dct.get("b", 0.0) or 0.0)
+                            c = float(dct.get("c", 0.0) or 0.0)
+
+                            if base == "V":
+                                total = (a + b + c) / 3.0 if (a or b or c) else float(dct.get("total", 0.0) or 0.0)
+                            elif base == "A":
+                                total = (a + b + c) if (a or b or c) else float(dct.get("total", 0.0) or 0.0)
+                            else:
+                                total = float(dct.get("total", 0.0) or 0.0)
+
+                            if phase:
+                                phase_line = f"Phase: {phase} | L1 {a:g}{(' '+unit) if unit else ''} | L2 {b:g}{(' '+unit) if unit else ''} | L3 {c:g}{(' '+unit) if unit else ''} | Total {total:g}{(' '+unit) if unit else ''}"
+                            else:
+                                phase_line = f"L1 {a:g}{(' '+unit) if unit else ''} | L2 {b:g}{(' '+unit) if unit else ''} | L3 {c:g}{(' '+unit) if unit else ''} | Total {total:g}{(' '+unit) if unit else ''}"
+                    except Exception:
+                        phase_line = ""
+
+                    # Value line
+                    val_str = f"{val:g}{(' '+unit) if unit else ''}"
+                    thr_str = f"{thr:g}{(' '+unit) if unit else ''}"
+
+                    lines = [title,
+                             f"Zeit: {ts_local}",
+                             f"Gerät: {devname} ({devkey})" + (f" @ {host}" if host else ""),
+                             f"Regel: {metric} {op} {thr_str} (Dauer {int(dur)}s, Cooldown {int(cd)}s)" + (f" | ID {rid}" if rid else ""),
+                             f"Wert: {val_str}"]
+
+                    if phase_line:
+                        lines.append(f"Phasen: {phase_line}")
+
+                    if base_msg:
+                        lines.append(f"Info: {base_msg}")
+
+                    return "\n".join(lines)
+
+            def _alerts_value(self, s: LiveSample, metric: str) -> float:
+                """Return a numeric value for an alert metric.
+
+                Supported metrics:
+                  - W, VAR, COSPHI (totals)
+                  - V, A (derived totals)
+                  - Phase-specific: *_L1, *_L2, *_L3 (maps to a/b/c)
+                    (V_L1.., A_L1.., W_L1.., VAR_L1.., COSPHI_L1..)
+                """
+                m0 = (metric or "W").strip().upper()
+                m = m0.replace(" ", "").replace("Φ", "PHI")
+
+                # Phase mapping
+                phase = None
+                if m.endswith("_L1"):
+                    phase = "a"; base = m[:-3]
+                elif m.endswith("_L2"):
+                    phase = "b"; base = m[:-3]
+                elif m.endswith("_L3"):
+                    phase = "c"; base = m[:-3]
+                else:
+                    base = m
+
+                # Helpers
+                def _mean_abc(d: dict) -> float:
+                    vals = []
+                    for k in ("a", "b", "c"):
+                        try:
+                            v = float(d.get(k, 0.0))
+                        except Exception:
+                            v = 0.0
+                        if v != 0.0:
+                            vals.append(v)
+                    if vals:
+                        return float(sum(vals) / len(vals))
+                    # fallback: try total if present
+                    try:
+                        return float(d.get("total", 0.0))
+                    except Exception:
+                        return 0.0
+
+                def _sum_abc(d: dict) -> float:
+                    ssum = 0.0
+                    ok = False
+                    for k in ("a", "b", "c"):
+                        try:
+                            v = float(d.get(k, 0.0))
+                        except Exception:
+                            v = 0.0
+                        if v != 0.0:
+                            ok = True
+                        ssum += v
+                    if ok:
+                        return float(ssum)
+                    try:
+                        return float(d.get("total", 0.0))
+                    except Exception:
+                        return 0.0
+
+                # Base metrics
+                if base in {"W", "P", "POWER"}:
+                    if phase:
+                        return float(s.power_w.get(phase, 0.0))
+                    return float(s.power_w.get("total", 0.0))
+
+                if base in {"VAR", "Q", "REACTIVE"}:
+                    if phase:
+                        return float(s.reactive_var.get(phase, 0.0))
+                    return float(s.reactive_var.get("total", 0.0))
+
+                if base in {"COSPHI", "COSPH", "COSP", "COS", "PF", "POWERFACTOR"}:
+                    if phase:
+                        return float(s.cosphi.get(phase, 0.0))
+                    return float(s.cosphi.get("total", 0.0))
+
+                if base in {"V", "VOLT", "VOLTAGE"}:
+                    if phase:
+                        return float(s.voltage_v.get(phase, 0.0))
+                    return _mean_abc(s.voltage_v)
+
+                if base in {"A", "AMP", "AMPS", "CURRENT"}:
+                    if phase:
+                        return float(s.current_a.get(phase, 0.0))
+                    return _sum_abc(s.current_a)
+
+                # Unknown -> default to power total
+                return float(s.power_w.get("total", 0.0))
+
+    
+
+            def _alerts_process_sample(self, s: LiveSample) -> None:
+                    rules = list(getattr(self.cfg, "alerts", []) or [])
+                    if not rules:
+                        return
+                    for r in rules:
+                        try:
+                            if not getattr(r, "enabled", True):
+                                continue
+                            devk = str(getattr(r, "device_key", "*") or "*").strip()
+                            if devk not in {"*", s.device_key}:
+                                continue
+                            rid = str(getattr(r, "rule_id", "") or "")
+                            if not rid:
+                                rid = f"{devk}:{getattr(r,'metric','W')}"
+                            op = str(getattr(r, "op", ">") or ">").strip()
+                            thr = float(getattr(r, "threshold", 0.0) or 0.0)
+                            dur = int(getattr(r, "duration_seconds", 10) or 0)
+                            cd = int(getattr(r, "cooldown_seconds", 120) or 0)
+
+                            val = self._alerts_value(s, getattr(r, "metric", "W"))
+                            cond = (
+                                (val > thr) if op == ">" else
+                                (val < thr) if op == "<" else
+                                (val >= thr) if op in {">=", "=>"} else
+                                (val <= thr) if op in {"<=", "=<"} else
+                                (val == thr) if op in {"=", "=="} else
+                                (val > thr)
+                            )
+
+                            st = self._alert_state.setdefault(rid, {"start_ts": None, "triggered": False, "last_trigger_ts": 0})
+                            if not cond:
+                                st["start_ts"] = None
+                                st["triggered"] = False
+                                continue
+
+                            if st["start_ts"] is None:
+                                st["start_ts"] = int(s.ts)
+                            if st["triggered"]:
+                                continue
+                            if dur > 0 and int(s.ts) - int(st["start_ts"]) < dur:
+                                continue
+                            if cd > 0 and int(s.ts) - int(st.get("last_trigger_ts", 0)) < cd:
+                                continue
+
+                            st["triggered"] = True
+                            st["last_trigger_ts"] = int(s.ts)
+
+                            msg_custom = str(getattr(r, "message", "") or "").strip()
+                            metric = str(getattr(r, "metric", "W"))
+                            devname = str(getattr(s, "device_name", s.device_key) or s.device_key)
+                            msg = msg_custom or self.t('settings.alerts.fired').format(device=devname, metric=metric, value=val, op=op, threshold=thr)
+
+                    
+                            if bool(getattr(r, "action_telegram", False)):
+                                try:
+                                    # Telegram can be more detailed than popup/beep
+                                    level = str(getattr(self.cfg.ui, "telegram_detail_level", "detailed") or "detailed").strip().lower()
+                                    if level == "simple":
+                                        tg_msg = msg
+                                    else:
+                                        tg_msg = self._alerts_format_telegram_message(r, s, metric, val, op, thr, dur, cd, msg_custom or "")
+                                    plots = []
+                                    try:
+                                        if bool(getattr(self.cfg.ui, "telegram_alarm_plots_enabled", True)):
+                                            plots = self._telegram_make_alarm_plots(str(getattr(s, "device_key", "") or devk), int(getattr(s, "ts", 0) or now_ts), minutes=10)
+                                        else:
+                                            plots = []
+                                    except Exception:
+                                        plots = []
+                                    self._alerts_send_telegram(tg_msg, plots)
+                                except Exception:
+                                    pass
+                            if bool(getattr(r, "action_beep", True)):
+                                try:
+                                    self.bell()
+                                except Exception:
+                                    pass
+                            if bool(getattr(r, "action_popup", True)):
+                                try:
+                                    messagebox.showwarning(self.t('settings.alerts.title'), msg)
+                                except Exception:
+                                    pass
+                        except Exception:
+                            continue
+
+            def _add_device_from_host(self, host: str, name_hint: str = "") -> None:
+                """Add a new device row by probing a Shelly IP/host (used by mDNS discovery)."""
+                host = (host or "").strip()
+                if not host:
+                    return
+
+                disc = None
                 try:
-                    from shelly_analyzer.services.demo import ensure_demo_csv
-                    ensure_demo_csv(
-                        self.storage,
-                        list(getattr(self.cfg, "devices", []) or []),
-                        getattr(self.cfg, "demo"),
-                    )
+                    disc = probe_device(host, timeout_seconds=2.5)
+                except Exception:
+                    disc = None
+
+                # Unique key
+                used = set()
+                try:
+                    for row in getattr(self, "_dev_vars", []) or []:
+                        used.add((row[0].get() or "").strip())
                 except Exception:
                     pass
-                return
+                n = 1
+                while f"shelly{n}" in used:
+                    n += 1
+                key = f"shelly{n}"
 
-            _log.info("Telegram summary: syncing data before send...")
-            try:
-                results = sync_all(
-                    self.cfg,
-                    self.storage,
-                    range_override=None,
-                    fallback_last_days=2,
-                )
-                ok_count = sum(
-                    1 for r in results
-                    if any(c.ok for c in r.chunks)
-                )
-                _log.info(
-                    "Telegram summary: sync done (%d/%d devices had new data)",
-                    ok_count, len(results),
-                )
-            except Exception as e:
-                _log.warning("Telegram summary: sync failed: %s (using existing data)", e)
+                # Name: prefer user visible instance name (mDNS) -> config override -> model
+                nm = (name_hint or "").strip()
+                if not nm:
+                    try:
+                        nm = (disc.model or "").strip() if disc else ""
+                    except Exception:
+                        nm = ""
+                if not nm:
+                    nm = f"Shelly {n}"
 
-            try:
-                from shelly_analyzer.services.compute import load_device
-                self.computed = {
-                    d.key: load_device(self.storage, d)
-                    for d in self.cfg.devices
-                }
-            except Exception as e:
-                _log.warning("Telegram summary: data reload failed: %s", e)
+                v_key = tk.StringVar(value=key)
+                v_name = tk.StringVar(value=nm)
+                v_host = tk.StringVar(value=str(host))
+                v_emid = tk.StringVar(value=str(int(getattr(disc, "component_id", 0) or 0)) if disc else "0")
+                v_model = tk.StringVar(value=str(getattr(disc, "model", "") or "") if disc else "")
+                v_kind = tk.StringVar(value=str(getattr(disc, "kind", "unknown") or "unknown") if disc else "unknown")
+                v_gen = tk.StringVar(value=str(int(getattr(disc, "gen", 0) or 0)) if disc else "0")
+                v_phases = tk.StringVar(value=str(int(getattr(disc, "phases", 1) or 1)) if disc else "1")
+                v_emdata = tk.BooleanVar(value=bool(getattr(disc, "supports_emdata", True)) if disc else True)
 
-        except Exception as e:
-            _log.warning("Telegram summary: pre-sync error: %s", e)
+                if not getattr(self, "_dev_vars", None):
+                    self._dev_vars = []
+                self._dev_vars.append((v_key, v_name, v_host, v_emid, v_model, v_kind, v_gen, v_phases, v_emdata))
+
+                try:
+                    # Rebuild settings tab to show the new row
+                    self._clear_frame(self.tab_settings)
+                    self._build_settings_tab()
+                except Exception:
+                    pass
 
     def _telegram_send_daily_summary_now(self) -> None:
             """Send the previous calendar day immediately (does not mark as sent)."""
@@ -8342,19 +8607,16 @@ class CoreMixin:
                 prev_day = (now - timedelta(days=1)).date()
                 start_dt = datetime.combine(prev_day, datetime.min.time(), tzinfo=tz)
                 end_dt = start_dt + timedelta(days=1)
-                # Sync data before building summary
-                self._sync_before_telegram_summary()
-
                 msg = self._build_telegram_summary("daily", start_dt, end_dt)
                 imgs = self._telegram_make_summary_plots("daily", start_dt, end_dt)
                 ok, err = self._telegram_send_with_images(msg, imgs)
                 if ok:
-                    messagebox.showinfo("Telegram", "OK (gesendet)")
+                    self._show_msgbox(self.t("settings.alerts.telegram.sent_ok"), kind="info")
                 else:
-                    messagebox.showwarning("Telegram", f"Fehler: {err}")
+                    self._show_msgbox(f"{self.t('settings.alerts.telegram.sent_fail')}: {err}", kind="warning")
             except Exception as e:
                 try:
-                    messagebox.showwarning("Telegram", f"Fehler: {e}")
+                    self._show_msgbox(f"{self.t('settings.alerts.telegram.sent_fail')}: {e}", kind="warning")
                 except Exception:
                     pass
 
@@ -8373,19 +8635,16 @@ class CoreMixin:
                 end_dt = now
                 start_dt = end_dt - timedelta(days=30)
 
-                # Sync data before building summary
-                self._sync_before_telegram_summary()
-
                 msg = self._build_telegram_summary("monthly", start_dt, end_dt)
                 imgs = self._telegram_make_summary_plots("monthly", start_dt, end_dt)
                 ok, err = self._telegram_send_with_images(msg, imgs)
                 if ok:
-                    messagebox.showinfo("Telegram", "OK (gesendet)")
+                    self._show_msgbox(self.t("settings.alerts.telegram.sent_ok"), kind="info")
                 else:
-                    messagebox.showwarning("Telegram", f"Fehler: {err}")
+                    self._show_msgbox(f"{self.t('settings.alerts.telegram.sent_fail')}: {err}", kind="warning")
             except Exception as e:
                 try:
-                    messagebox.showwarning("Telegram", f"Fehler: {e}")
+                    self._show_msgbox(f"{self.t('settings.alerts.telegram.sent_fail')}: {e}", kind="warning")
                 except Exception:
                     pass
 
