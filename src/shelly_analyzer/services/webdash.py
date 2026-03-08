@@ -93,6 +93,9 @@ def _local_ip_guess() -> str:
 class LivePoint:
     ts: int
     power_total_w: float
+    pa: float = 0.0
+    pb: float = 0.0
+    pc: float = 0.0
     va: float
     vb: float
     vc: float
@@ -148,6 +151,9 @@ class LiveStateStore:
                         "ts": p.ts,
                         # Ensure JSON-safe floats (no NaN/Inf) because browsers reject them.
                         "power_total_w": (p.power_total_w if math.isfinite(float(p.power_total_w)) else 0.0),
+                        "pa": (p.pa if math.isfinite(float(p.pa)) else 0.0),
+                        "pb": (p.pb if math.isfinite(float(p.pb)) else 0.0),
+                        "pc": (p.pc if math.isfinite(float(p.pc)) else 0.0),
                         "va": (p.va if math.isfinite(float(p.va)) else 0.0),
                         "vb": (p.vb if math.isfinite(float(p.vb)) else 0.0),
                         "vc": (p.vc if math.isfinite(float(p.vc)) else 0.0),
@@ -435,6 +441,7 @@ _HTML_TEMPLATE = """<!doctype html>
 
 
     <div class="grid" id="grid"></div>
+    <div id="cost_summary" style="margin:12px 12px 0;"></div>
   </div>
 
 <script>
@@ -713,6 +720,76 @@ function buildCards() {
 
 buildCards();
 
+// --- Cost Summary for 3-phase devices ---
+const costSumEl = document.getElementById("cost_summary");
+const threePhaseDevs = (DEVICES || []).filter(d => parseInt(d.phases || 3, 10) >= 3 && String(d.kind || "").toLowerCase() !== "switch");
+
+function buildCostSummary() {{
+  if (!costSumEl || threePhaseDevs.length === 0) return;
+  costSumEl.innerHTML = `<div style="background:var(--card-bg,#fff);border-radius:10px;padding:14px 18px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+    <h2 style="margin:0 0 10px;font-size:1.1em;">${t('web.costs.title')}</h2>
+    <div id="cost_cards"></div>
+  </div>`;
+}}
+buildCostSummary();
+
+function updateCostSummary(stateData) {{
+  if (!costSumEl || threePhaseDevs.length === 0) return;
+  const container = document.getElementById("cost_cards");
+  if (!container) return;
+
+  let html = '';
+  threePhaseDevs.forEach(dev => {{
+    const arr = stateData[dev.key];
+    if (!arr || arr.length === 0) return;
+    const last = arr[arr.length - 1];
+    const kwh = last.kwh_today || 0;
+    const cost = last.cost_today || 0;
+    const pw = last.power_total_w || 0;
+
+    // Phase balance
+    let balHtml = '';
+    const pa = Math.abs(last.pa || 0), pb = Math.abs(last.pb || 0), pc = Math.abs(last.pc || 0);
+    const active = [pa, pb, pc].filter(v => v > 5);
+    if (active.length >= 2) {{
+      const avg = active.reduce((a,b) => a+b, 0) / active.length;
+      const maxD = Math.max(...active.map(v => Math.abs(v - avg)));
+      const pct = avg > 0 ? Math.max(0, 100 - (maxD / avg * 100)) : 100;
+      const sym = pct >= 90 ? '✅' : pct >= 70 ? '⚠️' : '❌';
+      balHtml = `<span style="margin-left:12px;font-size:.85em;opacity:.8">${t('web.kv.balance')}: ${fmt(pct,0)}% ${sym} (${fmt(pa,0)}/${fmt(pb,0)}/${fmt(pc,0)} W)</span>`;
+    }}
+
+    html += `<div style="display:flex;align-items:center;gap:16px;padding:8px 0;border-bottom:1px solid rgba(128,128,128,.15);">
+      <div style="min-width:160px;font-weight:600;">${escapeHtml(dev.name || dev.key)}</div>
+      <div style="min-width:80px;text-align:right;">${fmt(pw,0)} W</div>
+      <div style="min-width:100px;text-align:right;">${fmt(kwh,3)} kWh</div>
+      <div style="min-width:80px;text-align:right;font-weight:700;color:#2E75B6;">${fmt(cost,2)} €</div>
+      ${balHtml}
+    </div>`;
+  }});
+
+  // Total row
+  let totalKwh = 0, totalCost = 0, totalW = 0;
+  threePhaseDevs.forEach(dev => {{
+    const arr = stateData[dev.key];
+    if (!arr || arr.length === 0) return;
+    const last = arr[arr.length - 1];
+    totalKwh += (last.kwh_today || 0);
+    totalCost += (last.cost_today || 0);
+    totalW += (last.power_total_w || 0);
+  }});
+  if (threePhaseDevs.length > 1) {{
+    html += `<div style="display:flex;align-items:center;gap:16px;padding:8px 0;font-weight:700;">
+      <div style="min-width:160px;">${t('web.costs.total')}</div>
+      <div style="min-width:80px;text-align:right;">${fmt(totalW,0)} W</div>
+      <div style="min-width:100px;text-align:right;">${fmt(totalKwh,3)} kWh</div>
+      <div style="min-width:80px;text-align:right;color:#2E75B6;">${fmt(totalCost,2)} €</div>
+    </div>`;
+  }}
+
+  container.innerHTML = html;
+}}
+
 const winSel = document.getElementById("win_sel");
 
 function renderWindowOptions(opts, selected) {{
@@ -932,12 +1009,30 @@ function kv(el, last, dev) {{
   const i = single ? `${fmt(last.ia)} A` : `${fmt(last.ia)} / ${fmt(last.ib)} / ${fmt(last.ic)} A`;
   const q = single ? `${fmt(last.q_total_var, 0)} VAR` : `${fmt(last.q_total_var, 0)} VAR (${fmt(last.qa,0)}/${fmt(last.qb,0)}/${fmt(last.qc,0)})`;
   const pf = single ? `${fmt(last.cosphi_total, 3)}` : `${fmt(last.cosphi_total, 3)} (${fmt(last.pfa,3)}/${fmt(last.pfb,3)}/${fmt(last.pfc,3)})`;
+
+  // Phase balance (3-phase only)
+  let balHtml = '';
+  if (!single) {{
+    const pa = Math.abs(last.pa || 0), pb = Math.abs(last.pb || 0), pc = Math.abs(last.pc || 0);
+    const active = [pa, pb, pc].filter(v => v > 5);
+    if (active.length >= 2) {{
+      const avg = active.reduce((a,b) => a+b, 0) / active.length;
+      const maxDev = Math.max(...active.map(v => Math.abs(v - avg)));
+      const pct = avg > 0 ? Math.max(0, 100 - (maxDev / avg * 100)) : 100;
+      const sym = pct >= 90 ? '✅' : pct >= 70 ? '⚠️' : '❌';
+      balHtml = `<b>${t('web.kv.balance')}</b><span>${fmt(pct,0)}% ${sym} (${fmt(pa,0)}/${fmt(pb,0)}/${fmt(pc,0)} W)</span>`;
+    }} else if (active.length >= 1) {{
+      balHtml = `<b>${t('web.kv.power_phases')}</b><span>${fmt(pa,0)} / ${fmt(pb,0)} / ${fmt(pc,0)} W</span>`;
+    }}
+  }}
+
   el.innerHTML = `
     <b>${t('web.kv.power')}</b><span>${fmt(last.power_total_w, 0)} W</span>
     <b>${t('web.kv.kwh_today')}</b><span>${fmt(last.kwh_today, 3)} kWh</span>
     <b>${t('web.kv.cost_today')}</b><span>${fmt(last.cost_today, 2)} €</span>
     <b>${t('web.kv.u')}</b><span>${u}</span>
     <b>${t('web.kv.i')}</b><span>${i}</span>
+    ${balHtml}
     <b>${t('web.kv.var')}</b><span>${q}</span>
     <b>${t('web.kv.cosphi')}</b><span>${pf}</span>
   `;
@@ -1070,6 +1165,9 @@ function renderState(data) {
       drawLineChart(ui.c, ts, cSeries, isSingle ? t('web.chart.current.1p') : t('web.chart.current'), palette3());
     }
   });
+
+  // Update cost summary panel
+  try { updateCostSummary(data); } catch (e) {}
 }
 
 async function tick(force=false) {{
