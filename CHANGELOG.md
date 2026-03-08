@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.9.2.56 - 2026-03-08
+
+### Changed
+- **Web dashboard: Full cost overview matching desktop app**. The cost panel now shows per 3-phase device: today/week/month/year cards (kWh + €), monthly projection, and previous month comparison (% change). Data is fetched via new `/api/costs` endpoint from CSV history (not just live data). Refreshes every 60 seconds + manual refresh button. Fully theme-aware (dark/light).
+- New API endpoint `/api/costs` computes historical energy costs per device and time range.
+
 ## 5.9.2.55 - 2026-03-08
 
 ### Fixed
