@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.9.2.52 - 2026-03-08
+
+### Changed
+- **Cost dashboard redesigned**: Now shows only 3-phase devices (3EM, Pro 3EM). Each device gets its own section with today/week/month/year cards, monthly projection, and previous month comparison. Single-phase and switch devices are excluded. Scrollable layout for multiple devices.
+
 ## 5.9.2.51 - 2026-03-08
 
 ### Fixed
