@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import logging.handlers
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -10,11 +11,29 @@ from typing import Optional
 _CONFIGURED = False
 _LOG_PATH: Optional[Path] = None
 
+_MAX_LOG_DAYS = 30  # keep logs for 30 days
+
+
+def _cleanup_old_logs(log_dir: Path, keep_days: int = _MAX_LOG_DAYS) -> None:
+    """Delete log files older than *keep_days*."""
+    try:
+        from datetime import timedelta
+        cutoff = datetime.now() - timedelta(days=keep_days)
+        for f in log_dir.glob("app_*.log*"):
+            try:
+                if f.stat().st_mtime < cutoff.timestamp():
+                    f.unlink()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
 
 def setup_logging(base_dir: Optional[Path] = None, level: int = logging.INFO) -> Path:
     """Configure file + console logging.
 
     Creates ./logs/app_YYYY-MM-DD.log (relative to *base_dir* or CWD).
+    Uses TimedRotatingFileHandler to rotate daily and keep up to 30 days.
     Also installs a sys.excepthook so uncaught exceptions land in the log.
 
     Returns the log file path.
@@ -27,6 +46,9 @@ def setup_logging(base_dir: Optional[Path] = None, level: int = logging.INFO) ->
     log_path = log_dir / f"app_{datetime.now().strftime('%Y-%m-%d')}.log"
     _LOG_PATH = log_path
 
+    # Clean up old log files on every startup
+    _cleanup_old_logs(log_dir, _MAX_LOG_DAYS)
+
     if _CONFIGURED:
         return log_path
 
@@ -35,7 +57,11 @@ def setup_logging(base_dir: Optional[Path] = None, level: int = logging.INFO) ->
 
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-    fh = logging.FileHandler(log_path, encoding="utf-8")
+    # Use TimedRotatingFileHandler: rotate at midnight, keep 30 backups
+    fh = logging.handlers.TimedRotatingFileHandler(
+        log_path, when="midnight", interval=1,
+        backupCount=_MAX_LOG_DAYS, encoding="utf-8",
+    )
     fh.setLevel(level)
     fh.setFormatter(fmt)
 

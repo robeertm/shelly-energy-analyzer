@@ -7950,6 +7950,7 @@ class CoreMixin:
             sum_power = 0.0
             cnt_power = 0
             min_power_w = None
+            all_power_values = []  # for standby detection (10th percentile)
 
             max_power_dev = None
             max_power = 0.0
@@ -8088,6 +8089,15 @@ class CoreMixin:
                             cnt_power += int(p.count())
                             pmin = float(p.min())
                             min_power_w = pmin if min_power_w is None else min(min_power_w, pmin)
+                            # Collect for standby detection (sample max 2000 points per device)
+                            try:
+                                vals = p.values
+                                if len(vals) > 2000:
+                                    import numpy as np
+                                    vals = np.random.choice(vals, 2000, replace=False)
+                                all_power_values.extend(float(v) for v in vals if v >= 0)
+                            except Exception:
+                                pass
 
                             # max power with timestamp
                             pmax = float(p.max())
@@ -8269,6 +8279,23 @@ class CoreMixin:
             if max_abs_var_dev is not None:
                 ts = str(max_abs_var_ts) if max_abs_var_ts is not None else ""
                 lines.append(f"⚡ Max |VAR| (W>{load_thr_w:.0f}): {abs(float(max_abs_var)):.0f} var ({max_abs_var_dev}) {ts}")
+
+            # Standby detection: 10th percentile of power = estimated base load
+            try:
+                if len(all_power_values) >= 20:
+                    import numpy as np
+                    arr = np.array(all_power_values)
+                    standby_w = float(np.percentile(arr, 10))
+                    if standby_w > 0:
+                        standby_kwh_year = standby_w * 24 * 365 / 1000.0
+                        lines.append("")
+                        lines.append(f"🔌 Standby-Grundlast: ~{standby_w:.0f} W")
+                        lines.append(f"   = ~{standby_kwh_year:.0f} kWh/Jahr")
+                        if unit_gross is not None:
+                            standby_cost_year = standby_kwh_year * unit_gross
+                            lines.append(f"   = ~{standby_cost_year:.0f} €/Jahr")
+            except Exception:
+                pass
 
             return "\n".join(lines).strip() + "\n"
 
