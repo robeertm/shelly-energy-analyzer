@@ -126,6 +126,16 @@ class CoreMixin:
                     self.storage.auto_import_from_previous_installs(keys)
             except Exception:
                 pass
+            # v6.0.0: auto-migrate CSV data to SQLite DB on first run.
+            try:
+                if keys and self.storage.needs_migration(keys):
+                    import logging as _log
+                    _log.getLogger(__name__).info("Migrating CSV data to SQLite DB...")
+                    migrated = self.storage.migrate_csvs_to_db(keys)
+                    archived = self.storage.archive_csv_files(keys)
+                    _log.getLogger(__name__).info("Migration done: %s rows, %s files archived", migrated, archived)
+            except Exception:
+                pass
             # Demo Mode: generate realistic demo CSV data so Plots/Exports work out-of-the-box.
             try:
                 if bool(getattr(getattr(self.cfg, 'demo', None), 'enabled', False)) and getattr(self.cfg, 'devices', None):
