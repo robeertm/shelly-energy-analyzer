@@ -178,7 +178,7 @@ def sync_one_device(
                 done_chunks += 1
                 _progress("Keine Daten (außerhalb Historie)")
                 continue
-            storage.save_chunk(device.key, a, b, content)
+            storage.save_chunk(device.key, a, b, content)  # v6: writes to DB
             chunks.append(ChunkResult(ts=a, end_ts=b, ok=True))
             last_success_end = b
             done_chunks += 1
@@ -193,17 +193,6 @@ def sync_one_device(
     # Update meta ONLY to the last successfully downloaded end_ts
     if last_success_end is not None:
         storage.save_meta(device.key, MetaState(last_end_ts=last_success_end, updated_at=ended_at))
-
-    # Optional packing
-    try:
-        storage.pack_csvs(
-            device.key,
-            threshold_count=cfg.csv_pack.threshold_count,
-            max_megabytes=cfg.csv_pack.max_megabytes,
-            remove_merged=cfg.csv_pack.remove_merged,
-        )
-    except Exception:
-        pass
 
     return SyncResult(
         device_key=device.key,
