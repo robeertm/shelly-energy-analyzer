@@ -165,14 +165,13 @@ def gen_sample(device: DeviceConfig, t: float, st: DemoState) -> Dict[str, Dict[
 # ---------- Demo CSV generator (for Plots) ----------
 
 def ensure_demo_csv(storage: Storage, devices: Iterable[DeviceConfig], demo: DemoConfig, days: int = 7) -> None:
-    """Create demo CSV chunks if none exist. Keeps it lightweight."""
+    """Create demo data if none exist. v6: writes directly to DB."""
     now = int(time.time())
     start = now - days * 86400
 
     for d in devices:
-        # If already has CSVs, don't overwrite
-        existing = storage.list_csv_files(d.key)
-        if existing:
+        # If already has data (DB or CSV), don't overwrite
+        if storage.has_usable_data(d.key):
             continue
 
         # Generate 15-minute samples
