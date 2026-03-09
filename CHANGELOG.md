@@ -1,5 +1,18 @@
 # Changelog
 
+## 6.0.0.1 - 2026-03-09
+
+### Fixed
+- **Plots: V/A/per-phase W showed nothing after DB migration.** DB schema columns (a_voltage, a_current, …) were always present in query results even when all values were NULL, preventing the live-data fallback for V/A plots. Now drops all-NULL columns from query results.
+- **Float 0.0 treated as missing data.** `or` operator on power readings treated a valid 0 W reading as falsy, silently discarding it. Fixed with explicit `is not None` checks.
+- **Transaction safety.** Hourly aggregation update now runs inside the same DB transaction as the sample insert, preventing inconsistent state on crash.
+- **Absurd energy values during data gaps.** Added 10-minute cap on sample intervals — gaps longer than that are treated as missing data instead of being integrated.
+- **Unsorted timestamps.** `ts_min`/`ts_max` for hourly aggregation now computed from actual data instead of assuming sorted order.
+- **DB read errors crash instead of CSV fallback.** `read_device_df()` now catches DB errors and falls back to CSV gracefully.
+- **`base_dir` swap leaked stale DB connection.** `ensure_data_for_devices()` now resets the DB instance when switching data directories.
+- **`save_meta()` crash on DB error.** Now falls back to JSON file if DB write fails.
+- **Migration silently skipped.** `keys` variable could be unbound if auto-import raised before assignment, causing migration to silently fail.
+
 ## 6.0.0.0 - 2026-03-09
 
 ### Changed

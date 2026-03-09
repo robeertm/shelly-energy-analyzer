@@ -120,6 +120,7 @@ class CoreMixin:
             # Auto-import legacy CSV data from previous installs (best-effort), so
             # users upgrading to a new folder don't have to manually copy the data/
             # directory.
+            keys: list = []
             try:
                 keys = [d.key for d in getattr(self.cfg, "devices", []) if getattr(d, "key", None)]
                 if keys:
