@@ -1,5 +1,15 @@
 # Changelog
 
+## 6.0.0.0 - 2026-03-09
+
+### Changed
+- **CSV → SQLite migration**: All energy data is now stored in a SQLite database (`data/energy.db`) instead of individual CSV files. This dramatically improves read performance for plots, stats, and cost calculations.
+- **Automatic migration on first startup**: Existing CSV data is automatically imported into the database. Original CSV files are moved to `data/csv_archive/` as backup.
+- **New `EnergyDB` class** (`io/database.py`): Thread-safe SQLite wrapper with WAL mode, per-thread connections, pre-computed energy on insert, and hourly aggregation table.
+- **Storage layer rewritten** (`io/storage.py`): `save_chunk()` now writes directly to DB. `read_device_df()` queries DB first with CSV fallback. Device metadata stored in DB.
+- **Sync simplified** (`services/sync.py`): Removed `pack_csvs()` — DB handles deduplication via `INSERT OR IGNORE`.
+- **Demo data** (`services/demo.py`): Demo generator now checks DB for existing data.
+
 ## 5.9.2.60 - 2026-03-08
 
 ### Improved
