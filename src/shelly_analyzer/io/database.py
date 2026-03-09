@@ -16,9 +16,12 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from shelly_analyzer.io.config import DeviceConfig
-
 logger = logging.getLogger(__name__)
+
+# Maximum plausible gap between samples (seconds).  If the time delta exceeds
+# this, we treat the gap as missing data and assign zero energy rather than
+# integrating power over an unrealistic span (e.g. device offline for days).
+_MAX_DELTA_S = 600  # 10 minutes
 
 # ---------------------------------------------------------------------------
 # Schema
@@ -113,9 +116,13 @@ def _compute_energy_row(
     Prefers interval energy (Wh) if available, otherwise integrates power.
     Returns (total_power, energy_kwh).
     """
+    # Cap delta to avoid absurd energy values during data gaps.
+    if delta_s > _MAX_DELTA_S:
+        delta_s = 0.0
+
     # If interval energy columns are available, use them.
     if a_energy is not None and b_energy is not None and c_energy is not None:
-        wh = (a_energy or 0.0) + (b_energy or 0.0) + (c_energy or 0.0)
+        wh = (a_energy if a_energy else 0.0) + (b_energy if b_energy else 0.0) + (c_energy if c_energy else 0.0)
         kwh = wh / 1000.0
         # Derive average power from energy (avoid div/0)
         if delta_s > 0:
@@ -213,6 +220,13 @@ class EnergyDB:
         ts_scale = _detect_ts_magnitude(sorted(ts_nums)[len(ts_nums) // 2])
         ts_divisor = {"s": 1, "ms": 1000, "ns": 1_000_000_000}.get(ts_scale, 1)
 
+        # Build a lookup: normalised column name → original header key.
+        # This allows O(1) lookups instead of scanning header_map per call.
+        _norm_to_orig: Dict[str, str] = {}
+        for orig, norm in header_map.items():
+            if norm not in _norm_to_orig:
+                _norm_to_orig[norm] = orig
+
         # Build insert rows.
         insert_rows: list = []
         prev_ts: Optional[int] = None
@@ -225,16 +239,20 @@ class EnergyDB:
 
             # Map CSV columns → DB columns.
             def _get(csv_name: str) -> Optional[float]:
-                # Try original name, then lowercased form.
-                for candidate_key, norm in header_map.items():
-                    if norm == csv_name:
-                        return _safe_float(row.get(candidate_key))
+                orig_key = _norm_to_orig.get(csv_name)
+                if orig_key is not None:
+                    return _safe_float(row.get(orig_key))
                 return None
 
-            a_p = _get("a_act_power") or _get("act_power_a")
-            b_p = _get("b_act_power") or _get("act_power_b")
-            c_p = _get("c_act_power") or _get("act_power_c")
-            total_p = (a_p or 0.0) + (b_p or 0.0) + (c_p or 0.0)
+            def _get_fallback(name1: str, name2: str) -> Optional[float]:
+                """Return the first non-None value (0.0 is a valid reading)."""
+                v = _get(name1)
+                return v if v is not None else _get(name2)
+
+            a_p = _get_fallback("a_act_power", "act_power_a")
+            b_p = _get_fallback("b_act_power", "act_power_b")
+            c_p = _get_fallback("c_act_power", "act_power_c")
+            total_p = (a_p if a_p is not None else 0.0) + (b_p if b_p is not None else 0.0) + (c_p if c_p is not None else 0.0)
 
             a_e = _get("a_total_act_energy")
             b_e = _get("b_total_act_energy")
@@ -262,14 +280,17 @@ class EnergyDB:
         placeholders = ",".join(["?"] * len(SAMPLE_COLUMNS))
         sql = f"INSERT OR REPLACE INTO samples ({','.join(SAMPLE_COLUMNS)}) VALUES ({placeholders})"
 
+        # Compute actual min/max timestamps (data may not be sorted).
+        all_ts = [r[1] for r in insert_rows]
+        ts_min = min(all_ts)
+        ts_max = max(all_ts)
+
         with self._write_lock:
             conn = self._conn()
             with conn:
                 conn.executemany(sql, insert_rows)
-            # Update hourly aggregation for affected range.
-            ts_min = insert_rows[0][1]
-            ts_max = insert_rows[-1][1]
-            self._update_hourly(conn, device_key, ts_min, ts_max)
+                # Update hourly aggregation inside the same transaction.
+                self._update_hourly_inner(conn, device_key, ts_min, ts_max)
 
         return len(insert_rows)
 
@@ -320,13 +341,17 @@ class EnergyDB:
         placeholders = ",".join(["?"] * len(SAMPLE_COLUMNS))
         sql = f"INSERT OR REPLACE INTO samples ({','.join(SAMPLE_COLUMNS)}) VALUES ({placeholders})"
 
+        # Compute actual min/max timestamps (data may not be sorted).
+        all_ts = [r[1] for r in rows]
+        ts_min = min(all_ts)
+        ts_max = max(all_ts)
+
         with self._write_lock:
             conn = self._conn()
             with conn:
                 conn.executemany(sql, rows)
-            ts_min = rows[0][1]
-            ts_max = rows[-1][1]
-            self._update_hourly(conn, device_key, ts_min, ts_max)
+                # Update hourly aggregation inside the same transaction.
+                self._update_hourly_inner(conn, device_key, ts_min, ts_max)
 
         return len(rows)
 
@@ -365,6 +390,15 @@ class EnergyDB:
         # Drop the device_key column (caller already knows it).
         if "device_key" in df.columns:
             df = df.drop(columns=["device_key"])
+
+        # Drop columns where ALL values are NULL.  The DB schema always
+        # includes every possible column (a_voltage, a_current, …) but the
+        # actual CSV data from Shelly EMData often contains only power/energy
+        # columns.  If we keep the all-NULL columns, downstream code (e.g.
+        # _df_has_wva_cols) thinks voltage/current data exists and skips the
+        # live-data fallback, resulting in empty V/A plots.
+        if not df.empty:
+            df = df.dropna(axis=1, how="all")
 
         return df
 
@@ -439,8 +473,11 @@ class EnergyDB:
 
     # -- hourly aggregation --------------------------------------------------
 
-    def _update_hourly(self, conn: sqlite3.Connection, device_key: str, ts_min: int, ts_max: int) -> None:
-        """Recompute hourly_energy rows for the affected time range."""
+    def _update_hourly_inner(self, conn: sqlite3.Connection, device_key: str, ts_min: int, ts_max: int) -> None:
+        """Recompute hourly_energy rows for the affected time range.
+
+        MUST be called inside an existing transaction (``with conn:`` block).
+        """
         # Align to hour boundaries.
         hour_start = (ts_min // 3600) * 3600
         hour_end = ((ts_max // 3600) + 1) * 3600
@@ -458,8 +495,7 @@ class EnergyDB:
             WHERE device_key = ? AND timestamp >= ? AND timestamp < ?
             GROUP BY device_key, hour_ts
         """
-        with conn:
-            conn.execute(sql, (device_key, hour_start, hour_end))
+        conn.execute(sql, (device_key, hour_start, hour_end))
 
     def rebuild_hourly(self, device_key: str) -> None:
         """Full rebuild of hourly aggregation for a device."""

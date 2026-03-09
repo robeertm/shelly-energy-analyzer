@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import shutil
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -104,7 +104,18 @@ class Storage:
             return MetaState()
 
     def save_meta(self, device_key: str, state: MetaState) -> None:
-        self.db.save_meta(device_key, state.last_end_ts, state.updated_at)
+        try:
+            self.db.save_meta(device_key, state.last_end_ts, state.updated_at)
+        except Exception:
+            # Fallback: persist to JSON so data is not lost.
+            try:
+                p = self.meta_path(device_key)
+                p.write_text(json.dumps({
+                    "last_end_ts": state.last_end_ts,
+                    "updated_at": state.updated_at,
+                }), encoding="utf-8")
+            except Exception:
+                pass
 
     # -- save chunk (DB-backed) ----------------------------------------------
 
@@ -123,14 +134,17 @@ class Storage:
         v6.0.0+: reads from SQLite (fast indexed range query).
         Fallback: reads from CSV files if DB has no data (pre-migration).
         """
-        # Try DB first.
-        if self.db.has_data(device_key):
-            df = self.db.query_samples(device_key, start_ts=start_ts, end_ts=end_ts)
-            if not df.empty:
-                # Compatibility: provide 'ts' alias.
-                if "ts" not in df.columns and "timestamp" in df.columns:
-                    df["ts"] = df["timestamp"]
-                return df
+        # Try DB first (guarded so a corrupt/locked DB falls back to CSV).
+        try:
+            if self.db.has_data(device_key):
+                df = self.db.query_samples(device_key, start_ts=start_ts, end_ts=end_ts)
+                if not df.empty:
+                    # Compatibility: provide 'ts' alias.
+                    if "ts" not in df.columns and "timestamp" in df.columns:
+                        df["ts"] = df["timestamp"]
+                    return df
+        except Exception:
+            logger.debug("DB read failed for '%s', falling back to CSV", device_key, exc_info=True)
 
         # Fallback: CSV files (pre-migration or empty DB).
         files = self.list_csv_files(device_key)
@@ -255,7 +269,7 @@ class Storage:
     def migrate_csvs_to_db(
         self,
         device_keys: List[str],
-        progress: Optional[callable] = None,
+        progress: Optional[Callable] = None,
     ) -> Dict[str, int]:
         """One-time migration: read all CSV files → insert into SQLite DB.
 
@@ -661,7 +675,9 @@ class Storage:
                 if not cand.exists() or not cand.is_dir():
                     continue
                 old = self.base_dir
+                old_db = self._db
                 self.base_dir = cand
+                self._db = None  # Reset so db property re-inits for new base_dir
                 try:
                     cand_missing = [k for k in keys if not self.has_usable_data(k)]
                     if len(cand_missing) < len(missing):
@@ -672,8 +688,10 @@ class Storage:
                             break
                     else:
                         self.base_dir = old
+                        self._db = old_db
                 except Exception:
                     self.base_dir = old
+                    self._db = old_db
                     continue
         except Exception as e:
             diag["attempts"].append(f"common_location_error:{e}")
