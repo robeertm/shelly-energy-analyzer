@@ -1,5 +1,10 @@
 # Changelog
 
+## 6.0.0.3 - 2026-03-10
+
+### Fixed
+- **Per-phase V and A plots now work.** The Shelly EMData CSV uses `a_avg_voltage` / `a_avg_current` (not `a_voltage` / `a_current`). The DB import now maps these to the base columns via fallback, so per-phase voltage and current plots are populated correctly. Auto re-import detects and fixes existing databases.
+
 ## 6.0.0.2 - 2026-03-09
 
 ### Fixed
