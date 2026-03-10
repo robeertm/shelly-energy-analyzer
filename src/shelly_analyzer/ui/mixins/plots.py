@@ -1115,7 +1115,7 @@ class PlotsMixin:
                 df_src = cd.df
                 df_src = df_src.sort_values("timestamp") if df_src is not None and not df_src.empty else df_src
 
-                if metric in {"V", "A"} and not self._df_has_wva_cols(df_src, metric):
+                if metric in {"V", "A", "VAR", "Q", "COSPHI", "PF"} and not self._df_has_wva_cols(df_src, metric):
                     df_live = self._df_from_live_store(key)
                     if df_live is not None and not df_live.empty:
                         df_src = df_live

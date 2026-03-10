@@ -391,6 +391,89 @@ class Storage:
 
         return result
 
+    # -- re-import from csv_archive (v6.0.0.2: fill expanded schema) ---------
+
+    def needs_reimport(self, device_keys: List[str]) -> bool:
+        """Check if existing DB data needs re-import to fill new columns."""
+        try:
+            return self.db.needs_reimport()
+        except Exception:
+            return False
+
+    def reimport_from_archive(
+        self,
+        device_keys: List[str],
+        progress: Optional[Callable] = None,
+    ) -> Dict[str, int]:
+        """Re-import CSV data from csv_archive/ to fill expanded DB columns.
+
+        v6.0.0.2: The DB schema was expanded with ~42 new columns (voltage
+        min/max/avg, current min/max/avg, apparent power, reactive energy).
+        Existing data was imported before those columns existed, so all new
+        columns are NULL.  This method re-reads the archived CSVs and uses
+        INSERT OR REPLACE to fill the missing columns.
+
+        Returns dict mapping device_key → number of rows re-imported.
+        """
+        from shelly_analyzer.core.energy import calculate_energy
+
+        archive_root = self.base_dir / "csv_archive"
+        result: Dict[str, int] = {}
+        total = len(device_keys)
+
+        for i, key in enumerate(device_keys):
+            if progress:
+                try:
+                    progress(key, i, total, "Re-importing from archive...")
+                except Exception:
+                    pass
+
+            archive_dir = archive_root / key
+            if not archive_dir.exists() or not archive_dir.is_dir():
+                result[key] = 0
+                continue
+
+            csv_files = sorted([
+                p for p in archive_dir.glob("*.csv")
+                if p.is_file() and "phases" not in p.name.lower()
+            ])
+            if not csv_files:
+                result[key] = 0
+                continue
+
+            try:
+                df = read_csv_files(csv_files)
+                if df is None or df.empty:
+                    result[key] = 0
+                    continue
+
+                # Calculate energy (total_power + energy_kwh) before inserting.
+                try:
+                    df = calculate_energy(df)
+                except Exception:
+                    pass
+
+                rows = self.db.insert_dataframe(key, df)
+                result[key] = rows
+
+                if progress:
+                    try:
+                        progress(key, i, total, f"{rows} rows re-imported")
+                    except Exception:
+                        pass
+
+                logger.info(
+                    "Re-imported %d rows for device '%s' from csv_archive "
+                    "(expanded schema columns now filled)",
+                    rows, key,
+                )
+
+            except Exception as e:
+                logger.warning("Re-import from archive failed for device '%s': %s", key, e)
+                result[key] = 0
+
+        return result
+
     # -- auto-import from previous installs (unchanged) ----------------------
 
     def auto_import_from_previous_installs(self, device_keys: List[str], search_root: Optional[Path] = None) -> Dict[str, int]:
