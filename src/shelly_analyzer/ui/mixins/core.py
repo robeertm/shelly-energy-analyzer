@@ -137,6 +137,17 @@ class CoreMixin:
                     _log.getLogger(__name__).info("Migration done: %s rows, %s files archived", migrated, archived)
             except Exception:
                 pass
+            # v6.0.0.2: re-import from csv_archive if DB schema was expanded
+            # (fills voltage min/max/avg, current min/max/avg, apparent power,
+            # reactive energy columns that were missing in the initial migration).
+            try:
+                if keys and self.storage.needs_reimport(keys):
+                    import logging as _log
+                    _log.getLogger(__name__).info("Re-importing CSV data to fill expanded DB schema (v6.0.0.2)...")
+                    reimported = self.storage.reimport_from_archive(keys)
+                    _log.getLogger(__name__).info("Re-import done: %s", reimported)
+            except Exception:
+                pass
             # Demo Mode: generate realistic demo CSV data so Plots/Exports work out-of-the-box.
             try:
                 if bool(getattr(getattr(self.cfg, 'demo', None), 'enabled', False)) and getattr(self.cfg, 'devices', None):
@@ -1229,6 +1240,14 @@ class CoreMixin:
                 if any(c.endswith("_i") or c.endswith("i") or "_i_" in c for c in cols):
                     return True
                 return False
+            if m in {"VAR", "Q"}:
+                # Need either pre-computed Q columns or apparent power for derivation.
+                tokens = ["q_total_var", "qa", "qb", "qc", "reactive_var", "aprt_power", "apparent_power"]
+                return any(any(t in c for t in tokens) for c in cols)
+            if m in {"COSPHI", "PF", "POWERFACTOR"}:
+                # Need either pre-computed cos φ columns or apparent power for derivation.
+                tokens = ["cosphi_total", "cosphi", "pfa", "pfb", "pfc", "pf_total", "aprt_power", "apparent_power"]
+                return any(any(t in c for t in tokens) for c in cols)
             return True
 
     def _df_from_live_store(self, device_key: str) -> pd.DataFrame:
@@ -1261,6 +1280,9 @@ class CoreMixin:
                     "timestamp","ts","total_power",
                     "a_voltage","b_voltage","c_voltage",
                     "a_current","b_current","c_current",
+                    "a_act_power","b_act_power","c_act_power",
+                    "q_total_var","qa","qb","qc",
+                    "cosphi_total","pfa","pfb","pfc",
                 ])
 
             df = pd.DataFrame(arr)
@@ -1282,6 +1304,19 @@ class CoreMixin:
                 "a_current": pd.to_numeric(df.get("ia"), errors="coerce"),
                 "b_current": pd.to_numeric(df.get("ib"), errors="coerce"),
                 "c_current": pd.to_numeric(df.get("ic"), errors="coerce"),
+                # Per-phase active power (W)
+                "a_act_power": pd.to_numeric(df.get("pa"), errors="coerce"),
+                "b_act_power": pd.to_numeric(df.get("pb"), errors="coerce"),
+                "c_act_power": pd.to_numeric(df.get("pc"), errors="coerce"),
+                # Pre-computed reactive power (VAR) and power factor (cos φ)
+                "q_total_var": pd.to_numeric(df.get("q_total_var"), errors="coerce"),
+                "qa": pd.to_numeric(df.get("qa"), errors="coerce"),
+                "qb": pd.to_numeric(df.get("qb"), errors="coerce"),
+                "qc": pd.to_numeric(df.get("qc"), errors="coerce"),
+                "cosphi_total": pd.to_numeric(df.get("cosphi_total"), errors="coerce"),
+                "pfa": pd.to_numeric(df.get("pfa"), errors="coerce"),
+                "pfb": pd.to_numeric(df.get("pfb"), errors="coerce"),
+                "pfc": pd.to_numeric(df.get("pfc"), errors="coerce"),
             })
             out = out.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
             # Deduplicate by timestamp (keep last)
@@ -1732,6 +1767,45 @@ class CoreMixin:
                     y = Q
                     mapping_text = f"VAR: {mapP}; {mapS}; {mapSign}"
 
+                # Override with pre-computed VAR/cosφ columns when P/S computation
+                # produced unusable results (no apparent power data available).
+                # This happens with live polling data where VAR and cosφ are already
+                # computed by the device and stored directly in the DataFrame.
+                if "S(no cols)" in mapping_text or mapS == "S(no cols)":
+                    if want_pf:
+                        _pf_col = first_col(["cosphi_total", "pf_total", "power_factor_total", "cos_phi_total", "cosphi", "pf"])
+                        if _pf_col:
+                            y = pd.to_numeric(df[_pf_col], errors="coerce")
+                            mapping_text = f"cosφ: direct={_pf_col}"
+                        else:
+                            _pfa = first_col(["pfa", "pf_a", "cosphi_a", "a_cosphi", "a_pf"])
+                            _pfb = first_col(["pfb", "pf_b", "cosphi_b", "b_cosphi", "b_pf"])
+                            _pfc = first_col(["pfc", "pf_c", "cosphi_c", "c_cosphi", "c_pf"])
+                            _pf_cols = [c for c in (_pfa, _pfb, _pfc) if c]
+                            if _pf_cols:
+                                _num_pf = pd.to_numeric(df[_pf_cols[0]], errors="coerce")
+                                if len(_pf_cols) > 1:
+                                    for _c in _pf_cols[1:]:
+                                        _num_pf = _num_pf + pd.to_numeric(df[_c], errors="coerce")
+                                    _num_pf = _num_pf / float(len(_pf_cols))
+                                y = _num_pf
+                                mapping_text = f"cosφ: mean({','.join(_pf_cols)})"
+                    else:
+                        _q_col = first_col(["q_total_var", "reactive_var_total", "total_reactive_var", "var_total", "q_total"])
+                        if _q_col:
+                            y = pd.to_numeric(df[_q_col], errors="coerce")
+                            mapping_text = f"VAR: direct={_q_col}"
+                        else:
+                            _qa = first_col(["qa", "q_a", "reactive_var_a", "a_reactive_var", "a_var", "a_q"])
+                            _qb = first_col(["qb", "q_b", "reactive_var_b", "b_reactive_var", "b_var", "b_q"])
+                            _qc = first_col(["qc", "q_c", "reactive_var_c", "c_reactive_var", "c_var", "c_q"])
+                            _q_cols = [c for c in (_qa, _qb, _qc) if c]
+                            if _q_cols:
+                                _num_q = pd.to_numeric(df[_q_cols[0]], errors="coerce")
+                                for _c in _q_cols[1:]:
+                                    _num_q = _num_q + pd.to_numeric(df[_c], errors="coerce")
+                                y = _num_q
+                                mapping_text = f"VAR: sum({','.join(_q_cols)})"
 
             elif metric_u == 'V':
                 ylab = 'V'
@@ -1879,53 +1953,6 @@ class CoreMixin:
                     else:
                         y = pd.Series([0.0] * len(df), index=df.index)
                         mapping_text = "A: (no columns)"
-            elif metric_u in {"VAR", "Q"}:
-                ylab = "VAR"
-                # Prefer stored reactive power columns from live samples (q_total_var / qa/qb/qc).
-                q_total_col = first_col(["q_total_var", "reactive_var_total", "total_reactive_var", "var_total", "q_total"])
-                if q_total_col:
-                    y = pd.to_numeric(df[q_total_col], errors="coerce")
-                    mapping_text = f"VAR: total={q_total_col}"
-                else:
-                    # Sum phases if total not available
-                    qa_col = first_col(["qa", "q_a", "reactive_var_a", "a_reactive_var", "a_var", "a_q"])
-                    qb_col = first_col(["qb", "q_b", "reactive_var_b", "b_reactive_var", "b_var", "b_q"])
-                    qc_col = first_col(["qc", "q_c", "reactive_var_c", "c_reactive_var", "c_var", "c_q"])
-                    cols = [c for c in (qa_col, qb_col, qc_col) if c]
-                    if cols:
-                        num = pd.to_numeric(df[cols[0]], errors="coerce")
-                        for c in cols[1:]:
-                            num = num + pd.to_numeric(df[c], errors="coerce")
-                        y = num
-                        mapping_text = f"VAR: sum({','.join(cols)})"
-                    else:
-                        y = pd.Series([0.0] * len(df), index=df.index)
-                        mapping_text = "VAR: (no columns)"
-
-            elif metric_u in {"COSPHI", "PF", "POWERFACTOR"}:
-                ylab = "cos φ"
-                pf_total_col = first_col(["cosphi_total", "pf_total", "power_factor_total", "cos_phi_total", "cosphi", "pf"])
-                if pf_total_col:
-                    y = pd.to_numeric(df[pf_total_col], errors="coerce")
-                    mapping_text = f"cosφ: total={pf_total_col}"
-                else:
-                    pfa_col = first_col(["pfa", "pf_a", "cosphi_a", "a_cosphi", "a_pf"])
-                    pfb_col = first_col(["pfb", "pf_b", "cosphi_b", "b_cosphi", "b_pf"])
-                    pfc_col = first_col(["pfc", "pf_c", "cosphi_c", "c_cosphi", "c_pf"])
-                    cols = [c for c in (pfa_col, pfb_col, pfc_col) if c]
-                    if cols:
-                        # Simple mean of available phases
-                        num = pd.to_numeric(df[cols[0]], errors="coerce")
-                        if len(cols) > 1:
-                            for c in cols[1:]:
-                                num = num + pd.to_numeric(df[c], errors="coerce")
-                            num = num / float(len(cols))
-                        y = num
-                        mapping_text = f"cosφ: mean({','.join(cols)})"
-                    else:
-                        y = pd.Series([0.0] * len(df), index=df.index)
-                        mapping_text = "cosφ: (no columns)"
-
             else:
                 y = pd.Series([0.0] * len(df), index=df.index)
 

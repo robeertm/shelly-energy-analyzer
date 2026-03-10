@@ -1,5 +1,14 @@
 # Changelog
 
+## 6.0.0.2 - 2026-03-09
+
+### Fixed
+- **V/A/VAR/cos φ plots now work with full Shelly EMData CSV data.** The DB schema was missing ~42 columns that the Shelly Pro 3EM EMData CSV format provides (voltage min/max/avg, current min/max/avg, apparent power, reactive energy, neutral current). All columns are now stored and used for plots.
+- **Automatic re-import from csv_archive on upgrade.** When the app detects that existing DB data was imported with the old schema (missing voltage/current/apparent power columns), it automatically re-imports the archived CSVs to fill the new columns. No manual action required.
+- **VAR and cos φ plots now work.** VAR (reactive power) and cos φ (power factor) are derived from active power (P) and apparent power (S) per phase. The expanded DB schema now includes the apparent power and reactive energy columns needed for this computation.
+- **Live data fallback extended to VAR/cos φ.** Previously only V and A would fall back to live polling data when historical data lacked the needed columns. Now VAR, cos φ, and per-phase power also fall back to the in-memory live store (which has pre-computed Q and PF from the device).
+- **Dead code removed.** Unreachable `elif` branches for VAR/COSPHI in `_wva_series()` that were shadowed by an earlier branch catching the same metric values have been removed and replaced with a clean post-computation override.
+
 ## 6.0.0.1 - 2026-03-09
 
 ### Fixed
