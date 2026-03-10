@@ -31,13 +31,19 @@ _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS samples (
     device_key  TEXT    NOT NULL,
     timestamp   INTEGER NOT NULL,
+    -- Active power (W) per phase
     a_act_power REAL, b_act_power REAL, c_act_power REAL,
+    -- Voltage (V) per phase: instantaneous / single-value columns
     a_voltage   REAL, b_voltage   REAL, c_voltage   REAL,
+    -- Current (A) per phase: instantaneous / single-value columns
     a_current   REAL, b_current   REAL, c_current   REAL,
+    -- Interval active energy (Wh) per phase
     a_total_act_energy REAL, b_total_act_energy REAL, c_total_act_energy REAL,
+    -- Active power min/max per phase
     a_min_act_power REAL, a_max_act_power REAL,
     b_min_act_power REAL, b_max_act_power REAL,
     c_min_act_power REAL, c_max_act_power REAL,
+    -- Computed totals
     total_power REAL,
     energy_kwh  REAL,
     PRIMARY KEY (device_key, timestamp)
@@ -60,7 +66,33 @@ CREATE TABLE IF NOT EXISTS device_meta (
 );
 """
 
-# All known sample columns in canonical order (must match CREATE TABLE).
+# Additional columns added in v6.0.0.2 for full Shelly EMData CSV support.
+# ALTER TABLE ADD COLUMN is used for backward compatibility (existing DBs).
+_EXTRA_COLUMNS: Tuple[Tuple[str, str], ...] = (
+    # Fundamental / return active energy per phase
+    ("a_fund_act_energy", "REAL"), ("b_fund_act_energy", "REAL"), ("c_fund_act_energy", "REAL"),
+    ("a_total_act_ret_energy", "REAL"), ("b_total_act_ret_energy", "REAL"), ("c_total_act_ret_energy", "REAL"),
+    ("a_fund_act_ret_energy", "REAL"), ("b_fund_act_ret_energy", "REAL"), ("c_fund_act_ret_energy", "REAL"),
+    # Reactive energy per phase (needed for VAR sign)
+    ("a_lag_react_energy", "REAL"), ("b_lag_react_energy", "REAL"), ("c_lag_react_energy", "REAL"),
+    ("a_lead_react_energy", "REAL"), ("b_lead_react_energy", "REAL"), ("c_lead_react_energy", "REAL"),
+    # Apparent power min/max per phase (needed for VAR / cos phi)
+    ("a_max_aprt_power", "REAL"), ("a_min_aprt_power", "REAL"),
+    ("b_max_aprt_power", "REAL"), ("b_min_aprt_power", "REAL"),
+    ("c_max_aprt_power", "REAL"), ("c_min_aprt_power", "REAL"),
+    # Voltage min/max/avg per phase (Shelly EMData format)
+    ("a_max_voltage", "REAL"), ("a_min_voltage", "REAL"), ("a_avg_voltage", "REAL"),
+    ("b_max_voltage", "REAL"), ("b_min_voltage", "REAL"), ("b_avg_voltage", "REAL"),
+    ("c_max_voltage", "REAL"), ("c_min_voltage", "REAL"), ("c_avg_voltage", "REAL"),
+    # Current min/max/avg per phase (Shelly EMData format)
+    ("a_max_current", "REAL"), ("a_min_current", "REAL"), ("a_avg_current", "REAL"),
+    ("b_max_current", "REAL"), ("b_min_current", "REAL"), ("b_avg_current", "REAL"),
+    ("c_max_current", "REAL"), ("c_min_current", "REAL"), ("c_avg_current", "REAL"),
+    # Neutral current
+    ("n_max_current", "REAL"), ("n_min_current", "REAL"), ("n_avg_current", "REAL"),
+)
+
+# All known sample columns in canonical order (base + extra).
 SAMPLE_COLUMNS: Tuple[str, ...] = (
     "device_key", "timestamp",
     "a_act_power", "b_act_power", "c_act_power",
@@ -71,10 +103,7 @@ SAMPLE_COLUMNS: Tuple[str, ...] = (
     "b_min_act_power", "b_max_act_power",
     "c_min_act_power", "c_max_act_power",
     "total_power", "energy_kwh",
-)
-
-# Columns that come from the CSV (everything except device_key and computed cols).
-_CSV_VALUE_COLS = SAMPLE_COLUMNS[1:-2]  # timestamp … c_max_act_power
+) + tuple(col for col, _ in _EXTRA_COLUMNS)
 
 # Timestamp column name variations (same as csv_read.TS_CANDIDATES).
 _TS_NAMES = {"timestamp", "ts", "time", "datetime", "date"}
@@ -156,6 +185,22 @@ class EnergyDB:
         conn = self._conn()
         with conn:
             conn.executescript(_SCHEMA_SQL)
+        # Migrate schema: add any missing columns from _EXTRA_COLUMNS.
+        self._ensure_extra_columns(conn)
+
+    def _ensure_extra_columns(self, conn: sqlite3.Connection) -> None:
+        """Add any missing columns to the samples table (idempotent)."""
+        try:
+            existing = {row[1].lower() for row in conn.execute("PRAGMA table_info(samples)").fetchall()}
+        except Exception:
+            return
+        for col_name, col_type in _EXTRA_COLUMNS:
+            if col_name.lower() not in existing:
+                try:
+                    conn.execute(f"ALTER TABLE samples ADD COLUMN {col_name} {col_type}")
+                    logger.info("Added column '%s' to samples table", col_name)
+                except Exception:
+                    pass  # Column might already exist from a concurrent init.
 
     # -- connection management (one connection per thread) -------------------
 
@@ -221,7 +266,6 @@ class EnergyDB:
         ts_divisor = {"s": 1, "ms": 1000, "ns": 1_000_000_000}.get(ts_scale, 1)
 
         # Build a lookup: normalised column name → original header key.
-        # This allows O(1) lookups instead of scanning header_map per call.
         _norm_to_orig: Dict[str, str] = {}
         for orig, norm in header_map.items():
             if norm not in _norm_to_orig:
@@ -263,6 +307,7 @@ class EnergyDB:
 
             insert_rows.append((
                 device_key, ts_int,
+                # Base columns
                 a_p, b_p, c_p,
                 _get("a_voltage"), _get("b_voltage"), _get("c_voltage"),
                 _get("a_current"), _get("b_current"), _get("c_current"),
@@ -271,6 +316,22 @@ class EnergyDB:
                 _get("b_min_act_power"), _get("b_max_act_power"),
                 _get("c_min_act_power"), _get("c_max_act_power"),
                 tp, kwh,
+                # Extra columns (v6.0.0.2)
+                _get("a_fund_act_energy"), _get("b_fund_act_energy"), _get("c_fund_act_energy"),
+                _get("a_total_act_ret_energy"), _get("b_total_act_ret_energy"), _get("c_total_act_ret_energy"),
+                _get("a_fund_act_ret_energy"), _get("b_fund_act_ret_energy"), _get("c_fund_act_ret_energy"),
+                _get("a_lag_react_energy"), _get("b_lag_react_energy"), _get("c_lag_react_energy"),
+                _get("a_lead_react_energy"), _get("b_lead_react_energy"), _get("c_lead_react_energy"),
+                _get("a_max_aprt_power"), _get("a_min_aprt_power"),
+                _get("b_max_aprt_power"), _get("b_min_aprt_power"),
+                _get("c_max_aprt_power"), _get("c_min_aprt_power"),
+                _get("a_max_voltage"), _get("a_min_voltage"), _get("a_avg_voltage"),
+                _get("b_max_voltage"), _get("b_min_voltage"), _get("b_avg_voltage"),
+                _get("c_max_voltage"), _get("c_min_voltage"), _get("c_avg_voltage"),
+                _get("a_max_current"), _get("a_min_current"), _get("a_avg_current"),
+                _get("b_max_current"), _get("b_min_current"), _get("b_avg_current"),
+                _get("c_max_current"), _get("c_min_current"), _get("c_avg_current"),
+                _get("n_max_current"), _get("n_min_current"), _get("n_avg_current"),
             ))
             prev_ts = ts_int
 
@@ -325,6 +386,7 @@ class EnergyDB:
 
             rows.append((
                 device_key, ts_int,
+                # Base columns
                 _col("a_act_power"), _col("b_act_power"), _col("c_act_power"),
                 _col("a_voltage"), _col("b_voltage"), _col("c_voltage"),
                 _col("a_current"), _col("b_current"), _col("c_current"),
@@ -333,6 +395,22 @@ class EnergyDB:
                 _col("b_min_act_power"), _col("b_max_act_power"),
                 _col("c_min_act_power"), _col("c_max_act_power"),
                 _col("total_power"), _col("energy_kwh"),
+                # Extra columns (v6.0.0.2)
+                _col("a_fund_act_energy"), _col("b_fund_act_energy"), _col("c_fund_act_energy"),
+                _col("a_total_act_ret_energy"), _col("b_total_act_ret_energy"), _col("c_total_act_ret_energy"),
+                _col("a_fund_act_ret_energy"), _col("b_fund_act_ret_energy"), _col("c_fund_act_ret_energy"),
+                _col("a_lag_react_energy"), _col("b_lag_react_energy"), _col("c_lag_react_energy"),
+                _col("a_lead_react_energy"), _col("b_lead_react_energy"), _col("c_lead_react_energy"),
+                _col("a_max_aprt_power"), _col("a_min_aprt_power"),
+                _col("b_max_aprt_power"), _col("b_min_aprt_power"),
+                _col("c_max_aprt_power"), _col("c_min_aprt_power"),
+                _col("a_max_voltage"), _col("a_min_voltage"), _col("a_avg_voltage"),
+                _col("b_max_voltage"), _col("b_min_voltage"), _col("b_avg_voltage"),
+                _col("c_max_voltage"), _col("c_min_voltage"), _col("c_avg_voltage"),
+                _col("a_max_current"), _col("a_min_current"), _col("a_avg_current"),
+                _col("b_max_current"), _col("b_min_current"), _col("b_avg_current"),
+                _col("c_max_current"), _col("c_min_current"), _col("c_avg_current"),
+                _col("n_max_current"), _col("n_min_current"), _col("n_avg_current"),
             ))
 
         if not rows:
@@ -470,6 +548,32 @@ class EnergyDB:
             (device_key,),
         ).fetchone()
         return int(row[0]) if row else 0
+
+    def needs_reimport(self) -> bool:
+        """Check if the DB was created with an older schema (missing extra columns).
+
+        Returns True if any of the extra columns have ALL NULL values across
+        all rows, suggesting data was imported before those columns existed.
+        """
+        conn = self._conn()
+        try:
+            existing = {row[1].lower() for row in conn.execute("PRAGMA table_info(samples)").fetchall()}
+            # If any extra column is missing entirely, schema migration just happened.
+            for col, _ in _EXTRA_COLUMNS:
+                if col.lower() not in existing:
+                    return True
+            # Check if a representative extra column has any non-NULL value.
+            # If a_avg_voltage is all NULL but data exists, we need a reimport.
+            row = conn.execute(
+                "SELECT 1 FROM samples WHERE a_avg_voltage IS NOT NULL LIMIT 1"
+            ).fetchone()
+            if row is None:
+                # No voltage data → check if there are any rows at all.
+                row = conn.execute("SELECT 1 FROM samples LIMIT 1").fetchone()
+                return row is not None
+        except Exception:
+            pass
+        return False
 
     # -- hourly aggregation --------------------------------------------------
 
