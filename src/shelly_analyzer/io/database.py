@@ -309,8 +309,12 @@ class EnergyDB:
                 device_key, ts_int,
                 # Base columns
                 a_p, b_p, c_p,
-                _get("a_voltage"), _get("b_voltage"), _get("c_voltage"),
-                _get("a_current"), _get("b_current"), _get("c_current"),
+                _get_fallback("a_voltage", "a_avg_voltage"),
+                _get_fallback("b_voltage", "b_avg_voltage"),
+                _get_fallback("c_voltage", "c_avg_voltage"),
+                _get_fallback("a_current", "a_avg_current"),
+                _get_fallback("b_current", "b_avg_current"),
+                _get_fallback("c_current", "c_avg_current"),
                 a_e, b_e, c_e,
                 _get("a_min_act_power"), _get("a_max_act_power"),
                 _get("b_min_act_power"), _get("b_max_act_power"),
@@ -384,12 +388,21 @@ class EnergyDB:
                         pass
                 return None
 
+            def _col_fallback(name1: str, name2: str) -> Optional[float]:
+                """Return first non-None column value (0.0 is valid)."""
+                v = _col(name1)
+                return v if v is not None else _col(name2)
+
             rows.append((
                 device_key, ts_int,
                 # Base columns
                 _col("a_act_power"), _col("b_act_power"), _col("c_act_power"),
-                _col("a_voltage"), _col("b_voltage"), _col("c_voltage"),
-                _col("a_current"), _col("b_current"), _col("c_current"),
+                _col_fallback("a_voltage", "a_avg_voltage"),
+                _col_fallback("b_voltage", "b_avg_voltage"),
+                _col_fallback("c_voltage", "c_avg_voltage"),
+                _col_fallback("a_current", "a_avg_current"),
+                _col_fallback("b_current", "b_avg_current"),
+                _col_fallback("c_current", "c_avg_current"),
                 _col("a_total_act_energy"), _col("b_total_act_energy"), _col("c_total_act_energy"),
                 _col("a_min_act_power"), _col("a_max_act_power"),
                 _col("b_min_act_power"), _col("b_max_act_power"),
@@ -550,10 +563,13 @@ class EnergyDB:
         return int(row[0]) if row else 0
 
     def needs_reimport(self) -> bool:
-        """Check if the DB was created with an older schema (missing extra columns).
+        """Check if the DB was created with an older schema or has unfilled columns.
 
-        Returns True if any of the extra columns have ALL NULL values across
-        all rows, suggesting data was imported before those columns existed.
+        Returns True if:
+        - Extra columns are missing entirely (schema migration just happened)
+        - Extra columns exist but are all NULL (imported before v6.0.0.2)
+        - Base V/A columns are all NULL even though data exists (v6.0.0.2
+          didn't populate base columns from a_avg_voltage fallback)
         """
         conn = self._conn()
         try:
@@ -562,8 +578,18 @@ class EnergyDB:
             for col, _ in _EXTRA_COLUMNS:
                 if col.lower() not in existing:
                     return True
-            # Check if a representative extra column has any non-NULL value.
-            # If a_avg_voltage is all NULL but data exists, we need a reimport.
+            # Check if base voltage column has data.  If a_voltage is all NULL
+            # but a_avg_voltage has data, the fallback mapping was missing and
+            # we need to re-import to fill the base columns.
+            row = conn.execute(
+                "SELECT 1 FROM samples WHERE a_voltage IS NOT NULL LIMIT 1"
+            ).fetchone()
+            if row is None:
+                # a_voltage is all NULL — check if data exists at all.
+                row = conn.execute("SELECT 1 FROM samples LIMIT 1").fetchone()
+                if row is not None:
+                    return True
+            # Also check extra columns (original v6.0.0.2 check).
             row = conn.execute(
                 "SELECT 1 FROM samples WHERE a_avg_voltage IS NOT NULL LIMIT 1"
             ).fetchone()
