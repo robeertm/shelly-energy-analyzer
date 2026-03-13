@@ -113,6 +113,7 @@ class LivePoint:
     pfc: float = 0.0
     kwh_today: float = 0.0
     cost_today: float = 0.0
+    freq_hz: float = 50.0
 
 
 def _safe_f(v: float) -> float:
@@ -177,6 +178,7 @@ class LiveStateStore:
                     "pfc": _safe_f(p.pfc),
                     "kwh_today": _safe_f(p.kwh_today),
                     "cost_today": _safe_f(p.cost_today),
+                    "freq_hz": _safe_f(p.freq_hz),
                 }
                 for p in arr
             ]
@@ -1162,6 +1164,7 @@ function kv(el, last, dev) {{
     }}
   }}
 
+  const fqHz = (last.freq_hz && last.freq_hz > 1) ? last.freq_hz : null;
   el.innerHTML = `
     <b>${t('web.kv.power')}</b><span>${fmt(last.power_total_w, 0)} W</span>
     <b>${t('web.kv.kwh_today')}</b><span>${fmt(last.kwh_today, 3)} kWh</span>
@@ -1171,6 +1174,7 @@ function kv(el, last, dev) {{
     ${balHtml}
     <b>${t('web.kv.var')}</b><span>${q}</span>
     <b>${t('web.kv.cosphi')}</b><span>${pf}</span>
+    ${fqHz !== null ? `<b>${t('web.kv.freq')}</b><span>${fmt(fqHz, 2)} Hz</span>` : ''}
   `;
 }}
 
