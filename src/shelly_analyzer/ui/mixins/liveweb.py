@@ -1296,27 +1296,28 @@ class LiveWebMixin:
                                     q_txt = f"{q_total:.0f} VAR ({qa2:.0f}/{qb2:.0f}/{qc2:.0f})"
                                     pf_txt = f"{pf_total:.3f} ({pfa2:.3f}/{pfb2:.3f}/{pfc2:.3f})"
                                     # Phase balance indicator (% symmetry)
+                                    # Always show it, even if one phase is below 5 W.
+                                    # The previous logic filtered "active" phases with >5 W which could
+                                    # make the balance text disappear when L1 dropped below that threshold.
                                     balance_txt = ""
                                     try:
                                         pa2 = float(s.power_w.get("a", 0.0))
                                         pb2 = float(s.power_w.get("b", 0.0))
                                         pc2 = float(s.power_w.get("c", 0.0))
-                                        phases_active = [abs(p) for p in (pa2, pb2, pc2) if abs(p) > 5.0]
-                                        if len(phases_active) >= 2:
-                                            # Balance: how symmetric is the load across active phases?
-                                            p_avg = sum(phases_active) / len(phases_active)
-                                            p_dev = max(abs(p - p_avg) for p in phases_active)
-                                            bal_pct = max(0.0, 100.0 - (p_dev / p_avg * 100.0)) if p_avg > 0 else 100.0
-                                            if bal_pct >= 90:
-                                                sym = "✅"
-                                            elif bal_pct >= 70:
-                                                sym = "⚠️"
-                                            else:
-                                                sym = "❌"
-                                            balance_txt = f"   {self.t('live.cards.balance')}: {bal_pct:.0f}% {sym} ({pa2:.0f}/{pb2:.0f}/{pc2:.0f} W)"
-                                        elif len(phases_active) == 1:
-                                            # Only one phase active - show distribution but no balance %
-                                            balance_txt = f"   W: {pa2:.0f}/{pb2:.0f}/{pc2:.0f}"
+                                        phases_abs = [abs(pa2), abs(pb2), abs(pc2)]
+                                        p_avg = sum(phases_abs) / 3.0
+                                        if p_avg > 0.0:
+                                            p_dev = max(abs(p - p_avg) for p in phases_abs)
+                                            bal_pct = max(0.0, 100.0 - (p_dev / p_avg * 100.0))
+                                        else:
+                                            bal_pct = 100.0
+                                        if bal_pct >= 90:
+                                            sym = "✅"
+                                        elif bal_pct >= 70:
+                                            sym = "⚠️"
+                                        else:
+                                            sym = "❌"
+                                        balance_txt = f"   {self.t('live.cards.balance')}: {bal_pct:.0f}% {sym} ({pa2:.0f}/{pb2:.0f}/{pc2:.0f} W)"
                                     except Exception:
                                         pass
                                     line2 = f"{self.t('web.kv.var')}: {q_txt}   {self.t('web.kv.cosphi')}: {pf_txt}{balance_txt}"
