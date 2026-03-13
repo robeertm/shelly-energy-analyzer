@@ -90,6 +90,8 @@ _EXTRA_COLUMNS: Tuple[Tuple[str, str], ...] = (
     ("c_max_current", "REAL"), ("c_min_current", "REAL"), ("c_avg_current", "REAL"),
     # Neutral current
     ("n_max_current", "REAL"), ("n_min_current", "REAL"), ("n_avg_current", "REAL"),
+    # Grid frequency (Hz) – average of all three phases
+    ("freq_hz", "REAL"),
 )
 
 # All known sample columns in canonical order (base + extra).
@@ -336,6 +338,12 @@ class EnergyDB:
                 _get("b_max_current"), _get("b_min_current"), _get("b_avg_current"),
                 _get("c_max_current"), _get("c_min_current"), _get("c_avg_current"),
                 _get("n_max_current"), _get("n_min_current"), _get("n_avg_current"),
+                # Frequency: prefer pre-computed column, else average per-phase freq columns
+                _get("freq_hz") if _get("freq_hz") is not None else (
+                    lambda fa, fb, fc: sum(v for v in (fa, fb, fc) if v is not None) / max(1, sum(1 for v in (fa, fb, fc) if v is not None))
+                    if any(v is not None for v in (_get("a_freq"), _get("b_freq"), _get("c_freq")))
+                    else None
+                )(_get("a_freq"), _get("b_freq"), _get("c_freq")),
             ))
             prev_ts = ts_int
 
@@ -424,6 +432,7 @@ class EnergyDB:
                 _col("b_max_current"), _col("b_min_current"), _col("b_avg_current"),
                 _col("c_max_current"), _col("c_min_current"), _col("c_avg_current"),
                 _col("n_max_current"), _col("n_min_current"), _col("n_avg_current"),
+                _col("freq_hz"),
             ))
 
         if not rows:
