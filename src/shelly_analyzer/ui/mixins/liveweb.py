@@ -1320,11 +1320,11 @@ class LiveWebMixin:
                                     except Exception:
                                         pass
                                     line2 = f"{self.t('web.kv.var')}: {q_txt}   {self.t('web.kv.cosphi')}: {pf_txt}{balance_txt}"
-                                # Append grid frequency if available
+                                line3 = "–"
                                 try:
                                     fq = float(getattr(s, "freq_hz", {}).get("total", 0.0))
                                     if fq > 1.0:
-                                        line2 += f"   {self.t('web.kv.freq')}: {fq:.2f} Hz"
+                                        line3 = f"{self.t('web.kv.freq')}: {fq:.2f} Hz"
                                 except Exception:
                                     pass
 
@@ -1334,6 +1334,8 @@ class LiveWebMixin:
                                     vars_['line1'].set(line1)
                                 if 'line2' in vars_:
                                     vars_['line2'].set(line2)
+                                if 'line3' in vars_:
+                                    vars_['line3'].set(line3)
                             except Exception:
                                 pass
                     except Exception:
