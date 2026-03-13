@@ -143,7 +143,12 @@ class PlotsMixin:
                 pass
 
             fig.set_dpi(dpi)
-            fig.set_size_inches(w / float(dpi), h / float(dpi), forward=True)
+            # forward=False: we fit the figure INTO the existing Tk canvas widget
+            # (not the other way around).  forward=True would tell matplotlib to
+            # resize the canvas widget to match the figure, which triggers a new
+            # <Configure> event → _on_plots_canvas_configure → resize again →
+            # infinite feedback loop visible as 1-second size jitter.
+            fig.set_size_inches(w / float(dpi), h / float(dpi), forward=False)
 
     def _plotly_imports(self):
             """Lazy import Plotly and return (go, make_subplots) or (None, None).
