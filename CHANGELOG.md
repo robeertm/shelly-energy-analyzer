@@ -1,5 +1,10 @@
 # Changelog
 
+## 6.0.0.5 - 2026-03-10
+
+### Fixed
+- **Plots: size jitter every ~1 second eliminated.** `fig.set_size_inches()` was called with `forward=True`, which tells matplotlib to resize the Tk canvas widget to match the figure. This fired a `<Configure>` event on the canvas → `_on_plots_canvas_configure` → `_resize_plots_figures_only` → `_resize_figure_to_widget` → another resize → infinite feedback loop visible as the plot alternating between two sizes every second. Changed to `forward=False` so the figure is fitted into the existing canvas without propagating a resize event back.
+
 ## 6.0.0.4 - 2026-03-10
 
 ### Added
