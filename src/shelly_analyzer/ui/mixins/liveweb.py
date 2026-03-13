@@ -1295,27 +1295,37 @@ class LiveWebMixin:
                                 else:
                                     q_txt = f"{q_total:.0f} VAR ({qa2:.0f}/{qb2:.0f}/{qc2:.0f})"
                                     pf_txt = f"{pf_total:.3f} ({pfa2:.3f}/{pfb2:.3f}/{pfc2:.3f})"
-                                    # Phase balance indicator (% symmetry)
-                                    balance_txt = ""
+                                    # Phase balance indicator (% symmetry).
+                                    # Always populate balance_txt so line2 never shrinks to
+                                    # an empty-looking label (which causes layout jitter in Tk).
+                                    # Use plain ASCII symbols instead of emoji – emoji glyphs
+                                    # render at a different font height in macOS Tk, causing the
+                                    # label row to grow/shrink on every sample update.
                                     try:
                                         pa2 = float(s.power_w.get("a", 0.0))
                                         pb2 = float(s.power_w.get("b", 0.0))
                                         pc2 = float(s.power_w.get("c", 0.0))
+                                    except Exception:
+                                        pa2, pb2, pc2 = 0.0, 0.0, 0.0
+                                    # Default: always show per-phase W (never empty)
+                                    balance_txt = f"   W: {pa2:.0f}/{pb2:.0f}/{pc2:.0f}"
+                                    try:
                                         phases_active = [abs(p) for p in (pa2, pb2, pc2) if abs(p) > 5.0]
                                         if len(phases_active) >= 2:
                                             # Balance: how symmetric is the load across active phases?
                                             p_avg = sum(phases_active) / len(phases_active)
                                             p_dev = max(abs(p - p_avg) for p in phases_active)
                                             bal_pct = max(0.0, 100.0 - (p_dev / p_avg * 100.0)) if p_avg > 0 else 100.0
+                                            # Plain ASCII quality indicators (no emoji → stable label height)
                                             if bal_pct >= 90:
-                                                sym = "✅"
+                                                sym = "[+]"
                                             elif bal_pct >= 70:
-                                                sym = "⚠️"
+                                                sym = "[~]"
                                             else:
-                                                sym = "❌"
+                                                sym = "[!]"
                                             balance_txt = f"   {self.t('live.cards.balance')}: {bal_pct:.0f}% {sym} ({pa2:.0f}/{pb2:.0f}/{pc2:.0f} W)"
-                                        elif len(phases_active) == 1:
-                                            # Only one phase active - show distribution but no balance %
+                                        else:
+                                            # Low load or single phase: always show per-phase W distribution
                                             balance_txt = f"   W: {pa2:.0f}/{pb2:.0f}/{pc2:.0f}"
                                     except Exception:
                                         pass

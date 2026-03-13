@@ -1,5 +1,12 @@
 # Changelog
 
+## 6.0.0.7 - 2026-03-13
+
+### Fixed
+- **Live view: phase-balance label jitter eliminated.** The `line2` status label in the Live tab was oscillating visually on every data refresh (~1 s). Two root causes were identified and fixed:
+  1. **Empty label when load is low.** When fewer than 2 phases had more than 5 W of load, `balance_txt` stayed empty, making `line2` appear nearly invisible. The label now always shows at least the per-phase W distribution (`W: a/b/c`), so its height stays constant.
+  2. **Emoji font height change.** The balance quality indicators used emoji characters (✅ / ⚠️ / ❌). On macOS/Tk these glyphs render at a different font height than plain text, causing the `ttk.Label` row to grow and shrink on every sample update. Replaced with plain ASCII indicators (`[+]` / `[~]` / `[!]`).
+
 ## 6.0.0.6 - 2026-03-10
 
 ### Fixed
