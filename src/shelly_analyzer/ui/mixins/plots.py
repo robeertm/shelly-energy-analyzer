@@ -707,7 +707,7 @@ class PlotsMixin:
             # Keep device selection stable when switching between metric tabs.
             # We remember the last selected device-tab index and apply it across all metric tabs
             # to avoid the UI feeling like parameters "jump around".
-            self._plots_metric_key_order = ["kwh", "V", "A", "W", "VAR", "COSPHI"]
+            self._plots_metric_key_order = ["kwh", "V", "A", "W", "VAR", "COSPHI", "HZ"]
             if not hasattr(self, "_plots_last_device_idx"):
                 self._plots_last_device_idx = 0
             self._plots_syncing_tabs = False
@@ -973,6 +973,12 @@ class PlotsMixin:
             _make_wva_controls(tab_pf, "COSPHI")
             _make_device_notebook(tab_pf, "COSPHI", two_axes=True)
 
+            # --- Hz tab (grid frequency) ---
+            tab_hz = ttk.Frame(nb)
+            nb.add(tab_hz, text="Hz")
+            _make_wva_controls(tab_hz, "HZ")
+            _make_device_notebook(tab_hz, "HZ", two_axes=False)
+
             # Redraw when switching metric tabs
             try:
                 nb.bind("<<NotebookTabChanged>>", lambda _e: self._redraw_plots_active())
@@ -1115,7 +1121,7 @@ class PlotsMixin:
                 df_src = cd.df
                 df_src = df_src.sort_values("timestamp") if df_src is not None and not df_src.empty else df_src
 
-                if metric in {"V", "A", "VAR", "Q", "COSPHI", "PF"} and not self._df_has_wva_cols(df_src, metric):
+                if metric in {"V", "A", "VAR", "Q", "COSPHI", "PF", "Hz", "HZ"} and not self._df_has_wva_cols(df_src, metric):
                     df_live = self._df_from_live_store(key)
                     if df_live is not None and not df_live.empty:
                         df_src = df_live

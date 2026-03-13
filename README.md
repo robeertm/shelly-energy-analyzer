@@ -7,7 +7,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 ## Key Features
 
 - 📊 **Live Monitoring**
-  - Real-time power, voltage and current
+  - Real-time power, voltage, current and **grid frequency (Hz)**
   - 1‑phase and 3‑phase devices (L1 / L2 / L3 + total)
   - Live cost display (kWh × configured price)
   - Phase balance indicator for 3-phase devices (detects imbalance)
@@ -20,9 +20,9 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
   - Per-device breakdown with cost share and bar chart
 
 - 📈 **Historical Analysis**
-  - Plots for W / V / A / kWh / VAR / cosφ
+  - Plots for W / V / A / kWh / VAR / cosφ / **Hz (grid frequency)**
   - Per-device and per-phase views
-  - CSV-based storage (offline-friendly)
+  - SQLite-based storage (fast range queries, WAL mode)
 
 - 📤 **Exports**
   - CSV export for further analysis
