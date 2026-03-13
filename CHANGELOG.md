@@ -1,5 +1,10 @@
 # Changelog
 
+## 6.0.0.6 - 2026-03-10
+
+### Fixed
+- **Plots: 1-second axis jitter on Hz / V / A tabs eliminated (root cause).** On macOS/Tk, `<Configure>` events fire not only on genuine widget resizes but also on internal Tk geometry re-layouts triggered by `update_idletasks()` calls (which occur inside `_resize_figure_to_widget`). These spurious events all carry the *same* `(width, height)` as before. The `_on_plots_canvas_configure` handler was reacting to every one of them, scheduling a full matplotlib figure redraw each time. This produced a ~1-2 second jitter loop — most visible on live-data tabs (Hz, V, A) where redraws already happen periodically. The fix: track the last-seen `(width, height)` per canvas widget and skip the redraw entirely when the size has not actually changed. A genuine window resize always delivers a new `(w, h)` pair and will still trigger the correct redraw.
+
 ## 6.0.0.5 - 2026-03-10
 
 ### Fixed
