@@ -1,5 +1,71 @@
 # Changelog
 
+## 6.0.0.8 - 2026-03-13
+### Changed
+- **Version bump and release packaging refresh.** This release supersedes `6.0.0.7` without functional code changes beyond the already integrated Live-tab layout update. Project metadata, package version strings, example config version, ZIP/release folder naming, and release assets are aligned to **6.0.0.8** for a clean GitHub release.
+
+## 6.0.0.7 - 2026-03-13
+### Changed
+- **Live tab: grid frequency now has its own status row.** The desktop Live view previously appended `Hz` to the VAR / cos φ line, which became crowded on 3-phase devices. The Live cards now render a dedicated fourth line for grid frequency (`Netzfrequenz / Grid frequency`) so the status area is easier to scan.
+
+## 6.0.0.6 - 2026-03-10
+
+### Fixed
+- **Plots: 1-second axis jitter on Hz / V / A tabs eliminated (root cause).** On macOS/Tk, `<Configure>` events fire not only on genuine widget resizes but also on internal Tk geometry re-layouts triggered by `update_idletasks()` calls (which occur inside `_resize_figure_to_widget`). These spurious events all carry the *same* `(width, height)` as before. The `_on_plots_canvas_configure` handler was reacting to every one of them, scheduling a full matplotlib figure redraw each time. This produced a ~1-2 second jitter loop — most visible on live-data tabs (Hz, V, A) where redraws already happen periodically. The fix: track the last-seen `(width, height)` per canvas widget and skip the redraw entirely when the size has not actually changed. A genuine window resize always delivers a new `(w, h)` pair and will still trigger the correct redraw.
+
+## 6.0.0.5 - 2026-03-10
+
+### Fixed
+- **Plots: size jitter every ~1 second eliminated.** `fig.set_size_inches()` was called with `forward=True`, which tells matplotlib to resize the Tk canvas widget to match the figure. This fired a `<Configure>` event on the canvas → `_on_plots_canvas_configure` → `_resize_plots_figures_only` → `_resize_figure_to_widget` → another resize → infinite feedback loop visible as the plot alternating between two sizes every second. Changed to `forward=False` so the figure is fitted into the existing canvas without propagating a resize event back.
+
+## 6.0.0.4 - 2026-03-10
+
+### Added
+- **Grid frequency (Hz) support.** The Shelly Pro 3EM measures grid frequency on each phase (`a_freq`, `b_freq`, `c_freq`). The average frequency is now:
+  - Extracted in `parse_live_fields()` and stored in the new `LiveSample.freq_hz` field
+  - Shown in the Tkinter live view (appended to the VAR/cos φ status line)
+  - Shown in the web dashboard KV panel ("Netzfrequenz / Grid frequency")
+  - Stored in the SQLite database as the new `freq_hz` column (schema migration is automatic)
+  - Available as an **"Hz" tab** in the Plots view (live data fallback applies, same as V/A)
+  - Usable in Telegram alerts (metric "Hz")
+
+## 6.0.0.3 - 2026-03-10
+
+### Fixed
+- **Per-phase V and A plots now work.** The Shelly EMData CSV uses `a_avg_voltage` / `a_avg_current` (not `a_voltage` / `a_current`). The DB import now maps these to the base columns via fallback, so per-phase voltage and current plots are populated correctly. Auto re-import detects and fixes existing databases.
+
+## 6.0.0.2 - 2026-03-09
+
+### Fixed
+- **V/A/VAR/cos φ plots now work with full Shelly EMData CSV data.** The DB schema was missing ~42 columns that the Shelly Pro 3EM EMData CSV format provides (voltage min/max/avg, current min/max/avg, apparent power, reactive energy, neutral current). All columns are now stored and used for plots.
+- **Automatic re-import from csv_archive on upgrade.** When the app detects that existing DB data was imported with the old schema (missing voltage/current/apparent power columns), it automatically re-imports the archived CSVs to fill the new columns. No manual action required.
+- **VAR and cos φ plots now work.** VAR (reactive power) and cos φ (power factor) are derived from active power (P) and apparent power (S) per phase. The expanded DB schema now includes the apparent power and reactive energy columns needed for this computation.
+- **Live data fallback extended to VAR/cos φ.** Previously only V and A would fall back to live polling data when historical data lacked the needed columns. Now VAR, cos φ, and per-phase power also fall back to the in-memory live store (which has pre-computed Q and PF from the device).
+- **Dead code removed.** Unreachable `elif` branches for VAR/COSPHI in `_wva_series()` that were shadowed by an earlier branch catching the same metric values have been removed and replaced with a clean post-computation override.
+
+## 6.0.0.1 - 2026-03-09
+
+### Fixed
+- **Plots: V/A/per-phase W showed nothing after DB migration.** DB schema columns (a_voltage, a_current, …) were always present in query results even when all values were NULL, preventing the live-data fallback for V/A plots. Now drops all-NULL columns from query results.
+- **Float 0.0 treated as missing data.** `or` operator on power readings treated a valid 0 W reading as falsy, silently discarding it. Fixed with explicit `is not None` checks.
+- **Transaction safety.** Hourly aggregation update now runs inside the same DB transaction as the sample insert, preventing inconsistent state on crash.
+- **Absurd energy values during data gaps.** Added 10-minute cap on sample intervals — gaps longer than that are treated as missing data instead of being integrated.
+- **Unsorted timestamps.** `ts_min`/`ts_max` for hourly aggregation now computed from actual data instead of assuming sorted order.
+- **DB read errors crash instead of CSV fallback.** `read_device_df()` now catches DB errors and falls back to CSV gracefully.
+- **`base_dir` swap leaked stale DB connection.** `ensure_data_for_devices()` now resets the DB instance when switching data directories.
+- **`save_meta()` crash on DB error.** Now falls back to JSON file if DB write fails.
+- **Migration silently skipped.** `keys` variable could be unbound if auto-import raised before assignment, causing migration to silently fail.
+
+## 6.0.0.0 - 2026-03-09
+
+### Changed
+- **CSV → SQLite migration**: All energy data is now stored in a SQLite database (`data/energy.db`) instead of individual CSV files. This dramatically improves read performance for plots, stats, and cost calculations.
+- **Automatic migration on first startup**: Existing CSV data is automatically imported into the database. Original CSV files are moved to `data/csv_archive/` as backup.
+- **New `EnergyDB` class** (`io/database.py`): Thread-safe SQLite wrapper with WAL mode, per-thread connections, pre-computed energy on insert, and hourly aggregation table.
+- **Storage layer rewritten** (`io/storage.py`): `save_chunk()` now writes directly to DB. `read_device_df()` queries DB first with CSV fallback. Device metadata stored in DB.
+- **Sync simplified** (`services/sync.py`): Removed `pack_csvs()` — DB handles deduplication via `INSERT OR IGNORE`.
+- **Demo data** (`services/demo.py`): Demo generator now checks DB for existing data.
+
 ## 5.9.2.60 - 2026-03-08
 
 ### Improved

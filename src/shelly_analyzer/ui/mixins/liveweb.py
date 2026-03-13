@@ -1320,6 +1320,13 @@ class LiveWebMixin:
                                     except Exception:
                                         pass
                                     line2 = f"{self.t('web.kv.var')}: {q_txt}   {self.t('web.kv.cosphi')}: {pf_txt}{balance_txt}"
+                                line3 = "–"
+                                try:
+                                    fq = float(getattr(s, "freq_hz", {}).get("total", 0.0))
+                                    if fq > 1.0:
+                                        line3 = f"{self.t('web.kv.freq')}: {fq:.2f} Hz"
+                                except Exception:
+                                    pass
 
                                 if 'line0' in vars_:
                                     vars_['line0'].set(line0)
@@ -1327,6 +1334,8 @@ class LiveWebMixin:
                                     vars_['line1'].set(line1)
                                 if 'line2' in vars_:
                                     vars_['line2'].set(line2)
+                                if 'line3' in vars_:
+                                    vars_['line3'].set(line3)
                             except Exception:
                                 pass
                     except Exception:
@@ -1360,6 +1369,7 @@ class LiveWebMixin:
                                 pfa=float(getattr(s, "cosphi", {}).get("a", 0.0)),
                                 pfb=float(getattr(s, "cosphi", {}).get("b", 0.0)),
                                 pfc=float(getattr(s, "cosphi", {}).get("c", 0.0)),
+                                freq_hz=float(getattr(s, "freq_hz", {}).get("total", 0.0)),
                                 kwh_today=float(total_kwh),
                                 cost_today=float(total_kwh) * float(getattr(getattr(self.cfg, 'pricing', None), 'unit_price_gross', lambda: 0.0)()) if total_kwh else 0.0,
                             ),

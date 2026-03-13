@@ -120,10 +120,32 @@ class CoreMixin:
             # Auto-import legacy CSV data from previous installs (best-effort), so
             # users upgrading to a new folder don't have to manually copy the data/
             # directory.
+            keys: list = []
             try:
                 keys = [d.key for d in getattr(self.cfg, "devices", []) if getattr(d, "key", None)]
                 if keys:
                     self.storage.auto_import_from_previous_installs(keys)
+            except Exception:
+                pass
+            # v6.0.0: auto-migrate CSV data to SQLite DB on first run.
+            try:
+                if keys and self.storage.needs_migration(keys):
+                    import logging as _log
+                    _log.getLogger(__name__).info("Migrating CSV data to SQLite DB...")
+                    migrated = self.storage.migrate_csvs_to_db(keys)
+                    archived = self.storage.archive_csv_files(keys)
+                    _log.getLogger(__name__).info("Migration done: %s rows, %s files archived", migrated, archived)
+            except Exception:
+                pass
+            # v6.0.0.2: re-import from csv_archive if DB schema was expanded
+            # (fills voltage min/max/avg, current min/max/avg, apparent power,
+            # reactive energy columns that were missing in the initial migration).
+            try:
+                if keys and self.storage.needs_reimport(keys):
+                    import logging as _log
+                    _log.getLogger(__name__).info("Re-importing CSV data to fill expanded DB schema (v6.0.0.2)...")
+                    reimported = self.storage.reimport_from_archive(keys)
+                    _log.getLogger(__name__).info("Re-import done: %s", reimported)
             except Exception:
                 pass
             # Demo Mode: generate realistic demo CSV data so Plots/Exports work out-of-the-box.
@@ -1118,7 +1140,7 @@ class CoreMixin:
                 if txt.lower() == "kwh":
                     return "kwh"
                 tnorm = txt.strip()
-                if tnorm.upper() in {"V", "A", "W", "VAR"}:
+                if tnorm.upper() in {"V", "A", "W", "VAR", "HZ"}:
                     return tnorm.upper()
                 # cos φ tab (accept variants)
                 tl = tnorm.lower().replace(" ", "").replace("φ", "phi")
@@ -1218,6 +1240,16 @@ class CoreMixin:
                 if any(c.endswith("_i") or c.endswith("i") or "_i_" in c for c in cols):
                     return True
                 return False
+            if m in {"VAR", "Q"}:
+                # Need either pre-computed Q columns or apparent power for derivation.
+                tokens = ["q_total_var", "qa", "qb", "qc", "reactive_var", "aprt_power", "apparent_power"]
+                return any(any(t in c for t in tokens) for c in cols)
+            if m in {"COSPHI", "PF", "POWERFACTOR"}:
+                # Need either pre-computed cos φ columns or apparent power for derivation.
+                tokens = ["cosphi_total", "cosphi", "pfa", "pfb", "pfc", "pf_total", "aprt_power", "apparent_power"]
+                return any(any(t in c for t in tokens) for c in cols)
+            if m in {"HZ", "FREQ", "FREQUENCY"}:
+                return any("freq_hz" in c or "frequency" in c or c == "freq" for c in cols)
             return True
 
     def _df_from_live_store(self, device_key: str) -> pd.DataFrame:
@@ -1250,6 +1282,10 @@ class CoreMixin:
                     "timestamp","ts","total_power",
                     "a_voltage","b_voltage","c_voltage",
                     "a_current","b_current","c_current",
+                    "a_act_power","b_act_power","c_act_power",
+                    "q_total_var","qa","qb","qc",
+                    "cosphi_total","pfa","pfb","pfc",
+                    "freq_hz",
                 ])
 
             df = pd.DataFrame(arr)
@@ -1271,6 +1307,21 @@ class CoreMixin:
                 "a_current": pd.to_numeric(df.get("ia"), errors="coerce"),
                 "b_current": pd.to_numeric(df.get("ib"), errors="coerce"),
                 "c_current": pd.to_numeric(df.get("ic"), errors="coerce"),
+                # Per-phase active power (W)
+                "a_act_power": pd.to_numeric(df.get("pa"), errors="coerce"),
+                "b_act_power": pd.to_numeric(df.get("pb"), errors="coerce"),
+                "c_act_power": pd.to_numeric(df.get("pc"), errors="coerce"),
+                # Pre-computed reactive power (VAR) and power factor (cos φ)
+                "q_total_var": pd.to_numeric(df.get("q_total_var"), errors="coerce"),
+                "qa": pd.to_numeric(df.get("qa"), errors="coerce"),
+                "qb": pd.to_numeric(df.get("qb"), errors="coerce"),
+                "qc": pd.to_numeric(df.get("qc"), errors="coerce"),
+                "cosphi_total": pd.to_numeric(df.get("cosphi_total"), errors="coerce"),
+                "pfa": pd.to_numeric(df.get("pfa"), errors="coerce"),
+                "pfb": pd.to_numeric(df.get("pfb"), errors="coerce"),
+                "pfc": pd.to_numeric(df.get("pfc"), errors="coerce"),
+                # Grid frequency (Hz) from live store
+                "freq_hz": pd.to_numeric(df.get("freq_hz"), errors="coerce"),
             })
             out = out.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
             # Deduplicate by timestamp (keep last)
@@ -1721,6 +1772,45 @@ class CoreMixin:
                     y = Q
                     mapping_text = f"VAR: {mapP}; {mapS}; {mapSign}"
 
+                # Override with pre-computed VAR/cosφ columns when P/S computation
+                # produced unusable results (no apparent power data available).
+                # This happens with live polling data where VAR and cosφ are already
+                # computed by the device and stored directly in the DataFrame.
+                if "S(no cols)" in mapping_text or mapS == "S(no cols)":
+                    if want_pf:
+                        _pf_col = first_col(["cosphi_total", "pf_total", "power_factor_total", "cos_phi_total", "cosphi", "pf"])
+                        if _pf_col:
+                            y = pd.to_numeric(df[_pf_col], errors="coerce")
+                            mapping_text = f"cosφ: direct={_pf_col}"
+                        else:
+                            _pfa = first_col(["pfa", "pf_a", "cosphi_a", "a_cosphi", "a_pf"])
+                            _pfb = first_col(["pfb", "pf_b", "cosphi_b", "b_cosphi", "b_pf"])
+                            _pfc = first_col(["pfc", "pf_c", "cosphi_c", "c_cosphi", "c_pf"])
+                            _pf_cols = [c for c in (_pfa, _pfb, _pfc) if c]
+                            if _pf_cols:
+                                _num_pf = pd.to_numeric(df[_pf_cols[0]], errors="coerce")
+                                if len(_pf_cols) > 1:
+                                    for _c in _pf_cols[1:]:
+                                        _num_pf = _num_pf + pd.to_numeric(df[_c], errors="coerce")
+                                    _num_pf = _num_pf / float(len(_pf_cols))
+                                y = _num_pf
+                                mapping_text = f"cosφ: mean({','.join(_pf_cols)})"
+                    else:
+                        _q_col = first_col(["q_total_var", "reactive_var_total", "total_reactive_var", "var_total", "q_total"])
+                        if _q_col:
+                            y = pd.to_numeric(df[_q_col], errors="coerce")
+                            mapping_text = f"VAR: direct={_q_col}"
+                        else:
+                            _qa = first_col(["qa", "q_a", "reactive_var_a", "a_reactive_var", "a_var", "a_q"])
+                            _qb = first_col(["qb", "q_b", "reactive_var_b", "b_reactive_var", "b_var", "b_q"])
+                            _qc = first_col(["qc", "q_c", "reactive_var_c", "c_reactive_var", "c_var", "c_q"])
+                            _q_cols = [c for c in (_qa, _qb, _qc) if c]
+                            if _q_cols:
+                                _num_q = pd.to_numeric(df[_q_cols[0]], errors="coerce")
+                                for _c in _q_cols[1:]:
+                                    _num_q = _num_q + pd.to_numeric(df[_c], errors="coerce")
+                                y = _num_q
+                                mapping_text = f"VAR: sum({','.join(_q_cols)})"
 
             elif metric_u == 'V':
                 ylab = 'V'
@@ -1868,52 +1958,16 @@ class CoreMixin:
                     else:
                         y = pd.Series([0.0] * len(df), index=df.index)
                         mapping_text = "A: (no columns)"
-            elif metric_u in {"VAR", "Q"}:
-                ylab = "VAR"
-                # Prefer stored reactive power columns from live samples (q_total_var / qa/qb/qc).
-                q_total_col = first_col(["q_total_var", "reactive_var_total", "total_reactive_var", "var_total", "q_total"])
-                if q_total_col:
-                    y = pd.to_numeric(df[q_total_col], errors="coerce")
-                    mapping_text = f"VAR: total={q_total_col}"
-                else:
-                    # Sum phases if total not available
-                    qa_col = first_col(["qa", "q_a", "reactive_var_a", "a_reactive_var", "a_var", "a_q"])
-                    qb_col = first_col(["qb", "q_b", "reactive_var_b", "b_reactive_var", "b_var", "b_q"])
-                    qc_col = first_col(["qc", "q_c", "reactive_var_c", "c_reactive_var", "c_var", "c_q"])
-                    cols = [c for c in (qa_col, qb_col, qc_col) if c]
-                    if cols:
-                        num = pd.to_numeric(df[cols[0]], errors="coerce")
-                        for c in cols[1:]:
-                            num = num + pd.to_numeric(df[c], errors="coerce")
-                        y = num
-                        mapping_text = f"VAR: sum({','.join(cols)})"
-                    else:
-                        y = pd.Series([0.0] * len(df), index=df.index)
-                        mapping_text = "VAR: (no columns)"
 
-            elif metric_u in {"COSPHI", "PF", "POWERFACTOR"}:
-                ylab = "cos φ"
-                pf_total_col = first_col(["cosphi_total", "pf_total", "power_factor_total", "cos_phi_total", "cosphi", "pf"])
-                if pf_total_col:
-                    y = pd.to_numeric(df[pf_total_col], errors="coerce")
-                    mapping_text = f"cosφ: total={pf_total_col}"
+            elif metric_u in {"HZ", "FREQ", "FREQUENCY"}:
+                ylab = "Hz"
+                fq_col = first_col(["freq_hz", "frequency", "freq", "hz"])
+                if fq_col:
+                    y = pd.to_numeric(df[fq_col], errors="coerce")
+                    mapping_text = f"Hz: {fq_col}"
                 else:
-                    pfa_col = first_col(["pfa", "pf_a", "cosphi_a", "a_cosphi", "a_pf"])
-                    pfb_col = first_col(["pfb", "pf_b", "cosphi_b", "b_cosphi", "b_pf"])
-                    pfc_col = first_col(["pfc", "pf_c", "cosphi_c", "c_cosphi", "c_pf"])
-                    cols = [c for c in (pfa_col, pfb_col, pfc_col) if c]
-                    if cols:
-                        # Simple mean of available phases
-                        num = pd.to_numeric(df[cols[0]], errors="coerce")
-                        if len(cols) > 1:
-                            for c in cols[1:]:
-                                num = num + pd.to_numeric(df[c], errors="coerce")
-                            num = num / float(len(cols))
-                        y = num
-                        mapping_text = f"cosφ: mean({','.join(cols)})"
-                    else:
-                        y = pd.Series([0.0] * len(df), index=df.index)
-                        mapping_text = "cosφ: (no columns)"
+                    y = pd.Series(dtype=float)
+                    mapping_text = "Hz(no cols)"
 
             else:
                 y = pd.Series([0.0] * len(df), index=df.index)
@@ -2536,6 +2590,7 @@ class CoreMixin:
                 v_line0 = tk.StringVar(value="–")  # Power + kWh today + updated
                 v_line1 = tk.StringVar(value="–")  # Voltage + current
                 v_line2 = tk.StringVar(value="–")  # VAR + cos φ
+                v_line3 = tk.StringVar(value="–")  # Grid frequency (Hz)
                 self._live_latest_vars[d.key] = {
                     "power": v_power,
                     "voltage": v_volt,
@@ -2545,11 +2600,13 @@ class CoreMixin:
                     "line0": v_line0,
                     "line1": v_line1,
                     "line2": v_line2,
+                    "line3": v_line3,
                 }
 
                 ttk.Label(status_fr, textvariable=v_line0, style="LiveInfo.TLabel").grid(row=0, column=0, sticky="w")
                 ttk.Label(status_fr, textvariable=v_line1, style="LiveInfo.TLabel").grid(row=1, column=0, sticky="w", pady=(2, 0))
                 ttk.Label(status_fr, textvariable=v_line2, style="LiveInfo.TLabel").grid(row=2, column=0, sticky="w", pady=(2, 0))
+                ttk.Label(status_fr, textvariable=v_line3, style="LiveInfo.TLabel").grid(row=3, column=0, sticky="w", pady=(2, 0))
 
                 # Switch state + toggle (only for kind == 'switch')
                 if str(getattr(d, "kind", "em")) == "switch":
@@ -2557,7 +2614,7 @@ class CoreMixin:
                     self._live_switch_vars[d.key] = v_sw
                     # Switch line (kept compact)
                     sw_fr = ttk.Frame(status_fr)
-                    sw_fr.grid(row=3, column=0, sticky="ew", pady=(2, 0))
+                    sw_fr.grid(row=4, column=0, sticky="ew", pady=(2, 0))
                     sw_fr.columnconfigure(0, weight=1)
                     ttk.Label(sw_fr, text=f"{self.t('live.cards.switch')}: ", style="LiveInfo.TLabel").pack(side="left")
                     ttk.Label(sw_fr, textvariable=v_sw, style="LiveInfo.TLabel").pack(side="left")
@@ -4752,6 +4809,7 @@ class CoreMixin:
                 "A", "A_L1", "A_L2", "A_L3",
                 "VAR", "VAR_L1", "VAR_L2", "VAR_L3",
                 "COSPHI", "COSPHI_L1", "COSPHI_L2", "COSPHI_L3",
+                "Hz",
             ]
             _op_choices = [">", "<", ">=", "<=", "="]
             for i, row in enumerate(getattr(self, "_alert_vars", []), start=1):
@@ -7377,7 +7435,7 @@ class CoreMixin:
             elif m.endswith("_L3"):
                 phase = "L3"; base = m[:-3]
 
-            unit = {"W": "W", "V": "V", "A": "A", "VAR": "var", "COSPHI": ""}.get(base, "")
+            unit = {"W": "W", "V": "V", "A": "A", "VAR": "var", "COSPHI": "", "HZ": "Hz"}.get(base, "")
             title = "🚨 Shelly Alarm"
 
             rid = str(getattr(r, "rule_id", "") or "")
@@ -7512,6 +7570,9 @@ class CoreMixin:
                 if phase:
                     return float(getattr(s, "cosphi", {}).get(phase, 0.0))
                 return float(getattr(s, "cosphi", {}).get("total", 0.0))
+
+            if base in {"HZ", "FREQ", "FREQUENCY"}:
+                return float(getattr(s, "freq_hz", {}).get("total", 0.0))
 
             if base in {"V", "VOLT", "VOLTAGE"}:
                 if phase:
