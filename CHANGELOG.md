@@ -1,5 +1,16 @@
 # Changelog
 
+## 6.0.0.8 - 2026-03-13
+
+### Changed
+- **Release version corrected to 6.0.0.8.** Project metadata, package version strings, example config version, release folder name, and ZIP asset were all aligned from `6.0.0.7` to **`6.0.0.8`**.
+- **Live tab: grid frequency remains on its own dedicated status row.** This release keeps the UI improvement introduced in the previous build, but publishes it as the corrected GitHub-ready release version **6.0.0.8**.
+
+## 6.0.0.7 - 2026-03-13
+
+### Changed
+- **Live tab: grid frequency now has its own status row.** The desktop Live view previously appended `Hz` to the VAR / cos φ line, which became crowded on 3-phase devices. The Live cards now render a dedicated fourth line for grid frequency (`Netzfrequenz / Grid frequency`) so the status area is easier to scan.
+- 
 ## 6.0.0.6 - 2026-03-10
 
 ### Fixed
