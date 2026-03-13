@@ -6,7 +6,7 @@ import time
 import logging
 import concurrent.futures
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
 from shelly_analyzer.io.http import ShellyHttp, HttpConfig, get_em_status, get_switch_status
@@ -84,12 +84,21 @@ def parse_live_fields(data: Dict[str, Any]) -> Dict[str, Dict[str, float]]:
     p_total = pa + pb + pc
     pf_total = (p_total / s_total) if s_total else 0.0
 
+    # Frequency (Hz): all 3 phases share the same grid frequency.
+    # Prefer per-phase keys; fall back to a generic "freq" key.
+    fa = _safe_float(data.get("a_freq", data.get("freq", 0.0)))
+    fb = _safe_float(data.get("b_freq", fa))
+    fc = _safe_float(data.get("c_freq", fa))
+    _freq_vals = [v for v in (fa, fb, fc) if v > 0.0]
+    freq_total = sum(_freq_vals) / len(_freq_vals) if _freq_vals else 0.0
+
     return {
         "power_w": {"a": pa, "b": pb, "c": pc, "total": p_total},
         "voltage_v": {"a": va, "b": vb, "c": vc},
         "current_a": {"a": ia, "b": ib, "c": ic},
         "reactive_var": {"a": qa, "b": qb, "c": qc, "total": q_total},
         "cosphi": {"a": pfa, "b": pfb, "c": pfc, "total": pf_total},
+        "freq_hz": {"a": fa, "b": fb, "c": fc, "total": freq_total},
     }
 
 
@@ -119,6 +128,7 @@ class LiveSample:
     current_a: Dict[str, float]  # a/b/c
     reactive_var: Dict[str, float]  # a/b/c/total (VAR)
     cosphi: Dict[str, float]  # a/b/c/total (cos φ)
+    freq_hz: Dict[str, float]  # a/b/c/total (grid frequency Hz)
     raw: Dict[str, Any]
 
 
@@ -173,6 +183,7 @@ class LivePoller:
                     current_a=fields["current_a"],
                     reactive_var=fields.get("reactive_var", {"a":0.0,"b":0.0,"c":0.0,"total":0.0}),
                     cosphi=fields.get("cosphi", {"a":0.0,"b":0.0,"c":0.0,"total":0.0}),
+                    freq_hz=fields.get("freq_hz", {"a":0.0,"b":0.0,"c":0.0,"total":0.0}),
                     raw=data,
                 )
                 try:
@@ -279,6 +290,7 @@ class MultiLivePoller:
             current_a=fields["current_a"],
             reactive_var=fields.get("reactive_var", {"a": 0.0, "b": 0.0, "c": 0.0, "total": 0.0}),
             cosphi=fields.get("cosphi", {"a": 0.0, "b": 0.0, "c": 0.0, "total": 0.0}),
+            freq_hz=fields.get("freq_hz", {"a": 0.0, "b": 0.0, "c": 0.0, "total": 0.0}),
             raw=data,
         )
 
@@ -399,6 +411,7 @@ class DemoMultiLivePoller:
                                 current_a=fields.get("current_a", {}),
                                 reactive_var=fields.get("reactive_var", {"a": 0.0, "b": 0.0, "c": 0.0, "total": 0.0}),
                                 cosphi=fields.get("cosphi", {"a": 0.0, "b": 0.0, "c": 0.0, "total": 0.0}),
+                                freq_hz=fields.get("freq_hz", {"a": 50.0, "b": 50.0, "c": 50.0, "total": 50.0}),
                                 raw={
                                     "demo": True,
                                     "kind": str(getattr(d, "kind", "em")),

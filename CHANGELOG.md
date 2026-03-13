@@ -1,5 +1,16 @@
 # Changelog
 
+## 6.0.0.4 - 2026-03-10
+
+### Added
+- **Grid frequency (Hz) support.** The Shelly Pro 3EM measures grid frequency on each phase (`a_freq`, `b_freq`, `c_freq`). The average frequency is now:
+  - Extracted in `parse_live_fields()` and stored in the new `LiveSample.freq_hz` field
+  - Shown in the Tkinter live view (appended to the VAR/cos φ status line)
+  - Shown in the web dashboard KV panel ("Netzfrequenz / Grid frequency")
+  - Stored in the SQLite database as the new `freq_hz` column (schema migration is automatic)
+  - Available as an **"Hz" tab** in the Plots view (live data fallback applies, same as V/A)
+  - Usable in Telegram alerts (metric "Hz")
+
 ## 6.0.0.3 - 2026-03-10
 
 ### Fixed
