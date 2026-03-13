@@ -143,7 +143,12 @@ class PlotsMixin:
                 pass
 
             fig.set_dpi(dpi)
-            fig.set_size_inches(w / float(dpi), h / float(dpi), forward=True)
+            # forward=False: we fit the figure INTO the existing Tk canvas widget
+            # (not the other way around).  forward=True would tell matplotlib to
+            # resize the canvas widget to match the figure, which triggers a new
+            # <Configure> event → _on_plots_canvas_configure → resize again →
+            # infinite feedback loop visible as 1-second size jitter.
+            fig.set_size_inches(w / float(dpi), h / float(dpi), forward=False)
 
     def _plotly_imports(self):
             """Lazy import Plotly and return (go, make_subplots) or (None, None).
@@ -707,7 +712,7 @@ class PlotsMixin:
             # Keep device selection stable when switching between metric tabs.
             # We remember the last selected device-tab index and apply it across all metric tabs
             # to avoid the UI feeling like parameters "jump around".
-            self._plots_metric_key_order = ["kwh", "V", "A", "W", "VAR", "COSPHI"]
+            self._plots_metric_key_order = ["kwh", "V", "A", "W", "VAR", "COSPHI", "HZ"]
             if not hasattr(self, "_plots_last_device_idx"):
                 self._plots_last_device_idx = 0
             self._plots_syncing_tabs = False
@@ -973,6 +978,12 @@ class PlotsMixin:
             _make_wva_controls(tab_pf, "COSPHI")
             _make_device_notebook(tab_pf, "COSPHI", two_axes=True)
 
+            # --- Hz tab (grid frequency) ---
+            tab_hz = ttk.Frame(nb)
+            nb.add(tab_hz, text="Hz")
+            _make_wva_controls(tab_hz, "HZ")
+            _make_device_notebook(tab_hz, "HZ", two_axes=False)
+
             # Redraw when switching metric tabs
             try:
                 nb.bind("<<NotebookTabChanged>>", lambda _e: self._redraw_plots_active())
@@ -1115,7 +1126,7 @@ class PlotsMixin:
                 df_src = cd.df
                 df_src = df_src.sort_values("timestamp") if df_src is not None and not df_src.empty else df_src
 
-                if metric in {"V", "A"} and not self._df_has_wva_cols(df_src, metric):
+                if metric in {"V", "A", "VAR", "Q", "COSPHI", "PF", "Hz", "HZ"} and not self._df_has_wva_cols(df_src, metric):
                     df_live = self._df_from_live_store(key)
                     if df_live is not None and not df_live.empty:
                         df_src = df_live
@@ -1359,7 +1370,36 @@ class PlotsMixin:
 
             We do a fast figure-only resize immediately, and debounce a full redraw
             (which re-filters data) only if needed.
+
+            Important: on macOS/Tk, ``<Configure>`` events fire not only on true
+            widget resizes but also on internal Tk geometry re-layouts (e.g. when
+            ``update_idletasks()`` is called or when hidden notebook tabs get
+            re-measured).  These spurious events all carry the *same* width/height
+            as the previous event.  Reacting to them causes a jitter loop:
+            the redraw calls ``update_idletasks()``, which triggers another
+            ``<Configure>``, which triggers another redraw, ad infinitum.
+            This loop is especially visible on Hz / V / A live-data plots which
+            redraw every ~1 second, producing a continuous bottom-axis shimmer.
+
+            Fix: ignore the event when this widget's size has not actually changed.
+            A genuine resize always carries a new (w, h) pair.
             """
+            # Ignore spurious <Configure> events that carry the same size as
+            # before for this specific widget.  Only a true size change warrants
+            # a figure redraw.
+            try:
+                new_w = int(getattr(_event, 'width', 0) or 0)
+                new_h = int(getattr(_event, 'height', 0) or 0)
+                widget_id = id(getattr(_event, 'widget', None))
+                if new_w > 0 and new_h > 0:
+                    sizes = getattr(self, '_plots_canvas_last_sizes', {})
+                    if sizes.get(widget_id) == (new_w, new_h):
+                        return  # same size for this widget – skip to avoid jitter
+                    sizes[widget_id] = (new_w, new_h)
+                    self._plots_canvas_last_sizes = sizes
+            except Exception:
+                pass
+
             # Start a short resize watch (fullscreen settles late on macOS).
             try:
                 self._kick_plots_resize_watch()
