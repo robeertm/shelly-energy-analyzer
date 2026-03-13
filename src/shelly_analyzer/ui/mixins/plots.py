@@ -1370,7 +1370,36 @@ class PlotsMixin:
 
             We do a fast figure-only resize immediately, and debounce a full redraw
             (which re-filters data) only if needed.
+
+            Important: on macOS/Tk, ``<Configure>`` events fire not only on true
+            widget resizes but also on internal Tk geometry re-layouts (e.g. when
+            ``update_idletasks()`` is called or when hidden notebook tabs get
+            re-measured).  These spurious events all carry the *same* width/height
+            as the previous event.  Reacting to them causes a jitter loop:
+            the redraw calls ``update_idletasks()``, which triggers another
+            ``<Configure>``, which triggers another redraw, ad infinitum.
+            This loop is especially visible on Hz / V / A live-data plots which
+            redraw every ~1 second, producing a continuous bottom-axis shimmer.
+
+            Fix: ignore the event when this widget's size has not actually changed.
+            A genuine resize always carries a new (w, h) pair.
             """
+            # Ignore spurious <Configure> events that carry the same size as
+            # before for this specific widget.  Only a true size change warrants
+            # a figure redraw.
+            try:
+                new_w = int(getattr(_event, 'width', 0) or 0)
+                new_h = int(getattr(_event, 'height', 0) or 0)
+                widget_id = id(getattr(_event, 'widget', None))
+                if new_w > 0 and new_h > 0:
+                    sizes = getattr(self, '_plots_canvas_last_sizes', {})
+                    if sizes.get(widget_id) == (new_w, new_h):
+                        return  # same size for this widget – skip to avoid jitter
+                    sizes[widget_id] = (new_w, new_h)
+                    self._plots_canvas_last_sizes = sizes
+            except Exception:
+                pass
+
             # Start a short resize watch (fullscreen settles late on macOS).
             try:
                 self._kick_plots_resize_watch()
