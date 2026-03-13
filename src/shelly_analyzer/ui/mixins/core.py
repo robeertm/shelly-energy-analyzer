@@ -1140,7 +1140,7 @@ class CoreMixin:
                 if txt.lower() == "kwh":
                     return "kwh"
                 tnorm = txt.strip()
-                if tnorm.upper() in {"V", "A", "W", "VAR"}:
+                if tnorm.upper() in {"V", "A", "W", "VAR", "HZ"}:
                     return tnorm.upper()
                 # cos φ tab (accept variants)
                 tl = tnorm.lower().replace(" ", "").replace("φ", "phi")
@@ -1248,6 +1248,8 @@ class CoreMixin:
                 # Need either pre-computed cos φ columns or apparent power for derivation.
                 tokens = ["cosphi_total", "cosphi", "pfa", "pfb", "pfc", "pf_total", "aprt_power", "apparent_power"]
                 return any(any(t in c for t in tokens) for c in cols)
+            if m in {"HZ", "FREQ", "FREQUENCY"}:
+                return any("freq_hz" in c or "frequency" in c or c == "freq" for c in cols)
             return True
 
     def _df_from_live_store(self, device_key: str) -> pd.DataFrame:
@@ -1283,6 +1285,7 @@ class CoreMixin:
                     "a_act_power","b_act_power","c_act_power",
                     "q_total_var","qa","qb","qc",
                     "cosphi_total","pfa","pfb","pfc",
+                    "freq_hz",
                 ])
 
             df = pd.DataFrame(arr)
@@ -1317,6 +1320,8 @@ class CoreMixin:
                 "pfa": pd.to_numeric(df.get("pfa"), errors="coerce"),
                 "pfb": pd.to_numeric(df.get("pfb"), errors="coerce"),
                 "pfc": pd.to_numeric(df.get("pfc"), errors="coerce"),
+                # Grid frequency (Hz) from live store
+                "freq_hz": pd.to_numeric(df.get("freq_hz"), errors="coerce"),
             })
             out = out.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
             # Deduplicate by timestamp (keep last)
@@ -1953,6 +1958,17 @@ class CoreMixin:
                     else:
                         y = pd.Series([0.0] * len(df), index=df.index)
                         mapping_text = "A: (no columns)"
+
+            elif metric_u in {"HZ", "FREQ", "FREQUENCY"}:
+                ylab = "Hz"
+                fq_col = first_col(["freq_hz", "frequency", "freq", "hz"])
+                if fq_col:
+                    y = pd.to_numeric(df[fq_col], errors="coerce")
+                    mapping_text = f"Hz: {fq_col}"
+                else:
+                    y = pd.Series(dtype=float)
+                    mapping_text = "Hz(no cols)"
+
             else:
                 y = pd.Series([0.0] * len(df), index=df.index)
 
@@ -4790,6 +4806,7 @@ class CoreMixin:
                 "A", "A_L1", "A_L2", "A_L3",
                 "VAR", "VAR_L1", "VAR_L2", "VAR_L3",
                 "COSPHI", "COSPHI_L1", "COSPHI_L2", "COSPHI_L3",
+                "Hz",
             ]
             _op_choices = [">", "<", ">=", "<=", "="]
             for i, row in enumerate(getattr(self, "_alert_vars", []), start=1):
@@ -7415,7 +7432,7 @@ class CoreMixin:
             elif m.endswith("_L3"):
                 phase = "L3"; base = m[:-3]
 
-            unit = {"W": "W", "V": "V", "A": "A", "VAR": "var", "COSPHI": ""}.get(base, "")
+            unit = {"W": "W", "V": "V", "A": "A", "VAR": "var", "COSPHI": "", "HZ": "Hz"}.get(base, "")
             title = "🚨 Shelly Alarm"
 
             rid = str(getattr(r, "rule_id", "") or "")
@@ -7550,6 +7567,9 @@ class CoreMixin:
                 if phase:
                     return float(getattr(s, "cosphi", {}).get(phase, 0.0))
                 return float(getattr(s, "cosphi", {}).get("total", 0.0))
+
+            if base in {"HZ", "FREQ", "FREQUENCY"}:
+                return float(getattr(s, "freq_hz", {}).get("total", 0.0))
 
             if base in {"V", "VOLT", "VOLTAGE"}:
                 if phase:
