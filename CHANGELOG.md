@@ -1,5 +1,11 @@
 # Changelog
 
+## 6.0.0.9 - 2026-03-13
+
+### Changed
+- **Release version corrected to 6.0.0.9.** Project metadata, package version strings, example config version, release folder name, and ZIP asset were all aligned from `6.0.0.7` to **`6.0.0.9`**.
+- **Live tab: grid frequency remains on its own dedicated status row.** This release keeps the UI improvement introduced in the previous build, but publishes it as the corrected GitHub-ready release version **6.0.0.9**.
+
 ## 6.0.0.8 - 2026-03-13
 
 ### Changed
