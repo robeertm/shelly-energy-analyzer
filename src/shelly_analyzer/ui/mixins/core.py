@@ -2590,6 +2590,7 @@ class CoreMixin:
                 v_line0 = tk.StringVar(value="–")  # Power + kWh today + updated
                 v_line1 = tk.StringVar(value="–")  # Voltage + current
                 v_line2 = tk.StringVar(value="–")  # VAR + cos φ
+                v_line3 = tk.StringVar(value="–")  # Grid frequency (Hz)
                 self._live_latest_vars[d.key] = {
                     "power": v_power,
                     "voltage": v_volt,
@@ -2599,11 +2600,13 @@ class CoreMixin:
                     "line0": v_line0,
                     "line1": v_line1,
                     "line2": v_line2,
+                    "line3": v_line3,
                 }
 
                 ttk.Label(status_fr, textvariable=v_line0, style="LiveInfo.TLabel").grid(row=0, column=0, sticky="w")
                 ttk.Label(status_fr, textvariable=v_line1, style="LiveInfo.TLabel").grid(row=1, column=0, sticky="w", pady=(2, 0))
                 ttk.Label(status_fr, textvariable=v_line2, style="LiveInfo.TLabel").grid(row=2, column=0, sticky="w", pady=(2, 0))
+                ttk.Label(status_fr, textvariable=v_line3, style="LiveInfo.TLabel").grid(row=3, column=0, sticky="w", pady=(2, 0))
 
                 # Switch state + toggle (only for kind == 'switch')
                 if str(getattr(d, "kind", "em")) == "switch":
@@ -2611,7 +2614,7 @@ class CoreMixin:
                     self._live_switch_vars[d.key] = v_sw
                     # Switch line (kept compact)
                     sw_fr = ttk.Frame(status_fr)
-                    sw_fr.grid(row=3, column=0, sticky="ew", pady=(2, 0))
+                    sw_fr.grid(row=4, column=0, sticky="ew", pady=(2, 0))
                     sw_fr.columnconfigure(0, weight=1)
                     ttk.Label(sw_fr, text=f"{self.t('live.cards.switch')}: ", style="LiveInfo.TLabel").pack(side="left")
                     ttk.Label(sw_fr, textvariable=v_sw, style="LiveInfo.TLabel").pack(side="left")
@@ -3695,6 +3698,7 @@ class CoreMixin:
                     "a_current",
                     "b_current",
                     "c_current",
+                    "n_current",
                 ):
                     if prev is not None and mk in prev:
                         try:
