@@ -4807,7 +4807,7 @@ class CoreMixin:
             _metric_choices = [
                 "W", "W_L1", "W_L2", "W_L3",
                 "V", "V_L1", "V_L2", "V_L3",
-                "A", "A_L1", "A_L2", "A_L3",
+                "A", "A_L1", "A_L2", "A_L3", "A_N",
                 "VAR", "VAR_L1", "VAR_L2", "VAR_L3",
                 "COSPHI", "COSPHI_L1", "COSPHI_L2", "COSPHI_L3",
                 "Hz",
@@ -7437,6 +7437,8 @@ class CoreMixin:
                 phase = "L3"; base = m[:-3]
 
             unit = {"W": "W", "V": "V", "A": "A", "VAR": "var", "COSPHI": "", "HZ": "Hz"}.get(base, "")
+            if m == "A_N":
+                unit = "A"
             title = "🚨 Shelly Alarm"
 
             rid = str(getattr(r, "rule_id", "") or "")
@@ -7581,6 +7583,32 @@ class CoreMixin:
                 return _mean_abc(getattr(s, "voltage_v", {}) or {})
 
             if base in {"A", "AMP", "AMPS", "CURRENT"}:
+                # Neutral current: A_N metric (or phase=='n' after suffix stripping)
+                if m0 == "A_N" or phase == "n":
+                    try:
+                        _ia = float(getattr(s, "current_a", {}).get("a", 0.0))
+                        _ib = float(getattr(s, "current_a", {}).get("b", 0.0))
+                        _ic = float(getattr(s, "current_a", {}).get("c", 0.0))
+                        if _ia > 0 or _ib > 0 or _ic > 0:
+                            _pa = float(getattr(s, "power_w", {}).get("a", 0.0))
+                            _pb = float(getattr(s, "power_w", {}).get("b", 0.0))
+                            _pc = float(getattr(s, "power_w", {}).get("c", 0.0))
+                            _qa = float(getattr(s, "reactive_var", {}).get("a", 0.0))
+                            _qb = float(getattr(s, "reactive_var", {}).get("b", 0.0))
+                            _qc = float(getattr(s, "reactive_var", {}).get("c", 0.0))
+                            _phi_a = math.atan2(_qa, _pa) if (_pa or _qa) else 0.0
+                            _phi_b = math.atan2(_qb, _pb) if (_pb or _qb) else 0.0
+                            _phi_c = math.atan2(_qc, _pc) if (_pc or _qc) else 0.0
+                            _2pi3 = 2.0 * math.pi / 3.0
+                            _ta = -_phi_a
+                            _tb = -_2pi3 - _phi_b
+                            _tc = _2pi3 - _phi_c
+                            _in_re = _ia * math.cos(_ta) + _ib * math.cos(_tb) + _ic * math.cos(_tc)
+                            _in_im = _ia * math.sin(_ta) + _ib * math.sin(_tb) + _ic * math.sin(_tc)
+                            return math.sqrt(_in_re * _in_re + _in_im * _in_im)
+                    except Exception:
+                        pass
+                    return 0.0
                 if phase:
                     return float(getattr(s, "current_a", {}).get(phase, 0.0))
                 return _sum_abc(getattr(s, "current_a", {}) or {})

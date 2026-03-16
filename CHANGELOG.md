@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.0.1.2 - 2026-03-16
+### Added
+- **Alarm rules: neutral current (A_N) as trigger metric.** The `A_N` metric is now available in the alarm configuration dropdown (Settings → Devices → Alarms). It calculates the neutral conductor current via the same phasor vector sum used in the live views. Triggers, duration, cooldown, popup, beep, and Telegram notifications all work identically to other metrics.
+
 ## 6.0.1.1 - 2026-03-16
 ### Fixed
 - **Web dashboard: neutral current now matches desktop app calculation.** Switched from simplified phasor sum to the full vector calculation with per-phase power-factor angles (`atan2(Q, P)`), identical to the desktop live view.
