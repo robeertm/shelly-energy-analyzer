@@ -1391,10 +1391,23 @@ class LiveWebMixin:
                         _ia = float(s.current_a.get("a", 0.0))
                         _ib = float(s.current_a.get("b", 0.0))
                         _ic = float(s.current_a.get("c", 0.0))
-                        # Neutral current via phasor sum (120° phase separation)
-                        _re = _ia - 0.5 * _ib - 0.5 * _ic
-                        _im = 0.8660254037844386 * (_ib - _ic)  # sqrt(3)/2
-                        _i_n = math.sqrt(_re * _re + _im * _im)
+                        # Neutral current via vector sum with power-factor angles (same as desktop app)
+                        _i_n = 0.0
+                        if _ia > 0 or _ib > 0 or _ic > 0:
+                            _pa = float(s.power_w.get("a", 0.0))
+                            _pb = float(s.power_w.get("b", 0.0))
+                            _pc = float(s.power_w.get("c", 0.0))
+                            _qa = float(getattr(s, "reactive_var", {}).get("a", 0.0))
+                            _qb = float(getattr(s, "reactive_var", {}).get("b", 0.0))
+                            _qc = float(getattr(s, "reactive_var", {}).get("c", 0.0))
+                            _phi_a = math.atan2(_qa, _pa) if (_pa or _qa) else 0.0
+                            _phi_b = math.atan2(_qb, _pb) if (_pb or _qb) else 0.0
+                            _phi_c = math.atan2(_qc, _pc) if (_pc or _qc) else 0.0
+                            _2pi3 = 2.0 * math.pi / 3.0
+                            _ta, _tb, _tc = -_phi_a, -_2pi3 - _phi_b, _2pi3 - _phi_c
+                            _in_re = _ia * math.cos(_ta) + _ib * math.cos(_tb) + _ic * math.cos(_tc)
+                            _in_im = _ia * math.sin(_ta) + _ib * math.sin(_tb) + _ic * math.sin(_tc)
+                            _i_n = math.sqrt(_in_re * _in_re + _in_im * _in_im)
                         self._live_state_store.update(
                             s.device_key,
                             LivePoint(
