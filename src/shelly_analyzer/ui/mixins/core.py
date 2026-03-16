@@ -3698,6 +3698,7 @@ class CoreMixin:
                     "a_current",
                     "b_current",
                     "c_current",
+                    "n_current",
                 ):
                     if prev is not None and mk in prev:
                         try:
