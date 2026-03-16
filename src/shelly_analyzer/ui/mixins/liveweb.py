@@ -1348,7 +1348,14 @@ class LiveWebMixin:
                             total_kwh = self._accumulate_live_kwh_today(s.device_key, int(s.ts), float(s.power_w.get('total', 0.0)))
                         except Exception:
                             total_kwh = self._get_today_kwh_total(s.device_key)
-                        self._live_state_store.update(
+                        _ia = float(s.current_a.get("a", 0.0))
+                    _ib = float(s.current_a.get("b", 0.0))
+                    _ic = float(s.current_a.get("c", 0.0))
+                    # Neutral current via phasor sum (120° phase separation)
+                    _re = _ia - 0.5 * _ib - 0.5 * _ic
+                    _im = 0.8660254037844386 * (_ib - _ic)  # sqrt(3)/2
+                    _i_n = math.sqrt(_re * _re + _im * _im)
+                    self._live_state_store.update(
                             s.device_key,
                             LivePoint(
                                 ts=int(s.ts),
@@ -1359,9 +1366,9 @@ class LiveWebMixin:
                                 va=float(s.voltage_v.get("a", 0.0)),
                                 vb=float(s.voltage_v.get("b", 0.0)),
                                 vc=float(s.voltage_v.get("c", 0.0)),
-                                ia=float(s.current_a.get("a", 0.0)),
-                                ib=float(s.current_a.get("b", 0.0)),
-                                ic=float(s.current_a.get("c", 0.0)),
+                                ia=_ia,
+                                ib=_ib,
+                                ic=_ic,
                                 q_total_var=float(getattr(s, "reactive_var", {}).get("total", 0.0)),
                                 qa=float(getattr(s, "reactive_var", {}).get("a", 0.0)),
                                 qb=float(getattr(s, "reactive_var", {}).get("b", 0.0)),
@@ -1373,6 +1380,7 @@ class LiveWebMixin:
                                 freq_hz=float(getattr(s, "freq_hz", {}).get("total", 0.0)),
                                 kwh_today=float(total_kwh),
                                 cost_today=float(total_kwh) * float(getattr(getattr(self.cfg, 'pricing', None), 'unit_price_gross', lambda: 0.0)()) if total_kwh else 0.0,
+                                i_n=_i_n,
                             ),
                         )
                     except Exception:
