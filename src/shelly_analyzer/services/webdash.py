@@ -114,6 +114,7 @@ class LivePoint:
     kwh_today: float = 0.0
     cost_today: float = 0.0
     freq_hz: float = 50.0
+    i_n: float = 0.0
 
 
 def _safe_f(v: float) -> float:
@@ -179,6 +180,7 @@ class LiveStateStore:
                     "kwh_today": _safe_f(p.kwh_today),
                     "cost_today": _safe_f(p.cost_today),
                     "freq_hz": _safe_f(p.freq_hz),
+                    "i_n": _safe_f(p.i_n),
                 }
                 for p in arr
             ]
@@ -1171,6 +1173,7 @@ function kv(el, last, dev) {{
     <b>${t('web.kv.cost_today')}</b><span>${fmt(last.cost_today, 2)} €</span>
     <b>${t('web.kv.u')}</b><span>${u}</span>
     <b>${t('web.kv.i')}</b><span>${i}</span>
+    ${!single && last.i_n !== undefined ? `<b>${t('web.kv.i_n')}</b><span>${fmt(last.i_n, 2)} A</span>` : ''}
     ${balHtml}
     <b>${t('web.kv.var')}</b><span>${q}</span>
     <b>${t('web.kv.cosphi')}</b><span>${pf}</span>
