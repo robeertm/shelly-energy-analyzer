@@ -1,5 +1,13 @@
 # Changelog
 
+## 6.0.1.4 - 2026-03-16
+### Changed
+- **Global plot theme setting.** Day/Night theme moved from Live tab quick-controls to Settings → Live & Preis → Darstellung. Now applies to **all** plots (Live + History/Plots tab). Options: Auto (System), Tag (hell), Nacht (dunkel). Auto detects OS dark mode.
+- **Removed per-plot theme toggle** from the Live tab control bar. Theme is now centrally managed in Settings.
+
+### Added
+- **History plots: day/night theming.** All kWh bar charts, W/V/A/cosφ/Hz time-series, and phase sub-plots in the Plots tab now respect the global theme setting.
+
 ## 6.0.1.3 - 2026-03-16
 ### Fixed
 - **Night mode: grid lines now clearly visible.** Changed grid color from `#444444` (barely visible) to `#AAAAAA` and increased alpha from 0.25 to 0.4 in dark mode. Grid lines are now easy to read against the dark background.

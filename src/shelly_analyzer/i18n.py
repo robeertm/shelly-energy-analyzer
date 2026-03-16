@@ -360,6 +360,11 @@ _I18N: Dict[str, Dict[str, str]] = {
         "settings.autosync.mode": "Modus:",
 
         # Settings: Live
+        "settings.appearance.title": "Darstellung",
+        "settings.appearance.theme": "Plot-Design:",
+        "settings.appearance.theme.auto": "Auto (System)",
+        "settings.appearance.theme.day": "Tag (hell)",
+        "settings.appearance.theme.night": "Nacht (dunkel)",
         "settings.live.title": "Live Anzeige",
         "settings.live.polling": "Polling (s):",
         "settings.live.window": "Ausschnitt (min):",
@@ -921,6 +926,11 @@ _I18N: Dict[str, Dict[str, str]] = {
         "settings.autosync.mode": "Mode:",
 
         # Settings: Live
+        "settings.appearance.title": "Appearance",
+        "settings.appearance.theme": "Plot theme:",
+        "settings.appearance.theme.auto": "Auto (System)",
+        "settings.appearance.theme.day": "Day (light)",
+        "settings.appearance.theme.night": "Night (dark)",
         "settings.live.title": "Live display",
         "settings.live.polling": "Polling (s):",
         "settings.live.window": "Window (min):",
@@ -1472,6 +1482,11 @@ _I18N: Dict[str, Dict[str, str]] = {
         "settings.autosync.mode": "Modo:",
 
         # Settings: Live
+        "settings.appearance.title": "Apariencia",
+        "settings.appearance.theme": "Tema de gráficos:",
+        "settings.appearance.theme.auto": "Auto (Sistema)",
+        "settings.appearance.theme.day": "Día (claro)",
+        "settings.appearance.theme.night": "Noche (oscuro)",
         "settings.live.title": "Vista en vivo",
         "settings.live.polling": "Sondeo (s):",
         "settings.live.window": "Ventana (min):",
