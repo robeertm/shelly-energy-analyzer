@@ -1753,15 +1753,49 @@ class PlotsMixin:
                     return day_start_min <= cur_min < night_start_min
                 return cur_min >= day_start_min or cur_min < night_start_min
 
-            # Resolve effective theme (all=auto based on current local time)
-            try:
-                _now = datetime.now()
-                _cur_min = int(_now.hour) * 60 + int(_now.minute)
-            except Exception:
-                _cur_min = 12 * 60
+            def _system_is_dark() -> bool:
+                """Detect OS-level dark mode (macOS / Windows / Linux)."""
+                import sys
+                try:
+                    if sys.platform == "darwin":
+                        import subprocess
+                        r = subprocess.run(
+                            ["defaults", "read", "-g", "AppleInterfaceStyle"],
+                            capture_output=True, text=True, timeout=2,
+                        )
+                        return r.stdout.strip().lower() == "dark"
+                    elif sys.platform == "win32":
+                        import winreg
+                        key = winreg.OpenKey(
+                            winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+                        )
+                        val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                        winreg.CloseKey(key)
+                        return val == 0
+                    else:
+                        # Linux/GTK: check gsettings
+                        import subprocess
+                        r = subprocess.run(
+                            ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                            capture_output=True, text=True, timeout=2,
+                        )
+                        return "dark" in r.stdout.strip().lower()
+                except Exception:
+                    return False
 
+            # Resolve effective theme
             if dn_pref == "all":
-                theme = "day" if _is_day_minutes(_cur_min) else "night"
+                # Auto: prefer system dark mode detection, fall back to time-based
+                try:
+                    theme = "night" if _system_is_dark() else "day"
+                except Exception:
+                    try:
+                        _now = datetime.now()
+                        _cur_min = int(_now.hour) * 60 + int(_now.minute)
+                    except Exception:
+                        _cur_min = 12 * 60
+                    theme = "day" if _is_day_minutes(_cur_min) else "night"
             else:
                 theme = dn_pref
 
@@ -1771,7 +1805,7 @@ class PlotsMixin:
                     if theme == "night":
                         bg = "#111111"
                         fg = "#E6E6E6"
-                        grid = "#444444"
+                        grid = "#AAAAAA"
                     else:
                         bg = "#FFFFFF"
                         fg = "#000000"
@@ -1805,7 +1839,7 @@ class PlotsMixin:
                     except Exception:
                         pass
                     try:
-                        ax.grid(True, axis="y", alpha=0.25)
+                        ax.grid(True, axis="y", alpha=0.4 if theme == "night" else 0.25)
                         # Adjust grid color if possible
                         for gl in ax.get_ygridlines():
                             gl.set_color(grid)
