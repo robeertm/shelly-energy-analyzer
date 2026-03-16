@@ -671,6 +671,138 @@ class PlotsMixin:
             except Exception:
                 pass
 
+    # ------------------------------------------------------------------
+    #  Global plot theme helpers (used by Live + History plots)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _system_is_dark() -> bool:
+            """Detect OS-level dark mode (macOS / Windows / Linux)."""
+            import sys
+            try:
+                if sys.platform == "darwin":
+                    import subprocess
+                    r = subprocess.run(
+                        ["defaults", "read", "-g", "AppleInterfaceStyle"],
+                        capture_output=True, text=True, timeout=2,
+                    )
+                    return r.stdout.strip().lower() == "dark"
+                elif sys.platform == "win32":
+                    import winreg
+                    key = winreg.OpenKey(
+                        winreg.HKEY_CURRENT_USER,
+                        r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+                    )
+                    val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                    winreg.CloseKey(key)
+                    return val == 0
+                else:
+                    import subprocess
+                    r = subprocess.run(
+                        ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                        capture_output=True, text=True, timeout=2,
+                    )
+                    return "dark" in r.stdout.strip().lower()
+            except Exception:
+                return False
+
+    def _resolve_plot_theme(self) -> str:
+            """Return 'day' or 'night' based on global config (plot_theme_mode).
+
+            Supports: auto (system dark-mode detection with time-of-day fallback),
+            day, night.
+            """
+            try:
+                pref = str(getattr(self.cfg.ui, "plot_theme_mode", "auto") or "auto").strip().lower()
+            except Exception:
+                pref = "auto"
+            if pref not in ("auto", "day", "night"):
+                pref = "auto"
+
+            if pref == "auto":
+                try:
+                    return "night" if self._system_is_dark() else "day"
+                except Exception:
+                    # Fallback: time-based
+                    try:
+                        from datetime import datetime as _dt
+                        h = _dt.now().hour
+                        return "day" if 6 <= h < 22 else "night"
+                    except Exception:
+                        return "day"
+            return pref
+
+    def _apply_plot_theme(self, fig, ax):
+            """Apply the current global theme (day/night) to a matplotlib figure+axis."""
+            try:
+                theme = self._resolve_plot_theme()
+                if theme == "night":
+                    bg, fg, grid = "#111111", "#E6E6E6", "#AAAAAA"
+                else:
+                    bg, fg, grid = "#FFFFFF", "#000000", "#BBBBBB"
+
+                try:
+                    fig.patch.set_facecolor(bg)
+                except Exception:
+                    pass
+                try:
+                    ax.set_facecolor(bg)
+                except Exception:
+                    pass
+                try:
+                    ax.tick_params(axis="both", colors=fg)
+                except Exception:
+                    pass
+                try:
+                    ax.xaxis.label.set_color(fg)
+                    ax.yaxis.label.set_color(fg)
+                except Exception:
+                    pass
+                try:
+                    if ax.title:
+                        ax.title.set_color(fg)
+                except Exception:
+                    pass
+                try:
+                    for spine in ax.spines.values():
+                        spine.set_color(fg)
+                except Exception:
+                    pass
+                try:
+                    ax.grid(True, axis="y", alpha=0.4 if theme == "night" else 0.25)
+                    for gl in ax.get_ygridlines():
+                        gl.set_color(grid)
+                except Exception:
+                    pass
+                try:
+                    leg = ax.get_legend()
+                    if leg is not None:
+                        try:
+                            leg.get_frame().set_facecolor(bg)
+                            leg.get_frame().set_edgecolor(grid)
+                        except Exception:
+                            pass
+                        try:
+                            for txt in leg.get_texts():
+                                try:
+                                    txt.set_color(fg)
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    for txt in getattr(ax, "texts", []) or []:
+                        try:
+                            txt.set_color(fg)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
     def _build_plots_tab(self) -> None:
             frm = self.tab_plots
 
@@ -1093,6 +1225,11 @@ class PlotsMixin:
                 except Exception:
                     pass
                 self._apply_axis_layout(fig, ax, w, legend=False)
+                # Apply global theme to kWh history plots
+                try:
+                    self._apply_plot_theme(fig, ax)
+                except Exception:
+                    pass
                 canvas.draw_idle()
 
     def _redraw_plots_wva2(self, metric: str) -> None:
@@ -1250,6 +1387,14 @@ class PlotsMixin:
                 self._apply_axis_layout(fig, ax1, w, legend=False)
                 if ax2 is not None:
                     self._apply_axis_layout(fig, ax2, w, legend=True)
+
+                # Apply global theme to history plots
+                try:
+                    self._apply_plot_theme(fig, ax1)
+                    if ax2 is not None:
+                        self._apply_plot_theme(fig, ax2)
+                except Exception:
+                    pass
                 canvas.draw_idle()
 
     def _reset_plots_range(self) -> None:
@@ -1572,6 +1717,13 @@ class PlotsMixin:
                 self._apply_axis_layout(fig, ax1, w, legend=False)
                 if ax2 is not None:
                     self._apply_axis_layout(fig, ax2, w, legend=True)
+                # Apply global theme to legacy WVA plots
+                try:
+                    self._apply_plot_theme(fig, ax1)
+                    if ax2 is not None:
+                        self._apply_plot_theme(fig, ax2)
+                except Exception:
+                    pass
                 canvas.draw_idle()
 
     def _redraw_stats_plots(self) -> None:
@@ -1632,6 +1784,11 @@ class PlotsMixin:
                 ax.grid(True, axis="y", alpha=0.3)
                 self._annotate_bars(ax, bars)
                 self._apply_axis_layout(fig, ax, canvas.get_tk_widget(), legend=False)
+                # Apply global theme to legacy stats plots
+                try:
+                    self._apply_plot_theme(fig, ax)
+                except Exception:
+                    pass
                 canvas.draw_idle()
 
     def _make_stats_figure(self, cd: ComputedDevice, mode: str, dpi: int = 140) -> Figure:
@@ -1725,79 +1882,8 @@ class PlotsMixin:
                 except Exception:
                     return ys_list
 
-                    # Day/Night appearance for Live plots (theme).
-            # This control changes the *look* of the plots (light/dark), not the data selection.
-            try:
-                dn_pref = str(getattr(self.cfg.ui, "live_daynight_mode", "all") or "all").strip().lower()
-            except Exception:
-                dn_pref = "all"
-            if dn_pref not in ("all", "day", "night"):
-                dn_pref = "all"
-
-            def _parse_hhmm(s: str, default_minutes: int) -> int:
-                try:
-                    s = str(s or "").strip()
-                    hh, mm = s.split(":", 1)
-                    h = max(0, min(23, int(hh)))
-                    m = max(0, min(59, int(mm)))
-                    return h * 60 + m
-                except Exception:
-                    return int(default_minutes)
-
-            day_start_min = _parse_hhmm(getattr(self.cfg.ui, "live_day_start", "06:00"), 6 * 60)
-            night_start_min = _parse_hhmm(getattr(self.cfg.ui, "live_night_start", "22:00"), 22 * 60)
-
-            def _is_day_minutes(cur_min: int) -> bool:
-                # Day is [day_start, night_start). Handles wrap-around (e.g. 22:00–06:00).
-                if day_start_min < night_start_min:
-                    return day_start_min <= cur_min < night_start_min
-                return cur_min >= day_start_min or cur_min < night_start_min
-
-            def _system_is_dark() -> bool:
-                """Detect OS-level dark mode (macOS / Windows / Linux)."""
-                import sys
-                try:
-                    if sys.platform == "darwin":
-                        import subprocess
-                        r = subprocess.run(
-                            ["defaults", "read", "-g", "AppleInterfaceStyle"],
-                            capture_output=True, text=True, timeout=2,
-                        )
-                        return r.stdout.strip().lower() == "dark"
-                    elif sys.platform == "win32":
-                        import winreg
-                        key = winreg.OpenKey(
-                            winreg.HKEY_CURRENT_USER,
-                            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
-                        )
-                        val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-                        winreg.CloseKey(key)
-                        return val == 0
-                    else:
-                        # Linux/GTK: check gsettings
-                        import subprocess
-                        r = subprocess.run(
-                            ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
-                            capture_output=True, text=True, timeout=2,
-                        )
-                        return "dark" in r.stdout.strip().lower()
-                except Exception:
-                    return False
-
-            # Resolve effective theme
-            if dn_pref == "all":
-                # Auto: prefer system dark mode detection, fall back to time-based
-                try:
-                    theme = "night" if _system_is_dark() else "day"
-                except Exception:
-                    try:
-                        _now = datetime.now()
-                        _cur_min = int(_now.hour) * 60 + int(_now.minute)
-                    except Exception:
-                        _cur_min = 12 * 60
-                    theme = "day" if _is_day_minutes(_cur_min) else "night"
-            else:
-                theme = dn_pref
+                    # Day/Night appearance – resolved via global config (plot_theme_mode).
+            theme = self._resolve_plot_theme()
 
             def _apply_live_theme(fig, ax):
                 """Apply light/dark theme to a single matplotlib axis."""

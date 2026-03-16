@@ -2453,14 +2453,8 @@ class CoreMixin:
             self.live_web_refresh_ctl = tk.DoubleVar(value=float(self.cfg.ui.live_web_refresh_seconds))
             self.live_smooth_ctl = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "live_smoothing_enabled", False)))
             self.live_smooth_sec_ctl = tk.IntVar(value=int(getattr(self.cfg.ui, "live_smoothing_seconds", 10)))
-            _dn_mode0 = str(getattr(self.cfg.ui, "live_daynight_mode", "all") or "all").strip().lower()
-            if _dn_mode0 == "day":
-                _dn_label0 = self.t('live.day')
-            elif _dn_mode0 == "night":
-                _dn_label0 = self.t('live.night')
-            else:
-                _dn_label0 = self.t('live.all')
-            self.live_daynight_ctl = tk.StringVar(value=_dn_label0)
+            # Day/Night was moved to Settings → Appearance as global plot_theme_mode
+            self.live_daynight_ctl = tk.StringVar(value="")
 
             ctl = ttk.Frame(top2)
             ctl.pack(side="left")
@@ -2482,10 +2476,7 @@ class CoreMixin:
             cb_smooth = ttk.Combobox(ctl, width=3, state="readonly", textvariable=self.live_smooth_sec_ctl, values=[0, 3, 5, 10, 20, 30])
             cb_smooth.grid(row=0, column=8, padx=(0, 10))
 
-            ttk.Label(ctl, text=self.t('live.daynight')).grid(row=0, column=9, padx=(0, 4))
-            cb_dn = ttk.Combobox(ctl, width=6, state="readonly", textvariable=self.live_daynight_ctl,
-                                values=[self.t('live.all'), self.t('live.day'), self.t('live.night')])
-            cb_dn.grid(row=0, column=10, padx=(0, 10))
+            # Day/Night toggle removed – now in Settings → Appearance
 
             # Open current log file (useful for debugging)
             try:
@@ -2512,10 +2503,7 @@ class CoreMixin:
                     self.live_smooth_ctl.trace_add('write', lambda *_a: self._schedule_apply_live_controls())
                 except Exception:
                     pass
-                try:
-                    self.live_daynight_ctl.trace_add('write', lambda *_a: self._schedule_apply_live_controls())
-                except Exception:
-                    pass
+                # Day/Night trace removed – now global in Settings
             except Exception:
                 pass
 
@@ -3356,20 +3344,10 @@ class CoreMixin:
             except Exception:
                 smooth_sec = int(getattr(self.cfg.ui, 'live_smoothing_seconds', 10))
 
-            # Day/Night mode (UI theme) - stored internally as: all|day|night
-            try:
-                _dn_label = str(self.live_daynight_ctl.get() or "").strip()
-            except Exception:
-                _dn_label = ""
-            try:
-                if _dn_label == self.t('live.day'):
-                    dn_mode = "day"
-                elif _dn_label == self.t('live.night'):
-                    dn_mode = "night"
-                else:
-                    dn_mode = "all"
-            except Exception:
-                dn_mode = "all"
+            # Day/Night mode (UI theme) - now read from global config (plot_theme_mode)
+            dn_mode = str(getattr(self.cfg.ui, 'plot_theme_mode', 'auto') or 'auto').strip().lower()
+            if dn_mode not in ('auto', 'day', 'night'):
+                dn_mode = 'auto'
 
 
             poll_s = max(0.2, float(poll_s))
@@ -3394,7 +3372,7 @@ class CoreMixin:
                 bool(getattr(old_ui, 'live_smoothing_enabled', smooth_on)) != smooth_on
                 or int(getattr(old_ui, 'live_smoothing_seconds', smooth_sec)) != smooth_sec
             )
-            changed_dn = str(getattr(old_ui, 'live_daynight_mode', 'all')) != str(dn_mode)
+            changed_dn = str(getattr(old_ui, 'plot_theme_mode', 'auto')) != str(dn_mode)
 
             # Persist config
             self.cfg = replace(
@@ -3408,7 +3386,7 @@ class CoreMixin:
                     live_web_refresh_seconds=web_refresh_s,
                     live_smoothing_enabled=smooth_on,
                     live_smoothing_seconds=smooth_sec,
-                    live_daynight_mode=dn_mode,
+                    plot_theme_mode=dn_mode,
                 ),
             )
             try:
@@ -5010,6 +4988,28 @@ class CoreMixin:
                 state="readonly",
             ).grid(row=0, column=4, padx=8, pady=8, sticky="w")
 
+            # ---------- Appearance / Theme ----------
+            appearance_box = ttk.LabelFrame(tab_main, text=self.t('settings.appearance.title'))
+            appearance_box.pack(fill="x", pady=(0, 10))
+            _theme_mode0 = str(getattr(self.cfg.ui, "plot_theme_mode", "auto") or "auto").strip().lower()
+            if _theme_mode0 not in ("auto", "day", "night"):
+                _theme_mode0 = "auto"
+            _theme_labels = {
+                "auto": self.t('settings.appearance.theme.auto'),
+                "day": self.t('settings.appearance.theme.day'),
+                "night": self.t('settings.appearance.theme.night'),
+            }
+            self._set_theme_mode_var = tk.StringVar(value=_theme_labels.get(_theme_mode0, _theme_labels["auto"]))
+            self._theme_label_to_mode = {v: k for k, v in _theme_labels.items()}
+            ttk.Label(appearance_box, text=self.t('settings.appearance.theme')).grid(row=0, column=0, padx=8, pady=8, sticky='w')
+            ttk.Combobox(
+                appearance_box,
+                values=list(_theme_labels.values()),
+                width=18,
+                textvariable=self._set_theme_mode_var,
+                state="readonly",
+            ).grid(row=0, column=1, padx=8, pady=8, sticky='w')
+
             live_box = ttk.LabelFrame(tab_main, text=self.t('settings.live.title'))
             live_box.pack(fill="x", pady=(0, 10))
             self.set_live_poll_var = tk.DoubleVar(value=float(self.cfg.ui.live_poll_seconds))
@@ -5762,9 +5762,20 @@ class CoreMixin:
                 redraw_s = float(self.cfg.ui.plot_redraw_seconds)
             redraw_s = max(0.2, redraw_s)
 
+            # Global plot theme
+            try:
+                _theme_label = str(getattr(self, '_set_theme_mode_var', tk.StringVar(value='')).get() or '').strip()
+                _theme_map = getattr(self, '_theme_label_to_mode', {})
+                plot_theme_mode = _theme_map.get(_theme_label, 'auto')
+            except Exception:
+                plot_theme_mode = str(getattr(self.cfg.ui, 'plot_theme_mode', 'auto') or 'auto')
+            if plot_theme_mode not in ('auto', 'day', 'night'):
+                plot_theme_mode = 'auto'
+
             ui = UiConfig(
                 live_poll_seconds=live_poll_s,
                 language=sel_lang,
+                plot_theme_mode=plot_theme_mode,
                 plot_redraw_seconds=redraw_s,
                 live_window_minutes=live_window_min,
                 live_retention_minutes=live_retention_min,
