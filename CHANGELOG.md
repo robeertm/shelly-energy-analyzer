@@ -1,6 +1,6 @@
 # Changelog
 
-## 6.0.0.10 - 2026-03-16
+## 6.0.1.0 - 2026-03-16
 ### Added
 - **Web dashboard: neutral conductor current (Neutralleiterstrom).** The live web dashboard now shows the calculated neutral current `I (N)` for 3-phase devices. The value is computed in real-time from the three phase currents via phasor summation (assuming 120° phase separation). A perfectly balanced load yields 0 A; any imbalance is immediately visible. Displayed between the current row and phase balance row in the KV panel.
 
