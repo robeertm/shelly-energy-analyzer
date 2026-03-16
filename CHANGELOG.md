@@ -1,5 +1,10 @@
 # Changelog
 
+## 6.0.1.1 - 2026-03-16
+### Fixed
+- **Web dashboard: neutral current now matches desktop app calculation.** Switched from simplified phasor sum to the full vector calculation with per-phase power-factor angles (`atan2(Q, P)`), identical to the desktop live view.
+- **Web dashboard: neutral current shown as dashed gray line in current chart.** The `I (N)` series is now rendered as a dashed gray line (matching the desktop app's `N` series style) alongside the L1/L2/L3 phase current lines for 3-phase devices.
+
 ## 6.0.1.0 - 2026-03-16
 ### Added
 - **Web dashboard: neutral conductor current (Neutralleiterstrom).** The live web dashboard now shows the calculated neutral current `I (N)` for 3-phase devices. Computed in real-time via phasor summation from phase currents (120° separation). Displayed between the current and phase balance rows in the KV panel.

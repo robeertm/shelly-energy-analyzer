@@ -1126,9 +1126,11 @@ function drawLineChart(canvas, tsMs, seriesList, yLabel, colors) {{
   seriesList.forEach((s, idx) => {{
     const vals = s.values || [];
     if (vals.length < 2) return;
-    const col = (colors && colors[idx]) ? colors[idx] : "rgba(106,167,255,0.9)";
+    const col = s.color || ((colors && colors[idx]) ? colors[idx] : "rgba(106,167,255,0.9)");
     ctx.strokeStyle = col;
-    ctx.lineWidth = Math.max(1, 1.6 * devicePixelRatio);
+    ctx.lineWidth = Math.max(1, (s.lineWidth || 1.6) * devicePixelRatio);
+    if (s.dashed) {{ ctx.setLineDash([6 * devicePixelRatio, 4 * devicePixelRatio]); }}
+    else {{ ctx.setLineDash([]); }}
     ctx.beginPath();
     let started = false;
     for (let i = 0; i < vals.length && i < tsMs.length; i++) {{
@@ -1140,6 +1142,7 @@ function drawLineChart(canvas, tsMs, seriesList, yLabel, colors) {{
       else {{ ctx.lineTo(x, y); }}
     }}
     ctx.stroke();
+    ctx.setLineDash([]);
   }});
 }}
 
@@ -1304,6 +1307,7 @@ function renderState(data) {
         {values: picked.arr.map(x=>x.ia)},
         {values: picked.arr.map(x=>x.ib)},
         {values: picked.arr.map(x=>x.ic)},
+        {values: picked.arr.map(x=>x.i_n), dashed: true, color: 'rgba(128,128,128,0.85)', lineWidth: 1.5},
       ];
       drawLineChart(ui.c, ts, cSeries, isSingle ? t('web.chart.current.1p') : t('web.chart.current'), palette3());
     }
