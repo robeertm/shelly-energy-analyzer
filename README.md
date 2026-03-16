@@ -8,9 +8,11 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 
 - 📊 **Live Monitoring**
   - Real-time power, voltage, current and **grid frequency (Hz)**
+  - **Neutral conductor current (I_N)** for 3-phase devices — computed via phasor vector sum with per-phase power-factor angles
   - 1‑phase and 3‑phase devices (L1 / L2 / L3 + total)
   - Live cost display (kWh × configured price)
   - Phase balance indicator for 3-phase devices (detects imbalance)
+  - Interactive legend toggle on live plots (click L1/L2/L3/N to show/hide)
   - Day / Night / Auto theme switching
 
 - 💰 **Cost Dashboard**
@@ -30,7 +32,8 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
   - PDF invoices with optional company logo
 
 - 🔔 **Telegram Notifications**
-  - Configurable threshold alerts with optional plots
+  - Configurable threshold alerts (W, V, A, A_N, VAR, cos φ, Hz) with optional plots
+  - **Neutral current (A_N) as alarm trigger** — get notified when neutral conductor current exceeds a threshold
   - Daily & monthly summaries with kWh bar charts
   - Previous period comparison (vs. yesterday / last month)
   - Standby base load detection (projected yearly cost)
@@ -48,7 +51,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - 🖥 **Cross‑Platform**
   - macOS / Windows / Linux
   - One-click start scripts
-  - Web dashboard (accessible from any device on the network)
+  - Web dashboard (accessible from any device on the network) with live charts, neutral current (dashed N line), phase balance, cost overview
 
 ## Quick Start (End Users)
 
@@ -94,7 +97,7 @@ Change language in **Settings → Language**.
 ## Running From Source (Developers)
 
 Requirements:
-- Python 3.11+ (recommended)
+- Python 3.10+ (3.11+ recommended)
 
 Install and run:
 ```bash
@@ -118,8 +121,8 @@ To publish an update:
 git add -A
 git commit -m "Description of changes"
 git push
-git tag v5.9.2.51
-git push origin v5.9.2.51
+git tag v6.0.1.2
+git push origin v6.0.1.2
 ```
 
 The GitHub Actions workflow will automatically build the release ZIP and publish it.
