@@ -69,11 +69,14 @@ class UiConfig:
     live_smoothing_enabled: bool = False
     live_smoothing_seconds: int = 10
 
-    # Live plot filter by time-of-day: all|day|night
+    # Live plot filter by time-of-day: all|day|night  (legacy, migrated to plot_theme_mode)
     live_daynight_mode: str = "all"
     # Day/Night split times (local time, HH:MM). Default: day 06:00-22:00.
     live_day_start: str = "06:00"
     live_night_start: str = "22:00"
+
+    # Global plot theme: auto|day|night  (applies to all plots: Live + History)
+    plot_theme_mode: str = "auto"
 
     # Optional Telegram notifications for alerts
     telegram_enabled: bool = False
