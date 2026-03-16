@@ -1,5 +1,10 @@
 # Changelog
 
+## 6.0.1.3 - 2026-03-16
+### Fixed
+- **Night mode: grid lines now clearly visible.** Changed grid color from `#444444` (barely visible) to `#AAAAAA` and increased alpha from 0.25 to 0.4 in dark mode. Grid lines are now easy to read against the dark background.
+- **Auto theme follows system dark mode.** The "Auto" day/night toggle now detects the OS-level dark mode setting (macOS `AppleInterfaceStyle`, Windows `AppsUseLightTheme` registry, Linux GNOME `color-scheme`) instead of relying solely on time-of-day. Falls back to time-based switching if system detection is unavailable.
+
 ## 6.0.1.2 - 2026-03-16
 ### Added
 - **Alarm rules: neutral current (A_N) as trigger metric.** The `A_N` metric is now available in the alarm configuration dropdown (Settings → Devices → Alarms). It calculates the neutral conductor current via the same phasor vector sum used in the live views. Triggers, duration, cooldown, popup, beep, and Telegram notifications all work identically to other metrics.
