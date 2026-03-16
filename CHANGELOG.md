@@ -1,5 +1,14 @@
 # Changelog
 
+## 6.0.0.10 - 2026-03-16
+
+### Added
+- **Neutral current & apparent power (3-phase).** For 3-phase devices, the neutral conductor current is now computed via vector sum of the three phase currents, correctly accounting for the phase displacement (cos φ / reactive power) between phases. The calculation uses `I_N = |I_a∠(-φ_a) + I_b∠(-120°-φ_b) + I_c∠(+120°-φ_c)|` where `φ_x = arctan2(Q_x, P_x)`. The result is:
+  - Shown in the Live tab status line (Hz row): `N: X.XX A / Y VA`
+  - Plotted as a dashed gray line ("N") in the Current (A) live chart
+  - Stored in the live time-series buffer (`n_current`) for scrollback
+- **Interactive legend toggle on all live plots.** Clicking a legend entry (L1, L2, L3, N) in the Voltage and Current live charts now toggles that series on/off. Hidden series are dimmed in the legend (alpha 0.3). State persists across the 1-second redraw cycle.
+
 ## 6.0.0.9 - 2026-03-13
 ### Changed
 - **Release version corrected to 6.0.0.9.** Project metadata, package version strings, example config version, release folder name, and ZIP asset were all aligned from `6.0.0.7` to **`6.0.0.9`**.
