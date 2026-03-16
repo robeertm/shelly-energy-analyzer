@@ -1926,13 +1926,14 @@ class PlotsMixin:
                                 ax_v.legend(loc="upper right")
                             except Exception:
                                 pass
+                        self._apply_live_legend_toggle(ax_v, canvas_v, d.key, "voltage")
                     ax_v.grid(True, axis="y", alpha=0.3)
                     self._configure_time_axis(ax_v, canvas_v.get_tk_widget(), win_m)
                     self._apply_axis_layout(self._live_figs[d.key]["voltage"], ax_v, canvas_v.get_tk_widget(), legend=(n_series > 1))
                     _apply_live_theme(self._live_figs[d.key]["voltage"], ax_v)
                     canvas_v.draw_idle()
 
-                # Current (L1/L2/L3 in one plot)
+                # Current (L1/L2/L3/N in one plot)
 
                 ax_c = self._live_axes.get(d.key, {}).get("current")
                 canvas_c = self._live_canvases.get(d.key, {}).get("current")
@@ -1954,6 +1955,15 @@ class PlotsMixin:
                         ys = _maybe_smooth(xs, ys)
                         ax_c.plot(xs, ys, label=label)
                         n_series += 1
+                    # Neutral current (dashed, gray) — 3-phase only
+                    if ph >= 3:
+                        arr_n = _slice_live(metrics.get("n_current", []))
+                        if arr_n:
+                            xs_n = [datetime.fromtimestamp(t) for t, _ in arr_n]
+                            ys_n = [v for _, v in arr_n]
+                            ys_n = _maybe_smooth(xs_n, ys_n)
+                            ax_c.plot(xs_n, ys_n, label="N", linestyle="--", color="gray", linewidth=1.5)
+                            n_series += 1
                     if n_series > 1:
                         try:
                             base = self._font_base_for_widget(canvas_c.get_tk_widget())
@@ -1963,11 +1973,86 @@ class PlotsMixin:
                                 ax_c.legend(loc="upper right")
                             except Exception:
                                 pass
+                        self._apply_live_legend_toggle(ax_c, canvas_c, d.key, "current")
                     ax_c.grid(True, axis="y", alpha=0.3)
                     self._configure_time_axis(ax_c, canvas_c.get_tk_widget(), win_m)
                     self._apply_axis_layout(self._live_figs[d.key]["current"], ax_c, canvas_c.get_tk_widget(), legend=(n_series > 1))
                     _apply_live_theme(self._live_figs[d.key]['current'], ax_c)
                     canvas_c.draw_idle()
+
+    def _apply_live_legend_toggle(self, ax, canvas, device_key: str, metric: str) -> None:
+            """Apply hidden-line state and connect legend pick events.
+
+            Stored state: self._live_hidden_lines = {(device_key, metric): set_of_labels}
+            On each redraw this is called AFTER legend creation to:
+              1. Hide lines whose label is in the hidden set
+              2. Dim the corresponding legend entries (alpha 0.3)
+              3. Connect a pick_event handler (once per canvas) that toggles visibility
+            """
+            try:
+                if not hasattr(self, '_live_hidden_lines'):
+                    self._live_hidden_lines = {}
+                hidden = self._live_hidden_lines.get((device_key, metric), set())
+
+                # Apply hidden state to plot lines
+                for line in ax.get_lines():
+                    lbl = line.get_label()
+                    if lbl.startswith('_'):
+                        continue
+                    if lbl in hidden:
+                        line.set_visible(False)
+
+                # Apply to legend entries
+                legend = ax.get_legend()
+                if not legend:
+                    return
+                for leg_line, leg_text in zip(legend.get_lines(), legend.get_texts()):
+                    leg_line.set_picker(True)
+                    leg_line.set_pickradius(10)
+                    if leg_text.get_text() in hidden:
+                        leg_line.set_alpha(0.3)
+                        leg_text.set_alpha(0.3)
+
+                # Connect pick event once per canvas
+                if not hasattr(self, '_live_legend_cids'):
+                    self._live_legend_cids = set()
+                canvas_id = id(canvas)
+                if canvas_id not in self._live_legend_cids:
+                    self._live_legend_cids.add(canvas_id)
+
+                    def _on_legend_pick(event, _self=self, _dk=device_key, _met=metric, _ax=ax, _cv=canvas):
+                        try:
+                            if not hasattr(event, 'artist'):
+                                return
+                            leg = _ax.get_legend()
+                            if not leg:
+                                return
+                            for ll, lt in zip(leg.get_lines(), leg.get_texts()):
+                                if ll is event.artist:
+                                    lbl = lt.get_text()
+                                    hl = getattr(_self, '_live_hidden_lines', {})
+                                    s = hl.get((_dk, _met), set())
+                                    if lbl in s:
+                                        s.discard(lbl)
+                                    else:
+                                        s.add(lbl)
+                                    hl[(_dk, _met)] = s
+                                    _self._live_hidden_lines = hl
+                                    # Toggle current lines
+                                    for pl in _ax.get_lines():
+                                        if pl.get_label() == lbl:
+                                            pl.set_visible(lbl not in s)
+                                    new_alpha = 0.3 if lbl in s else 1.0
+                                    ll.set_alpha(new_alpha)
+                                    lt.set_alpha(new_alpha)
+                                    _cv.draw_idle()
+                                    break
+                        except Exception:
+                            pass
+
+                    canvas.mpl_connect('pick_event', _on_legend_pick)
+            except Exception:
+                pass
 
     def _configure_time_axis(self, ax, widget: tk.Widget, window_minutes: int) -> None:
 

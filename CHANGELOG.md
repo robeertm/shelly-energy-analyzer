@@ -1,22 +1,23 @@
 # Changelog
 
-## 6.0.0.9 - 2026-03-13
+## 6.0.0.10 - 2026-03-16
 
+### Added
+- **Neutral current & apparent power (3-phase).** For 3-phase devices, the neutral conductor current is now computed via vector sum of the three phase currents, correctly accounting for the phase displacement (cos φ / reactive power) between phases. The calculation uses `I_N = |I_a∠(-φ_a) + I_b∠(-120°-φ_b) + I_c∠(+120°-φ_c)|` where `φ_x = arctan2(Q_x, P_x)`. The result is:
+  - Shown in the Live tab status line (Hz row): `N: X.XX A / Y VA`
+  - Plotted as a dashed gray line ("N") in the Current (A) live chart
+  - Stored in the live time-series buffer (`n_current`) for scrollback
+- **Interactive legend toggle on all live plots.** Clicking a legend entry (L1, L2, L3, N) in the Voltage and Current live charts now toggles that series on/off. Hidden series are dimmed in the legend (alpha 0.3). State persists across the 1-second redraw cycle.
+
+## 6.0.0.9 - 2026-03-13
 ### Changed
 - **Release version corrected to 6.0.0.9.** Project metadata, package version strings, example config version, release folder name, and ZIP asset were all aligned from `6.0.0.7` to **`6.0.0.9`**.
 - **Live tab: grid frequency remains on its own dedicated status row.** This release keeps the UI improvement introduced in the previous build, but publishes it as the corrected GitHub-ready release version **6.0.0.9**.
 
-## 6.0.0.8 - 2026-03-13
-
-### Changed
-- **Release version corrected to 6.0.0.8.** Project metadata, package version strings, example config version, release folder name, and ZIP asset were all aligned from `6.0.0.7` to **`6.0.0.8`**.
-- **Live tab: grid frequency remains on its own dedicated status row.** This release keeps the UI improvement introduced in the previous build, but publishes it as the corrected GitHub-ready release version **6.0.0.8**.
-
 ## 6.0.0.7 - 2026-03-13
-
 ### Changed
 - **Live tab: grid frequency now has its own status row.** The desktop Live view previously appended `Hz` to the VAR / cos φ line, which became crowded on 3-phase devices. The Live cards now render a dedicated fourth line for grid frequency (`Netzfrequenz / Grid frequency`) so the status area is easier to scan.
-- 
+
 ## 6.0.0.6 - 2026-03-10
 
 ### Fixed

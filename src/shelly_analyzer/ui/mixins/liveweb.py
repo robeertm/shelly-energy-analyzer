@@ -1198,7 +1198,32 @@ class LiveWebMixin:
                     series["a_current"].append((s.ts, float(s.current_a.get("a", 0.0))))
                     series["b_current"].append((s.ts, float(s.current_a.get("b", 0.0))))
                     series["c_current"].append((s.ts, float(s.current_a.get("c", 0.0))))
-                
+                    # Neutral current via vector sum of phase currents (3-phase only).
+                    # Uses arctan2(Q, P) per phase for the power-factor angle, then
+                    # computes I_N = |I_a∠(-φ_a) + I_b∠(-120°-φ_b) + I_c∠(120°-φ_c)|.
+                    try:
+                        _ia = float(s.current_a.get("a", 0.0))
+                        _ib = float(s.current_a.get("b", 0.0))
+                        _ic = float(s.current_a.get("c", 0.0))
+                        if _ia > 0 or _ib > 0 or _ic > 0:
+                            _pa = float(s.power_w.get("a", 0.0))
+                            _pb = float(s.power_w.get("b", 0.0))
+                            _pc = float(s.power_w.get("c", 0.0))
+                            _qa = float(getattr(s, "reactive_var", {}).get("a", 0.0))
+                            _qb = float(getattr(s, "reactive_var", {}).get("b", 0.0))
+                            _qc = float(getattr(s, "reactive_var", {}).get("c", 0.0))
+                            _phi_a = math.atan2(_qa, _pa) if (_pa or _qa) else 0.0
+                            _phi_b = math.atan2(_qb, _pb) if (_pb or _qb) else 0.0
+                            _phi_c = math.atan2(_qc, _pc) if (_pc or _qc) else 0.0
+                            _2pi3 = 2.0 * math.pi / 3.0
+                            _ta, _tb, _tc = -_phi_a, -_2pi3 - _phi_b, _2pi3 - _phi_c
+                            _in_re = _ia * math.cos(_ta) + _ib * math.cos(_tb) + _ic * math.cos(_tc)
+                            _in_im = _ia * math.sin(_ta) + _ib * math.sin(_tb) + _ic * math.sin(_tc)
+                            _i_n = math.sqrt(_in_re * _in_re + _in_im * _in_im)
+                            series["n_current"].append((s.ts, _i_n))
+                    except Exception:
+                        pass
+
                     # Evaluate alert rules on incoming live samples
                     try:
                         self._alerts_process_sample(s)
@@ -1296,37 +1321,53 @@ class LiveWebMixin:
                                     q_txt = f"{q_total:.0f} VAR ({qa2:.0f}/{qb2:.0f}/{qc2:.0f})"
                                     pf_txt = f"{pf_total:.3f} ({pfa2:.3f}/{pfb2:.3f}/{pfc2:.3f})"
                                     # Phase balance indicator (% symmetry)
+                                    # Always show it, even if one phase is below 5 W.
+                                    # The previous logic filtered "active" phases with >5 W which could
+                                    # make the balance text disappear when L1 dropped below that threshold.
                                     balance_txt = ""
                                     try:
                                         pa2 = float(s.power_w.get("a", 0.0))
                                         pb2 = float(s.power_w.get("b", 0.0))
                                         pc2 = float(s.power_w.get("c", 0.0))
-                                        phases_active = [abs(p) for p in (pa2, pb2, pc2) if abs(p) > 5.0]
-                                        if len(phases_active) >= 2:
-                                            # Balance: how symmetric is the load across active phases?
-                                            p_avg = sum(phases_active) / len(phases_active)
-                                            p_dev = max(abs(p - p_avg) for p in phases_active)
-                                            bal_pct = max(0.0, 100.0 - (p_dev / p_avg * 100.0)) if p_avg > 0 else 100.0
-                                            if bal_pct >= 90:
-                                                sym = "✅"
-                                            elif bal_pct >= 70:
-                                                sym = "⚠️"
-                                            else:
-                                                sym = "❌"
-                                            balance_txt = f"   {self.t('live.cards.balance')}: {bal_pct:.0f}% {sym} ({pa2:.0f}/{pb2:.0f}/{pc2:.0f} W)"
-                                        elif len(phases_active) == 1:
-                                            # Only one phase active - show distribution but no balance %
-                                            balance_txt = f"   W: {pa2:.0f}/{pb2:.0f}/{pc2:.0f}"
+                                        phases_abs = [abs(pa2), abs(pb2), abs(pc2)]
+                                        p_avg = sum(phases_abs) / 3.0
+                                        if p_avg > 0.0:
+                                            p_dev = max(abs(p - p_avg) for p in phases_abs)
+                                            bal_pct = max(0.0, 100.0 - (p_dev / p_avg * 100.0))
+                                        else:
+                                            bal_pct = 100.0
+                                        if bal_pct >= 90:
+                                            sym = "✅"
+                                        elif bal_pct >= 70:
+                                            sym = "⚠️"
+                                        else:
+                                            sym = "❌"
+                                        balance_txt = f"   {self.t('live.cards.balance')}: {bal_pct:.0f}% {sym} ({pa2:.0f}/{pb2:.0f}/{pc2:.0f} W)"
                                     except Exception:
                                         pass
                                     line2 = f"{self.t('web.kv.var')}: {q_txt}   {self.t('web.kv.cosphi')}: {pf_txt}{balance_txt}"
-                                # Append grid frequency if available
+                                line3 = "–"
                                 try:
                                     fq = float(getattr(s, "freq_hz", {}).get("total", 0.0))
                                     if fq > 1.0:
-                                        line2 += f"   {self.t('web.kv.freq')}: {fq:.2f} Hz"
+                                        line3 = f"{self.t('web.kv.freq')}: {fq:.2f} Hz"
                                 except Exception:
                                     pass
+                                # Neutral current (3-phase only): compute from last n_current sample
+                                if ph2 >= 3:
+                                    try:
+                                        _ns = series.get("n_current") if series is not None else None
+                                        if _ns and len(_ns) > 0:
+                                            _i_n_val = _ns[-1][1]
+                                            _va2 = float(s.voltage_v.get("a", 0.0))
+                                            _vb2 = float(s.voltage_v.get("b", 0.0))
+                                            _vc2 = float(s.voltage_v.get("c", 0.0))
+                                            _v_avg = (_va2 + _vb2 + _vc2) / 3.0
+                                            _s_n = _v_avg * _i_n_val
+                                            _n_txt = f"   N: {_i_n_val:.2f} A / {_s_n:.0f} VA"
+                                            line3 = (line3 + _n_txt) if line3 != "–" else f"N: {_i_n_val:.2f} A / {_s_n:.0f} VA"
+                                    except Exception:
+                                        pass
 
                                 if 'line0' in vars_:
                                     vars_['line0'].set(line0)
@@ -1334,6 +1375,8 @@ class LiveWebMixin:
                                     vars_['line1'].set(line1)
                                 if 'line2' in vars_:
                                     vars_['line2'].set(line2)
+                                if 'line3' in vars_:
+                                    vars_['line3'].set(line3)
                             except Exception:
                                 pass
                     except Exception:
