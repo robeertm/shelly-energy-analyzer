@@ -994,8 +994,16 @@ class PlotsMixin:
                     dev_nb.add(tab, text=d.name)
 
                     fig = Figure(figsize=(11, 3.6), dpi=120)
+                    # Set initial figure background to match theme so no
+                    # white flash appears before the first redraw.
+                    try:
+                        _init_bg = "#111111" if self._resolve_plot_theme() == "night" else "#FFFFFF"
+                        fig.patch.set_facecolor(_init_bg)
+                    except Exception:
+                        _init_bg = "#FFFFFF"
                     # Axes are created during redraw (because V/A uses 2 axes)
                     canvas = FigureCanvasTkAgg(fig, master=tab)
+                    canvas.get_tk_widget().configure(bg=_init_bg)
                     canvas.get_tk_widget().pack(fill="both", expand=True)
 
                     self._plots_device_order[metric_key].append(d.key)
