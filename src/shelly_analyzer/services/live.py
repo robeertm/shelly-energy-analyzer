@@ -92,10 +92,17 @@ def parse_live_fields(data: Dict[str, Any]) -> Dict[str, Dict[str, float]]:
     _freq_vals = [v for v in (fa, fb, fc) if v > 0.0]
     freq_total = sum(_freq_vals) / len(_freq_vals) if _freq_vals else 0.0
 
+    # Neutral conductor current: prefer device-provided field; else derive
+    # from phase currents assuming 120° displacement:
+    #   I_N = sqrt(Ia² + Ib² + Ic² - Ia·Ib - Ia·Ic - Ib·Ic)
+    i_n = _safe_float(data.get("n_current", data.get("n_avg_current", float("nan"))))
+    if not math.isfinite(i_n):
+        i_n = math.sqrt(max(ia*ia + ib*ib + ic*ic - ia*ib - ia*ic - ib*ic, 0.0))
+
     return {
         "power_w": {"a": pa, "b": pb, "c": pc, "total": p_total},
         "voltage_v": {"a": va, "b": vb, "c": vc},
-        "current_a": {"a": ia, "b": ib, "c": ic},
+        "current_a": {"a": ia, "b": ib, "c": ic, "n": i_n},
         "reactive_var": {"a": qa, "b": qb, "c": qc, "total": q_total},
         "cosphi": {"a": pfa, "b": pfb, "c": pfc, "total": pf_total},
         "freq_hz": {"a": fa, "b": fb, "c": fc, "total": freq_total},
