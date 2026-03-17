@@ -1354,7 +1354,10 @@ class PlotsMixin:
                             continue
                         if tmp.empty:
                             continue
-                        ax2.plot(tmp.index, tmp.values, label=lab)
+                        if lab == "N":
+                            ax2.plot(tmp.index, tmp.values, label=lab, color="gray", linestyle="--", alpha=0.7)
+                        else:
+                            ax2.plot(tmp.index, tmp.values, label=lab)
                         any_line = True
                     ax2.set_ylabel(ylabel)
                     ax2.grid(True, axis="y", alpha=0.3)
@@ -1680,7 +1683,10 @@ class PlotsMixin:
                             continue
                         if tmp is None or tmp.empty:
                             continue
-                        ax2.plot(tmp.index, tmp.values, label=lab)
+                        if lab == "N":
+                            ax2.plot(tmp.index, tmp.values, label=lab, color="gray", linestyle="--", alpha=0.7)
+                        else:
+                            ax2.plot(tmp.index, tmp.values, label=lab)
                         any_line = True
                     ax2.set_ylabel(ylabel)
                     ax2.grid(True, axis="y", alpha=0.3)
