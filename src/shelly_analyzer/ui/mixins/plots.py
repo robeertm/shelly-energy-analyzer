@@ -1618,8 +1618,8 @@ class PlotsMixin:
                 self._resize_figure_to_widget(fig, w, dpi=self._dpi_for_widget(w), min_h_px=320)
                 fig.clear()
 
-                # For V/A: show total on top axis and phases on bottom axis.
-                if metric in {"V", "A"}:
+                # For V/A/VAR/COSPHI: show total on top axis and phases on bottom axis.
+                if metric in {"W", "V", "A", "VAR", "Q", "COSPHI", "PF"}:
                     ax1 = fig.add_subplot(211)
                     ax2 = fig.add_subplot(212, sharex=ax1)
                     self._stats_axes[d.key] = ax1

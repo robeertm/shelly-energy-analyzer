@@ -1649,7 +1649,7 @@ class CoreMixin:
                     col = first_col([
                         'power_total_w',
                         'total_act_power', 'total_active_power', 'total_apower',
-                        'total_power_w', 'total_act_power_w',
+                        'total_power', 'total_w', 'total_power_w', 'total_act_power_w',
                         'avg_power', 'avg_active_power', 'avg_act_power', 'avg_apower', 'avg_w',
                         'active_power', 'act_power', 'apower',
                         'power', 'watts', 'w', 'power_w',
@@ -2319,27 +2319,12 @@ class CoreMixin:
                     pass
 
                 # Add neutral conductor current for "A" metric
+                # Always compute N from phase currents using 120° displacement
+                # formula. The stored n_avg_current from Shelly is unreliable
+                # (often a constant ~0.014 regardless of actual load).
                 if kind == "current":
-                    n_col = None
-                    for c in cols_all:
-                        cl = str(c).lower()
-                        if cl == "n_avg_current":
-                            n_col = c
-                            break
-                    if n_col is None:
-                        for c in cols_all:
-                            cl = str(c).lower()
-                            if cl.startswith("n_") and "current" in cl:
-                                n_col = c
-                                break
-                    if n_col is not None:
-                        n_ser = _num(n_col)
-                        if n_ser is not None and n_ser.notna().any():
-                            out["N"] = n_ser
-                    # If N not from DB, compute from phase currents
-                    if "N" not in out and "L1" in out and "L2" in out and "L3" in out:
+                    if "L1" in out and "L2" in out and "L3" in out:
                         try:
-                            import numpy as np
                             ia = pd.to_numeric(out["L1"], errors="coerce").fillna(0.0)
                             ib = pd.to_numeric(out["L2"], errors="coerce").fillna(0.0)
                             ic = pd.to_numeric(out["L3"], errors="coerce").fillna(0.0)
