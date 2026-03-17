@@ -2633,6 +2633,12 @@ class CoreMixin:
                 ax_p = fig_p.add_subplot(111)
                 ax_p.set_ylabel("W")
                 canvas_p = FigureCanvasTkAgg(fig_p, master=box_p)
+                try:
+                    _lbg = "#111111" if self._resolve_plot_theme() == "night" else "#FFFFFF"
+                    fig_p.patch.set_facecolor(_lbg)
+                    canvas_p.get_tk_widget().configure(bg=_lbg)
+                except Exception:
+                    pass
                 canvas_p.get_tk_widget().pack(fill="both", expand=True)
                 # Voltage (all phases)
                 v_title = self.t('live.chart.voltage.1p') if int(getattr(d, 'phases', 3) or 3) <= 1 else self.t('live.chart.voltage')
@@ -2642,6 +2648,11 @@ class CoreMixin:
                 ax_v = fig_v.add_subplot(111)
                 ax_v.set_ylabel("V")
                 canvas_v = FigureCanvasTkAgg(fig_v, master=box_v)
+                try:
+                    fig_v.patch.set_facecolor(_lbg)
+                    canvas_v.get_tk_widget().configure(bg=_lbg)
+                except Exception:
+                    pass
                 canvas_v.get_tk_widget().pack(fill="both", expand=True)
                 # Current (all phases)
                 c_title = self.t('live.chart.current.1p') if int(getattr(d, 'phases', 3) or 3) <= 1 else self.t('live.chart.current')
@@ -2651,6 +2662,11 @@ class CoreMixin:
                 ax_c = fig_c.add_subplot(111)
                 ax_c.set_ylabel("A")
                 canvas_c = FigureCanvasTkAgg(fig_c, master=box_c)
+                try:
+                    fig_c.patch.set_facecolor(_lbg)
+                    canvas_c.get_tk_widget().configure(bg=_lbg)
+                except Exception:
+                    pass
                 canvas_c.get_tk_widget().pack(fill="both", expand=True)
                 self._live_figs[d.key]["power"] = fig_p
                 self._live_figs[d.key]["voltage"] = fig_v
