@@ -1,6 +1,6 @@
 # Changelog
 
-## 6.0.1.9 - 2026-03-17
+## 6.0.1.10 - 2026-03-17
 ### Fixed
 - **False neutral current alarm on live start.** When live monitoring was restarted, the alert state retained `start_ts` from the previous session. The duration check passed immediately on the first sample, causing a false trigger. Alert state is now cleared when live monitoring starts.
 
