@@ -3491,6 +3491,10 @@ class CoreMixin:
                 self._apply_live_controls()
             except Exception:
                 pass
+            # Reset alert state so stale start_ts from a previous live session
+            # cannot cause an immediate false trigger (duration check would pass
+            # because now_ts − old_start_ts is huge).
+            self._alert_state.clear()
             # Start live polling for *all configured devices*.
             # The UI shows only two devices at a time, but polling continues for all.
             if not self._live_pollers:
