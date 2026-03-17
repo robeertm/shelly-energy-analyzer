@@ -1,5 +1,14 @@
 # Changelog
 
+## 6.0.0.10 - 2026-03-17
+### Added
+- **Neutral conductor current (N) for all views.** The neutral current is now:
+  - Parsed from the Shelly API (`n_current` field) or computed from phase currents using the 120° displacement formula: `I_N = √(Ia² + Ib² + Ic² - Ia·Ib - Ia·Ic - Ib·Ic)`
+  - Shown in the Tkinter live view and web dashboard KV panel (appended to the current line)
+  - Plotted as a **dashed gray line** labeled "N" in all current (A) charts: live Tkinter plots, live web dashboard canvas charts, and historical Plots tab
+  - Backfilled automatically for all historical database records on startup (where `n_avg_current` was NULL)
+  - Computed on-the-fly for historical plots even when not stored in the database
+
 ## 6.0.0.9 - 2026-03-13
 ### Changed
 - **Release version corrected to 6.0.0.9.** Project metadata, package version strings, example config version, release folder name, and ZIP asset were all aligned from `6.0.0.7` to **`6.0.0.9`**.
