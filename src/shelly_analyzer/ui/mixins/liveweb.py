@@ -1198,6 +1198,7 @@ class LiveWebMixin:
                     series["a_current"].append((s.ts, float(s.current_a.get("a", 0.0))))
                     series["b_current"].append((s.ts, float(s.current_a.get("b", 0.0))))
                     series["c_current"].append((s.ts, float(s.current_a.get("c", 0.0))))
+                    series["n_current"].append((s.ts, float(s.current_a.get("n", 0.0))))
                 
                     # Evaluate alert rules on incoming live samples
                     try:
@@ -1220,12 +1221,13 @@ class LiveWebMixin:
 
                             dev_cfg = next((d for d in self.cfg.devices if d.key == s.device_key), None)
                             ph = int(getattr(dev_cfg, "phases", 3) or 3) if dev_cfg is not None else 3
+                            i_n = float(s.current_a.get("n", 0.0))
                             if ph <= 1:
                                 volt_txt = f"L1 {va:.1f} V"
                                 curr_txt = f"L1 {ia:.2f} A"
                             else:
                                 volt_txt = f"L1 {va:.1f} V  L2 {vb:.1f} V  L3 {vc:.1f} V"
-                                curr_txt = f"L1 {ia:.2f} A  L2 {ib:.2f} A  L3 {ic:.2f} A"
+                                curr_txt = f"L1 {ia:.2f} A  L2 {ib:.2f} A  L3 {ic:.2f} A  (N {i_n:.2f} A)"
 
                             vars_["power"].set(f"{pw:.0f} W")
                             vars_["voltage"].set(volt_txt)
@@ -1362,6 +1364,7 @@ class LiveWebMixin:
                                 ia=float(s.current_a.get("a", 0.0)),
                                 ib=float(s.current_a.get("b", 0.0)),
                                 ic=float(s.current_a.get("c", 0.0)),
+                                i_n=float(s.current_a.get("n", 0.0)),
                                 q_total_var=float(getattr(s, "reactive_var", {}).get("total", 0.0)),
                                 qa=float(getattr(s, "reactive_var", {}).get("a", 0.0)),
                                 qb=float(getattr(s, "reactive_var", {}).get("b", 0.0)),

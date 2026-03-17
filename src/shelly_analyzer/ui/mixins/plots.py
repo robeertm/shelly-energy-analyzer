@@ -1217,7 +1217,10 @@ class PlotsMixin:
                             continue
                         if tmp.empty:
                             continue
-                        ax2.plot(tmp.index, tmp.values, label=lab)
+                        if lab == "N":
+                            ax2.plot(tmp.index, tmp.values, label=lab, color="gray", linestyle="--", alpha=0.7)
+                        else:
+                            ax2.plot(tmp.index, tmp.values, label=lab)
                         any_line = True
                     ax2.set_ylabel(ylabel)
                     ax2.grid(True, axis="y", alpha=0.3)
@@ -1535,7 +1538,10 @@ class PlotsMixin:
                             continue
                         if tmp is None or tmp.empty:
                             continue
-                        ax2.plot(tmp.index, tmp.values, label=lab)
+                        if lab == "N":
+                            ax2.plot(tmp.index, tmp.values, label=lab, color="gray", linestyle="--", alpha=0.7)
+                        else:
+                            ax2.plot(tmp.index, tmp.values, label=lab)
                         any_line = True
                     ax2.set_ylabel(ylabel)
                     ax2.grid(True, axis="y", alpha=0.3)
@@ -1954,6 +1960,16 @@ class PlotsMixin:
                         ys = _maybe_smooth(xs, ys)
                         ax_c.plot(xs, ys, label=label)
                         n_series += 1
+                    # Neutral conductor current (dashed gray)
+                    if ph > 1:
+                        arr_n = _slice_live(metrics.get("n_current", []))
+                        if arr_n:
+                            xs_n = [datetime.fromtimestamp(t) for t, _ in arr_n]
+                            ys_n = [v for _, v in arr_n]
+                            xs_n, ys_n = _filter_daynight(xs_n, ys_n)
+                            ys_n = _maybe_smooth(xs_n, ys_n)
+                            ax_c.plot(xs_n, ys_n, label="N", color="gray", linestyle="--", alpha=0.7)
+                            n_series += 1
                     if n_series > 1:
                         try:
                             base = self._font_base_for_widget(canvas_c.get_tk_widget())

@@ -111,6 +111,7 @@ class LivePoint:
     pfa: float = 0.0
     pfb: float = 0.0
     pfc: float = 0.0
+    i_n: float = 0.0
     kwh_today: float = 0.0
     cost_today: float = 0.0
     freq_hz: float = 50.0
@@ -168,6 +169,7 @@ class LiveStateStore:
                     "ia": _safe_f(p.ia),
                     "ib": _safe_f(p.ib),
                     "ic": _safe_f(p.ic),
+                    "i_n": _safe_f(p.i_n),
                     "q_total_var": _safe_f(p.q_total_var),
                     "qa": _safe_f(p.qa),
                     "qb": _safe_f(p.qb),
@@ -1127,6 +1129,11 @@ function drawLineChart(canvas, tsMs, seriesList, yLabel, colors) {{
     const col = (colors && colors[idx]) ? colors[idx] : "rgba(106,167,255,0.9)";
     ctx.strokeStyle = col;
     ctx.lineWidth = Math.max(1, 1.6 * devicePixelRatio);
+    if (s.dash) {{
+      ctx.setLineDash(s.dash.map(d => d * devicePixelRatio));
+    }} else {{
+      ctx.setLineDash([]);
+    }}
     ctx.beginPath();
     let started = false;
     for (let i = 0; i < vals.length && i < tsMs.length; i++) {{
@@ -1138,13 +1145,14 @@ function drawLineChart(canvas, tsMs, seriesList, yLabel, colors) {{
       else {{ ctx.lineTo(x, y); }}
     }}
     ctx.stroke();
+    ctx.setLineDash([]);
   }});
 }}
 
 function kv(el, last, dev) {{
   const single = (parseInt((dev && dev.phases !== undefined) ? dev.phases : 3, 10) <= 1);
   const u = single ? `${fmt(last.va)} V` : `${fmt(last.va)} / ${fmt(last.vb)} / ${fmt(last.vc)} V`;
-  const i = single ? `${fmt(last.ia)} A` : `${fmt(last.ia)} / ${fmt(last.ib)} / ${fmt(last.ic)} A`;
+  const i = single ? `${fmt(last.ia)} A` : `${fmt(last.ia)} / ${fmt(last.ib)} / ${fmt(last.ic)} A  (N ${fmt(last.i_n, 2)} A)`;
   const q = single ? `${fmt(last.q_total_var, 0)} VAR` : `${fmt(last.q_total_var, 0)} VAR (${fmt(last.qa,0)}/${fmt(last.qb,0)}/${fmt(last.qc,0)})`;
   const pf = single ? `${fmt(last.cosphi_total, 3)}` : `${fmt(last.cosphi_total, 3)} (${fmt(last.pfa,3)}/${fmt(last.pfb,3)}/${fmt(last.pfc,3)})`;
 
@@ -1301,8 +1309,9 @@ function renderState(data) {
         {values: picked.arr.map(x=>x.ia)},
         {values: picked.arr.map(x=>x.ib)},
         {values: picked.arr.map(x=>x.ic)},
+        {values: picked.arr.map(x=>x.i_n), dash: [6, 4]},
       ];
-      drawLineChart(ui.c, ts, cSeries, isSingle ? t('web.chart.current.1p') : t('web.chart.current'), palette3());
+      drawLineChart(ui.c, ts, cSeries, isSingle ? t('web.chart.current.1p') : t('web.chart.current'), [...palette3(), 'rgba(156,163,175,0.85)']);
     }
   });
 
