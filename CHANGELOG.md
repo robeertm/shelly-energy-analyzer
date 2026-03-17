@@ -1,5 +1,22 @@
 # Changelog
 
+## 6.0.1.9 - 2026-03-17
+### Fixed
+- **False neutral current alarm on live start.** When live monitoring was restarted, the alert state retained `start_ts` from the previous session. The duration check passed immediately on the first sample, causing a false trigger. Alert state is now cleared when live monitoring starts.
+
+## 6.0.1.8 - 2026-03-17
+### Fixed
+- **Night mode: white stripes on plot edges.** Canvas widget background color is now set at creation time, eliminating visible white edges on V, A, W, VAR, cos φ, and Hz plots in dark mode.
+
+## 6.0.1.7 - 2026-03-17
+### Fixed
+- **Night mode: white stripes on plot panel edges.** Set canvas widget background to match the dark theme at creation time instead of only after the first redraw.
+
+## 6.0.1.6 - 2026-03-17
+### Fixed
+- **N current showing 0 in plots.** Neutral current was not displayed in historical plot data.
+- **VAR and cos φ plots empty.** Reactive power and power factor plots showed no data due to a query issue.
+
 ## 6.0.1.5 - 2026-03-17
 ### Added
 - **Neutral current in historical plots.** The N current is now shown as a dashed gray line in the Plots tab (A / current charts) for historical data, matching the live view style.
