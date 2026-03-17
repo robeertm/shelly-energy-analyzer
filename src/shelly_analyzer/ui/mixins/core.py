@@ -2318,8 +2318,41 @@ class CoreMixin:
                 except Exception:
                     pass
 
+                # Add neutral conductor current for "A" metric
+                if kind == "current":
+                    n_col = None
+                    for c in cols_all:
+                        cl = str(c).lower()
+                        if cl == "n_avg_current":
+                            n_col = c
+                            break
+                    if n_col is None:
+                        for c in cols_all:
+                            cl = str(c).lower()
+                            if cl.startswith("n_") and "current" in cl:
+                                n_col = c
+                                break
+                    if n_col is not None:
+                        n_ser = _num(n_col)
+                        if n_ser is not None and n_ser.notna().any():
+                            out["N"] = n_ser
+                    # If N not from DB, compute from phase currents
+                    if "N" not in out and "L1" in out and "L2" in out and "L3" in out:
+                        try:
+                            import numpy as np
+                            ia = pd.to_numeric(out["L1"], errors="coerce").fillna(0.0)
+                            ib = pd.to_numeric(out["L2"], errors="coerce").fillna(0.0)
+                            ic = pd.to_numeric(out["L3"], errors="coerce").fillna(0.0)
+                            n_calc = np.sqrt(np.maximum(ia**2 + ib**2 + ic**2 - ia*ib - ia*ic - ib*ic, 0.0))
+                            out["N"] = n_calc
+                        except Exception:
+                            pass
+
                 # Keep stable order
-                return {k: out[k] for k in ("L1", "L2", "L3") if k in out}
+                result = {k: out[k] for k in ("L1", "L2", "L3") if k in out}
+                if "N" in out:
+                    result["N"] = out["N"]
+                return result
 
     def _pretty_kwh_mode(self, mode: str) -> str:
             """Return a localized, human-friendly label for kWh stats modes.

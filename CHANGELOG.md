@@ -1,5 +1,11 @@
 # Changelog
 
+## 6.0.1.5 - 2026-03-17
+### Added
+- **Neutral current in historical plots.** The N current is now shown as a dashed gray line in the Plots tab (A / current charts) for historical data, matching the live view style.
+- **Automatic backfill of `n_avg_current` in database.** On startup, any historical samples missing `n_avg_current` are computed from phase currents using the 120° displacement formula and stored permanently.
+- **On-the-fly N current computation for plots.** Even without stored `n_avg_current`, the Plots tab computes N from L1/L2/L3 phase currents.
+
 ## 6.0.1.4 - 2026-03-16
 ### Changed
 - **Global plot theme setting.** Day/Night theme moved from Live tab quick-controls to Settings → Live & Preis → Darstellung. Now applies to **all** plots (Live + History/Plots tab). Options: Auto (System), Tag (hell), Nacht (dunkel). Auto detects OS dark mode.
