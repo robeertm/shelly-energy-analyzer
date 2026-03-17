@@ -189,6 +189,8 @@ class EnergyDB:
             conn.executescript(_SCHEMA_SQL)
         # Migrate schema: add any missing columns from _EXTRA_COLUMNS.
         self._ensure_extra_columns(conn)
+        # Backfill neutral current from phase currents where missing.
+        self._backfill_n_current(conn)
 
     def _ensure_extra_columns(self, conn: sqlite3.Connection) -> None:
         """Add any missing columns to the samples table (idempotent)."""
@@ -203,6 +205,55 @@ class EnergyDB:
                     logger.info("Added column '%s' to samples table", col_name)
                 except Exception:
                     pass  # Column might already exist from a concurrent init.
+
+    def _backfill_n_current(self, conn: sqlite3.Connection) -> None:
+        """Compute n_avg_current from phase currents where it is NULL.
+
+        Uses the 120° displacement formula:
+            I_N = sqrt(Ia² + Ib² + Ic² - Ia·Ib - Ia·Ic - Ib·Ic)
+        """
+        try:
+            existing = {row[1].lower() for row in conn.execute("PRAGMA table_info(samples)").fetchall()}
+            needed = {"n_avg_current", "a_avg_current", "b_avg_current", "c_avg_current"}
+            if not needed.issubset(existing):
+                if not {"n_avg_current", "a_current", "b_current", "c_current"}.issubset(existing):
+                    return
+            row = conn.execute(
+                "SELECT 1 FROM samples WHERE n_avg_current IS NULL "
+                "AND (a_avg_current IS NOT NULL OR a_current IS NOT NULL) LIMIT 1"
+            ).fetchone()
+            if row is None:
+                return
+            logger.info("Backfilling n_avg_current from phase currents …")
+            ia = "COALESCE(a_avg_current, a_current, 0)"
+            ib = "COALESCE(b_avg_current, b_current, 0)"
+            ic = "COALESCE(c_avg_current, c_current, 0)"
+            cursor = conn.execute(
+                f"SELECT device_key, timestamp, {ia}, {ib}, {ic} "
+                f"FROM samples WHERE n_avg_current IS NULL "
+                f"AND ({ia} IS NOT NULL OR {ib} IS NOT NULL)"
+            )
+            import math
+            batch = []
+            for dk, ts, a, b, c in cursor:
+                a, b, c = float(a or 0), float(b or 0), float(c or 0)
+                n = math.sqrt(max(a*a + b*b + c*c - a*b - a*c - b*c, 0.0))
+                batch.append((n, dk, ts))
+                if len(batch) >= 5000:
+                    conn.executemany(
+                        "UPDATE samples SET n_avg_current = ? WHERE device_key = ? AND timestamp = ?",
+                        batch,
+                    )
+                    batch.clear()
+            if batch:
+                conn.executemany(
+                    "UPDATE samples SET n_avg_current = ? WHERE device_key = ? AND timestamp = ?",
+                    batch,
+                )
+            conn.commit()
+            logger.info("Backfilled n_avg_current for historical samples")
+        except Exception:
+            logger.debug("n_avg_current backfill skipped", exc_info=True)
 
     # -- connection management (one connection per thread) -------------------
 
