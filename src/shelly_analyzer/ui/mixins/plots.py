@@ -732,7 +732,7 @@ class PlotsMixin:
                         return "day"
             return pref
 
-    def _apply_plot_theme(self, fig, ax):
+    def _apply_plot_theme(self, fig, ax, canvas=None):
             """Apply the current global theme (day/night) to a matplotlib figure+axis."""
             try:
                 theme = self._resolve_plot_theme()
@@ -741,6 +741,13 @@ class PlotsMixin:
                 else:
                     bg, fg, grid = "#FFFFFF", "#000000", "#BBBBBB"
 
+                # Set the Tk canvas widget background to match the figure
+                # background so no white stripes appear at the edges.
+                try:
+                    if canvas is not None:
+                        canvas.get_tk_widget().configure(bg=bg)
+                except Exception:
+                    pass
                 try:
                     fig.patch.set_facecolor(bg)
                 except Exception:
@@ -1227,7 +1234,7 @@ class PlotsMixin:
                 self._apply_axis_layout(fig, ax, w, legend=False)
                 # Apply global theme to kWh history plots
                 try:
-                    self._apply_plot_theme(fig, ax)
+                    self._apply_plot_theme(fig, ax, canvas=canvas)
                 except Exception:
                     pass
                 canvas.draw_idle()
@@ -1393,7 +1400,7 @@ class PlotsMixin:
 
                 # Apply global theme to history plots
                 try:
-                    self._apply_plot_theme(fig, ax1)
+                    self._apply_plot_theme(fig, ax1, canvas=canvas)
                     if ax2 is not None:
                         self._apply_plot_theme(fig, ax2)
                 except Exception:
@@ -1725,7 +1732,7 @@ class PlotsMixin:
                     self._apply_axis_layout(fig, ax2, w, legend=True)
                 # Apply global theme to legacy WVA plots
                 try:
-                    self._apply_plot_theme(fig, ax1)
+                    self._apply_plot_theme(fig, ax1, canvas=canvas)
                     if ax2 is not None:
                         self._apply_plot_theme(fig, ax2)
                 except Exception:
@@ -1792,7 +1799,7 @@ class PlotsMixin:
                 self._apply_axis_layout(fig, ax, canvas.get_tk_widget(), legend=False)
                 # Apply global theme to legacy stats plots
                 try:
-                    self._apply_plot_theme(fig, ax)
+                    self._apply_plot_theme(fig, ax, canvas=canvas)
                 except Exception:
                     pass
                 canvas.draw_idle()
