@@ -6,6 +6,7 @@ Uses WAL mode for concurrent reads (web dashboard + UI) during writes (sync).
 from __future__ import annotations
 
 import csv
+import datetime
 import io
 import logging
 import sqlite3
@@ -57,6 +58,28 @@ CREATE TABLE IF NOT EXISTS hourly_energy (
     max_power_w  REAL,
     sample_count INTEGER DEFAULT 0,
     PRIMARY KEY (device_key, hour_ts)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS monthly_energy (
+    device_key   TEXT    NOT NULL,
+    month_ts     INTEGER NOT NULL,   -- Unix seconds: 1st of month 00:00 UTC
+    kwh          REAL    NOT NULL DEFAULT 0,
+    avg_power_w  REAL,
+    max_power_w  REAL,
+    min_power_w  REAL,
+    -- Per-phase voltage averages
+    avg_a_voltage REAL, avg_b_voltage REAL, avg_c_voltage REAL,
+    min_a_voltage REAL, min_b_voltage REAL, min_c_voltage REAL,
+    max_a_voltage REAL, max_b_voltage REAL, max_c_voltage REAL,
+    -- Per-phase current averages
+    avg_a_current REAL, avg_b_current REAL, avg_c_current REAL,
+    max_a_current REAL, max_b_current REAL, max_c_current REAL,
+    -- Neutral current
+    avg_n_current REAL, max_n_current REAL,
+    -- Grid frequency
+    avg_freq_hz  REAL,
+    sample_count INTEGER DEFAULT 0,
+    PRIMARY KEY (device_key, month_ts)
 ) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS device_meta (
@@ -191,6 +214,11 @@ class EnergyDB:
         self._ensure_extra_columns(conn)
         # Backfill neutral current from phase currents where missing.
         self._backfill_n_current(conn)
+        # Apply retention policy: compress data older than 2 years to monthly.
+        try:
+            self.apply_retention()
+        except Exception:
+            logger.debug("Retention policy application skipped", exc_info=True)
 
     def _ensure_extra_columns(self, conn: sqlite3.Connection) -> None:
         """Add any missing columns to the samples table (idempotent)."""
@@ -514,7 +542,11 @@ class EnergyDB:
         start_ts: Optional[int] = None,
         end_ts: Optional[int] = None,
     ) -> pd.DataFrame:
-        """Read samples as a pandas DataFrame, optionally filtered by time range."""
+        """Read samples as a pandas DataFrame, optionally filtered by time range.
+
+        Transparently merges monthly aggregated data for periods that have been
+        compressed by the retention policy.
+        """
         conn = self._conn()
         conditions = ["device_key = ?"]
         params: list = [device_key]
@@ -541,6 +573,24 @@ class EnergyDB:
         # Drop the device_key column (caller already knows it).
         if "device_key" in df.columns:
             df = df.drop(columns=["device_key"])
+
+        # Merge monthly aggregated data if the query range covers compressed
+        # periods.  Monthly data is included when no start_ts is given or when
+        # start_ts falls before the oldest raw sample.
+        try:
+            monthly_df = self.query_monthly(device_key, start_ts=start_ts, end_ts=end_ts)
+            if not monthly_df.empty:
+                if df.empty:
+                    df = monthly_df
+                else:
+                    # Only include monthly rows older than the oldest raw sample
+                    # to avoid overlap.
+                    oldest_raw = df["timestamp"].min()
+                    monthly_df = monthly_df[monthly_df["timestamp"] < oldest_raw]
+                    if not monthly_df.empty:
+                        df = pd.concat([monthly_df, df], ignore_index=True)
+        except Exception:
+            logger.debug("Failed to merge monthly data", exc_info=True)
 
         # Drop columns where ALL values are NULL.  The DB schema always
         # includes every possible column (a_voltage, a_current, …) but the
@@ -706,3 +756,213 @@ class EnergyDB:
                     WHERE device_key = ?
                     GROUP BY device_key, (timestamp / 3600) * 3600
                 """, (device_key,))
+
+    # -- retention / monthly compression -------------------------------------
+
+    @staticmethod
+    def _retention_cutoff_ts() -> Optional[int]:
+        """Return Unix timestamp of Jan 1 two years ago, or None if no compression needed.
+
+        Policy: keep full-resolution data for the current year and the previous
+        year.  Everything older is compressed to monthly aggregates.
+
+        Example (today = 2026-03-18):
+          current year = 2026, previous year = 2025
+          cutoff = 2025-01-01 00:00:00 UTC  →  data before this is compressed.
+        """
+        now = datetime.datetime.now(datetime.timezone.utc)
+        cutoff_year = now.year - 1  # keep this year + previous year
+        cutoff = datetime.datetime(cutoff_year, 1, 1, tzinfo=datetime.timezone.utc)
+        return int(cutoff.timestamp())
+
+    def apply_retention(self) -> Dict[str, int]:
+        """Compress old samples to monthly aggregates and delete the raw rows.
+
+        Returns dict mapping device_key → number of raw rows deleted.
+        """
+        cutoff_ts = self._retention_cutoff_ts()
+        if cutoff_ts is None:
+            return {}
+
+        conn = self._conn()
+
+        # Find devices that have data older than cutoff.
+        rows = conn.execute(
+            "SELECT DISTINCT device_key FROM samples WHERE timestamp < ?",
+            (cutoff_ts,),
+        ).fetchall()
+        if not rows:
+            return {}
+
+        device_keys = [r[0] for r in rows]
+        result: Dict[str, int] = {}
+
+        for dk in device_keys:
+            deleted = self._compress_device_before(conn, dk, cutoff_ts)
+            if deleted > 0:
+                result[dk] = deleted
+                logger.info(
+                    "Retention: compressed %d old samples to monthly for device '%s'",
+                    deleted, dk,
+                )
+
+        return result
+
+    def _compress_device_before(
+        self, conn: sqlite3.Connection, device_key: str, cutoff_ts: int
+    ) -> int:
+        """Aggregate samples before *cutoff_ts* into monthly_energy rows, then delete them.
+
+        Returns number of raw sample rows deleted.
+        """
+        # Build monthly aggregates from raw samples.
+        # We group by calendar month using strftime on Unix timestamps.
+        # month_ts = Unix timestamp of the 1st of each month (UTC).
+        agg_sql = """
+            SELECT
+                -- First day of month as Unix ts
+                CAST(strftime('%%s', strftime('%%Y-%%m-01', timestamp, 'unixepoch')) AS INTEGER) AS month_ts,
+                COALESCE(SUM(energy_kwh), 0) AS kwh,
+                AVG(total_power) AS avg_power_w,
+                MAX(total_power) AS max_power_w,
+                MIN(total_power) AS min_power_w,
+                AVG(COALESCE(a_voltage, a_avg_voltage)) AS avg_a_voltage,
+                AVG(COALESCE(b_voltage, b_avg_voltage)) AS avg_b_voltage,
+                AVG(COALESCE(c_voltage, c_avg_voltage)) AS avg_c_voltage,
+                MIN(COALESCE(a_min_voltage, a_voltage, a_avg_voltage)) AS min_a_voltage,
+                MIN(COALESCE(b_min_voltage, b_voltage, b_avg_voltage)) AS min_b_voltage,
+                MIN(COALESCE(c_min_voltage, c_voltage, c_avg_voltage)) AS min_c_voltage,
+                MAX(COALESCE(a_max_voltage, a_voltage, a_avg_voltage)) AS max_a_voltage,
+                MAX(COALESCE(b_max_voltage, b_voltage, b_avg_voltage)) AS max_b_voltage,
+                MAX(COALESCE(c_max_voltage, c_voltage, c_avg_voltage)) AS max_c_voltage,
+                AVG(COALESCE(a_current, a_avg_current)) AS avg_a_current,
+                AVG(COALESCE(b_current, b_avg_current)) AS avg_b_current,
+                AVG(COALESCE(c_current, c_avg_current)) AS avg_c_current,
+                MAX(COALESCE(a_max_current, a_current, a_avg_current)) AS max_a_current,
+                MAX(COALESCE(b_max_current, b_current, b_avg_current)) AS max_b_current,
+                MAX(COALESCE(c_max_current, c_current, c_avg_current)) AS max_c_current,
+                AVG(n_avg_current) AS avg_n_current,
+                MAX(n_max_current) AS max_n_current,
+                AVG(freq_hz) AS avg_freq_hz,
+                COUNT(*) AS sample_count
+            FROM samples
+            WHERE device_key = ? AND timestamp < ?
+            GROUP BY month_ts
+            ORDER BY month_ts
+        """
+
+        agg_rows = conn.execute(agg_sql, (device_key, cutoff_ts)).fetchall()
+        if not agg_rows:
+            return 0
+
+        # Insert monthly aggregates (merge with any existing rows).
+        insert_sql = """
+            INSERT OR REPLACE INTO monthly_energy (
+                device_key, month_ts, kwh, avg_power_w, max_power_w, min_power_w,
+                avg_a_voltage, avg_b_voltage, avg_c_voltage,
+                min_a_voltage, min_b_voltage, min_c_voltage,
+                max_a_voltage, max_b_voltage, max_c_voltage,
+                avg_a_current, avg_b_current, avg_c_current,
+                max_a_current, max_b_current, max_c_current,
+                avg_n_current, max_n_current,
+                avg_freq_hz, sample_count
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+
+        with self._write_lock:
+            with conn:
+                for row in agg_rows:
+                    conn.execute(insert_sql, (device_key, *row))
+
+                # Count rows to delete.
+                count_row = conn.execute(
+                    "SELECT COUNT(*) FROM samples WHERE device_key = ? AND timestamp < ?",
+                    (device_key, cutoff_ts),
+                ).fetchone()
+                deleted = int(count_row[0]) if count_row else 0
+
+                # Delete compressed raw samples.
+                conn.execute(
+                    "DELETE FROM samples WHERE device_key = ? AND timestamp < ?",
+                    (device_key, cutoff_ts),
+                )
+
+                # Also clean up hourly_energy for the compressed period.
+                conn.execute(
+                    "DELETE FROM hourly_energy WHERE device_key = ? AND hour_ts < ?",
+                    (device_key, cutoff_ts),
+                )
+
+        return deleted
+
+    def query_monthly(
+        self,
+        device_key: str,
+        start_ts: Optional[int] = None,
+        end_ts: Optional[int] = None,
+    ) -> pd.DataFrame:
+        """Read monthly aggregated data as a DataFrame compatible with sample queries.
+
+        Returns rows with timestamp, total_power, energy_kwh, voltage, current,
+        freq_hz columns — one row per month.
+        """
+        conn = self._conn()
+        conditions = ["device_key = ?"]
+        params: list = [device_key]
+        if start_ts is not None:
+            conditions.append("month_ts >= ?")
+            params.append(int(start_ts))
+        if end_ts is not None:
+            conditions.append("month_ts <= ?")
+            params.append(int(end_ts))
+
+        where = " AND ".join(conditions)
+        sql = f"""
+            SELECT
+                month_ts AS timestamp,
+                avg_power_w AS total_power,
+                kwh AS energy_kwh,
+                avg_a_voltage AS a_voltage,
+                avg_b_voltage AS b_voltage,
+                avg_c_voltage AS c_voltage,
+                avg_a_current AS a_current,
+                avg_b_current AS b_current,
+                avg_c_current AS c_current,
+                avg_n_current AS n_avg_current,
+                avg_freq_hz AS freq_hz,
+                avg_power_w AS a_act_power,
+                max_power_w,
+                min_power_w,
+                sample_count
+            FROM monthly_energy
+            WHERE {where}
+            ORDER BY month_ts
+        """
+        df = pd.read_sql_query(sql, conn, params=params)
+
+        if "timestamp" in df.columns and not df.empty:
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s", utc=True)
+            try:
+                df["timestamp"] = df["timestamp"].dt.tz_localize(None)
+            except Exception:
+                pass
+
+        return df
+
+    def oldest_sample_ts(self, device_key: str) -> Optional[int]:
+        """Return the oldest sample timestamp for a device, or None."""
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT MIN(timestamp) FROM samples WHERE device_key = ?",
+            (device_key,),
+        ).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
+
+    def oldest_monthly_ts(self, device_key: str) -> Optional[int]:
+        """Return the oldest monthly aggregate timestamp for a device, or None."""
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT MIN(month_ts) FROM monthly_energy WHERE device_key = ?",
+            (device_key,),
+        ).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
