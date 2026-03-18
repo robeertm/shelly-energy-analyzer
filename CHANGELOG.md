@@ -1,5 +1,9 @@
 # Changelog
 
+## 6.0.1.11 - 2026-03-18
+### Added
+- **Database retention policy.** Data older than 2 full calendar years is automatically compressed to monthly aggregates on startup. The current year and the previous year are kept at full resolution (down to the second). Older data is aggregated into a new `monthly_energy` table (kWh, avg/min/max power, per-phase voltage & current, neutral current, grid frequency) and the raw samples are deleted. Queries transparently merge monthly and raw data, so historical plots and cost calculations work seamlessly across all time ranges.
+
 ## 6.0.1.10 - 2026-03-17
 ### Fixed
 - **False neutral current alarm on live start.** When live monitoring was restarted, the alert state retained `start_ts` from the previous session. The duration check passed immediately on the first sample, causing a false trigger. Alert state is now cleared when live monitoring starts.
