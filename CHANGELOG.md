@@ -1,5 +1,9 @@
 # Changelog
 
+## 7.0.0.1 - 2026-03-19
+### Fixed
+- **Update checker fails on 3-part versions (e.g. 7.0.0).** The version parser regex only accepted 4-part tags (X.Y.Z.W). Tags like `v7.0.0` were rejected, causing the updater to never find newer releases. Now accepts both 3- and 4-part versions.
+
 ## 7.0.0 - 2026-03-19
 ### Added
 - **Consumption Heatmap tab.** A new "Heatmap" tab provides two visualizations:
