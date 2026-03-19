@@ -30,6 +30,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "tabs.plots": "Plots",
         "tabs.live": "Live",
         "tabs.costs": "Kosten",
+        "tabs.heatmap": "Heatmap",
         "tabs.export": "Export",
         "tabs.settings": "Einstellungen",
 
@@ -568,6 +569,26 @@ _I18N: Dict[str, Dict[str, str]] = {
     "pdf.block.customer": "Rechnung an",
     "pdf.col.unit": "Einheit",
 
+        # Heatmap tab
+        "heatmap.title": "🔥 Verbrauchsheatmap",
+        "heatmap.refresh": "Aktualisieren",
+        "heatmap.device": "Gerät",
+        "heatmap.unit": "Einheit",
+        "heatmap.year": "Jahr",
+        "heatmap.calendar.title": "Kalender-Heatmap (Tagesverbrauch)",
+        "heatmap.calendar.subtitle": "{year} – Tagesverbrauch ({unit})",
+        "heatmap.hourly.title": "Stunden-Heatmap (Wochentag × Uhrzeit)",
+        "heatmap.hourly.subtitle": "{year} – Verbrauch nach Wochentag & Stunde ({unit})",
+        "heatmap.hourly.xlabel": "Uhrzeit",
+        "heatmap.hourly.ylabel": "Wochentag",
+        "heatmap.day.mon": "Mo",
+        "heatmap.day.tue": "Di",
+        "heatmap.day.wed": "Mi",
+        "heatmap.day.thu": "Do",
+        "heatmap.day.fri": "Fr",
+        "heatmap.day.sat": "Sa",
+        "heatmap.day.sun": "So",
+
     },
     "en": {
         # App
@@ -590,6 +611,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "tabs.plots": "Charts",
         "tabs.live": "Live",
         "tabs.costs": "Costs",
+        "tabs.heatmap": "Heatmap",
         "tabs.export": "Export",
         "tabs.settings": "Settings",
 
@@ -1137,6 +1159,26 @@ _I18N: Dict[str, Dict[str, str]] = {
     "pdf.block.customer": "Bill to",
     "pdf.col.unit": "Unit",
 
+        # Heatmap tab
+        "heatmap.title": "🔥 Consumption Heatmap",
+        "heatmap.refresh": "Refresh",
+        "heatmap.device": "Device",
+        "heatmap.unit": "Unit",
+        "heatmap.year": "Year",
+        "heatmap.calendar.title": "Calendar Heatmap (Daily Consumption)",
+        "heatmap.calendar.subtitle": "{year} – Daily consumption ({unit})",
+        "heatmap.hourly.title": "Hour Heatmap (Weekday × Time)",
+        "heatmap.hourly.subtitle": "{year} – Consumption by weekday & hour ({unit})",
+        "heatmap.hourly.xlabel": "Time of day",
+        "heatmap.hourly.ylabel": "Day of week",
+        "heatmap.day.mon": "Mon",
+        "heatmap.day.tue": "Tue",
+        "heatmap.day.wed": "Wed",
+        "heatmap.day.thu": "Thu",
+        "heatmap.day.fri": "Fri",
+        "heatmap.day.sat": "Sat",
+        "heatmap.day.sun": "Sun",
+
     },
     "es": {
         # App
@@ -1159,6 +1201,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "tabs.plots": "Gráficos",
         "tabs.live": "En vivo",
         "tabs.costs": "Costos",
+        "tabs.heatmap": "Mapa de calor",
         "tabs.export": "Exportar",
         "tabs.settings": "Ajustes",
 
@@ -1690,6 +1733,26 @@ _I18N: Dict[str, Dict[str, str]] = {
     "pdf.block.customer": "Cliente",
     "pdf.col.unit": "Unidad",
 
+        # Heatmap tab
+        "heatmap.title": "🔥 Mapa de calor de consumo",
+        "heatmap.refresh": "Actualizar",
+        "heatmap.device": "Dispositivo",
+        "heatmap.unit": "Unidad",
+        "heatmap.year": "Año",
+        "heatmap.calendar.title": "Mapa de calor de calendario (consumo diario)",
+        "heatmap.calendar.subtitle": "{year} – Consumo diario ({unit})",
+        "heatmap.hourly.title": "Mapa de calor horario (día × hora)",
+        "heatmap.hourly.subtitle": "{year} – Consumo por día y hora ({unit})",
+        "heatmap.hourly.xlabel": "Hora del día",
+        "heatmap.hourly.ylabel": "Día de la semana",
+        "heatmap.day.mon": "Lun",
+        "heatmap.day.tue": "Mar",
+        "heatmap.day.wed": "Mié",
+        "heatmap.day.thu": "Jue",
+        "heatmap.day.fri": "Vie",
+        "heatmap.day.sat": "Sáb",
+        "heatmap.day.sun": "Dom",
+
     },
 }
 
@@ -1819,6 +1882,26 @@ _I18N["fr"] = _mk_lang({
     "web.control.jobs": "Tâches",
     "web.freeze.on": "Freeze : activé",
     "web.freeze.off": "Freeze : désactivé",
+    # Heatmap
+    "tabs.heatmap": "Carte de chaleur",
+    "heatmap.title": "🔥 Carte de chaleur de consommation",
+    "heatmap.refresh": "Actualiser",
+    "heatmap.device": "Appareil",
+    "heatmap.unit": "Unité",
+    "heatmap.year": "Année",
+    "heatmap.calendar.title": "Carte calendrier (consommation journalière)",
+    "heatmap.calendar.subtitle": "{year} – Consommation quotidienne ({unit})",
+    "heatmap.hourly.title": "Carte horaire (jour × heure)",
+    "heatmap.hourly.subtitle": "{year} – Consommation par jour et heure ({unit})",
+    "heatmap.hourly.xlabel": "Heure",
+    "heatmap.hourly.ylabel": "Jour",
+    "heatmap.day.mon": "Lun",
+    "heatmap.day.tue": "Mar",
+    "heatmap.day.wed": "Mer",
+    "heatmap.day.thu": "Jeu",
+    "heatmap.day.fri": "Ven",
+    "heatmap.day.sat": "Sam",
+    "heatmap.day.sun": "Dim",
 })
 
 
@@ -1895,6 +1978,26 @@ _I18N["pt"] = _mk_lang({
     "tabs.settings": "Definições",
     "msg.settings": "Definições",
     "web.control.title": "Controlo Shelly",
+    # Heatmap
+    "tabs.heatmap": "Mapa de calor",
+    "heatmap.title": "🔥 Mapa de calor de consumo",
+    "heatmap.refresh": "Atualizar",
+    "heatmap.device": "Dispositivo",
+    "heatmap.unit": "Unidade",
+    "heatmap.year": "Ano",
+    "heatmap.calendar.title": "Mapa de calor de calendário (consumo diário)",
+    "heatmap.calendar.subtitle": "{year} – Consumo diário ({unit})",
+    "heatmap.hourly.title": "Mapa de calor horário (dia × hora)",
+    "heatmap.hourly.subtitle": "{year} – Consumo por dia e hora ({unit})",
+    "heatmap.hourly.xlabel": "Hora do dia",
+    "heatmap.hourly.ylabel": "Dia da semana",
+    "heatmap.day.mon": "Seg",
+    "heatmap.day.tue": "Ter",
+    "heatmap.day.wed": "Qua",
+    "heatmap.day.thu": "Qui",
+    "heatmap.day.fri": "Sex",
+    "heatmap.day.sat": "Sáb",
+    "heatmap.day.sun": "Dom",
 })
 
 
@@ -1969,6 +2072,26 @@ _I18N["it"] = _mk_lang({
     "settings.language.ru": "Russo",
     "msg.settings": "Impostazioni",
     "web.control.title": "Controllo Shelly",
+    # Heatmap
+    "tabs.heatmap": "Mappa di calore",
+    "heatmap.title": "🔥 Mappa di calore dei consumi",
+    "heatmap.refresh": "Aggiorna",
+    "heatmap.device": "Dispositivo",
+    "heatmap.unit": "Unità",
+    "heatmap.year": "Anno",
+    "heatmap.calendar.title": "Mappa di calore calendario (consumo giornaliero)",
+    "heatmap.calendar.subtitle": "{year} – Consumo giornaliero ({unit})",
+    "heatmap.hourly.title": "Mappa di calore oraria (giorno × ora)",
+    "heatmap.hourly.subtitle": "{year} – Consumo per giorno e ora ({unit})",
+    "heatmap.hourly.xlabel": "Ora del giorno",
+    "heatmap.hourly.ylabel": "Giorno della settimana",
+    "heatmap.day.mon": "Lun",
+    "heatmap.day.tue": "Mar",
+    "heatmap.day.wed": "Mer",
+    "heatmap.day.thu": "Gio",
+    "heatmap.day.fri": "Ven",
+    "heatmap.day.sat": "Sab",
+    "heatmap.day.sun": "Dom",
 })
 
 
@@ -2042,6 +2165,26 @@ _I18N["pl"] = _mk_lang({
     "settings.language.ru": "Rosyjski",
     "msg.settings": "Ustawienia",
     "web.control.title": "Sterowanie Shelly",
+    # Heatmap
+    "tabs.heatmap": "Mapa ciepła",
+    "heatmap.title": "🔥 Mapa ciepła zużycia",
+    "heatmap.refresh": "Odśwież",
+    "heatmap.device": "Urządzenie",
+    "heatmap.unit": "Jednostka",
+    "heatmap.year": "Rok",
+    "heatmap.calendar.title": "Mapa ciepła kalendarza (zużycie dzienne)",
+    "heatmap.calendar.subtitle": "{year} – Zużycie dzienne ({unit})",
+    "heatmap.hourly.title": "Mapa ciepła godzinowa (dzień × godzina)",
+    "heatmap.hourly.subtitle": "{year} – Zużycie wg dnia i godziny ({unit})",
+    "heatmap.hourly.xlabel": "Godzina",
+    "heatmap.hourly.ylabel": "Dzień tygodnia",
+    "heatmap.day.mon": "Pn",
+    "heatmap.day.tue": "Wt",
+    "heatmap.day.wed": "Śr",
+    "heatmap.day.thu": "Cz",
+    "heatmap.day.fri": "Pt",
+    "heatmap.day.sat": "Sb",
+    "heatmap.day.sun": "Nd",
 })
 
 
@@ -2115,6 +2258,26 @@ _I18N["cs"] = _mk_lang({
     "settings.language.ru": "Ruština",
     "msg.settings": "Nastavení",
     "web.control.title": "Ovládání Shelly",
+    # Heatmap
+    "tabs.heatmap": "Tepelná mapa",
+    "heatmap.title": "🔥 Tepelná mapa spotřeby",
+    "heatmap.refresh": "Obnovit",
+    "heatmap.device": "Zařízení",
+    "heatmap.unit": "Jednotka",
+    "heatmap.year": "Rok",
+    "heatmap.calendar.title": "Tepelná mapa kalendáře (denní spotřeba)",
+    "heatmap.calendar.subtitle": "{year} – Denní spotřeba ({unit})",
+    "heatmap.hourly.title": "Hodinová tepelná mapa (den × hodina)",
+    "heatmap.hourly.subtitle": "{year} – Spotřeba podle dne a hodiny ({unit})",
+    "heatmap.hourly.xlabel": "Hodina",
+    "heatmap.hourly.ylabel": "Den v týdnu",
+    "heatmap.day.mon": "Po",
+    "heatmap.day.tue": "Út",
+    "heatmap.day.wed": "St",
+    "heatmap.day.thu": "Čt",
+    "heatmap.day.fri": "Pá",
+    "heatmap.day.sat": "So",
+    "heatmap.day.sun": "Ne",
 })
 
 
@@ -2188,6 +2351,26 @@ _I18N["ru"] = _mk_lang({
     "settings.language.ru": "Русский",
     "msg.settings": "Настройки",
     "web.control.title": "Управление Shelly",
+    # Heatmap
+    "tabs.heatmap": "Тепловая карта",
+    "heatmap.title": "🔥 Тепловая карта потребления",
+    "heatmap.refresh": "Обновить",
+    "heatmap.device": "Устройство",
+    "heatmap.unit": "Единица",
+    "heatmap.year": "Год",
+    "heatmap.calendar.title": "Тепловая карта календаря (суточное потребление)",
+    "heatmap.calendar.subtitle": "{year} – Суточное потребление ({unit})",
+    "heatmap.hourly.title": "Почасовая тепловая карта (день × час)",
+    "heatmap.hourly.subtitle": "{year} – Потребление по дням и часам ({unit})",
+    "heatmap.hourly.xlabel": "Час",
+    "heatmap.hourly.ylabel": "День недели",
+    "heatmap.day.mon": "Пн",
+    "heatmap.day.tue": "Вт",
+    "heatmap.day.wed": "Ср",
+    "heatmap.day.thu": "Чт",
+    "heatmap.day.fri": "Пт",
+    "heatmap.day.sat": "Сб",
+    "heatmap.day.sun": "Вс",
 })
 
 
