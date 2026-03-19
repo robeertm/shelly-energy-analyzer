@@ -1,6 +1,16 @@
 # Changelog
 
-## 7.0.0.1 - 2026-03-19
+## 7.1.0 - 2026-03-19
+### Added
+- **Webhook / Home Assistant Integration.** A new generic HTTP POST webhook system allows sending real-time alarm notifications and scheduled daily/monthly summaries to any HTTP endpoint — fully independent of Telegram.
+  - **Configurable URL and custom headers:** Supports arbitrary HTTP headers (as a JSON object), enabling Bearer token auth, API keys, and other authentication schemes.
+  - **JSON payload** for all event types: alarms include `device_key`, `device_name`, `metric`, `value`, `op`, `threshold`, `duration_seconds`, `message`, and `timestamp`. Summaries include `period_start`, `period_end`, and the full summary `message`.
+  - **Per-type enable/disable:** Alarm webhooks, daily summaries, and monthly summaries can be toggled independently.
+  - **Alarm-level webhook action:** Each alert rule has a new "Webhook" checkbox column; when enabled, a webhook POST is fired whenever that rule triggers (requires global webhook alarm toggle to also be on).
+  - **Scheduled summaries:** Daily and monthly webhook summaries fire at the configured time (reuses the Telegram daily/monthly time setting), with a grace window to prevent duplicates. State is persisted in `data/webhook_summary_state.json`.
+  - **Test button** in settings to verify the webhook URL immediately.
+  - **Compatible with:** Home Assistant webhooks, ntfy.sh, Node-RED, Zapier, Make, n8n, generic HTTP listeners, and any service accepting a JSON POST.
+  - **Fully i18n-compatible** (German and English, other languages fall back to English via the existing fallback chain).
 ### Fixed
 - **Update checker fails on 3-part versions (e.g. 7.0.0).** The version parser regex only accepted 4-part tags (X.Y.Z.W). Tags like `v7.0.0` were rejected, causing the updater to never find newer releases. Now accepts both 3- and 4-part versions.
 
