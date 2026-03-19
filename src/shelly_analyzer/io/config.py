@@ -99,6 +99,16 @@ class UiConfig:
 
 
 
+    # Webhook integration (generic HTTP POST, compatible with Home Assistant, ntfy.sh, Node-RED, Zapier, …)
+    webhook_enabled: bool = False
+    webhook_url: str = ""
+    # Custom HTTP headers as a JSON object string, e.g. '{"Authorization": "Bearer mytoken"}'
+    webhook_custom_headers: str = ""
+    # Which event types trigger a webhook POST
+    webhook_alarm_enabled: bool = True
+    webhook_daily_summary_enabled: bool = False
+    webhook_monthly_summary_enabled: bool = False
+
     # Auto-sync in the background (triggered from the GUI).
 
     # Auto-sync in the background (triggered from the GUI).
@@ -135,6 +145,7 @@ class AlertRule:
     action_popup: bool = True
     action_beep: bool = True
     action_telegram: bool = False
+    action_webhook: bool = False
     message: str = ""
 
 @dataclass(frozen=True)
@@ -391,6 +402,12 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         telegram_summary_load_w=_coerce_float(ui_raw.get("telegram_summary_load_w", UiConfig.telegram_summary_load_w), UiConfig.telegram_summary_load_w),
         telegram_daily_summary_last_sent=str(ui_raw.get("telegram_daily_summary_last_sent", UiConfig.telegram_daily_summary_last_sent) or ""),
         telegram_monthly_summary_last_sent=str(ui_raw.get("telegram_monthly_summary_last_sent", UiConfig.telegram_monthly_summary_last_sent) or ""),
+        webhook_enabled=bool(ui_raw.get("webhook_enabled", UiConfig.webhook_enabled)),
+        webhook_url=str(ui_raw.get("webhook_url", UiConfig.webhook_url) or ""),
+        webhook_custom_headers=str(ui_raw.get("webhook_custom_headers", UiConfig.webhook_custom_headers) or ""),
+        webhook_alarm_enabled=bool(ui_raw.get("webhook_alarm_enabled", UiConfig.webhook_alarm_enabled)),
+        webhook_daily_summary_enabled=bool(ui_raw.get("webhook_daily_summary_enabled", UiConfig.webhook_daily_summary_enabled)),
+        webhook_monthly_summary_enabled=bool(ui_raw.get("webhook_monthly_summary_enabled", UiConfig.webhook_monthly_summary_enabled)),
         live_daynight_mode=str(ui_raw.get("live_daynight_mode", UiConfig.live_daynight_mode) or UiConfig.live_daynight_mode),
         live_day_start=str(ui_raw.get("live_day_start", UiConfig.live_day_start) or UiConfig.live_day_start),
         live_night_start=str(ui_raw.get("live_night_start", UiConfig.live_night_start) or UiConfig.live_night_start),
@@ -476,6 +493,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
                     action_popup=bool(a.get("action_popup", a.get("popup", True))),
                     action_beep=bool(a.get("action_beep", a.get("beep", True))),
                     action_telegram=bool(a.get("action_telegram", a.get("telegram", False))),
+                    action_webhook=bool(a.get("action_webhook", False)),
                     message=str(a.get("message", "") or ""),
                 )
             )
@@ -583,6 +601,12 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "telegram_summary_load_w": getattr(cfg.ui, "telegram_summary_load_w", UiConfig.telegram_summary_load_w),
             "telegram_daily_summary_last_sent": getattr(cfg.ui, "telegram_daily_summary_last_sent", ""),
             "telegram_monthly_summary_last_sent": getattr(cfg.ui, "telegram_monthly_summary_last_sent", ""),
+            "webhook_enabled": bool(getattr(cfg.ui, "webhook_enabled", False)),
+            "webhook_url": str(getattr(cfg.ui, "webhook_url", "") or ""),
+            "webhook_custom_headers": str(getattr(cfg.ui, "webhook_custom_headers", "") or ""),
+            "webhook_alarm_enabled": bool(getattr(cfg.ui, "webhook_alarm_enabled", True)),
+            "webhook_daily_summary_enabled": bool(getattr(cfg.ui, "webhook_daily_summary_enabled", False)),
+            "webhook_monthly_summary_enabled": bool(getattr(cfg.ui, "webhook_monthly_summary_enabled", False)),
             "plot_theme_mode": getattr(cfg.ui, "plot_theme_mode", UiConfig.plot_theme_mode),
         },
         "updates": {
@@ -610,6 +634,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
                 "action_popup": r.action_popup,
                 "action_beep": r.action_beep,
                 "action_telegram": getattr(r, "action_telegram", False),
+                "action_webhook": getattr(r, "action_webhook", False),
                 "message": r.message,
             }
             for r in (getattr(cfg, "alerts", []) or [])
