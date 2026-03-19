@@ -1,5 +1,14 @@
 # Changelog
 
+## 7.0.0 - 2026-03-19
+### Added
+- **Consumption Heatmap tab.** A new "Heatmap" tab provides two visualizations:
+  - **Calendar heatmap (GitHub-contribution-graph style):** Each day is shown as a colored cell (yellow → red), arranged in a week grid for the selected year. Color encodes daily consumption in kWh or €.
+  - **Weekday × Hour heatmap:** A 7×24 grid showing when consumption is typically highest throughout the week. Rows = days of week (Mon–Sun), columns = hours (00:00–23:00).
+- **Full i18n support** for the heatmap tab in all 9 supported languages (de, en, es, fr, pt, it, pl, cs, ru), including localized day-of-week abbreviations.
+- **Light/Dark theme** integration: both heatmaps respect the global plot theme (Auto/Day/Night) and update on refresh.
+- **Interactive controls:** device selector, unit toggle (kWh / €), and year selector with auto-refresh on selection change.
+
 ## 6.0.1.12 - 2026-03-19
 ### Fixed
 - **CRITICAL: Gen1 switch toggle crashes with AttributeError.** `ShellyHttp` has no `get_json()` method. The Gen1 relay fallback in `set_switch_state()` called `client.get_json(url)`, causing an `AttributeError` on every switch attempt for Gen1 devices (e.g. Shelly Plug S). Fixed to `client.get(url).json()`.
