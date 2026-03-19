@@ -353,6 +353,8 @@ _I18N: Dict[str, Dict[str, str]] = {
         "settings.pricing.vat_rate": "MwSt-Satz (%):",
         "settings.pricing.base_fee": "Grundpreis (€/Jahr):",
         "settings.pricing.base_fee_includes_vat": "Grundpreis enthält MwSt (Brutto)",
+        "settings.pricing.co2_intensity": "CO₂-Intensität (g/kWh):",
+        "settings.pricing.co2_presets": "Voreinstellungen",
 
         # Settings: Autosync
         "settings.autosync.title": "Autosync",
@@ -940,6 +942,8 @@ _I18N: Dict[str, Dict[str, str]] = {
         "settings.pricing.vat_rate": "VAT rate (%):",
         "settings.pricing.base_fee": "Base fee (€/year):",
         "settings.pricing.base_fee_includes_vat": "Base fee includes VAT (gross)",
+        "settings.pricing.co2_intensity": "CO₂ intensity (g/kWh):",
+        "settings.pricing.co2_presets": "Presets",
 
         # Settings: Autosync
         "settings.autosync.title": "Autosync",
@@ -1517,6 +1521,8 @@ _I18N: Dict[str, Dict[str, str]] = {
         "settings.pricing.vat_rate": "Tasa IVA (%):",
         "settings.pricing.base_fee": "Cuota base (€/año):",
         "settings.pricing.base_fee_includes_vat": "Cuota base incluye IVA (bruto)",
+        "settings.pricing.co2_intensity": "Intensidad CO₂ (g/kWh):",
+        "settings.pricing.co2_presets": "Preajustes",
 
         # Settings: Autosync
         "settings.autosync.title": "Autosync",
@@ -1872,6 +1878,8 @@ _I18N["fr"] = _mk_lang({
     "settings.language.ru": "Russe",
     "settings.pricing.title": "Prix & TVA",
     "settings.pricing.vat_enabled": "TVA activée",
+    "settings.pricing.co2_intensity": "Intensité CO₂ (g/kWh) :",
+    "settings.pricing.co2_presets": "Présélections",
     "settings.web.title": "Dashboard Web (Live)",
     "billing.title": "Données de facture",
     "msg.settings": "Paramètres",
@@ -1975,6 +1983,8 @@ _I18N["pt"] = _mk_lang({
     "settings.language.pl": "Polaco",
     "settings.language.cs": "Tcheco",
     "settings.language.ru": "Russo",
+    "settings.pricing.co2_intensity": "Intensidade CO₂ (g/kWh):",
+    "settings.pricing.co2_presets": "Pré-definições",
     "tabs.settings": "Definições",
     "msg.settings": "Definições",
     "web.control.title": "Controlo Shelly",
@@ -2070,6 +2080,8 @@ _I18N["it"] = _mk_lang({
     "settings.language.pl": "Polacco",
     "settings.language.cs": "Ceco",
     "settings.language.ru": "Russo",
+    "settings.pricing.co2_intensity": "Intensità CO₂ (g/kWh):",
+    "settings.pricing.co2_presets": "Preset",
     "msg.settings": "Impostazioni",
     "web.control.title": "Controllo Shelly",
     # Heatmap
@@ -2163,6 +2175,8 @@ _I18N["pl"] = _mk_lang({
     "settings.language.pl": "Polski",
     "settings.language.cs": "Czeski",
     "settings.language.ru": "Rosyjski",
+    "settings.pricing.co2_intensity": "Intensywność CO₂ (g/kWh):",
+    "settings.pricing.co2_presets": "Ustawienia wstępne",
     "msg.settings": "Ustawienia",
     "web.control.title": "Sterowanie Shelly",
     # Heatmap
@@ -2256,6 +2270,8 @@ _I18N["cs"] = _mk_lang({
     "settings.language.pl": "Polština",
     "settings.language.cs": "Čeština",
     "settings.language.ru": "Ruština",
+    "settings.pricing.co2_intensity": "Intenzita CO₂ (g/kWh):",
+    "settings.pricing.co2_presets": "Předvolby",
     "msg.settings": "Nastavení",
     "web.control.title": "Ovládání Shelly",
     # Heatmap
@@ -2349,6 +2365,8 @@ _I18N["ru"] = _mk_lang({
     "settings.language.pl": "Польский",
     "settings.language.cs": "Чешский",
     "settings.language.ru": "Русский",
+    "settings.pricing.co2_intensity": "Интенсивность CO₂ (г/кВтч):",
+    "settings.pricing.co2_presets": "Предустановки",
     "msg.settings": "Настройки",
     "web.control.title": "Управление Shelly",
     # Heatmap

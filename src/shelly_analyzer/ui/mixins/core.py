@@ -3770,7 +3770,7 @@ class CoreMixin:
             canvas.bind_all("<MouseWheel>", _on_mousewheel)
 
             # Build per-device sections
-            self._cost_device_vars = {}  # {device_key: {range_key: {kwh: StringVar, eur: StringVar}, proj_kwh, proj_eur, cmp_text}}
+            self._cost_device_vars = {}  # {device_key: {range_key: {kwh: StringVar, eur: StringVar, co2: StringVar}, proj_kwh, proj_eur, proj_co2, cmp_text}}
 
             three_phase_devs = [d for d in (self.cfg.devices or []) if int(getattr(d, "phases", 3) or 3) >= 3 and str(getattr(d, "kind", "em")) != "switch"]
 
@@ -3798,9 +3798,11 @@ class CoreMixin:
                         card.grid(row=0, column=col, sticky="nsew", padx=3, pady=3)
                         v_kwh = tk.StringVar(value="– kWh")
                         v_eur = tk.StringVar(value="– €")
+                        v_co2 = tk.StringVar(value="")
                         ttk.Label(card, textvariable=v_kwh, font=("", 10)).pack(anchor="w", padx=6, pady=(4, 0))
-                        ttk.Label(card, textvariable=v_eur, font=("", 12, "bold")).pack(anchor="w", padx=6, pady=(1, 4))
-                        vars_dev[key] = {"kwh": v_kwh, "eur": v_eur}
+                        ttk.Label(card, textvariable=v_eur, font=("", 12, "bold")).pack(anchor="w", padx=6, pady=(1, 0))
+                        ttk.Label(card, textvariable=v_co2, font=("", 9), foreground="#4caf50").pack(anchor="w", padx=6, pady=(0, 4))
+                        vars_dev[key] = {"kwh": v_kwh, "eur": v_eur, "co2": v_co2}
 
                     # Row 2: Projection + Previous month comparison
                     row2 = ttk.Frame(dev_frame)
@@ -3811,10 +3813,13 @@ class CoreMixin:
                     proj_card.grid(row=0, column=0, sticky="nsew", padx=3, pady=3)
                     v_proj_kwh = tk.StringVar(value="– kWh")
                     v_proj_eur = tk.StringVar(value="– €")
+                    v_proj_co2 = tk.StringVar(value="")
                     ttk.Label(proj_card, textvariable=v_proj_kwh, font=("", 10)).pack(anchor="w", padx=6, pady=(4, 0))
-                    ttk.Label(proj_card, textvariable=v_proj_eur, font=("", 12, "bold")).pack(anchor="w", padx=6, pady=(1, 4))
+                    ttk.Label(proj_card, textvariable=v_proj_eur, font=("", 12, "bold")).pack(anchor="w", padx=6, pady=(1, 0))
+                    ttk.Label(proj_card, textvariable=v_proj_co2, font=("", 9), foreground="#4caf50").pack(anchor="w", padx=6, pady=(0, 4))
                     vars_dev["proj_kwh"] = v_proj_kwh
                     vars_dev["proj_eur"] = v_proj_eur
+                    vars_dev["proj_co2"] = v_proj_co2
 
                     cmp_card = ttk.LabelFrame(row2, text=self.t("costs.vs_last_month"))
                     cmp_card.grid(row=0, column=1, sticky="nsew", padx=3, pady=3)
@@ -3842,6 +3847,12 @@ class CoreMixin:
                     unit = float(self.cfg.pricing.unit_price_gross())
                 except Exception:
                     unit = float(getattr(getattr(self.cfg, "pricing", None), "electricity_price_eur_per_kwh", 0.30) or 0.30)
+
+                # CO₂ intensity (g/kWh → kg/kWh factor)
+                try:
+                    co2_g_per_kwh = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
+                except Exception:
+                    co2_g_per_kwh = 380.0
 
                 # Time ranges
                 today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -3892,6 +3903,11 @@ class CoreMixin:
                         if key in vars_dev:
                             vars_dev[key]["kwh"].set(f"{kwh:.2f} kWh")
                             vars_dev[key]["eur"].set(f"{kwh * unit:.2f} €")
+                            if co2_g_per_kwh > 0:
+                                co2_kg = kwh * co2_g_per_kwh / 1000.0
+                                vars_dev[key]["co2"].set(f"🌿 {co2_kg:.3f} kg CO₂")
+                            else:
+                                vars_dev[key]["co2"].set("")
 
                     # Projection
                     try:
@@ -3902,6 +3918,11 @@ class CoreMixin:
                         proj_kwh = month_kwh / days_elapsed * days_in_month
                         vars_dev["proj_kwh"].set(f"~{proj_kwh:.1f} kWh")
                         vars_dev["proj_eur"].set(f"~{proj_kwh * unit:.2f} €")
+                        if co2_g_per_kwh > 0:
+                            proj_co2_kg = proj_kwh * co2_g_per_kwh / 1000.0
+                            vars_dev["proj_co2"].set(f"🌿 ~{proj_co2_kg:.2f} kg CO₂")
+                        else:
+                            vars_dev["proj_co2"].set("")
                     except Exception:
                         pass
 
@@ -5094,6 +5115,35 @@ class CoreMixin:
             self.base_fee_includes_vat_var = tk.BooleanVar(value=bool(getattr(self.cfg.pricing, 'base_fee_includes_vat', True)))
             ttk.Checkbutton(pricing_box, text=self.t('settings.pricing.base_fee_includes_vat'), variable=self.base_fee_includes_vat_var).grid(row=2, column=2, padx=8, pady=8, sticky="w")
 
+            ttk.Label(pricing_box, text=self.t('settings.pricing.co2_intensity')).grid(row=3, column=0, padx=8, pady=8, sticky="w")
+            self.co2_intensity_var = tk.StringVar(value=str(getattr(self.cfg.pricing, 'co2_intensity_g_per_kwh', 380.0)))
+            ttk.Entry(pricing_box, textvariable=self.co2_intensity_var, width=10).grid(row=3, column=1, padx=8, pady=8, sticky="w")
+
+            def _co2_preset_menu():
+                m = tk.Menu(self, tearoff=0)
+                presets = [
+                    ("DE ~380 g/kWh", 380.0),
+                    ("AT ~120 g/kWh", 120.0),
+                    ("CH ~30 g/kWh", 30.0),
+                    ("FR ~60 g/kWh", 60.0),
+                    ("EU ~255 g/kWh", 255.0),
+                    ("Ökostrom / Green 0 g/kWh", 0.0),
+                ]
+                for label, val in presets:
+                    m.add_command(label=label, command=lambda v=val: self.co2_intensity_var.set(str(v)))
+                try:
+                    btn = getattr(self, '_co2_preset_btn', None)
+                    if btn:
+                        x = btn.winfo_rootx()
+                        y = btn.winfo_rooty() + btn.winfo_height()
+                        m.tk_popup(x, y)
+                except Exception:
+                    pass
+
+            btn_co2_presets = ttk.Button(pricing_box, text=self.t('settings.pricing.co2_presets'), command=_co2_preset_menu)
+            btn_co2_presets.grid(row=3, column=2, padx=8, pady=8, sticky="w")
+            self._co2_preset_btn = btn_co2_presets
+
             autosync_box = ttk.LabelFrame(tab_main, text=self.t('settings.autosync.title'))
             autosync_box.pack(fill="x", pady=(0, 10))
             self.set_autosync_enabled_var = tk.BooleanVar(value=bool(self.cfg.ui.autosync_enabled))
@@ -5818,6 +5868,10 @@ class CoreMixin:
                 base_fee = float(self.base_fee_var.get().strip().replace(",", "."))
             except Exception:
                 base_fee = float(getattr(self.cfg.pricing, 'base_fee_eur_per_year', 127.51))
+            try:
+                co2_intensity = float(self.co2_intensity_var.get().strip().replace(",", "."))
+            except Exception:
+                co2_intensity = float(getattr(self.cfg.pricing, 'co2_intensity_g_per_kwh', 380.0))
             pricing = PricingConfig(
                 electricity_price_eur_per_kwh=price,
                 base_fee_eur_per_year=base_fee,
@@ -5825,6 +5879,7 @@ class CoreMixin:
                 price_includes_vat=bool(self.price_includes_vat_var.get()),
                 vat_enabled=bool(self.vat_enabled_var.get()),
                 vat_rate_percent=vat_rate,
+                co2_intensity_g_per_kwh=co2_intensity,
             )
             # UI
             # Language selection
@@ -8484,12 +8539,14 @@ class CoreMixin:
                                 end_dt = datetime.now(tz)
                                 start_dt = end_dt - timedelta(hours=24)
                                 msg_text = self._build_telegram_summary("daily", start_dt, end_dt)
+                                _co2_intensity = float(getattr(getattr(self.cfg, "pricing", None), "co2_intensity_g_per_kwh", 380.0) or 0.0)
                                 payload = {
                                     "type": "daily_summary",
                                     "timestamp": datetime.now().isoformat(),
                                     "period_start": start_dt.isoformat(),
                                     "period_end": end_dt.isoformat(),
                                     "message": msg_text,
+                                    "co2_intensity_g_per_kwh": _co2_intensity,
                                     "source": "shelly-energy-analyzer",
                                 }
                                 ok, err = self._webhook_send_sync(payload)
@@ -8524,12 +8581,14 @@ class CoreMixin:
                                 end_dt = datetime.now(tz)
                                 start_dt = end_dt - timedelta(days=30)
                                 msg_text = self._build_telegram_summary("monthly", start_dt, end_dt)
+                                _co2_intensity = float(getattr(getattr(self.cfg, "pricing", None), "co2_intensity_g_per_kwh", 380.0) or 0.0)
                                 payload = {
                                     "type": "monthly_summary",
                                     "timestamp": datetime.now().isoformat(),
                                     "period_start": start_dt.isoformat(),
                                     "period_end": end_dt.isoformat(),
                                     "message": msg_text,
+                                    "co2_intensity_g_per_kwh": _co2_intensity,
                                     "source": "shelly-energy-analyzer",
                                 }
                                 ok, err = self._webhook_send_sync(payload)
@@ -8845,6 +8904,15 @@ class CoreMixin:
                 except Exception:
                     pass
 
+            # CO₂ emissions
+            try:
+                co2_g_per_kwh = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
+                if co2_g_per_kwh > 0:
+                    co2_kg = total_kwh * co2_g_per_kwh / 1000.0
+                    lines.append(f"🌿 CO₂: {co2_kg:.3f} kg ({co2_g_per_kwh:.0f} g/kWh)")
+            except Exception:
+                pass
+
             # Comparison with previous period (Vortag / Vormonat)
             try:
                 period_delta = end_dt - start_dt
@@ -8913,12 +8981,18 @@ class CoreMixin:
             # per device
             lines.append("")
             lines.append("🏠 Pro Gerät:")
+            try:
+                _co2_g = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
+            except Exception:
+                _co2_g = 0.0
             if per_dev_kwh:
                 for name, _key, kwh in per_dev_kwh:
+                    parts_dev = [f"{kwh:.3f} kWh"]
                     if unit_gross is not None:
-                        lines.append(f" - {name}: {kwh:.3f} kWh · {(kwh * unit_gross):.2f} €")
-                    else:
-                        lines.append(f" - {name}: {kwh:.3f} kWh")
+                        parts_dev.append(f"{(kwh * unit_gross):.2f} €")
+                    if _co2_g > 0:
+                        parts_dev.append(f"{kwh * _co2_g / 1000.0:.3f} kg CO₂")
+                    lines.append(f" - {name}: {' · '.join(parts_dev)}")
             else:
                 lines.append(" - (keine Daten)")
 
@@ -8983,6 +9057,13 @@ class CoreMixin:
                         if unit_gross is not None:
                             standby_cost_year = standby_kwh_year * unit_gross
                             lines.append(f"   = ~{standby_cost_year:.0f} €/Jahr")
+                        try:
+                            _sb_co2_g = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
+                            if _sb_co2_g > 0:
+                                standby_co2_year = standby_kwh_year * _sb_co2_g / 1000.0
+                                lines.append(f"   = ~{standby_co2_year:.0f} kg CO₂/Jahr")
+                        except Exception:
+                            pass
             except Exception:
                 pass
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 7.2.0 - 2026-03-19
+### Added
+- **CO₂ Footprint Tracking.** Electricity consumption is now translated into CO₂ emissions throughout the app.
+  - **Configurable CO₂ intensity** (g CO₂/kWh) in Settings → Pricing & VAT. Country presets via dropdown: DE ~380, AT ~120, CH ~30, FR ~60, EU ~255, Green/Renewable 0 g/kWh.
+  - **Costs tab:** Each time-range card (Today, This Week, This Month, This Year) and the monthly projection card now show the corresponding CO₂ value in kg (e.g. `🌿 1.234 kg CO₂`) when CO₂ intensity is configured (> 0).
+  - **Plots tab:** All kWh bar chart titles include the total CO₂ for the displayed period (e.g. `… / 12.34 kg CO₂`).
+  - **Telegram summaries:** Daily and monthly summaries include a `🌿 CO₂: X.XXX kg` line after the cost line, and per-device breakdowns show kg CO₂ alongside kWh and €. The standby baseline section also shows estimated kg CO₂/year.
+  - **Webhook payloads:** Daily and monthly summary payloads include `co2_intensity_g_per_kwh` so downstream consumers (Home Assistant, Node-RED, etc.) can compute emissions directly.
+  - **Full i18n support** for all 9 languages (de, en, es, fr, pt, it, pl, cs, ru): CO₂ intensity label and preset button are translated. Translations for fr/pt/it/pl/cs/ru are provided as native overrides in the `_mk_lang` blocks.
+  - **Zero/disabled option:** Setting CO₂ intensity to 0 disables all CO₂ display, e.g. for 100% renewable tariffs.
+
 ## 7.1.0 - 2026-03-19
 ### Added
 - **Webhook / Home Assistant Integration.** A new generic HTTP POST webhook system allows sending real-time alarm notifications and scheduled daily/monthly summaries to any HTTP endpoint — fully independent of Telegram.
