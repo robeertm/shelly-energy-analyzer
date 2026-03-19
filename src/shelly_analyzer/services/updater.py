@@ -17,15 +17,20 @@ from typing import Optional, Tuple
 
 DEFAULT_TIMEOUT_S = 3.0
 
-_TAG_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)\.(\d+)$")
+_TAG_RE_4 = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)\.(\d+)$")
+_TAG_RE_3 = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 
 def parse_version(tag: str) -> Optional[Tuple[int,int,int,int]]:
     if not tag:
         return None
-    m = _TAG_RE.match(tag.strip())
-    if not m:
-        return None
-    return tuple(int(x) for x in m.groups())
+    s = tag.strip()
+    m = _TAG_RE_4.match(s)
+    if m:
+        return tuple(int(x) for x in m.groups())
+    m = _TAG_RE_3.match(s)
+    if m:
+        return (int(m.group(1)), int(m.group(2)), int(m.group(3)), 0)
+    return None
 
 def is_newer(a: str, b: str) -> bool:
     """Return True if version a > version b (tags like v5.9.1.3)."""
