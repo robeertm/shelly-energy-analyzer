@@ -8,8 +8,9 @@ from .mixins.scaling import ScalingMixin
 from .mixins.plots import PlotsMixin
 from .mixins.liveweb import LiveWebMixin
 from .mixins.updates import UpdatesMixin
+from .mixins.heatmap import HeatmapMixin
 
 
-class App(CoreMixin, tk.Tk, ScalingMixin, PlotsMixin, LiveWebMixin, UpdatesMixin):
+class App(CoreMixin, tk.Tk, ScalingMixin, PlotsMixin, LiveWebMixin, UpdatesMixin, HeatmapMixin):
     """Main GUI application class (composed from mixins)."""
     pass
