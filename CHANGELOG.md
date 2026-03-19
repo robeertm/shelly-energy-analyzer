@@ -1,5 +1,14 @@
 # Changelog
 
+## 6.0.1.12 - 2026-03-19
+### Fixed
+- **KRITISCH: Gen1 Shelly-Schalten crasht mit AttributeError.** `ShellyHttp` hat keine `get_json()`-Methode. Der Gen1-Relay-Fallback in `set_switch_state()` rief `client.get_json(url)` auf, was bei jedem Schaltversuch eines Gen1-Geräts (z. B. Shelly Plug S) zu einem `AttributeError` führte. Korrigiert zu `client.get(url).json()`.
+- **Geräte-Probe beim Start überschreibt `updates`- und `demo`-Einstellungen.** Bei erkannten Geräteänderungen beim Startup-Probe wurde `AppConfig` ohne `updates=` und `demo=` neu erstellt, wodurch beide Felder auf Standardwerte zurückgesetzt und in `config.json` gespeichert wurden. Demo-Modus-Nutzer verloren ihren Demo-Modus bei jedem Start.
+- **UI-Einstellungen nach Neustart zurückgesetzt (load/save-Lücken in config.py).** `live_daynight_mode`, `live_day_start`, `live_night_start` wurden in `config.json` gespeichert, aber nie wieder eingelesen. `plot_theme_mode`, `telegram_alarm_plots_enabled`, `telegram_summary_load_w` wurden eingelesen, aber nie gespeichert. Alle 6 Felder werden jetzt korrekt ge-loaded und ge-saved.
+- **Einphasige EM-Geräte wurden auf 3 Phasen gezwungen.** `phases=1` in `config.json` für ein EM-Gerät wurde beim Laden stets auf 3 überschrieben. Einphasige EM-Konfigurationen werden jetzt respektiert.
+- **PDF-Rechnung: Zeilen laufen über Seitenrand.** Bei vielen Rechnungszeilen fehlte eine Seitenumbruch-Prüfung pro Zeile. Zeilen werden jetzt auf der nächsten Seite weitergeschrieben wenn `y < 5 cm`.
+- **Datenbank: `n_avg_current`-Backfill verarbeitete Zeilen ohne Stromdaten.** Die WHERE-Bedingung nutzte `COALESCE(x, 0)`, das niemals NULL ist, sodass alle Zeilen mit `n_avg_current IS NULL` selektiert wurden (auch völlig stromlose Zeilen). Die Bedingung prüft jetzt die Rohspalten direkt.
+
 ## 6.0.1.11 - 2026-03-18
 ### Added
 - **Database retention policy.** Data older than 2 full calendar years is automatically compressed to monthly aggregates on startup. The current year and the previous year are kept at full resolution (down to the second). Older data is aggregated into a new `monthly_energy` table (kWh, avg/min/max power, per-phase voltage & current, neutral current, grid frequency) and the raw samples are deleted. Queries transparently merge monthly and raw data, so historical plots and cost calculations work seamlessly across all time ranges.

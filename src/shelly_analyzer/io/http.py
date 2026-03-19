@@ -249,4 +249,4 @@ def set_switch_state(client: ShellyHttp, host: str, switch_id: int, on: bool) ->
         # Gen1 fallback: returns JSON with ison etc.
         turn = "on" if on else "off"
         url = f"http://{host}/relay/{int(switch_id)}?turn={turn}"
-        return client.get_json(url)
+        return client.get(url).json()
