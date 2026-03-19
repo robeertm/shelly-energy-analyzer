@@ -165,6 +165,10 @@ class PricingConfig:
     vat_enabled: bool = True
     vat_rate_percent: float = 19.0
 
+    # CO₂ intensity of the electricity mix (grams CO₂ per kWh).
+    # Country presets: DE ~380, AT ~120, CH ~30, green energy ~0.
+    co2_intensity_g_per_kwh: float = 380.0
+
     def vat_rate(self) -> float:
         if not self.vat_enabled:
             return 0.0
@@ -440,6 +444,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         price_includes_vat=bool(pricing_raw.get("price_includes_vat", PricingConfig.price_includes_vat)),
         vat_enabled=bool(pricing_raw.get("vat_enabled", PricingConfig.vat_enabled)),
         vat_rate_percent=_coerce_float(pricing_raw.get("vat_rate_percent", PricingConfig.vat_rate_percent), PricingConfig.vat_rate_percent),
+        co2_intensity_g_per_kwh=_coerce_float(pricing_raw.get("co2_intensity_g_per_kwh", PricingConfig.co2_intensity_g_per_kwh), PricingConfig.co2_intensity_g_per_kwh),
     )
 
     def _party_from_raw(obj: Any, defaults: BillingParty) -> BillingParty:
@@ -646,6 +651,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "price_includes_vat": cfg.pricing.price_includes_vat,
             "vat_enabled": cfg.pricing.vat_enabled,
             "vat_rate_percent": cfg.pricing.vat_rate_percent,
+            "co2_intensity_g_per_kwh": getattr(cfg.pricing, "co2_intensity_g_per_kwh", 380.0),
         },
         "billing": {
             "issuer": {
