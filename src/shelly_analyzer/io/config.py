@@ -326,8 +326,10 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
             kind = "em"
         gen = _coerce_int(d.get("gen", 0), 0)
         model = str(d.get("model", "") or "")
-        phases = _coerce_int(d.get("phases", 3 if kind == "em" else 1), 3 if kind == "em" else 1)
-        phases = 3 if kind == "em" else 1 if phases <= 1 else phases
+        _phases_default = 3 if kind == "em" else 1
+        phases = _coerce_int(d.get("phases", _phases_default), _phases_default)
+        if kind != "em" and phases <= 1:
+            phases = 1
         supports_emdata = bool(d.get("supports_emdata", True if kind == "em" else False))
         devices.append(
             DeviceConfig(
@@ -389,6 +391,10 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         telegram_summary_load_w=_coerce_float(ui_raw.get("telegram_summary_load_w", UiConfig.telegram_summary_load_w), UiConfig.telegram_summary_load_w),
         telegram_daily_summary_last_sent=str(ui_raw.get("telegram_daily_summary_last_sent", UiConfig.telegram_daily_summary_last_sent) or ""),
         telegram_monthly_summary_last_sent=str(ui_raw.get("telegram_monthly_summary_last_sent", UiConfig.telegram_monthly_summary_last_sent) or ""),
+        live_daynight_mode=str(ui_raw.get("live_daynight_mode", UiConfig.live_daynight_mode) or UiConfig.live_daynight_mode),
+        live_day_start=str(ui_raw.get("live_day_start", UiConfig.live_day_start) or UiConfig.live_day_start),
+        live_night_start=str(ui_raw.get("live_night_start", UiConfig.live_night_start) or UiConfig.live_night_start),
+        plot_theme_mode=str(ui_raw.get("plot_theme_mode", UiConfig.plot_theme_mode) or UiConfig.plot_theme_mode),
     )
 
     updates_raw = raw.get("updates", {}) if isinstance(raw.get("updates"), dict) else {}
@@ -573,9 +579,13 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "telegram_daily_summary_time": getattr(cfg.ui, "telegram_daily_summary_time", "00:00"),
             "telegram_monthly_summary_enabled": getattr(cfg.ui, "telegram_monthly_summary_enabled", False),
             "telegram_monthly_summary_time": getattr(cfg.ui, "telegram_monthly_summary_time", "00:00"),
+            "telegram_alarm_plots_enabled": getattr(cfg.ui, "telegram_alarm_plots_enabled", True),
+            "telegram_summary_load_w": getattr(cfg.ui, "telegram_summary_load_w", UiConfig.telegram_summary_load_w),
             "telegram_daily_summary_last_sent": getattr(cfg.ui, "telegram_daily_summary_last_sent", ""),
             "telegram_monthly_summary_last_sent": getattr(cfg.ui, "telegram_monthly_summary_last_sent", ""),
-        },        "updates": {
+            "plot_theme_mode": getattr(cfg.ui, "plot_theme_mode", UiConfig.plot_theme_mode),
+        },
+        "updates": {
             "repo": getattr(getattr(cfg, "updates", UpdatesConfig()), "repo", UpdatesConfig.repo),
             "check_on_start": bool(getattr(getattr(cfg, "updates", UpdatesConfig()), "check_on_start", True)),
             "auto_install": bool(getattr(getattr(cfg, "updates", UpdatesConfig()), "auto_install", False)),

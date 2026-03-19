@@ -359,6 +359,10 @@ def export_pdf_invoice(
         c.drawRightString(col_amt_x, y, _fmt_money(amount, lang))
 
         y -= 0.95 * cm if len(parts) > 1 else 0.55 * cm
+        if y < 5.0 * cm:
+            c.showPage()
+            y = h - 2.0 * cm
+            c.setFont("Helvetica", 10)
 
     # Totals
     vat_amount = net_total * vat_rate

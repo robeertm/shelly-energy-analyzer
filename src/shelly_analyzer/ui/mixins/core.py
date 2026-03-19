@@ -320,6 +320,8 @@ class CoreMixin:
                             download=self.cfg.download,
                             csv_pack=self.cfg.csv_pack,
                             ui=self.cfg.ui,
+                            updates=self.cfg.updates,
+                            demo=self.cfg.demo,
                             pricing=self.cfg.pricing,
                             billing=self.cfg.billing,
                             alerts=getattr(self.cfg, 'alerts', []) or [],

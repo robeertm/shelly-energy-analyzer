@@ -256,10 +256,18 @@ class EnergyDB:
             ia = "COALESCE(a_avg_current, a_current, 0)"
             ib = "COALESCE(b_avg_current, b_current, 0)"
             ic = "COALESCE(c_avg_current, c_current, 0)"
+            # Only process rows that actually have at least one phase current value.
+            # Use the raw (non-COALESCE) columns for the NULL check so rows with
+            # no current data at all are skipped efficiently.
+            has_current = (
+                "a_avg_current IS NOT NULL OR a_current IS NOT NULL OR "
+                "b_avg_current IS NOT NULL OR b_current IS NOT NULL OR "
+                "c_avg_current IS NOT NULL OR c_current IS NOT NULL"
+            )
             cursor = conn.execute(
                 f"SELECT device_key, timestamp, {ia}, {ib}, {ic} "
                 f"FROM samples WHERE n_avg_current IS NULL "
-                f"AND ({ia} IS NOT NULL OR {ib} IS NOT NULL)"
+                f"AND ({has_current})"
             )
             import math
             batch = []
