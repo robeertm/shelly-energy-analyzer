@@ -4574,6 +4574,7 @@ class CoreMixin:
                             tk.BooleanVar(value=bool(getattr(r, "action_popup", True))),
                             tk.BooleanVar(value=bool(getattr(r, "action_beep", True))),
                             tk.BooleanVar(value=bool(getattr(r, "action_telegram", False))),
+                            tk.BooleanVar(value=bool(getattr(r, "action_webhook", False))),
                             tk.StringVar(value=str(getattr(r, "message", ""))),
                         )
                     )
@@ -4756,6 +4757,87 @@ class CoreMixin:
             except Exception:
                 pass
 
+            # --- Webhook settings ---
+            wh_box = ttk.LabelFrame(alerts_wrap, text=self.t("settings.webhook.title"))
+            wh_box.pack(fill="x", padx=8, pady=(6, 4))
+
+            if not hasattr(self, "_wh_enabled_var"):
+                self._wh_enabled_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "webhook_enabled", False)))
+                self._wh_url_var = tk.StringVar(value=str(getattr(self.cfg.ui, "webhook_url", "") or ""))
+                self._wh_headers_var = tk.StringVar(value=str(getattr(self.cfg.ui, "webhook_custom_headers", "") or ""))
+                self._wh_alarm_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "webhook_alarm_enabled", True)))
+                self._wh_daily_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "webhook_daily_summary_enabled", False)))
+                self._wh_monthly_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "webhook_monthly_summary_enabled", False)))
+
+            ttk.Checkbutton(
+                wh_box,
+                text=self.t("settings.webhook.enabled"),
+                variable=self._wh_enabled_var,
+            ).grid(row=0, column=0, padx=8, pady=6, sticky="w")
+
+            ttk.Label(wh_box, text=self.t("settings.webhook.url") + ":").grid(row=0, column=1, padx=(12, 6), pady=6, sticky="e")
+            ttk.Entry(wh_box, textvariable=self._wh_url_var, width=46).grid(row=0, column=2, padx=(0, 8), pady=6, sticky="we", columnspan=2)
+
+            def _wh_send_test() -> None:
+                try:
+                    self._save_settings()
+                except Exception:
+                    pass
+                def _worker():
+                    payload = {
+                        "type": "test",
+                        "timestamp": datetime.now().isoformat(),
+                        "message": "Shelly Energy Analyzer – Webhook Test",
+                        "source": "shelly-energy-analyzer",
+                    }
+                    ok, err = self._webhook_send_sync(payload)
+                    def _done():
+                        if ok:
+                            messagebox.showinfo("Webhook", "OK (gesendet)")
+                        else:
+                            messagebox.showwarning("Webhook", f"Fehler: {err or 'unbekannt'}")
+                    try:
+                        self.root.after(0, _done)
+                    except Exception:
+                        _done()
+                try:
+                    threading.Thread(target=_worker, daemon=True).start()
+                except Exception as _e:
+                    messagebox.showwarning("Webhook", f"Fehler: {_e}")
+
+            ttk.Button(wh_box, text=self.t("settings.webhook.test"), command=_wh_send_test).grid(
+                row=0, column=4, padx=8, pady=6, sticky="e"
+            )
+
+            ttk.Label(wh_box, text=self.t("settings.webhook.headers") + ":").grid(row=1, column=1, padx=(12, 6), pady=(0, 6), sticky="e")
+            ttk.Entry(wh_box, textvariable=self._wh_headers_var, width=46).grid(row=1, column=2, padx=(0, 8), pady=(0, 6), sticky="we", columnspan=2)
+            ttk.Label(wh_box, text=self.t("settings.webhook.headers.hint"), foreground="gray").grid(row=1, column=4, padx=(0, 8), pady=(0, 6), sticky="w")
+
+            ttk.Checkbutton(
+                wh_box,
+                text=self.t("settings.webhook.alarm_enabled"),
+                variable=self._wh_alarm_var,
+            ).grid(row=2, column=0, padx=8, pady=(0, 6), sticky="w")
+            ttk.Checkbutton(
+                wh_box,
+                text=self.t("settings.webhook.daily_summary_enabled"),
+                variable=self._wh_daily_var,
+            ).grid(row=2, column=2, padx=8, pady=(0, 6), sticky="w")
+            ttk.Checkbutton(
+                wh_box,
+                text=self.t("settings.webhook.monthly_summary_enabled"),
+                variable=self._wh_monthly_var,
+            ).grid(row=2, column=4, padx=8, pady=(0, 6), sticky="w")
+
+            ttk.Label(wh_box, text=self.t("settings.webhook.hint"), foreground="gray").grid(
+                row=3, column=0, columnspan=5, padx=8, pady=(0, 6), sticky="w"
+            )
+
+            try:
+                wh_box.columnconfigure(2, weight=1)
+            except Exception:
+                pass
+
     # Alerts table
             atable = ttk.Frame(alerts_wrap)
             atable.pack(fill="x")
@@ -4771,6 +4853,7 @@ class CoreMixin:
                 ("popup", self.t('settings.alerts.col_popup'), 7),
                 ("beep", self.t('settings.alerts.col_beep'), 6),
                 ("tg", self.t('settings.alerts.col_telegram'), 8),
+                ("wh", self.t('settings.alerts.col_webhook'), 8),
                 ("msg", self.t('settings.alerts.col_message'), 24),
                 ("del", "", 3),
             ]
@@ -4835,7 +4918,7 @@ class CoreMixin:
             ]
             _op_choices = [">", "<", ">=", "<=", "="]
             for i, row in enumerate(getattr(self, "_alert_vars", []), start=1):
-                (v_id, v_en, v_dev, v_met, v_op, v_thr, v_dur, v_cd, v_pop, v_beep, v_tg, v_msg) = row
+                (v_id, v_en, v_dev, v_met, v_op, v_thr, v_dur, v_cd, v_pop, v_beep, v_tg, v_wh, v_msg) = row
                 # Normalize device selection to display value
                 try:
                     cur = (v_dev.get() or '').strip()
@@ -4878,8 +4961,11 @@ class CoreMixin:
                 w_tg = ttk.Checkbutton(atable, variable=v_tg)
                 w_tg.grid(row=i, column=10, padx=(0, 10), pady=2, sticky="w")
 
+                w_wh = ttk.Checkbutton(atable, variable=v_wh)
+                w_wh.grid(row=i, column=11, padx=(0, 10), pady=2, sticky="w")
+
                 w_msg = ttk.Entry(atable, textvariable=v_msg, width=24)
-                w_msg.grid(row=i, column=11, padx=(0, 6), pady=2, sticky="we")
+                w_msg.grid(row=i, column=12, padx=(0, 6), pady=2, sticky="we")
 
                 # Per-row delete button (allows removing rules in the middle)
                 def _del_row(_idx=i-1, _v_en=v_en, _v_id=v_id):
@@ -4894,10 +4980,10 @@ class CoreMixin:
                         pass
                     self._delete_alert_row(_idx)
 
-                ttk.Button(atable, text="✖", width=2, command=_del_row).grid(row=i, column=12, padx=(0, 0), pady=2, sticky="w")
+                ttk.Button(atable, text="✖", width=2, command=_del_row).grid(row=i, column=13, padx=(0, 0), pady=2, sticky="w")
 
                 # Lock editing for active rules (enabled=True). Use default-args to avoid late-binding bugs.
-                def _toggle_row_lock(*_a, v_en=v_en, w_id=w_id, w_dev=w_dev, w_met=w_met, w_op=w_op, w_thr=w_thr, w_dur=w_dur, w_cd=w_cd, w_pop=w_pop, w_beep=w_beep, w_tg=w_tg, w_msg=w_msg):
+                def _toggle_row_lock(*_a, v_en=v_en, w_id=w_id, w_dev=w_dev, w_met=w_met, w_op=w_op, w_thr=w_thr, w_dur=w_dur, w_cd=w_cd, w_pop=w_pop, w_beep=w_beep, w_tg=w_tg, w_wh=w_wh, w_msg=w_msg):
                     locked = bool(v_en.get())
                     if locked:
                         try:
@@ -4911,6 +4997,7 @@ class CoreMixin:
                             w_pop.configure(state="disabled")
                             w_beep.configure(state="disabled")
                             w_tg.configure(state="disabled")
+                            w_wh.configure(state="disabled")
                             w_msg.configure(state="disabled")
                         except Exception:
                             pass
@@ -4926,6 +5013,7 @@ class CoreMixin:
                             w_pop.configure(state="normal")
                             w_beep.configure(state="normal")
                             w_tg.configure(state="normal")
+                            w_wh.configure(state="normal")
                             w_msg.configure(state="normal")
                         except Exception:
                             pass
@@ -5848,6 +5936,13 @@ class CoreMixin:
     telegram_summary_load_w=float(getattr(self, "_tg_sum_loadw_var", tk.StringVar(value="200")).get() or 200.0),
     telegram_monthly_summary_last_sent=str(getattr(self.cfg.ui, "telegram_monthly_summary_last_sent", "") or ""),
 
+    webhook_enabled=bool(getattr(self, "_wh_enabled_var", tk.BooleanVar(value=False)).get()),
+    webhook_url=str(getattr(self, "_wh_url_var", tk.StringVar(value="")).get() or ""),
+    webhook_custom_headers=str(getattr(self, "_wh_headers_var", tk.StringVar(value="")).get() or ""),
+    webhook_alarm_enabled=bool(getattr(self, "_wh_alarm_var", tk.BooleanVar(value=True)).get()),
+    webhook_daily_summary_enabled=bool(getattr(self, "_wh_daily_var", tk.BooleanVar(value=False)).get()),
+    webhook_monthly_summary_enabled=bool(getattr(self, "_wh_monthly_var", tk.BooleanVar(value=False)).get()),
+
                 autosync_enabled=bool(self.set_autosync_enabled_var.get()),
                 autosync_interval_hours=int(self.set_autosync_interval_var.get() or 12),
                 autosync_mode=str(self.set_autosync_mode_var.get() or "incremental"),
@@ -5892,7 +5987,7 @@ class CoreMixin:
             alerts: List[AlertRule] = []
             try:
                 for row in getattr(self, "_alert_vars", []) or []:
-                    (v_id, v_en, v_dev, v_met, v_op, v_thr, v_dur, v_cd, v_pop, v_beep, v_tg, v_msg) = row
+                    (v_id, v_en, v_dev, v_met, v_op, v_thr, v_dur, v_cd, v_pop, v_beep, v_tg, v_wh, v_msg) = row
                     rid = (v_id.get() or "").strip() or f"rule{len(alerts)+1}"
                     dev_disp = (v_dev.get() or "").strip()
                     try:
@@ -5930,6 +6025,7 @@ class CoreMixin:
                             action_popup=bool(v_pop.get()),
                             action_beep=bool(v_beep.get()),
                             action_telegram=bool(v_tg.get()),
+                            action_webhook=bool(v_wh.get()),
                             message=str(v_msg.get() or ""),
                         )
                     )
@@ -6143,6 +6239,11 @@ class CoreMixin:
             # Scheduled Telegram summaries
             try:
                 self._telegram_summary_tick()
+            except Exception:
+                pass
+            # Scheduled Webhook summaries
+            try:
+                self._webhook_summary_tick()
             except Exception:
                 pass
             self.after(500, self._drain_queues_loop)
@@ -6428,6 +6529,7 @@ class CoreMixin:
                     tk.BooleanVar(value=True),
                     tk.BooleanVar(value=True),
                     tk.BooleanVar(value=False),
+                    tk.BooleanVar(value=False),
                     tk.StringVar(value=""),
                 )
             )
@@ -6503,6 +6605,46 @@ class CoreMixin:
                 # Fallback: treat any 200 with no JSON as success? better be conservative
                 return False, raw.decode("utf-8", errors="replace")[:200]
 
+
+    def _webhook_send_sync(self, payload: dict) -> tuple[bool, str]:
+            """Send a generic JSON webhook HTTP POST and return (ok, error_message)."""
+            try:
+                if not bool(getattr(self.cfg.ui, "webhook_enabled", False)):
+                    return False, "Webhook ist deaktiviert"
+                url = str(getattr(self.cfg.ui, "webhook_url", "") or "").strip()
+                if not url:
+                    return False, "Webhook-URL fehlt"
+            except Exception as e:
+                return False, str(e)
+
+            try:
+                body = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
+                req = urllib.request.Request(url, data=body, method="POST")
+                req.add_header("Content-Type", "application/json")
+                req.add_header("User-Agent", "ShellyEnergyAnalyzer")
+
+                # Parse and apply custom headers (JSON object string)
+                headers_str = str(getattr(self.cfg.ui, "webhook_custom_headers", "") or "").strip()
+                if headers_str:
+                    try:
+                        custom_headers = json.loads(headers_str)
+                        if isinstance(custom_headers, dict):
+                            for k, v in custom_headers.items():
+                                req.add_header(str(k), str(v))
+                    except Exception:
+                        pass
+
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    resp.read()
+                return True, ""
+            except urllib.error.HTTPError as he:
+                try:
+                    raw = he.read()
+                    return False, f"HTTP {he.code}: {raw.decode('utf-8', errors='replace')[:200]}"
+                except Exception:
+                    return False, f"HTTPError: {he}"
+            except Exception as e:
+                return False, str(e)
 
     def _telegram_send_photo_sync(self, image_path: "Path", caption: str = "") -> tuple[bool, str]:
             """Send a Telegram photo synchronously and return (ok, error_message)."""
@@ -7763,6 +7905,31 @@ class CoreMixin:
                         except Exception as e:
                             print(f"[alerts][telegram] build error: {e}")
 
+                    if bool(getattr(r, "action_webhook", False)):
+                        try:
+                            if bool(getattr(self.cfg.ui, "webhook_alarm_enabled", True)):
+                                wh_payload = {
+                                    "type": "alarm",
+                                    "timestamp": datetime.fromtimestamp(now_ts).isoformat(),
+                                    "rule_id": rid,
+                                    "device_key": str(getattr(s, "device_key", "") or devk),
+                                    "device_name": devname,
+                                    "metric": metric,
+                                    "value": round(val, 4),
+                                    "op": op,
+                                    "threshold": round(thr, 4),
+                                    "duration_seconds": dur,
+                                    "message": msg,
+                                    "source": "shelly-energy-analyzer",
+                                }
+                                def _wh_send(payload=wh_payload):
+                                    ok, err = self._webhook_send_sync(payload)
+                                    if not ok:
+                                        print(f"[alerts][webhook] send failed: {err}")
+                                threading.Thread(target=_wh_send, daemon=True).start()
+                        except Exception as e:
+                            print(f"[alerts][webhook] error: {e}")
+
                     if bool(getattr(r, "action_beep", True)):
                         try:
                             self.bell()
@@ -8256,6 +8423,124 @@ class CoreMixin:
                     logging.getLogger(__name__).warning("Telegram monthly summary failed: %s", err)
                 except Exception:
                     pass
+
+    def _webhook_summary_tick(self) -> None:
+            """Send scheduled daily/monthly webhook summaries (independent of Telegram)."""
+            wh_daily = bool(getattr(self.cfg.ui, "webhook_daily_summary_enabled", False))
+            wh_monthly = bool(getattr(self.cfg.ui, "webhook_monthly_summary_enabled", False))
+            if not bool(getattr(self.cfg.ui, "webhook_enabled", False)):
+                return
+            if not wh_daily and not wh_monthly:
+                return
+
+            try:
+                base_dir = getattr(getattr(self, "storage", None), "base_dir", None) or "."
+                p_state = Path(base_dir) / "data" / "webhook_summary_state.json"
+                p_state.parent.mkdir(parents=True, exist_ok=True)
+                if not hasattr(self, "_wh_summary_state"):
+                    try:
+                        self._wh_summary_state = json.loads(p_state.read_text(encoding="utf-8")) if p_state.exists() else {}
+                    except Exception:
+                        self._wh_summary_state = {}
+                state = self._wh_summary_state
+            except Exception:
+                return
+
+            def _st_get(k: str, default: str = "") -> str:
+                try:
+                    return str(state.get(k, default) or default)
+                except Exception:
+                    return default
+
+            def _st_set(k: str, v: str) -> None:
+                try:
+                    state[k] = v
+                    p_state.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                except Exception:
+                    pass
+
+            now = datetime.now()
+            now_ts = int(time.time())
+
+            # --- Daily ---
+            if wh_daily:
+                try:
+                    hh, mm = self._parse_hhmm(str(getattr(self.cfg.ui, "telegram_daily_summary_time", "00:00") or "00:00"))
+                    due = datetime.combine(now.date(), datetime.min.time()).replace(hour=hh, minute=mm)
+                    key = f"{due.strftime('%Y-%m-%d')}_{hh:02d}{mm:02d}"
+                    grace_s = 7200  # 2h
+                    last = _st_get("daily_last", "")
+                    attempt_ts_str = _st_get("daily_attempt_ts", "0")
+                    try:
+                        attempt_ts = int(float(attempt_ts_str or 0))
+                    except Exception:
+                        attempt_ts = 0
+                    if now >= due and now <= (due + timedelta(seconds=grace_s)) and last != key:
+                        if not (attempt_ts and (now_ts - attempt_ts) < 60):
+                            _st_set("daily_attempt_ts", str(now_ts))
+                            try:
+                                from zoneinfo import ZoneInfo
+                                tz = ZoneInfo("Europe/Berlin")
+                                end_dt = datetime.now(tz)
+                                start_dt = end_dt - timedelta(hours=24)
+                                msg_text = self._build_telegram_summary("daily", start_dt, end_dt)
+                                payload = {
+                                    "type": "daily_summary",
+                                    "timestamp": datetime.now().isoformat(),
+                                    "period_start": start_dt.isoformat(),
+                                    "period_end": end_dt.isoformat(),
+                                    "message": msg_text,
+                                    "source": "shelly-energy-analyzer",
+                                }
+                                ok, err = self._webhook_send_sync(payload)
+                            except Exception as e:
+                                ok, err = False, str(e)
+                            if ok:
+                                _st_set("daily_last", key)
+                            elif err:
+                                logging.getLogger(__name__).warning("Webhook daily summary failed: %s", err)
+                except Exception as e:
+                    logging.getLogger(__name__).warning("Webhook daily summary tick error: %s", e)
+
+            # --- Monthly ---
+            if wh_monthly:
+                try:
+                    hh, mm = self._parse_hhmm(str(getattr(self.cfg.ui, "telegram_monthly_summary_time", "00:00") or "00:00"))
+                    now_m = now.replace(day=1, hour=hh, minute=mm, second=0, microsecond=0)
+                    key = f"{now_m.strftime('%Y-%m')}_{hh:02d}{mm:02d}"
+                    grace_s = 86400  # 24h
+                    last = _st_get("monthly_last", "")
+                    attempt_ts_str = _st_get("monthly_attempt_ts", "0")
+                    try:
+                        attempt_ts = int(float(attempt_ts_str or 0))
+                    except Exception:
+                        attempt_ts = 0
+                    if now >= now_m and now <= (now_m + timedelta(seconds=grace_s)) and last != key:
+                        if not (attempt_ts and (now_ts - attempt_ts) < 300):
+                            _st_set("monthly_attempt_ts", str(now_ts))
+                            try:
+                                from zoneinfo import ZoneInfo
+                                tz = ZoneInfo("Europe/Berlin")
+                                end_dt = datetime.now(tz)
+                                start_dt = end_dt - timedelta(days=30)
+                                msg_text = self._build_telegram_summary("monthly", start_dt, end_dt)
+                                payload = {
+                                    "type": "monthly_summary",
+                                    "timestamp": datetime.now().isoformat(),
+                                    "period_start": start_dt.isoformat(),
+                                    "period_end": end_dt.isoformat(),
+                                    "message": msg_text,
+                                    "source": "shelly-energy-analyzer",
+                                }
+                                ok, err = self._webhook_send_sync(payload)
+                            except Exception as e:
+                                ok, err = False, str(e)
+                            if ok:
+                                _st_set("monthly_last", key)
+                            elif err:
+                                logging.getLogger(__name__).warning("Webhook monthly summary failed: %s", err)
+                except Exception as e:
+                    logging.getLogger(__name__).warning("Webhook monthly summary tick error: %s", e)
 
     def _build_telegram_summary(self, kind: str, start: datetime, end: datetime) -> str:
             """Build a detailed summary message for a time range.
