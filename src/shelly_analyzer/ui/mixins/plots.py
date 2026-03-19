@@ -1232,7 +1232,12 @@ class PlotsMixin:
                     a = pstart.date().isoformat() if pstart is not None else "…"
                     b = pend.date().isoformat() if pend is not None else "…"
                     range_lbl = f" | {a}–{b}"
-                ax.set_title(f"{dcfg.name} – {self._pretty_kwh_mode(mode)}{range_lbl} | {_fmt_kwh(total)} ({_fmt_eur(cost)})")
+                try:
+                    _co2_g = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
+                    co2_lbl = f" / {total * _co2_g / 1000.0:.2f} kg CO₂" if _co2_g > 0 else ""
+                except Exception:
+                    co2_lbl = ""
+                ax.set_title(f"{dcfg.name} – {self._pretty_kwh_mode(mode)}{range_lbl} | {_fmt_kwh(total)} ({_fmt_eur(cost)}){co2_lbl}")
                 ax.grid(True, axis="y", alpha=0.3)
                 self._annotate_bars(ax, bars)
                 try:
@@ -1801,7 +1806,12 @@ class PlotsMixin:
                     a = pstart.date().isoformat() if pstart is not None else "…"
                     b = pend.date().isoformat() if pend is not None else "…"
                     range_lbl = f" | {a}–{b}"
-                ax.set_title(f"{d.name} – {self._pretty_kwh_mode(mode)}{range_lbl} | {_fmt_kwh(total)} ({_fmt_eur(cost)})")
+                try:
+                    _co2_g = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
+                    co2_lbl = f" / {total * _co2_g / 1000.0:.2f} kg CO₂" if _co2_g > 0 else ""
+                except Exception:
+                    co2_lbl = ""
+                ax.set_title(f"{d.name} – {self._pretty_kwh_mode(mode)}{range_lbl} | {_fmt_kwh(total)} ({_fmt_eur(cost)}){co2_lbl}")
                 ax.grid(True, axis="y", alpha=0.3)
                 self._annotate_bars(ax, bars)
                 self._apply_axis_layout(fig, ax, canvas.get_tk_widget(), legend=False)
@@ -1821,7 +1831,12 @@ class PlotsMixin:
             self._apply_xticks(ax, labels)
             unit_gross = float(self.cfg.pricing.unit_price_gross())
             total = float(sum(values))
-            ax.set_title(f"{cd.device_name} – {self._pretty_kwh_mode(mode)} | {_fmt_kwh(total)} ({_fmt_eur(total * unit_gross)})")
+            try:
+                _co2_g = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
+                co2_lbl = f" / {total * _co2_g / 1000.0:.2f} kg CO₂" if _co2_g > 0 else ""
+            except Exception:
+                co2_lbl = ""
+            ax.set_title(f"{cd.device_name} – {self._pretty_kwh_mode(mode)} | {_fmt_kwh(total)} ({_fmt_eur(total * unit_gross)}){co2_lbl}")
             ax.grid(True, axis="y", alpha=0.3)
             self._annotate_bars(ax, bars)
             fig.tight_layout()
