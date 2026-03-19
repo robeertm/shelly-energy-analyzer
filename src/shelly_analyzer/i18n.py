@@ -2658,6 +2658,36 @@ _I18N.setdefault("es", {}).update({
     "pdf.summary.note": "Precio bruto: {price} €/kWh{vat_part} – creado con Shelly Energy Analyzer {version}",
 })
 
+# -------- Webhook integration translations --------
+
+_I18N.setdefault("de", {}).update({
+    "settings.webhook.title": "Webhook",
+    "settings.webhook.enabled": "Webhook aktiv",
+    "settings.webhook.url": "URL",
+    "settings.webhook.headers": "Custom Headers (JSON)",
+    "settings.webhook.headers.hint": 'z.B. {"Authorization": "Bearer token"}',
+    "settings.webhook.alarm_enabled": "Bei Alarmen senden",
+    "settings.webhook.daily_summary_enabled": "Tägliche Zusammenfassung",
+    "settings.webhook.monthly_summary_enabled": "Monatliche Zusammenfassung",
+    "settings.webhook.test": "Test senden",
+    "settings.webhook.hint": "Kompatibel mit Home Assistant, ntfy.sh, Node-RED, Zapier u.a.",
+    "settings.alerts.col_webhook": "Webhook",
+})
+
+_I18N.setdefault("en", {}).update({
+    "settings.webhook.title": "Webhook",
+    "settings.webhook.enabled": "Enable webhook",
+    "settings.webhook.url": "URL",
+    "settings.webhook.headers": "Custom headers (JSON)",
+    "settings.webhook.headers.hint": 'e.g. {"Authorization": "Bearer token"}',
+    "settings.webhook.alarm_enabled": "Send on alarms",
+    "settings.webhook.daily_summary_enabled": "Daily summary",
+    "settings.webhook.monthly_summary_enabled": "Monthly summary",
+    "settings.webhook.test": "Send test",
+    "settings.webhook.hint": "Compatible with Home Assistant, ntfy.sh, Node-RED, Zapier, etc.",
+    "settings.alerts.col_webhook": "Webhook",
+})
+
 # -------- Local formatting helpers (dates/numbers) --------
 
 _DATE_FORMATS = {
