@@ -2,12 +2,12 @@
 
 ## 6.0.1.12 - 2026-03-19
 ### Fixed
-- **KRITISCH: Gen1 Shelly-Schalten crasht mit AttributeError.** `ShellyHttp` hat keine `get_json()`-Methode. Der Gen1-Relay-Fallback in `set_switch_state()` rief `client.get_json(url)` auf, was bei jedem Schaltversuch eines Gen1-Geräts (z. B. Shelly Plug S) zu einem `AttributeError` führte. Korrigiert zu `client.get(url).json()`.
-- **Geräte-Probe beim Start überschreibt `updates`- und `demo`-Einstellungen.** Bei erkannten Geräteänderungen beim Startup-Probe wurde `AppConfig` ohne `updates=` und `demo=` neu erstellt, wodurch beide Felder auf Standardwerte zurückgesetzt und in `config.json` gespeichert wurden. Demo-Modus-Nutzer verloren ihren Demo-Modus bei jedem Start.
-- **UI-Einstellungen nach Neustart zurückgesetzt (load/save-Lücken in config.py).** `live_daynight_mode`, `live_day_start`, `live_night_start` wurden in `config.json` gespeichert, aber nie wieder eingelesen. `plot_theme_mode`, `telegram_alarm_plots_enabled`, `telegram_summary_load_w` wurden eingelesen, aber nie gespeichert. Alle 6 Felder werden jetzt korrekt ge-loaded und ge-saved.
-- **Einphasige EM-Geräte wurden auf 3 Phasen gezwungen.** `phases=1` in `config.json` für ein EM-Gerät wurde beim Laden stets auf 3 überschrieben. Einphasige EM-Konfigurationen werden jetzt respektiert.
-- **PDF-Rechnung: Zeilen laufen über Seitenrand.** Bei vielen Rechnungszeilen fehlte eine Seitenumbruch-Prüfung pro Zeile. Zeilen werden jetzt auf der nächsten Seite weitergeschrieben wenn `y < 5 cm`.
-- **Datenbank: `n_avg_current`-Backfill verarbeitete Zeilen ohne Stromdaten.** Die WHERE-Bedingung nutzte `COALESCE(x, 0)`, das niemals NULL ist, sodass alle Zeilen mit `n_avg_current IS NULL` selektiert wurden (auch völlig stromlose Zeilen). Die Bedingung prüft jetzt die Rohspalten direkt.
+- **CRITICAL: Gen1 switch toggle crashes with AttributeError.** `ShellyHttp` has no `get_json()` method. The Gen1 relay fallback in `set_switch_state()` called `client.get_json(url)`, causing an `AttributeError` on every switch attempt for Gen1 devices (e.g. Shelly Plug S). Fixed to `client.get(url).json()`.
+- **Startup device probe resets `updates` and `demo` settings.** When device changes were detected during the startup probe, `AppConfig` was rebuilt without `updates=` and `demo=`, resetting both to defaults and saving to `config.json`. Demo mode users lost their demo configuration on every launch.
+- **UI settings reset after restart (load/save gaps in config.py).** `live_daynight_mode`, `live_day_start`, `live_night_start` were saved to `config.json` but never loaded back. `plot_theme_mode`, `telegram_alarm_plots_enabled`, `telegram_summary_load_w` were loaded but never saved. All 6 fields are now correctly round-tripped.
+- **Single-phase EM devices forced to 3 phases.** `phases=1` in `config.json` for an EM device was always overwritten to 3 on load. Single-phase EM configurations are now respected.
+- **PDF invoice: lines overflow page margin.** With many invoice line items, there was no page break check per line. Lines are now continued on the next page when `y < 5 cm`.
+- **Database: `n_avg_current` backfill processed rows without current data.** The WHERE clause used `COALESCE(x, 0)` which is never NULL, so all rows with `n_avg_current IS NULL` were selected — including rows with no current measurements at all. The condition now checks raw columns directly.
 
 ## 6.0.1.11 - 2026-03-18
 ### Added
