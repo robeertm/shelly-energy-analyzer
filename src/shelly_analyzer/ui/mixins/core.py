@@ -753,7 +753,18 @@ class CoreMixin:
             self._update_device_page_choices()
 
     def _get_visible_devices(self) -> List[DeviceConfig]:
-            """Return the devices currently visible in the UI (max 2)."""
+            """Return the devices currently visible in the UI (max 2 for plots/live).
+
+            When a group or 'all' is selected the first 2 devices in that selection
+            are returned so that the existing plot/live widgets keep working.
+            Use _get_selected_all_devices() for cost aggregation (no limit).
+            """
+            view_type = str(getattr(self.cfg.ui, "selected_view_type", "page") or "page")
+            if view_type == "group":
+                return self._get_selected_all_devices()[:2]
+            if view_type == "all":
+                return list(self.cfg.devices)[:2]
+            # page (default)
             try:
                 page = int(getattr(self.cfg.ui, "device_page_index", 0) or 0)
             except Exception:
@@ -762,49 +773,133 @@ class CoreMixin:
             start = page * 2
             return list(self.cfg.devices[start : start + 2])
 
-    def _device_page_labels(self) -> List[str]:
+    def _get_selected_all_devices(self) -> List[DeviceConfig]:
+            """Return ALL devices for the currently selected view (no 2-device limit).
+
+            Used by the costs tab and Telegram summary for proper aggregation.
+            """
+            view_type = str(getattr(self.cfg.ui, "selected_view_type", "page") or "page")
+            if view_type == "all":
+                return list(self.cfg.devices)
+            if view_type == "group":
+                group_name = str(getattr(self.cfg.ui, "selected_view_group", "") or "")
+                key_map = {d.key: d for d in self.cfg.devices}
+                for g in (getattr(self.cfg, "groups", []) or []):
+                    if g.name == group_name:
+                        return [key_map[k] for k in g.device_keys if k in key_map]
+                return list(self.cfg.devices)[:2]
+            # page
+            try:
+                page = int(getattr(self.cfg.ui, "device_page_index", 0) or 0)
+            except Exception:
+                page = 0
+            page = max(0, page)
+            start = page * 2
+            return list(self.cfg.devices[start : start + 2])
+
+    def _build_view_entries(self) -> List[dict]:
+            """Build the list of view entries for the device page dropdown.
+
+            Each entry is a dict with keys: type ('page'|'group'|'all'), ref (page_idx or group_name), label.
+            """
+            entries: List[dict] = []
             devs = list(self.cfg.devices)
+            # Device pages
             if not devs:
-                return ["1: — | —"]
-            labels: List[str] = []
-            for i in range(0, len(devs), 2):
-                left = devs[i].name
-                right = devs[i + 1].name if i + 1 < len(devs) else "—"
-                labels.append(f"{(i//2)+1}: {left} | {right}")
-            return labels
+                entries.append({"type": "page", "ref": 0, "label": "1: — | —"})
+            else:
+                for i in range(0, len(devs), 2):
+                    left = devs[i].name
+                    right = devs[i + 1].name if i + 1 < len(devs) else "—"
+                    entries.append({"type": "page", "ref": i // 2, "label": f"{(i//2)+1}: {left} | {right}"})
+            # Groups
+            prefix = self.t("groups.group_prefix")
+            for g in (getattr(self.cfg, "groups", []) or []):
+                if g.name:
+                    entries.append({"type": "group", "ref": g.name, "label": f"{prefix}{g.name}"})
+            # Total / Gesamt
+            if len(devs) > 1:
+                entries.append({"type": "all", "ref": None, "label": self.t("groups.all")})
+            return entries
+
+    def _device_page_labels(self) -> List[str]:
+            return [e["label"] for e in self._build_view_entries()]
 
     def _update_device_page_choices(self) -> None:
-            labels = self._device_page_labels()
+            entries = self._build_view_entries()
+            labels = [e["label"] for e in entries]
             self._page_labels = labels
+            self._view_entries = entries
             try:
                 self.device_page_cb["values"] = labels
             except Exception:
                 pass
-            max_idx = max(0, len(labels) - 1)
+
+            # Determine the correct label for the current config state
+            view_type = str(getattr(self.cfg.ui, "selected_view_type", "page") or "page")
+            view_group = str(getattr(self.cfg.ui, "selected_view_group", "") or "")
             try:
-                idx = int(getattr(self.cfg.ui, "device_page_index", 0) or 0)
+                page_idx = int(getattr(self.cfg.ui, "device_page_index", 0) or 0)
             except Exception:
-                idx = 0
-            if idx > max_idx:
-                idx = max_idx
-                self.cfg = replace(self.cfg, ui=replace(self.cfg.ui, device_page_index=idx))
+                page_idx = 0
+
+            current_label = None
+            for e in entries:
+                if view_type == "page" and e["type"] == "page" and e["ref"] == page_idx:
+                    current_label = e["label"]
+                    break
+                if view_type == "group" and e["type"] == "group" and e["ref"] == view_group:
+                    current_label = e["label"]
+                    break
+                if view_type == "all" and e["type"] == "all":
+                    current_label = e["label"]
+                    break
+
+            if current_label is None and labels:
+                current_label = labels[0]
+                # Reset to first page
+                self.cfg = replace(self.cfg, ui=replace(self.cfg.ui,
+                    device_page_index=0,
+                    selected_view_type="page",
+                    selected_view_group="",
+                ))
                 try:
                     save_config(self.cfg, self.cfg_path)
                 except Exception:
                     pass
+
             try:
-                self.device_page_label_var.set(labels[idx])
+                self.device_page_label_var.set(current_label or "")
             except Exception:
                 pass
 
     def _on_device_page_selected(self, _evt: Any = None) -> None:
-            labels = getattr(self, "_page_labels", None) or self._device_page_labels()
+            entries = getattr(self, "_view_entries", None)
+            if not entries:
+                entries = self._build_view_entries()
             sel = str(self.device_page_label_var.get())
-            try:
-                idx = labels.index(sel)
-            except Exception:
-                idx = 0
-            self.cfg = replace(self.cfg, ui=replace(self.cfg.ui, device_page_index=idx))
+            # Find matching entry
+            entry = next((e for e in entries if e["label"] == sel), None)
+            if entry is None and entries:
+                entry = entries[0]
+
+            if entry is not None:
+                if entry["type"] == "page":
+                    self.cfg = replace(self.cfg, ui=replace(self.cfg.ui,
+                        device_page_index=int(entry["ref"]),
+                        selected_view_type="page",
+                        selected_view_group="",
+                    ))
+                elif entry["type"] == "group":
+                    self.cfg = replace(self.cfg, ui=replace(self.cfg.ui,
+                        selected_view_type="group",
+                        selected_view_group=str(entry["ref"]),
+                    ))
+                elif entry["type"] == "all":
+                    self.cfg = replace(self.cfg, ui=replace(self.cfg.ui,
+                        selected_view_type="all",
+                        selected_view_group="",
+                    ))
             try:
                 save_config(self.cfg, self.cfg_path)
             except Exception:
@@ -815,6 +910,11 @@ class CoreMixin:
             self._rebuild_live_tab()
             try:
                 self._reload_data()
+            except Exception:
+                pass
+            # Refresh costs to show correct aggregate
+            try:
+                self._refresh_costs_tab()
             except Exception:
                 pass
             # Ensure live UI reflects the current live state after the rebuild.
@@ -3866,8 +3966,63 @@ class CoreMixin:
 
             # Build per-device sections
             self._cost_device_vars = {}  # {device_key: {range_key: {kwh: StringVar, eur: StringVar, co2: StringVar}, proj_kwh, proj_eur, proj_co2, cmp_text}}
+            self._cost_aggregate_vars = {}  # vars for group/all aggregate section
 
             three_phase_devs = [d for d in (self.cfg.devices or []) if int(getattr(d, "phases", 3) or 3) >= 3 and str(getattr(d, "kind", "em")) != "switch"]
+
+            # --- Aggregate section (group or all-devices view) ---
+            view_type = str(getattr(self.cfg.ui, "selected_view_type", "page") or "page")
+            view_group = str(getattr(self.cfg.ui, "selected_view_group", "") or "")
+            if view_type in ("group", "all"):
+                agg_title = (
+                    self.t("costs.group_aggregate").format(name=view_group)
+                    if view_type == "group"
+                    else self.t("costs.all_devices")
+                )
+                agg_frame = ttk.LabelFrame(self._cost_scroll_frame, text=f"📊 {agg_title}")
+                agg_frame.pack(fill="x", padx=14, pady=(8, 4))
+                agg_vars: dict = {}
+                cards_agg = ttk.Frame(agg_frame)
+                cards_agg.pack(fill="x", padx=8, pady=4)
+                cards_agg.columnconfigure((0, 1, 2, 3), weight=1)
+                for col, (key, label) in enumerate([
+                    ("today", self.t("costs.today")),
+                    ("week", self.t("costs.this_week")),
+                    ("month", self.t("costs.this_month")),
+                    ("year", self.t("costs.this_year")),
+                ]):
+                    card = ttk.LabelFrame(cards_agg, text=label)
+                    card.grid(row=0, column=col, sticky="nsew", padx=3, pady=3)
+                    v_kwh = tk.StringVar(value="– kWh")
+                    v_eur = tk.StringVar(value="– €")
+                    v_co2 = tk.StringVar(value="")
+                    v_tou = tk.StringVar(value="")
+                    ttk.Label(card, textvariable=v_kwh, font=("", 10)).pack(anchor="w", padx=6, pady=(4, 0))
+                    ttk.Label(card, textvariable=v_eur, font=("", 12, "bold")).pack(anchor="w", padx=6, pady=(1, 0))
+                    ttk.Label(card, textvariable=v_co2, font=("", 9), foreground="#4caf50").pack(anchor="w", padx=6, pady=(0, 1))
+                    ttk.Label(card, textvariable=v_tou, font=("", 8), foreground="#888888").pack(anchor="w", padx=6, pady=(0, 4))
+                    agg_vars[key] = {"kwh": v_kwh, "eur": v_eur, "co2": v_co2, "tou": v_tou}
+                # Projection + comparison row
+                row2_agg = ttk.Frame(agg_frame)
+                row2_agg.pack(fill="x", padx=8, pady=(0, 6))
+                row2_agg.columnconfigure((0, 1), weight=1)
+                proj_card_agg = ttk.LabelFrame(row2_agg, text=self.t("costs.projected_month"))
+                proj_card_agg.grid(row=0, column=0, sticky="nsew", padx=3, pady=3)
+                v_proj_kwh_agg = tk.StringVar(value="– kWh")
+                v_proj_eur_agg = tk.StringVar(value="– €")
+                v_proj_co2_agg = tk.StringVar(value="")
+                ttk.Label(proj_card_agg, textvariable=v_proj_kwh_agg, font=("", 10)).pack(anchor="w", padx=6, pady=(4, 0))
+                ttk.Label(proj_card_agg, textvariable=v_proj_eur_agg, font=("", 12, "bold")).pack(anchor="w", padx=6, pady=(1, 0))
+                ttk.Label(proj_card_agg, textvariable=v_proj_co2_agg, font=("", 9), foreground="#4caf50").pack(anchor="w", padx=6, pady=(0, 4))
+                agg_vars["proj_kwh"] = v_proj_kwh_agg
+                agg_vars["proj_eur"] = v_proj_eur_agg
+                agg_vars["proj_co2"] = v_proj_co2_agg
+                cmp_card_agg = ttk.LabelFrame(row2_agg, text=self.t("costs.vs_last_month"))
+                cmp_card_agg.grid(row=0, column=1, sticky="nsew", padx=3, pady=3)
+                v_cmp_agg = tk.StringVar(value="–")
+                ttk.Label(cmp_card_agg, textvariable=v_cmp_agg, font=("", 11, "bold")).pack(anchor="w", padx=6, pady=8)
+                agg_vars["cmp_text"] = v_cmp_agg
+                self._cost_aggregate_vars = agg_vars
 
             if not three_phase_devs:
                 ttk.Label(self._cost_scroll_frame, text=self.t("costs.no_3phase"), font=("", 11)).pack(padx=14, pady=20)
@@ -3930,7 +4085,7 @@ class CoreMixin:
             self.after(500, self._refresh_costs_tab)
 
     def _refresh_costs_tab(self) -> None:
-            """Recalculate and display cost data per 3-phase device."""
+            """Recalculate and display cost data per 3-phase device and aggregate."""
             import logging as _log_m
             _log = _log_m.getLogger(__name__)
             try:
@@ -4055,6 +4210,96 @@ class CoreMixin:
                             )
                         else:
                             vars_dev["cmp_text"].set(self.t("costs.no_prev_data"))
+                    except Exception:
+                        pass
+
+                # --- Aggregate section update (group/all) ---
+                agg_vars = getattr(self, "_cost_aggregate_vars", {})
+                if agg_vars:
+                    agg_devices = self._get_selected_all_devices()
+                    agg_results: Dict[str, Tuple[float, float, dict]] = {}
+                    for rng_key, (rng_start, rng_end) in ranges.items():
+                        tot_kwh = 0.0
+                        tot_cost = 0.0
+                        tot_breakdown: Dict[str, Tuple[float, float]] = {}
+                        for d in agg_devices:
+                            try:
+                                cd = self.computed.get(d.key)
+                                if cd is None:
+                                    continue
+                                df = cd.df.copy()
+                                if "timestamp" not in df.columns:
+                                    continue
+                                df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+                                df = df.dropna(subset=["timestamp"])
+                                try:
+                                    if df["timestamp"].dt.tz is None:
+                                        df["timestamp"] = df["timestamp"].dt.tz_localize("UTC")
+                                    df["timestamp"] = df["timestamp"].dt.tz_convert(tz)
+                                except Exception:
+                                    pass
+                                m = (df["timestamp"] >= rng_start) & (df["timestamp"] < rng_end)
+                                df_rng = df.loc[m]
+                                kwh_s = pd.to_numeric(df_rng["energy_kwh"], errors="coerce").fillna(0.0) if "energy_kwh" in df_rng.columns else pd.Series(dtype=float)
+                                kwh = float(kwh_s.sum())
+                                if tou_enabled and len(df_rng) > 0 and "energy_kwh" in df_rng.columns:
+                                    cost, breakdown = _tou_cost_breakdown(df_rng["timestamp"], kwh_s, pricing, tou, tz)
+                                else:
+                                    cost = kwh * unit
+                                    breakdown = {}
+                                tot_kwh += kwh
+                                tot_cost += cost
+                                for k, (bk, bc) in breakdown.items():
+                                    pk, pc = tot_breakdown.get(k, (0.0, 0.0))
+                                    tot_breakdown[k] = (pk + bk, pc + bc)
+                            except Exception:
+                                pass
+                        agg_results[rng_key] = (tot_kwh, tot_cost, tot_breakdown)
+
+                    for key in ("today", "week", "month", "year"):
+                        kwh, cost, breakdown = agg_results.get(key, (0.0, 0.0, {}))
+                        if key in agg_vars:
+                            agg_vars[key]["kwh"].set(f"{kwh:.2f} kWh")
+                            agg_vars[key]["eur"].set(f"{cost:.2f} €")
+                            if co2_g_per_kwh > 0:
+                                agg_vars[key]["co2"].set(f"🌿 {kwh * co2_g_per_kwh / 1000.0:.3f} kg CO₂")
+                            else:
+                                agg_vars[key]["co2"].set("")
+                            if tou_enabled and breakdown:
+                                agg_vars[key]["tou"].set("  |  ".join(
+                                    f"{name}: {k:.2f} kWh / {c:.2f} €"
+                                    for name, (k, c) in breakdown.items()
+                                ))
+                            else:
+                                agg_vars[key]["tou"].set("")
+
+                    try:
+                        import calendar
+                        days_in_month = calendar.monthrange(now.year, now.month)[1]
+                        days_elapsed = max(1, (now - month_start).total_seconds() / 86400.0)
+                        m_kwh, m_cost, _ = agg_results.get("month", (0.0, 0.0, {}))
+                        proj_kwh = m_kwh / days_elapsed * days_in_month
+                        proj_cost = m_cost / days_elapsed * days_in_month
+                        agg_vars["proj_kwh"].set(f"~{proj_kwh:.1f} kWh")
+                        agg_vars["proj_eur"].set(f"~{proj_cost:.2f} €")
+                        if co2_g_per_kwh > 0:
+                            agg_vars["proj_co2"].set(f"🌿 ~{proj_kwh * co2_g_per_kwh / 1000.0:.2f} kg CO₂")
+                        else:
+                            agg_vars["proj_co2"].set("")
+                    except Exception:
+                        pass
+
+                    try:
+                        last_m_kwh, last_m_cost, _ = agg_results.get("last_month", (0.0, 0.0, {}))
+                        cur_m_kwh, cur_m_cost, _ = agg_results.get("month", (0.0, 0.0, {}))
+                        if last_m_kwh > 0:
+                            delta = ((cur_m_kwh - last_m_kwh) / last_m_kwh) * 100.0
+                            arrow = "📈" if delta > 0 else "📉"
+                            agg_vars["cmp_text"].set(
+                                f"{arrow} {delta:+.1f}% ({last_m_kwh:.1f} kWh = {last_m_cost:.2f} €)"
+                            )
+                        else:
+                            agg_vars["cmp_text"].set(self.t("costs.no_prev_data"))
                     except Exception:
                         pass
 
@@ -4458,12 +4703,15 @@ class CoreMixin:
 
             tab_devices = ttk.Frame(nb)
             self._settings_tab_devices = tab_devices
+            tab_groups = ttk.Frame(nb)
+            self._settings_tab_groups = tab_groups
             tab_main = ttk.Frame(nb)
             tab_advanced = ttk.Frame(nb)
             tab_expert = ttk.Frame(nb)
             tab_billing = ttk.Frame(nb)
             tab_updates = ttk.Frame(nb)
             nb.add(tab_devices, text=self.t('settings.devices'))
+            nb.add(tab_groups, text=self.t('settings.groups'))
             nb.add(tab_main, text=self.t('settings.main'))
             nb.add(tab_advanced, text=self.t('settings.advanced'))
             nb.add(tab_expert, text=self.t('settings.expert'))
@@ -4491,6 +4739,10 @@ class CoreMixin:
             self.btn_upd_open.pack(side='left')
 
             ttk.Checkbutton(up_outer, text=self.t('updates.auto'), variable=self.upd_auto).pack(anchor='w', pady=(6, 0))
+
+    # ---------------- Gruppen ----------------
+            self._build_groups_settings_tab(tab_groups)
+
     # ---------------- Geräte ----------------
 
             # Scrollbar for small screens (Devices subtab can get very tall)
@@ -5852,6 +6104,117 @@ class CoreMixin:
             self.settings_status = tk.StringVar(value=f"config.json: {self.cfg_path}")
             ttk.Label(bottom, textvariable=self.settings_status).pack(side="left", padx=12)
 
+    def _build_groups_settings_tab(self, parent: ttk.Frame) -> None:
+            """Build the Groups editor subtab in Settings."""
+            # Scrollable container
+            outer = ttk.Frame(parent)
+            outer.pack(fill="both", expand=True)
+            canvas = tk.Canvas(outer, highlightthickness=0)
+            vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+            canvas.configure(yscrollcommand=vsb.set)
+            vsb.pack(side="right", fill="y")
+            canvas.pack(side="left", fill="both", expand=True)
+            inner = ttk.Frame(canvas)
+            win = canvas.create_window((0, 0), window=inner, anchor="nw")
+            inner.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+            canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
+
+            def _bind_wheel(w):
+                w.bind("<Enter>", lambda _e: canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")))
+                w.bind("<Leave>", lambda _e: canvas.unbind_all("<MouseWheel>"))
+
+            _bind_wheel(canvas)
+            _bind_wheel(inner)
+
+            ttk.Label(inner, text=self.t("groups.title"), font=("TkDefaultFont", 13, "bold")).pack(anchor="w", padx=12, pady=(12, 4))
+
+            # Groups container (rebuilt on add/delete)
+            groups_frame = ttk.Frame(inner)
+            groups_frame.pack(fill="x", padx=12, pady=4)
+
+            status_var = tk.StringVar(value="")
+            ttk.Label(inner, textvariable=status_var, foreground="#888888").pack(anchor="w", padx=12)
+
+            # State: list of (name_var, {device_key: BooleanVar})
+            if not getattr(self, "_group_vars", None):
+                self._group_vars: List[Tuple[tk.StringVar, dict]] = []
+                for g in (getattr(self.cfg, "groups", []) or []):
+                    name_var = tk.StringVar(value=g.name)
+                    dev_checks = {d.key: tk.BooleanVar(value=(d.key in g.device_keys)) for d in self.cfg.devices}
+                    self._group_vars.append((name_var, dev_checks))
+
+            def _rebuild_groups_ui() -> None:
+                for child in list(groups_frame.winfo_children()):
+                    try:
+                        child.destroy()
+                    except Exception:
+                        pass
+                if not self._group_vars:
+                    ttk.Label(groups_frame, text=self.t("groups.no_groups"), foreground="#888888").pack(anchor="w", pady=8)
+                    return
+                for idx, (name_var, dev_checks) in enumerate(self._group_vars):
+                    grp_frame = ttk.LabelFrame(groups_frame, text=f"#{idx + 1}")
+                    grp_frame.pack(fill="x", pady=(4, 2))
+
+                    name_row = ttk.Frame(grp_frame)
+                    name_row.pack(fill="x", padx=8, pady=(6, 2))
+                    ttk.Label(name_row, text=self.t("groups.name"), width=8).pack(side="left")
+                    ttk.Entry(name_row, textvariable=name_var, width=30).pack(side="left", padx=4)
+
+                    def _delete_group(i=idx) -> None:
+                        try:
+                            self._group_vars.pop(i)
+                        except Exception:
+                            pass
+                        _rebuild_groups_ui()
+
+                    ttk.Button(name_row, text=self.t("groups.delete"), command=_delete_group).pack(side="left", padx=8)
+
+                    dev_row = ttk.Frame(grp_frame)
+                    dev_row.pack(fill="x", padx=8, pady=(2, 6))
+                    ttk.Label(dev_row, text=self.t("groups.devices")).pack(side="left", anchor="n", pady=2)
+                    cb_frame = ttk.Frame(dev_row)
+                    cb_frame.pack(side="left", padx=4)
+                    for d in self.cfg.devices:
+                        if d.key not in dev_checks:
+                            dev_checks[d.key] = tk.BooleanVar(value=False)
+                        ttk.Checkbutton(cb_frame, text=f"{d.name} ({d.key})", variable=dev_checks[d.key]).pack(anchor="w")
+
+            _rebuild_groups_ui()
+
+            def _add_group() -> None:
+                name_var = tk.StringVar(value=f"Gruppe {len(self._group_vars) + 1}")
+                dev_checks = {d.key: tk.BooleanVar(value=False) for d in self.cfg.devices}
+                self._group_vars.append((name_var, dev_checks))
+                _rebuild_groups_ui()
+
+            def _save_groups() -> None:
+                from shelly_analyzer.io.config import DeviceGroup as _DG
+                new_groups = []
+                for name_var, dev_checks in self._group_vars:
+                    name = str(name_var.get() or "").strip()
+                    if not name:
+                        status_var.set(self.t("groups.empty_name"))
+                        return
+                    keys = [k for k, v in dev_checks.items() if v.get()]
+                    new_groups.append(_DG(name=name, device_keys=keys))
+                self.cfg = replace(self.cfg, groups=new_groups)
+                try:
+                    save_config(self.cfg, self.cfg_path)
+                    status_var.set(self.t("groups.saved"))
+                except Exception as e:
+                    status_var.set(str(e))
+                # Refresh dropdown to include new groups
+                try:
+                    self._update_device_page_choices()
+                except Exception:
+                    pass
+
+            btn_row = ttk.Frame(inner)
+            btn_row.pack(fill="x", padx=12, pady=(8, 4))
+            ttk.Button(btn_row, text=self.t("groups.add"), command=_add_group).pack(side="left")
+            ttk.Button(btn_row, text=self.t("groups.save"), command=_save_groups).pack(side="left", padx=8)
+
     def _add_device_row(self) -> None:
             # Adds a new device row (not persisted until you click "Speichern").
             n = len(getattr(self, "_dev_vars", [])) + 1
@@ -6661,6 +7024,8 @@ class CoreMixin:
             self.lang = normalize_lang(getattr(self.cfg.ui, "language", "de"))
             self.t = lambda k, **kw: _t(self.lang, k, **kw)
             self.title(f"{self.t('app.title')} {__version__}")
+            # Reset cached group vars so they reflect reloaded config
+            self._group_vars = None
             messagebox.showinfo(self.t('msg.settings'), self.t('settings.reload.done') + "\n" + self.t('settings.reload.note'))
 
     def _heartbeat_tick(self) -> None:
@@ -10019,6 +10384,32 @@ class CoreMixin:
                 if solar_text:
                     lines.append("")
                     lines.append(solar_text)
+            except Exception:
+                pass
+
+            # Group summaries (only if groups are configured)
+            try:
+                cfg_groups = list(getattr(self.cfg, "groups", []) or [])
+                if cfg_groups:
+                    lines.append("")
+                    lines.append("📦 Gruppen:")
+                    key_map = {d.key: d.name for d in self.cfg.devices}
+                    for grp in cfg_groups:
+                        grp_kwh = 0.0
+                        grp_cost = 0.0
+                        for dkey in (grp.device_keys or []):
+                            try:
+                                _kwh_s = self._telegram_kwh_series(start_dt, end_dt, freq="H" if kind == "daily" else "D", device_key=dkey)
+                                grp_kwh += float(_kwh_s.sum()) if len(_kwh_s) > 0 else 0.0
+                            except Exception:
+                                pass
+                        if unit_gross is not None:
+                            grp_cost = grp_kwh * unit_gross
+                        grp_parts = [f"{grp_kwh:.3f} kWh"]
+                        if grp_cost > 0:
+                            grp_parts.append(f"{grp_cost:.2f} €")
+                        pct = (grp_kwh / total_kwh * 100.0) if total_kwh > 0 else 0.0
+                        lines.append(f" - {grp.name}: {' · '.join(grp_parts)} ({pct:.1f}%)")
             except Exception:
                 pass
 
