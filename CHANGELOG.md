@@ -1,5 +1,20 @@
 # Changelog
 
+## 7.3.0 - 2026-03-20
+### Added
+- **Automatic Email Reports.** A new email reporting system sends scheduled daily and/or monthly PDF energy reports via standard SMTP — no third-party service required.
+  - **SMTP configuration in settings:** SMTP server, port, STARTTLS (port 587, recommended) or SSL/TLS (port 465), username, password, sender address.
+  - **Recipient list:** Comma-separated list of email addresses; multiple recipients are supported.
+  - **Daily PDF report:** Sends the previous day's energy summary as a PDF attachment at a configurable time (HH:MM local time). A 2-hour grace window prevents missed sends.
+  - **Monthly PDF report:** Sends the previous month's energy summary as a PDF attachment on the 1st of each month at a configurable time. A 24-hour grace window prevents missed sends.
+  - **"Send now" buttons** for both daily and monthly reports to trigger an immediate send without waiting for the scheduled time.
+  - **Test email button** to verify SMTP connectivity and credentials directly from the settings panel.
+  - **Enable/disable toggle** for the entire email system; daily and monthly reports can be enabled independently.
+  - **Uses Python's standard library only** (`smtplib`, `ssl`, `email.*`) — no additional dependencies.
+  - **State persistence** in `data/email_summary_state.json` to prevent duplicate sends across restarts.
+  - **Full i18n support** in all 9 languages (de, en, es, fr, pt, it, pl, cs, ru).
+  - **Consistent theming:** The email settings panel follows the same UI layout as Telegram and Webhook panels.
+
 ## 7.1.0 - 2026-03-19
 ### Added
 - **Webhook / Home Assistant Integration.** A new generic HTTP POST webhook system allows sending real-time alarm notifications and scheduled daily/monthly summaries to any HTTP endpoint — fully independent of Telegram.

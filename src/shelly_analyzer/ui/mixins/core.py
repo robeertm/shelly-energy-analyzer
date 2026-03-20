@@ -4838,6 +4838,132 @@ class CoreMixin:
             except Exception:
                 pass
 
+            # --- Email report settings ---
+            em_box = ttk.LabelFrame(alerts_wrap, text=self.t("settings.email.title"))
+            em_box.pack(fill="x", padx=8, pady=(6, 4))
+
+            if not hasattr(self, "_em_enabled_var"):
+                self._em_enabled_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "email_enabled", False)))
+                self._em_smtp_host_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_smtp_host", "") or ""))
+                self._em_smtp_port_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_smtp_port", 587) or 587))
+                self._em_use_tls_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "email_smtp_use_tls", True)))
+                self._em_use_ssl_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "email_smtp_use_ssl", False)))
+                self._em_username_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_smtp_username", "") or ""))
+                self._em_password_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_smtp_password", "") or ""))
+                self._em_sender_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_smtp_sender", "") or ""))
+                self._em_recipients_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_recipients", "") or ""))
+                self._em_daily_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "email_daily_report_enabled", False)))
+                self._em_daily_time_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_daily_report_time", "00:00") or "00:00"))
+                self._em_monthly_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "email_monthly_report_enabled", False)))
+                self._em_monthly_time_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_monthly_report_time", "00:00") or "00:00"))
+
+            # Row 0: enabled + SMTP host + port + test button
+            ttk.Checkbutton(
+                em_box,
+                text=self.t("settings.email.enabled"),
+                variable=self._em_enabled_var,
+            ).grid(row=0, column=0, padx=8, pady=6, sticky="w")
+
+            ttk.Label(em_box, text=self.t("settings.email.smtp_host") + ":").grid(row=0, column=1, padx=(12, 6), pady=6, sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_smtp_host_var, width=28).grid(row=0, column=2, padx=(0, 8), pady=6, sticky="we")
+
+            ttk.Label(em_box, text=self.t("settings.email.smtp_port") + ":").grid(row=0, column=3, padx=(8, 6), pady=6, sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_smtp_port_var, width=6).grid(row=0, column=4, padx=(0, 8), pady=6, sticky="w")
+
+            def _em_send_test() -> None:
+                try:
+                    self._save_settings()
+                except Exception:
+                    pass
+                def _worker():
+                    from shelly_analyzer.services.email_sender import send_email_from_cfg
+                    ok, err = send_email_from_cfg(
+                        self.cfg.ui,
+                        subject="Shelly Energy Analyzer – Test",
+                        body="This is a test email from Shelly Energy Analyzer.",
+                    )
+                    def _done():
+                        if ok:
+                            messagebox.showinfo(self.t("settings.email.title"), "OK")
+                        else:
+                            messagebox.showwarning(self.t("settings.email.title"), f"Error: {err or 'unknown'}")
+                    try:
+                        self.root.after(0, _done)
+                    except Exception:
+                        _done()
+                try:
+                    threading.Thread(target=_worker, daemon=True).start()
+                except Exception as _e:
+                    messagebox.showwarning(self.t("settings.email.title"), f"Error: {_e}")
+
+            ttk.Button(em_box, text=self.t("settings.email.test"), command=_em_send_test).grid(
+                row=0, column=5, padx=8, pady=6, sticky="e"
+            )
+
+            # Row 1: TLS/SSL + username + password
+            ttk.Checkbutton(
+                em_box,
+                text=self.t("settings.email.use_tls"),
+                variable=self._em_use_tls_var,
+            ).grid(row=1, column=0, padx=8, pady=(0, 6), sticky="w")
+            ttk.Checkbutton(
+                em_box,
+                text=self.t("settings.email.use_ssl"),
+                variable=self._em_use_ssl_var,
+            ).grid(row=1, column=1, padx=(12, 6), pady=(0, 6), sticky="w")
+
+            ttk.Label(em_box, text=self.t("settings.email.username") + ":").grid(row=1, column=2, padx=(8, 6), pady=(0, 6), sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_username_var, width=18).grid(row=1, column=3, padx=(0, 8), pady=(0, 6), sticky="we")
+
+            ttk.Label(em_box, text=self.t("settings.email.password") + ":").grid(row=1, column=4, padx=(8, 6), pady=(0, 6), sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_password_var, show="*", width=18).grid(row=1, column=5, padx=(0, 8), pady=(0, 6), sticky="we")
+
+            # Row 2: sender + recipients
+            ttk.Label(em_box, text=self.t("settings.email.sender") + ":").grid(row=2, column=0, padx=8, pady=(0, 6), sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_sender_var, width=28).grid(row=2, column=1, columnspan=2, padx=(0, 8), pady=(0, 6), sticky="we")
+
+            ttk.Label(em_box, text=self.t("settings.email.recipients") + ":").grid(row=2, column=3, padx=(8, 6), pady=(0, 6), sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_recipients_var, width=28).grid(row=2, column=4, columnspan=2, padx=(0, 8), pady=(0, 6), sticky="we")
+
+            # Row 3: daily report
+            ttk.Checkbutton(
+                em_box,
+                text=self.t("settings.email.daily_report"),
+                variable=self._em_daily_var,
+            ).grid(row=3, column=0, columnspan=2, padx=8, pady=(0, 6), sticky="w")
+            ttk.Label(em_box, text=self.t("settings.email.daily_time") + ":").grid(row=3, column=2, padx=(8, 6), pady=(0, 6), sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_daily_time_var, width=8).grid(row=3, column=3, padx=(0, 8), pady=(0, 6), sticky="w")
+            ttk.Button(
+                em_box,
+                text=self.t("settings.email.daily_send_now"),
+                command=self._email_send_daily_now,
+            ).grid(row=3, column=5, padx=8, pady=(0, 6), sticky="e")
+
+            # Row 4: monthly report
+            ttk.Checkbutton(
+                em_box,
+                text=self.t("settings.email.monthly_report"),
+                variable=self._em_monthly_var,
+            ).grid(row=4, column=0, columnspan=2, padx=8, pady=(0, 6), sticky="w")
+            ttk.Label(em_box, text=self.t("settings.email.monthly_time") + ":").grid(row=4, column=2, padx=(8, 6), pady=(0, 6), sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_monthly_time_var, width=8).grid(row=4, column=3, padx=(0, 8), pady=(0, 6), sticky="w")
+            ttk.Button(
+                em_box,
+                text=self.t("settings.email.monthly_send_now"),
+                command=self._email_send_monthly_now,
+            ).grid(row=4, column=5, padx=8, pady=(0, 6), sticky="e")
+
+            # Row 5: hint
+            ttk.Label(em_box, text=self.t("settings.email.hint"), foreground="gray").grid(
+                row=5, column=0, columnspan=6, padx=8, pady=(0, 6), sticky="w"
+            )
+
+            try:
+                em_box.columnconfigure(2, weight=1)
+                em_box.columnconfigure(4, weight=1)
+            except Exception:
+                pass
+
     # Alerts table
             atable = ttk.Frame(alerts_wrap)
             atable.pack(fill="x")
@@ -5943,6 +6069,20 @@ class CoreMixin:
     webhook_daily_summary_enabled=bool(getattr(self, "_wh_daily_var", tk.BooleanVar(value=False)).get()),
     webhook_monthly_summary_enabled=bool(getattr(self, "_wh_monthly_var", tk.BooleanVar(value=False)).get()),
 
+    email_enabled=bool(getattr(self, "_em_enabled_var", tk.BooleanVar(value=False)).get()),
+    email_smtp_host=str(getattr(self, "_em_smtp_host_var", tk.StringVar(value="")).get() or ""),
+    email_smtp_port=int(getattr(self, "_em_smtp_port_var", tk.StringVar(value="587")).get() or 587),
+    email_smtp_use_tls=bool(getattr(self, "_em_use_tls_var", tk.BooleanVar(value=True)).get()),
+    email_smtp_use_ssl=bool(getattr(self, "_em_use_ssl_var", tk.BooleanVar(value=False)).get()),
+    email_smtp_username=str(getattr(self, "_em_username_var", tk.StringVar(value="")).get() or ""),
+    email_smtp_password=str(getattr(self, "_em_password_var", tk.StringVar(value="")).get() or ""),
+    email_smtp_sender=str(getattr(self, "_em_sender_var", tk.StringVar(value="")).get() or ""),
+    email_recipients=str(getattr(self, "_em_recipients_var", tk.StringVar(value="")).get() or ""),
+    email_daily_report_enabled=bool(getattr(self, "_em_daily_var", tk.BooleanVar(value=False)).get()),
+    email_daily_report_time=str(getattr(self, "_em_daily_time_var", tk.StringVar(value="00:00")).get() or "00:00"),
+    email_monthly_report_enabled=bool(getattr(self, "_em_monthly_var", tk.BooleanVar(value=False)).get()),
+    email_monthly_report_time=str(getattr(self, "_em_monthly_time_var", tk.StringVar(value="00:00")).get() or "00:00"),
+
                 autosync_enabled=bool(self.set_autosync_enabled_var.get()),
                 autosync_interval_hours=int(self.set_autosync_interval_var.get() or 12),
                 autosync_mode=str(self.set_autosync_mode_var.get() or "incremental"),
@@ -6244,6 +6384,11 @@ class CoreMixin:
             # Scheduled Webhook summaries
             try:
                 self._webhook_summary_tick()
+            except Exception:
+                pass
+            # Scheduled Email reports
+            try:
+                self._email_summary_tick()
             except Exception:
                 pass
             self.after(500, self._drain_queues_loop)
@@ -8541,6 +8686,228 @@ class CoreMixin:
                                 logging.getLogger(__name__).warning("Webhook monthly summary failed: %s", err)
                 except Exception as e:
                     logging.getLogger(__name__).warning("Webhook monthly summary tick error: %s", e)
+
+    def _email_summary_tick(self) -> None:
+            """Send scheduled daily/monthly email PDF reports."""
+            em_daily = bool(getattr(self.cfg.ui, "email_daily_report_enabled", False))
+            em_monthly = bool(getattr(self.cfg.ui, "email_monthly_report_enabled", False))
+            if not bool(getattr(self.cfg.ui, "email_enabled", False)):
+                return
+            if not em_daily and not em_monthly:
+                return
+
+            try:
+                base_dir = getattr(getattr(self, "storage", None), "base_dir", None) or "."
+                p_state = Path(base_dir) / "data" / "email_summary_state.json"
+                p_state.parent.mkdir(parents=True, exist_ok=True)
+                if not hasattr(self, "_em_summary_state"):
+                    try:
+                        self._em_summary_state = json.loads(p_state.read_text(encoding="utf-8")) if p_state.exists() else {}
+                    except Exception:
+                        self._em_summary_state = {}
+                state = self._em_summary_state
+            except Exception:
+                return
+
+            def _st_get(k: str, default: str = "") -> str:
+                try:
+                    return str(state.get(k, default) or default)
+                except Exception:
+                    return default
+
+            def _st_set(k: str, v: str) -> None:
+                try:
+                    state[k] = v
+                    p_state.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                except Exception:
+                    pass
+
+            now = datetime.now()
+            now_ts = int(time.time())
+
+            # --- Daily ---
+            if em_daily:
+                try:
+                    hh, mm = self._parse_hhmm(str(getattr(self.cfg.ui, "email_daily_report_time", "00:00") or "00:00"))
+                    due = datetime.combine(now.date(), datetime.min.time()).replace(hour=hh, minute=mm)
+                    key = f"{due.strftime('%Y-%m-%d')}_{hh:02d}{mm:02d}"
+                    grace_s = 7200  # 2h
+                    last = _st_get("daily_last", "")
+                    attempt_ts = int(float(_st_get("daily_attempt_ts", "0") or 0))
+                    if now >= due and now <= (due + timedelta(seconds=grace_s)) and last != key:
+                        if not (attempt_ts and (now_ts - attempt_ts) < 60):
+                            _st_set("daily_attempt_ts", str(now_ts))
+                            try:
+                                yesterday = now.date() - timedelta(days=1)
+                                start_dt = datetime.combine(yesterday, datetime.min.time())
+                                end_dt = datetime.combine(now.date(), datetime.min.time())
+                                ok, err = self._email_send_report("daily", start_dt, end_dt)
+                            except Exception as e:
+                                ok, err = False, str(e)
+                            if ok:
+                                _st_set("daily_last", key)
+                            elif err:
+                                logging.getLogger(__name__).warning("Email daily report failed: %s", err)
+                except Exception as e:
+                    logging.getLogger(__name__).warning("Email daily tick error: %s", e)
+
+            # --- Monthly ---
+            if em_monthly:
+                try:
+                    hh, mm = self._parse_hhmm(str(getattr(self.cfg.ui, "email_monthly_report_time", "00:00") or "00:00"))
+                    now_m = now.replace(day=1, hour=hh, minute=mm, second=0, microsecond=0)
+                    key = f"{now_m.strftime('%Y-%m')}_{hh:02d}{mm:02d}"
+                    grace_s = 86400  # 24h
+                    last = _st_get("monthly_last", "")
+                    attempt_ts = int(float(_st_get("monthly_attempt_ts", "0") or 0))
+                    if now >= now_m and now <= (now_m + timedelta(seconds=grace_s)) and last != key:
+                        if not (attempt_ts and (now_ts - attempt_ts) < 300):
+                            _st_set("monthly_attempt_ts", str(now_ts))
+                            try:
+                                if now.month == 1:
+                                    py, pm = now.year - 1, 12
+                                else:
+                                    py, pm = now.year, now.month - 1
+                                start_dt = datetime(py, pm, 1, 0, 0, 0)
+                                end_dt = datetime(now.year, now.month, 1, 0, 0, 0)
+                                ok, err = self._email_send_report("monthly", start_dt, end_dt)
+                            except Exception as e:
+                                ok, err = False, str(e)
+                            if ok:
+                                _st_set("monthly_last", key)
+                            elif err:
+                                logging.getLogger(__name__).warning("Email monthly report failed: %s", err)
+                except Exception as e:
+                    logging.getLogger(__name__).warning("Email monthly tick error: %s", e)
+
+    def _email_send_report(self, kind: str, start_dt: datetime, end_dt: datetime) -> tuple:
+            """Build a PDF energy report and send it via email. Returns (ok, err)."""
+            try:
+                from shelly_analyzer.services.email_sender import send_email_from_cfg
+                from shelly_analyzer.services.export import export_pdf_summary, ReportTotals
+                from shelly_analyzer.services.compute import summarize
+                import tempfile
+
+                lang = str(getattr(self, "lang", "de") or "de")
+
+                # Build totals per device
+                totals = []
+                for d in getattr(self.cfg, "devices", []):
+                    try:
+                        computed = getattr(self, "computed", {}) or {}
+                        df = getattr(computed.get(d.key), "df", None)
+                        if df is None or df.empty:
+                            continue
+                        start_ts = pd.Timestamp(start_dt)
+                        end_ts = pd.Timestamp(end_dt)
+                        df_filtered = df[(df.index >= start_ts) & (df.index < end_ts)] if len(df) > 0 else df
+                        kwh, avgp, maxp = summarize(df_filtered)
+                        unit_gross = float(self.cfg.pricing.unit_price_gross())
+                        totals.append(ReportTotals(name=d.name, kwh_total=kwh, cost_eur=kwh * unit_gross, avg_power_w=avgp, max_power_w=maxp))
+                    except Exception:
+                        pass
+
+                period_label = f"{start_dt.strftime('%Y-%m-%d')} – {end_dt.strftime('%Y-%m-%d')}"
+
+                # Generate temporary PDF
+                with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                    pdf_path = Path(tmp.name)
+
+                title_key = "pdf.summary.title" if kind == "daily" else "pdf.summary.title"
+                from shelly_analyzer.i18n import t as _t
+                title = _t(lang, title_key)
+                export_pdf_summary(
+                    title=title,
+                    period_label=period_label,
+                    totals=totals,
+                    out_path=pdf_path,
+                    lang=lang,
+                )
+
+                if kind == "daily":
+                    subject = f"Shelly Energy Analyzer – Daily Report {start_dt.strftime('%Y-%m-%d')}"
+                else:
+                    subject = f"Shelly Energy Analyzer – Monthly Report {start_dt.strftime('%Y-%m')}"
+
+                body = f"{subject}\n\nPeriod: {period_label}\n\nGenerated by Shelly Energy Analyzer."
+
+                ok, err = send_email_from_cfg(self.cfg.ui, subject=subject, body=body, attachments=[pdf_path])
+
+                try:
+                    pdf_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+                return ok, err
+            except Exception as e:
+                return False, str(e)
+
+    def _email_send_daily_now(self) -> None:
+            """Send the previous calendar day email report immediately."""
+            if not bool(getattr(self.cfg.ui, "email_enabled", False)):
+                messagebox.showwarning(
+                    self.t("settings.email.title"),
+                    self.t("settings.email.enabled") + ": OFF",
+                )
+                return
+            try:
+                self._save_settings()
+            except Exception:
+                pass
+            def _worker():
+                now = datetime.now()
+                yesterday = now.date() - timedelta(days=1)
+                start_dt = datetime.combine(yesterday, datetime.min.time())
+                end_dt = datetime.combine(now.date(), datetime.min.time())
+                ok, err = self._email_send_report("daily", start_dt, end_dt)
+                def _done():
+                    if ok:
+                        messagebox.showinfo(self.t("settings.email.title"), "OK")
+                    else:
+                        messagebox.showwarning(self.t("settings.email.title"), f"Error: {err or 'unknown'}")
+                try:
+                    self.root.after(0, _done)
+                except Exception:
+                    _done()
+            try:
+                threading.Thread(target=_worker, daemon=True).start()
+            except Exception as e:
+                messagebox.showwarning(self.t("settings.email.title"), f"Error: {e}")
+
+    def _email_send_monthly_now(self) -> None:
+            """Send the previous calendar month email report immediately."""
+            if not bool(getattr(self.cfg.ui, "email_enabled", False)):
+                messagebox.showwarning(
+                    self.t("settings.email.title"),
+                    self.t("settings.email.enabled") + ": OFF",
+                )
+                return
+            try:
+                self._save_settings()
+            except Exception:
+                pass
+            def _worker():
+                now = datetime.now()
+                if now.month == 1:
+                    py, pm = now.year - 1, 12
+                else:
+                    py, pm = now.year, now.month - 1
+                start_dt = datetime(py, pm, 1, 0, 0, 0)
+                end_dt = datetime(now.year, now.month, 1, 0, 0, 0)
+                ok, err = self._email_send_report("monthly", start_dt, end_dt)
+                def _done():
+                    if ok:
+                        messagebox.showinfo(self.t("settings.email.title"), "OK")
+                    else:
+                        messagebox.showwarning(self.t("settings.email.title"), f"Error: {err or 'unknown'}")
+                try:
+                    self.root.after(0, _done)
+                except Exception:
+                    _done()
+            try:
+                threading.Thread(target=_worker, daemon=True).start()
+            except Exception as e:
+                messagebox.showwarning(self.t("settings.email.title"), f"Error: {e}")
 
     def _build_telegram_summary(self, kind: str, start: datetime, end: datetime) -> str:
             """Build a detailed summary message for a time range.
