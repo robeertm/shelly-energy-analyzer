@@ -326,6 +326,26 @@ class DeviceGroup:
 
 
 @dataclass(frozen=True)
+class DeviceSchedule:
+    """A timed on/off schedule for a Shelly switch/plug device.
+
+    weekdays: list of integers 0–6 where 0 = Monday … 6 = Sunday.
+    shelly_id_on / shelly_id_off: Shelly Schedule IDs returned by Schedule.Create
+    (-1 means the schedule lives only locally in the app, not pushed to the device).
+    """
+    schedule_id: str
+    device_key: str
+    name: str
+    time_on: str               # "HH:MM"
+    time_off: str              # "HH:MM"
+    weekdays: List[int] = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6])
+    enabled: bool = True
+    switch_id: int = 0
+    shelly_id_on: int = -1
+    shelly_id_off: int = -1
+
+
+@dataclass(frozen=True)
 class AppConfig:
     version: str = __version__
     devices: List[DeviceConfig] = field(default_factory=list)
@@ -343,6 +363,7 @@ class AppConfig:
     tou: TouConfig = field(default_factory=TouConfig)
     anomaly: AnomalyConfig = field(default_factory=AnomalyConfig)
     groups: List[DeviceGroup] = field(default_factory=list)
+    schedules: List[DeviceSchedule] = field(default_factory=list)
 
 
 def default_config_path(project_root: Optional[Path] = None) -> Path:
@@ -675,6 +696,31 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
                 device_keys=[str(k) for k in gkeys if k],
             ))
 
+    schedules: List[DeviceSchedule] = []
+    schedules_raw = raw.get("schedules", [])
+    if isinstance(schedules_raw, list):
+        for s in schedules_raw:
+            if not isinstance(s, dict):
+                continue
+            sid = str(s.get("schedule_id", "") or "").strip()
+            if not sid:
+                continue
+            wdays_raw = s.get("weekdays", [0, 1, 2, 3, 4, 5, 6])
+            if not isinstance(wdays_raw, list):
+                wdays_raw = [0, 1, 2, 3, 4, 5, 6]
+            schedules.append(DeviceSchedule(
+                schedule_id=sid,
+                device_key=str(s.get("device_key", "") or "").strip(),
+                name=str(s.get("name", "") or "").strip(),
+                time_on=str(s.get("time_on", "06:00") or "06:00"),
+                time_off=str(s.get("time_off", "07:00") or "07:00"),
+                weekdays=[int(x) for x in wdays_raw if isinstance(x, (int, float))],
+                enabled=bool(s.get("enabled", True)),
+                switch_id=_coerce_int(s.get("switch_id", 0), 0),
+                shelly_id_on=_coerce_int(s.get("shelly_id_on", -1), -1),
+                shelly_id_off=_coerce_int(s.get("shelly_id_off", -1), -1),
+            ))
+
     cfg = AppConfig(
         version=str(raw.get("version", __version__)),
         devices=devices,
@@ -690,6 +736,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         tou=tou,
         anomaly=anomaly,
         groups=groups,
+        schedules=schedules,
     )
 
     # Write back migrated schema (and missing blocks) if needed
@@ -895,6 +942,21 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
                 "device_keys": list(g.device_keys),
             }
             for g in (getattr(cfg, "groups", []) or [])
+        ],
+        "schedules": [
+            {
+                "schedule_id": s.schedule_id,
+                "device_key": s.device_key,
+                "name": s.name,
+                "time_on": s.time_on,
+                "time_off": s.time_off,
+                "weekdays": list(s.weekdays),
+                "enabled": s.enabled,
+                "switch_id": s.switch_id,
+                "shelly_id_on": s.shelly_id_on,
+                "shelly_id_off": s.shelly_id_off,
+            }
+            for s in (getattr(cfg, "schedules", []) or [])
         ],
     }
     path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
