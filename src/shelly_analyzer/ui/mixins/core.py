@@ -48,6 +48,8 @@ from shelly_analyzer.io.config import (
     DownloadConfig,
     PricingConfig,
     SolarConfig,
+    TouConfig,
+    TouRate,
     UiConfig,
     UpdatesConfig,
     AlertRule,
@@ -76,6 +78,86 @@ from shelly_analyzer.services.mdns import discover_shelly_mdns
 
 
 from .._shared import _fmt_eur, _fmt_kwh, _parse_date_flexible, _period_bounds, PLOTS_MODES, AUTOSYNC_INTERVAL_OPTIONS, AUTOSYNC_MODE_OPTIONS, INVOICE_PERIOD_OPTIONS
+
+
+def _tou_cost_breakdown(timestamps: "pd.Series", kwh_series: "pd.Series", pricing: PricingConfig, tou: TouConfig, tz: Any) -> "Tuple[float, Dict[str, Tuple[float, float]]]":
+    """Calculate TOU cost breakdown from timestamps and per-row kWh values.
+
+    Returns (total_cost_eur, {rate_name: (kwh, cost_eur)}).
+    If TOU is disabled or no rates defined, uses flat rate under key ''.
+    """
+    flat_unit = float(pricing.unit_price_gross())
+    total_kwh = float(pd.to_numeric(kwh_series, errors="coerce").fillna(0.0).sum())
+
+    if not getattr(tou, "enabled", False) or not getattr(tou, "rates", None):
+        total_cost = total_kwh * flat_unit
+        return total_cost, {}
+
+    rates = list(tou.rates)
+    vat_rate = pricing.vat_rate()
+
+    # Precompute gross price for each rate (respecting VAT settings of pricing config)
+    def _rate_gross(rate_price: float) -> float:
+        if vat_rate <= 0:
+            return float(rate_price)
+        return float(rate_price) if pricing.price_includes_vat else float(rate_price) * (1.0 + vat_rate)
+
+    rate_gross_prices = [_rate_gross(r.price_eur_per_kwh) for r in rates]
+
+    try:
+        ts = pd.to_datetime(timestamps, errors="coerce")
+        if ts.dt.tz is None:
+            ts = ts.dt.tz_localize("UTC")
+        ts = ts.dt.tz_convert(tz)
+        hours = ts.dt.hour.values
+        weekdays = ts.dt.weekday.values  # 0=Mon, 6=Sun
+    except Exception:
+        # Fallback: flat rate
+        total_cost = total_kwh * flat_unit
+        return total_cost, {}
+
+    kwh_vals = pd.to_numeric(kwh_series, errors="coerce").fillna(0.0).values
+    # Per-rate accumulators
+    rate_kwh = [0.0] * len(rates)
+    rate_cost = [0.0] * len(rates)
+    unmatched_kwh = 0.0
+    unmatched_cost = 0.0
+
+    for i in range(len(kwh_vals)):
+        h = int(hours[i])
+        wd = int(weekdays[i])
+        kw = float(kwh_vals[i])
+        matched = False
+        for ri, rate in enumerate(rates):
+            s = int(rate.start_hour) % 24
+            e = int(rate.end_hour) % 24
+            if s < e:
+                in_window = s <= h < e
+            elif s > e:
+                in_window = h >= s or h < e
+            else:
+                in_window = True  # full day
+            if rate.weekdays_only and wd >= 5:
+                continue
+            if in_window:
+                rate_kwh[ri] += kw
+                rate_cost[ri] += kw * rate_gross_prices[ri]
+                matched = True
+                break
+        if not matched:
+            unmatched_kwh += kw
+            unmatched_cost += kw * flat_unit
+
+    breakdown: Dict[str, Tuple[float, float]] = {}
+    for ri, rate in enumerate(rates):
+        if rate_kwh[ri] > 1e-9:
+            breakdown[rate.name] = (rate_kwh[ri], rate_cost[ri])
+    if unmatched_kwh > 1e-9:
+        breakdown["?"] = (unmatched_kwh, unmatched_cost)
+
+    total_cost = sum(c for _, c in breakdown.values())
+    return total_cost, breakdown
+
 
 class CoreMixin:
     """Auto-generated mixin extracted from the former ui/app.py to keep files smaller."""
@@ -3803,10 +3885,12 @@ class CoreMixin:
                         v_kwh = tk.StringVar(value="– kWh")
                         v_eur = tk.StringVar(value="– €")
                         v_co2 = tk.StringVar(value="")
+                        v_tou = tk.StringVar(value="")
                         ttk.Label(card, textvariable=v_kwh, font=("", 10)).pack(anchor="w", padx=6, pady=(4, 0))
                         ttk.Label(card, textvariable=v_eur, font=("", 12, "bold")).pack(anchor="w", padx=6, pady=(1, 0))
-                        ttk.Label(card, textvariable=v_co2, font=("", 9), foreground="#4caf50").pack(anchor="w", padx=6, pady=(0, 4))
-                        vars_dev[key] = {"kwh": v_kwh, "eur": v_eur, "co2": v_co2}
+                        ttk.Label(card, textvariable=v_co2, font=("", 9), foreground="#4caf50").pack(anchor="w", padx=6, pady=(0, 1))
+                        ttk.Label(card, textvariable=v_tou, font=("", 8), foreground="#888888").pack(anchor="w", padx=6, pady=(0, 4))
+                        vars_dev[key] = {"kwh": v_kwh, "eur": v_eur, "co2": v_co2, "tou": v_tou}
 
                     # Row 2: Projection + Previous month comparison
                     row2 = ttk.Frame(dev_frame)
@@ -3846,17 +3930,22 @@ class CoreMixin:
                 tz = ZoneInfo("Europe/Berlin")
                 now = datetime.now(tz)
 
-                # Unit price (gross)
+                pricing = getattr(self.cfg, "pricing", PricingConfig())
+                tou = getattr(self.cfg, "tou", TouConfig())
+
+                # Unit price (gross) – fallback for non-TOU
                 try:
-                    unit = float(self.cfg.pricing.unit_price_gross())
+                    unit = float(pricing.unit_price_gross())
                 except Exception:
-                    unit = float(getattr(getattr(self.cfg, "pricing", None), "electricity_price_eur_per_kwh", 0.30) or 0.30)
+                    unit = float(getattr(pricing, "electricity_price_eur_per_kwh", 0.30) or 0.30)
 
                 # CO₂ intensity (g/kWh → kg/kWh factor)
                 try:
-                    co2_g_per_kwh = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
+                    co2_g_per_kwh = float(getattr(pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
                 except Exception:
                     co2_g_per_kwh = 380.0
+
+                tou_enabled = getattr(tou, "enabled", False) and bool(getattr(tou, "rates", None))
 
                 # Time ranges
                 today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -3878,10 +3967,12 @@ class CoreMixin:
                         continue
 
                     vars_dev = self._cost_device_vars[d.key]
-                    dev_results = {}
+                    dev_results = {}  # rng_key -> (kwh, cost, breakdown_dict)
 
                     for rng_key, (rng_start, rng_end) in ranges.items():
                         kwh = 0.0
+                        cost = 0.0
+                        breakdown: Dict[str, Tuple[float, float]] = {}
                         try:
                             cd = self.computed.get(d.key)
                             if cd is not None:
@@ -3896,32 +3987,45 @@ class CoreMixin:
                                     except Exception:
                                         pass
                                     m = (df["timestamp"] >= rng_start) & (df["timestamp"] < rng_end)
-                                    kwh = float(pd.to_numeric(df.loc[m, "energy_kwh"], errors="coerce").fillna(0.0).sum())
+                                    df_rng = df.loc[m]
+                                    kwh_s = pd.to_numeric(df_rng["energy_kwh"], errors="coerce").fillna(0.0) if "energy_kwh" in df_rng.columns else pd.Series(dtype=float)
+                                    kwh = float(kwh_s.sum())
+                                    if tou_enabled and len(df_rng) > 0 and "energy_kwh" in df_rng.columns:
+                                        cost, breakdown = _tou_cost_breakdown(df_rng["timestamp"], kwh_s, pricing, tou, tz)
+                                    else:
+                                        cost = kwh * unit
                         except Exception:
                             pass
-                        dev_results[rng_key] = kwh
+                        dev_results[rng_key] = (kwh, cost, breakdown)
 
                     # Update cards
                     for key in ("today", "week", "month", "year"):
-                        kwh = dev_results.get(key, 0.0)
+                        kwh, cost, breakdown = dev_results.get(key, (0.0, 0.0, {}))
                         if key in vars_dev:
                             vars_dev[key]["kwh"].set(f"{kwh:.2f} kWh")
-                            vars_dev[key]["eur"].set(f"{kwh * unit:.2f} €")
+                            vars_dev[key]["eur"].set(f"{cost:.2f} €")
                             if co2_g_per_kwh > 0:
                                 co2_kg = kwh * co2_g_per_kwh / 1000.0
                                 vars_dev[key]["co2"].set(f"🌿 {co2_kg:.3f} kg CO₂")
                             else:
                                 vars_dev[key]["co2"].set("")
+                            # TOU breakdown
+                            if tou_enabled and breakdown:
+                                parts = [f"{name}: {k:.2f} kWh / {c:.2f} €" for name, (k, c) in breakdown.items()]
+                                vars_dev[key]["tou"].set("  |  ".join(parts))
+                            else:
+                                vars_dev[key]["tou"].set("")
 
                     # Projection
                     try:
                         import calendar
                         days_in_month = calendar.monthrange(now.year, now.month)[1]
                         days_elapsed = max(1, (now - month_start).total_seconds() / 86400.0)
-                        month_kwh = dev_results.get("month", 0.0)
+                        month_kwh, month_cost, _ = dev_results.get("month", (0.0, 0.0, {}))
                         proj_kwh = month_kwh / days_elapsed * days_in_month
+                        proj_cost = month_cost / days_elapsed * days_in_month
                         vars_dev["proj_kwh"].set(f"~{proj_kwh:.1f} kWh")
-                        vars_dev["proj_eur"].set(f"~{proj_kwh * unit:.2f} €")
+                        vars_dev["proj_eur"].set(f"~{proj_cost:.2f} €")
                         if co2_g_per_kwh > 0:
                             proj_co2_kg = proj_kwh * co2_g_per_kwh / 1000.0
                             vars_dev["proj_co2"].set(f"🌿 ~{proj_co2_kg:.2f} kg CO₂")
@@ -3932,13 +4036,13 @@ class CoreMixin:
 
                     # Comparison with last month
                     try:
-                        last_m_kwh = dev_results.get("last_month", 0.0)
-                        cur_m_kwh = dev_results.get("month", 0.0)
+                        last_m_kwh, last_m_cost, _ = dev_results.get("last_month", (0.0, 0.0, {}))
+                        cur_m_kwh, cur_m_cost, _ = dev_results.get("month", (0.0, 0.0, {}))
                         if last_m_kwh > 0:
                             delta = ((cur_m_kwh - last_m_kwh) / last_m_kwh) * 100.0
                             arrow = "📈" if delta > 0 else "📉"
                             vars_dev["cmp_text"].set(
-                                f"{arrow} {delta:+.1f}% ({last_m_kwh:.1f} kWh = {last_m_kwh * unit:.2f} €)"
+                                f"{arrow} {delta:+.1f}% ({last_m_kwh:.1f} kWh = {last_m_cost:.2f} €)"
                             )
                         else:
                             vars_dev["cmp_text"].set(self.t("costs.no_prev_data"))
@@ -5278,6 +5382,145 @@ class CoreMixin:
             btn_co2_presets.grid(row=3, column=2, padx=8, pady=8, sticky="w")
             self._co2_preset_btn = btn_co2_presets
 
+            # ---------- TOU / Mehrtarif settings ----------
+            tou_box = ttk.LabelFrame(tab_main, text=self.t('settings.tou.title'))
+            tou_box.pack(fill="x", pady=(0, 10))
+
+            _tou_cfg = getattr(self.cfg, "tou", TouConfig())
+            self._tou_enabled_var = tk.BooleanVar(value=bool(getattr(_tou_cfg, "enabled", False)))
+            ttk.Checkbutton(
+                tou_box,
+                text=self.t('settings.tou.enabled'),
+                variable=self._tou_enabled_var,
+            ).grid(row=0, column=0, columnspan=4, padx=8, pady=(8, 2), sticky="w")
+
+            ttk.Label(
+                tou_box,
+                text=self.t('settings.tou.hint'),
+                foreground="gray",
+            ).grid(row=1, column=0, columnspan=4, padx=8, pady=(0, 4), sticky="w")
+
+            # Treeview for rates
+            tree_frame = ttk.Frame(tou_box)
+            tree_frame.grid(row=2, column=0, columnspan=3, padx=8, pady=4, sticky="nsew")
+            tou_box.columnconfigure(0, weight=1)
+            tou_box.rowconfigure(2, weight=1)
+
+            tou_cols = ("name", "price", "start", "end", "weekdays")
+            self._tou_tree = ttk.Treeview(
+                tree_frame,
+                columns=tou_cols,
+                show="headings",
+                height=4,
+                selectmode="browse",
+            )
+            self._tou_tree.heading("name", text=self.t('settings.tou.col_name'))
+            self._tou_tree.heading("price", text=self.t('settings.tou.col_price'))
+            self._tou_tree.heading("start", text=self.t('settings.tou.col_start'))
+            self._tou_tree.heading("end", text=self.t('settings.tou.col_end'))
+            self._tou_tree.heading("weekdays", text=self.t('settings.tou.col_weekdays'))
+            self._tou_tree.column("name", width=80, anchor="w")
+            self._tou_tree.column("price", width=100, anchor="center")
+            self._tou_tree.column("start", width=70, anchor="center")
+            self._tou_tree.column("end", width=70, anchor="center")
+            self._tou_tree.column("weekdays", width=100, anchor="center")
+
+            _tou_vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=self._tou_tree.yview)
+            self._tou_tree.configure(yscrollcommand=_tou_vsb.set)
+            self._tou_tree.pack(side="left", fill="both", expand=True)
+            _tou_vsb.pack(side="right", fill="y")
+
+            # Populate tree from config
+            self._tou_rates_list: List[TouRate] = list(getattr(_tou_cfg, "rates", TouConfig().rates) or [])
+
+            def _tou_refresh_tree():
+                for item in self._tou_tree.get_children():
+                    self._tou_tree.delete(item)
+                for r in self._tou_rates_list:
+                    wd = "✓" if r.weekdays_only else "–"
+                    self._tou_tree.insert("", "end", values=(r.name, f"{r.price_eur_per_kwh:.4f}", r.start_hour, r.end_hour, wd))
+            _tou_refresh_tree()
+
+            def _tou_open_dialog(rate: Optional[TouRate] = None) -> Optional[TouRate]:
+                """Open add/edit dialog. Returns new TouRate or None if cancelled."""
+                is_edit = rate is not None
+                dlg = tk.Toplevel(self)
+                dlg.title(self.t('settings.tou.dialog_title_edit') if is_edit else self.t('settings.tou.dialog_title_add'))
+                dlg.resizable(False, False)
+                dlg.grab_set()
+                dlg.transient(self)
+
+                v_name = tk.StringVar(value=rate.name if rate else "HT")
+                v_price = tk.StringVar(value=str(rate.price_eur_per_kwh) if rate else "0.35")
+                v_start = tk.StringVar(value=str(rate.start_hour) if rate else "6")
+                v_end = tk.StringVar(value=str(rate.end_hour) if rate else "22")
+                v_wd = tk.BooleanVar(value=rate.weekdays_only if rate else False)
+
+                pad = {"padx": 8, "pady": 4}
+                ttk.Label(dlg, text=self.t('settings.tou.field_name')).grid(row=0, column=0, sticky="w", **pad)
+                ttk.Entry(dlg, textvariable=v_name, width=12).grid(row=0, column=1, sticky="w", **pad)
+                ttk.Label(dlg, text=self.t('settings.tou.field_price')).grid(row=1, column=0, sticky="w", **pad)
+                ttk.Entry(dlg, textvariable=v_price, width=12).grid(row=1, column=1, sticky="w", **pad)
+                ttk.Label(dlg, text=self.t('settings.tou.field_start')).grid(row=2, column=0, sticky="w", **pad)
+                ttk.Entry(dlg, textvariable=v_start, width=6).grid(row=2, column=1, sticky="w", **pad)
+                ttk.Label(dlg, text=self.t('settings.tou.field_end')).grid(row=3, column=0, sticky="w", **pad)
+                ttk.Entry(dlg, textvariable=v_end, width=6).grid(row=3, column=1, sticky="w", **pad)
+                ttk.Checkbutton(dlg, text=self.t('settings.tou.field_weekdays'), variable=v_wd).grid(
+                    row=4, column=0, columnspan=2, sticky="w", **pad
+                )
+
+                result: List[Optional[TouRate]] = [None]
+
+                def _ok():
+                    try:
+                        name = v_name.get().strip() or "HT"
+                        price = float(v_price.get().strip().replace(",", "."))
+                        s_h = int(v_start.get().strip()) % 24
+                        e_h = int(v_end.get().strip()) % 24
+                        result[0] = TouRate(name=name, price_eur_per_kwh=price, start_hour=s_h, end_hour=e_h, weekdays_only=bool(v_wd.get()))
+                        dlg.destroy()
+                    except Exception as ex:
+                        messagebox.showerror("Error", str(ex), parent=dlg)
+
+                btn_frame = ttk.Frame(dlg)
+                btn_frame.grid(row=5, column=0, columnspan=2, pady=8)
+                ttk.Button(btn_frame, text=self.t('btn.apply'), command=_ok).pack(side="left", padx=4)
+                ttk.Button(btn_frame, text=self.t('btn.reset'), command=dlg.destroy).pack(side="left", padx=4)
+                dlg.wait_window()
+                return result[0]
+
+            def _tou_add():
+                new_rate = _tou_open_dialog()
+                if new_rate is not None:
+                    self._tou_rates_list.append(new_rate)
+                    _tou_refresh_tree()
+
+            def _tou_edit():
+                sel = self._tou_tree.selection()
+                if not sel:
+                    return
+                idx = self._tou_tree.index(sel[0])
+                if 0 <= idx < len(self._tou_rates_list):
+                    new_rate = _tou_open_dialog(self._tou_rates_list[idx])
+                    if new_rate is not None:
+                        self._tou_rates_list[idx] = new_rate
+                        _tou_refresh_tree()
+
+            def _tou_remove():
+                sel = self._tou_tree.selection()
+                if not sel:
+                    return
+                idx = self._tou_tree.index(sel[0])
+                if 0 <= idx < len(self._tou_rates_list):
+                    self._tou_rates_list.pop(idx)
+                    _tou_refresh_tree()
+
+            btn_col = ttk.Frame(tou_box)
+            btn_col.grid(row=2, column=3, padx=(4, 8), pady=4, sticky="n")
+            ttk.Button(btn_col, text=self.t('settings.tou.add'), command=_tou_add, width=10).pack(pady=2)
+            ttk.Button(btn_col, text=self.t('settings.tou.edit'), command=_tou_edit, width=10).pack(pady=2)
+            ttk.Button(btn_col, text=self.t('settings.tou.remove'), command=_tou_remove, width=10).pack(pady=2)
+
             autosync_box = ttk.LabelFrame(tab_main, text=self.t('settings.autosync.title'))
             autosync_box.pack(fill="x", pady=(0, 10))
             self.set_autosync_enabled_var = tk.BooleanVar(value=bool(self.cfg.ui.autosync_enabled))
@@ -6300,6 +6543,15 @@ class CoreMixin:
             except Exception:
                 solar = getattr(self.cfg, "solar", SolarConfig())
 
+            # TOU / Mehrtarif config
+            try:
+                tou = TouConfig(
+                    enabled=bool(getattr(self, "_tou_enabled_var", tk.BooleanVar(value=False)).get()),
+                    rates=list(getattr(self, "_tou_rates_list", TouConfig().rates) or TouConfig().rates),
+                )
+            except Exception:
+                tou = getattr(self.cfg, "tou", TouConfig())
+
             self.cfg = AppConfig(
                 version=__version__,
                 devices=devs,
@@ -6311,6 +6563,7 @@ class CoreMixin:
                 billing=billing,
                 alerts=alerts,
                 solar=solar,
+                tou=tou,
             )
             save_config(self.cfg, self.cfg_path)
 
@@ -9294,6 +9547,8 @@ class CoreMixin:
 
             total_kwh = 0.0
             per_dev_kwh = []  # (name, key, kwh)
+            tou_total_cost: Optional[float] = None  # None when TOU disabled
+            tou_breakdown: Dict[str, Tuple[float, float]] = {}  # {name: (kwh, cost)}
 
             # hourly energy across ALL devices
             hourly_kwh = None  # pd.Series indexed by hour timestamp
@@ -9411,6 +9666,25 @@ class CoreMixin:
 
                 total_kwh += kwh
                 per_dev_kwh.append((d.name, d.key, kwh))
+
+                # TOU cost breakdown per device
+                try:
+                    _tou_cfg = getattr(self.cfg, "tou", TouConfig())
+                    if getattr(_tou_cfg, "enabled", False) and getattr(_tou_cfg, "rates", None) and "energy_kwh" in df_e.columns and "timestamp" in df_e.columns:
+                        from zoneinfo import ZoneInfo as _ZoneInfo
+                        _tz = _ZoneInfo("Europe/Berlin")
+                        _, _dev_breakdown = _tou_cost_breakdown(df_e["timestamp"], pd.to_numeric(df_e["energy_kwh"], errors="coerce").fillna(0.0), self.cfg.pricing, _tou_cfg, _tz)
+                        for _rname, (_rkwh, _rcost) in _dev_breakdown.items():
+                            if _rname in tou_breakdown:
+                                _ek, _ec = tou_breakdown[_rname]
+                                tou_breakdown[_rname] = (_ek + _rkwh, _ec + _rcost)
+                            else:
+                                tou_breakdown[_rname] = (_rkwh, _rcost)
+                        if tou_total_cost is None:
+                            tou_total_cost = 0.0
+                        tou_total_cost += sum(c for _, c in _dev_breakdown.values())
+                except Exception:
+                    pass
 
                 # Hourly kWh
                 try:
@@ -9552,7 +9826,15 @@ class CoreMixin:
             # totals
             lines.append(f"⚡ Verbrauch: {total_kwh:.3f} kWh")
 
-            if unit_gross is not None:
+            if tou_total_cost is not None:
+                try:
+                    lines.append(f"💶 Kosten: {tou_total_cost:.2f} € (TOU)")
+                    if tou_breakdown:
+                        for _rname, (_rkwh, _rcost) in tou_breakdown.items():
+                            lines.append(f"   ↳ {_rname}: {_rkwh:.3f} kWh · {_rcost:.2f} €")
+                except Exception:
+                    pass
+            elif unit_gross is not None:
                 try:
                     cost = total_kwh * unit_gross
                     lines.append(f"💶 Kosten: {cost:.2f} €")
