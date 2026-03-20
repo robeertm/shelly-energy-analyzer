@@ -1,5 +1,12 @@
 # Changelog
 
+## 8.0.1 - 2026-03-20
+### Fixed
+- **Heatmap colorbar stacking:** Colorbars no longer accumulate on each refresh. The figure is now fully cleared (`fig.clf()`) before redrawing, preventing legend/colorbar buildup.
+- **Comparison mode showing no data:** Fixed timestamp conversion in the comparison tab to handle both timezone-aware and timezone-naive datetime64 columns (same root cause as earlier heatmap bug).
+- **Email settings UI labels:** Added all missing `settings.email.*` i18n keys for German and English. Labels previously showed raw key names instead of human-readable text.
+- **Duplicate "E-Mail Test" button:** The test button was rendered twice on the same grid cell (row 3, col 5), overlapping the "Send daily now" button. The test button now has its own row.
+
 ## 8.0.0 - 2026-03-20
 ### Added
 - **Device Scheduling (⏰ Schedules tab) — Feature 10/10, completing the full feature set.**
