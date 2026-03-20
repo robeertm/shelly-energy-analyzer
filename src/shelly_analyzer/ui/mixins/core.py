@@ -47,6 +47,7 @@ from shelly_analyzer.io.config import (
     DeviceConfig,
     DownloadConfig,
     PricingConfig,
+    SolarConfig,
     UiConfig,
     UpdatesConfig,
     AlertRule,
@@ -603,6 +604,7 @@ class CoreMixin:
             self.tab_live = ttk.Frame(self.notebook)
             self.tab_costs = ttk.Frame(self.notebook)
             self.tab_heatmap = ttk.Frame(self.notebook)
+            self.tab_solar = ttk.Frame(self.notebook)
             self.tab_export = ttk.Frame(self.notebook)
             self.tab_settings = ttk.Frame(self.notebook)
             # Notebook tab labels are translated based on the selected UI language.
@@ -611,6 +613,7 @@ class CoreMixin:
             self.notebook.add(self.tab_live, text=self.t("tabs.live"))
             self.notebook.add(self.tab_costs, text=self.t("tabs.costs"))
             self.notebook.add(self.tab_heatmap, text=self.t("tabs.heatmap"))
+            self.notebook.add(self.tab_solar, text=self.t("tabs.solar"))
             self.notebook.add(self.tab_export, text=self.t("tabs.export"))
             self.notebook.add(self.tab_settings, text=self.t("tabs.settings"))
 
@@ -621,7 +624,7 @@ class CoreMixin:
                 self.notebook.insert(0, self.tab_setup, text=self.t("tabs.setup"))
 
                 # Put placeholders into disabled tabs (avoid CSV warnings on first run)
-                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_export):
+                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_export):
                     try:
                         ttk.Label(
                             tab,
@@ -650,6 +653,7 @@ class CoreMixin:
                 self._build_live_tab()
                 self._build_costs_tab()
                 self._build_heatmap_tab()
+                self._build_solar_tab()
                 self._build_export_tab()
                 self._build_settings_tab()
                 self._tabs_built = True
@@ -5321,6 +5325,42 @@ class CoreMixin:
                 state="readonly",
             ).grid(row=0, column=1, padx=8, pady=8, sticky='w')
 
+            # ---------- Solar / PV settings ----------
+            solar_box = ttk.LabelFrame(tab_main, text=self.t('settings.solar.title'))
+            solar_box.pack(fill="x", pady=(0, 10))
+            _solar_cfg = getattr(self.cfg, "solar", None)
+            self._solar_enabled_var = tk.BooleanVar(value=bool(getattr(_solar_cfg, "enabled", False)))
+            ttk.Checkbutton(
+                solar_box,
+                text=self.t('settings.solar.enabled'),
+                variable=self._solar_enabled_var,
+            ).grid(row=0, column=0, columnspan=3, padx=8, pady=(8, 2), sticky="w")
+
+            ttk.Label(solar_box, text=self.t('settings.solar.pv_meter')).grid(row=1, column=0, padx=8, pady=4, sticky="w")
+            _dev_names_for_solar = [self.t('settings.solar.none')] + [d.name for d in (getattr(self.cfg, "devices", []) or [])]
+            _dev_keys_for_solar = [""] + [d.key for d in (getattr(self.cfg, "devices", []) or [])]
+            _cur_pv_key = str(getattr(_solar_cfg, "pv_meter_device_key", "") or "")
+            _cur_pv_idx = _dev_keys_for_solar.index(_cur_pv_key) if _cur_pv_key in _dev_keys_for_solar else 0
+            self._solar_pv_meter_var = tk.StringVar(value=_dev_names_for_solar[_cur_pv_idx])
+            self._solar_dev_keys_list = _dev_keys_for_solar
+            self._solar_dev_names_list = _dev_names_for_solar
+            ttk.Combobox(
+                solar_box,
+                textvariable=self._solar_pv_meter_var,
+                values=_dev_names_for_solar,
+                width=26,
+                state="readonly",
+            ).grid(row=1, column=1, padx=8, pady=4, sticky="w")
+            ttk.Label(
+                solar_box,
+                text=self.t('settings.solar.pv_meter.hint'),
+                foreground="gray",
+            ).grid(row=1, column=2, padx=8, pady=4, sticky="w")
+
+            ttk.Label(solar_box, text=self.t('settings.solar.feed_in_tariff')).grid(row=2, column=0, padx=8, pady=(4, 8), sticky="w")
+            self._solar_tariff_var = tk.StringVar(value=str(getattr(_solar_cfg, "feed_in_tariff_eur_per_kwh", 0.082)))
+            ttk.Entry(solar_box, textvariable=self._solar_tariff_var, width=10).grid(row=2, column=1, padx=8, pady=(4, 8), sticky="w")
+
             live_box = ttk.LabelFrame(tab_main, text=self.t('settings.live.title'))
             live_box.pack(fill="x", pady=(0, 10))
             self.set_live_poll_var = tk.DoubleVar(value=float(self.cfg.ui.live_poll_seconds))
@@ -6237,6 +6277,29 @@ class CoreMixin:
                 updates = replace(getattr(self.cfg, "updates", UpdatesConfig()), auto_install=bool(self.upd_auto.get()))
             except Exception:
                 updates = UpdatesConfig(auto_install=bool(self.upd_auto.get()))
+
+            # Solar / PV config
+            try:
+                _pv_name = str(getattr(self, "_solar_pv_meter_var", tk.StringVar()).get() or "")
+                _names_list = getattr(self, "_solar_dev_names_list", [])
+                _keys_list = getattr(self, "_solar_dev_keys_list", [])
+                if _pv_name in _names_list:
+                    _pv_key = _keys_list[_names_list.index(_pv_name)]
+                else:
+                    _pv_key = ""
+                _tariff_raw = str(getattr(self, "_solar_tariff_var", tk.StringVar(value="0.082")).get() or "0.082")
+                try:
+                    _tariff = float(_tariff_raw.replace(",", "."))
+                except Exception:
+                    _tariff = 0.082
+                solar = SolarConfig(
+                    enabled=bool(getattr(self, "_solar_enabled_var", tk.BooleanVar(value=False)).get()),
+                    pv_meter_device_key=_pv_key,
+                    feed_in_tariff_eur_per_kwh=_tariff,
+                )
+            except Exception:
+                solar = getattr(self.cfg, "solar", SolarConfig())
+
             self.cfg = AppConfig(
                 version=__version__,
                 devices=devs,
@@ -6247,6 +6310,7 @@ class CoreMixin:
                 pricing=pricing,
                 billing=billing,
                 alerts=alerts,
+                solar=solar,
             )
             save_config(self.cfg, self.cfg_path)
 
@@ -8719,6 +8783,12 @@ class CoreMixin:
                                     "co2_intensity_g_per_kwh": _co2_intensity,
                                     "source": "shelly-energy-analyzer",
                                 }
+                                try:
+                                    _sr = self._solar_calc_period(start_dt, end_dt)
+                                    if _sr:
+                                        payload["solar"] = {k: v for k, v in _sr.items() if v is not None}
+                                except Exception:
+                                    pass
                                 ok, err = self._webhook_send_sync(payload)
                             except Exception as e:
                                 ok, err = False, str(e)
@@ -8761,6 +8831,12 @@ class CoreMixin:
                                     "co2_intensity_g_per_kwh": _co2_intensity,
                                     "source": "shelly-energy-analyzer",
                                 }
+                                try:
+                                    _sr = self._solar_calc_period(start_dt, end_dt)
+                                    if _sr:
+                                        payload["solar"] = {k: v for k, v in _sr.items() if v is not None}
+                                except Exception:
+                                    pass
                                 ok, err = self._webhook_send_sync(payload)
                             except Exception as e:
                                 ok, err = False, str(e)
@@ -9643,6 +9719,15 @@ class CoreMixin:
                                 lines.append(f"   = ~{standby_co2_year:.0f} kg CO₂/Jahr")
                         except Exception:
                             pass
+            except Exception:
+                pass
+
+            # Solar / PV summary (append if configured)
+            try:
+                solar_text = self._solar_build_summary_text(start, end)
+                if solar_text:
+                    lines.append("")
+                    lines.append(solar_text)
             except Exception:
                 pass
 
