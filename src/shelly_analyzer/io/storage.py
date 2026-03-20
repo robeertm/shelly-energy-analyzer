@@ -138,11 +138,14 @@ class Storage:
         try:
             if self.db.has_data(device_key):
                 df = self.db.query_samples(device_key, start_ts=start_ts, end_ts=end_ts)
-                if not df.empty:
-                    # Compatibility: provide 'ts' alias.
-                    if "ts" not in df.columns and "timestamp" in df.columns:
-                        df["ts"] = df["timestamp"]
-                    return df
+                # Compatibility: provide 'ts' alias.
+                if "ts" not in df.columns and "timestamp" in df.columns:
+                    df["ts"] = df["timestamp"]
+                # Always return from DB when the device is registered there — even if
+                # this specific date range is empty.  Falling through to the CSV path
+                # causes a ValueError (no legacy CSV files) that callers such as
+                # _cmp_load_daily silently swallow, producing a blank compare chart.
+                return df
         except Exception:
             logger.debug("DB read failed for '%s', falling back to CSV", device_key, exc_info=True)
 
