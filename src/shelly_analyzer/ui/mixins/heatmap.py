@@ -149,6 +149,17 @@ class HeatmapMixin:
             # Ensure we have an energy_kwh column
             if "energy_kwh" not in df.columns:
                 return None
+
+            # Normalize timestamp columns to Unix integer seconds.
+            # query_samples() converts raw SQLite integers to naive UTC datetime64
+            # (nanoseconds). The heatmap helpers call datetime.fromtimestamp(int(ts))
+            # which expects Unix seconds, so we convert back here.
+            for col_name in ("timestamp", "ts"):
+                if col_name in df.columns and pd.api.types.is_datetime64_any_dtype(df[col_name]):
+                    df = df.copy()
+                    df[col_name] = df[col_name].astype("int64") // 10 ** 9
+                    break
+
             return df
         except Exception as e:
             logger.debug("heatmap load_df error for '%s' year=%s: %s", device_key, year, e)
