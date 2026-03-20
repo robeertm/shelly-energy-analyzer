@@ -2706,6 +2706,48 @@ _I18N.setdefault("en", {}).update({
     "settings.alerts.col_webhook": "Webhook",
 })
 
+# -------- E-Mail report translations --------
+
+_I18N.setdefault("de", {}).update({
+    "settings.email.title": "E-Mail-Reports",
+    "settings.email.enabled": "E-Mail aktiv",
+    "settings.email.smtp_server": "SMTP-Server",
+    "settings.email.smtp_port": "Port",
+    "settings.email.smtp_user": "Benutzername",
+    "settings.email.smtp_password": "Passwort",
+    "settings.email.from_address": "Absender",
+    "settings.email.use_tls": "TLS/STARTTLS",
+    "settings.email.recipients": "Empfänger (kommagetrennt)",
+    "settings.email.alarm_enabled": "Bei Alarmen senden",
+    "settings.email.daily_summary_enabled": "Täglicher Bericht",
+    "settings.email.daily_summary_time": "Uhrzeit täglich (HH:MM)",
+    "settings.email.monthly_summary_enabled": "Monatlicher Bericht",
+    "settings.email.monthly_summary_time": "Uhrzeit monatlich (HH:MM)",
+    "settings.email.test": "Test senden",
+    "settings.email.hint": "Tägliche/monatliche Berichte werden als PDF-Anhang gesendet.",
+    "settings.alerts.col_email": "E-Mail",
+})
+
+_I18N.setdefault("en", {}).update({
+    "settings.email.title": "E-Mail Reports",
+    "settings.email.enabled": "Enable e-mail",
+    "settings.email.smtp_server": "SMTP server",
+    "settings.email.smtp_port": "Port",
+    "settings.email.smtp_user": "Username",
+    "settings.email.smtp_password": "Password",
+    "settings.email.from_address": "From address",
+    "settings.email.use_tls": "TLS/STARTTLS",
+    "settings.email.recipients": "Recipients (comma-separated)",
+    "settings.email.alarm_enabled": "Send on alarms",
+    "settings.email.daily_summary_enabled": "Daily report",
+    "settings.email.daily_summary_time": "Daily time (HH:MM)",
+    "settings.email.monthly_summary_enabled": "Monthly report",
+    "settings.email.monthly_summary_time": "Monthly time (HH:MM)",
+    "settings.email.test": "Send test",
+    "settings.email.hint": "Daily/monthly reports are sent as PDF attachments.",
+    "settings.alerts.col_email": "E-Mail",
+})
+
 # -------- Local formatting helpers (dates/numbers) --------
 
 _DATE_FORMATS = {

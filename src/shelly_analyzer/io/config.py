@@ -117,6 +117,23 @@ class UiConfig:
     # One of: incremental|all|day|week|month
     autosync_mode: str = "incremental"
 
+    # E-Mail report integration (SMTP)
+    email_enabled: bool = False
+    email_smtp_server: str = ""
+    email_smtp_port: int = 587
+    email_smtp_user: str = ""
+    email_smtp_password: str = ""
+    email_from_address: str = ""
+    email_use_tls: bool = True
+    # Comma-separated list of recipient addresses
+    email_recipients: str = ""
+    # Which event types trigger an e-mail
+    email_alarm_enabled: bool = True
+    email_daily_summary_enabled: bool = False
+    email_monthly_summary_enabled: bool = False
+    email_daily_summary_time: str = "00:00"    # HH:MM, local time
+    email_monthly_summary_time: str = "00:00"  # HH:MM, local time
+
     # Which device page is selected in the desktop UI (0-based). Each page shows up to 2 devices.
     device_page_index: int = 0
 
@@ -146,6 +163,7 @@ class AlertRule:
     action_beep: bool = True
     action_telegram: bool = False
     action_webhook: bool = False
+    action_email: bool = False
     message: str = ""
 
 @dataclass(frozen=True)
@@ -412,6 +430,19 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         webhook_alarm_enabled=bool(ui_raw.get("webhook_alarm_enabled", UiConfig.webhook_alarm_enabled)),
         webhook_daily_summary_enabled=bool(ui_raw.get("webhook_daily_summary_enabled", UiConfig.webhook_daily_summary_enabled)),
         webhook_monthly_summary_enabled=bool(ui_raw.get("webhook_monthly_summary_enabled", UiConfig.webhook_monthly_summary_enabled)),
+        email_enabled=bool(ui_raw.get("email_enabled", UiConfig.email_enabled)),
+        email_smtp_server=str(ui_raw.get("email_smtp_server", UiConfig.email_smtp_server) or ""),
+        email_smtp_port=_coerce_int(ui_raw.get("email_smtp_port", UiConfig.email_smtp_port), UiConfig.email_smtp_port),
+        email_smtp_user=str(ui_raw.get("email_smtp_user", UiConfig.email_smtp_user) or ""),
+        email_smtp_password=str(ui_raw.get("email_smtp_password", UiConfig.email_smtp_password) or ""),
+        email_from_address=str(ui_raw.get("email_from_address", UiConfig.email_from_address) or ""),
+        email_use_tls=bool(ui_raw.get("email_use_tls", UiConfig.email_use_tls)),
+        email_recipients=str(ui_raw.get("email_recipients", UiConfig.email_recipients) or ""),
+        email_alarm_enabled=bool(ui_raw.get("email_alarm_enabled", UiConfig.email_alarm_enabled)),
+        email_daily_summary_enabled=bool(ui_raw.get("email_daily_summary_enabled", UiConfig.email_daily_summary_enabled)),
+        email_monthly_summary_enabled=bool(ui_raw.get("email_monthly_summary_enabled", UiConfig.email_monthly_summary_enabled)),
+        email_daily_summary_time=str(ui_raw.get("email_daily_summary_time", UiConfig.email_daily_summary_time) or UiConfig.email_daily_summary_time),
+        email_monthly_summary_time=str(ui_raw.get("email_monthly_summary_time", UiConfig.email_monthly_summary_time) or UiConfig.email_monthly_summary_time),
         live_daynight_mode=str(ui_raw.get("live_daynight_mode", UiConfig.live_daynight_mode) or UiConfig.live_daynight_mode),
         live_day_start=str(ui_raw.get("live_day_start", UiConfig.live_day_start) or UiConfig.live_day_start),
         live_night_start=str(ui_raw.get("live_night_start", UiConfig.live_night_start) or UiConfig.live_night_start),
@@ -499,6 +530,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
                     action_beep=bool(a.get("action_beep", a.get("beep", True))),
                     action_telegram=bool(a.get("action_telegram", a.get("telegram", False))),
                     action_webhook=bool(a.get("action_webhook", False)),
+                    action_email=bool(a.get("action_email", False)),
                     message=str(a.get("message", "") or ""),
                 )
             )
@@ -612,6 +644,19 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "webhook_alarm_enabled": bool(getattr(cfg.ui, "webhook_alarm_enabled", True)),
             "webhook_daily_summary_enabled": bool(getattr(cfg.ui, "webhook_daily_summary_enabled", False)),
             "webhook_monthly_summary_enabled": bool(getattr(cfg.ui, "webhook_monthly_summary_enabled", False)),
+            "email_enabled": bool(getattr(cfg.ui, "email_enabled", False)),
+            "email_smtp_server": str(getattr(cfg.ui, "email_smtp_server", "") or ""),
+            "email_smtp_port": int(getattr(cfg.ui, "email_smtp_port", 587)),
+            "email_smtp_user": str(getattr(cfg.ui, "email_smtp_user", "") or ""),
+            "email_smtp_password": str(getattr(cfg.ui, "email_smtp_password", "") or ""),
+            "email_from_address": str(getattr(cfg.ui, "email_from_address", "") or ""),
+            "email_use_tls": bool(getattr(cfg.ui, "email_use_tls", True)),
+            "email_recipients": str(getattr(cfg.ui, "email_recipients", "") or ""),
+            "email_alarm_enabled": bool(getattr(cfg.ui, "email_alarm_enabled", True)),
+            "email_daily_summary_enabled": bool(getattr(cfg.ui, "email_daily_summary_enabled", False)),
+            "email_monthly_summary_enabled": bool(getattr(cfg.ui, "email_monthly_summary_enabled", False)),
+            "email_daily_summary_time": str(getattr(cfg.ui, "email_daily_summary_time", "00:00") or "00:00"),
+            "email_monthly_summary_time": str(getattr(cfg.ui, "email_monthly_summary_time", "00:00") or "00:00"),
             "plot_theme_mode": getattr(cfg.ui, "plot_theme_mode", UiConfig.plot_theme_mode),
         },
         "updates": {
@@ -640,6 +685,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
                 "action_beep": r.action_beep,
                 "action_telegram": getattr(r, "action_telegram", False),
                 "action_webhook": getattr(r, "action_webhook", False),
+                "action_email": getattr(r, "action_email", False),
                 "message": r.message,
             }
             for r in (getattr(cfg, "alerts", []) or [])

@@ -1,5 +1,17 @@
 # Changelog
 
+## 7.3.0 - 2026-03-20
+### Added
+- **Automatic E-Mail Reports.** A new SMTP-based e-mail system sends scheduled energy reports as PDF attachments — fully independent of Telegram and webhooks.
+  - **SMTP configuration:** Server, port, TLS/STARTTLS (port 587) and SSL (port 465), username, password, and sender address — all configurable in the Settings UI.
+  - **Recipient list:** Comma-separated recipient addresses.
+  - **Scheduled daily and monthly PDF reports:** At the configured time, a PDF summary (kWh, avg/max power, cost per device) is generated and sent as an attachment alongside the text summary.
+  - **Alarm e-mails:** Each alert rule has a new "E-Mail" checkbox column; when a rule triggers, an e-mail with alarm details is sent (requires global e-mail alarm toggle to be on).
+  - **Independent scheduling:** Daily and monthly e-mail summaries have their own time settings and state persistence (`data/email_summary_state.json`), separate from Telegram and webhook schedules.
+  - **Test button** in settings to verify SMTP connectivity immediately.
+  - **Uses Python standard library** (`smtplib`, `ssl`, `email`) — no additional dependencies.
+  - **Fully i18n-compatible** (German and English, other languages fall back to English).
+
 ## 7.2.0 - 2026-03-19
 ### Added
 - **CO₂ Footprint Tracking.** Electricity consumption is now translated into CO₂ emissions throughout the app.
