@@ -1,5 +1,24 @@
 # Changelog
 
+## 7.5.0 - 2026-03-20
+### Added
+- **PV/Solar Integration.** A new "☀️ Solar" tab provides a complete solar energy overview for Shelly setups with a bidirectional grid meter.
+  - **Configurable PV meter:** Select the Shelly device at the grid connection point (negative power = export to grid) via Settings → Solar / PV.
+  - **Feed-in tariff (Einspeisevergütung):** Configurable €/kWh rate to calculate feed-in revenue.
+  - **Automatic metric calculation from bidirectional power readings:**
+    - **Einspeisung / Grid feed-in (kWh):** Energy exported to the grid (intervals where power < 0).
+    - **Netzbezug / Grid consumption (kWh):** Energy imported from the grid (intervals where power ≥ 0).
+    - **Eigenverbrauch / Self-consumption (kWh):** Calculated from other configured Shelly devices (total household consumption minus grid import). Requires at least one other device to be configured.
+    - **Autarkiegrad / Self-sufficiency (%):** Self-consumption as a share of total household consumption.
+    - **PV-Erzeugung / PV production (kWh):** Estimated total PV output (self-consumption + feed-in).
+    - **Einspeisevergütung / Feed-in revenue (€):** Feed-in energy × configured tariff.
+    - **Ersparte Kosten / Cost savings (€):** Self-consumed energy × electricity price.
+  - **Period selector:** View statistics for Today, This Week, This Month, or This Year.
+  - **Daily bar chart:** Visual breakdown of feed-in vs. grid import per day, with full light/dark theme support.
+  - **Telegram & Webhook integration:** Solar data (feed-in, grid consumption, self-consumption, autarky, PV production, revenue, savings) is appended to daily and monthly summaries. Webhook payloads also include a structured `solar` sub-object with all numeric metrics.
+  - **Full i18n support** in all 9 languages (de, en, es, fr, pt, it, pl, cs, ru).
+  - **Graceful degradation:** When no PV meter is configured or no other devices exist, the tab shows informative messages rather than errors.
+
 ## 7.1.0 - 2026-03-19
 ### Added
 - **Webhook / Home Assistant Integration.** A new generic HTTP POST webhook system allows sending real-time alarm notifications and scheduled daily/monthly summaries to any HTTP endpoint — fully independent of Telegram.
