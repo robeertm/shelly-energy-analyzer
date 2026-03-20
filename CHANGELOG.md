@@ -1,5 +1,24 @@
 # Changelog
 
+## 8.2.0 - 2026-03-20
+### Added
+- **Version history in updater.** The Settings → Updates tab now shows the last 10 GitHub
+  releases in a scrollable list. The currently installed version is marked with a "(current)"
+  indicator. Users can select any version and click "Install selected version" to install it,
+  enabling rollbacks to older releases when needed.
+- **Downgrade / reinstall warnings.** Selecting a version older than the installed one shows
+  an orange warning. Selecting the currently installed version shows an informational note.
+  Versions without a downloadable asset show a "no download available" notice and disable
+  the install button.
+- **`fetch_releases()` in updater service.** New function queries
+  `GET /repos/{owner}/{repo}/releases?per_page=10`, picks the correct platform ZIP asset
+  (macOS / Windows / Linux), and returns a typed `ReleaseEntry` list.
+- **i18n for all 9 languages.** New translation keys for the version-history section
+  (`updates.versions_title`, `updates.current_version`, `updates.current_indicator`,
+  `updates.install_selected`, `updates.version_list_loading`, `updates.version_list_empty`,
+  `updates.downgrade_warning`, `updates.reinstall_note`, `updates.no_asset_warning`) added
+  for de, en, es, fr, pt, it, pl, cs, ru.
+
 ## 8.1.1 - 2026-03-20
 ### Fixed
 - **Anomaly detection state not persisted across restarts.** `save_config()` was missing
