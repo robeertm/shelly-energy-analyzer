@@ -1,5 +1,19 @@
 # Changelog
 
+## 8.0.1 - 2026-03-20
+### Fixed
+- **Heatmap: both plots rendered almost entirely yellow** — caused by monthly-aggregate
+  rows (containing the full monthly kWh total, e.g. 150 kWh) being mixed into the same
+  DataFrame as raw per-sample rows (~0.001 kWh each) by `query_samples()`. The single
+  outlier value dominated the colour scale (`vmax ≈ 150`), collapsing all other cells
+  to yellow. The weekday×hour heatmap additionally showed exactly one isolated bright
+  cell (the month with the highest total mapped to a single weekday/hour bucket).
+  **Fix:** `_heatmap_load_df()` now reads from the `hourly_energy` table (per-hour kWh,
+  correct scale) instead of calling `read_device_df()`. For compressed historical years
+  where hourly data has been purged by the retention policy, it falls back to
+  `monthly_energy` and distributes each month's total evenly across all hours of that
+  month, keeping the colour scale proportional.
+
 ## 8.0.0 - 2026-03-20
 ### Added
 - **Device Scheduling (⏰ Schedules tab) — Feature 10/10, completing the full feature set.**

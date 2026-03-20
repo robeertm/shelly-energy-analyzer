@@ -134,33 +134,89 @@ class HeatmapMixin:
     # ── Data helpers ──────────────────────────────────────────────────────────
 
     def _heatmap_load_df(self, device_key: str, year: int):
-        """Load a year's worth of samples for *device_key* as a DataFrame.
+        """Load a year's hourly-aggregated energy data for *device_key*.
+
+        Returns a DataFrame with columns:
+            timestamp   – Unix integer seconds (start of the hour)
+            energy_kwh  – kWh consumed in that hour
 
         Returns None if no data is available.
+
+        Data sources (in preference order):
+        1. ``hourly_energy`` table — per-hour kWh, always correct scale.
+           Available for years that have not been compressed by the retention
+           policy (typically the current year and the previous year).
+        2. ``monthly_energy`` table — compressed historical data.
+           Each monthly total is distributed evenly across all hours of that
+           month so that the heatmap colour scale stays meaningful.
+
+        Using ``read_device_df()`` / ``query_samples()`` is intentionally
+        avoided here: that method merges raw per-sample rows (~0.001 kWh each)
+        with monthly-aggregate rows (~150 kWh each) into a single DataFrame,
+        causing one extreme outlier that forces the entire colour scale to
+        maximum and renders every other cell yellow.
         """
         try:
             import pandas as pd
+            from calendar import monthrange
 
             start_ts = int(datetime(year, 1, 1).timestamp())
             end_ts = int(datetime(year + 1, 1, 1).timestamp())
-            df = self.storage.read_device_df(device_key, start_ts=start_ts, end_ts=end_ts)
-            if df is None or df.empty:
-                return None
-            # Ensure we have an energy_kwh column
-            if "energy_kwh" not in df.columns:
-                return None
 
-            # Normalize timestamp columns to Unix integer seconds.
-            # query_samples() converts raw SQLite integers to naive UTC datetime64
-            # (nanoseconds). The heatmap helpers call datetime.fromtimestamp(int(ts))
-            # which expects Unix seconds, so we convert back here.
-            for col_name in ("timestamp", "ts"):
-                if col_name in df.columns and pd.api.types.is_datetime64_any_dtype(df[col_name]):
-                    df = df.copy()
-                    df[col_name] = df[col_name].astype("int64") // 10 ** 9
-                    break
+            # ── 1. Hourly energy (primary) ────────────────────────────────────
+            try:
+                hourly_df = self.storage.db.query_hourly(
+                    device_key, start_ts=start_ts, end_ts=end_ts
+                )
+                if not hourly_df.empty and "kwh" in hourly_df.columns:
+                    ts_col = "hour_ts" if "hour_ts" in hourly_df.columns else "timestamp"
+                    return pd.DataFrame({
+                        "timestamp": hourly_df[ts_col].astype("int64"),
+                        "energy_kwh": hourly_df["kwh"].fillna(0.0),
+                    })
+            except Exception as e:
+                logger.debug(
+                    "heatmap: hourly query failed for '%s' year=%s: %s", device_key, year, e
+                )
 
-            return df
+            # ── 2. Monthly energy fallback (compressed historical years) ──────
+            # Distribute each month's total evenly across all hours of that
+            # month so the colour scale stays proportional.
+            try:
+                monthly_df = self.storage.db.query_monthly(
+                    device_key, start_ts=start_ts, end_ts=end_ts
+                )
+                if not monthly_df.empty and "energy_kwh" in monthly_df.columns:
+                    rows = []
+                    for _, row in monthly_df.iterrows():
+                        ts_val = row.get("timestamp")
+                        if ts_val is None:
+                            continue
+                        ts_int = (
+                            int(ts_val.timestamp())
+                            if hasattr(ts_val, "timestamp")
+                            else int(ts_val)
+                        )
+                        dt = datetime.fromtimestamp(ts_int)
+                        days_in_month = monthrange(dt.year, dt.month)[1]
+                        hours_in_month = days_in_month * 24
+                        monthly_kwh = float(row.get("energy_kwh") or 0.0)
+                        kwh_per_hour = (
+                            monthly_kwh / hours_in_month if hours_in_month > 0 else 0.0
+                        )
+                        base_ts = int(datetime(dt.year, dt.month, 1).timestamp())
+                        for h in range(hours_in_month):
+                            h_ts = base_ts + h * 3600
+                            if start_ts <= h_ts < end_ts:
+                                rows.append({"timestamp": h_ts, "energy_kwh": kwh_per_hour})
+                    if rows:
+                        return pd.DataFrame(rows)
+            except Exception as e:
+                logger.debug(
+                    "heatmap: monthly fallback failed for '%s' year=%s: %s", device_key, year, e
+                )
+
+            return None
         except Exception as e:
             logger.debug("heatmap load_df error for '%s' year=%s: %s", device_key, year, e)
             return None
