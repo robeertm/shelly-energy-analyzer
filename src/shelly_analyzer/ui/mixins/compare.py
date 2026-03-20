@@ -166,11 +166,17 @@ class CompareMixin:
             if df is None or df.empty or "energy_kwh" not in df.columns:
                 return {}
 
-            # Normalize timestamp column: query_samples() returns naive UTC datetime64.
+            # Normalize timestamp column: query_samples() returns datetime64
+            # (may be tz-aware or tz-naive depending on pandas version).
+            # Convert back to Unix integer seconds for consistent handling.
             ts_col = "timestamp" if "timestamp" in df.columns else "ts"
-            if ts_col in df.columns and pd.api.types.is_datetime64_any_dtype(df[ts_col]):
-                df = df.copy()
-                df[ts_col] = df[ts_col].astype("int64") // 10 ** 9
+            df = df.copy()
+            for col_name in ("timestamp", "ts"):
+                if col_name not in df.columns:
+                    continue
+                col = df[col_name]
+                if hasattr(col.dtype, "tz") or pd.api.types.is_datetime64_any_dtype(col):
+                    df[col_name] = col.astype("int64") // 10 ** 9
 
             local_dates = df[ts_col].apply(lambda ts: datetime.fromtimestamp(int(ts)).date())
             tmp = df.copy()

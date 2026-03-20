@@ -5318,6 +5318,7 @@ class CoreMixin:
                 command=self._email_send_monthly_now,
             ).grid(row=4, column=5, padx=(4, 8), pady=(0, 6), sticky="e")
 
+            # Row 5: Test button
             def _em_send_test() -> None:
                 try:
                     self._save_settings()
@@ -5343,11 +5344,11 @@ class CoreMixin:
                     messagebox.showwarning(self.t("settings.email.title"), f"Fehler: {_e}")
 
             ttk.Button(em_box, text=self.t("settings.email.test"), command=_em_send_test).grid(
-                row=3, column=5, padx=8, pady=(0, 6), sticky="e"
+                row=5, column=0, padx=8, pady=(0, 6), sticky="w"
             )
 
             ttk.Label(em_box, text=self.t("settings.email.hint"), foreground="gray").grid(
-                row=5, column=0, columnspan=6, padx=8, pady=(0, 6), sticky="w"
+                row=6, column=0, columnspan=6, padx=8, pady=(0, 6), sticky="w"
             )
 
             try:
