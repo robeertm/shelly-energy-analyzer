@@ -1,5 +1,17 @@
 # Changelog
 
+## 8.4.0 - 2026-03-20
+### Added
+- **NILM appliance detector in the web dashboard.** The live web view now shows
+  the top-3 appliance candidates (icon, localised name, confidence dot + %) below
+  the metrics grid for each device, updated on every poll cycle.  Uses the same
+  `identify_appliance()` engine as the desktop Live tab.  Results are hidden in
+  compact/sparkline mode and localised in all 9 supported languages.
+- **`/api/state` extended with `_appliances` field.**  The JSON response now
+  includes a top-level `_appliances` object (`{device_key: [{icon, id, conf}]}`)
+  computed from the latest power reading, so the web frontend can render hints
+  without an extra round-trip.
+
 ## 8.3.0 - 2026-03-20
 ### Added
 - **NILM-Light appliance detector.** The Live tab now shows a "Possible devices"
