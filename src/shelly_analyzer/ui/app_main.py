@@ -11,8 +11,9 @@ from .mixins.updates import UpdatesMixin
 from .mixins.heatmap import HeatmapMixin
 from .mixins.solar import SolarMixin
 from .mixins.compare import CompareMixin
+from .mixins.anomaly import AnomalyMixin
 
 
-class App(CoreMixin, tk.Tk, ScalingMixin, PlotsMixin, LiveWebMixin, UpdatesMixin, HeatmapMixin, SolarMixin, CompareMixin):
+class App(CoreMixin, tk.Tk, ScalingMixin, PlotsMixin, LiveWebMixin, UpdatesMixin, HeatmapMixin, SolarMixin, CompareMixin, AnomalyMixin):
     """Main GUI application class (composed from mixins)."""
     pass

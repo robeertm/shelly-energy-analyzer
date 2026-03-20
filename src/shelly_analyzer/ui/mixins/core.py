@@ -40,6 +40,7 @@ from shelly_analyzer.i18n import t as _t, normalize_lang, LANGS, format_date_loc
 from shelly_analyzer.core.energy import filter_by_time, calculate_energy
 from shelly_analyzer.core.stats import daily_kwh, weekly_kwh, monthly_kwh
 from shelly_analyzer.io.config import (
+    AnomalyConfig,
     AppConfig,
     BillingConfig,
     BillingParty,
@@ -262,6 +263,8 @@ class CoreMixin:
             self._live_diag: Dict[str, Dict[str, Any]] = {}
             # Alert state per rule_id
             self._alert_state: Dict[str, Dict[str, Any]] = {}
+            # Anomaly detection history (in-memory)
+            self._anomaly_log: List[Any] = []
             # Log file path (set by run_gui via logging_setup)
             self._log_path: Optional[Path] = get_log_path()
             # device_key -> metric -> ringbuffer of (ts,val)
@@ -688,6 +691,7 @@ class CoreMixin:
             self.tab_heatmap = ttk.Frame(self.notebook)
             self.tab_solar = ttk.Frame(self.notebook)
             self.tab_compare = ttk.Frame(self.notebook)
+            self.tab_anomaly = ttk.Frame(self.notebook)
             self.tab_export = ttk.Frame(self.notebook)
             self.tab_settings = ttk.Frame(self.notebook)
             # Notebook tab labels are translated based on the selected UI language.
@@ -698,6 +702,7 @@ class CoreMixin:
             self.notebook.add(self.tab_heatmap, text=self.t("tabs.heatmap"))
             self.notebook.add(self.tab_solar, text=self.t("tabs.solar"))
             self.notebook.add(self.tab_compare, text=self.t("tabs.compare"))
+            self.notebook.add(self.tab_anomaly, text=self.t("tabs.anomaly"))
             self.notebook.add(self.tab_export, text=self.t("tabs.export"))
             self.notebook.add(self.tab_settings, text=self.t("tabs.settings"))
 
@@ -708,7 +713,7 @@ class CoreMixin:
                 self.notebook.insert(0, self.tab_setup, text=self.t("tabs.setup"))
 
                 # Put placeholders into disabled tabs (avoid CSV warnings on first run)
-                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_compare, self.tab_export):
+                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_compare, self.tab_anomaly, self.tab_export):
                     try:
                         ttk.Label(
                             tab,
@@ -739,6 +744,7 @@ class CoreMixin:
                 self._build_heatmap_tab()
                 self._build_solar_tab()
                 self._build_compare_tab()
+                self._build_anomaly_tab()
                 self._build_export_tab()
                 self._build_settings_tab()
                 self._tabs_built = True

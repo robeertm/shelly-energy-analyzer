@@ -292,6 +292,28 @@ class SolarConfig:
 
 
 @dataclass(frozen=True)
+class AnomalyConfig:
+    """Anomaly detection settings."""
+    enabled: bool = False
+    # Number of standard deviations required to trigger an anomaly
+    sigma_threshold: float = 2.0
+    # Minimum absolute deviation (kWh) to suppress noise for daily-consumption check
+    min_deviation_kwh: float = 0.1
+    # Rolling baseline window in days
+    window_days: int = 30
+    # Which checks to run
+    check_unusual_daily: bool = True
+    check_night_consumption: bool = True
+    check_power_peak_time: bool = True
+    # Notification channels
+    action_telegram: bool = False
+    action_webhook: bool = False
+    action_email: bool = False
+    # Maximum entries kept in the in-memory + persisted history
+    max_history: int = 200
+
+
+@dataclass(frozen=True)
 class AppConfig:
     version: str = __version__
     devices: List[DeviceConfig] = field(default_factory=list)
@@ -306,6 +328,7 @@ class AppConfig:
     alerts: List[AlertRule] = field(default_factory=list)
     solar: SolarConfig = field(default_factory=SolarConfig)
     tou: TouConfig = field(default_factory=TouConfig)
+    anomaly: AnomalyConfig = field(default_factory=AnomalyConfig)
 
 
 def default_config_path(project_root: Optional[Path] = None) -> Path:
@@ -604,6 +627,21 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         rates=tou_rates,
     )
 
+    anomaly_raw = raw.get("anomaly", {}) if isinstance(raw.get("anomaly"), dict) else {}
+    anomaly = AnomalyConfig(
+        enabled=bool(anomaly_raw.get("enabled", AnomalyConfig.enabled)),
+        sigma_threshold=_coerce_float(anomaly_raw.get("sigma_threshold", AnomalyConfig.sigma_threshold), AnomalyConfig.sigma_threshold),
+        min_deviation_kwh=_coerce_float(anomaly_raw.get("min_deviation_kwh", AnomalyConfig.min_deviation_kwh), AnomalyConfig.min_deviation_kwh),
+        window_days=_coerce_int(anomaly_raw.get("window_days", AnomalyConfig.window_days), AnomalyConfig.window_days),
+        check_unusual_daily=bool(anomaly_raw.get("check_unusual_daily", AnomalyConfig.check_unusual_daily)),
+        check_night_consumption=bool(anomaly_raw.get("check_night_consumption", AnomalyConfig.check_night_consumption)),
+        check_power_peak_time=bool(anomaly_raw.get("check_power_peak_time", AnomalyConfig.check_power_peak_time)),
+        action_telegram=bool(anomaly_raw.get("action_telegram", AnomalyConfig.action_telegram)),
+        action_webhook=bool(anomaly_raw.get("action_webhook", AnomalyConfig.action_webhook)),
+        action_email=bool(anomaly_raw.get("action_email", AnomalyConfig.action_email)),
+        max_history=_coerce_int(anomaly_raw.get("max_history", AnomalyConfig.max_history), AnomalyConfig.max_history),
+    )
+
     cfg = AppConfig(
         version=str(raw.get("version", __version__)),
         devices=devices,
@@ -617,6 +655,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         alerts=alerts,
         solar=solar,
         tou=tou,
+        anomaly=anomaly,
     )
 
     # Write back migrated schema (and missing blocks) if needed
@@ -640,6 +679,9 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
             needs_writeback = True
         if "base_fee_eur_per_year" not in raw_original["pricing"]:
             needs_writeback = True
+
+    if "anomaly" not in raw_original:
+        needs_writeback = True
 
     if needs_writeback:
         save_config(cfg, path)
