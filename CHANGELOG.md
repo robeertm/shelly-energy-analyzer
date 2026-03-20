@@ -1,5 +1,26 @@
 # Changelog
 
+## 8.3.0 - 2026-03-20
+### Added
+- **NILM-Light appliance detector.** The Live tab now shows a "Possible devices"
+  line below the realtime metrics for each Shelly device.  On every new sample the
+  current total power (W) is matched against a built-in database of 25 household
+  appliance power signatures and the top-3 candidates are displayed with a
+  confidence indicator (🟢 ≥ 70 %, 🟡 ≥ 40 %, 🔴 < 40 %) and percentage score.
+  A small hint line reminds the user that results are estimates based on typical
+  power ranges.
+- **`ApplianceSignature` dataclass and `identify_appliance()` function**
+  (`src/shelly_analyzer/services/appliance_detector.py`).  Includes signatures for
+  refrigerator, freezer, washing machine, tumble dryer, dishwasher, oven, hob,
+  microwave, kettle, coffee machine, toaster, iron, hair dryer, vacuum cleaner,
+  EV charger, heat pump, instantaneous water heater, hot water boiler, TV,
+  PC/gaming PC, laptop, router, LED lighting, air conditioner, and fan.
+  Confidence is computed as a linear falloff from the centre of each appliance's
+  power range, with a ±5 % tolerance zone at the boundaries (fixed confidence 0.25).
+- **i18n for all 9 languages.** New translation keys `live.appliance.title`,
+  `live.appliance.hint`, and `appliance.{id}.name` (25 device names) added for
+  de, en, es, fr, pt, it, pl, cs, ru.
+
 ## 8.2.0 - 2026-03-20
 ### Added
 - **Version history in updater.** The Settings → Updates tab now shows the last 10 GitHub

@@ -2801,6 +2801,7 @@ class CoreMixin:
                 v_line1 = tk.StringVar(value="–")  # Voltage + current
                 v_line2 = tk.StringVar(value="–")  # VAR + cos φ
                 v_line3 = tk.StringVar(value="–")  # Grid frequency (Hz)
+                v_appl  = tk.StringVar(value="–")  # Appliance detector
                 self._live_latest_vars[d.key] = {
                     "power": v_power,
                     "voltage": v_volt,
@@ -2811,12 +2812,24 @@ class CoreMixin:
                     "line1": v_line1,
                     "line2": v_line2,
                     "line3": v_line3,
+                    "appliance": v_appl,
                 }
 
                 ttk.Label(status_fr, textvariable=v_line0, style="LiveInfo.TLabel").grid(row=0, column=0, sticky="w")
                 ttk.Label(status_fr, textvariable=v_line1, style="LiveInfo.TLabel").grid(row=1, column=0, sticky="w", pady=(2, 0))
                 ttk.Label(status_fr, textvariable=v_line2, style="LiveInfo.TLabel").grid(row=2, column=0, sticky="w", pady=(2, 0))
                 ttk.Label(status_fr, textvariable=v_line3, style="LiveInfo.TLabel").grid(row=3, column=0, sticky="w", pady=(2, 0))
+                # Appliance detector row
+                appl_fr = ttk.Frame(status_fr)
+                appl_fr.grid(row=5, column=0, sticky="ew", pady=(6, 0))
+                appl_fr.columnconfigure(0, weight=1)
+                ttk.Label(appl_fr, textvariable=v_appl, style="LiveInfo.TLabel").pack(anchor="w")
+                try:
+                    _hint_lbl = ttk.Label(appl_fr, text=self.t('live.appliance.hint'), style="LiveInfo.TLabel")
+                    _hint_lbl.pack(anchor="w")
+                    _hint_lbl.configure(foreground="#888888")
+                except Exception:
+                    pass
 
                 # Switch state + toggle (only for kind == 'switch')
                 if str(getattr(d, "kind", "em")) == "switch":
