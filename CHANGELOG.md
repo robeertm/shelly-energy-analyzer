@@ -1,5 +1,9 @@
 # Changelog
 
+## 8.0.3 - 2026-03-20
+### Fixed
+- **Responsive tab scaling (Kosten, Heatmap, Solar):** Charts in these tabs now correctly rescale when the window is resized. Previously, plots were only rendered at their initial size and did not adapt to window size changes.
+
 ## 8.0.2 - 2026-03-20
 ### Fixed
 - **Heatmap: both plots rendered almost entirely yellow** — caused by monthly-aggregate
