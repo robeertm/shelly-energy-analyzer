@@ -3711,6 +3711,80 @@ _I18N.setdefault("ru", {}).update({
     "compare.err.invalid_dates": "Неверная дата – используйте YYYY-MM-DD",
 })
 
+# -------- Comparison quick presets (v8.1.0) --------
+
+_I18N.setdefault("de", {}).update({
+    "compare.quick.label": "Schnellvergleich:",
+    "compare.quick.month": "Aktueller vs. Vormonat",
+    "compare.quick.quarter": "Aktuelles vs. Vorquartal",
+    "compare.quick.halfyear": "Aktuelles vs. Vorhalbjahr",
+    "compare.quick.year": "Aktuelles vs. Vorjahr",
+})
+
+_I18N.setdefault("en", {}).update({
+    "compare.quick.label": "Quick compare:",
+    "compare.quick.month": "This vs. Last Month",
+    "compare.quick.quarter": "This vs. Last Quarter",
+    "compare.quick.halfyear": "This vs. Last Half-Year",
+    "compare.quick.year": "This vs. Last Year",
+})
+
+_I18N.setdefault("es", {}).update({
+    "compare.quick.label": "Comparación rápida:",
+    "compare.quick.month": "Mes actual vs. anterior",
+    "compare.quick.quarter": "Trimestre actual vs. anterior",
+    "compare.quick.halfyear": "Semestre actual vs. anterior",
+    "compare.quick.year": "Año actual vs. anterior",
+})
+
+_I18N.setdefault("fr", {}).update({
+    "compare.quick.label": "Comparaison rapide :",
+    "compare.quick.month": "Mois actuel vs. précédent",
+    "compare.quick.quarter": "Trimestre actuel vs. précédent",
+    "compare.quick.halfyear": "Semestre actuel vs. précédent",
+    "compare.quick.year": "Année actuelle vs. précédente",
+})
+
+_I18N.setdefault("pt", {}).update({
+    "compare.quick.label": "Comparação rápida:",
+    "compare.quick.month": "Mês atual vs. anterior",
+    "compare.quick.quarter": "Trimestre atual vs. anterior",
+    "compare.quick.halfyear": "Semestre atual vs. anterior",
+    "compare.quick.year": "Ano atual vs. anterior",
+})
+
+_I18N.setdefault("it", {}).update({
+    "compare.quick.label": "Confronto rapido:",
+    "compare.quick.month": "Mese corrente vs. precedente",
+    "compare.quick.quarter": "Trimestre corrente vs. precedente",
+    "compare.quick.halfyear": "Semestre corrente vs. precedente",
+    "compare.quick.year": "Anno corrente vs. precedente",
+})
+
+_I18N.setdefault("pl", {}).update({
+    "compare.quick.label": "Szybkie porównanie:",
+    "compare.quick.month": "Bieżący vs. poprzedni miesiąc",
+    "compare.quick.quarter": "Bieżący vs. poprzedni kwartał",
+    "compare.quick.halfyear": "Bieżące vs. poprzednie półrocze",
+    "compare.quick.year": "Bieżący vs. poprzedni rok",
+})
+
+_I18N.setdefault("cs", {}).update({
+    "compare.quick.label": "Rychlé porovnání:",
+    "compare.quick.month": "Aktuální vs. předchozí měsíc",
+    "compare.quick.quarter": "Aktuální vs. předchozí čtvrtletí",
+    "compare.quick.halfyear": "Aktuální vs. předchozí pololetí",
+    "compare.quick.year": "Aktuální vs. předchozí rok",
+})
+
+_I18N.setdefault("ru", {}).update({
+    "compare.quick.label": "Быстрое сравнение:",
+    "compare.quick.month": "Текущий vs. прошлый месяц",
+    "compare.quick.quarter": "Текущий vs. прошлый квартал",
+    "compare.quick.halfyear": "Текущее vs. прошлое полугодие",
+    "compare.quick.year": "Текущий vs. прошлый год",
+})
+
 # -------- Anomaly detection (v7.8.0) --------
 
 _I18N.setdefault("de", {}).update({

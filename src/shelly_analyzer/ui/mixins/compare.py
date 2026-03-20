@@ -5,6 +5,7 @@ devices) with delta display and a matplotlib-based grouped bar chart.
 """
 from __future__ import annotations
 
+import calendar as _calendar
 import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -115,6 +116,22 @@ class CompareMixin:
         )
         self._cmp_gran_cb.current(1)
         self._cmp_gran_cb.pack(side="left", padx=(0, 16))
+
+        # ── Quick-compare buttons ─────────────────────────────────────────────
+        quick_frm = ttk.Frame(frm)
+        quick_frm.pack(fill="x", padx=14, pady=(0, 4))
+        ttk.Label(quick_frm, text=self.t("compare.quick.label")).pack(side="left", padx=(0, 6))
+        for _preset, _key in [
+            ("month",    "compare.quick.month"),
+            ("quarter",  "compare.quick.quarter"),
+            ("halfyear", "compare.quick.halfyear"),
+            ("year",     "compare.quick.year"),
+        ]:
+            ttk.Button(
+                quick_frm,
+                text=self.t(_key),
+                command=lambda p=_preset: self._cmp_apply_quick(p),
+            ).pack(side="left", padx=(0, 6))
 
         # ── Delta summary strip ───────────────────────────────────────────────
         delta_frm = ttk.Frame(frm)
@@ -294,7 +311,7 @@ class CompareMixin:
             use_eur = self._cmp_unit_var.get() == "€"
             try:
                 price_kwh = float(
-                    getattr(getattr(self.cfg, "pricing", None), "price_per_kwh", 0.0) or 0.0
+                    getattr(getattr(self.cfg, "pricing", None), "electricity_price_eur_per_kwh", 0.0) or 0.0
                 )
             except Exception:
                 price_kwh = 0.0
@@ -382,6 +399,60 @@ class CompareMixin:
 
         except Exception as e:
             logger.warning("_refresh_compare error: %s", e, exc_info=True)
+
+    # ── Quick-compare presets ─────────────────────────────────────────────────
+
+    def _cmp_apply_quick(self, preset: str) -> None:
+        """Set date fields for a common comparison preset and refresh."""
+        today = date.today()
+        fmt = "%Y-%m-%d"
+
+        if preset == "month":
+            a_start = date(today.year, today.month, 1)
+            a_end = today
+            pm = today.month - 1 if today.month > 1 else 12
+            pmy = today.year if today.month > 1 else today.year - 1
+            b_start = date(pmy, pm, 1)
+            b_end = date(pmy, pm, _calendar.monthrange(pmy, pm)[1])
+
+        elif preset == "quarter":
+            q = (today.month - 1) // 3          # 0-based: 0=Q1, 1=Q2, 2=Q3, 3=Q4
+            a_start = date(today.year, q * 3 + 1, 1)
+            a_end = today
+            if q == 0:
+                b_start = date(today.year - 1, 10, 1)
+                b_end = date(today.year - 1, 12, 31)
+            else:
+                ps = (q - 1) * 3 + 1
+                pe = ps + 2
+                b_start = date(today.year, ps, 1)
+                b_end = date(today.year, pe, _calendar.monthrange(today.year, pe)[1])
+
+        elif preset == "halfyear":
+            if today.month <= 6:
+                a_start = date(today.year, 1, 1)
+                b_start = date(today.year - 1, 7, 1)
+                b_end = date(today.year - 1, 12, 31)
+            else:
+                a_start = date(today.year, 7, 1)
+                b_start = date(today.year, 1, 1)
+                b_end = date(today.year, 6, 30)
+            a_end = today
+
+        elif preset == "year":
+            a_start = date(today.year, 1, 1)
+            a_end = today
+            b_start = date(today.year - 1, 1, 1)
+            b_end = date(today.year - 1, 12, 31)
+
+        else:
+            return
+
+        self._cmp_from_a_var.set(a_start.strftime(fmt))
+        self._cmp_to_a_var.set(a_end.strftime(fmt))
+        self._cmp_from_b_var.set(b_start.strftime(fmt))
+        self._cmp_to_b_var.set(b_end.strftime(fmt))
+        self._refresh_compare()
 
     # ── Drawing ───────────────────────────────────────────────────────────────
 
