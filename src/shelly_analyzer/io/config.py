@@ -160,6 +160,11 @@ class UiConfig:
     # Which device page is selected in the desktop UI (0-based). Each page shows up to 2 devices.
     device_page_index: int = 0
 
+    # Selected view type: "page" | "group" | "all"
+    selected_view_type: str = "page"
+    # Group name when selected_view_type == "group"
+    selected_view_group: str = ""
+
 
 
 
@@ -314,9 +319,17 @@ class AnomalyConfig:
 
 
 @dataclass(frozen=True)
+class DeviceGroup:
+    """A logical group of devices (e.g. 'Apartment 1', 'Workshop')."""
+    name: str
+    device_keys: List[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class AppConfig:
     version: str = __version__
     devices: List[DeviceConfig] = field(default_factory=list)
+    groups: List[DeviceGroup] = field(default_factory=list)
 
     download: DownloadConfig = field(default_factory=DownloadConfig)
     csv_pack: CsvPackConfig = field(default_factory=CsvPackConfig)
@@ -329,6 +342,7 @@ class AppConfig:
     solar: SolarConfig = field(default_factory=SolarConfig)
     tou: TouConfig = field(default_factory=TouConfig)
     anomaly: AnomalyConfig = field(default_factory=AnomalyConfig)
+    groups: List[DeviceGroup] = field(default_factory=list)
 
 
 def default_config_path(project_root: Optional[Path] = None) -> Path:
@@ -466,6 +480,8 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         live_smoothing_enabled=bool(ui_raw.get("live_smoothing_enabled", UiConfig.live_smoothing_enabled)),
         live_smoothing_seconds=_coerce_int(ui_raw.get("live_smoothing_seconds", UiConfig.live_smoothing_seconds), UiConfig.live_smoothing_seconds),
         device_page_index=_coerce_int(ui_raw.get("device_page_index", UiConfig.device_page_index), UiConfig.device_page_index),
+        selected_view_type=str(ui_raw.get("selected_view_type", UiConfig.selected_view_type) or "page"),
+        selected_view_group=str(ui_raw.get("selected_view_group", UiConfig.selected_view_group) or ""),
         autosync_enabled=bool(ui_raw.get("autosync_enabled", UiConfig.autosync_enabled)),
         autosync_interval_hours=_coerce_int(ui_raw.get("autosync_interval_hours", UiConfig.autosync_interval_hours), UiConfig.autosync_interval_hours),
         autosync_mode=str(ui_raw.get("autosync_mode", UiConfig.autosync_mode)),
@@ -642,6 +658,23 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         max_history=_coerce_int(anomaly_raw.get("max_history", AnomalyConfig.max_history), AnomalyConfig.max_history),
     )
 
+    groups: List[DeviceGroup] = []
+    groups_raw = raw.get("groups", [])
+    if isinstance(groups_raw, list):
+        for g in groups_raw:
+            if not isinstance(g, dict):
+                continue
+            gname = str(g.get("name", "") or "").strip()
+            if not gname:
+                continue
+            gkeys = g.get("device_keys", [])
+            if not isinstance(gkeys, list):
+                gkeys = []
+            groups.append(DeviceGroup(
+                name=gname,
+                device_keys=[str(k) for k in gkeys if k],
+            ))
+
     cfg = AppConfig(
         version=str(raw.get("version", __version__)),
         devices=devices,
@@ -656,6 +689,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         solar=solar,
         tou=tou,
         anomaly=anomaly,
+        groups=groups,
     )
 
     # Write back migrated schema (and missing blocks) if needed
@@ -726,6 +760,8 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "live_window_minutes": cfg.ui.live_window_minutes,
             "live_retention_minutes": getattr(cfg.ui, "live_retention_minutes", 120),
             "device_page_index": getattr(cfg.ui, "device_page_index", 0),
+            "selected_view_type": getattr(cfg.ui, "selected_view_type", "page"),
+            "selected_view_group": getattr(cfg.ui, "selected_view_group", ""),
             "autosync_enabled": cfg.ui.autosync_enabled,
             "autosync_interval_hours": cfg.ui.autosync_interval_hours,
             "autosync_mode": cfg.ui.autosync_mode,
@@ -853,6 +889,13 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "payment_terms_days": cfg.billing.payment_terms_days,
             "invoice_logo_path": cfg.billing.invoice_logo_path,
         },
+        "groups": [
+            {
+                "name": g.name,
+                "device_keys": list(g.device_keys),
+            }
+            for g in (getattr(cfg, "groups", []) or [])
+        ],
     }
     path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return path

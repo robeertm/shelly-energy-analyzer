@@ -1,5 +1,20 @@
 # Changelog
 
+## 7.9.0 - 2026-03-20
+### Added
+- **Device Groups & Aggregation.** Multiple Shelly devices can now be combined into logical groups (e.g. "Apartment 1", "Workshop", "Whole House") and displayed as a single aggregated unit.
+  - **DeviceGroup** dataclass persisted under the `groups` key in `config.json`:
+    - `name` – display name of the group
+    - `device_keys` – list of device keys belonging to this group
+  - **Dropdown extension:** The "View" dropdown in the top bar now shows three categories: individual device pages (existing), named groups (prefix `📦`), and a "Total" entry (`🔢 Gesamt / Total`) that aggregates all devices.
+  - **UiConfig additions:** Two new fields track the selected view — `selected_view_type` ("page" | "group" | "all") and `selected_view_group` (group name).
+  - **Costs tab aggregation:** When a group or "Total" is selected, the costs tab displays an additional aggregate section at the top showing summed kWh, cost (€), CO₂, TOU breakdown, projected month cost, and comparison vs. previous month for all devices in the selection.
+  - **Plots / Live tab compatibility:** When a group is selected, the plots and live tabs show the first two devices of the group (consistent with the existing 2-device display limit). The costs tab always aggregates all member devices.
+  - **Settings → Groups tab (new subtab):** A dedicated scrollable "Groups" editor in the Settings tab allows creating, editing, and deleting groups. Each group has a name field and per-device checkboxes. Changes are saved to `config.json` and the dropdown is updated immediately.
+  - **Telegram summary groups section:** When groups are configured, the Telegram daily/monthly summary now appends a "📦 Gruppen" section listing each group's total kWh, cost, and share of overall consumption.
+  - **Full i18n support** in all 9 languages (de, en, es, fr, pt, it, pl, cs, ru): settings tab name, editor labels (name, devices, add, delete, save), costs aggregate title, and total label.
+  - **Backward compatible:** `groups` array is written back to `config.json` on first use; existing configs without this key continue to work with no migration needed.
+
 ## 7.8.0 - 2026-03-20
 ### Added
 - **Anomaly Detection (🔍 Anomalies tab).** A new `AnomalyMixin` adds automatic detection of unusual consumption patterns using rolling mean + standard deviation statistics.
