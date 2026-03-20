@@ -67,6 +67,7 @@ from shelly_analyzer.services.export import (
     InvoiceLine,
 )
 from shelly_analyzer.services.live import LivePoller, MultiLivePoller, DemoMultiLivePoller, LiveSample
+from shelly_analyzer.services.appliance_detector import identify_appliance as _identify_appliance
 from shelly_analyzer.services.sync import sync_all
 from shelly_analyzer.services.webdash import LivePoint, LiveStateStore, LiveWebDashboard
 from shelly_analyzer.services.discovery import probe_device
@@ -1377,6 +1378,24 @@ class LiveWebMixin:
                                     vars_['line2'].set(line2)
                                 if 'line3' in vars_:
                                     vars_['line3'].set(line3)
+                                # Appliance detector
+                                try:
+                                    _appl_var = vars_.get('appliance')
+                                    if _appl_var is not None:
+                                        _matches = _identify_appliance(pw)[:3]
+                                        if _matches:
+                                            _title = self.t('live.appliance.title')
+                                            _parts = []
+                                            for _sig, _conf in _matches:
+                                                _pct = int(_conf * 100)
+                                                _dot = "🟢" if _pct >= 70 else ("🟡" if _pct >= 40 else "🔴")
+                                                _name = self.t(f'appliance.{_sig.id}.name')
+                                                _parts.append(f"{_sig.icon} {_name} {_dot} {_pct}%")
+                                            _appl_var.set(f"{_title}: " + "  ·  ".join(_parts))
+                                        else:
+                                            _appl_var.set("")
+                                except Exception:
+                                    pass
                             except Exception:
                                 pass
                     except Exception:
