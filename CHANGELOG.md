@@ -1,5 +1,10 @@
 # Changelog
 
+## 7.4.0 - 2026-03-20
+### Added
+- **"Send now" buttons for email reports.** Daily and monthly email report panels each have a new "Send now" button to trigger an immediate send without waiting for the scheduled time, mirroring the Telegram daily/monthly send-now buttons.
+- **Full i18n for email settings in all 9 languages.** Previously only German and English were translated. Spanish (es), French (fr), Portuguese (pt), Italian (it), Polish (pl), Czech (cs), and Russian (ru) translations are now complete for all email settings, including the new send-now buttons.
+
 ## 7.3.0 - 2026-03-20
 ### Added
 - **Automatic E-Mail Reports.** A new SMTP-based e-mail system sends scheduled energy reports as PDF attachments — fully independent of Telegram and webhooks.

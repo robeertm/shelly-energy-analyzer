@@ -4926,6 +4926,11 @@ class CoreMixin:
             ).grid(row=3, column=1, padx=(12, 4), pady=(0, 6), sticky="w", columnspan=2)
             ttk.Label(em_box, text=self.t("settings.email.daily_summary_time") + ":").grid(row=3, column=3, padx=(4, 4), pady=(0, 6), sticky="e")
             ttk.Entry(em_box, textvariable=self._em_daily_time_var, width=7).grid(row=3, column=4, padx=(0, 6), pady=(0, 6), sticky="w")
+            ttk.Button(
+                em_box,
+                text=self.t("settings.email.daily_send_now"),
+                command=self._email_send_daily_now,
+            ).grid(row=3, column=5, padx=(4, 8), pady=(0, 6), sticky="e")
 
             ttk.Checkbutton(
                 em_box,
@@ -4934,6 +4939,11 @@ class CoreMixin:
             ).grid(row=4, column=1, padx=(12, 4), pady=(0, 6), sticky="w", columnspan=2)
             ttk.Label(em_box, text=self.t("settings.email.monthly_summary_time") + ":").grid(row=4, column=3, padx=(4, 4), pady=(0, 6), sticky="e")
             ttk.Entry(em_box, textvariable=self._em_monthly_time_var, width=7).grid(row=4, column=4, padx=(0, 6), pady=(0, 6), sticky="w")
+            ttk.Button(
+                em_box,
+                text=self.t("settings.email.monthly_send_now"),
+                command=self._email_send_monthly_now,
+            ).grid(row=4, column=5, padx=(4, 8), pady=(0, 6), sticky="e")
 
             def _em_send_test() -> None:
                 try:
@@ -8994,6 +9004,127 @@ class CoreMixin:
                                 logging.getLogger(__name__).warning("Email monthly summary failed: %s", err)
                 except Exception as e:
                     logging.getLogger(__name__).warning("Email monthly summary tick error: %s", e)
+
+    def _email_send_daily_now(self) -> None:
+            """Send the previous calendar day email report immediately (no auto-mark-as-sent)."""
+            if not bool(getattr(self.cfg.ui, "email_enabled", False)):
+                messagebox.showwarning(
+                    self.t("settings.email.title"),
+                    self.t("settings.email.enabled") + ": OFF",
+                )
+                return
+            try:
+                self._save_settings()
+            except Exception:
+                pass
+            def _worker():
+                now = datetime.now()
+                yesterday = now.date() - timedelta(days=1)
+                start_dt = datetime.combine(yesterday, datetime.min.time())
+                end_dt = datetime.combine(now.date(), datetime.min.time())
+                try:
+                    summary_text = self._build_telegram_summary("daily", start_dt, end_dt)
+                    totals = self._build_report_totals(start_dt, end_dt)
+                    from shelly_analyzer.services.export import export_pdf_summary
+                    import tempfile
+                    lang = str(getattr(self, "lang", "de") or "de")
+                    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+                    pdf_path = Path(tmp.name)
+                    tmp.close()
+                    export_pdf_summary(
+                        title=f"Daily Report {yesterday.strftime('%Y-%m-%d')}",
+                        period_label=f"{start_dt.strftime('%Y-%m-%d')} – {end_dt.strftime('%Y-%m-%d')}",
+                        totals=totals or [],
+                        out_path=pdf_path,
+                        lang=lang,
+                    )
+                    attachments = [str(pdf_path)] if pdf_path.exists() else []
+                    ok, err = self._email_send_sync(
+                        subject=f"Shelly Energy Analyzer – Daily Report {yesterday.strftime('%Y-%m-%d')}",
+                        body=summary_text,
+                        attachments=attachments,
+                    )
+                    try:
+                        pdf_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                except Exception as e:
+                    ok, err = False, str(e)
+                def _done():
+                    if ok:
+                        messagebox.showinfo(self.t("settings.email.title"), "OK")
+                    else:
+                        messagebox.showwarning(self.t("settings.email.title"), f"Fehler: {err or 'unbekannt'}")
+                try:
+                    self.root.after(0, _done)
+                except Exception:
+                    _done()
+            try:
+                threading.Thread(target=_worker, daemon=True).start()
+            except Exception as e:
+                messagebox.showwarning(self.t("settings.email.title"), f"Fehler: {e}")
+
+    def _email_send_monthly_now(self) -> None:
+            """Send the previous calendar month email report immediately (no auto-mark-as-sent)."""
+            if not bool(getattr(self.cfg.ui, "email_enabled", False)):
+                messagebox.showwarning(
+                    self.t("settings.email.title"),
+                    self.t("settings.email.enabled") + ": OFF",
+                )
+                return
+            try:
+                self._save_settings()
+            except Exception:
+                pass
+            def _worker():
+                now = datetime.now()
+                if now.month == 1:
+                    py, pm = now.year - 1, 12
+                else:
+                    py, pm = now.year, now.month - 1
+                start_dt = datetime(py, pm, 1, 0, 0, 0)
+                end_dt = datetime(now.year, now.month, 1, 0, 0, 0)
+                try:
+                    summary_text = self._build_telegram_summary("monthly", start_dt, end_dt)
+                    totals = self._build_report_totals(start_dt, end_dt)
+                    from shelly_analyzer.services.export import export_pdf_summary
+                    import tempfile
+                    lang = str(getattr(self, "lang", "de") or "de")
+                    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+                    pdf_path = Path(tmp.name)
+                    tmp.close()
+                    export_pdf_summary(
+                        title=f"Monthly Report {start_dt.strftime('%Y-%m')}",
+                        period_label=f"{start_dt.strftime('%Y-%m-%d')} – {end_dt.strftime('%Y-%m-%d')}",
+                        totals=totals or [],
+                        out_path=pdf_path,
+                        lang=lang,
+                    )
+                    attachments = [str(pdf_path)] if pdf_path.exists() else []
+                    ok, err = self._email_send_sync(
+                        subject=f"Shelly Energy Analyzer – Monthly Report {start_dt.strftime('%Y-%m')}",
+                        body=summary_text,
+                        attachments=attachments,
+                    )
+                    try:
+                        pdf_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                except Exception as e:
+                    ok, err = False, str(e)
+                def _done():
+                    if ok:
+                        messagebox.showinfo(self.t("settings.email.title"), "OK")
+                    else:
+                        messagebox.showwarning(self.t("settings.email.title"), f"Fehler: {err or 'unbekannt'}")
+                try:
+                    self.root.after(0, _done)
+                except Exception:
+                    _done()
+            try:
+                threading.Thread(target=_worker, daemon=True).start()
+            except Exception as e:
+                messagebox.showwarning(self.t("settings.email.title"), f"Fehler: {e}")
 
     def _build_report_totals(self, start_dt, end_dt):
             """Build ReportTotals list for PDF export from DB data."""
