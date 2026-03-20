@@ -4596,6 +4596,7 @@ class CoreMixin:
                             tk.BooleanVar(value=bool(getattr(r, "action_beep", True))),
                             tk.BooleanVar(value=bool(getattr(r, "action_telegram", False))),
                             tk.BooleanVar(value=bool(getattr(r, "action_webhook", False))),
+                            tk.BooleanVar(value=bool(getattr(r, "action_email", False))),
                             tk.StringVar(value=str(getattr(r, "message", ""))),
                         )
                     )
@@ -4859,6 +4860,119 @@ class CoreMixin:
             except Exception:
                 pass
 
+            # --- E-Mail settings ---
+            em_box = ttk.LabelFrame(alerts_wrap, text=self.t("settings.email.title"))
+            em_box.pack(fill="x", padx=8, pady=(6, 4))
+
+            if not hasattr(self, "_em_enabled_var"):
+                self._em_enabled_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "email_enabled", False)))
+                self._em_smtp_server_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_smtp_server", "") or ""))
+                self._em_smtp_port_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_smtp_port", 587)))
+                self._em_smtp_user_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_smtp_user", "") or ""))
+                self._em_smtp_pass_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_smtp_password", "") or ""))
+                self._em_from_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_from_address", "") or ""))
+                self._em_use_tls_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "email_use_tls", True)))
+                self._em_recipients_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_recipients", "") or ""))
+                self._em_alarm_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "email_alarm_enabled", True)))
+                self._em_daily_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "email_daily_summary_enabled", False)))
+                self._em_daily_time_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_daily_summary_time", "00:00") or "00:00"))
+                self._em_monthly_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "email_monthly_summary_enabled", False)))
+                self._em_monthly_time_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_monthly_summary_time", "00:00") or "00:00"))
+
+            # Row 0: Enable + SMTP server + port + TLS
+            ttk.Checkbutton(
+                em_box,
+                text=self.t("settings.email.enabled"),
+                variable=self._em_enabled_var,
+            ).grid(row=0, column=0, padx=8, pady=6, sticky="w")
+
+            ttk.Label(em_box, text=self.t("settings.email.smtp_server") + ":").grid(row=0, column=1, padx=(12, 4), pady=6, sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_smtp_server_var, width=30).grid(row=0, column=2, padx=(0, 6), pady=6, sticky="we")
+
+            ttk.Label(em_box, text=self.t("settings.email.smtp_port") + ":").grid(row=0, column=3, padx=(4, 4), pady=6, sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_smtp_port_var, width=6).grid(row=0, column=4, padx=(0, 6), pady=6, sticky="w")
+
+            ttk.Checkbutton(
+                em_box,
+                text=self.t("settings.email.use_tls"),
+                variable=self._em_use_tls_var,
+            ).grid(row=0, column=5, padx=8, pady=6, sticky="w")
+
+            # Row 1: User + Password + From
+            ttk.Label(em_box, text=self.t("settings.email.smtp_user") + ":").grid(row=1, column=1, padx=(12, 4), pady=(0, 6), sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_smtp_user_var, width=24).grid(row=1, column=2, padx=(0, 6), pady=(0, 6), sticky="we")
+
+            ttk.Label(em_box, text=self.t("settings.email.smtp_password") + ":").grid(row=1, column=3, padx=(4, 4), pady=(0, 6), sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_smtp_pass_var, width=18, show="*").grid(row=1, column=4, padx=(0, 6), pady=(0, 6), sticky="we", columnspan=2)
+
+            # Row 2: From address + Recipients
+            ttk.Label(em_box, text=self.t("settings.email.from_address") + ":").grid(row=2, column=1, padx=(12, 4), pady=(0, 6), sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_from_var, width=28).grid(row=2, column=2, padx=(0, 6), pady=(0, 6), sticky="we")
+
+            ttk.Label(em_box, text=self.t("settings.email.recipients") + ":").grid(row=2, column=3, padx=(4, 4), pady=(0, 6), sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_recipients_var, width=30).grid(row=2, column=4, padx=(0, 6), pady=(0, 6), sticky="we", columnspan=2)
+
+            # Row 3: Alarm + Daily + Monthly toggles + times + Test button
+            ttk.Checkbutton(
+                em_box,
+                text=self.t("settings.email.alarm_enabled"),
+                variable=self._em_alarm_var,
+            ).grid(row=3, column=0, padx=8, pady=(0, 6), sticky="w")
+
+            ttk.Checkbutton(
+                em_box,
+                text=self.t("settings.email.daily_summary_enabled"),
+                variable=self._em_daily_var,
+            ).grid(row=3, column=1, padx=(12, 4), pady=(0, 6), sticky="w", columnspan=2)
+            ttk.Label(em_box, text=self.t("settings.email.daily_summary_time") + ":").grid(row=3, column=3, padx=(4, 4), pady=(0, 6), sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_daily_time_var, width=7).grid(row=3, column=4, padx=(0, 6), pady=(0, 6), sticky="w")
+
+            ttk.Checkbutton(
+                em_box,
+                text=self.t("settings.email.monthly_summary_enabled"),
+                variable=self._em_monthly_var,
+            ).grid(row=4, column=1, padx=(12, 4), pady=(0, 6), sticky="w", columnspan=2)
+            ttk.Label(em_box, text=self.t("settings.email.monthly_summary_time") + ":").grid(row=4, column=3, padx=(4, 4), pady=(0, 6), sticky="e")
+            ttk.Entry(em_box, textvariable=self._em_monthly_time_var, width=7).grid(row=4, column=4, padx=(0, 6), pady=(0, 6), sticky="w")
+
+            def _em_send_test() -> None:
+                try:
+                    self._save_settings()
+                except Exception:
+                    pass
+                def _worker():
+                    ok, err = self._email_send_sync(
+                        subject="Shelly Energy Analyzer – E-Mail Test",
+                        body="Dies ist eine Test-E-Mail vom Shelly Energy Analyzer.\n\nIf you received this, SMTP is configured correctly.",
+                    )
+                    def _done():
+                        if ok:
+                            messagebox.showinfo(self.t("settings.email.title"), "OK – E-Mail gesendet")
+                        else:
+                            messagebox.showwarning(self.t("settings.email.title"), f"Fehler: {err or 'unbekannt'}")
+                    try:
+                        self.root.after(0, _done)
+                    except Exception:
+                        _done()
+                try:
+                    threading.Thread(target=_worker, daemon=True).start()
+                except Exception as _e:
+                    messagebox.showwarning(self.t("settings.email.title"), f"Fehler: {_e}")
+
+            ttk.Button(em_box, text=self.t("settings.email.test"), command=_em_send_test).grid(
+                row=3, column=5, padx=8, pady=(0, 6), sticky="e"
+            )
+
+            ttk.Label(em_box, text=self.t("settings.email.hint"), foreground="gray").grid(
+                row=5, column=0, columnspan=6, padx=8, pady=(0, 6), sticky="w"
+            )
+
+            try:
+                em_box.columnconfigure(2, weight=1)
+                em_box.columnconfigure(4, weight=1)
+            except Exception:
+                pass
+
     # Alerts table
             atable = ttk.Frame(alerts_wrap)
             atable.pack(fill="x")
@@ -4875,6 +4989,7 @@ class CoreMixin:
                 ("beep", self.t('settings.alerts.col_beep'), 6),
                 ("tg", self.t('settings.alerts.col_telegram'), 8),
                 ("wh", self.t('settings.alerts.col_webhook'), 8),
+                ("em", self.t('settings.alerts.col_email'), 8),
                 ("msg", self.t('settings.alerts.col_message'), 24),
                 ("del", "", 3),
             ]
@@ -4939,7 +5054,7 @@ class CoreMixin:
             ]
             _op_choices = [">", "<", ">=", "<=", "="]
             for i, row in enumerate(getattr(self, "_alert_vars", []), start=1):
-                (v_id, v_en, v_dev, v_met, v_op, v_thr, v_dur, v_cd, v_pop, v_beep, v_tg, v_wh, v_msg) = row
+                (v_id, v_en, v_dev, v_met, v_op, v_thr, v_dur, v_cd, v_pop, v_beep, v_tg, v_wh, v_em, v_msg) = row
                 # Normalize device selection to display value
                 try:
                     cur = (v_dev.get() or '').strip()
@@ -4985,8 +5100,11 @@ class CoreMixin:
                 w_wh = ttk.Checkbutton(atable, variable=v_wh)
                 w_wh.grid(row=i, column=11, padx=(0, 10), pady=2, sticky="w")
 
+                w_em = ttk.Checkbutton(atable, variable=v_em)
+                w_em.grid(row=i, column=12, padx=(0, 10), pady=2, sticky="w")
+
                 w_msg = ttk.Entry(atable, textvariable=v_msg, width=24)
-                w_msg.grid(row=i, column=12, padx=(0, 6), pady=2, sticky="we")
+                w_msg.grid(row=i, column=13, padx=(0, 6), pady=2, sticky="we")
 
                 # Per-row delete button (allows removing rules in the middle)
                 def _del_row(_idx=i-1, _v_en=v_en, _v_id=v_id):
@@ -5001,10 +5119,10 @@ class CoreMixin:
                         pass
                     self._delete_alert_row(_idx)
 
-                ttk.Button(atable, text="✖", width=2, command=_del_row).grid(row=i, column=13, padx=(0, 0), pady=2, sticky="w")
+                ttk.Button(atable, text="✖", width=2, command=_del_row).grid(row=i, column=14, padx=(0, 0), pady=2, sticky="w")
 
                 # Lock editing for active rules (enabled=True). Use default-args to avoid late-binding bugs.
-                def _toggle_row_lock(*_a, v_en=v_en, w_id=w_id, w_dev=w_dev, w_met=w_met, w_op=w_op, w_thr=w_thr, w_dur=w_dur, w_cd=w_cd, w_pop=w_pop, w_beep=w_beep, w_tg=w_tg, w_wh=w_wh, w_msg=w_msg):
+                def _toggle_row_lock(*_a, v_en=v_en, w_id=w_id, w_dev=w_dev, w_met=w_met, w_op=w_op, w_thr=w_thr, w_dur=w_dur, w_cd=w_cd, w_pop=w_pop, w_beep=w_beep, w_tg=w_tg, w_wh=w_wh, w_em=w_em, w_msg=w_msg):
                     locked = bool(v_en.get())
                     if locked:
                         try:
@@ -5019,6 +5137,7 @@ class CoreMixin:
                             w_beep.configure(state="disabled")
                             w_tg.configure(state="disabled")
                             w_wh.configure(state="disabled")
+                            w_em.configure(state="disabled")
                             w_msg.configure(state="disabled")
                         except Exception:
                             pass
@@ -5035,6 +5154,7 @@ class CoreMixin:
                             w_beep.configure(state="normal")
                             w_tg.configure(state="normal")
                             w_wh.configure(state="normal")
+                            w_em.configure(state="normal")
                             w_msg.configure(state="normal")
                         except Exception:
                             pass
@@ -5997,6 +6117,19 @@ class CoreMixin:
     webhook_alarm_enabled=bool(getattr(self, "_wh_alarm_var", tk.BooleanVar(value=True)).get()),
     webhook_daily_summary_enabled=bool(getattr(self, "_wh_daily_var", tk.BooleanVar(value=False)).get()),
     webhook_monthly_summary_enabled=bool(getattr(self, "_wh_monthly_var", tk.BooleanVar(value=False)).get()),
+    email_enabled=bool(getattr(self, "_em_enabled_var", tk.BooleanVar(value=False)).get()),
+    email_smtp_server=str(getattr(self, "_em_smtp_server_var", tk.StringVar(value="")).get() or ""),
+    email_smtp_port=int(str(getattr(self, "_em_smtp_port_var", tk.StringVar(value="587")).get() or "587").strip() or "587"),
+    email_smtp_user=str(getattr(self, "_em_smtp_user_var", tk.StringVar(value="")).get() or ""),
+    email_smtp_password=str(getattr(self, "_em_smtp_pass_var", tk.StringVar(value="")).get() or ""),
+    email_from_address=str(getattr(self, "_em_from_var", tk.StringVar(value="")).get() or ""),
+    email_use_tls=bool(getattr(self, "_em_use_tls_var", tk.BooleanVar(value=True)).get()),
+    email_recipients=str(getattr(self, "_em_recipients_var", tk.StringVar(value="")).get() or ""),
+    email_alarm_enabled=bool(getattr(self, "_em_alarm_var", tk.BooleanVar(value=True)).get()),
+    email_daily_summary_enabled=bool(getattr(self, "_em_daily_var", tk.BooleanVar(value=False)).get()),
+    email_monthly_summary_enabled=bool(getattr(self, "_em_monthly_var", tk.BooleanVar(value=False)).get()),
+    email_daily_summary_time=str(getattr(self, "_em_daily_time_var", tk.StringVar(value="00:00")).get() or "00:00"),
+    email_monthly_summary_time=str(getattr(self, "_em_monthly_time_var", tk.StringVar(value="00:00")).get() or "00:00"),
 
                 autosync_enabled=bool(self.set_autosync_enabled_var.get()),
                 autosync_interval_hours=int(self.set_autosync_interval_var.get() or 12),
@@ -6042,7 +6175,7 @@ class CoreMixin:
             alerts: List[AlertRule] = []
             try:
                 for row in getattr(self, "_alert_vars", []) or []:
-                    (v_id, v_en, v_dev, v_met, v_op, v_thr, v_dur, v_cd, v_pop, v_beep, v_tg, v_wh, v_msg) = row
+                    (v_id, v_en, v_dev, v_met, v_op, v_thr, v_dur, v_cd, v_pop, v_beep, v_tg, v_wh, v_em, v_msg) = row
                     rid = (v_id.get() or "").strip() or f"rule{len(alerts)+1}"
                     dev_disp = (v_dev.get() or "").strip()
                     try:
@@ -6081,6 +6214,7 @@ class CoreMixin:
                             action_beep=bool(v_beep.get()),
                             action_telegram=bool(v_tg.get()),
                             action_webhook=bool(v_wh.get()),
+                            action_email=bool(v_em.get()),
                             message=str(v_msg.get() or ""),
                         )
                     )
@@ -6299,6 +6433,11 @@ class CoreMixin:
             # Scheduled Webhook summaries
             try:
                 self._webhook_summary_tick()
+            except Exception:
+                pass
+            # Scheduled E-Mail summaries
+            try:
+                self._email_summary_tick()
             except Exception:
                 pass
             self.after(500, self._drain_queues_loop)
@@ -6583,6 +6722,7 @@ class CoreMixin:
                     tk.StringVar(value="120"),
                     tk.BooleanVar(value=True),
                     tk.BooleanVar(value=True),
+                    tk.BooleanVar(value=False),
                     tk.BooleanVar(value=False),
                     tk.BooleanVar(value=False),
                     tk.StringVar(value=""),
@@ -7985,6 +8125,26 @@ class CoreMixin:
                         except Exception as e:
                             print(f"[alerts][webhook] error: {e}")
 
+                    if bool(getattr(r, "action_email", False)):
+                        try:
+                            if bool(getattr(self.cfg.ui, "email_alarm_enabled", True)):
+                                em_subject = f"[Shelly Alarm] {metric} {op} {thr} – {devname}"
+                                em_body = (
+                                    f"Alarm ausgelöst: {msg}\n\n"
+                                    f"Gerät: {devname} ({str(getattr(s, 'device_key', '') or devk)})\n"
+                                    f"Metrik: {metric} {op} {thr}\n"
+                                    f"Wert: {round(val, 4)}\n"
+                                    f"Zeit: {datetime.fromtimestamp(now_ts).isoformat()}\n"
+                                    f"Quelle: shelly-energy-analyzer"
+                                )
+                                def _em_send(subj=em_subject, body=em_body):
+                                    ok, err = self._email_send_sync(subject=subj, body=body)
+                                    if not ok:
+                                        print(f"[alerts][email] send failed: {err}")
+                                threading.Thread(target=_em_send, daemon=True).start()
+                        except Exception as e:
+                            print(f"[alerts][email] error: {e}")
+
                     if bool(getattr(r, "action_beep", True)):
                         try:
                             self.bell()
@@ -8600,6 +8760,294 @@ class CoreMixin:
                                 logging.getLogger(__name__).warning("Webhook monthly summary failed: %s", err)
                 except Exception as e:
                     logging.getLogger(__name__).warning("Webhook monthly summary tick error: %s", e)
+
+    def _email_send_sync(self, subject: str, body: str, attachments: list | None = None) -> tuple[bool, str]:
+            """Send an e-mail via SMTP and return (ok, error_message)."""
+            try:
+                if not bool(getattr(self.cfg.ui, "email_enabled", False)):
+                    return False, "E-Mail ist deaktiviert"
+                server = str(getattr(self.cfg.ui, "email_smtp_server", "") or "").strip()
+                if not server:
+                    return False, "SMTP-Server fehlt"
+                port = int(getattr(self.cfg.ui, "email_smtp_port", 587))
+                user = str(getattr(self.cfg.ui, "email_smtp_user", "") or "").strip()
+                password = str(getattr(self.cfg.ui, "email_smtp_password", "") or "").strip()
+                from_addr = str(getattr(self.cfg.ui, "email_from_address", "") or "").strip()
+                if not from_addr:
+                    from_addr = user  # fallback
+                if not from_addr:
+                    return False, "Absender-Adresse fehlt"
+                recipients_str = str(getattr(self.cfg.ui, "email_recipients", "") or "").strip()
+                if not recipients_str:
+                    return False, "Empfänger fehlt"
+                recipients = [a.strip() for a in recipients_str.split(",") if a.strip()]
+                if not recipients:
+                    return False, "Empfänger fehlt"
+                use_tls = bool(getattr(self.cfg.ui, "email_use_tls", True))
+            except Exception as e:
+                return False, str(e)
+
+            try:
+                import smtplib
+                import ssl
+                from email.mime.multipart import MIMEMultipart
+                from email.mime.text import MIMEText
+                from email.mime.base import MIMEBase
+                from email import encoders
+
+                msg = MIMEMultipart()
+                msg["From"] = from_addr
+                msg["To"] = ", ".join(recipients)
+                msg["Subject"] = subject
+                msg.attach(MIMEText(body, "plain", "utf-8"))
+
+                for att_path in (attachments or []):
+                    try:
+                        from pathlib import Path as _P
+                        p = _P(att_path)
+                        if p.exists() and p.is_file():
+                            part = MIMEBase("application", "octet-stream")
+                            part.set_payload(p.read_bytes())
+                            encoders.encode_base64(part)
+                            part.add_header("Content-Disposition", f'attachment; filename="{p.name}"')
+                            msg.attach(part)
+                    except Exception:
+                        pass
+
+                if use_tls:
+                    ctx = ssl.create_default_context()
+                    if port == 465:
+                        # SSL/TLS
+                        with smtplib.SMTP_SSL(server, port, context=ctx, timeout=15) as smtp:
+                            if user and password:
+                                smtp.login(user, password)
+                            smtp.sendmail(from_addr, recipients, msg.as_string())
+                    else:
+                        # STARTTLS (port 587 etc.)
+                        with smtplib.SMTP(server, port, timeout=15) as smtp:
+                            smtp.ehlo()
+                            smtp.starttls(context=ctx)
+                            smtp.ehlo()
+                            if user and password:
+                                smtp.login(user, password)
+                            smtp.sendmail(from_addr, recipients, msg.as_string())
+                else:
+                    with smtplib.SMTP(server, port, timeout=15) as smtp:
+                        smtp.ehlo()
+                        if user and password:
+                            smtp.login(user, password)
+                        smtp.sendmail(from_addr, recipients, msg.as_string())
+
+                return True, ""
+            except Exception as e:
+                return False, str(e)
+
+    def _email_summary_tick(self) -> None:
+            """Send scheduled daily/monthly e-mail summaries with PDF attachments."""
+            em_daily = bool(getattr(self.cfg.ui, "email_daily_summary_enabled", False))
+            em_monthly = bool(getattr(self.cfg.ui, "email_monthly_summary_enabled", False))
+            if not bool(getattr(self.cfg.ui, "email_enabled", False)):
+                return
+            if not em_daily and not em_monthly:
+                return
+
+            try:
+                base_dir = getattr(getattr(self, "storage", None), "base_dir", None) or "."
+                p_state = Path(base_dir) / "data" / "email_summary_state.json"
+                p_state.parent.mkdir(parents=True, exist_ok=True)
+                if not hasattr(self, "_em_summary_state"):
+                    try:
+                        self._em_summary_state = json.loads(p_state.read_text(encoding="utf-8")) if p_state.exists() else {}
+                    except Exception:
+                        self._em_summary_state = {}
+                state = self._em_summary_state
+            except Exception:
+                return
+
+            def _st_get(k: str, default: str = "") -> str:
+                try:
+                    return str(state.get(k, default) or default)
+                except Exception:
+                    return default
+
+            def _st_set(k: str, v: str) -> None:
+                try:
+                    state[k] = v
+                    p_state.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                except Exception:
+                    pass
+
+            now = datetime.now()
+            now_ts = int(time.time())
+            lang = str(getattr(self.cfg.ui, "language", "de") or "de")
+
+            # --- Daily ---
+            if em_daily:
+                try:
+                    hh, mm = self._parse_hhmm(str(getattr(self.cfg.ui, "email_daily_summary_time", "00:00") or "00:00"))
+                    due = datetime.combine(now.date(), datetime.min.time()).replace(hour=hh, minute=mm)
+                    key = f"{due.strftime('%Y-%m-%d')}_{hh:02d}{mm:02d}"
+                    grace_s = 7200  # 2h
+                    last = _st_get("daily_last", "")
+                    attempt_ts_str = _st_get("daily_attempt_ts", "0")
+                    try:
+                        attempt_ts = int(float(attempt_ts_str or 0))
+                    except Exception:
+                        attempt_ts = 0
+                    if now >= due and now <= (due + timedelta(seconds=grace_s)) and last != key:
+                        if not (attempt_ts and (now_ts - attempt_ts) < 60):
+                            _st_set("daily_attempt_ts", str(now_ts))
+                            try:
+                                from zoneinfo import ZoneInfo
+                                tz = ZoneInfo("Europe/Berlin")
+                                end_dt = datetime.now(tz)
+                                start_dt = end_dt - timedelta(hours=24)
+                                msg_text = self._build_telegram_summary("daily", start_dt, end_dt)
+
+                                # Generate PDF attachment
+                                pdf_path = None
+                                try:
+                                    from shelly_analyzer.services.export import export_pdf_summary, ReportTotals
+                                    tmp_dir = Path(base_dir) / "data" / "email_tmp"
+                                    tmp_dir.mkdir(parents=True, exist_ok=True)
+                                    pdf_path = tmp_dir / f"daily_report_{due.strftime('%Y-%m-%d')}.pdf"
+                                    totals = self._build_report_totals(start_dt, end_dt)
+                                    if totals:
+                                        export_pdf_summary(
+                                            title="Shelly Energy Analyzer – Daily Report",
+                                            period_label=f"{start_dt.strftime('%Y-%m-%d')} – {end_dt.strftime('%Y-%m-%d')}",
+                                            totals=totals,
+                                            out_path=pdf_path,
+                                            lang=lang,
+                                        )
+                                except Exception:
+                                    pdf_path = None
+
+                                attachments = [str(pdf_path)] if pdf_path and pdf_path.exists() else []
+                                ok, err = self._email_send_sync(
+                                    subject=f"Shelly Energy Analyzer – Daily Report {due.strftime('%Y-%m-%d')}",
+                                    body=msg_text,
+                                    attachments=attachments,
+                                )
+                            except Exception as e:
+                                ok, err = False, str(e)
+                            if ok:
+                                _st_set("daily_last", key)
+                            elif err:
+                                logging.getLogger(__name__).warning("Email daily summary failed: %s", err)
+                except Exception as e:
+                    logging.getLogger(__name__).warning("Email daily summary tick error: %s", e)
+
+            # --- Monthly ---
+            if em_monthly:
+                try:
+                    hh, mm = self._parse_hhmm(str(getattr(self.cfg.ui, "email_monthly_summary_time", "00:00") or "00:00"))
+                    now_m = now.replace(day=1, hour=hh, minute=mm, second=0, microsecond=0)
+                    key = f"{now_m.strftime('%Y-%m')}_{hh:02d}{mm:02d}"
+                    grace_s = 86400  # 24h
+                    last = _st_get("monthly_last", "")
+                    attempt_ts_str = _st_get("monthly_attempt_ts", "0")
+                    try:
+                        attempt_ts = int(float(attempt_ts_str or 0))
+                    except Exception:
+                        attempt_ts = 0
+                    if now >= now_m and now <= (now_m + timedelta(seconds=grace_s)) and last != key:
+                        if not (attempt_ts and (now_ts - attempt_ts) < 300):
+                            _st_set("monthly_attempt_ts", str(now_ts))
+                            try:
+                                from zoneinfo import ZoneInfo
+                                tz = ZoneInfo("Europe/Berlin")
+                                end_dt = datetime.now(tz)
+                                start_dt = end_dt - timedelta(days=30)
+                                msg_text = self._build_telegram_summary("monthly", start_dt, end_dt)
+
+                                # Generate PDF attachment
+                                pdf_path = None
+                                try:
+                                    from shelly_analyzer.services.export import export_pdf_summary, ReportTotals
+                                    tmp_dir = Path(base_dir) / "data" / "email_tmp"
+                                    tmp_dir.mkdir(parents=True, exist_ok=True)
+                                    pdf_path = tmp_dir / f"monthly_report_{now_m.strftime('%Y-%m')}.pdf"
+                                    totals = self._build_report_totals(start_dt, end_dt)
+                                    if totals:
+                                        export_pdf_summary(
+                                            title="Shelly Energy Analyzer – Monthly Report",
+                                            period_label=f"{start_dt.strftime('%Y-%m-%d')} – {end_dt.strftime('%Y-%m-%d')}",
+                                            totals=totals,
+                                            out_path=pdf_path,
+                                            lang=lang,
+                                        )
+                                except Exception:
+                                    pdf_path = None
+
+                                attachments = [str(pdf_path)] if pdf_path and pdf_path.exists() else []
+                                ok, err = self._email_send_sync(
+                                    subject=f"Shelly Energy Analyzer – Monthly Report {now_m.strftime('%Y-%m')}",
+                                    body=msg_text,
+                                    attachments=attachments,
+                                )
+                            except Exception as e:
+                                ok, err = False, str(e)
+                            if ok:
+                                _st_set("monthly_last", key)
+                            elif err:
+                                logging.getLogger(__name__).warning("Email monthly summary failed: %s", err)
+                except Exception as e:
+                    logging.getLogger(__name__).warning("Email monthly summary tick error: %s", e)
+
+    def _build_report_totals(self, start_dt, end_dt):
+            """Build ReportTotals list for PDF export from DB data."""
+            try:
+                from shelly_analyzer.services.export import ReportTotals
+                totals = []
+                db = getattr(self, "storage", None)
+                if db is None:
+                    return None
+                start_ts = int(start_dt.timestamp())
+                end_ts = int(end_dt.timestamp())
+                for dev in (self.cfg.devices or []):
+                    try:
+                        df = db.query_samples(dev.key, start_ts=start_ts, end_ts=end_ts)
+                        if df is None or df.empty:
+                            continue
+                        # Find power column
+                        pwr_col = None
+                        for c in ("total_act_power", "a_act_power", "power_w"):
+                            if c in df.columns:
+                                pwr_col = c
+                                break
+                        powers = df[pwr_col].dropna().astype(float).tolist() if pwr_col else []
+                        avg_w = sum(powers) / len(powers) if powers else 0.0
+                        max_w = max(powers) if powers else 0.0
+                        # Compute kWh from energy column or integrate power
+                        kwh = 0.0
+                        for c in ("total_act", "energy_wh"):
+                            if c in df.columns:
+                                vals = df[c].dropna()
+                                if not vals.empty:
+                                    kwh = (vals.max() - vals.min()) / 1000.0
+                                    break
+                        if kwh <= 0 and powers and "timestamp" in df.columns:
+                            # Fallback: integrate power over time
+                            ts_col = df["timestamp"].dropna()
+                            if len(ts_col) > 1:
+                                total_hours = (ts_col.max() - ts_col.min()).total_seconds() / 3600.0
+                                if total_hours > 0:
+                                    kwh = avg_w * total_hours / 1000.0
+                        price = self.cfg.pricing.unit_price_gross()
+                        cost = kwh * price
+                        totals.append(ReportTotals(
+                            name=dev.name,
+                            kwh_total=round(kwh, 3),
+                            avg_power_w=round(avg_w, 1),
+                            max_power_w=round(max_w, 1),
+                            cost_eur=round(cost, 2),
+                        ))
+                    except Exception:
+                        continue
+                return totals if totals else None
+            except Exception:
+                return None
 
     def _build_telegram_summary(self, kind: str, start: datetime, end: datetime) -> str:
             """Build a detailed summary message for a time range.
