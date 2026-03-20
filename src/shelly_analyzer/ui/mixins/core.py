@@ -4748,6 +4748,29 @@ class CoreMixin:
 
             ttk.Checkbutton(up_outer, text=self.t('updates.auto'), variable=self.upd_auto).pack(anchor='w', pady=(6, 0))
 
+            # --- Version history ---
+            ttk.Separator(up_outer, orient='horizontal').pack(fill='x', pady=(14, 8))
+            ttk.Label(up_outer, text=self.t('updates.versions_title'), font=('TkDefaultFont', 11, 'bold')).pack(anchor='w', pady=(0, 6))
+
+            ttk.Label(up_outer, text=self.t('updates.current_version', version=__version__), foreground='gray').pack(anchor='w', pady=(0, 4))
+
+            ver_frame = ttk.Frame(up_outer)
+            ver_frame.pack(anchor='w', fill='x', pady=(0, 4))
+
+            self.upd_release_lb = tk.Listbox(ver_frame, height=10, width=52, selectmode='single', exportselection=False)
+            self.upd_release_lb.pack(side='left')
+
+            ver_sb = ttk.Scrollbar(ver_frame, orient='vertical', command=self.upd_release_lb.yview)
+            ver_sb.pack(side='left', fill='y')
+            self.upd_release_lb.configure(yscrollcommand=ver_sb.set)
+            self.upd_release_lb.bind('<<ListboxSelect>>', self._updates_on_release_select)
+
+            self.upd_downgrade_var = tk.StringVar(value="")
+            ttk.Label(up_outer, textvariable=self.upd_downgrade_var, foreground='orange').pack(anchor='w', pady=(2, 0))
+
+            self.btn_upd_install_sel = ttk.Button(up_outer, text=self.t('updates.install_selected'), command=self._updates_install_selected, state='disabled')
+            self.btn_upd_install_sel.pack(anchor='w', pady=(6, 0))
+
     # ---------------- Gruppen ----------------
             self._build_groups_settings_tab(tab_groups)
 

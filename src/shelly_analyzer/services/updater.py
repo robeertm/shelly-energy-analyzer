@@ -55,6 +55,13 @@ class UpdateInfo:
     asset_url: Optional[str] = None
     asset_name: Optional[str] = None
 
+
+@dataclass
+class ReleaseEntry:
+    tag: str
+    asset_url: Optional[str] = None
+    asset_name: Optional[str] = None
+
 def _http_get_json(url: str, timeout_s: float = DEFAULT_TIMEOUT_S) -> dict:
     req = urllib.request.Request(url, headers={
         "User-Agent": "shelly-energy-analyzer-updater",
@@ -79,6 +86,21 @@ def _pick_asset(release: dict, platform_suffix: str) -> Tuple[Optional[str], Opt
         if name.lower().endswith(".zip") and url:
             return url, name
     return None, None
+
+def fetch_releases(repo: str, limit: int = 10, timeout_s: float = DEFAULT_TIMEOUT_S) -> list:
+    """Fetch the last `limit` releases from GitHub API. Returns list of ReleaseEntry."""
+    api = f"https://api.github.com/repos/{repo}/releases?per_page={limit}"
+    releases = _http_get_json(api, timeout_s=timeout_s)
+    suffix = detect_platform_suffix()
+    result: list = []
+    for rel in releases[:limit]:
+        tag = rel.get("tag_name") or ""
+        if not tag:
+            continue
+        url, name = _pick_asset(rel, suffix)
+        result.append(ReleaseEntry(tag=tag, asset_url=url, asset_name=name))
+    return result
+
 
 def check_latest_release(repo: str, timeout_s: float = DEFAULT_TIMEOUT_S) -> UpdateInfo:
     api = f"https://api.github.com/repos/{repo}/releases/latest"

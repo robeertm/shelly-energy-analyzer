@@ -99,6 +99,7 @@ class UpdatesMixin:
             """Non-blocking GitHub release check with immediate UI feedback.
 
             Uses a sequence id so slow/failed older requests cannot overwrite newer results.
+            Also fetches the last 10 releases to populate the version history list.
             """
             import threading
             from types import SimpleNamespace
@@ -120,14 +121,27 @@ class UpdatesMixin:
                     self.btn_upd_install.configure(state="disabled")
             except Exception:
                 pass
+            try:
+                if hasattr(self, "btn_upd_install_sel"):
+                    self.btn_upd_install_sel.configure(state="disabled")
+            except Exception:
+                pass
+            try:
+                if hasattr(self, "upd_release_lb"):
+                    self.upd_release_lb.delete(0, "end")
+                    self.upd_release_lb.insert("end", self.t("updates.version_list_loading"))
+            except Exception:
+                pass
 
             def worker() -> None:
                 repo = self._updates_repo()
                 try:
-                    from shelly_analyzer.services.updater import check_latest_release, is_newer
+                    from shelly_analyzer.services.updater import check_latest_release, fetch_releases, is_newer
                     info = check_latest_release(repo, timeout_s=10.0)
+                    releases = fetch_releases(repo, limit=10, timeout_s=10.0)
                 except Exception as e:
                     info = None
+                    releases = []
                     err = str(e)
 
                     def apply_err():
@@ -146,6 +160,7 @@ class UpdatesMixin:
                                 self.btn_upd_install.configure(state="disabled")
                         except Exception:
                             pass
+                        self._updates_populate_release_list([])
 
                     try:
                         self.after(0, apply_err)
@@ -172,6 +187,7 @@ class UpdatesMixin:
                                 self.btn_upd_install.configure(state="disabled")
                         except Exception:
                             pass
+                        self._updates_populate_release_list(releases)
                         return
 
                     tag = getattr(info, "latest_tag", None) or ""
@@ -217,6 +233,8 @@ class UpdatesMixin:
                                 self.btn_upd_install.configure(state="disabled")
                         except Exception:
                             pass
+
+                    self._updates_populate_release_list(releases)
 
                 try:
                     self.after(0, apply_ok)
@@ -266,6 +284,115 @@ class UpdatesMixin:
                 self._updates_set_status(self.t("updates.status.unreachable"))
                 return
 
+    def _updates_populate_release_list(self, releases: list) -> None:
+            """Populate the version history listbox with the given releases (called on UI thread)."""
+            try:
+                lb = getattr(self, "upd_release_lb", None)
+                if lb is None:
+                    return
+                lb.delete(0, "end")
+                if not releases:
+                    lb.insert("end", self.t("updates.version_list_empty"))
+                    self._upd_releases_data: list = []
+                    return
+
+                from shelly_analyzer.services.updater import parse_version
+                cur_parsed = parse_version(__version__)
+                self._upd_releases_data = list(releases)
+
+                for entry in releases:
+                    tag = entry.tag
+                    label = tag
+                    entry_parsed = parse_version(tag.lstrip("v"))
+                    if cur_parsed and entry_parsed and entry_parsed == cur_parsed:
+                        label = f"{tag}  {self.t('updates.current_indicator').strip()}"
+                    lb.insert("end", label)
+            except Exception:
+                pass
+            # Reset selection-dependent UI
+            try:
+                if hasattr(self, "btn_upd_install_sel"):
+                    self.btn_upd_install_sel.configure(state="disabled")
+            except Exception:
+                pass
+            try:
+                if hasattr(self, "upd_downgrade_var"):
+                    self.upd_downgrade_var.set("")
+            except Exception:
+                pass
+
+    def _updates_on_release_select(self, event=None) -> None:
+            """Handle selection change in the version history listbox."""
+            try:
+                lb = getattr(self, "upd_release_lb", None)
+                if lb is None:
+                    return
+                sel = lb.curselection()
+                if not sel:
+                    return
+                idx = sel[0]
+                releases = getattr(self, "_upd_releases_data", [])
+                if idx >= len(releases):
+                    return
+                entry = releases[idx]
+
+                # Enable install button only if there's a downloadable asset
+                has_asset = bool(getattr(entry, "asset_url", None))
+                try:
+                    if hasattr(self, "btn_upd_install_sel"):
+                        self.btn_upd_install_sel.configure(state="normal" if has_asset else "disabled")
+                except Exception:
+                    pass
+
+                # Show downgrade warning if selected version is older than or equal to current
+                try:
+                    from shelly_analyzer.services.updater import parse_version, is_newer
+                    sel_tag = entry.tag
+                    cur_tag = f"v{__version__}"
+                    if is_newer(sel_tag, cur_tag):
+                        warn = ""
+                    elif parse_version(sel_tag.lstrip("v")) == parse_version(__version__):
+                        warn = self.t("updates.reinstall_note")
+                    else:
+                        warn = self.t("updates.downgrade_warning") if has_asset else self.t("updates.no_asset_warning")
+                    if not has_asset:
+                        warn = self.t("updates.no_asset_warning")
+                    if hasattr(self, "upd_downgrade_var"):
+                        self.upd_downgrade_var.set(warn)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+    def _updates_install_selected(self) -> None:
+            """Install the version selected in the history listbox."""
+            try:
+                lb = getattr(self, "upd_release_lb", None)
+                if lb is None:
+                    return
+                sel = lb.curselection()
+                if not sel:
+                    return
+                idx = sel[0]
+                releases = getattr(self, "_upd_releases_data", [])
+                if idx >= len(releases):
+                    return
+                entry = releases[idx]
+                tag = getattr(entry, "tag", None)
+                zip_url = getattr(entry, "asset_url", None)
+                if not tag or not zip_url:
+                    try:
+                        self._updates_set_status(self.t("updates.no_download"))
+                    except Exception:
+                        pass
+                    return
+                self._updates_do_install(tag, zip_url)
+            except Exception as e:
+                try:
+                    self._updates_set_status(str(e))
+                except Exception:
+                    pass
+
     def _updates_install_latest(self) -> None:
             """Download & install the latest ZIP via updater_helper (cross-platform)."""
             rel = getattr(self, "_upd_latest", None)
@@ -280,8 +407,10 @@ class UpdatesMixin:
                 except Exception:
                     pass
                 return
+            self._updates_do_install(rel.tag, rel.zip_url)
 
-            # Download to updates/ and stage unpack
+    def _updates_do_install(self, tag: str, zip_url: str) -> None:
+            """Download a release ZIP and hand off to updater_helper, then exit."""
             import urllib.request
             import zipfile
             from pathlib import Path
@@ -289,7 +418,7 @@ class UpdatesMixin:
             app_dir = Path(self.project_root).resolve()
             upd_dir = app_dir / "updates"
             upd_dir.mkdir(parents=True, exist_ok=True)
-            zip_path = upd_dir / f"{rel.tag}.zip"
+            zip_path = upd_dir / f"{tag}.zip"
             staging = upd_dir / "staging"
 
             # clean staging
@@ -307,7 +436,7 @@ class UpdatesMixin:
                 pass
 
             try:
-                req = urllib.request.Request(str(rel.zip_url), headers={"User-Agent": "shelly-energy-analyzer"})
+                req = urllib.request.Request(str(zip_url), headers={"User-Agent": "shelly-energy-analyzer"})
                 with urllib.request.urlopen(req, timeout=20.0) as resp:
                     data = resp.read()
                 zip_path.write_bytes(data)
@@ -370,8 +499,6 @@ class UpdatesMixin:
             except Exception:
                 pass
             raise SystemExit(0)
-
-            pass
 
 
     # Backwards-compatible handlers for older button wiring.
