@@ -3268,6 +3268,161 @@ _I18N.setdefault("ru", {}).update({
     "costs.tou.flat_rate": "Единый тариф",
 })
 
+# -------- Comparison mode (v7.7.0) --------
+
+_I18N.setdefault("de", {}).update({
+    "tabs.compare": "🔀 Vergleich",
+    "compare.title": "🔀 Vergleichsmodus",
+    "compare.refresh": "Aktualisieren",
+    "compare.period_a": "Zeitraum A",
+    "compare.period_b": "Zeitraum B",
+    "compare.device": "Gerät",
+    "compare.from": "Von",
+    "compare.to": "Bis",
+    "compare.unit": "Einheit",
+    "compare.granularity": "Granularität",
+    "compare.gran.total": "Gesamt",
+    "compare.gran.daily": "Täglich",
+    "compare.gran.monthly": "Monatlich",
+    "compare.err.invalid_dates": "Ungültiges Datum – bitte YYYY-MM-DD verwenden",
+})
+
+_I18N.setdefault("en", {}).update({
+    "tabs.compare": "🔀 Compare",
+    "compare.title": "🔀 Comparison Mode",
+    "compare.refresh": "Refresh",
+    "compare.period_a": "Period A",
+    "compare.period_b": "Period B",
+    "compare.device": "Device",
+    "compare.from": "From",
+    "compare.to": "To",
+    "compare.unit": "Unit",
+    "compare.granularity": "Granularity",
+    "compare.gran.total": "Total",
+    "compare.gran.daily": "Daily",
+    "compare.gran.monthly": "Monthly",
+    "compare.err.invalid_dates": "Invalid date – please use YYYY-MM-DD",
+})
+
+_I18N.setdefault("es", {}).update({
+    "tabs.compare": "🔀 Comparar",
+    "compare.title": "🔀 Modo comparación",
+    "compare.refresh": "Actualizar",
+    "compare.period_a": "Período A",
+    "compare.period_b": "Período B",
+    "compare.device": "Dispositivo",
+    "compare.from": "Desde",
+    "compare.to": "Hasta",
+    "compare.unit": "Unidad",
+    "compare.granularity": "Granularidad",
+    "compare.gran.total": "Total",
+    "compare.gran.daily": "Diario",
+    "compare.gran.monthly": "Mensual",
+    "compare.err.invalid_dates": "Fecha inválida – use YYYY-MM-DD",
+})
+
+_I18N.setdefault("fr", {}).update({
+    "tabs.compare": "🔀 Comparer",
+    "compare.title": "🔀 Mode comparaison",
+    "compare.refresh": "Actualiser",
+    "compare.period_a": "Période A",
+    "compare.period_b": "Période B",
+    "compare.device": "Appareil",
+    "compare.from": "Du",
+    "compare.to": "Au",
+    "compare.unit": "Unité",
+    "compare.granularity": "Granularité",
+    "compare.gran.total": "Total",
+    "compare.gran.daily": "Journalier",
+    "compare.gran.monthly": "Mensuel",
+    "compare.err.invalid_dates": "Date invalide – utilisez YYYY-MM-DD",
+})
+
+_I18N.setdefault("pt", {}).update({
+    "tabs.compare": "🔀 Comparar",
+    "compare.title": "🔀 Modo de comparação",
+    "compare.refresh": "Atualizar",
+    "compare.period_a": "Período A",
+    "compare.period_b": "Período B",
+    "compare.device": "Dispositivo",
+    "compare.from": "De",
+    "compare.to": "Até",
+    "compare.unit": "Unidade",
+    "compare.granularity": "Granularidade",
+    "compare.gran.total": "Total",
+    "compare.gran.daily": "Diário",
+    "compare.gran.monthly": "Mensal",
+    "compare.err.invalid_dates": "Data inválida – use YYYY-MM-DD",
+})
+
+_I18N.setdefault("it", {}).update({
+    "tabs.compare": "🔀 Confronta",
+    "compare.title": "🔀 Modalità confronto",
+    "compare.refresh": "Aggiorna",
+    "compare.period_a": "Periodo A",
+    "compare.period_b": "Periodo B",
+    "compare.device": "Dispositivo",
+    "compare.from": "Dal",
+    "compare.to": "Al",
+    "compare.unit": "Unità",
+    "compare.granularity": "Granularità",
+    "compare.gran.total": "Totale",
+    "compare.gran.daily": "Giornaliero",
+    "compare.gran.monthly": "Mensile",
+    "compare.err.invalid_dates": "Data non valida – usare YYYY-MM-DD",
+})
+
+_I18N.setdefault("pl", {}).update({
+    "tabs.compare": "🔀 Porównaj",
+    "compare.title": "🔀 Tryb porównania",
+    "compare.refresh": "Odśwież",
+    "compare.period_a": "Okres A",
+    "compare.period_b": "Okres B",
+    "compare.device": "Urządzenie",
+    "compare.from": "Od",
+    "compare.to": "Do",
+    "compare.unit": "Jednostka",
+    "compare.granularity": "Granularność",
+    "compare.gran.total": "Łącznie",
+    "compare.gran.daily": "Dziennie",
+    "compare.gran.monthly": "Miesięcznie",
+    "compare.err.invalid_dates": "Nieprawidłowa data – użyj YYYY-MM-DD",
+})
+
+_I18N.setdefault("cs", {}).update({
+    "tabs.compare": "🔀 Porovnat",
+    "compare.title": "🔀 Režim porovnání",
+    "compare.refresh": "Obnovit",
+    "compare.period_a": "Období A",
+    "compare.period_b": "Období B",
+    "compare.device": "Zařízení",
+    "compare.from": "Od",
+    "compare.to": "Do",
+    "compare.unit": "Jednotka",
+    "compare.granularity": "Granularita",
+    "compare.gran.total": "Celkem",
+    "compare.gran.daily": "Denně",
+    "compare.gran.monthly": "Měsíčně",
+    "compare.err.invalid_dates": "Neplatné datum – použijte YYYY-MM-DD",
+})
+
+_I18N.setdefault("ru", {}).update({
+    "tabs.compare": "🔀 Сравнение",
+    "compare.title": "🔀 Режим сравнения",
+    "compare.refresh": "Обновить",
+    "compare.period_a": "Период A",
+    "compare.period_b": "Период B",
+    "compare.device": "Устройство",
+    "compare.from": "С",
+    "compare.to": "По",
+    "compare.unit": "Единица",
+    "compare.granularity": "Детализация",
+    "compare.gran.total": "Итого",
+    "compare.gran.daily": "Ежедневно",
+    "compare.gran.monthly": "Ежемесячно",
+    "compare.err.invalid_dates": "Неверная дата – используйте YYYY-MM-DD",
+})
+
 # -------- Local formatting helpers (dates/numbers) --------
 
 _DATE_FORMATS = {
