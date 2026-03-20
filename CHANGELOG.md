@@ -1,5 +1,12 @@
 # Changelog
 
+## 8.0.4 - 2026-03-20
+### Fixed
+- **Compare tab no longer shows blank charts when comparing two periods (e.g. January vs February).**
+  `Storage.read_device_df()` was falling through to the legacy CSV fallback whenever a date-range query returned zero rows — even for devices that are fully stored in the SQLite DB.
+  Because no CSV files exist post-migration, the fallback raised `ValueError("No data found …")`, which `_cmp_load_daily` silently swallowed, producing an empty result dict and a chart full of zero-height bars.
+  Fix: when `has_data(device_key)` is True, always return the DataFrame from the DB (empty or not) without touching the CSV path.  Callers that receive an empty DataFrame already handle the "no data for this range" case correctly.
+
 ## 8.0.0 - 2026-03-20
 ### Added
 - **Device Scheduling (⏰ Schedules tab) — Feature 10/10, completing the full feature set.**
