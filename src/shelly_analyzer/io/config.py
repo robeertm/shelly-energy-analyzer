@@ -237,6 +237,16 @@ class UpdatesConfig:
 
 
 @dataclass(frozen=True)
+class SolarConfig:
+    """PV/Solar integration settings."""
+    enabled: bool = False
+    # Key of the device at the grid connection point (negative power = export to grid)
+    pv_meter_device_key: str = ""
+    # Feed-in tariff (Einspeisevergütung) in €/kWh
+    feed_in_tariff_eur_per_kwh: float = 0.082
+
+
+@dataclass(frozen=True)
 class AppConfig:
     version: str = __version__
     devices: List[DeviceConfig] = field(default_factory=list)
@@ -249,6 +259,7 @@ class AppConfig:
     pricing: PricingConfig = field(default_factory=PricingConfig)
     billing: BillingConfig = field(default_factory=BillingConfig)
     alerts: List[AlertRule] = field(default_factory=list)
+    solar: SolarConfig = field(default_factory=SolarConfig)
 
 
 def default_config_path(project_root: Optional[Path] = None) -> Path:
@@ -498,6 +509,16 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
                 )
             )
 
+    solar_raw = raw.get("solar", {}) if isinstance(raw.get("solar"), dict) else {}
+    solar = SolarConfig(
+        enabled=bool(solar_raw.get("enabled", SolarConfig.enabled)),
+        pv_meter_device_key=str(solar_raw.get("pv_meter_device_key", SolarConfig.pv_meter_device_key) or ""),
+        feed_in_tariff_eur_per_kwh=_coerce_float(
+            solar_raw.get("feed_in_tariff_eur_per_kwh", SolarConfig.feed_in_tariff_eur_per_kwh),
+            SolarConfig.feed_in_tariff_eur_per_kwh,
+        ),
+    )
+
     cfg = AppConfig(
         version=str(raw.get("version", __version__)),
         devices=devices,
@@ -509,6 +530,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         pricing=pricing,
         billing=billing,
         alerts=alerts,
+        solar=solar,
     )
 
     # Write back migrated schema (and missing blocks) if needed
@@ -639,6 +661,11 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             }
             for r in (getattr(cfg, "alerts", []) or [])
         ],
+        "solar": {
+            "enabled": bool(getattr(cfg.solar, "enabled", False)),
+            "pv_meter_device_key": str(getattr(cfg.solar, "pv_meter_device_key", "") or ""),
+            "feed_in_tariff_eur_per_kwh": float(getattr(cfg.solar, "feed_in_tariff_eur_per_kwh", 0.082)),
+        },
         "pricing": {
             "electricity_price_eur_per_kwh": cfg.pricing.electricity_price_eur_per_kwh,
             "base_fee_eur_per_year": cfg.pricing.base_fee_eur_per_year,
