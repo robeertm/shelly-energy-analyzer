@@ -1,5 +1,5 @@
 {
-  "version": "6.0.0.9",
+  "version": "8.0.0",
   "devices": [
     {
       "key": "shelly1",
@@ -30,6 +30,9 @@
     "live_poll_seconds": 1,
     "plot_redraw_seconds": 0.5,
     "live_window_minutes": 10,
+    "live_retention_minutes": 120,
+    "language": "de",
+    "plot_theme_mode": "auto",
     "autosync_enabled": false,
     "autosync_interval_hours": 12,
     "autosync_mode": "incremental",
@@ -39,13 +42,18 @@
     "live_web_token": "",
     "live_smoothing_enabled": false,
     "live_smoothing_seconds": 10,
+    "live_daynight_mode": "all",
+    "live_day_start": "06:00",
+    "live_night_start": "22:00",
     "device_page_index": 0,
-    "language": "de",
+    "selected_view_type": "page",
+    "selected_view_group": "",
     "telegram_enabled": false,
     "telegram_bot_token": "",
     "telegram_chat_id": "",
     "telegram_verify_ssl": true,
     "telegram_detail_level": "detailed",
+    "telegram_alarm_plots_enabled": true,
     "telegram_daily_summary_enabled": false,
     "telegram_daily_summary_time": "00:00",
     "telegram_monthly_summary_enabled": false,
@@ -53,9 +61,25 @@
     "telegram_daily_summary_last_sent": "",
     "telegram_monthly_summary_last_sent": "",
     "telegram_summary_load_w": 200.0,
-    "live_daynight_mode": "all",
-    "live_day_start": "06:00",
-    "live_night_start": "22:00"
+    "webhook_enabled": false,
+    "webhook_url": "",
+    "webhook_custom_headers": "",
+    "webhook_alarm_enabled": true,
+    "webhook_daily_summary_enabled": false,
+    "webhook_monthly_summary_enabled": false,
+    "email_enabled": false,
+    "email_smtp_server": "",
+    "email_smtp_port": 587,
+    "email_smtp_user": "",
+    "email_smtp_password": "",
+    "email_from_address": "",
+    "email_use_tls": true,
+    "email_recipients": "",
+    "email_alarm_enabled": true,
+    "email_daily_summary_enabled": false,
+    "email_monthly_summary_enabled": false,
+    "email_daily_summary_time": "00:00",
+    "email_monthly_summary_time": "00:00"
   },
   "pricing": {
     "electricity_price_eur_per_kwh": 0.3265,
@@ -63,7 +87,8 @@
     "vat_enabled": true,
     "vat_rate_percent": 19,
     "base_fee_eur_per_year": 127.51,
-    "base_fee_includes_vat": true
+    "base_fee_includes_vat": true,
+    "co2_intensity_g_per_kwh": 380.0
   },
   "billing": {
     "issuer": {
@@ -91,8 +116,84 @@
       "bic": ""
     },
     "invoice_prefix": "INV",
-    "payment_terms_days": 14
+    "payment_terms_days": 14,
+    "invoice_logo_path": ""
   },
+  "solar": {
+    "enabled": false,
+    "pv_meter_device_key": "",
+    "feed_in_tariff_eur_per_kwh": 0.082
+  },
+  "tou": {
+    "enabled": false,
+    "rates": [
+      {
+        "name": "HT",
+        "price_eur_per_kwh": 0.35,
+        "start_hour": 6,
+        "end_hour": 22,
+        "weekdays_only": false
+      },
+      {
+        "name": "NT",
+        "price_eur_per_kwh": 0.22,
+        "start_hour": 22,
+        "end_hour": 6,
+        "weekdays_only": false
+      }
+    ]
+  },
+  "anomaly": {
+    "enabled": false,
+    "sigma_threshold": 2.0,
+    "min_deviation_kwh": 0.1,
+    "window_days": 30,
+    "check_unusual_daily": true,
+    "check_night_consumption": true,
+    "check_power_peak_time": true,
+    "action_telegram": false,
+    "action_webhook": false,
+    "action_email": false,
+    "max_history": 200
+  },
+  "groups": [
+    {
+      "name": "Apartment 1",
+      "device_keys": ["shelly1"]
+    }
+  ],
+  "schedules": [
+    {
+      "schedule_id": "sched1",
+      "device_key": "shelly2",
+      "name": "Server Nacht-Aus",
+      "time_on": "07:00",
+      "time_off": "23:00",
+      "weekdays": [0, 1, 2, 3, 4, 5, 6],
+      "enabled": false,
+      "switch_id": 0,
+      "shelly_id_on": -1,
+      "shelly_id_off": -1
+    }
+  ],
+  "alerts": [
+    {
+      "rule_id": "rule1",
+      "enabled": false,
+      "device_key": "*",
+      "metric": "W",
+      "op": ">",
+      "threshold": 5000.0,
+      "duration_seconds": 10,
+      "cooldown_seconds": 120,
+      "action_popup": true,
+      "action_beep": true,
+      "action_telegram": false,
+      "action_webhook": false,
+      "action_email": false,
+      "message": ""
+    }
+  ],
   "demo": {
     "enabled": false,
     "scenario": "household",
