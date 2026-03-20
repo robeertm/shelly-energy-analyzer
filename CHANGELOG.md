@@ -1,5 +1,15 @@
 # Changelog
 
+## 8.1.1 - 2026-03-20
+### Fixed
+- **Anomaly detection state not persisted across restarts.** `save_config()` was missing
+  the `"anomaly"` key entirely — the enabled flag, notification channels (Telegram / Webhook
+  / E-Mail), and all detection parameters were never written back to `config.json`, so every
+  restart reset them to defaults.
+- **Anomaly detection not auto-started on app launch.** When the detection had been enabled
+  during a previous session it is now automatically triggered 500 ms after the Anomalies tab
+  is built, matching the persisted `enabled` state.
+
 ## 8.1.0 - 2026-03-20
 ### Added
 - **Compare tab: quick-compare buttons.** Four one-click presets ("This vs. Last Month",

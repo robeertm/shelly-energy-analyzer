@@ -958,6 +958,19 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             }
             for s in (getattr(cfg, "schedules", []) or [])
         ],
+        "anomaly": {
+            "enabled": bool(getattr(cfg.anomaly, "enabled", False)),
+            "sigma_threshold": float(getattr(cfg.anomaly, "sigma_threshold", 2.0)),
+            "min_deviation_kwh": float(getattr(cfg.anomaly, "min_deviation_kwh", 0.1)),
+            "window_days": int(getattr(cfg.anomaly, "window_days", 30)),
+            "check_unusual_daily": bool(getattr(cfg.anomaly, "check_unusual_daily", True)),
+            "check_night_consumption": bool(getattr(cfg.anomaly, "check_night_consumption", True)),
+            "check_power_peak_time": bool(getattr(cfg.anomaly, "check_power_peak_time", True)),
+            "action_telegram": bool(getattr(cfg.anomaly, "action_telegram", False)),
+            "action_webhook": bool(getattr(cfg.anomaly, "action_webhook", False)),
+            "action_email": bool(getattr(cfg.anomaly, "action_email", False)),
+            "max_history": int(getattr(cfg.anomaly, "max_history", 200)),
+        },
     }
     path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
