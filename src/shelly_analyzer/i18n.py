@@ -591,6 +591,22 @@ _I18N: Dict[str, Dict[str, str]] = {
         "heatmap.day.sat": "Sa",
         "heatmap.day.sun": "So",
 
+        # Groups
+        "settings.groups": "Gruppen",
+        "groups.title": "Gerätеgruppen",
+        "groups.add": "Gruppe hinzufügen",
+        "groups.name": "Name:",
+        "groups.devices": "Geräte:",
+        "groups.delete": "Löschen",
+        "groups.no_groups": "Keine Gruppen konfiguriert.",
+        "groups.save": "Gruppen speichern",
+        "groups.all": "🔢 Gesamt (alle Geräte)",
+        "groups.group_prefix": "📦 ",
+        "groups.saved": "Gruppen gespeichert.",
+        "groups.empty_name": "Gruppenname darf nicht leer sein.",
+        "costs.group_aggregate": "Gruppe: {name}",
+        "costs.all_devices": "🔢 Gesamt (alle Geräte)",
+
     },
     "en": {
         # App
@@ -1183,6 +1199,22 @@ _I18N: Dict[str, Dict[str, str]] = {
         "heatmap.day.sat": "Sat",
         "heatmap.day.sun": "Sun",
 
+        # Groups
+        "settings.groups": "Groups",
+        "groups.title": "Device Groups",
+        "groups.add": "Add group",
+        "groups.name": "Name:",
+        "groups.devices": "Devices:",
+        "groups.delete": "Delete",
+        "groups.no_groups": "No groups configured.",
+        "groups.save": "Save groups",
+        "groups.all": "🔢 Total (all devices)",
+        "groups.group_prefix": "📦 ",
+        "groups.saved": "Groups saved.",
+        "groups.empty_name": "Group name must not be empty.",
+        "costs.group_aggregate": "Group: {name}",
+        "costs.all_devices": "🔢 Total (all devices)",
+
     },
     "es": {
         # App
@@ -1759,6 +1791,22 @@ _I18N: Dict[str, Dict[str, str]] = {
         "heatmap.day.sat": "Sáb",
         "heatmap.day.sun": "Dom",
 
+        # Groups
+        "settings.groups": "Grupos",
+        "groups.title": "Grupos de dispositivos",
+        "groups.add": "Añadir grupo",
+        "groups.name": "Nombre:",
+        "groups.devices": "Dispositivos:",
+        "groups.delete": "Eliminar",
+        "groups.no_groups": "No hay grupos configurados.",
+        "groups.save": "Guardar grupos",
+        "groups.all": "🔢 Total (todos los dispositivos)",
+        "groups.group_prefix": "📦 ",
+        "groups.saved": "Grupos guardados.",
+        "groups.empty_name": "El nombre del grupo no puede estar vacío.",
+        "costs.group_aggregate": "Grupo: {name}",
+        "costs.all_devices": "🔢 Total (todos los dispositivos)",
+
     },
 }
 
@@ -1910,6 +1958,20 @@ _I18N["fr"] = _mk_lang({
     "heatmap.day.fri": "Ven",
     "heatmap.day.sat": "Sam",
     "heatmap.day.sun": "Dim",
+    "settings.groups": "Groupes",
+    "groups.title": "Groupes d'appareils",
+    "groups.add": "Ajouter un groupe",
+    "groups.name": "Nom :",
+    "groups.devices": "Appareils :",
+    "groups.delete": "Supprimer",
+    "groups.no_groups": "Aucun groupe configuré.",
+    "groups.save": "Enregistrer les groupes",
+    "groups.all": "🔢 Total (tous les appareils)",
+    "groups.group_prefix": "📦 ",
+    "groups.saved": "Groupes enregistrés.",
+    "groups.empty_name": "Le nom du groupe ne peut pas être vide.",
+    "costs.group_aggregate": "Groupe : {name}",
+    "costs.all_devices": "🔢 Total (tous les appareils)",
 })
 
 
@@ -2008,6 +2070,20 @@ _I18N["pt"] = _mk_lang({
     "heatmap.day.fri": "Sex",
     "heatmap.day.sat": "Sáb",
     "heatmap.day.sun": "Dom",
+    "settings.groups": "Grupos",
+    "groups.title": "Grupos de dispositivos",
+    "groups.add": "Adicionar grupo",
+    "groups.name": "Nome:",
+    "groups.devices": "Dispositivos:",
+    "groups.delete": "Excluir",
+    "groups.no_groups": "Nenhum grupo configurado.",
+    "groups.save": "Salvar grupos",
+    "groups.all": "🔢 Total (todos os dispositivos)",
+    "groups.group_prefix": "📦 ",
+    "groups.saved": "Grupos salvos.",
+    "groups.empty_name": "O nome do grupo não pode estar vazio.",
+    "costs.group_aggregate": "Grupo: {name}",
+    "costs.all_devices": "🔢 Total (todos os dispositivos)",
 })
 
 
@@ -2104,6 +2180,20 @@ _I18N["it"] = _mk_lang({
     "heatmap.day.fri": "Ven",
     "heatmap.day.sat": "Sab",
     "heatmap.day.sun": "Dom",
+    "settings.groups": "Gruppi",
+    "groups.title": "Gruppi di dispositivi",
+    "groups.add": "Aggiungi gruppo",
+    "groups.name": "Nome:",
+    "groups.devices": "Dispositivi:",
+    "groups.delete": "Elimina",
+    "groups.no_groups": "Nessun gruppo configurato.",
+    "groups.save": "Salva gruppi",
+    "groups.all": "🔢 Totale (tutti i dispositivi)",
+    "groups.group_prefix": "📦 ",
+    "groups.saved": "Gruppi salvati.",
+    "groups.empty_name": "Il nome del gruppo non può essere vuoto.",
+    "costs.group_aggregate": "Gruppo: {name}",
+    "costs.all_devices": "🔢 Totale (tutti i dispositivi)",
 })
 
 
@@ -2199,6 +2289,20 @@ _I18N["pl"] = _mk_lang({
     "heatmap.day.fri": "Pt",
     "heatmap.day.sat": "Sb",
     "heatmap.day.sun": "Nd",
+    "settings.groups": "Grupy",
+    "groups.title": "Grupy urządzeń",
+    "groups.add": "Dodaj grupę",
+    "groups.name": "Nazwa:",
+    "groups.devices": "Urządzenia:",
+    "groups.delete": "Usuń",
+    "groups.no_groups": "Brak skonfigurowanych grup.",
+    "groups.save": "Zapisz grupy",
+    "groups.all": "🔢 Suma (wszystkie urządzenia)",
+    "groups.group_prefix": "📦 ",
+    "groups.saved": "Grupy zapisane.",
+    "groups.empty_name": "Nazwa grupy nie może być pusta.",
+    "costs.group_aggregate": "Grupa: {name}",
+    "costs.all_devices": "🔢 Suma (wszystkie urządzenia)",
 })
 
 
@@ -2294,6 +2398,20 @@ _I18N["cs"] = _mk_lang({
     "heatmap.day.fri": "Pá",
     "heatmap.day.sat": "So",
     "heatmap.day.sun": "Ne",
+    "settings.groups": "Skupiny",
+    "groups.title": "Skupiny zařízení",
+    "groups.add": "Přidat skupinu",
+    "groups.name": "Název:",
+    "groups.devices": "Zařízení:",
+    "groups.delete": "Smazat",
+    "groups.no_groups": "Nejsou nakonfigurovány žádné skupiny.",
+    "groups.save": "Uložit skupiny",
+    "groups.all": "🔢 Celkem (všechna zařízení)",
+    "groups.group_prefix": "📦 ",
+    "groups.saved": "Skupiny uloženy.",
+    "groups.empty_name": "Název skupiny nesmí být prázdný.",
+    "costs.group_aggregate": "Skupina: {name}",
+    "costs.all_devices": "🔢 Celkem (všechna zařízení)",
 })
 
 
@@ -2389,6 +2507,20 @@ _I18N["ru"] = _mk_lang({
     "heatmap.day.fri": "Пт",
     "heatmap.day.sat": "Сб",
     "heatmap.day.sun": "Вс",
+    "settings.groups": "Группы",
+    "groups.title": "Группы устройств",
+    "groups.add": "Добавить группу",
+    "groups.name": "Название:",
+    "groups.devices": "Устройства:",
+    "groups.delete": "Удалить",
+    "groups.no_groups": "Группы не настроены.",
+    "groups.save": "Сохранить группы",
+    "groups.all": "🔢 Итого (все устройства)",
+    "groups.group_prefix": "📦 ",
+    "groups.saved": "Группы сохранены.",
+    "groups.empty_name": "Название группы не может быть пустым.",
+    "costs.group_aggregate": "Группа: {name}",
+    "costs.all_devices": "🔢 Итого (все устройства)",
 })
 
 
