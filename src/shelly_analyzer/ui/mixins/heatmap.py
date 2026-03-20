@@ -85,8 +85,12 @@ class HeatmapMixin:
             "<Configure>",
             lambda e: scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all")),
         )
-        scroll_canvas.create_window((0, 0), window=self._heatmap_scroll_frame, anchor="nw")
+        _hm_win = scroll_canvas.create_window((0, 0), window=self._heatmap_scroll_frame, anchor="nw")
         scroll_canvas.configure(yscrollcommand=scrollbar.set)
+        scroll_canvas.bind(
+            "<Configure>",
+            lambda e: scroll_canvas.itemconfigure(_hm_win, width=e.width),
+        )
         scroll_canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
