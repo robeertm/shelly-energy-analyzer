@@ -75,8 +75,12 @@ class SolarMixin:
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all")),
         )
-        canvas.create_window((0, 0), window=self._solar_scroll_frame, anchor="nw")
+        _sol_win = canvas.create_window((0, 0), window=self._solar_scroll_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.bind(
+            "<Configure>",
+            lambda e: canvas.itemconfigure(_sol_win, width=e.width),
+        )
 
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")

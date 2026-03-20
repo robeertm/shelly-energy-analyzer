@@ -3954,8 +3954,12 @@ class CoreMixin:
                 "<Configure>",
                 lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
             )
-            canvas.create_window((0, 0), window=self._cost_scroll_frame, anchor="nw")
+            _cost_win = canvas.create_window((0, 0), window=self._cost_scroll_frame, anchor="nw")
             canvas.configure(yscrollcommand=scrollbar.set)
+            canvas.bind(
+                "<Configure>",
+                lambda e: canvas.itemconfigure(_cost_win, width=e.width),
+            )
 
             canvas.pack(side="left", fill="both", expand=True)
             scrollbar.pack(side="right", fill="y")
