@@ -687,6 +687,7 @@ class CoreMixin:
             self.tab_costs = ttk.Frame(self.notebook)
             self.tab_heatmap = ttk.Frame(self.notebook)
             self.tab_solar = ttk.Frame(self.notebook)
+            self.tab_compare = ttk.Frame(self.notebook)
             self.tab_export = ttk.Frame(self.notebook)
             self.tab_settings = ttk.Frame(self.notebook)
             # Notebook tab labels are translated based on the selected UI language.
@@ -696,6 +697,7 @@ class CoreMixin:
             self.notebook.add(self.tab_costs, text=self.t("tabs.costs"))
             self.notebook.add(self.tab_heatmap, text=self.t("tabs.heatmap"))
             self.notebook.add(self.tab_solar, text=self.t("tabs.solar"))
+            self.notebook.add(self.tab_compare, text=self.t("tabs.compare"))
             self.notebook.add(self.tab_export, text=self.t("tabs.export"))
             self.notebook.add(self.tab_settings, text=self.t("tabs.settings"))
 
@@ -706,7 +708,7 @@ class CoreMixin:
                 self.notebook.insert(0, self.tab_setup, text=self.t("tabs.setup"))
 
                 # Put placeholders into disabled tabs (avoid CSV warnings on first run)
-                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_export):
+                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_compare, self.tab_export):
                     try:
                         ttk.Label(
                             tab,
@@ -736,6 +738,7 @@ class CoreMixin:
                 self._build_costs_tab()
                 self._build_heatmap_tab()
                 self._build_solar_tab()
+                self._build_compare_tab()
                 self._build_export_tab()
                 self._build_settings_tab()
                 self._tabs_built = True
@@ -10980,7 +10983,7 @@ class CoreMixin:
 
             # Enable tabs
             try:
-                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_export):
+                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_compare, self.tab_export):
                     try:
                         self.notebook.tab(tab, state="normal")
                     except Exception:
@@ -11008,6 +11011,10 @@ class CoreMixin:
                     pass
                 try:
                     self._clear_frame(self.tab_heatmap); self._build_heatmap_tab()
+                except Exception:
+                    pass
+                try:
+                    self._clear_frame(self.tab_compare); self._build_compare_tab()
                 except Exception:
                     pass
                 try:

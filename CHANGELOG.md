@@ -1,5 +1,19 @@
 # Changelog
 
+## 7.7.0 - 2026-03-20
+### Fixed
+- **Heatmap tab no longer shows blank charts.** The calendar heatmap and weekday×hour heatmap were silently failing because `query_samples()` converts raw SQLite Unix integer timestamps to naive UTC `datetime64` objects. The heatmap helpers called `datetime.fromtimestamp(int(ts))` on those objects, which returns nanoseconds instead of seconds, causing an overflow that the `except` clause swallowed. Fixed by normalizing timestamp columns back to Unix integer seconds immediately after loading in `_heatmap_load_df` (and in `_cmp_load_daily`). The same normalization is applied in the new Comparison tab.
+
+### Added
+- **Comparison Mode tab (🔀 Compare).** A new tab (`CompareMixin`) lets users overlay two arbitrary time periods — or two different devices — side-by-side in a grouped bar chart.
+  - **Two period pickers:** Period A and Period B each have an independent device selector (Combobox over all configured Shelly devices) and two date entry fields (From / To, accepting YYYY-MM-DD or DD.MM.YYYY).
+  - **Default values:** Period A defaults to current year so far; Period B defaults to the full previous year.
+  - **Unit toggle:** Switch between kWh and € (uses the configured flat-rate or TOU pricing).
+  - **Granularity selector:** Choose Total (single bar pair), Daily (relative day-by-day alignment), or Monthly (relative month index).
+  - **Delta summary strip:** Always-visible bold label showing `A: X kWh | B: Y kWh | Δ: +Z kWh (+P%)` above the chart.
+  - **Matplotlib bar chart:** Side-by-side grouped bars in blue (A) / orange (B) with full light/dark theme support, automatic x-axis label decimation for dense daily views, and a legend when more than one data point exists.
+  - **Full i18n support** in all 9 languages (de, en, es, fr, pt, it, pl, cs, ru).
+
 ## 7.6.0 - 2026-03-20
 ### Added
 - **Time-of-Use (TOU) / Multi-Tariff Pricing.** The app now supports time-variable electricity tariffs (Mehrtarif / Doppeltarif), replacing the single flat rate when enabled.

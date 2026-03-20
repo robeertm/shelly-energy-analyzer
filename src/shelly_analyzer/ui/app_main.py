@@ -10,8 +10,9 @@ from .mixins.liveweb import LiveWebMixin
 from .mixins.updates import UpdatesMixin
 from .mixins.heatmap import HeatmapMixin
 from .mixins.solar import SolarMixin
+from .mixins.compare import CompareMixin
 
 
-class App(CoreMixin, tk.Tk, ScalingMixin, PlotsMixin, LiveWebMixin, UpdatesMixin, HeatmapMixin, SolarMixin):
+class App(CoreMixin, tk.Tk, ScalingMixin, PlotsMixin, LiveWebMixin, UpdatesMixin, HeatmapMixin, SolarMixin, CompareMixin):
     """Main GUI application class (composed from mixins)."""
     pass
