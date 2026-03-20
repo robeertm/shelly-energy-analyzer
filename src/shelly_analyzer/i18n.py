@@ -2948,6 +2948,52 @@ _I18N.setdefault("en", {}).update({
     "settings.alerts.col_webhook": "Webhook",
 })
 
+# -------- E-Mail settings translations --------
+
+_I18N.setdefault("de", {}).update({
+    "settings.email.title": "E-Mail-Benachrichtigungen",
+    "settings.email.enabled": "E-Mail aktiv",
+    "settings.email.smtp_server": "SMTP-Server",
+    "settings.email.smtp_port": "Port",
+    "settings.email.use_tls": "TLS verwenden",
+    "settings.email.smtp_user": "Benutzer",
+    "settings.email.smtp_password": "Passwort",
+    "settings.email.from_address": "Absender",
+    "settings.email.recipients": "Empfänger",
+    "settings.email.alarm_enabled": "Bei Alarmen senden",
+    "settings.email.daily_summary_enabled": "Tägliche Zusammenfassung",
+    "settings.email.daily_summary_time": "Uhrzeit",
+    "settings.email.daily_send_now": "Jetzt senden",
+    "settings.email.monthly_summary_enabled": "Monatliche Zusammenfassung",
+    "settings.email.monthly_summary_time": "Uhrzeit",
+    "settings.email.monthly_send_now": "Jetzt senden",
+    "settings.email.test": "Test senden",
+    "settings.email.hint": "Kommagetrennte Empfänger-Adressen. SMTP-Zugangsdaten werden lokal gespeichert.",
+    "settings.alerts.col_email": "E-Mail",
+})
+
+_I18N.setdefault("en", {}).update({
+    "settings.email.title": "Email Notifications",
+    "settings.email.enabled": "Enable email",
+    "settings.email.smtp_server": "SMTP server",
+    "settings.email.smtp_port": "Port",
+    "settings.email.use_tls": "Use TLS",
+    "settings.email.smtp_user": "User",
+    "settings.email.smtp_password": "Password",
+    "settings.email.from_address": "From address",
+    "settings.email.recipients": "Recipients",
+    "settings.email.alarm_enabled": "Send on alarms",
+    "settings.email.daily_summary_enabled": "Daily summary",
+    "settings.email.daily_summary_time": "Time",
+    "settings.email.daily_send_now": "Send now",
+    "settings.email.monthly_summary_enabled": "Monthly summary",
+    "settings.email.monthly_summary_time": "Time",
+    "settings.email.monthly_send_now": "Send now",
+    "settings.email.test": "Send test",
+    "settings.email.hint": "Comma-separated recipient addresses. SMTP credentials are stored locally.",
+    "settings.alerts.col_email": "Email",
+})
+
 # -------- PV/Solar integration translations --------
 
 _I18N.setdefault("de", {}).update({

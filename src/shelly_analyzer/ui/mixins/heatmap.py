@@ -271,12 +271,14 @@ class HeatmapMixin:
         fg = "#E6E6E6" if theme == "night" else "#000000"
         no_data = self.t("plots.no_data")
 
-        for fig, ax, canvas in (
-            (self._heatmap_cal_fig, self._heatmap_cal_ax, self._heatmap_cal_canvas),
-            (self._heatmap_hourly_fig, self._heatmap_hourly_ax, self._heatmap_hourly_canvas),
+        for fig, ax_attr, canvas in (
+            (self._heatmap_cal_fig, "_heatmap_cal_ax", self._heatmap_cal_canvas),
+            (self._heatmap_hourly_fig, "_heatmap_hourly_ax", self._heatmap_hourly_canvas),
         ):
             try:
-                ax.clear()
+                fig.clf()
+                ax = fig.add_subplot(111)
+                setattr(self, ax_attr, ax)
                 fig.patch.set_facecolor(bg)
                 ax.set_facecolor(bg)
                 ax.text(
@@ -307,7 +309,10 @@ class HeatmapMixin:
             ax = self._heatmap_cal_ax
             canvas = self._heatmap_cal_canvas
 
-            ax.clear()
+            # Clear the entire figure (removes axes + colorbars) and recreate axes
+            fig.clf()
+            ax = fig.add_subplot(111)
+            self._heatmap_cal_ax = ax
 
             try:
                 theme = self._resolve_plot_theme()
@@ -424,7 +429,10 @@ class HeatmapMixin:
             ax = self._heatmap_hourly_ax
             canvas = self._heatmap_hourly_canvas
 
-            ax.clear()
+            # Clear the entire figure (removes axes + colorbars) and recreate axes
+            fig.clf()
+            ax = fig.add_subplot(111)
+            self._heatmap_hourly_ax = ax
 
             try:
                 theme = self._resolve_plot_theme()
