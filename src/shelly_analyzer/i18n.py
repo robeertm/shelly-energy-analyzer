@@ -4534,6 +4534,116 @@ _I18N.setdefault("ru", {}).update({
     "sched.status.load_error": "Ошибка загрузки: {err}",
 })
 
+# -------- Version-history / downgrade i18n (all 9 languages) --------
+
+_I18N.setdefault("de", {}).update({
+    "updates.versions_title": "Verfügbare Versionen (letzte 10)",
+    "updates.current_version": "Aktuelle Version: {version}",
+    "updates.current_indicator": " (aktuell)",
+    "updates.install_selected": "Gewählte Version installieren",
+    "updates.version_list_loading": "Versionen werden geladen…",
+    "updates.version_list_empty": "Keine Versionen gefunden",
+    "updates.downgrade_warning": "⚠ Achtung: Dies ist eine ältere Version (Downgrade)!",
+    "updates.reinstall_note": "ℹ Diese Version ist bereits installiert.",
+    "updates.no_asset_warning": "⚠ Kein Download für diese Version verfügbar.",
+})
+
+_I18N.setdefault("en", {}).update({
+    "updates.versions_title": "Available versions (last 10)",
+    "updates.current_version": "Current version: {version}",
+    "updates.current_indicator": " (current)",
+    "updates.install_selected": "Install selected version",
+    "updates.version_list_loading": "Loading versions…",
+    "updates.version_list_empty": "No versions found",
+    "updates.downgrade_warning": "⚠ Warning: This is an older version (downgrade)!",
+    "updates.reinstall_note": "ℹ This version is already installed.",
+    "updates.no_asset_warning": "⚠ No download available for this version.",
+})
+
+_I18N.setdefault("es", {}).update({
+    "updates.versions_title": "Versiones disponibles (últimas 10)",
+    "updates.current_version": "Versión actual: {version}",
+    "updates.current_indicator": " (actual)",
+    "updates.install_selected": "Instalar versión seleccionada",
+    "updates.version_list_loading": "Cargando versiones…",
+    "updates.version_list_empty": "No se encontraron versiones",
+    "updates.downgrade_warning": "⚠ Atención: Esta es una versión anterior (downgrade).",
+    "updates.reinstall_note": "ℹ Esta versión ya está instalada.",
+    "updates.no_asset_warning": "⚠ No hay descarga disponible para esta versión.",
+})
+
+_I18N.setdefault("fr", {}).update({
+    "updates.versions_title": "Versions disponibles (10 dernières)",
+    "updates.current_version": "Version actuelle : {version}",
+    "updates.current_indicator": " (actuelle)",
+    "updates.install_selected": "Installer la version sélectionnée",
+    "updates.version_list_loading": "Chargement des versions…",
+    "updates.version_list_empty": "Aucune version trouvée",
+    "updates.downgrade_warning": "⚠ Attention : Cette version est plus ancienne (downgrade) !",
+    "updates.reinstall_note": "ℹ Cette version est déjà installée.",
+    "updates.no_asset_warning": "⚠ Aucun téléchargement disponible pour cette version.",
+})
+
+_I18N.setdefault("pt", {}).update({
+    "updates.versions_title": "Versões disponíveis (últimas 10)",
+    "updates.current_version": "Versão atual: {version}",
+    "updates.current_indicator": " (atual)",
+    "updates.install_selected": "Instalar versão selecionada",
+    "updates.version_list_loading": "Carregando versões…",
+    "updates.version_list_empty": "Nenhuma versão encontrada",
+    "updates.downgrade_warning": "⚠ Atenção: Esta é uma versão mais antiga (downgrade)!",
+    "updates.reinstall_note": "ℹ Esta versão já está instalada.",
+    "updates.no_asset_warning": "⚠ Nenhum download disponível para esta versão.",
+})
+
+_I18N.setdefault("it", {}).update({
+    "updates.versions_title": "Versioni disponibili (ultime 10)",
+    "updates.current_version": "Versione attuale: {version}",
+    "updates.current_indicator": " (attuale)",
+    "updates.install_selected": "Installa versione selezionata",
+    "updates.version_list_loading": "Caricamento versioni…",
+    "updates.version_list_empty": "Nessuna versione trovata",
+    "updates.downgrade_warning": "⚠ Attenzione: Questa è una versione precedente (downgrade)!",
+    "updates.reinstall_note": "ℹ Questa versione è già installata.",
+    "updates.no_asset_warning": "⚠ Nessun download disponibile per questa versione.",
+})
+
+_I18N.setdefault("pl", {}).update({
+    "updates.versions_title": "Dostępne wersje (ostatnie 10)",
+    "updates.current_version": "Aktualna wersja: {version}",
+    "updates.current_indicator": " (aktualna)",
+    "updates.install_selected": "Zainstaluj wybraną wersję",
+    "updates.version_list_loading": "Ładowanie wersji…",
+    "updates.version_list_empty": "Nie znaleziono wersji",
+    "updates.downgrade_warning": "⚠ Uwaga: To jest starsza wersja (downgrade)!",
+    "updates.reinstall_note": "ℹ Ta wersja jest już zainstalowana.",
+    "updates.no_asset_warning": "⚠ Brak pliku do pobrania dla tej wersji.",
+})
+
+_I18N.setdefault("cs", {}).update({
+    "updates.versions_title": "Dostupné verze (posledních 10)",
+    "updates.current_version": "Aktuální verze: {version}",
+    "updates.current_indicator": " (aktuální)",
+    "updates.install_selected": "Nainstalovat vybranou verzi",
+    "updates.version_list_loading": "Načítání verzí…",
+    "updates.version_list_empty": "Žádné verze nenalezeny",
+    "updates.downgrade_warning": "⚠ Pozor: Jedná se o starší verzi (downgrade)!",
+    "updates.reinstall_note": "ℹ Tato verze je již nainstalována.",
+    "updates.no_asset_warning": "⚠ Pro tuto verzi není k dispozici žádný stažitelný soubor.",
+})
+
+_I18N.setdefault("ru", {}).update({
+    "updates.versions_title": "Доступные версии (последние 10)",
+    "updates.current_version": "Текущая версия: {version}",
+    "updates.current_indicator": " (текущая)",
+    "updates.install_selected": "Установить выбранную версию",
+    "updates.version_list_loading": "Загрузка версий…",
+    "updates.version_list_empty": "Версии не найдены",
+    "updates.downgrade_warning": "⚠ Внимание: Это более старая версия (откат)!",
+    "updates.reinstall_note": "ℹ Эта версия уже установлена.",
+    "updates.no_asset_warning": "⚠ Для этой версии нет доступного файла загрузки.",
+})
+
 # -------- Local formatting helpers (dates/numbers) --------
 
 _DATE_FORMATS = {
