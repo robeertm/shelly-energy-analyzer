@@ -9,6 +9,29 @@ from shelly_analyzer import __version__
 
 
 @dataclass(frozen=True)
+class TouRate:
+    """A single Time-of-Use tariff window."""
+    name: str = "HT"
+    price_eur_per_kwh: float = 0.35
+    # Start hour (inclusive, 0-23 local time)
+    start_hour: int = 6
+    # End hour (exclusive, 0-23 local time; if end_hour < start_hour the window wraps overnight)
+    end_hour: int = 22
+    # If True, this rate only applies Monday–Friday (weekdays 0–4)
+    weekdays_only: bool = False
+
+
+@dataclass(frozen=True)
+class TouConfig:
+    """Time-of-Use multi-tariff configuration."""
+    enabled: bool = False
+    rates: List[TouRate] = field(default_factory=lambda: [
+        TouRate(name="HT", price_eur_per_kwh=0.35, start_hour=6, end_hour=22, weekdays_only=False),
+        TouRate(name="NT", price_eur_per_kwh=0.22, start_hour=22, end_hour=6, weekdays_only=False),
+    ])
+
+
+@dataclass(frozen=True)
 class DeviceConfig:
     key: str
     name: str
@@ -282,6 +305,7 @@ class AppConfig:
     billing: BillingConfig = field(default_factory=BillingConfig)
     alerts: List[AlertRule] = field(default_factory=list)
     solar: SolarConfig = field(default_factory=SolarConfig)
+    tou: TouConfig = field(default_factory=TouConfig)
 
 
 def default_config_path(project_root: Optional[Path] = None) -> Path:
@@ -556,6 +580,30 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         ),
     )
 
+    tou_raw = raw.get("tou", {}) if isinstance(raw.get("tou"), dict) else {}
+    _default_tou_rates = TouConfig().rates
+    tou_rates_raw = tou_raw.get("rates", None)
+    if isinstance(tou_rates_raw, list) and tou_rates_raw:
+        tou_rates: List[TouRate] = []
+        for r in tou_rates_raw:
+            if not isinstance(r, dict):
+                continue
+            tou_rates.append(TouRate(
+                name=str(r.get("name", "HT") or "HT"),
+                price_eur_per_kwh=_coerce_float(r.get("price_eur_per_kwh", 0.35), 0.35),
+                start_hour=_coerce_int(r.get("start_hour", 6), 6),
+                end_hour=_coerce_int(r.get("end_hour", 22), 22),
+                weekdays_only=bool(r.get("weekdays_only", False)),
+            ))
+        if not tou_rates:
+            tou_rates = list(_default_tou_rates)
+    else:
+        tou_rates = list(_default_tou_rates)
+    tou = TouConfig(
+        enabled=bool(tou_raw.get("enabled", False)),
+        rates=tou_rates,
+    )
+
     cfg = AppConfig(
         version=str(raw.get("version", __version__)),
         devices=devices,
@@ -568,6 +616,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         billing=billing,
         alerts=alerts,
         solar=solar,
+        tou=tou,
     )
 
     # Write back migrated schema (and missing blocks) if needed
@@ -725,6 +774,19 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "vat_enabled": cfg.pricing.vat_enabled,
             "vat_rate_percent": cfg.pricing.vat_rate_percent,
             "co2_intensity_g_per_kwh": getattr(cfg.pricing, "co2_intensity_g_per_kwh", 380.0),
+        },
+        "tou": {
+            "enabled": bool(getattr(cfg.tou, "enabled", False)),
+            "rates": [
+                {
+                    "name": r.name,
+                    "price_eur_per_kwh": r.price_eur_per_kwh,
+                    "start_hour": r.start_hour,
+                    "end_hour": r.end_hour,
+                    "weekdays_only": r.weekdays_only,
+                }
+                for r in (getattr(cfg.tou, "rates", []) or [])
+            ],
         },
         "billing": {
             "issuer": {
