@@ -1,5 +1,30 @@
 # Changelog
 
+## 7.8.0 - 2026-03-20
+### Added
+- **Anomaly Detection (🔍 Anomalies tab).** A new `AnomalyMixin` adds automatic detection of unusual consumption patterns using rolling mean + standard deviation statistics.
+  - **Three independent detectors:**
+    - **Unusual daily consumption:** Compares each day's total kWh against a rolling N-day baseline (mean ± Nσ). Flags days that deviate significantly with configurable minimum absolute deviation to suppress noise.
+    - **Elevated night consumption:** Tracks the ratio of night-time energy (22:00–06:00) to total daily energy over a rolling baseline. Flags days where the night ratio is significantly higher than usual, indicating unexpected standby loads or overnight usage.
+    - **Power peak at unusual hour:** Identifies the hour of the daily maximum power draw and compares it to the rolling distribution of typical peak times (using circular distance for 24-hour wrap). Flags peaks that occur at statistically unusual hours.
+  - **Statistical foundation:** All detectors use a configurable rolling window (default 30 days) to compute mean and standard deviation. Anomalies are triggered when the deviation exceeds `sigma_threshold` × σ (default 2.0σ).
+  - **AnomalyConfig** dataclass persisted under the `anomaly` key in `config.json`:
+    - `enabled` – master switch
+    - `sigma_threshold` – sensitivity (number of std deviations; lower = more sensitive)
+    - `min_deviation_kwh` – minimum kWh deviation to suppress false positives
+    - `window_days` – rolling baseline window length
+    - `check_unusual_daily`, `check_night_consumption`, `check_power_peak_time` – toggles per detector
+    - `action_telegram`, `action_webhook`, `action_email` – notification channels
+    - `max_history` – maximum entries retained in the in-memory history log
+  - **Anomaly tab UI:**
+    - Top bar with title, "Run Detection Now" button, and "Clear history" button.
+    - Inline settings panel (enabled toggle, sigma, min deviation, window, check toggles, notification channel checkboxes) – changes are saved to `config.json` immediately.
+    - Treeview history log showing: timestamp, device name, anomaly type (translated), value, σ count, and description.
+    - Status line showing running/completed state and event count.
+  - **Notifications:** When a new anomaly is detected, optional notifications are dispatched via Telegram (`_alerts_send_telegram`), Webhook (`_webhook_send_sync` with structured JSON payload including `event`, `device`, `anomaly_type`, `value`, `sigma`, `description`), and E-mail (`_email_send_sync`).
+  - **Full i18n support** in all 9 languages (de, en, es, fr, pt, it, pl, cs, ru).
+  - **Backward compatible:** `anomaly` section is written back to existing `config.json` on first run with all defaults; no migration needed.
+
 ## 7.7.0 - 2026-03-20
 ### Fixed
 - **Heatmap tab no longer shows blank charts.** The calendar heatmap and weekday×hour heatmap were silently failing because `query_samples()` converts raw SQLite Unix integer timestamps to naive UTC `datetime64` objects. The heatmap helpers called `datetime.fromtimestamp(int(ts))` on those objects, which returns nanoseconds instead of seconds, causing an overflow that the `except` clause swallowed. Fixed by normalizing timestamp columns back to Unix integer seconds immediately after loading in `_heatmap_load_df` (and in `_cmp_load_daily`). The same normalization is applied in the new Comparison tab.
