@@ -1,32 +1,23 @@
 # Changelog
 
-## 7.4.0 - 2026-03-20
+## 7.5.0 - 2026-03-20
 ### Added
-- **"Send now" buttons for email reports.** Daily and monthly email report panels each have a new "Send now" button to trigger an immediate send without waiting for the scheduled time, mirroring the Telegram daily/monthly send-now buttons.
-- **Full i18n for email settings in all 9 languages.** Previously only German and English were translated. Spanish (es), French (fr), Portuguese (pt), Italian (it), Polish (pl), Czech (cs), and Russian (ru) translations are now complete for all email settings, including the new send-now buttons.
-
-## 7.3.0 - 2026-03-20
-### Added
-- **Automatic E-Mail Reports.** A new SMTP-based e-mail system sends scheduled energy reports as PDF attachments — fully independent of Telegram and webhooks.
-  - **SMTP configuration:** Server, port, TLS/STARTTLS (port 587) and SSL (port 465), username, password, and sender address — all configurable in the Settings UI.
-  - **Recipient list:** Comma-separated recipient addresses.
-  - **Scheduled daily and monthly PDF reports:** At the configured time, a PDF summary (kWh, avg/max power, cost per device) is generated and sent as an attachment alongside the text summary.
-  - **Alarm e-mails:** Each alert rule has a new "E-Mail" checkbox column; when a rule triggers, an e-mail with alarm details is sent (requires global e-mail alarm toggle to be on).
-  - **Independent scheduling:** Daily and monthly e-mail summaries have their own time settings and state persistence (`data/email_summary_state.json`), separate from Telegram and webhook schedules.
-  - **Test button** in settings to verify SMTP connectivity immediately.
-  - **Uses Python standard library** (`smtplib`, `ssl`, `email`) — no additional dependencies.
-  - **Fully i18n-compatible** (German and English, other languages fall back to English).
-
-## 7.2.0 - 2026-03-19
-### Added
-- **CO₂ Footprint Tracking.** Electricity consumption is now translated into CO₂ emissions throughout the app.
-  - **Configurable CO₂ intensity** (g CO₂/kWh) in Settings → Pricing & VAT. Country presets via dropdown: DE ~380, AT ~120, CH ~30, FR ~60, EU ~255, Green/Renewable 0 g/kWh.
-  - **Costs tab:** Each time-range card (Today, This Week, This Month, This Year) and the monthly projection card now show the corresponding CO₂ value in kg (e.g. `🌿 1.234 kg CO₂`) when CO₂ intensity is configured (> 0).
-  - **Plots tab:** All kWh bar chart titles include the total CO₂ for the displayed period (e.g. `… / 12.34 kg CO₂`).
-  - **Telegram summaries:** Daily and monthly summaries include a `🌿 CO₂: X.XXX kg` line after the cost line, and per-device breakdowns show kg CO₂ alongside kWh and €. The standby baseline section also shows estimated kg CO₂/year.
-  - **Webhook payloads:** Daily and monthly summary payloads include `co2_intensity_g_per_kwh` so downstream consumers (Home Assistant, Node-RED, etc.) can compute emissions directly.
-  - **Full i18n support** for all 9 languages (de, en, es, fr, pt, it, pl, cs, ru): CO₂ intensity label and preset button are translated. Translations for fr/pt/it/pl/cs/ru are provided as native overrides in the `_mk_lang` blocks.
-  - **Zero/disabled option:** Setting CO₂ intensity to 0 disables all CO₂ display, e.g. for 100% renewable tariffs.
+- **PV/Solar Integration.** A new "☀️ Solar" tab provides a complete solar energy overview for Shelly setups with a bidirectional grid meter.
+  - **Configurable PV meter:** Select the Shelly device at the grid connection point (negative power = export to grid) via Settings → Solar / PV.
+  - **Feed-in tariff (Einspeisevergütung):** Configurable €/kWh rate to calculate feed-in revenue.
+  - **Automatic metric calculation from bidirectional power readings:**
+    - **Einspeisung / Grid feed-in (kWh):** Energy exported to the grid (intervals where power < 0).
+    - **Netzbezug / Grid consumption (kWh):** Energy imported from the grid (intervals where power ≥ 0).
+    - **Eigenverbrauch / Self-consumption (kWh):** Calculated from other configured Shelly devices (total household consumption minus grid import). Requires at least one other device to be configured.
+    - **Autarkiegrad / Self-sufficiency (%):** Self-consumption as a share of total household consumption.
+    - **PV-Erzeugung / PV production (kWh):** Estimated total PV output (self-consumption + feed-in).
+    - **Einspeisevergütung / Feed-in revenue (€):** Feed-in energy × configured tariff.
+    - **Ersparte Kosten / Cost savings (€):** Self-consumed energy × electricity price.
+  - **Period selector:** View statistics for Today, This Week, This Month, or This Year.
+  - **Daily bar chart:** Visual breakdown of feed-in vs. grid import per day, with full light/dark theme support.
+  - **Telegram & Webhook integration:** Solar data (feed-in, grid consumption, self-consumption, autarky, PV production, revenue, savings) is appended to daily and monthly summaries. Webhook payloads also include a structured `solar` sub-object with all numeric metrics.
+  - **Full i18n support** in all 9 languages (de, en, es, fr, pt, it, pl, cs, ru).
+  - **Graceful degradation:** When no PV meter is configured or no other devices exist, the tab shows informative messages rather than errors.
 
 ## 7.1.0 - 2026-03-19
 ### Added
