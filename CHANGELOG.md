@@ -1,5 +1,15 @@
 # Changelog
 
+## 8.0.5 - 2026-03-20
+### Fixed
+- **Compare tab: blank chart when DB range query returns empty rows.**
+  `Storage.read_device_df()` fell through to the legacy CSV path whenever a date-range query
+  returned zero rows — even for devices fully stored in SQLite.  Because no CSV files exist
+  post-migration, the fallback raised `ValueError`, which `_cmp_load_daily` silently swallowed,
+  yielding an empty result dict and zero-height bars.
+  Fix: when `has_data(device_key)` is True, always return the DataFrame from the DB (empty or
+  not) without touching the CSV path.
+
 ## 8.0.4 - 2026-03-20
 ### Fixed
 - **Comparison tab showed no data (remaining cases).** `_cmp_load_daily` relied solely on
