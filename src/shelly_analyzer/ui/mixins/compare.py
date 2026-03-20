@@ -154,6 +154,13 @@ class CompareMixin:
         """Load daily kWh/€ totals for *device_key* between two dates.
 
         Returns ``{"%Y-%m-%d": value}`` for each day in [from_date, to_date].
+
+        Strategy:
+        1. Primary: ``hourly_energy`` table — always populated during sync, stores
+           integer ``hour_ts`` (no datetime-conversion issues), and has a ``kwh``
+           column guaranteed by COALESCE.
+        2. Fallback: raw ``samples`` via ``read_device_df`` — kept for devices
+           whose hourly table was never rebuilt (very old DBs).
         """
         try:
             import pandas as pd
@@ -162,6 +169,33 @@ class CompareMixin:
             to_plus = to_date + timedelta(days=1)
             end_ts = int(datetime(to_plus.year, to_plus.month, to_plus.day).timestamp())
 
+            def _aggregate(ts_series, kwh_series) -> Dict[str, float]:
+                """Group (timestamp_seconds, kwh) pairs into daily totals."""
+                local_dates = ts_series.apply(
+                    lambda ts: datetime.fromtimestamp(int(ts)).date()
+                )
+                tmp = pd.DataFrame({"_date": local_dates, "_kwh": kwh_series.fillna(0.0)})
+                daily = tmp.groupby("_date")["_kwh"].sum()
+                out: Dict[str, float] = {}
+                for d, kwh in daily.items():
+                    if from_date <= d <= to_date:
+                        val = float(kwh) * price_kwh if use_eur else float(kwh)
+                        out[d.strftime("%Y-%m-%d")] = max(0.0, val)
+                return out
+
+            # ── 1. Hourly pre-aggregated table (primary) ──────────────────────
+            try:
+                hourly_df = self.storage.db.query_hourly(
+                    device_key, start_ts=start_ts, end_ts=end_ts
+                )
+                if hourly_df is not None and not hourly_df.empty and "kwh" in hourly_df.columns:
+                    result = _aggregate(hourly_df["hour_ts"], hourly_df["kwh"])
+                    if result:
+                        return result
+            except Exception as e:
+                logger.debug("_cmp_load_daily hourly path error for '%s': %s", device_key, e)
+
+            # ── 2. Raw samples fallback ────────────────────────────────────────
             df = self.storage.read_device_df(device_key, start_ts=start_ts, end_ts=end_ts)
             if df is None or df.empty or "energy_kwh" not in df.columns:
                 return {}
@@ -178,21 +212,10 @@ class CompareMixin:
                 if hasattr(col.dtype, "tz") or pd.api.types.is_datetime64_any_dtype(col):
                     df[col_name] = col.astype("int64") // 10 ** 9
 
-            local_dates = df[ts_col].apply(lambda ts: datetime.fromtimestamp(int(ts)).date())
-            tmp = df.copy()
-            tmp["_date"] = local_dates
-            tmp["_kwh"] = df["energy_kwh"].fillna(0.0)
-            daily = tmp.groupby("_date")["_kwh"].sum()
-
-            result: Dict[str, float] = {}
-            for d, kwh in daily.items():
-                if from_date <= d <= to_date:
-                    val = float(kwh) * price_kwh if use_eur else float(kwh)
-                    result[d.strftime("%Y-%m-%d")] = max(0.0, val)
-            return result
+            return _aggregate(df[ts_col], df["energy_kwh"])
 
         except Exception as e:
-            logger.debug("_cmp_load_daily error for '%s': %s", device_key, e)
+            logger.warning("_cmp_load_daily error for '%s': %s", device_key, e, exc_info=True)
             return {}
 
     # ── Aggregation helpers ───────────────────────────────────────────────────
@@ -311,6 +334,13 @@ class CompareMixin:
             daily_a = self._cmp_load_daily(key_a, from_a, to_a, use_eur, price_kwh)
             daily_b = self._cmp_load_daily(key_b, from_b, to_b, use_eur, price_kwh)
 
+            # If both periods returned no data, show a clear message rather than
+            # rendering an empty chart with invisible zero-height bars.
+            if not daily_a and not daily_b:
+                self._cmp_show_message(self.t("plots.no_data"))
+                self._cmp_delta_var.set("")
+                return
+
             total_a = sum(daily_a.values())
             total_b = sum(daily_b.values())
 
@@ -351,7 +381,7 @@ class CompareMixin:
             )
 
         except Exception as e:
-            logger.debug("_refresh_compare error: %s", e)
+            logger.warning("_refresh_compare error: %s", e, exc_info=True)
 
     # ── Drawing ───────────────────────────────────────────────────────────────
 
@@ -473,7 +503,7 @@ class CompareMixin:
             canvas.draw()
 
         except Exception as e:
-            logger.debug("_draw_compare_chart error: %s", e)
+            logger.warning("_draw_compare_chart error: %s", e, exc_info=True)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
