@@ -18,6 +18,7 @@ from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 from urllib.parse import urlparse, parse_qs
 
 from shelly_analyzer.i18n import get_lang_map, normalize_lang, t as _t
+from shelly_analyzer.services.appliance_detector import identify_appliance as _identify_appliance
 
 # Best-effort project root derived from this file location (more reliable than CWD on macOS Finder launches).
 try:
@@ -184,6 +185,20 @@ class LiveStateStore:
                 }
                 for p in arr
             ]
+        # Appliance hints for the latest reading per device
+        appliances: Dict[str, List[Dict[str, Any]]] = {}
+        for k, arr in snap.items():
+            if arr:
+                try:
+                    matches = _identify_appliance(arr[-1].power_total_w)[:3]
+                    appliances[k] = [
+                        {"icon": sig.icon, "id": sig.id, "conf": conf}
+                        for sig, conf in matches
+                    ]
+                except Exception:
+                    appliances[k] = []
+        if appliances:
+            out["_appliances"] = appliances
         return out
 
 
@@ -416,6 +431,30 @@ _HTML_TEMPLATE = """<!doctype html>
       color: var(--fg);
       font-weight: 650;
     }}
+    .appl-title {{
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 6px 2px 3px;
+    }}
+    .appl {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      padding: 0 0 4px;
+    }}
+    .appl-item {{
+      font-size: 12px;
+      background: rgba(106,167,255,0.08);
+      border: 1px solid rgba(106,167,255,0.15);
+      border-radius: 10px;
+      padding: 3px 9px;
+      white-space: nowrap;
+    }}
+    :root[data-compact="1"] .appl { display: none; }
+    :root[data-compact="1"] .appl-title { display: none; }
 
     /* ---- Cost panel ---- */
     .cost-panel {{
@@ -810,6 +849,8 @@ function buildCards() {
         <canvas id="c_${id}" class="currentPlot"></canvas>
       </div>
       <div class="kv" id="kv_${id}"></div>
+      <div class="appl-title" id="appltitle_${id}" style="display:none">${escapeHtml(t('live.appliance.title'))}</div>
+      <div class="appl" id="appl_${id}"></div>
     `;
     gridEl.appendChild(card);
     UI[dev.key] = {
@@ -817,6 +858,8 @@ function buildCards() {
       v: document.getElementById(`v_${id}`),
       c: document.getElementById(`c_${id}`),
       kv: document.getElementById(`kv_${id}`),
+      appl: document.getElementById(`appl_${id}`),
+      applTitle: document.getElementById(`appltitle_${id}`),
       swState: document.getElementById(`sw_${id}`),
       swBtn: document.getElementById(`swbtn_${id}`),
     };
@@ -1146,6 +1189,22 @@ function drawLineChart(canvas, tsMs, seriesList, yLabel, colors) {{
   }});
 }}
 
+function renderAppliances(el, titleEl, appls) {{
+  if (!el) return;
+  if (compactMode || !appls || !appls.length) {{
+    el.innerHTML = '';
+    if (titleEl) titleEl.style.display = 'none';
+    return;
+  }}
+  if (titleEl) titleEl.style.display = '';
+  el.innerHTML = appls.map(a => {{
+    const name = t('appliance.' + a.id + '.name') || a.id;
+    const pct = Math.round(a.conf * 100);
+    const dot = pct >= 70 ? '🟢' : pct >= 40 ? '🟡' : '🔴';
+    return `<span class="appl-item">${{a.icon}} ${{escapeHtml(name)}} ${{dot}} ${{pct}}%</span>`;
+  }}).join('');
+}}
+
 function kv(el, last, dev) {{
   const single = (parseInt((dev && dev.phases !== undefined) ? dev.phases : 3, 10) <= 1);
   const u = single ? `${fmt(last.va)} V` : `${fmt(last.va)} / ${fmt(last.vb)} / ${fmt(last.vc)} V`;
@@ -1277,6 +1336,10 @@ function renderState(data) {
 
     const picked = pickDev(data, dev);
     if (picked.last) kv(ui.kv, picked.last, dev);
+    try {
+      const appls = data._appliances && data._appliances[dev.key];
+      renderAppliances(ui.appl, ui.applTitle, appls || []);
+    } catch (e) {}
     const ts = picked.arr.map(x=>x.ts*1000);
     const sparkOpts = compactMode ? {compact:true} : null;
     const isSingle = (parseInt(dev.phases || 3, 10) <= 1);
