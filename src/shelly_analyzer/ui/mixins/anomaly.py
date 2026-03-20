@@ -165,6 +165,10 @@ class AnomalyMixin:
         # Populate from existing in-memory log
         self._anomaly_refresh_tree()
 
+        # Auto-start detection if it was active when the app was last closed
+        if bool(getattr(self.cfg.anomaly, "enabled", False)):
+            self.after(500, self._run_anomaly_detection)
+
     # ── Detection runner ──────────────────────────────────────────────────────
 
     def _run_anomaly_detection(self) -> None:
