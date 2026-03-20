@@ -1,5 +1,18 @@
 # Changelog
 
+## 7.6.0 - 2026-03-20
+### Added
+- **Time-of-Use (TOU) / Multi-Tariff Pricing.** The app now supports time-variable electricity tariffs (Mehrtarif / Doppeltarif), replacing the single flat rate when enabled.
+  - **TouConfig** dataclass with `enabled` flag and a list of **TouRate** entries, each defining a name (e.g. HT/NT or Peak/Off-Peak), price (€/kWh), start hour, end hour (overnight windows supported when end < start), and an optional weekdays-only flag (Mon–Fri).
+  - **Default rates:** HT (0.35 €/kWh, 06:00–22:00) and NT (0.22 €/kWh, 22:00–06:00); fully configurable.
+  - **Timestamp-based cost calculation:** Each energy interval is matched to the applicable tariff window, enabling accurate cost breakdowns regardless of mix of peak/off-peak consumption. Falls back gracefully to flat rate if TOU is disabled or no rates are defined.
+  - **Costs tab breakdown:** Each time-range card (Today, Week, Month, Year) now shows a per-tariff breakdown line, e.g. `HT: 12.34 kWh / 4.32 € | NT: 8.00 kWh / 1.76 €`.
+  - **Month projection** and **previous month comparison** are also computed using the TOU cost model.
+  - **Telegram & Webhook summaries** include the TOU cost breakdown per tariff name when TOU is active.
+  - **Settings UI – TOU editor:** A new "Mehrtarif / Zeit-variable Preise (TOU)" section in Settings → main tab allows enabling TOU, adding/editing/removing tariff windows via a Treeview with add/edit/remove buttons and an inline dialog (name, price, start hour, end hour, weekdays-only checkbox).
+  - **Persisted in config.json** under the `tou` key with full serialisation/deserialisation, including backward-compatible defaults for existing installations.
+  - **Full i18n support** in all 9 languages (de, en, es, fr, pt, it, pl, cs, ru).
+
 ## 7.5.0 - 2026-03-20
 ### Added
 - **PV/Solar Integration.** A new "☀️ Solar" tab provides a complete solar energy overview for Shelly setups with a bidirectional grid meter.
