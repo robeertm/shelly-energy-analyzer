@@ -1,5 +1,16 @@
 # Changelog
 
+## 8.1.0 - 2026-03-20
+### Added
+- **Compare tab: quick-compare buttons.** Four one-click presets ("This vs. Last Month",
+  "This vs. Last Quarter", "This vs. Last Half-Year", "This vs. Last Year") automatically
+  fill both period A and B date fields and immediately trigger a refresh. Translatable
+  labels added for all 9 supported languages (de, en, es, fr, pt, it, pl, cs, ru).
+### Fixed
+- **Compare tab: EUR unit conversion used wrong config field.** `_refresh_compare` read
+  `pricing.price_per_kwh` (non-existent attribute, always resolved to 0.0) instead of
+  `pricing.electricity_price_eur_per_kwh`, causing all € values to show as 0.00.
+
 ## 8.0.5 - 2026-03-20
 ### Fixed
 - **Compare tab: blank chart when DB range query returns empty rows.**
