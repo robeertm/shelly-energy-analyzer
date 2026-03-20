@@ -1,10 +1,10 @@
 # Shelly Energy Analyzer
 
-A cross-platform desktop application to analyze, visualize and export energy data from Shelly devices (1‑phase and 3‑phase) — including live dashboards, cost tracking, historical plots, CSV/PDF exports, Telegram alerts, solar/PV monitoring, anomaly detection, device scheduling and much more.
+A cross-platform desktop application to analyze, visualize and export energy data from Shelly devices (1‑phase and 3‑phase) — including live dashboards, cost tracking, historical plots, CSV/PDF exports, Telegram alerts, solar/PV monitoring, anomaly detection, NILM appliance detection, device scheduling and much more.
 
 This repository is **GitHub-ready** (MIT license, clean structure, no secrets). Releases are published via **GitHub Releases** so the built‑in updater can find and download new versions.
 
-> **Current version: v8.0.0** — all 10 major feature modules complete.
+> **Current version: v8.4.0** — all major feature modules complete.
 
 ---
 
@@ -43,14 +43,17 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 
 ### 🔍 Comparison Mode
 - Compare two arbitrary date ranges side-by-side (e.g. this week vs. last week)
+- **Quick-compare buttons** — one click to compare Month, Quarter, Half-Year or Year against the previous period
 - Overlaid line charts for any metric (kWh, W, cost, …)
 - Percentage delta indicators for quick at-a-glance diff
+- EUR unit support in addition to kWh for cost comparisons
 
 ### ⚠️ Automatic Anomaly Detection
 - Rolling mean ± N × σ (configurable sigma multiplier) algorithm
 - Detects consumption spikes and unexpected dips in real time and in history
 - Highlighted anomaly markers on time-series plots
 - Anomaly log with timestamp, device, metric and deviation magnitude
+- Detection state (enabled/disabled) persisted across app restarts
 
 ### ☀️ PV / Solar Dashboard
 - Feed-in energy tracking (kWh exported to grid)
@@ -74,6 +77,13 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Aggregated energy, power and cost view per group
 - Independent group dashboard with combined time-series plots
 
+### 🔌 NILM Appliance Detection
+- Non-Intrusive Load Monitoring — identifies which appliances are running from live wattage alone
+- ~25 built-in device profiles (fridge, washing machine, dishwasher, EV charger, heat pump, etc.)
+- Top-3 matches shown with confidence score for each detection
+- Works in the desktop app and the **web dashboard**
+- No smart plugs or additional hardware required
+
 ### ⏰ Device Scheduling
 - Create on/off schedules for Shelly Gen2 devices via the official RPC API
 - Visual schedule editor (time slots, days-of-week)
@@ -92,7 +102,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 ### 🖥 Cross‑Platform
 - macOS / Windows / Linux
 - One-click start scripts
-- Web dashboard (accessible from any device on the network) with live charts, neutral current (dashed N line), phase balance, cost overview
+- Web dashboard (accessible from any device on the network) with live charts, neutral current (dashed N line), phase balance, cost overview and NILM appliance detection
 
 ---
 
@@ -173,6 +183,7 @@ The built-in updater checks the latest release on GitHub automatically.
 
 - If you are offline or GitHub is blocked by DNS/VPN/firewall, the app will show an "offline/timeout" message.
 - **Download & install** is only enabled when a newer version than the current one is available.
+- **Version history** — the updater shows the last 10 releases; you can install any of them, including older versions (downgrade).
 
 To publish an update:
 ```bash
