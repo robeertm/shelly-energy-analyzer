@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -234,6 +234,35 @@ def get_switch_status(client: ShellyHttp, host: str, switch_id: int) -> Dict[str
         pass
 
     return data
+
+
+def schedule_list(client: ShellyHttp, host: str) -> Dict[str, Any]:
+    """List all schedules on a Gen2+ device (Schedule.List)."""
+    return rpc_call(client, host, "Schedule.List", {})
+
+
+def schedule_create(
+    client: ShellyHttp,
+    host: str,
+    timespec: str,
+    calls: List[Dict[str, Any]],
+    enable: bool = True,
+) -> Dict[str, Any]:
+    """Create a schedule on a Gen2+ device (Schedule.Create).
+
+    timespec follows cron-like format: "ss mm hh * * dow"
+    where dow is comma-separated 0-based day-of-week (0=Sun … 6=Sat).
+    """
+    return rpc_call(client, host, "Schedule.Create", {
+        "enable": bool(enable),
+        "timespec": str(timespec),
+        "calls": list(calls),
+    })
+
+
+def schedule_delete(client: ShellyHttp, host: str, schedule_id: int) -> Dict[str, Any]:
+    """Delete a schedule on a Gen2+ device (Schedule.Delete)."""
+    return rpc_call(client, host, "Schedule.Delete", {"id": int(schedule_id)})
 
 
 def set_switch_state(client: ShellyHttp, host: str, switch_id: int, on: bool) -> Dict[str, Any]:

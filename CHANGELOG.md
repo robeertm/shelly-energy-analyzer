@@ -1,5 +1,35 @@
 # Changelog
 
+## 8.0.0 - 2026-03-20
+### Added
+- **Device Scheduling (⏰ Schedules tab) — Feature 10/10, completing the full feature set.**
+  A new `ScheduleMixin` introduces a dedicated "Schedules" tab for automatic timed control of Shelly plugs and switches.
+  - **`DeviceSchedule` dataclass** persisted under the `schedules` key in `config.json`:
+    - `schedule_id` – local UUID (stable across restarts)
+    - `device_key` – references a configured device
+    - `name` – human-readable label (e.g. "Hot Water", "Space Heater")
+    - `time_on` / `time_off` – HH:MM local time for switching on/off
+    - `weekdays` – list of 0–6 integers (0 = Monday … 6 = Sunday)
+    - `enabled` – master toggle per schedule
+    - `switch_id` – relay/switch index on the device
+    - `shelly_id_on` / `shelly_id_off` – Shelly Gen2 Schedule IDs (-1 = local-only)
+  - **Shelly Gen2+ RPC integration:** Three new helpers in `io/http.py`:
+    - `schedule_list()` — `Schedule.List` RPC
+    - `schedule_create()` — `Schedule.Create` RPC (cron timespec, Switch.Set calls)
+    - `schedule_delete()` — `Schedule.Delete` RPC
+  - **"Push to Device" button:** Converts a local schedule to two Shelly Gen2 cron jobs (one for ON, one for OFF) via `Schedule.Create` and persists the returned Shelly IDs back to `config.json`. Deletes previously pushed jobs before re-pushing.
+  - **"Load from Device" button:** Imports schedules stored directly on a Gen2+ device (`Schedule.List`) and creates local `DeviceSchedule` entries linked to the Shelly job IDs.
+  - **Local app scheduler (`services/scheduler.py`):** A `LocalScheduler` background daemon thread (30-second tick) that fires `Switch.Set` commands for schedules not pushed to the device (Gen1 devices and locally-only entries). Uses a per-minute fired-set to prevent double-firing.
+    - Helper `build_shelly_timespec()` converts HH:MM + weekday list to Shelly cron format ("ss mm hh * * dow").
+  - **Schedule editor UI:**
+    - Treeview with columns: Name, Device, On-Time, Off-Time, Weekdays, Enabled, Backend (Shelly RPC / App local)
+    - **Add / Edit / Delete** buttons with confirmation dialog for deletion
+    - Editor dialog: name field, device dropdown, relay ID, on-time, off-time, weekday checkboxes (Mo–Su), enabled toggle
+    - Weekdays display: "Daily", "Mon–Fri", "Sat–Sun", or comma-separated day abbreviations
+    - Status line showing push/load progress and errors
+  - **Full i18n support** in all 9 languages (de, en, es, fr, pt, it, pl, cs, ru) for all labels, buttons, messages, and weekday names.
+  - **Backward compatible:** `schedules` array defaults to `[]`; existing `config.json` files load without changes.
+
 ## 7.9.0 - 2026-03-20
 ### Added
 - **Device Groups & Aggregation.** Multiple Shelly devices can now be combined into logical groups (e.g. "Apartment 1", "Workshop", "Whole House") and displayed as a single aggregated unit.
