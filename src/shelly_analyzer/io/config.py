@@ -109,6 +109,21 @@ class UiConfig:
     webhook_daily_summary_enabled: bool = False
     webhook_monthly_summary_enabled: bool = False
 
+    # Email reports (SMTP)
+    email_enabled: bool = False
+    email_smtp_host: str = ""
+    email_smtp_port: int = 587
+    email_smtp_use_tls: bool = True   # STARTTLS on port 587
+    email_smtp_use_ssl: bool = False  # implicit SSL on port 465
+    email_smtp_username: str = ""
+    email_smtp_password: str = ""
+    email_smtp_sender: str = ""
+    email_recipients: str = ""        # comma-separated list
+    email_daily_report_enabled: bool = False
+    email_daily_report_time: str = "00:00"   # HH:MM local time
+    email_monthly_report_enabled: bool = False
+    email_monthly_report_time: str = "00:00" # HH:MM local time
+
     # Auto-sync in the background (triggered from the GUI).
 
     # Auto-sync in the background (triggered from the GUI).
@@ -408,6 +423,19 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         webhook_alarm_enabled=bool(ui_raw.get("webhook_alarm_enabled", UiConfig.webhook_alarm_enabled)),
         webhook_daily_summary_enabled=bool(ui_raw.get("webhook_daily_summary_enabled", UiConfig.webhook_daily_summary_enabled)),
         webhook_monthly_summary_enabled=bool(ui_raw.get("webhook_monthly_summary_enabled", UiConfig.webhook_monthly_summary_enabled)),
+        email_enabled=bool(ui_raw.get("email_enabled", UiConfig.email_enabled)),
+        email_smtp_host=str(ui_raw.get("email_smtp_host", UiConfig.email_smtp_host) or ""),
+        email_smtp_port=_coerce_int(ui_raw.get("email_smtp_port", UiConfig.email_smtp_port), UiConfig.email_smtp_port),
+        email_smtp_use_tls=bool(ui_raw.get("email_smtp_use_tls", UiConfig.email_smtp_use_tls)),
+        email_smtp_use_ssl=bool(ui_raw.get("email_smtp_use_ssl", UiConfig.email_smtp_use_ssl)),
+        email_smtp_username=str(ui_raw.get("email_smtp_username", UiConfig.email_smtp_username) or ""),
+        email_smtp_password=str(ui_raw.get("email_smtp_password", UiConfig.email_smtp_password) or ""),
+        email_smtp_sender=str(ui_raw.get("email_smtp_sender", UiConfig.email_smtp_sender) or ""),
+        email_recipients=str(ui_raw.get("email_recipients", UiConfig.email_recipients) or ""),
+        email_daily_report_enabled=bool(ui_raw.get("email_daily_report_enabled", UiConfig.email_daily_report_enabled)),
+        email_daily_report_time=str(ui_raw.get("email_daily_report_time", UiConfig.email_daily_report_time) or "00:00"),
+        email_monthly_report_enabled=bool(ui_raw.get("email_monthly_report_enabled", UiConfig.email_monthly_report_enabled)),
+        email_monthly_report_time=str(ui_raw.get("email_monthly_report_time", UiConfig.email_monthly_report_time) or "00:00"),
         live_daynight_mode=str(ui_raw.get("live_daynight_mode", UiConfig.live_daynight_mode) or UiConfig.live_daynight_mode),
         live_day_start=str(ui_raw.get("live_day_start", UiConfig.live_day_start) or UiConfig.live_day_start),
         live_night_start=str(ui_raw.get("live_night_start", UiConfig.live_night_start) or UiConfig.live_night_start),
@@ -607,6 +635,19 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "webhook_alarm_enabled": bool(getattr(cfg.ui, "webhook_alarm_enabled", True)),
             "webhook_daily_summary_enabled": bool(getattr(cfg.ui, "webhook_daily_summary_enabled", False)),
             "webhook_monthly_summary_enabled": bool(getattr(cfg.ui, "webhook_monthly_summary_enabled", False)),
+            "email_enabled": bool(getattr(cfg.ui, "email_enabled", False)),
+            "email_smtp_host": str(getattr(cfg.ui, "email_smtp_host", "") or ""),
+            "email_smtp_port": int(getattr(cfg.ui, "email_smtp_port", 587)),
+            "email_smtp_use_tls": bool(getattr(cfg.ui, "email_smtp_use_tls", True)),
+            "email_smtp_use_ssl": bool(getattr(cfg.ui, "email_smtp_use_ssl", False)),
+            "email_smtp_username": str(getattr(cfg.ui, "email_smtp_username", "") or ""),
+            "email_smtp_password": str(getattr(cfg.ui, "email_smtp_password", "") or ""),
+            "email_smtp_sender": str(getattr(cfg.ui, "email_smtp_sender", "") or ""),
+            "email_recipients": str(getattr(cfg.ui, "email_recipients", "") or ""),
+            "email_daily_report_enabled": bool(getattr(cfg.ui, "email_daily_report_enabled", False)),
+            "email_daily_report_time": str(getattr(cfg.ui, "email_daily_report_time", "00:00") or "00:00"),
+            "email_monthly_report_enabled": bool(getattr(cfg.ui, "email_monthly_report_enabled", False)),
+            "email_monthly_report_time": str(getattr(cfg.ui, "email_monthly_report_time", "00:00") or "00:00"),
             "plot_theme_mode": getattr(cfg.ui, "plot_theme_mode", UiConfig.plot_theme_mode),
         },
         "updates": {
