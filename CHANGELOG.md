@@ -1,5 +1,22 @@
 # Changelog
 
+## 8.0.4 - 2026-03-20
+### Fixed
+- **Comparison tab showed no data (remaining cases).** `_cmp_load_daily` relied solely on
+  `read_device_df` with a timestamp range filter. When `query_samples` returned an empty
+  DataFrame for the selected period (e.g. `hourly_energy` / `samples` mismatch), the code
+  silently fell back to the CSV path, found no CSV files, caught the `ValueError`, and
+  returned `{}` — causing invisible zero-height bars. Fixed by:
+  1. **Primary path now uses `query_hourly`** — the pre-aggregated `hourly_energy` table
+     is always populated during sync, stores integer `hour_ts` (no datetime-conversion
+     issues), and its `kwh` column is guaranteed by `COALESCE(SUM(energy_kwh), 0)`.
+  2. **Raw-samples fallback retained** for very old databases where `hourly_energy` was
+     never rebuilt.
+  3. **Explicit "no data" message** shown in the chart when both periods return empty
+     results, instead of invisible zero-height bars.
+  4. **Exception logging upgraded** from `logger.debug` to `logger.warning` with full
+     traceback in `_cmp_load_daily`, `_refresh_compare`, and `_draw_compare_chart`.
+
 ## 8.0.3 - 2026-03-20
 ### Fixed
 - **Responsive tab scaling (Kosten, Heatmap, Solar):** Charts in these tabs now correctly rescale when the window is resized. Previously, plots were only rendered at their initial size and did not adapt to window size changes.
