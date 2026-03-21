@@ -541,6 +541,13 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.freeze": "Freeze",
         "web.freeze.on": "Freeze: An",
         "web.freeze.off": "Freeze: Aus",
+        "web.tab.live": "Live",
+        "web.tab.costs": "Kosten",
+        "web.tab.heatmap": "Heatmap",
+        "web.tab.solar": "Solar",
+        "web.tab.compare": "Vergleich",
+        "web.tab.anomalies": "Anomalien",
+        "web.no_data": "Keine Daten",
 
         # Web: Control page
         "web.control.title": "Shelly Steuerung",
@@ -1230,6 +1237,13 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.freeze": "Freeze",
         "web.freeze.on": "Freeze: on",
         "web.freeze.off": "Freeze: off",
+        "web.tab.live": "Live",
+        "web.tab.costs": "Costs",
+        "web.tab.heatmap": "Heatmap",
+        "web.tab.solar": "Solar",
+        "web.tab.compare": "Compare",
+        "web.tab.anomalies": "Anomalies",
+        "web.no_data": "No data",
 
         # Web: Control page
         "web.control.title": "Shelly Control",
@@ -1854,6 +1868,13 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.freeze": "Congelar",
         "web.freeze.on": "Congelar: sí",
         "web.freeze.off": "Congelar: no",
+        "web.tab.live": "Live",
+        "web.tab.costs": "Costes",
+        "web.tab.heatmap": "Heatmap",
+        "web.tab.solar": "Solar",
+        "web.tab.compare": "Comparar",
+        "web.tab.anomalies": "Anomalías",
+        "web.no_data": "Sin datos",
 
         # Web: Control page
         "web.control.title": "Control Shelly",
@@ -2135,6 +2156,13 @@ _I18N["fr"] = _mk_lang({
     "web.control.jobs": "Tâches",
     "web.freeze.on": "Freeze : activé",
     "web.freeze.off": "Freeze : désactivé",
+    "web.tab.live": "Live",
+    "web.tab.costs": "Coûts",
+    "web.tab.heatmap": "Heatmap",
+    "web.tab.solar": "Solaire",
+    "web.tab.compare": "Comparer",
+    "web.tab.anomalies": "Anomalies",
+    "web.no_data": "Pas de données",
     # Heatmap
     "tabs.heatmap": "Carte de chaleur",
     "heatmap.title": "🔥 Carte de chaleur de consommation",
@@ -2886,6 +2914,58 @@ _I18N["ru"] = _mk_lang({
     "appliance.led_light.name": "LED-освещение",
     "appliance.air_conditioner.name": "Кондиционер",
     "appliance.fan.name": "Вентилятор",
+})
+
+# -------- Web tab names v9.0.0 --------
+
+_I18N.setdefault("pt", {}).update({
+    "web.tab.live": "Live",
+    "web.tab.costs": "Custos",
+    "web.tab.heatmap": "Heatmap",
+    "web.tab.solar": "Solar",
+    "web.tab.compare": "Comparar",
+    "web.tab.anomalies": "Anomalias",
+    "web.no_data": "Sem dados",
+})
+
+_I18N.setdefault("it", {}).update({
+    "web.tab.live": "Live",
+    "web.tab.costs": "Costi",
+    "web.tab.heatmap": "Heatmap",
+    "web.tab.solar": "Solare",
+    "web.tab.compare": "Confronto",
+    "web.tab.anomalies": "Anomalie",
+    "web.no_data": "Nessun dato",
+})
+
+_I18N.setdefault("pl", {}).update({
+    "web.tab.live": "Live",
+    "web.tab.costs": "Koszty",
+    "web.tab.heatmap": "Heatmap",
+    "web.tab.solar": "Solar",
+    "web.tab.compare": "Porównaj",
+    "web.tab.anomalies": "Anomalie",
+    "web.no_data": "Brak danych",
+})
+
+_I18N.setdefault("cs", {}).update({
+    "web.tab.live": "Live",
+    "web.tab.costs": "Náklady",
+    "web.tab.heatmap": "Heatmap",
+    "web.tab.solar": "Solár",
+    "web.tab.compare": "Porovnat",
+    "web.tab.anomalies": "Anomálie",
+    "web.no_data": "Žádná data",
+})
+
+_I18N.setdefault("ru", {}).update({
+    "web.tab.live": "Live",
+    "web.tab.costs": "Расходы",
+    "web.tab.heatmap": "Тепловая карта",
+    "web.tab.solar": "Солнце",
+    "web.tab.compare": "Сравнение",
+    "web.tab.anomalies": "Аномалии",
+    "web.no_data": "Нет данных",
 })
 
 
