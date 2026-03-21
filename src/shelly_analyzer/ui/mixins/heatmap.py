@@ -132,6 +132,42 @@ class HeatmapMixin:
         self._heatmap_hourly_canvas.get_tk_widget().configure(bg=_init_bg)
         self._heatmap_hourly_canvas.get_tk_widget().pack(fill="x", expand=True, padx=4, pady=4)
 
+        # ── Tooltip labels (float over the canvas) ────────────────────────────
+        _tt_opts = dict(
+            text="", bg="#1e1e1e", fg="#ffffff", font=("", 9),
+            padx=7, pady=4, relief="flat", bd=0,
+        )
+        self._heatmap_tooltip_cal = tk.Label(
+            self._heatmap_cal_canvas.get_tk_widget(), **_tt_opts
+        )
+        self._heatmap_tooltip_hourly = tk.Label(
+            self._heatmap_hourly_canvas.get_tk_widget(), **_tt_opts
+        )
+
+        # Initialise data stores used by tooltip callbacks
+        self._heatmap_cal_z: Optional[np.ndarray] = None
+        self._heatmap_cal_grid_start: Optional[date] = None
+        self._heatmap_cal_year: Optional[int] = None
+        self._heatmap_cal_use_eur: bool = False
+        self._heatmap_hourly_z: Optional[np.ndarray] = None
+        self._heatmap_hourly_use_eur: bool = False
+
+        # Connect mouse-motion events (connections survive fig.clf())
+        self._heatmap_cal_canvas.mpl_connect(
+            "motion_notify_event", self._heatmap_cal_motion
+        )
+        self._heatmap_cal_canvas.mpl_connect(
+            "figure_leave_event",
+            lambda _e: self._heatmap_tooltip_cal.place_forget(),
+        )
+        self._heatmap_hourly_canvas.mpl_connect(
+            "motion_notify_event", self._heatmap_hourly_motion
+        )
+        self._heatmap_hourly_canvas.mpl_connect(
+            "figure_leave_event",
+            lambda _e: self._heatmap_tooltip_hourly.place_forget(),
+        )
+
         # Initial render (deferred so the tab has time to lay out)
         self.after(700, self._refresh_heatmap)
 
@@ -465,6 +501,12 @@ class HeatmapMixin:
                 color=fg, fontsize=10, pad=4,
             )
 
+            # Store data for tooltip callbacks
+            self._heatmap_cal_z = z
+            self._heatmap_cal_grid_start = grid_start
+            self._heatmap_cal_year = year
+            self._heatmap_cal_use_eur = use_eur
+
             try:
                 canvas.get_tk_widget().configure(bg=bg)
             except Exception:
@@ -565,6 +607,10 @@ class HeatmapMixin:
             ax.set_xlabel(self.t("heatmap.hourly.xlabel"), color=fg, fontsize=9)
             ax.set_ylabel(self.t("heatmap.hourly.ylabel"), color=fg, fontsize=9)
 
+            # Store data for tooltip callbacks
+            self._heatmap_hourly_z = z
+            self._heatmap_hourly_use_eur = use_eur
+
             try:
                 canvas.get_tk_widget().configure(bg=bg)
             except Exception:
@@ -574,6 +620,87 @@ class HeatmapMixin:
             canvas.draw()
         except Exception as e:
             logger.debug("_draw_hourly_heatmap error: %s", e)
+
+    # ── Tooltip callbacks ─────────────────────────────────────────────────────
+
+    def _heatmap_cal_motion(self, event) -> None:
+        """Show a tooltip with date + value when hovering over the calendar heatmap."""
+        tooltip = getattr(self, "_heatmap_tooltip_cal", None)
+        if tooltip is None:
+            return
+        try:
+            z = self._heatmap_cal_z
+            grid_start = self._heatmap_cal_grid_start
+            year = self._heatmap_cal_year
+
+            if event.inaxes is None or z is None or grid_start is None or event.xdata is None:
+                tooltip.place_forget()
+                return
+
+            col = int(event.xdata)
+            row = int(event.ydata)
+
+            if not (0 <= col < 53 and 0 <= row < 7):
+                tooltip.place_forget()
+                return
+
+            val = z[row, col]
+            if np.isnan(val):
+                tooltip.place_forget()
+                return
+
+            d = grid_start + timedelta(days=col * 7 + row)
+            if d.year != year:
+                tooltip.place_forget()
+                return
+
+            unit = "€" if self._heatmap_cal_use_eur else "kWh"
+            text = f"{d.strftime('%d.%m.%Y')}: {val:.2f} {unit}"
+
+            canvas_h = self._heatmap_cal_canvas.get_tk_widget().winfo_height()
+            tx = int(event.x) + 12
+            ty = max(2, canvas_h - int(event.y) - 32)
+
+            tooltip.config(text=text)
+            tooltip.lift()
+            tooltip.place(x=tx, y=ty)
+        except Exception:
+            tooltip.place_forget()
+
+    def _heatmap_hourly_motion(self, event) -> None:
+        """Show a tooltip with weekday + hour + value when hovering over the hourly heatmap."""
+        tooltip = getattr(self, "_heatmap_tooltip_hourly", None)
+        if tooltip is None:
+            return
+        try:
+            z = self._heatmap_hourly_z
+
+            if event.inaxes is None or z is None or event.xdata is None:
+                tooltip.place_forget()
+                return
+
+            col = int(event.xdata)   # hour  0-23
+            row = int(event.ydata)   # weekday 0-6 (Mon=0)
+
+            if not (0 <= col < 24 and 0 <= row < 7):
+                tooltip.place_forget()
+                return
+
+            val = z[row, col]
+            day_labels = self._heatmap_day_labels()
+            day_name = day_labels[row]
+            unit = "€" if self._heatmap_hourly_use_eur else "kWh"
+            text = f"{day_name} {col:02d}:00–{col + 1:02d}:00: {val:.2f} {unit}"
+
+            canvas_h = self._heatmap_hourly_canvas.get_tk_widget().winfo_height()
+            tx = int(event.x) + 12
+            ty = max(2, canvas_h - int(event.y) - 32)
+
+            tooltip.config(text=text)
+            tooltip.lift()
+            tooltip.place(x=tx, y=ty)
+        except Exception:
+            tooltip.place_forget()
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
