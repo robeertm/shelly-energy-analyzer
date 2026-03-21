@@ -265,9 +265,13 @@ class HeatmapMixin:
         return result
 
     def _heatmap_hourly(self, df, use_eur: bool, price_kwh: float) -> Dict[Tuple[int, int], float]:
-        """Aggregate DataFrame to weekday×hour totals (summed, not averaged).
+        """Aggregate DataFrame to weekday×hour averages.
 
         Returns {(weekday, hour): value}  where weekday 0=Mon … 6=Sun.
+        Each cell holds the *mean* kWh across all occurrences of that
+        weekday/hour combination in the selected year (e.g. ~52 Thursdays),
+        so the value represents a typical hourly consumption rather than a
+        yearly sum.
         """
         result: Dict[Tuple[int, int], float] = {}
         try:
@@ -280,7 +284,7 @@ class HeatmapMixin:
             tmp = df.copy()
             tmp["_wd_hr"] = tmp[ts_col].apply(_wd_hr)
             tmp["_kwh"] = df["energy_kwh"].fillna(0.0)
-            grouped = tmp.groupby("_wd_hr")["_kwh"].sum()
+            grouped = tmp.groupby("_wd_hr")["_kwh"].mean()
 
             for (wd, hr), kwh in grouped.items():
                 val = float(kwh) * price_kwh if use_eur else float(kwh)
