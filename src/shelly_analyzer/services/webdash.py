@@ -3010,7 +3010,62 @@ class _Handler(BaseHTTPRequestHandler):
                 return
 
             if path_only.startswith("/api/state"):
-                payload = self.store.snapshot()
+                raw_snap = self.store.snapshot()
+                # Build devices array expected by the v9 JS frontend.
+                # raw_snap format: {"device_key": [...points], "_appliances": {key: [...]}}
+                appliances_map: Dict[str, List[Any]] = raw_snap.get("_appliances", {})  # type: ignore[assignment]
+                dev_meta_by_key: Dict[str, Dict[str, Any]] = {
+                    d.get("key", ""): d
+                    for d in (self.dashboard.devices_meta or [])
+                    if isinstance(d, dict) and d.get("key")
+                }
+                devices_list: List[Dict[str, Any]] = []
+                for dkey, points in raw_snap.items():
+                    if dkey.startswith("_") or not isinstance(points, list) or not points:
+                        continue
+                    latest: Dict[str, Any] = points[-1]
+                    meta = dev_meta_by_key.get(dkey, {})
+                    name = str(meta.get("name") or dkey)
+                    va = float(latest.get("va") or 0)
+                    vb = float(latest.get("vb") or 0)
+                    vc = float(latest.get("vc") or 0)
+                    ia = float(latest.get("ia") or 0)
+                    ib = float(latest.get("ib") or 0)
+                    ic = float(latest.get("ic") or 0)
+                    pa = float(latest.get("pa") or 0)
+                    pb = float(latest.get("pb") or 0)
+                    pc = float(latest.get("pc") or 0)
+                    non_zero_v = [v for v in [va, vb, vc] if v > 0]
+                    voltage_v = sum(non_zero_v) / len(non_zero_v) if non_zero_v else 0.0
+                    current_a = ia + ib + ic if (ib > 0 or ic > 0) else ia
+                    phases: List[Dict[str, float]] = []
+                    if vb > 0 or vc > 0:
+                        if va > 0:
+                            phases.append({"voltage_v": va, "current_a": ia, "power_w": pa})
+                        if vb > 0:
+                            phases.append({"voltage_v": vb, "current_a": ib, "power_w": pb})
+                        if vc > 0:
+                            phases.append({"voltage_v": vc, "current_a": ic, "power_w": pc})
+                    raw_appl = appliances_map.get(dkey, [])
+                    appl_strs: List[str] = [
+                        f"{a.get('icon', '')} {a.get('id', '')}".strip()
+                        for a in raw_appl
+                        if isinstance(a, dict)
+                    ]
+                    devices_list.append({
+                        "key": dkey,
+                        "name": name,
+                        "power_w": float(latest.get("power_total_w") or 0),
+                        "today_kwh": float(latest.get("kwh_today") or 0),
+                        "cost_today": float(latest.get("cost_today") or 0),
+                        "voltage_v": voltage_v,
+                        "current_a": current_a,
+                        "pf": float(latest.get("cosphi_total") or 0),
+                        "freq_hz": float(latest.get("freq_hz") or 50),
+                        "phases": phases,
+                        "appliances": appl_strs,
+                    })
+                payload = {"devices": devices_list}
                 body = json.dumps(payload).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")

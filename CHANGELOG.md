@@ -1,5 +1,18 @@
 # Changelog
 
+## 9.0.1 - 2026-03-21
+### Fixed
+- **Live tab blank** — `/api/state` was returning the raw `LiveStateStore`
+  snapshot (`{device_key: [...points]}`), but the v9 JS frontend expects
+  `{devices: [{key, name, power_w, today_kwh, ...}]}`.  The server-side
+  handler now transforms the snapshot into the correct device-list format,
+  populating `power_w`, `today_kwh`, `cost_today`, `voltage_v`, `current_a`,
+  `pf`, `freq_hz`, `phases` (multi-phase Shellys), and `appliances` (NILM
+  chip labels as strings).
+- **NILM appliance chips** — appliance objects `{icon, id, conf}` are now
+  serialised as `"<icon> <id>"` strings before being sent to the browser, so
+  they display correctly instead of `[object Object]`.
+
 ## 9.0.0 - 2026-03-21
 ### Added
 - **Complete Web UI rewrite (major).** The mobile web dashboard is now a
