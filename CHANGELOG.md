@@ -1,5 +1,17 @@
 # Changelog
 
+## 8.5.0 - 2026-03-21
+### Added
+- **Heatmap tooltips.** Hovering over a day cell in the calendar heatmap now
+  shows a floating tooltip with the date and consumption value
+  (e.g. "15.01.2026: 12.4 kWh").  Hovering over a cell in the
+  weekday × hour heatmap shows the weekday, time slot, and value
+  (e.g. "Mon 14:00–15:00: 0.8 kWh").  Tooltips are rendered as a dark
+  `tk.Label` floating over the canvas and disappear when the cursor
+  leaves the plot area.  Both heatmaps use `mpl_connect
+  ('motion_notify_event')` for zero-dependency, always-available
+  interactivity.
+
 ## 8.4.0 - 2026-03-20
 ### Added
 - **NILM appliance detector in the web dashboard.** The live web view now shows
