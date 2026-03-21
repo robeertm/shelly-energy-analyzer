@@ -260,27 +260,20 @@ _HTML_TEMPLATE = """<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>{web_live_title}</title>
+  <title>Shelly Energy Analyzer</title>
   <style>
+    /* ── Theme variables ── */
     :root {{
-      /* Light theme (default) */
       --bg: #f6f7fb;
       --card: #ffffff;
       --fg: #111827;
       --muted: #4b5563;
       --accent: #2563eb;
       --border: rgba(17,24,39,0.12);
-      --chipbg: rgba(17,24,39,0.04);
-
-      /* Canvas chart colors (live page) */
-      --plot-grid: rgba(17,24,39,0.10);
-      --plot-tick: rgba(17,24,39,0.70);
-      --plot-title: rgba(17,24,39,0.90);
-      --plot-wait: rgba(17,24,39,0.55);
-
-      --plot-line1: rgba(37,99,235,0.92);
-      --plot-line2: rgba(217,119,6,0.92);
-      --plot-line3: rgba(22,163,74,0.92);
+      --chipbg: rgba(17,24,39,0.06);
+      --pwr-low: #16a34a;
+      --pwr-med: #d97706;
+      --pwr-high: #dc2626;
     }}
     :root[data-theme="dark"] {{
       --bg: #0b0f14;
@@ -289,1115 +282,1192 @@ _HTML_TEMPLATE = """<!doctype html>
       --muted: #9fb0c3;
       --accent: #6aa7ff;
       --border: rgba(255,255,255,0.08);
-      --chipbg: rgba(255,255,255,0.02);
-
-      /* Canvas chart colors (live page) */
-      --plot-grid: rgba(255,255,255,0.09);
-      --plot-tick: rgba(255,255,255,0.55);
-      --plot-title: rgba(255,255,255,0.85);
-      --plot-wait: rgba(255,255,255,0.55);
-
-      --plot-line1: rgba(106,167,255,0.90);
-      --plot-line2: rgba(255,180,84,0.90);
-      --plot-line3: rgba(136,240,179,0.90);
+      --chipbg: rgba(255,255,255,0.04);
     }}
-    html, body {{
-      height: 100%;
+    /* ── Reset / base ── */
+    *, *::before, *::after {{ box-sizing: border-box; }}
+    body {{
       margin: 0;
+      font-family: -apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background: var(--bg);
       color: var(--fg);
-      font-family: -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-    }}
-    .wrap {{
-      padding: 10px;
-      box-sizing: border-box;
-    }}
-    .topbar {{
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 10px;
-      margin: 6px 2px 10px;
-      flex-wrap: wrap;
-    }}
-    .left {{
-      min-width: 0;
-    }}
-    .right {{
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      justify-content: flex-start;
-      align-items: center;
-    }}
-    a.navlink {{
-      color: var(--muted);
-      text-decoration: none;
-      font-size: 12px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: var(--chipbg);
-    }}
-    a.navlink.active {{
-      color: var(--fg);
-      border-color: rgba(106,167,255,0.35);
-    }}
-    .urlpill span {{
-      display: inline-block;
-      max-width: min(55vw, 340px);
       overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      vertical-align: bottom;
+      height: 100vh;
     }}
-    select {{
-      font-size: 13px;
-      padding: 6px 8px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
+    /* ── App shell ── */
+    #app {{ display: flex; flex-direction: column; height: 100vh; }}
+    #hdr {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
       background: var(--card);
-      color: var(--fg);
-      min-width: 76px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
     }}
-    @media (max-width: 420px) {{
-      .urlpill span {{
-        max-width: 80vw;
-      }}
+    #panes {{
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 10px;
+      padding-bottom: 80px;
     }}
-    .title {{
-      font-size: 16px;
-      font-weight: 650;
-      letter-spacing: 0.2px;
-    }}
-    .meta {{
-      font-size: 12px;
-      color: var(--muted);
-    }}
-    .grid {{
+    /* ── Panes ── */
+    .pane {{ display: none; animation: fadeIn 0.2s ease; }}
+    .pane.active {{ display: block; }}
+    @keyframes fadeIn {{ from {{ opacity: 0; transform: translateY(4px); }} to {{ opacity: 1; transform: translateY(0); }} }}
+    /* ── Bottom nav ── */
+    #bottom-nav {{
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
       display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px;
+      grid-template-columns: repeat(6,1fr);
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      padding-bottom: env(safe-area-inset-bottom, 0);
+      z-index: 100;
     }}
-    @media (min-width: 900px) {{
-      .grid {{
-        grid-template-columns: 1fr 1fr;
-      }}
+    .nav-btn {{
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 56px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 10px;
+      cursor: pointer;
+      padding: 6px 2px;
+      gap: 2px;
+      transition: color 0.15s;
     }}
+    .nav-btn .nav-icon {{ font-size: 20px; line-height: 1; }}
+    .nav-btn.active {{ color: var(--accent); }}
+    /* ── Icon buttons ── */
+    .icon-btn {{
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--fg);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 6px 10px;
+      min-height: 36px;
+    }}
+    /* ── Cards ── */
     .card {{
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 10px;
-      box-sizing: border-box;
-      min-width: 0;
+      padding: 14px;
+      margin-bottom: 10px;
     }}
-    .card h2 {{
-      margin: 0 0 8px;
-      font-size: 14px;
-      font-weight: 650;
-      color: var(--fg);
-    }}
-    .row {{
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 10px;
-    }}
-    canvas {{
-      width: 100%;
-      height: 160px;
-      display: block;
-      background: var(--chipbg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-    }}
-    @media (orientation: landscape) and (max-width: 900px) {{
-      canvas { height: 130px; }
-    }}
-    /* Compact mode: sparklines (power + current) */
-    :root[data-compact="1"] .kv { display: none; }
-    :root[data-compact="1"] canvas { height: 92px; }
-    :root[data-compact="1"] canvas.voltagePlot { display: none; }
-    :root[data-compact="1"] .row { gap: 8px; }
-    .kv {{
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 6px 10px;
-      font-size: 12px;
-      color: var(--muted);
-      margin: 8px 2px 2px;
-    }}
-    .kv b {{
-      color: var(--fg);
-      font-weight: 650;
-    }}
-    .appl-title {{
-      font-size: 11px;
-      font-weight: 600;
+    .card-title {{
+      font-size: 13px;
+      font-weight: 700;
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      padding: 6px 2px 3px;
+      margin-bottom: 10px;
     }}
-    .appl {{
+    .card-grid {{
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr;
+    }}
+    @media (min-width: 700px) {{
+      .card-grid {{ grid-template-columns: 1fr 1fr; }}
+    }}
+    /* ── Metric grid ── */
+    .metric-grid {{
+      display: grid;
+      grid-template-columns: repeat(2,1fr);
+      gap: 8px;
+    }}
+    @media (min-width: 600px) {{
+      .metric-grid {{ grid-template-columns: repeat(4,1fr); }}
+    }}
+    .metric-card {{
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+    }}
+    .metric-label {{
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-bottom: 4px;
+    }}
+    .metric-value {{
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+    }}
+    .metric-sub {{ font-size: 12px; color: var(--muted); margin-top: 2px; }}
+    /* ── Power colour ── */
+    .pwr-low {{ color: var(--pwr-low); }}
+    .pwr-med {{ color: var(--pwr-med); }}
+    .pwr-high {{ color: var(--pwr-high); }}
+    /* ── Controls row ── */
+    .controls-row {{
       display: flex;
+      gap: 8px;
       flex-wrap: wrap;
-      gap: 5px;
-      padding: 0 0 4px;
+      align-items: center;
+      margin-bottom: 10px;
     }}
-    .appl-item {{
-      font-size: 12px;
-      background: rgba(106,167,255,0.08);
-      border: 1px solid rgba(106,167,255,0.15);
+    select, input[type=date], input[type=text] {{
+      background: var(--card);
+      color: var(--fg);
+      border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 3px 9px;
-      white-space: nowrap;
+      padding: 8px 10px;
+      font-size: 13px;
+      min-height: 44px;
+      font-family: inherit;
     }}
-    :root[data-compact="1"] .appl { display: none; }
-    :root[data-compact="1"] .appl-title { display: none; }
-
-    /* ---- Cost panel ---- */
-    .cost-panel {{
+    .btn {{
+      background: var(--chipbg);
+      color: var(--fg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 14px;
+      min-height: 44px;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+    }}
+    .btn-outline {{ border: 1px solid var(--border); background: var(--card); color: var(--fg); }}
+    .btn-accent {{ background: var(--accent); color: #fff; border: none; }}
+    .btn-sm {{ min-height: 36px; padding: 6px 10px; font-size: 12px; }}
+    /* ── Device live cards ── */
+    .dev-card {{
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 14px;
-      box-sizing: border-box;
-    }}
-    .cost-panel h2 {{
-      margin: 0 0 14px;
-      font-size: 15px;
-      font-weight: 700;
-      color: var(--fg);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }}
-    .cost-panel h2 button {{
-      padding: 5px 14px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--muted);
+      margin-bottom: 10px;
       cursor: pointer;
+    }}
+    .dev-header {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }}
+    .dev-name {{ font-size: 14px; font-weight: 700; flex: 1; min-width: 0; }}
+    .dev-power {{ font-size: 26px; font-weight: 700; }}
+    .dev-meta {{ font-size: 12px; color: var(--muted); margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }}
+    .dev-expand {{ display: none; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }}
+    .dev-expand.open {{ display: block; }}
+    .dev-kv {{ display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12px; }}
+    .dev-kv dt {{ color: var(--muted); }}
+    .dev-kv dd {{ margin: 0; font-weight: 600; }}
+    /* NILM chips */
+    .appl-list {{ display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }}
+    .appl-chip {{
+      font-size: 11px;
+      background: rgba(106,167,255,0.10);
+      border: 1px solid rgba(106,167,255,0.20);
+      border-radius: 10px;
+      padding: 3px 9px;
+    }}
+    /* Sparkline canvas */
+    .sparkline-wrap {{ margin-top: 10px; }}
+    canvas.sparkline {{
+      width: 100%;
+      height: 56px;
+      display: block;
+      border-radius: 8px;
+      background: var(--chipbg);
+    }}
+    /* ── Heatmap ── */
+    .hm-calendar {{ overflow-x: auto; padding-bottom: 4px; }}
+    .hm-grid {{ display: flex; gap: 2px; }}
+    .hm-week {{ display: flex; flex-direction: column; gap: 2px; }}
+    .hm-day {{
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--chipbg);
+      position: relative;
+    }}
+    .hm-month-labels {{ display: flex; gap: 2px; font-size: 9px; color: var(--muted); margin-bottom: 3px; }}
+    .hm-month-labels span {{ overflow: hidden; }}
+    /* Hourly heatmap table */
+    .hm-table-wrap {{ overflow-x: auto; }}
+    .hm-table {{ border-collapse: collapse; font-size: 9px; }}
+    .hm-cell {{
+      width: 26px;
+      height: 26px;
+      text-align: center;
+      vertical-align: middle;
+      font-size: 9px;
+      border: none;
+    }}
+    .hm-head {{ font-size: 9px; color: var(--muted); text-align: center; padding: 0 2px; }}
+    /* Tooltip */
+    #hm-tooltip {{
+      position: fixed;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 10px;
       font-size: 12px;
-      font-weight: 500;
+      pointer-events: none;
+      display: none;
+      z-index: 200;
+      white-space: nowrap;
     }}
-    .cost-panel h2 button:hover {{
-      color: var(--fg);
-      border-color: var(--accent);
-    }}
-    .cost-dev {{
-      background: var(--bg);
+    /* ── Anomaly events ── */
+    .event-card {{
+      background: var(--card);
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 12px 14px;
-      margin-bottom: 10px;
-    }}
-    .cost-dev:last-child {{
-      margin-bottom: 0;
-    }}
-    .cost-dev-name {{
-      font-weight: 700;
-      font-size: 14px;
-      color: var(--accent);
-      margin-bottom: 10px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--border);
-    }}
-    .cost-dev-name span {{
-      font-weight: 400;
-      color: var(--muted);
-      font-size: 12px;
-    }}
-    .cost-cards {{
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
       margin-bottom: 8px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
     }}
-    .cost-row2 {{
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
+    .event-dot {{
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-top: 4px;
+      flex-shrink: 0;
     }}
-    .cost-card {{
-      background: var(--card);
+    .event-body {{ flex: 1; min-width: 0; }}
+    .event-type {{ font-size: 13px; font-weight: 700; }}
+    .event-meta {{ font-size: 11px; color: var(--muted); margin-top: 2px; }}
+    /* ── Status badge ── */
+    .badge {{
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }}
+    .badge-green {{ background: rgba(22,163,74,0.15); color: #16a34a; }}
+    .badge-red {{ background: rgba(220,38,38,0.12); color: #dc2626; }}
+    .badge-yellow {{ background: rgba(217,119,6,0.12); color: #d97706; }}
+    /* ── Chart canvas ── */
+    canvas.bar-chart {{
+      width: 100%;
+      height: 220px;
+      display: block;
+      border-radius: 10px;
+    }}
+    /* ── Loading / error ── */
+    .loading-msg {{ color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }}
+    .error-msg {{ color: var(--pwr-high); font-size: 13px; padding: 20px 0; text-align: center; }}
+    .info-msg {{ color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }}
+    /* ── Compare delta ── */
+    .delta-grid {{ display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-bottom: 10px; }}
+    @media (min-width: 500px) {{ .delta-grid {{ grid-template-columns: repeat(4,1fr); }} }}
+    /* ── Summary row ── */
+    .summary-row {{ display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }}
+    .summary-chip {{
+      background: var(--chipbg);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 10px 12px;
-      text-align: center;
-    }}
-    .cost-card-label {{
-      font-size: 10px;
-      color: var(--muted);
-      margin-bottom: 6px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }}
-    .cost-card-kwh {{
-      font-size: 13px;
-      color: var(--fg);
-      margin-bottom: 2px;
-    }}
-    .cost-card-eur {{
-      font-size: 20px;
-      font-weight: 800;
-      color: var(--accent);
-      line-height: 1.2;
-    }}
-    .cost-card-vs {{
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--fg);
-      line-height: 1.5;
-      text-align: left;
-    }}
-    @media (max-width: 600px) {{
-      .cost-cards {{
-        grid-template-columns: 1fr 1fr;
-      }}
-      .cost-row2 {{
-        grid-template-columns: 1fr;
-      }}
-      .cost-card-eur {{
-        font-size: 16px;
-      }}
-    }}
-    @media (max-width: 360px) {{
-      .cost-cards {{
-        grid-template-columns: 1fr;
-      }}
-    }}
-
-    .pill {{
-      display: inline-flex;
-      gap: 8px;
-      align-items: center;
-      padding: 6px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: var(--chipbg);
+      padding: 6px 12px;
       font-size: 12px;
-      color: var(--muted);
-      white-space: nowrap;
     }}
+    .summary-chip b {{ color: var(--accent); }}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="topbar">
-      <div class="left">
-        <div class="title">{web_live_title}</div>
-        <div class="meta">{web_live_meta} <span id="refresh_s"></span>s • <span id="auto_state">–</span> • <span id="stamp">–</span></div>
-      </div>
-      <div class="right">
-        <a class="navlink active" id="nav_live" href="/">{web_nav_live}</a>
-        <a class="navlink" id="nav_control" href="/control">{web_nav_control}</a>
-        <a class="navlink" id="btn_theme" href="#">🌓</a>
-        <a class="navlink" id="btn_auto" href="#">⏸</a>
-        <a class="navlink" id="btn_refresh" href="#">↻</a>
-        <a class="navlink" id="btn_compact" href="#">▦</a>
-        <div class="pill">{web_pill_window}: <select id="win_sel"></select> min</div>
-        <div class="pill">shelly_analyzer: <b id="analyzer_state">–</b></div>
-        <div class="pill urlpill">{web_pill_url}: <span id="url"></span></div>
-      </div>
+<script>
+(function(){{
+  let th = localStorage.getItem('sea_theme');
+  if(!th) th = window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
+  document.documentElement.dataset.theme = th;
+}})();
+</script>
+<div id="app">
+  <header id="hdr">
+    <span id="hdr-title" style="font-weight:700;font-size:15px">⚡ Shelly Analyzer</span>
+    <div id="hdr-actions" style="display:flex;gap:8px;align-items:center">
+      <span id="live-stamp" style="font-size:11px;color:var(--muted)"></span>
+      <button id="btn-freeze" class="icon-btn" title="Freeze/Resume">▶</button>
+      <button id="btn-theme" class="icon-btn" title="Toggle theme">☀</button>
+    </div>
+  </header>
+
+  <div id="panes">
+    <!-- Live -->
+    <div id="pane-live" class="pane active">
+      <div id="live-grid" class="card-grid"></div>
     </div>
 
+    <!-- Costs -->
+    <div id="pane-costs" class="pane">
+      <div id="costs-content"><p class="loading-msg">Loading…</p></div>
+    </div>
 
-    <div class="grid" id="grid"></div>
-    <div id="cost_summary" style="margin:10px 12px 0;"></div>
+    <!-- Heatmap -->
+    <div id="pane-heatmap" class="pane">
+      <div class="controls-row">
+        <select id="hm-device"></select>
+        <select id="hm-unit">
+          <option value="kWh">kWh</option>
+          <option value="eur">€</option>
+        </select>
+        <select id="hm-year"></select>
+        <button class="btn btn-outline" onclick="loadHeatmap()">↻</button>
+      </div>
+      <div id="hm-calendar-wrap"></div>
+      <div id="hm-hourly-wrap" style="margin-top:14px"></div>
+    </div>
+
+    <!-- Solar -->
+    <div id="pane-solar" class="pane">
+      <div class="controls-row" id="solar-periods"></div>
+      <div id="solar-content"><p class="loading-msg">Loading…</p></div>
+    </div>
+
+    <!-- Compare -->
+    <div id="pane-compare" class="pane">
+      <div id="cmp-controls" style="margin-bottom:10px"></div>
+      <div id="cmp-quick" style="margin-bottom:10px"></div>
+      <div id="cmp-result"></div>
+    </div>
+
+    <!-- Anomalies -->
+    <div id="pane-anomalies" class="pane">
+      <div id="anom-content"><p class="loading-msg">Loading…</p></div>
+    </div>
   </div>
 
+  <nav id="bottom-nav">
+    <button class="nav-btn active" onclick="switchPane('live',this)">
+      <span class="nav-icon">📡</span>
+      <span class="nav-label">Live</span>
+    </button>
+    <button class="nav-btn" onclick="switchPane('costs',this)">
+      <span class="nav-icon">💰</span>
+      <span class="nav-label">Kosten</span>
+    </button>
+    <button class="nav-btn" onclick="switchPane('heatmap',this)">
+      <span class="nav-icon">🔥</span>
+      <span class="nav-label">Heatmap</span>
+    </button>
+    <button class="nav-btn" onclick="switchPane('solar',this)">
+      <span class="nav-icon">☀️</span>
+      <span class="nav-label">Solar</span>
+    </button>
+    <button class="nav-btn" onclick="switchPane('compare',this)">
+      <span class="nav-icon">🔀</span>
+      <span class="nav-label">Vergleich</span>
+    </button>
+    <button class="nav-btn" onclick="switchPane('anomalies',this)">
+      <span class="nav-icon">🔍</span>
+      <span class="nav-label">Anomalien</span>
+    </button>
+  </nav>
+</div>
+
+<div id="hm-tooltip"></div>
+
 <script>
+/* ── Injected constants ── */
 const REFRESH_MS = {refresh_ms};
 const WINDOW_MIN = {window_min};
 const WINDOW_OPTIONS = {window_options_json};
 const DEVICES = {devices_json};
 const I18N = {i18n_json};
-function t(k){ return (I18N && I18N[k]) ? I18N[k] : k; }
+function t(k, fb) {{ return (I18N && I18N[k]) ? I18N[k] : (fb || k); }}
 
-let windowMin = WINDOW_MIN;
-let pendingWindow = null;
-
-document.getElementById("refresh_s").textContent = (REFRESH_MS/1000).toFixed(1).replace(/\\.0$/, "");
-function qs() { return ""; }
-document.getElementById("url").textContent = window.location.origin + "/";
-
-// Navigation links are simple (no auth/token)
-
-
-// Theme + Auto-Refresh (persisted)
-const LS_THEME = "sea_web_theme";
-const LS_AUTO  = "sea_web_autorefresh";
-const LS_COMPACT = "sea_web_compact";
-
-let autoRefresh = (localStorage.getItem(LS_AUTO) ?? "1") !== "0";
+/* ── State ── */
 let frozen = false;
-let compactMode = (localStorage.getItem(LS_COMPACT) ?? "0") === "1";
+let liveTimer = null;
+let currentPane = 'live';
+let sparkData = {{}};   // key -> [{{"ts":..,"w":..}}]
+let cmpChart = null;
 
-function setTheme(theme) {
-  const t0 = (theme === "dark") ? "dark" : "light";
-  document.documentElement.dataset.theme = t0;
-  localStorage.setItem(LS_THEME, t0);
-  updateThemeBtn();
-  // Redraw charts with theme-appropriate colors immediately.
-  try {
-    if (window.__SEA_LAST_STATE) renderState(window.__SEA_LAST_STATE);
-  } catch (e) {}
-}
+/* ── Theme ── */
+document.getElementById('btn-theme').addEventListener('click', function() {{
+  const root = document.documentElement;
+  const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+  root.dataset.theme = next;
+  localStorage.setItem('sea_theme', next);
+  this.textContent = next === 'dark' ? '☀' : '🌙';
+}});
+(function() {{
+  const th = document.documentElement.dataset.theme;
+  document.getElementById('btn-theme').textContent = th === 'dark' ? '☀' : '🌙';
+}})();
 
-function updateThemeBtn() {
-  const el = document.getElementById("btn_theme");
-  if (!el) return;
-  const theme = document.documentElement.dataset.theme || "dark";
-  el.textContent = (theme === "dark") ? "🌙" : "☀️";
-  el.title = (theme === "dark") ? (t('web.theme.dark') || 'Dark') : (t('web.theme.light') || 'Light');
-}
-
-function updateAutoBtn() {
-  const el = document.getElementById("btn_auto");
-  const st = document.getElementById("auto_state");
-  if (el) {
-    // This button controls the app's Freeze state.
-    // Not frozen => show pause icon; frozen => show play icon.
-    if (frozen) el.classList.add('active'); else el.classList.remove('active');
-    el.textContent = frozen ? '▶' : '⏸';
-    el.title = frozen ? (t('web.freeze.off') || 'Freeze aus (weiter)') : (t('web.freeze.on') || 'Freeze an (pause)');
-  }
-  if (st) st.textContent = frozen ? (t('web.freeze') || 'Freeze') : (autoRefresh ? 'Auto' : 'Manual');
-}
-
-function updateCompactBtn() {
-  const el = document.getElementById("btn_compact");
-  if (!el) return;
-  if (compactMode) el.classList.add('active'); else el.classList.remove('active');
-  el.title = compactMode ? (t('web.compact.on') || "Compact on") : (t('web.compact.off') || "Compact off");
-}
-
-function applyCompact(redraw=true) {
-  document.documentElement.dataset.compact = compactMode ? "1" : "0";
-  try { localStorage.setItem(LS_COMPACT, compactMode ? "1" : "0"); } catch (e) {}
-  updateCompactBtn();
-  if (redraw) {
-    try { if (window.__SEA_LAST_STATE) renderState(window.__SEA_LAST_STATE); } catch (e) {}
-  }
-}
-
-// Init theme
-(function initTheme(){
-  let theme = localStorage.getItem(LS_THEME);
-  if (!theme) {
-    theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
-  }
-  document.documentElement.dataset.theme = theme;
-  updateThemeBtn();
-})();
-
-// Init compact mode
-(function initCompact(){
-  try { compactMode = (localStorage.getItem(LS_COMPACT) ?? "0") === "1"; } catch (e) { compactMode = false; }
-  document.documentElement.dataset.compact = compactMode ? "1" : "0";
-  updateCompactBtn();
-})();
-
-updateAutoBtn();
-
-// Init freeze state from the app (so the web pause button matches the UI)
-(async function initFreezeState(){
-  try {
-    const r = await apiRun('get_freeze', {});
-    if (r && r.ok) {
-      frozen = !!r.freeze;
-      // If app is frozen, ensure web auto-refresh is paused too.
-      autoRefresh = autoRefresh && !frozen;
-      updateAutoBtn();
-    }
-  } catch (e) {
-    // ignore
-  }
-})();
-
-// Keep freeze state in sync if Freeze is toggled in the desktop app.
-// Requirement: no matter where Freeze is pressed (web or app), both must stop/resume.
-let _freezePrevAuto = null;
-async function syncFreezeState() {
-  try {
-    const r = await apiRun('get_freeze', {});
-    if (!(r && r.ok)) return;
-    const newFrozen = !!r.freeze;
-    if (newFrozen === frozen) return;
-
-    // External change detected (likely via desktop UI)
-    if (newFrozen) {
-      _freezePrevAuto = autoRefresh;
-      frozen = true;
-      autoRefresh = false;
-    } else {
-      frozen = false;
-      if (_freezePrevAuto !== null) {
-        autoRefresh = !!_freezePrevAuto;
-        _freezePrevAuto = null;
-      }
-    }
-
-    try { localStorage.setItem(LS_AUTO, autoRefresh ? "1" : "0"); } catch (e) {}
-    updateAutoBtn();
-    if (!frozen && autoRefresh) tick(true);
-  } catch (e) {
-    // ignore
-  }
-}
-
-setInterval(syncFreezeState, 1000);
-
-// Button handlers
-(function bindTopbarButtons(){
-  const bt = document.getElementById('btn_theme');
-  if (bt) bt.addEventListener('click', (ev)=>{ ev.preventDefault(); const cur = document.documentElement.dataset.theme||'dark'; setTheme(cur==='dark'?'light':'dark'); });
-  const ba = document.getElementById('btn_auto');
-  if (ba) ba.addEventListener('click', async (ev)=>{
-    ev.preventDefault();
-    try {
-      const r = await apiRun('toggle_freeze', {});
-      if (r && r.ok) {
-        frozen = !!r.freeze;
-        // When frozen, we also pause web auto-refresh.
-        autoRefresh = !frozen;
-        try { localStorage.setItem(LS_AUTO, autoRefresh ? "1" : "0"); } catch (e) {}
-        updateAutoBtn();
-        if (autoRefresh) tick(true);
-      }
-    } catch (e) {
-      // ignore
-    }
-  });
-  const br = document.getElementById('btn_refresh');
-  if (br) br.addEventListener('click', (ev)=>{ ev.preventDefault(); tick(true); });
-  const bc = document.getElementById('btn_compact');
-  if (bc) bc.addEventListener('click', (ev)=>{ ev.preventDefault(); compactMode = !compactMode; applyCompact(true); });
-})();
-
-function escapeHtml(s) {
-  return String(s || "").replace(/[&<>"']/g, c => ({
-    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
-  }[c]));
-}
-
-function makeId(key) {
-  return String(key || "dev").replace(/[^a-zA-Z0-9_-]/g, "_");
-}
-
-const gridEl = document.getElementById("grid");
-const UI = {}; // device_key -> {p,v,c,kv,swState,swBtn}
-
-async function apiRun(action, params) {
-  const r = await fetch("/api/run" + qs(), {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    // NOTE: this template is rendered via Python .format(), so braces must be escaped.
-    // The extra '}}}}' here is intentional to survive formatting and produce valid JS:
-    //   JSON.stringify({action: ..., params: params||{}})
-    body: JSON.stringify({action: String(action||""), params: params||{}}}})
-  });
-  return await r.json();
-}
-
-function parseSwitchOn(res) {
-  try {
-    if (!res) return null;
-    const cand = [
-      res.on, res.is_on, res.output,
-      res.state, res.status,
-      res.result && res.result.on,
-      res.result && res.result.is_on,
-      res.result && res.result.output,
-      res.result && res.result.state,
-      res.result && res.result.status,
-    ];
-    for (const v of cand) {
-      if (v === undefined || v === null) continue;
-      if (typeof v === 'boolean') return v;
-      const s = String(v).toLowerCase();
-      if (s === 'on' || s === 'true' || s === '1' || s === 'enabled') return true;
-      if (s === 'off' || s === 'false' || s === '0' || s === 'disabled') return false;
-      const n = Number(v);
-      if (!isNaN(n)) return n !== 0;
-    }
-  } catch (e) {}
-  return null;
-}
-
-function buildCards() {
-  if (!gridEl) return;
-  gridEl.innerHTML = "";
-  (DEVICES || []).forEach(dev => {
-    const id = makeId(dev.key);
-    const isSwitch = String(dev.kind || "").toLowerCase() === "switch";
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <h2>${escapeHtml(dev.name || dev.key)}</h2>
-      ${isSwitch ? `<div class="row" style="margin:6px 0 8px;gap:10px;">
-        <div class="pill">${escapeHtml(t('web.switch'))}: <b id="sw_${id}">–</b></div>
-        <button id="swbtn_${id}" type="button">${escapeHtml(t('web.switch.toggle'))}</button>
-      </div>` : ``}
-      <div class="row">
-        <canvas id="p_${id}" class="powerPlot"></canvas>
-        <canvas id="v_${id}" class="voltagePlot"></canvas>
-        <canvas id="c_${id}" class="currentPlot"></canvas>
-      </div>
-      <div class="kv" id="kv_${id}"></div>
-      <div class="appl-title" id="appltitle_${id}" style="display:none">${escapeHtml(t('live.appliance.title'))}</div>
-      <div class="appl" id="appl_${id}"></div>
-    `;
-    gridEl.appendChild(card);
-    UI[dev.key] = {
-      p: document.getElementById(`p_${id}`),
-      v: document.getElementById(`v_${id}`),
-      c: document.getElementById(`c_${id}`),
-      kv: document.getElementById(`kv_${id}`),
-      appl: document.getElementById(`appl_${id}`),
-      applTitle: document.getElementById(`appltitle_${id}`),
-      swState: document.getElementById(`sw_${id}`),
-      swBtn: document.getElementById(`swbtn_${id}`),
-    };
-
-    // Wire switch toggle (if present)
-    if (isSwitch) {
-      const btn = UI[dev.key].swBtn;
-      if (btn) {
-        btn.addEventListener('click', async () => {
-          try {
-            btn.disabled = true;
-            const res = await apiRun('toggle_switch', {device_key: dev.key});
-            if (res && res.ok && UI[dev.key].swState) {
-              const on = parseSwitchOn(res);
-              if (on !== null) UI[dev.key].swState.textContent = on ? t('web.switch.on') : t('web.switch.off');
-              UI[dev.key]._swLastFetch = Date.now();
-            }
-          } catch (e) {
-            // ignore
-          } finally {
-            btn.disabled = false;
-          }
-        });
-      }
-    }
-  });
-}
-
-buildCards();
-
-// --- Cost Summary for 3-phase devices ---
-const costSumEl = document.getElementById("cost_summary");
-const threePhaseDevs = (DEVICES || []).filter(d => parseInt(d.phases || 3, 10) >= 3 && String(d.kind || "").toLowerCase() !== "switch");
-
-function buildCostSummary() {{
-  if (!costSumEl || threePhaseDevs.length === 0) return;
-  costSumEl.innerHTML = `<div class="cost-panel">
-    <h2>💰 ${t('web.costs.title')} <button id="cost_refresh_btn">${t('web.costs.refresh')}</button></h2>
-    <div id="cost_devices"><div style="color:var(--muted);font-size:13px;padding:12px 0;">⏳ ...</div></div>
-  </div>`;
-  document.getElementById("cost_refresh_btn").addEventListener("click", (e) => {{ e.preventDefault(); fetchCosts(); }});
-  fetchCosts();
-}}
-buildCostSummary();
-
-async function fetchCosts() {{
-  if (!costSumEl || threePhaseDevs.length === 0) return;
-  try {{
-    const r = await fetch("/api/costs" + qs());
-    const data = await r.json();
-    if (data && data.ok) renderCosts(data.devices || []);
-  }} catch (e) {{}}
+/* ── Tab switching ── */
+function switchPane(name, btn) {{
+  document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const pane = document.getElementById('pane-' + name);
+  if (pane) pane.classList.add('active');
+  if (btn) btn.classList.add('active');
+  currentPane = name;
+  localStorage.setItem('sea_pane', name);
+  onPaneActivated(name);
 }}
 
-function renderCosts(devices) {{
-  const container = document.getElementById("cost_devices");
-  if (!container) return;
-  if (!devices.length) {{ container.innerHTML = `<div style="color:var(--muted);padding:8px;">No 3-phase devices.</div>`; return; }}
-
-  const labels = {{
-    today: t('web.costs.today'),
-    week: t('web.costs.week'),
-    month: t('web.costs.month'),
-    year: t('web.costs.year'),
-  }};
-
-  let html = '';
-  devices.forEach(dev => {{
-    html += `<div class="cost-dev">`;
-    html += `<div class="cost-dev-name">⚡ ${{escapeHtml(dev.name)}} <span>(${{escapeHtml(dev.host)}})</span></div>`;
-
-    // Cards row: today / week / month / year
-    html += `<div class="cost-cards">`;
-    ['today','week','month','year'].forEach(k => {{
-      const kwh = dev[k + '_kwh'] || 0;
-      const eur = dev[k + '_eur'] || 0;
-      html += `<div class="cost-card">
-        <div class="cost-card-label">${labels[k]}</div>
-        <div class="cost-card-kwh">${fmt(kwh,2)} kWh</div>
-        <div class="cost-card-eur">${fmt(eur,2)} €</div>
-      </div>`;
-    }});
-    html += `</div>`;
-
-    // Row 2: Projection + vs last month
-    html += `<div class="cost-row2">`;
-    html += `<div class="cost-card">
-      <div class="cost-card-label">${t('web.costs.projected')}</div>
-      <div class="cost-card-kwh">~${{fmt(dev.proj_kwh || 0, 1)}} kWh</div>
-      <div class="cost-card-eur">~${{fmt(dev.proj_eur || 0, 2)}} €</div>
-    </div>`;
-    const vsPct = dev.vs_last_pct;
-    let vsText = '';
-    if (vsPct !== null && vsPct !== undefined) {{
-      const arrow = vsPct > 0 ? '📈' : '📉';
-      vsText = `${{arrow}} ${{vsPct > 0 ? '+' : ''}}${{fmt(vsPct,1)}}% (${{fmt(dev.last_month_kwh||0,1)}} kWh = ${{fmt(dev.last_month_eur||0,2)}} €)`;
-    }} else {{
-      vsText = t('web.costs.no_prev');
-    }}
-    html += `<div class="cost-card">
-      <div class="cost-card-label">${t('web.costs.vs_last')}</div>
-      <div class="cost-card-vs">${vsText}</div>
-    </div>`;
-    html += `</div>`;
-
-    html += `</div>`;
-  }});
-  container.innerHTML = html;
-}}
-
-// Refresh costs every 60 seconds
-setInterval(fetchCosts, 60000);
-
-const winSel = document.getElementById("win_sel");
-
-function renderWindowOptions(opts, selected) {{
-  if (!winSel) return;
-  winSel.innerHTML = "";
-  const uniq = Array.from(new Set(opts.map(x=>parseInt(x,10)).filter(x=>x>0))).sort((a,b)=>a-b);
-  uniq.forEach(m => {{
-    const o = document.createElement("option");
-    o.value = String(m);
-    o.textContent = String(m);
-    if (m === selected) o.selected = true;
-    winSel.appendChild(o);
-  }});
-}}
-
-async function syncConfig() {{
-  try {{
-    const r = await fetch("/api/config" + qs(), {{cache:"no-store"}});
-    const cfg = await r.json();
-    // If the user just changed the window, keep the UI stable until the server confirms.
-    if (pendingWindow !== null) {{
-      const sm = parseInt((cfg && cfg.window_minutes) ? cfg.window_minutes : pendingWindow, 10);
-      if (!isNaN(sm) && sm === pendingWindow) {{
-        windowMin = pendingWindow;
-        pendingWindow = null;
-      }}
-    }}
-    if (pendingWindow === null && cfg && cfg.window_minutes) {{
-      const m = parseInt(cfg.window_minutes, 10);
-      if (!isNaN(m) && m>0) windowMin = m;
-    }}
-    const opts = (cfg && cfg.available_windows) ? cfg.available_windows : WINDOW_OPTIONS;
-    renderWindowOptions(opts, pendingWindow !== null ? pendingWindow : windowMin);
-    // Analyzer status (heartbeat from desktop app)
-    try {
-      const el = document.getElementById("analyzer_state");
-      if (el && cfg) {
-        const on = !!cfg.analyzer_running;
-        el.textContent = on ? t('web.switch.on') : t('web.switch.off');
-      }
-    } catch (e) {}
-  } catch (e) {
-    renderWindowOptions(WINDOW_OPTIONS, windowMin);
-    try {
-      const el = document.getElementById("analyzer_state");
-      if (el) el.textContent = t('web.switch.off');
-    } catch (e2) {}
-  }
-}
-
-if (winSel) {{
-  winSel.addEventListener("change", async () => {{
-    const m = parseInt(winSel.value, 10);
-    if (!m || isNaN(m)) return;
-    // Optimistically apply locally so the UI doesn't "jump back" while the request is in-flight.
-    windowMin = m;
-    pendingWindow = m;
-    try {{
-      await fetch("/api/set_window" + qs(), {{
-        method: "POST",
-        headers: {{"Content-Type":"application/json"}},
-        body: JSON.stringify({{minutes: m}})
-      }});
-    }} catch (e) {{}}
-    await syncConfig();
-  }});
-}}
-
-// initial render + periodic sync for bidirectional updates
-syncConfig();
-setInterval(syncConfig, Math.max(2000, REFRESH_MS*3));
-
-function fmt(n, d=1) {{
-  if (n === null || n === undefined || isNaN(n)) return "–";
-  return Number(n).toFixed(d);
-}}
-
-function cssVar(name, fallback) {{
-  try {{
-    const v = getComputedStyle(document.documentElement).getPropertyValue(name);
-    const s = (v || "").trim();
-    return s || fallback;
-  }} catch (e) {{
-    return fallback;
+function onPaneActivated(name) {{
+  if (name === 'live') {{
+    startLive();
+  }} else {{
+    stopLive();
+    if (name === 'costs') loadCosts();
+    else if (name === 'heatmap') initHeatmap();
+    else if (name === 'solar') initSolar();
+    else if (name === 'compare') initCompare();
+    else if (name === 'anomalies') loadAnomalies();
   }}
 }}
 
-function palettePower() {{
-  return [cssVar('--plot-line1', 'rgba(37,99,235,0.92)')];
+/* ──────────────────────────────────────────────
+   LIVE TAB
+────────────────────────────────────────────── */
+function pwrClass(w) {{
+  if (w < 100) return 'pwr-low';
+  if (w < 500) return 'pwr-med';
+  return 'pwr-high';
 }}
-function palette3() {{
-  return [
-    cssVar('--plot-line1', 'rgba(37,99,235,0.92)'),
-    cssVar('--plot-line2', 'rgba(217,119,6,0.92)'),
-    cssVar('--plot-line3', 'rgba(22,163,74,0.92)')
-  ];
+function fmt(v, dec, unit) {{
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  return v.toFixed(dec) + (unit ? ' ' + unit : '');
 }}
 
-function drawLineChart(canvas, tsMs, seriesList, yLabel, colors) {{
-  const ctx = canvas.getContext("2d");
-  const w = canvas.width  = canvas.clientWidth  * devicePixelRatio;
-  const h = canvas.height = canvas.clientHeight * devicePixelRatio;
-  ctx.clearRect(0, 0, w, h);
+function startLive() {{
+  if (liveTimer) return;
+  tick(true);
+  liveTimer = setInterval(function() {{ if (!frozen) tick(false); }}, REFRESH_MS);
+  document.getElementById('btn-freeze').addEventListener('click', toggleFreeze);
+}}
+function stopLive() {{
+  if (liveTimer) {{ clearInterval(liveTimer); liveTimer = null; }}
+}}
+function toggleFreeze() {{
+  frozen = !frozen;
+  document.getElementById('btn-freeze').textContent = frozen ? '▶' : '⏸';
+}}
 
-  const colGrid  = cssVar('--plot-grid',  'rgba(17,24,39,0.10)');
-  const colTick  = cssVar('--plot-tick',  'rgba(17,24,39,0.70)');
-  const colTitle = cssVar('--plot-title', 'rgba(17,24,39,0.90)');
-  const colWait  = cssVar('--plot-wait',  'rgba(17,24,39,0.55)');
+async function tick(first) {{
+  try {{
+    const r = await fetch('/api/state');
+    if (!r.ok) return;
+    const data = await r.json();
+    renderLive(data, first);
+    const stamp = document.getElementById('live-stamp');
+    const d = new Date();
+    stamp.textContent = d.toLocaleTimeString();
+  }} catch(e) {{
+    // silent retry
+  }}
+}}
 
-  const padL = 46 * devicePixelRatio;
-  const padR = 10 * devicePixelRatio;
-  const padT = 10 * devicePixelRatio;
-  const padB = 38 * devicePixelRatio;
+function renderLive(data, first) {{
+  const grid = document.getElementById('live-grid');
+  const devices = data.devices || [];
 
-  const plotW = w - padL - padR;
-  const plotH = h - padT - padB;
-
-  // compute min/max from all series
-  let ymin = Infinity, ymax = -Infinity, n = 0;
-  seriesList.forEach(s => {{
-    (s.values || []).forEach(v => {{
-      if (v === null || v === undefined || isNaN(v)) return;
-      ymin = Math.min(ymin, v);
-      ymax = Math.max(ymax, v);
-      n++;
-    }});
+  // Init sparkline buffers
+  devices.forEach(function(d) {{
+    if (!sparkData[d.key]) sparkData[d.key] = [];
+    const buf = sparkData[d.key];
+    buf.push({{ ts: Date.now(), w: d.power_w || 0 }});
+    if (buf.length > 60) buf.shift();
   }});
 
-  if (!isFinite(ymin) || !isFinite(ymax) || n < 2 || !tsMs || tsMs.length < 2) {{
-    ctx.fillStyle = colWait;
-    const fs = Math.round(12 * devicePixelRatio);
-    ctx.font = fs + "px system-ui";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText("Warte auf Daten …", padL, padT + 8*devicePixelRatio);
+  if (first || grid.children.length !== devices.length) {{
+    grid.innerHTML = '';
+    devices.forEach(function(d) {{
+      const card = buildDeviceCard(d);
+      grid.appendChild(card);
+    }});
+  }} else {{
+    devices.forEach(function(d, i) {{
+      updateDeviceCard(grid.children[i], d);
+    }});
+  }}
+}}
+
+function buildDeviceCard(d) {{
+  const div = document.createElement('div');
+  div.className = 'dev-card';
+  div.id = 'dc-' + d.key;
+  div.innerHTML = devCardHTML(d);
+  div.querySelector('.dev-header').addEventListener('click', function() {{
+    const exp = div.querySelector('.dev-expand');
+    exp.classList.toggle('open');
+  }});
+  return div;
+}}
+
+function devCardHTML(d) {{
+  const pc = pwrClass(d.power_w || 0);
+  const phases = (d.phases && d.phases.length > 0) ? d.phases : null;
+  let phaseHtml = '';
+  if (phases) {{
+    phaseHtml = '<dl class="dev-kv">';
+    phases.forEach(function(ph, i) {{
+      phaseHtml += '<dt>Phase ' + (i+1) + '</dt><dd>' + fmt(ph.voltage_v,1,'V') + ' · ' + fmt(ph.current_a,2,'A') + ' · ' + fmt(ph.power_w,0,'W') + '</dd>';
+    }});
+    phaseHtml += '</dl>';
+  }}
+  const nilm = d.appliances && d.appliances.length ? '<div class="appl-list">' + d.appliances.map(function(a) {{ return '<span class="appl-chip">' + a + '</span>'; }}).join('') + '</div>' : '';
+  return (
+    '<div class="dev-header">' +
+      '<div>' +
+        '<div class="dev-name">' + esc(d.name || d.key) + '</div>' +
+        '<div class="dev-meta">' +
+          '<span>' + fmt(d.today_kwh, 3) + ' kWh</span>' +
+          (d.cost_today !== undefined ? '<span>' + fmt(d.cost_today, 2) + ' €</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="dev-power ' + pc + '">' + fmt(d.power_w, 0) + ' W</div>' +
+    '</div>' +
+    '<div class="sparkline-wrap"><canvas class="sparkline" id="sp-' + d.key + '"></canvas></div>' +
+    '<div class="dev-expand">' +
+      '<dl class="dev-kv">' +
+        '<dt>Voltage</dt><dd>' + fmt(d.voltage_v, 1, 'V') + '</dd>' +
+        '<dt>Current</dt><dd>' + fmt(d.current_a, 2, 'A') + '</dd>' +
+        '<dt>cos φ</dt><dd>' + (d.pf !== undefined ? fmt(d.pf, 2) : '—') + '</dd>' +
+        '<dt>Freq</dt><dd>' + (d.freq_hz !== undefined ? fmt(d.freq_hz, 1, 'Hz') : '—') + '</dd>' +
+      '</dl>' +
+      phaseHtml +
+      nilm +
+    '</div>'
+  );
+}}
+
+function updateDeviceCard(card, d) {{
+  const pc = pwrClass(d.power_w || 0);
+  const pw = card.querySelector('.dev-power');
+  if (pw) {{ pw.textContent = fmt(d.power_w, 0) + ' W'; pw.className = 'dev-power ' + pc; }}
+  const meta = card.querySelector('.dev-meta');
+  if (meta) {{
+    const spans = meta.querySelectorAll('span');
+    if (spans[0]) spans[0].textContent = fmt(d.today_kwh, 3) + ' kWh';
+    if (spans[1] && d.cost_today !== undefined) spans[1].textContent = fmt(d.cost_today, 2) + ' €';
+  }}
+  // Redraw sparkline
+  const sp = card.querySelector('canvas.sparkline');
+  if (sp && sparkData[d.key]) drawSparkline(sp, sparkData[d.key].map(function(p) {{ return p.w; }}));
+}}
+
+/* ──────────────────────────────────────────────
+   SPARKLINE
+────────────────────────────────────────────── */
+function drawSparkline(canvas, values) {{
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth || 200;
+  const H = canvas.offsetHeight || 56;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+  if (!values || values.length < 2) return;
+  const max = Math.max(...values, 1);
+  const min = 0;
+  const pad = 4;
+  const sx = (W - pad*2) / (values.length - 1);
+  // Fill
+  ctx.beginPath();
+  values.forEach(function(v, i) {{
+    const x = pad + i * sx;
+    const y = H - pad - ((v - min) / (max - min)) * (H - pad*2);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }});
+  ctx.lineTo(pad + (values.length-1)*sx, H - pad);
+  ctx.lineTo(pad, H - pad);
+  ctx.closePath();
+  const cs = getComputedStyle(document.documentElement);
+  const accent = cs.getPropertyValue('--accent').trim() || '#2563eb';
+  ctx.fillStyle = accent + '28';
+  ctx.fill();
+  // Line
+  ctx.beginPath();
+  values.forEach(function(v, i) {{
+    const x = pad + i * sx;
+    const y = H - pad - ((v - min) / (max - min)) * (H - pad*2);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }});
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}}
+
+/* ──────────────────────────────────────────────
+   COSTS TAB
+────────────────────────────────────────────── */
+async function loadCosts() {{
+  const el = document.getElementById('costs-content');
+  el.innerHTML = '<p class="loading-msg">Loading…</p>';
+  try {{
+    const r = await fetch('/api/costs');
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    renderCosts(data, el);
+  }} catch(e) {{
+    el.innerHTML = '<p class="error-msg">Error loading costs: ' + e.message + '</p>';
+  }}
+}}
+
+function renderCosts(data, el) {{
+  if (!data || !data.devices || data.devices.length === 0) {{
+    el.innerHTML = '<p class="info-msg">No cost data available.</p>';
     return;
   }}
+  let html = '';
+  if (data.summary) {{
+    const s = data.summary;
+    html += '<div class="card" style="margin-bottom:10px"><div class="card-title">Summary</div>' +
+      '<div class="metric-grid">' +
+      metricCardHtml('Today', fmt(s.today_eur,2,'€'), fmt(s.today_kwh,3,'kWh')) +
+      metricCardHtml('Week', fmt(s.week_eur,2,'€'), fmt(s.week_kwh,3,'kWh')) +
+      metricCardHtml('Month', fmt(s.month_eur,2,'€'), fmt(s.month_kwh,3,'kWh')) +
+      metricCardHtml('Year', fmt(s.year_eur,2,'€'), fmt(s.year_kwh,3,'kWh')) +
+      '</div></div>';
+  }}
+  html += '<div class="card-grid">';
+  data.devices.forEach(function(d) {{
+    html += '<div class="card">' +
+      '<div class="card-title">' + esc(d.name || d.key) + '</div>' +
+      '<div class="metric-grid">' +
+      metricCardHtml('Today', fmt(d.today_eur,2,'€'), fmt(d.today_kwh,3,'kWh')) +
+      metricCardHtml('Week', fmt(d.week_eur,2,'€'), '') +
+      metricCardHtml('Month', fmt(d.month_eur,2,'€'), '') +
+      metricCardHtml('Year (proj.)', fmt(d.year_eur,2,'€'), '') +
+      '</div></div>';
+  }});
+  html += '</div>';
+  el.innerHTML = html;
+}}
 
-  // headroom
-  const span = Math.max(1e-6, ymax - ymin);
-  ymin -= 0.06 * span;
-  ymax += 0.08 * span;
+function metricCardHtml(label, value, sub) {{
+  return '<div class="metric-card">' +
+    '<div class="metric-label">' + esc(label) + '</div>' +
+    '<div class="metric-value">' + esc(value) + '</div>' +
+    (sub ? '<div class="metric-sub">' + esc(sub) + '</div>' : '') +
+    '</div>';
+}}
 
-  const tmin = tsMs[0];
-  const tmax = tsMs[tsMs.length - 1];
-  const tspan = Math.max(1, tmax - tmin);
+/* ──────────────────────────────────────────────
+   HEATMAP TAB
+────────────────────────────────────────────── */
+function initHeatmap() {{
+  const sel = document.getElementById('hm-device');
+  if (sel.children.length === 0) {{
+    DEVICES.forEach(function(d) {{
+      const opt = document.createElement('option');
+      opt.value = d.key;
+      opt.textContent = d.name || d.key;
+      sel.appendChild(opt);
+    }});
+  }}
+  const ySel = document.getElementById('hm-year');
+  if (ySel.children.length === 0) {{
+    const now = new Date().getFullYear();
+    for (let y = now; y >= now - 4; y--) {{
+      const opt = document.createElement('option');
+      opt.value = y;
+      opt.textContent = y;
+      ySel.appendChild(opt);
+    }}
+  }}
+  loadHeatmap();
+}}
 
-  function xFromT(t) {{ return padL + ((t - tmin) / tspan) * plotW; }}
-  function yFromV(v) {{ return padT + (1 - ((v - ymin) / (ymax - ymin))) * plotH; }}
+async function loadHeatmap() {{
+  const device = document.getElementById('hm-device').value;
+  const year = document.getElementById('hm-year').value;
+  const unit = document.getElementById('hm-unit').value;
+  const calWrap = document.getElementById('hm-calendar-wrap');
+  const hrWrap = document.getElementById('hm-hourly-wrap');
+  calWrap.innerHTML = '<p class="loading-msg">Loading…</p>';
+  hrWrap.innerHTML = '';
+  if (!device) {{ calWrap.innerHTML = '<p class="info-msg">Select a device.</p>'; return; }}
+  try {{
+    const r = await fetch('/api/heatmap?device=' + encodeURIComponent(device) + '&year=' + year + '&unit=' + unit);
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    renderHeatmapCalendar(data, calWrap, unit);
+    renderHeatmapHourly(data, hrWrap, unit);
+  }} catch(e) {{
+    calWrap.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+  }}
+}}
 
-  // grid + y labels
-  ctx.strokeStyle = colGrid;
-  ctx.fillStyle = colTick;
-  const yTicks = 4;
-  ctx.textAlign = "right";
-  ctx.textBaseline = "middle";
-  ctx.font = Math.round(11 * devicePixelRatio) + "px system-ui";
+function renderHeatmapCalendar(data, el, unit) {{
+  const daily = data.daily || {{}};
+  const year = parseInt(document.getElementById('hm-year').value);
+  const start = new Date(year, 0, 1);
+  // Align to Monday
+  while (start.getDay() !== 1) start.setDate(start.getDate() - 1);
+  const end = new Date(year, 11, 31);
+  while (end.getDay() !== 0) end.setDate(end.getDate() + 1);
+
+  const vals = Object.values(daily).filter(function(v) {{ return v > 0; }});
+  const maxVal = vals.length ? Math.max(...vals) : 1;
+
+  const weeks = [];
+  let cur = new Date(start);
+  while (cur <= end) {{
+    const week = [];
+    for (let d = 0; d < 7; d++) {{
+      week.push(new Date(cur));
+      cur.setDate(cur.getDate() + 1);
+    }}
+    weeks.push(week);
+  }}
+
+  // Month labels
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  let monthLabelHtml = '<div class="hm-month-labels">';
+  let lastMonth = -1;
+  weeks.forEach(function(week) {{
+    const m = week[0].getMonth();
+    if (m !== lastMonth && week[0].getFullYear() === year) {{
+      monthLabelHtml += '<span style="width:' + (12+2) + 'px">' + monthNames[m] + '</span>';
+      lastMonth = m;
+    }} else {{
+      monthLabelHtml += '<span style="width:' + (12+2) + 'px"></span>';
+    }}
+  }});
+  monthLabelHtml += '</div>';
+
+  let gridHtml = '<div class="hm-grid">';
+  weeks.forEach(function(week) {{
+    gridHtml += '<div class="hm-week">';
+    week.forEach(function(day) {{
+      const key = day.toISOString().slice(0,10);
+      const v = daily[key] || 0;
+      const ratio = maxVal > 0 ? v / maxVal : 0;
+      const alpha = Math.round(ratio * 200);
+      const label = unit === 'eur' ? fmt(v,2,'€') : fmt(v,3,'kWh');
+      const inYear = day.getFullYear() === year;
+      const bg = inYear && v > 0 ? 'rgba(37,99,235,' + (0.12 + ratio*0.75).toFixed(2) + ')' : '';
+      gridHtml += '<div class="hm-day" style="' + (bg ? 'background:' + bg + ';' : '') + '" data-date="' + key + '" data-val="' + label + '"></div>';
+    }});
+    gridHtml += '</div>';
+  }});
+  gridHtml += '</div>';
+
+  el.innerHTML = '<div class="hm-calendar">' + monthLabelHtml + gridHtml + '</div>';
+
+  // Tooltip
+  el.querySelectorAll('.hm-day').forEach(function(cell) {{
+    cell.addEventListener('mousemove', function(e) {{
+      showHmTooltip(e, cell.dataset.date + ': ' + cell.dataset.val);
+    }});
+    cell.addEventListener('touchstart', function(e) {{
+      e.preventDefault();
+      showHmTooltip(e.touches[0], cell.dataset.date + ': ' + cell.dataset.val);
+    }}, {{passive:false}});
+    cell.addEventListener('mouseleave', hideHmTooltip);
+    cell.addEventListener('touchend', hideHmTooltip);
+  }});
+}}
+
+function renderHeatmapHourly(data, el, unit) {{
+  const hourly = data.hourly;
+  if (!hourly) return;
+  const days = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+  const vals = [];
+  for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) {{
+    const v = (hourly[d] && hourly[d][h]) ? hourly[d][h] : 0;
+    if (v > 0) vals.push(v);
+  }}
+  const maxVal = vals.length ? Math.max(...vals) : 1;
+
+  let html = '<div class="card"><div class="card-title">Hourly Pattern</div><div class="hm-table-wrap"><table class="hm-table"><thead><tr><th class="hm-head"></th>';
+  for (let h = 0; h < 24; h++) html += '<th class="hm-head">' + h + '</th>';
+  html += '</tr></thead><tbody>';
+  for (let d = 0; d < 7; d++) {{
+    html += '<tr><td class="hm-head" style="padding-right:4px">' + days[d] + '</td>';
+    for (let h = 0; h < 24; h++) {{
+      const v = (hourly[d] && hourly[d][h]) ? hourly[d][h] : 0;
+      const ratio = maxVal > 0 ? v / maxVal : 0;
+      const label = v > 0 ? (unit === 'eur' ? fmt(v,2) : fmt(v,3)) : '';
+      const bg = v > 0 ? 'rgba(37,99,235,' + (0.10 + ratio*0.80).toFixed(2) + ')' : 'transparent';
+      const title = days[d] + ' ' + h + 'h: ' + (unit === 'eur' ? fmt(v,2,'€') : fmt(v,3,'kWh'));
+      html += '<td class="hm-cell" style="background:' + bg + '" data-tip="' + title + '">' + label + '</td>';
+    }}
+    html += '</tr>';
+  }}
+  html += '</tbody></table></div></div>';
+  el.innerHTML = html;
+
+  el.querySelectorAll('.hm-cell[data-tip]').forEach(function(cell) {{
+    cell.addEventListener('mousemove', function(e) {{ showHmTooltip(e, cell.dataset.tip); }});
+    cell.addEventListener('mouseleave', hideHmTooltip);
+    cell.addEventListener('touchstart', function(e) {{
+      e.preventDefault();
+      showHmTooltip(e.touches[0], cell.dataset.tip);
+    }}, {{passive:false}});
+    cell.addEventListener('touchend', hideHmTooltip);
+  }});
+}}
+
+function showHmTooltip(e, text) {{
+  const tt = document.getElementById('hm-tooltip');
+  tt.textContent = text;
+  tt.style.display = 'block';
+  tt.style.left = (e.clientX + 10) + 'px';
+  tt.style.top = (e.clientY - 30) + 'px';
+}}
+function hideHmTooltip() {{
+  document.getElementById('hm-tooltip').style.display = 'none';
+}}
+
+/* ──────────────────────────────────────────────
+   SOLAR TAB
+────────────────────────────────────────────── */
+let solarPeriod = 'today';
+function initSolar() {{
+  const row = document.getElementById('solar-periods');
+  if (row.children.length === 0) {{
+    ['today','week','month','year'].forEach(function(p) {{
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-outline btn-sm';
+      btn.textContent = p.charAt(0).toUpperCase() + p.slice(1);
+      btn.dataset.period = p;
+      btn.addEventListener('click', function() {{
+        solarPeriod = p;
+        row.querySelectorAll('.btn').forEach(function(b) {{ b.classList.remove('btn-accent'); }});
+        btn.classList.add('btn-accent');
+        loadSolar(p);
+      }});
+      row.appendChild(btn);
+    }});
+    row.children[0].classList.add('btn-accent');
+  }}
+  loadSolar(solarPeriod);
+}}
+
+async function loadSolar(period) {{
+  const el = document.getElementById('solar-content');
+  el.innerHTML = '<p class="loading-msg">Loading…</p>';
+  try {{
+    const r = await fetch('/api/solar?period=' + period);
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    renderSolar(data, el);
+  }} catch(e) {{
+    el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+  }}
+}}
+
+function renderSolar(data, el) {{
+  if (data.configured === false || data.enabled === false) {{
+    el.innerHTML = '<p class="info-msg">Solar monitoring is not configured.</p>';
+    return;
+  }}
+  const fields = [
+    ['PV Production', fmt(data.pv_kwh,3,'kWh'), ''],
+    ['Feed-in', fmt(data.feed_in_kwh,3,'kWh'), ''],
+    ['Grid Draw', fmt(data.grid_kwh,3,'kWh'), ''],
+    ['Self-Consumption', fmt(data.self_kwh,3,'kWh'), ''],
+    ['Autarky', fmt(data.autarky_pct,1,'%'), ''],
+    ['Revenue', fmt(data.revenue_eur,2,'€'), ''],
+    ['Savings', fmt(data.savings_eur,2,'€'), ''],
+  ];
+  let html = '<div class="card"><div class="metric-grid">';
+  fields.forEach(function(f) {{ html += metricCardHtml(f[0], f[1], f[2]); }});
+  html += '</div></div>';
+  el.innerHTML = html;
+}}
+
+/* ──────────────────────────────────────────────
+   COMPARE TAB
+────────────────────────────────────────────── */
+let cmpInitialized = false;
+function initCompare() {{
+  if (cmpInitialized) return;
+  cmpInitialized = true;
+
+  const ctrl = document.getElementById('cmp-controls');
+  const today = new Date().toISOString().slice(0,10);
+  const monthAgo = new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
+
+  const devOptions = DEVICES.map(function(d) {{
+    return '<option value="' + esc(d.key) + '">' + esc(d.name||d.key) + '</option>';
+  }}).join('');
+
+  ctrl.innerHTML =
+    '<div class="card">' +
+      '<div class="card-title">Device A</div>' +
+      '<div class="controls-row">' +
+        '<select id="cmp-da">' + devOptions + '</select>' +
+        '<input type="date" id="cmp-fa" value="' + monthAgo + '">' +
+        '<input type="date" id="cmp-ta" value="' + today + '">' +
+      '</div>' +
+      '<div class="card-title" style="margin-top:8px">Device B</div>' +
+      '<div class="controls-row">' +
+        '<select id="cmp-db">' + devOptions + '</select>' +
+        '<input type="date" id="cmp-fb" value="' + monthAgo + '">' +
+        '<input type="date" id="cmp-tb" value="' + today + '">' +
+      '</div>' +
+      '<div class="controls-row" style="margin-top:8px">' +
+        '<select id="cmp-unit"><option value="kWh">kWh</option><option value="eur">€</option></select>' +
+        '<select id="cmp-gran"><option value="total">Total</option><option value="daily">Daily</option><option value="monthly">Monthly</option></select>' +
+        '<button class="btn btn-accent" onclick="loadCompare()">Compare</button>' +
+      '</div>' +
+    '</div>';
+
+  // Quick presets
+  const quick = document.getElementById('cmp-quick');
+  const presets = [['month','Month'],['quarter','Quarter'],['halfyear','Half Year'],['year','Year']];
+  let qhtml = '<div class="controls-row">';
+  presets.forEach(function(p) {{
+    qhtml += '<button class="btn btn-outline btn-sm" onclick="loadComparePreset(\'' + p[0] + '\')">' + p[1] + '</button>';
+  }});
+  qhtml += '</div>';
+  quick.innerHTML = qhtml;
+}}
+
+async function loadComparePreset(preset) {{
+  const result = document.getElementById('cmp-result');
+  result.innerHTML = '<p class="loading-msg">Loading…</p>';
+  try {{
+    const url = '/api/compare?preset=' + preset +
+      '&device_a=' + encodeURIComponent((document.getElementById('cmp-da')||{{}}).value||'') +
+      '&device_b=' + encodeURIComponent((document.getElementById('cmp-db')||{{}}).value||'') +
+      '&unit=' + ((document.getElementById('cmp-unit')||{{}}).value||'kWh') +
+      '&gran=' + ((document.getElementById('cmp-gran')||{{}}).value||'total');
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    renderCompare(data, result);
+  }} catch(e) {{
+    result.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+  }}
+}}
+
+async function loadCompare() {{
+  const result = document.getElementById('cmp-result');
+  result.innerHTML = '<p class="loading-msg">Loading…</p>';
+  try {{
+    const da = document.getElementById('cmp-da').value;
+    const fa = document.getElementById('cmp-fa').value;
+    const ta = document.getElementById('cmp-ta').value;
+    const db = document.getElementById('cmp-db').value;
+    const fb = document.getElementById('cmp-fb').value;
+    const tb = document.getElementById('cmp-tb').value;
+    const unit = document.getElementById('cmp-unit').value;
+    const gran = document.getElementById('cmp-gran').value;
+    const url = '/api/compare?device_a=' + encodeURIComponent(da) +
+      '&from_a=' + fa + '&to_a=' + ta +
+      '&device_b=' + encodeURIComponent(db) +
+      '&from_b=' + fb + '&to_b=' + tb +
+      '&unit=' + unit + '&gran=' + gran;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    renderCompare(data, result);
+  }} catch(e) {{
+    result.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+  }}
+}}
+
+function renderCompare(data, el) {{
+  if (!data) {{ el.innerHTML = '<p class="info-msg">No data.</p>'; return; }}
+  const unit = data.unit || 'kWh';
+  const ta = data.total_a || 0;
+  const tb = data.total_b || 0;
+  const delta = ta - tb;
+  const pct = tb !== 0 ? ((delta / Math.abs(tb)) * 100) : 0;
+
+  let html = '<div class="card">' +
+    '<div class="delta-grid">' +
+    metricCardHtml(data.label_a || 'Device A', fmt(ta,3,unit), '') +
+    metricCardHtml(data.label_b || 'Device B', fmt(tb,3,unit), '') +
+    metricCardHtml('Delta', (delta >= 0 ? '+' : '') + fmt(delta,3,unit), '') +
+    metricCardHtml('Δ %', (pct >= 0 ? '+' : '') + fmt(pct,1,'%'), '') +
+    '</div></div>';
+
+  // Bar chart
+  if (data.series_a && data.series_b && data.labels) {{
+    html += '<div class="card"><canvas class="bar-chart" id="cmp-canvas"></canvas></div>';
+  }}
+  el.innerHTML = html;
+
+  if (data.series_a && data.series_b && data.labels) {{
+    const canvas = document.getElementById('cmp-canvas');
+    drawBars(canvas, data.labels, [
+      {{ values: data.series_a, color: 'rgba(37,99,235,0.75)', label: data.label_a || 'A' }},
+      {{ values: data.series_b, color: 'rgba(217,119,6,0.75)', label: data.label_b || 'B' }}
+    ], {{ unit: unit }});
+  }}
+}}
+
+/* ──────────────────────────────────────────────
+   BAR CHART
+────────────────────────────────────────────── */
+function drawBars(canvas, labels, series, opts) {{
+  opts = opts || {{}};
+  const unit = opts.unit || '';
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth || 300;
+  const H = canvas.offsetHeight || 220;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const cs = getComputedStyle(document.documentElement);
+  const fg = cs.getPropertyValue('--fg').trim() || '#111';
+  const muted = cs.getPropertyValue('--muted').trim() || '#888';
+  const border = cs.getPropertyValue('--border').trim() || 'rgba(0,0,0,0.1)';
+
+  const padL = 48, padR = 12, padT = 16, padB = 54;
+  const cW = W - padL - padR;
+  const cH = H - padT - padB;
+
+  const allVals = [];
+  series.forEach(function(s) {{ allVals.push(...s.values); }});
+  const maxV = Math.max(...allVals, 0.001);
+
+  // Y grid
+  const yTicks = 5;
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 1;
+  ctx.fillStyle = muted;
+  ctx.font = '10px system-ui';
+  ctx.textAlign = 'right';
   for (let i = 0; i <= yTicks; i++) {{
-    const y = padT + (plotH * i / yTicks);
+    const v = (maxV / yTicks) * i;
+    const y = padT + cH - (v / maxV) * cH;
     ctx.beginPath();
     ctx.moveTo(padL, y);
-    ctx.lineTo(padL + plotW, y);
+    ctx.lineTo(padL + cW, y);
     ctx.stroke();
-    const v = ymax - (ymax - ymin) * i / yTicks;
-    ctx.fillText(fmt(v, 1), padL - 6*devicePixelRatio, y);
+    ctx.fillText(v.toFixed(1), padL - 4, y + 3);
   }}
 
-  // x grid + x labels (time)
-  const tickCount = (plotW > 900*devicePixelRatio) ? 6 : ((plotW > 620*devicePixelRatio) ? 5 : 4);
-  ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  ctx.font = Math.round(11 * devicePixelRatio) + "px system-ui";
-  for (let i = 0; i <= tickCount; i++) {{
-    const t = tmin + (tspan * i / tickCount);
-    const x = xFromT(t);
-    ctx.beginPath();
-    ctx.moveTo(x, padT);
-    ctx.lineTo(x, padT + plotH);
-    ctx.stroke();
+  // Bars
+  const n = labels.length;
+  const groupW = cW / n;
+  const barW = Math.max(2, Math.min(18, (groupW - 4) / series.length));
 
-    const d = new Date(t);
-    const lab = d.toLocaleTimeString([], {{hour: "2-digit", minute: "2-digit"}});
-    ctx.fillText(lab, x, padT + plotH + 6*devicePixelRatio);
-  }}
+  series.forEach(function(s, si) {{
+    ctx.fillStyle = s.color;
+    labels.forEach(function(lbl, li) {{
+      const v = s.values[li] || 0;
+      const bh = (v / maxV) * cH;
+      const x = padL + li * groupW + (groupW - barW * series.length) / 2 + si * barW;
+      const y = padT + cH - bh;
+      ctx.fillRect(x, y, barW - 1, bh);
+    }});
+  }});
 
-  // title
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  ctx.fillStyle = colTitle;
-  ctx.font = Math.round(12 * devicePixelRatio) + "px system-ui";
-  ctx.fillText(yLabel, padL, 2*devicePixelRatio);
+  // X labels
+  ctx.fillStyle = muted;
+  ctx.textAlign = 'center';
+  ctx.font = '9px system-ui';
+  labels.forEach(function(lbl, li) {{
+    const x = padL + li * groupW + groupW / 2;
+    const maxLbl = 8;
+    const text = lbl.length > maxLbl ? lbl.slice(0, maxLbl) + '…' : lbl;
+    ctx.save();
+    ctx.translate(x, padT + cH + 8);
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+  }});
 
-  // series
-  seriesList.forEach((s, idx) => {{
-    const vals = s.values || [];
-    if (vals.length < 2) return;
-    const col = s.color || ((colors && colors[idx]) ? colors[idx] : "rgba(106,167,255,0.9)");
-    ctx.strokeStyle = col;
-    ctx.lineWidth = Math.max(1, (s.lineWidth || 1.6) * devicePixelRatio);
-    if (s.dashed) {{ ctx.setLineDash([6 * devicePixelRatio, 4 * devicePixelRatio]); }}
-    else {{ ctx.setLineDash([]); }}
-    ctx.beginPath();
-    let started = false;
-    for (let i = 0; i < vals.length && i < tsMs.length; i++) {{
-      const v = vals[i];
-      if (v === null || v === undefined || isNaN(v)) {{ started = false; continue; }}
-      const x = xFromT(tsMs[i]);
-      const y = yFromV(v);
-      if (!started) {{ ctx.moveTo(x, y); started = true; }}
-      else {{ ctx.lineTo(x, y); }}
-    }}
-    ctx.stroke();
-    ctx.setLineDash([]);
+  // Legend
+  ctx.textAlign = 'left';
+  ctx.font = '10px system-ui';
+  series.forEach(function(s, i) {{
+    const lx = padL + i * 90;
+    ctx.fillStyle = s.color;
+    ctx.fillRect(lx, H - 14, 10, 10);
+    ctx.fillStyle = fg;
+    ctx.fillText(s.label, lx + 14, H - 5);
   }});
 }}
 
-function renderAppliances(el, titleEl, appls) {{
-  if (!el) return;
-  if (compactMode || !appls || !appls.length) {{
-    el.innerHTML = '';
-    if (titleEl) titleEl.style.display = 'none';
+/* ──────────────────────────────────────────────
+   ANOMALIES TAB
+────────────────────────────────────────────── */
+async function loadAnomalies() {{
+  const el = document.getElementById('anom-content');
+  el.innerHTML = '<p class="loading-msg">Loading…</p>';
+  try {{
+    const r = await fetch('/api/anomalies');
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    renderAnomalies(data, el);
+  }} catch(e) {{
+    el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+  }}
+}}
+
+function renderAnomalies(data, el) {{
+  let html = '';
+  // Status badge
+  const enabled = data.enabled !== false;
+  html += '<div style="margin-bottom:10px">' +
+    '<span class="badge ' + (enabled ? 'badge-green' : 'badge-red') + '">' +
+    (enabled ? 'Enabled' : 'Disabled') + '</span>' +
+    (data.model ? ' <span class="badge badge-yellow">' + esc(data.model) + '</span>' : '') +
+    '</div>';
+
+  const events = data.events || [];
+  if (events.length === 0) {{
+    html += '<p class="info-msg">No anomaly events found.</p>';
+    el.innerHTML = html;
     return;
   }}
-  if (titleEl) titleEl.style.display = '';
-  el.innerHTML = appls.map(a => {{
-    const name = t('appliance.' + a.id + '.name') || a.id;
-    const pct = Math.round(a.conf * 100);
-    const dot = pct >= 70 ? '🟢' : pct >= 40 ? '🟡' : '🔴';
-    return `<span class="appl-item">${{a.icon}} ${{escapeHtml(name)}} ${{dot}} ${{pct}}%</span>`;
-  }}).join('');
+  events.forEach(function(ev) {{
+    const ts = ev.timestamp ? new Date(ev.timestamp).toLocaleString() : '';
+    const sigma = ev.sigma !== undefined ? ' · σ=' + fmt(ev.sigma, 2) : '';
+    const val = ev.value !== undefined ? ' · ' + fmt(ev.value, 1) + ' W' : '';
+    html += '<div class="event-card">' +
+      '<div class="event-dot"></div>' +
+      '<div class="event-body">' +
+        '<div class="event-type">' + esc(ev.anomaly_type || ev.type || 'Anomaly') + '</div>' +
+        '<div class="event-meta">' +
+          esc(ev.device_name || ev.device || '') +
+          (ts ? ' · ' + ts : '') +
+          val + sigma +
+        '</div>' +
+        (ev.description ? '<div style="font-size:12px;margin-top:4px;color:var(--muted)">' + esc(ev.description) + '</div>' : '') +
+      '</div></div>';
+  }});
+  el.innerHTML = html;
 }}
 
-function kv(el, last, dev) {{
-  const single = (parseInt((dev && dev.phases !== undefined) ? dev.phases : 3, 10) <= 1);
-  const u = single ? `${fmt(last.va)} V` : `${fmt(last.va)} / ${fmt(last.vb)} / ${fmt(last.vc)} V`;
-  const i = single ? `${fmt(last.ia)} A` : `${fmt(last.ia)} / ${fmt(last.ib)} / ${fmt(last.ic)} A`;
-  const q = single ? `${fmt(last.q_total_var, 0)} VAR` : `${fmt(last.q_total_var, 0)} VAR (${fmt(last.qa,0)}/${fmt(last.qb,0)}/${fmt(last.qc,0)})`;
-  const pf = single ? `${fmt(last.cosphi_total, 3)}` : `${fmt(last.cosphi_total, 3)} (${fmt(last.pfa,3)}/${fmt(last.pfb,3)}/${fmt(last.pfc,3)})`;
-
-  // Phase balance (3-phase only)
-  let balHtml = '';
-  if (!single) {{
-    const pa = Math.abs(last.pa || 0), pb = Math.abs(last.pb || 0), pc = Math.abs(last.pc || 0);
-    const active = [pa, pb, pc].filter(v => v > 5);
-    if (active.length >= 2) {{
-      const avg = active.reduce((a,b) => a+b, 0) / active.length;
-      const maxDev = Math.max(...active.map(v => Math.abs(v - avg)));
-      const pct = avg > 0 ? Math.max(0, 100 - (maxDev / avg * 100)) : 100;
-      const sym = pct >= 90 ? '✅' : pct >= 70 ? '⚠️' : '❌';
-      balHtml = `<b>${t('web.kv.balance')}</b><span>${fmt(pct,0)}% ${sym} (${fmt(pa,0)}/${fmt(pb,0)}/${fmt(pc,0)} W)</span>`;
-    }} else if (active.length >= 1) {{
-      balHtml = `<b>${t('web.kv.power_phases')}</b><span>${fmt(pa,0)} / ${fmt(pb,0)} / ${fmt(pc,0)} W</span>`;
-    }}
-  }}
-
-  const fqHz = (last.freq_hz && last.freq_hz > 1) ? last.freq_hz : null;
-  el.innerHTML = `
-    <b>${t('web.kv.power')}</b><span>${fmt(last.power_total_w, 0)} W</span>
-    <b>${t('web.kv.kwh_today')}</b><span>${fmt(last.kwh_today, 3)} kWh</span>
-    <b>${t('web.kv.cost_today')}</b><span>${fmt(last.cost_today, 2)} €</span>
-    <b>${t('web.kv.u')}</b><span>${u}</span>
-    <b>${t('web.kv.i')}</b><span>${i}</span>
-    ${!single && last.i_n !== undefined ? `<b>${t('web.kv.i_n')}</b><span>${fmt(last.i_n, 2)} A</span>` : ''}
-    ${balHtml}
-    <b>${t('web.kv.var')}</b><span>${q}</span>
-    <b>${t('web.kv.cosphi')}</b><span>${pf}</span>
-    ${fqHz !== null ? `<b>${t('web.kv.freq')}</b><span>${fmt(fqHz, 2)} Hz</span>` : ''}
-  `;
+/* ──────────────────────────────────────────────
+   UTILITIES
+────────────────────────────────────────────── */
+function esc(s) {{
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
 }}
 
-
-
-// Stable min/max bucket sampling (anchored to time), to avoid "jiggling" peaks.
-function stableSample(arr, target) {{
-  if (!arr || arr.length <= target) return arr || [];
-  const n = arr.length;
-  const t0 = parseInt(arr[0].ts, 10);
-  const t1 = parseInt(arr[n-1].ts, 10);
-  const span = Math.max(1, t1 - t0);
-  const buckets = Math.max(10, Math.min(target, 2000));
-  const bw = span / buckets;
-  const out = [];
-  let i = 0;
-  for (let b = 0; b < buckets && i < n; b++) {{
-    const end = (b === buckets-1) ? (t1 + 1) : (t0 + (b+1)*bw);
-    let minIdx = -1, maxIdx = -1;
-    let minV = Infinity, maxV = -Infinity;
-    const startI = i;
-    while (i < n && parseInt(arr[i].ts, 10) < end) {{
-      const v = Number(arr[i].power_total_w);
-      if (!isNaN(v)) {{
-        if (v < minV) {{ minV = v; minIdx = i; }}
-        if (v > maxV) {{ maxV = v; maxIdx = i; }}
-      }}
-      i++;
-    }}
-    if (i === startI) continue;
-    if (minIdx >= 0 && maxIdx >= 0) {{
-      if (minIdx === maxIdx) out.push(arr[minIdx]);
-      else if (minIdx < maxIdx) {{ out.push(arr[minIdx]); out.push(arr[maxIdx]); }}
-      else {{ out.push(arr[maxIdx]); out.push(arr[minIdx]); }}
-    }} else {{
-      out.push(arr[startI]);
-    }}
+/* ──────────────────────────────────────────────
+   BOOT
+────────────────────────────────────────────── */
+(function() {{
+  // Restore last pane
+  const last = localStorage.getItem('sea_pane');
+  if (last && last !== 'live') {{
+    const btn = document.querySelector('.nav-btn[onclick*=\'' + last + '\']');
+    if (btn) switchPane(last, btn);
+    else startLive();
+  }} else {{
+    startLive();
   }}
-  // Ensure last point is included.
-  if (out.length && out[out.length-1].ts !== arr[n-1].ts) out.push(arr[n-1]);
-  out.sort((a,b) => (a.ts||0) - (b.ts||0));
-  // Dedupe identical timestamps.
-  return out.filter((p, idx) => idx === 0 || p.ts !== out[idx-1].ts);
-}
-
-function pickDev(data, dev) {{
-  const arr0 = data[dev.key] || [];
-  const n0 = arr0.length;
-  const last = n0 ? arr0[n0-1] : null;
-
-  // Filter to selected time window (minutes) based on latest timestamp.
-  let arr = arr0;
-  if (last && last.ts) {{
-    const cutoff = parseInt(last.ts, 10) - (parseInt(windowMin, 10) * 60);
-    arr = arr0.filter(x => x && x.ts !== undefined && parseInt(x.ts, 10) >= cutoff);
-  }}
-
-  // Downsample for drawing performance, but keep it *stable* (time-bucketed)
-  // so peaks don't appear/disappear when n changes each refresh.
-  const sampled = stableSample(arr, 900);
-
-  return {{
-    arr: sampled,
-    last: last
-  }};
-}}
-
-function renderState(data) {
-  if (!data) return;
-  try {
-    document.getElementById("stamp").textContent = new Date().toLocaleString();
-  } catch (e) {}
-
-  (DEVICES || []).forEach(dev => {
-    const ui = UI[dev.key];
-    if (!ui) return;
-    // Switch state refresh (keep in sync with real device state)
-    try {
-      const isSwitch = String(dev.kind || "").toLowerCase() === "switch";
-      if (isSwitch && ui.swState) {
-        const now = Date.now();
-        const lastFetch = ui._swLastFetch || 0;
-        if (!lastFetch || (now - lastFetch) > 5000) {
-          ui._swLastFetch = now;
-          apiRun('get_switch', {device_key: dev.key}).then(res => {
-            if (res && res.ok && ui.swState) {
-              const on = parseSwitchOn(res);
-              if (on !== null) ui.swState.textContent = on ? t('web.switch.on') : t('web.switch.off');
-            }
-          }).catch(()=>{});
-        }
-      }
-    } catch (e) {}
-
-    const picked = pickDev(data, dev);
-    if (picked.last) kv(ui.kv, picked.last, dev);
-    try {
-      const appls = data._appliances && data._appliances[dev.key];
-      renderAppliances(ui.appl, ui.applTitle, appls || []);
-    } catch (e) {}
-    const ts = picked.arr.map(x=>x.ts*1000);
-    const sparkOpts = compactMode ? {compact:true} : null;
-    const isSingle = (parseInt(dev.phases || 3, 10) <= 1);
-    // Show/hide elements in compact mode
-    try { if (ui.v) ui.v.style.display = compactMode ? "none" : ""; } catch (e) {}
-    try { if (ui.kv) ui.kv.style.display = compactMode ? "none" : ""; } catch (e) {}
-
-    // Power
-    drawLineChart(ui.p, ts, [{values: picked.arr.map(x=>x.power_total_w)}], compactMode ? "W" : t('web.chart.power'), palettePower(), sparkOpts);
-    // Voltage only in normal mode
-    if (!compactMode) {
-      const vSeries = isSingle ? [
-        {values: picked.arr.map(x=>x.va)},
-      ] : [
-        {values: picked.arr.map(x=>x.va)},
-        {values: picked.arr.map(x=>x.vb)},
-        {values: picked.arr.map(x=>x.vc)},
-      ];
-      drawLineChart(ui.v, ts, vSeries, isSingle ? t('web.chart.voltage.1p') : t('web.chart.voltage'), palette3());
-    }
-    // Current: compact mode shows TOTAL only
-    if (compactMode) {
-      drawLineChart(ui.c, ts, [{values: picked.arr.map(x=>x.ia)}], "A", palettePower(), sparkOpts);
-    } else {
-      const cSeries = isSingle ? [
-        {values: picked.arr.map(x=>x.ia)},
-      ] : [
-        {values: picked.arr.map(x=>x.ia)},
-        {values: picked.arr.map(x=>x.ib)},
-        {values: picked.arr.map(x=>x.ic)},
-        {values: picked.arr.map(x=>x.i_n), dashed: true, color: 'rgba(128,128,128,0.85)', lineWidth: 1.5},
-      ];
-      drawLineChart(ui.c, ts, cSeries, isSingle ? t('web.chart.current.1p') : t('web.chart.current'), palette3());
-    }
-  });
-
-  // Update cost summary panel
-  // (costs are fetched via /api/costs independently)
-}
-
-async function tick(force=false) {{
-  // Pause updates when app is frozen (web pause button triggers app freeze)
-  if (frozen) return;
-  if (!force && !autoRefresh) return;
-  try {{
-    const r = await fetch("/api/state" + qs());
-    const data = await r.json();
-
-    // cache latest state so we can redraw instantly on theme changes
-    window.__SEA_LAST_STATE = data;
-    renderState(data);
-  }} catch (e) {{
-    // keep silent; next tick will retry
-  }}
-}}
-
-tick(true);
-setInterval(()=>tick(false), REFRESH_MS);
+}})();
 </script>
 </body>
 </html>
@@ -2983,6 +3053,72 @@ class _Handler(BaseHTTPRequestHandler):
                     qs = parse_qs(parsed.query or "")
                     params: Dict[str, Any] = {k: (v[0] if isinstance(v, list) and v else v) for k, v in qs.items()}
                     payload = self.dashboard.on_action("plots_data", params)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            # ── New v9.0.0 API endpoints ──────────────────────────────────────
+            if path_only.startswith("/api/heatmap"):
+                try:
+                    parsed = urlparse(self.path)
+                    qs = parse_qs(parsed.query or "")
+                    params_hm: Dict[str, Any] = {k: (v[0] if isinstance(v, list) and v else v) for k, v in qs.items()}
+                    payload = self.dashboard.on_action("heatmap", params_hm)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if path_only.startswith("/api/solar"):
+                try:
+                    parsed = urlparse(self.path)
+                    qs = parse_qs(parsed.query or "")
+                    params_sol: Dict[str, Any] = {k: (v[0] if isinstance(v, list) and v else v) for k, v in qs.items()}
+                    payload = self.dashboard.on_action("solar", params_sol)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if path_only.startswith("/api/compare"):
+                try:
+                    parsed = urlparse(self.path)
+                    qs = parse_qs(parsed.query or "")
+                    params_cmp: Dict[str, Any] = {k: (v[0] if isinstance(v, list) and v else v) for k, v in qs.items()}
+                    payload = self.dashboard.on_action("compare", params_cmp)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if path_only.startswith("/api/anomalies"):
+                try:
+                    payload = self.dashboard.on_action("anomalies", {})
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
                 body = json.dumps(payload).encode("utf-8")
