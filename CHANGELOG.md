@@ -1,5 +1,19 @@
 # Changelog
 
+## 9.0.3 - 2026-03-21
+### Fixed
+- **Web UI STILL broken after v9.0.2** — A second `\'`-escaping bug existed in
+  `initCompare()`.  The preset buttons were built with:
+  `onclick="loadComparePreset(\'' + p[0] + '\')"`.
+  Again, `\'` in a Python `"""..."""` string is just `'`, so the rendered JS
+  contained `loadComparePreset('' + p[0] + '')` — two adjacent string literals
+  without a concatenation operator, which is a JS syntax error.  Because any
+  syntax error in a `<script>` block aborts the entire block, the page stayed
+  completely non-interactive (same symptom as the v9.0.2 bug).
+  Fixed by doubling the backslash (`\\'` → stored `\'`) so the backslash
+  survives Python's escape processing and JavaScript sees a properly escaped
+  single-quote inside the string.
+
 ## 9.0.2 - 2026-03-21
 ### Fixed
 - **Web UI completely blank (all tabs)** — A JavaScript syntax error in the

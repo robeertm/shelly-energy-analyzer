@@ -1222,7 +1222,7 @@ function initCompare() {{
   const presets = [['month','Month'],['quarter','Quarter'],['halfyear','Half Year'],['year','Year']];
   let qhtml = '<div class="controls-row">';
   presets.forEach(function(p) {{
-    qhtml += '<button class="btn btn-outline btn-sm" onclick="loadComparePreset(\'' + p[0] + '\')">' + p[1] + '</button>';
+    qhtml += '<button class="btn btn-outline btn-sm" onclick="loadComparePreset(\\'' + p[0] + '\\')">' + p[1] + '</button>';
   }});
   qhtml += '</div>';
   quick.innerHTML = qhtml;
