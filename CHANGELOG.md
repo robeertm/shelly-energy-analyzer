@@ -1,5 +1,14 @@
 # Changelog
 
+## 8.6.1 - 2026-03-21
+### Fixed
+- **Heatmap weekday × hour: values too high (sum → mean).** The
+  weekday × hour heatmap was accumulating all occurrences of a given
+  weekday/hour slot across the entire year (≈52 values per cell) using
+  `sum()`, producing values like 8.8 kWh for a single hour instead of a
+  typical ~0.2 kWh.  Changed the aggregation to `mean()` so each cell now
+  shows the average hourly consumption for that weekday/hour combination.
+
 ## 8.6.0 - 2026-03-21
 ### Added
 - **Heatmap tooltips.** Hovering over a day cell in the calendar heatmap now
