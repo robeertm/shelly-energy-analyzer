@@ -1,5 +1,19 @@
 # Changelog
 
+## 8.5.0 - 2026-03-21
+### Changed
+- **Auto-refresh on tab switch.** The Costs, Heatmap, Solar, and Comparison tabs
+  now reload their data automatically whenever the user switches to them.  The
+  manual "Refresh" button has been removed from all four tabs.
+- **Auto-refresh on control changes (Comparison tab).** Changing device, date
+  range (Return / focus-out), unit, or granularity in the Comparison tab now
+  triggers an immediate refresh without requiring a button click.
+- **Heatmap fills full window height.** Both heatmap plots (calendar and
+  weekday × hour) now expand to fill all available vertical space instead of
+  being constrained to fixed heights in a scrollable container.  The scroll
+  container has been replaced with a simple frame so the two sections split the
+  available height equally and scale with window resize.
+
 ## 8.4.0 - 2026-03-20
 ### Added
 - **NILM appliance detector in the web dashboard.** The live web view now shows

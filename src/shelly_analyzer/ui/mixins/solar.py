@@ -33,7 +33,6 @@ class SolarMixin:
         top = ttk.Frame(frm)
         top.pack(fill="x", padx=14, pady=(12, 4))
         ttk.Label(top, text=self.t("solar.title"), font=("", 14, "bold")).pack(side="left")
-        ttk.Button(top, text=self.t("solar.refresh"), command=self._refresh_solar_tab).pack(side="right")
 
         # ── Period selector ──────────────────────────────────────────────────
         ctrl = ttk.Frame(frm)

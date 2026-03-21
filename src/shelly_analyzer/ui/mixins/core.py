@@ -345,7 +345,7 @@ class CoreMixin:
             # We therefore schedule a short resize-watch whenever the main window
             # or the active tab changes.
             try:
-                self.notebook.bind('<<NotebookTabChanged>>', lambda _e=None: self._kick_plots_resize_watch())
+                self.notebook.bind('<<NotebookTabChanged>>', lambda _e=None: (self._kick_plots_resize_watch(), self._on_tab_changed()))
             except Exception:
                 pass
             try:
@@ -497,7 +497,7 @@ class CoreMixin:
             # We therefore schedule a short resize-watch whenever the main window
             # or the active tab changes.
             try:
-                self.notebook.bind('<<NotebookTabChanged>>', lambda _e=None: self._kick_plots_resize_watch())
+                self.notebook.bind('<<NotebookTabChanged>>', lambda _e=None: (self._kick_plots_resize_watch(), self._on_tab_changed()))
             except Exception:
                 pass
             try:
@@ -507,6 +507,21 @@ class CoreMixin:
             try:
                 if was_live:
                     self._start_live()
+            except Exception:
+                pass
+
+    def _on_tab_changed(self) -> None:
+            """Refresh the content of the newly selected tab."""
+            try:
+                sel = self.notebook.select()
+                if sel == str(getattr(self, 'tab_costs', None)):
+                    self.after(50, self._refresh_costs_tab)
+                elif sel == str(getattr(self, 'tab_heatmap', None)):
+                    self.after(50, self._refresh_heatmap)
+                elif sel == str(getattr(self, 'tab_solar', None)):
+                    self.after(50, self._refresh_solar_tab)
+                elif sel == str(getattr(self, 'tab_compare', None)):
+                    self.after(50, self._refresh_compare)
             except Exception:
                 pass
 
@@ -3953,7 +3968,6 @@ class CoreMixin:
             top = ttk.Frame(frm)
             top.pack(fill="x", padx=14, pady=(12, 4))
             ttk.Label(top, text=self.t("costs.title"), font=("", 14, "bold")).pack(side="left")
-            ttk.Button(top, text=self.t("costs.refresh"), command=self._refresh_costs_tab).pack(side="right")
 
             # Scrollable container for device sections
             container = ttk.Frame(frm)

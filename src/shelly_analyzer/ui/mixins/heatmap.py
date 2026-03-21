@@ -30,7 +30,6 @@ class HeatmapMixin:
         top = ttk.Frame(frm)
         top.pack(fill="x", padx=14, pady=(12, 4))
         ttk.Label(top, text=self.t("heatmap.title"), font=("", 14, "bold")).pack(side="left")
-        ttk.Button(top, text=self.t("heatmap.refresh"), command=self._refresh_heatmap).pack(side="right")
 
         # ── Controls: device, unit, year ──────────────────────────────────────
         ctrl = ttk.Frame(frm)
@@ -74,35 +73,14 @@ class HeatmapMixin:
         unit_cb.bind("<<ComboboxSelected>>", lambda _e: self.after(50, self._refresh_heatmap))
         year_cb.bind("<<ComboboxSelected>>", lambda _e: self.after(50, self._refresh_heatmap))
 
-        # ── Scrollable content area ───────────────────────────────────────────
+        # ── Content area (fills available space in both directions) ──────────
         outer = ttk.Frame(frm)
         outer.pack(fill="both", expand=True)
+        outer.rowconfigure(0, weight=1)
+        outer.rowconfigure(1, weight=1)
+        outer.columnconfigure(0, weight=1)
 
-        scroll_canvas = tk.Canvas(outer, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(outer, orient="vertical", command=scroll_canvas.yview)
-        self._heatmap_scroll_frame = ttk.Frame(scroll_canvas)
-        self._heatmap_scroll_frame.bind(
-            "<Configure>",
-            lambda e: scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all")),
-        )
-        _hm_win = scroll_canvas.create_window((0, 0), window=self._heatmap_scroll_frame, anchor="nw")
-        scroll_canvas.configure(yscrollcommand=scrollbar.set)
-        scroll_canvas.bind(
-            "<Configure>",
-            lambda e: scroll_canvas.itemconfigure(_hm_win, width=e.width),
-        )
-        scroll_canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        def _mwheel(event):
-            try:
-                scroll_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            except Exception:
-                pass
-
-        scroll_canvas.bind_all("<MouseWheel>", _mwheel)
-
-        scroll = self._heatmap_scroll_frame
+        scroll = outer
 
         # Resolve initial background colour so plots don't flash white
         try:
@@ -112,25 +90,25 @@ class HeatmapMixin:
 
         # ── Section 1: Calendar heatmap ───────────────────────────────────────
         sec1 = ttk.LabelFrame(scroll, text=self.t("heatmap.calendar.title"))
-        sec1.pack(fill="x", padx=12, pady=(10, 4))
+        sec1.pack(fill="both", expand=True, padx=12, pady=(10, 4))
 
         self._heatmap_cal_fig = Figure(figsize=(14, 2.8), dpi=100)
         self._heatmap_cal_fig.patch.set_facecolor(_init_bg)
         self._heatmap_cal_ax = self._heatmap_cal_fig.add_subplot(111)
         self._heatmap_cal_canvas = FigureCanvasTkAgg(self._heatmap_cal_fig, master=sec1)
         self._heatmap_cal_canvas.get_tk_widget().configure(bg=_init_bg)
-        self._heatmap_cal_canvas.get_tk_widget().pack(fill="x", expand=True, padx=4, pady=4)
+        self._heatmap_cal_canvas.get_tk_widget().pack(fill="both", expand=True, padx=4, pady=4)
 
         # ── Section 2: Hour × Weekday heatmap ────────────────────────────────
         sec2 = ttk.LabelFrame(scroll, text=self.t("heatmap.hourly.title"))
-        sec2.pack(fill="x", padx=12, pady=(4, 12))
+        sec2.pack(fill="both", expand=True, padx=12, pady=(4, 12))
 
         self._heatmap_hourly_fig = Figure(figsize=(14, 3.5), dpi=100)
         self._heatmap_hourly_fig.patch.set_facecolor(_init_bg)
         self._heatmap_hourly_ax = self._heatmap_hourly_fig.add_subplot(111)
         self._heatmap_hourly_canvas = FigureCanvasTkAgg(self._heatmap_hourly_fig, master=sec2)
         self._heatmap_hourly_canvas.get_tk_widget().configure(bg=_init_bg)
-        self._heatmap_hourly_canvas.get_tk_widget().pack(fill="x", expand=True, padx=4, pady=4)
+        self._heatmap_hourly_canvas.get_tk_widget().pack(fill="both", expand=True, padx=4, pady=4)
 
         # Initial render (deferred so the tab has time to lay out)
         self.after(700, self._refresh_heatmap)
