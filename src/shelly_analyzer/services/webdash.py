@@ -1461,7 +1461,7 @@ function esc(s) {{
   // Restore last pane
   const last = localStorage.getItem('sea_pane');
   if (last && last !== 'live') {{
-    const btn = document.querySelector('.nav-btn[onclick*=\'' + last + '\']');
+    const btn = document.querySelector('.nav-btn[onclick*="' + last + '"]');
     if (btn) switchPane(last, btn);
     else startLive();
   }} else {{
