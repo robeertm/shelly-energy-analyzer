@@ -869,6 +869,339 @@ class LiveWebMixin:
 
                 return {"ok": True, "files": [{"name": zpath.name, "url": f"/files/web/{zpath.name}"}], "count": len(paths), "hours": hours}
 
+            # --- Heatmap data for web dashboard ---
+            if action == "heatmap":
+                try:
+                    from datetime import datetime as _dt2
+                    device_key = str(params.get("device") or "").strip()
+                    try:
+                        year = int(params.get("year") or _dt2.now().year)
+                    except Exception:
+                        year = _dt2.now().year
+                    unit = str(params.get("unit") or "kWh").strip()
+                    use_eur = (unit.lower() in ("eur", "€", "euro"))
+                    try:
+                        _unit_price = float(self.cfg.pricing.unit_price_gross())
+                    except Exception:
+                        _unit_price = 0.30
+
+                    # Find device (fallback to first device)
+                    if not device_key and self.cfg.devices:
+                        device_key = self.cfg.devices[0].key
+                    if not device_key:
+                        return {"ok": False, "error": "no device"}
+
+                    start_ts = int(_dt2(year, 1, 1).timestamp())
+                    end_ts = int(_dt2(year, 12, 31, 23, 59, 59).timestamp())
+
+                    # Load hourly data
+                    try:
+                        hourly_df = self.storage.db.query_hourly(device_key, start_ts=start_ts, end_ts=end_ts)
+                    except Exception:
+                        hourly_df = None
+
+                    calendar_data: List[Dict[str, Any]] = []
+                    hourly_matrix: Dict[int, Dict[int, float]] = {wd: {h: 0.0 for h in range(24)} for wd in range(7)}
+                    hourly_counts: Dict[int, Dict[int, int]] = {wd: {h: 0 for h in range(24)} for wd in range(7)}
+
+                    if hourly_df is not None and not hourly_df.empty and "hour_ts" in hourly_df.columns and "kwh" in hourly_df.columns:
+                        # Calendar: aggregate to daily
+                        daily_totals: Dict[str, float] = {}
+                        for _, row in hourly_df.iterrows():
+                            try:
+                                ts_val = int(row["hour_ts"])
+                                kwh_val = float(row["kwh"] or 0.0)
+                                dt_local = _dt2.fromtimestamp(ts_val)
+                                date_str = dt_local.strftime("%Y-%m-%d")
+                                daily_totals[date_str] = daily_totals.get(date_str, 0.0) + kwh_val
+                                # Hourly matrix: weekday (0=Mon) × hour
+                                wd = dt_local.weekday()  # 0=Mon
+                                h = dt_local.hour
+                                hourly_matrix[wd][h] += kwh_val
+                                hourly_counts[wd][h] += 1
+                            except Exception:
+                                continue
+
+                        for date_str, kwh_val in daily_totals.items():
+                            val = kwh_val * _unit_price if use_eur else kwh_val
+                            calendar_data.append({"date": date_str, "value": round(val, 3)})
+
+                    # Build hourly matrix (averages) for weekday×hour heatmap
+                    hourly_out: Dict[str, Dict[str, float]] = {}
+                    for wd in range(7):
+                        hourly_out[str(wd)] = {}
+                        for h in range(24):
+                            cnt = hourly_counts[wd][h]
+                            kwh_avg = (hourly_matrix[wd][h] / cnt) if cnt > 0 else 0.0
+                            val = kwh_avg * _unit_price if use_eur else kwh_avg
+                            hourly_out[str(wd)][str(h)] = round(val, 4)
+
+                    devices_list = [{"key": d.key, "name": d.name} for d in self.cfg.devices]
+                    return {
+                        "ok": True,
+                        "device_key": device_key,
+                        "year": year,
+                        "unit": unit,
+                        "calendar": calendar_data,
+                        "hourly": hourly_out,
+                        "devices": devices_list,
+                    }
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
+            # --- Solar data for web dashboard ---
+            if action == "solar":
+                try:
+                    solar_cfg = getattr(self.cfg, "solar", None)
+                    if solar_cfg is None or not getattr(solar_cfg, "enabled", False):
+                        return {"ok": True, "configured": False}
+                    pv_key = str(getattr(solar_cfg, "pv_meter_device_key", "") or "")
+                    if not pv_key:
+                        return {"ok": True, "configured": False}
+
+                    period = str(params.get("period") or "today").strip()
+                    from datetime import datetime as _dt3, timedelta as _td3
+                    from zoneinfo import ZoneInfo as _ZI3
+                    _tz3 = _ZI3("Europe/Berlin")
+                    _now3 = _dt3.now(_tz3)
+                    _today3 = _now3.replace(hour=0, minute=0, second=0, microsecond=0)
+                    if period == "week":
+                        _start3 = _today3 - _td3(days=_now3.weekday())
+                        _end3 = _now3
+                    elif period == "month":
+                        _start3 = _today3.replace(day=1)
+                        _end3 = _now3
+                    elif period == "year":
+                        _start3 = _today3.replace(month=1, day=1)
+                        _end3 = _now3
+                    else:  # today
+                        _start3 = _today3
+                        _end3 = _now3
+
+                    start_ts3 = int(_start3.timestamp())
+                    end_ts3 = int(_end3.timestamp())
+
+                    def _load_hourly_kwh(dev_key: str) -> float:
+                        try:
+                            df = self.storage.db.query_hourly(dev_key, start_ts=start_ts3, end_ts=end_ts3)
+                            if df is not None and not df.empty and "kwh" in df.columns:
+                                return float(pd.to_numeric(df["kwh"], errors="coerce").fillna(0.0).sum())
+                        except Exception:
+                            pass
+                        return 0.0
+
+                    # PV meter: split feed-in (negative power) vs grid import (positive)
+                    feed_in_kwh = 0.0
+                    grid_kwh = 0.0
+                    try:
+                        pv_df = self.storage.db.query_hourly(pv_key, start_ts=start_ts3, end_ts=end_ts3)
+                        if pv_df is not None and not pv_df.empty and "kwh" in pv_df.columns:
+                            kwh_col = pd.to_numeric(pv_df["kwh"], errors="coerce").fillna(0.0)
+                            feed_in_kwh = float(kwh_col[kwh_col < 0].abs().sum())
+                            grid_kwh = float(kwh_col[kwh_col >= 0].sum())
+                    except Exception:
+                        pass
+
+                    # Household consumption (all non-PV devices)
+                    household_kwh = 0.0
+                    for d in self.cfg.devices:
+                        if d.key == pv_key:
+                            continue
+                        household_kwh += _load_hourly_kwh(d.key)
+
+                    self_kwh = max(0.0, household_kwh - grid_kwh) if household_kwh > 0 else 0.0
+                    pv_kwh = self_kwh + feed_in_kwh
+                    autarky_pct = (min(100.0, self_kwh / household_kwh * 100.0) if household_kwh > 0 else 0.0)
+
+                    try:
+                        feed_in_tariff = float(getattr(solar_cfg, "feed_in_tariff_eur_per_kwh", 0.082))
+                        unit_price = float(self.cfg.pricing.unit_price_gross())
+                    except Exception:
+                        feed_in_tariff = 0.082
+                        unit_price = 0.30
+
+                    return {
+                        "ok": True,
+                        "configured": True,
+                        "period": period,
+                        "feed_in_kwh": round(feed_in_kwh, 3),
+                        "grid_kwh": round(grid_kwh, 3),
+                        "self_kwh": round(self_kwh, 3),
+                        "pv_kwh": round(pv_kwh, 3),
+                        "autarky_pct": round(autarky_pct, 1),
+                        "household_kwh": round(household_kwh, 3),
+                        "revenue_eur": round(feed_in_kwh * feed_in_tariff, 2),
+                        "savings_eur": round(self_kwh * unit_price, 2),
+                    }
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
+            # --- Compare data for web dashboard ---
+            if action == "compare":
+                try:
+                    from datetime import date as _date4, datetime as _dt4, timedelta as _td4
+                    device_a = str(params.get("device_a") or "").strip()
+                    device_b = str(params.get("device_b") or "").strip()
+                    if not device_a and self.cfg.devices:
+                        device_a = self.cfg.devices[0].key
+                    if not device_b and self.cfg.devices:
+                        device_b = self.cfg.devices[0].key
+
+                    def _pdate4(s: Any) -> Optional[_date4]:
+                        try:
+                            return _parse_date_flexible(str(s or "").strip()).date()
+                        except Exception:
+                            return None
+
+                    today4 = _date4.today()
+                    jan1 = _date4(today4.year, 1, 1)
+                    jan1_last = _date4(today4.year - 1, 1, 1)
+                    dec31_last = _date4(today4.year - 1, 12, 31)
+
+                    from_a = _pdate4(params.get("from_a")) or jan1
+                    to_a = _pdate4(params.get("to_a")) or (today4 - _td4(days=1))
+                    from_b = _pdate4(params.get("from_b")) or jan1_last
+                    to_b = _pdate4(params.get("to_b")) or dec31_last
+
+                    if to_a < from_a:
+                        from_a, to_a = to_a, from_a
+                    if to_b < from_b:
+                        from_b, to_b = to_b, from_b
+
+                    unit = str(params.get("unit") or "kWh").strip()
+                    use_eur = unit.lower() in ("eur", "€", "euro")
+                    try:
+                        _price4 = float(self.cfg.pricing.unit_price_gross())
+                    except Exception:
+                        _price4 = 0.30
+
+                    gran = str(params.get("gran") or "total").strip()
+
+                    # Quick preset expansion
+                    preset = str(params.get("preset") or "").strip()
+                    if preset:
+                        import calendar as _cal4
+                        _now4 = today4
+                        if preset == "month":
+                            _ms = _date4(_now4.year, _now4.month, 1)
+                            _lms = (_ms - _td4(days=1)).replace(day=1)
+                            _lme = _ms - _td4(days=1)
+                            from_a, to_a = _ms, _now4
+                            from_b, to_b = _lms, _lme
+                        elif preset == "quarter":
+                            _q = (_now4.month - 1) // 3
+                            _qs = _date4(_now4.year, _q * 3 + 1, 1)
+                            _lqs_y = _now4.year if _q > 0 else _now4.year - 1
+                            _lqs_m = (_q - 1) * 3 + 1 if _q > 0 else 10
+                            _lqs = _date4(_lqs_y, _lqs_m, 1)
+                            _lqe = _qs - _td4(days=1)
+                            from_a, to_a = _qs, _now4
+                            from_b, to_b = _lqs, _lqe
+                        elif preset == "halfyear":
+                            _hs = _date4(_now4.year, 1, 1) if _now4.month <= 6 else _date4(_now4.year, 7, 1)
+                            _lhs = (_hs - _td4(days=1)).replace(day=1)
+                            if _lhs.month > 6:
+                                _lhs = _date4(_lhs.year, 7, 1)
+                            else:
+                                _lhs = _date4(_lhs.year, 1, 1)
+                            _lhe = _hs - _td4(days=1)
+                            from_a, to_a = _hs, _now4
+                            from_b, to_b = _lhs, _lhe
+                        elif preset == "year":
+                            from_a = _date4(_now4.year, 1, 1)
+                            to_a = _now4
+                            from_b = _date4(_now4.year - 1, 1, 1)
+                            to_b = _date4(_now4.year - 1, 12, 31)
+
+                    # Load daily data using existing helper method
+                    daily_a = self._cmp_load_daily(device_a, from_a, to_a, use_eur, _price4)
+                    daily_b = self._cmp_load_daily(device_b, from_b, to_b, use_eur, _price4)
+
+                    total_a = sum(daily_a.values())
+                    total_b = sum(daily_b.values())
+                    delta = total_a - total_b
+                    delta_pct = ((delta / total_b * 100.0) if total_b > 0 else 0.0)
+
+                    # Build aligned series for the chart
+                    if gran == "monthly":
+                        vals_a, vals_b, labels = self._cmp_align_monthly(daily_a, from_a, to_a, daily_b, from_b, to_b)
+                    elif gran == "daily":
+                        vals_a, vals_b, labels = self._cmp_align_daily(daily_a, from_a, to_a, daily_b, from_b, to_b)
+                    else:  # total
+                        vals_a, vals_b, labels = [total_a], [total_b], ["A vs B"]
+
+                    return {
+                        "ok": True,
+                        "device_a": device_a,
+                        "device_b": device_b,
+                        "from_a": from_a.isoformat(),
+                        "to_a": to_a.isoformat(),
+                        "from_b": from_b.isoformat(),
+                        "to_b": to_b.isoformat(),
+                        "unit": unit,
+                        "gran": gran,
+                        "labels": labels,
+                        "values_a": [round(v, 3) for v in vals_a],
+                        "values_b": [round(v, 3) for v in vals_b],
+                        "total_a": round(total_a, 3),
+                        "total_b": round(total_b, 3),
+                        "delta": round(delta, 3),
+                        "delta_pct": round(delta_pct, 1),
+                    }
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
+            # --- Anomaly data for web dashboard ---
+            if action == "anomalies":
+                try:
+                    from shelly_analyzer.services.anomaly import detect_anomalies as _detect
+                    anom_cfg = getattr(self.cfg, "anomaly", None)
+                    enabled = bool(getattr(anom_cfg, "enabled", False)) if anom_cfg else False
+                    sigma = float(getattr(anom_cfg, "sigma_threshold", 2.0)) if anom_cfg else 2.0
+                    min_dev = float(getattr(anom_cfg, "min_deviation_kwh", 0.1)) if anom_cfg else 0.1
+                    window_days = int(getattr(anom_cfg, "window_days", 30)) if anom_cfg else 30
+                    check_daily = bool(getattr(anom_cfg, "check_unusual_daily", True)) if anom_cfg else True
+                    check_night = bool(getattr(anom_cfg, "check_night_consumption", True)) if anom_cfg else True
+                    check_peak = bool(getattr(anom_cfg, "check_power_peak_time", True)) if anom_cfg else True
+
+                    all_events: List[Dict[str, Any]] = []
+                    if enabled:
+                        for d in self.cfg.devices:
+                            try:
+                                cd = load_device(self.storage, d)
+                                if cd is None or cd.df is None or cd.df.empty:
+                                    continue
+                                events = _detect(
+                                    cd.df, d.key, d.name,
+                                    sigma=sigma, min_deviation_kwh=min_dev,
+                                    window_days=window_days,
+                                    check_unusual_daily=check_daily,
+                                    check_night_consumption=check_night,
+                                    check_power_peak_time=check_peak,
+                                )
+                                for ev in events:
+                                    all_events.append({
+                                        "event_id": ev.event_id,
+                                        "timestamp": ev.timestamp.isoformat(),
+                                        "device_key": ev.device_key,
+                                        "device_name": ev.device_name,
+                                        "anomaly_type": ev.anomaly_type,
+                                        "value": round(ev.value, 3),
+                                        "sigma_count": round(ev.sigma_count, 2),
+                                        "description": ev.description,
+                                    })
+                            except Exception:
+                                continue
+                    # Sort newest first
+                    all_events.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+                    return {
+                        "ok": True,
+                        "enabled": enabled,
+                        "events": all_events[:200],
+                    }
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
             raise ValueError(f"Unknown action: {action}")
 
     def _web_plots_data(self, params: Dict[str, Any]) -> Dict[str, Any]:

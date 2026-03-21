@@ -1,5 +1,44 @@
 # Changelog
 
+## 9.0.0 - 2026-03-21
+### Added
+- **Complete Web UI rewrite (major).** The mobile web dashboard is now a
+  full-featured single-page app (SPA) with a bottom navigation bar matching
+  all tabs of the desktop application.
+- **6 tabs in the web UI:** Live, Kosten, Heatmap, Solar, Vergleich, Anomalien.
+- **Live tab** — real-time device cards with color-coded power (green/yellow/red),
+  sparkline canvas chart, collapsible detail rows (voltage, current, cos φ),
+  and NILM appliance chips.  Freeze button in the header.
+- **Kosten tab** — cost overview per device with today/week/month/year and
+  monthly projection, powered by the existing `/api/costs` endpoint.
+- **Heatmap tab** — interactive GitHub-style calendar heatmap (daily kWh/€)
+  and a 7 × 24 weekday × hour heatmap with color scale.  Device, unit and
+  year selectors.  Touch tooltip on tap.  New `/api/heatmap` endpoint.
+- **Solar tab** — PV dashboard with feed-in, grid consumption, self-consumption,
+  autarky %, PV production, feed-in revenue and cost savings.  Period buttons
+  (Today/Week/Month/Year).  New `/api/solar` endpoint.
+- **Vergleich tab** — period-over-period comparison with device A/B selectors,
+  date range inputs, unit (kWh/€) and granularity (total/daily/monthly) toggles,
+  quick-preset buttons (month/quarter/half-year/year), grouped Canvas bar chart
+  and delta display.  New `/api/compare` endpoint.
+- **Anomalien tab** — lists detected anomaly events (type, device, timestamp,
+  sigma, description) with an enabled/disabled status badge.  New `/api/anomalies`
+  endpoint.
+- **Mobile-first design** — bottom navigation bar with emoji icons, min 44 px
+  touch targets, works at 360 px viewport width, responsive grid up to 1920 px.
+- **Dark/Light mode toggle** with `prefers-color-scheme` auto-detection and
+  localStorage persistence.
+- **Smooth tab transitions** with fade-in animation.
+- **New i18n keys** (`web.tab.*`, `web.no_data`) added for all 9 supported
+  languages (de, en, es, fr, pt, it, pl, cs, ru).
+- **4 new backend API routes:** `/api/heatmap`, `/api/solar`, `/api/compare`,
+  `/api/anomalies` — all backed by new action handlers in `LiveWebMixin`.
+### Fixed (from 8.6.1/8.6.2)
+- **Heatmap weekday × hour: values too high (sum → mean).** Aggregation
+  changed from `sum()` to `mean()` so each cell shows the average hourly
+  consumption for that weekday/hour combination.
+- **Version string sync.** All version strings now consistently reflect 9.0.0.
+
 ## 8.6.2 - 2026-03-21
 ### Fixed
 - **Version inconsistency resolved.** `__init__.py` was not updated when 8.6.1
