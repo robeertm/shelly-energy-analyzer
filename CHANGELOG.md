@@ -1,5 +1,12 @@
 # Changelog
 
+## 8.6.2 - 2026-03-21
+### Fixed
+- **Version inconsistency resolved.** `__init__.py` was not updated when 8.6.1
+  was tagged, causing the app to display 8.6.0 while the updater reported 8.6.1
+  as available. All version strings (`__init__.py`, `pyproject.toml`) are now
+  in sync at 8.6.2.
+
 ## 8.6.1 - 2026-03-21
 ### Fixed
 - **Heatmap weekday × hour: values too high (sum → mean).** The
