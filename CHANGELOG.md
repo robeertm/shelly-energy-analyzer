@@ -1,5 +1,18 @@
 # Changelog
 
+## 9.0.2 - 2026-03-21
+### Fixed
+- **Web UI completely blank (all tabs)** — A JavaScript syntax error in the
+  BOOT IIFE prevented the entire main script block from executing.  In the
+  Python `"""..."""` template string, `\'` is a plain single-quote `'`, so
+  the querySelector call rendered as `'.nav-btn[onclick*='' + last + '']'` —
+  two adjacent string literals with no operator, which is invalid JS.
+  Fixed by using double quotes inside the CSS attribute selector:
+  `'.nav-btn[onclick*="' + last + '"]'`.  With the script broken, only the
+  hard-coded `class="pane active"` on the Live pane was visible; it was empty
+  because `startLive()` / `tick()` never ran, and all other tabs stayed
+  `display:none` because `switchPane()` was undefined.
+
 ## 9.0.1 - 2026-03-21
 ### Fixed
 - **Live tab blank** — `/api/state` was returning the raw `LiveStateStore`
