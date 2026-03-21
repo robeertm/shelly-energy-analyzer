@@ -1,5 +1,17 @@
 # Changelog
 
+## 9.0.3 - 2026-03-21
+### Fixed
+- **Web UI completely broken (blank/unresponsive)** — The boot IIFE used single
+  quotes for the outer JS string AND for the CSS attribute-selector value in
+  `querySelector('.nav-btn[onclick*=\'...\']')`.  Inside a Python triple-quoted
+  string, `\'` is just `'`, so the rendered output became the invalid JS
+  `querySelector('.nav-btn[onclick*='' + last + '']')`.  The JavaScript parser
+  treats `''` as two adjacent string terminators, producing a syntax error that
+  silently aborts the entire main script block — leaving the page with a
+  visible header and tab bar but no interactivity.  Fixed by using double quotes
+  for the attribute-selector value: `querySelector('.nav-btn[onclick*="' + last + '"]')`.
+
 ## 9.0.1 - 2026-03-21
 ### Fixed
 - **Live tab blank** — `/api/state` was returning the raw `LiveStateStore`
