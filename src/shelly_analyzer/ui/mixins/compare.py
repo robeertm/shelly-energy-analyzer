@@ -33,7 +33,6 @@ class CompareMixin:
         top = ttk.Frame(frm)
         top.pack(fill="x", padx=14, pady=(12, 4))
         ttk.Label(top, text=self.t("compare.title"), font=("", 14, "bold")).pack(side="left")
-        ttk.Button(top, text=self.t("compare.refresh"), command=self._refresh_compare).pack(side="right")
 
         # ── Period controls ───────────────────────────────────────────────────
         ctrl = ttk.Frame(frm)
@@ -61,14 +60,21 @@ class CompareMixin:
         if dev_names:
             dev_cb_a.current(0)
         dev_cb_a.pack(side="left", padx=(0, 14), pady=6)
+        dev_cb_a.bind("<<ComboboxSelected>>", lambda _e: self.after(50, self._refresh_compare))
 
         ttk.Label(row_a, text=self.t("compare.from") + ":").pack(side="left", padx=(0, 4))
         self._cmp_from_a_var = tk.StringVar(value=jan1_this.strftime("%Y-%m-%d"))
-        ttk.Entry(row_a, textvariable=self._cmp_from_a_var, width=12).pack(side="left", padx=(0, 8))
+        _entry_from_a = ttk.Entry(row_a, textvariable=self._cmp_from_a_var, width=12)
+        _entry_from_a.pack(side="left", padx=(0, 8))
+        _entry_from_a.bind("<Return>", lambda _e: self.after(50, self._refresh_compare))
+        _entry_from_a.bind("<FocusOut>", lambda _e: self.after(50, self._refresh_compare))
 
         ttk.Label(row_a, text=self.t("compare.to") + ":").pack(side="left", padx=(0, 4))
         self._cmp_to_a_var = tk.StringVar(value=(today - timedelta(days=1)).strftime("%Y-%m-%d"))
-        ttk.Entry(row_a, textvariable=self._cmp_to_a_var, width=12).pack(side="left", padx=(0, 8))
+        _entry_to_a = ttk.Entry(row_a, textvariable=self._cmp_to_a_var, width=12)
+        _entry_to_a.pack(side="left", padx=(0, 8))
+        _entry_to_a.bind("<Return>", lambda _e: self.after(50, self._refresh_compare))
+        _entry_to_a.bind("<FocusOut>", lambda _e: self.after(50, self._refresh_compare))
 
         # Period B
         row_b = ttk.LabelFrame(ctrl, text=self.t("compare.period_b"))
@@ -82,14 +88,21 @@ class CompareMixin:
         if dev_names:
             dev_cb_b.current(0)
         dev_cb_b.pack(side="left", padx=(0, 14), pady=6)
+        dev_cb_b.bind("<<ComboboxSelected>>", lambda _e: self.after(50, self._refresh_compare))
 
         ttk.Label(row_b, text=self.t("compare.from") + ":").pack(side="left", padx=(0, 4))
         self._cmp_from_b_var = tk.StringVar(value=jan1_last.strftime("%Y-%m-%d"))
-        ttk.Entry(row_b, textvariable=self._cmp_from_b_var, width=12).pack(side="left", padx=(0, 8))
+        _entry_from_b = ttk.Entry(row_b, textvariable=self._cmp_from_b_var, width=12)
+        _entry_from_b.pack(side="left", padx=(0, 8))
+        _entry_from_b.bind("<Return>", lambda _e: self.after(50, self._refresh_compare))
+        _entry_from_b.bind("<FocusOut>", lambda _e: self.after(50, self._refresh_compare))
 
         ttk.Label(row_b, text=self.t("compare.to") + ":").pack(side="left", padx=(0, 4))
         self._cmp_to_b_var = tk.StringVar(value=dec31_last.strftime("%Y-%m-%d"))
-        ttk.Entry(row_b, textvariable=self._cmp_to_b_var, width=12).pack(side="left", padx=(0, 8))
+        _entry_to_b = ttk.Entry(row_b, textvariable=self._cmp_to_b_var, width=12)
+        _entry_to_b.pack(side="left", padx=(0, 8))
+        _entry_to_b.bind("<Return>", lambda _e: self.after(50, self._refresh_compare))
+        _entry_to_b.bind("<FocusOut>", lambda _e: self.after(50, self._refresh_compare))
 
         # ── Options row ───────────────────────────────────────────────────────
         opts = ttk.Frame(frm)
@@ -102,6 +115,7 @@ class CompareMixin:
         )
         unit_cb.current(0)
         unit_cb.pack(side="left", padx=(0, 16))
+        unit_cb.bind("<<ComboboxSelected>>", lambda _e: self.after(50, self._refresh_compare))
 
         ttk.Label(opts, text=self.t("compare.granularity") + ":").pack(side="left", padx=(0, 4))
         self._cmp_gran_keys = ["total", "daily", "monthly"]
@@ -116,6 +130,7 @@ class CompareMixin:
         )
         self._cmp_gran_cb.current(1)
         self._cmp_gran_cb.pack(side="left", padx=(0, 16))
+        self._cmp_gran_cb.bind("<<ComboboxSelected>>", lambda _e: self.after(50, self._refresh_compare))
 
         # ── Quick-compare buttons ─────────────────────────────────────────────
         quick_frm = ttk.Frame(frm)
