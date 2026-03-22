@@ -651,9 +651,9 @@ _HTML_TEMPLATE = """<!doctype html>
     <span id="hdr-title" style="font-weight:700;font-size:15px">⚡ Shelly Analyzer</span>
     <div id="hdr-actions" style="display:flex;gap:8px;align-items:center">
       <span id="live-stamp" style="font-size:11px;color:var(--muted)"></span>
-      <button id="btn-freeze" class="icon-btn" title="Freeze/Resume">▶</button>
-      <button id="btn-live-settings" class="icon-btn" title="Device settings" onclick="openLiveSettings()">⚙</button>
-      <button id="btn-theme" class="icon-btn" title="Toggle theme">☀</button>
+      <button id="btn-freeze" class="icon-btn" title="{web_btn_freeze_title}">▶</button>
+      <button id="btn-live-settings" class="icon-btn" title="{web_btn_settings_title}" onclick="openLiveSettings()">⚙</button>
+      <button id="btn-theme" class="icon-btn" title="{web_btn_theme_title}">☀</button>
     </div>
   </header>
 
@@ -666,7 +666,7 @@ _HTML_TEMPLATE = """<!doctype html>
 
     <!-- Costs -->
     <div id="pane-costs" class="pane">
-      <div id="costs-content"><p class="loading-msg">Loading…</p></div>
+      <div id="costs-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
 
     <!-- Heatmap -->
@@ -687,7 +687,7 @@ _HTML_TEMPLATE = """<!doctype html>
     <!-- Solar -->
     <div id="pane-solar" class="pane">
       <div class="controls-row" id="solar-periods"></div>
-      <div id="solar-content"><p class="loading-msg">Loading…</p></div>
+      <div id="solar-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
 
     <!-- Compare -->
@@ -699,34 +699,34 @@ _HTML_TEMPLATE = """<!doctype html>
 
     <!-- Anomalies -->
     <div id="pane-anomalies" class="pane">
-      <div id="anom-content"><p class="loading-msg">Loading…</p></div>
+      <div id="anom-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
   </div>
 
   <nav id="bottom-nav">
     <button class="nav-btn active" onclick="switchPane('live',this)">
       <span class="nav-icon">📡</span>
-      <span class="nav-label">Live</span>
+      <span class="nav-label">{web_tab_live}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('costs',this)">
       <span class="nav-icon">💰</span>
-      <span class="nav-label">Kosten</span>
+      <span class="nav-label">{web_tab_costs}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('heatmap',this)">
       <span class="nav-icon">🔥</span>
-      <span class="nav-label">Heatmap</span>
+      <span class="nav-label">{web_tab_heatmap}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('solar',this)">
       <span class="nav-icon">☀️</span>
-      <span class="nav-label">Solar</span>
+      <span class="nav-label">{web_tab_solar}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('compare',this)">
       <span class="nav-icon">🔀</span>
-      <span class="nav-label">Vergleich</span>
+      <span class="nav-label">{web_tab_compare}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('anomalies',this)">
       <span class="nav-icon">🔍</span>
-      <span class="nav-label">Anomalien</span>
+      <span class="nav-label">{web_tab_anomalies}</span>
     </button>
   </nav>
 </div>
@@ -736,12 +736,12 @@ _HTML_TEMPLATE = """<!doctype html>
 <div id="live-settings-modal" class="modal-overlay">
   <div class="modal-panel">
     <div class="modal-header">
-      <span>Device Order &amp; Visibility</span>
+      <span>{web_dash_device_order}</span>
       <button class="icon-btn" onclick="closeLiveSettings()">✕</button>
     </div>
     <div id="live-settings-list"></div>
     <div style="text-align:right;margin-top:12px">
-      <button class="btn btn-accent" onclick="closeLiveSettings()">Done</button>
+      <button class="btn btn-accent" onclick="closeLiveSettings()">{web_dash_done}</button>
     </div>
   </div>
 </div>
@@ -1028,7 +1028,7 @@ function devCardHTML(d) {{
   if (phases) {{
     phaseHtml = '<dl class="dev-kv">';
     phases.forEach(function(ph, i) {{
-      phaseHtml += '<dt>Phase ' + (i+1) + '</dt><dd>' + fmt(ph.voltage_v,1,'V') + ' · ' + fmt(ph.current_a,2,'A') + ' · ' + fmt(ph.power_w,0,'W') + '</dd>';
+      phaseHtml += '<dt>' + t('web.dash.phase', 'Phase') + ' ' + (i+1) + '</dt><dd>' + fmt(ph.voltage_v,1,'V') + ' \xb7 ' + fmt(ph.current_a,2,'A') + ' \xb7 ' + fmt(ph.power_w,0,'W') + '</dd>';
     }});
     phaseHtml += '</dl>';
   }}
@@ -1047,15 +1047,15 @@ function devCardHTML(d) {{
     '<div class="sparkline-wrap"><canvas class="sparkline" id="sp-' + d.key + '"></canvas></div>' +
     '<div class="dev-expand">' +
       '<dl class="dev-kv">' +
-        '<dt>Voltage</dt><dd>' + fmt(d.voltage_v, 1, 'V') + '</dd>' +
-        '<dt>Current</dt><dd>' + fmt(d.current_a, 2, 'A') + '</dd>' +
+        '<dt>' + t('web.kv.u', 'Voltage') + '</dt><dd>' + fmt(d.voltage_v, 1, 'V') + '</dd>' +
+        '<dt>' + t('web.kv.i', 'Current') + '</dt><dd>' + fmt(d.current_a, 2, 'A') + '</dd>' +
         '<dt>cos \u03c6</dt><dd>' + (d.pf !== undefined ? fmt(d.pf, 2) : '\u2014') + '</dd>' +
-        '<dt>Freq</dt><dd>' + (d.freq_hz !== undefined ? fmt(d.freq_hz, 1, 'Hz') : '\u2014') + '</dd>' +
+        '<dt>' + t('web.kv.freq', 'Freq') + '</dt><dd>' + (d.freq_hz !== undefined ? fmt(d.freq_hz, 1, 'Hz') : '\u2014') + '</dd>' +
       '</dl>' +
       phaseHtml +
-      '<div class="sparkline-wrap" style="margin-top:8px"><div class="sparkline-label">Voltage</div><canvas class="sparkline-sm" id="sp-v-' + d.key + '"></canvas></div>' +
-      '<div class="sparkline-wrap" style="margin-top:6px"><div class="sparkline-label">Current</div><canvas class="sparkline-sm" id="sp-a-' + d.key + '"></canvas></div>' +
-      (phases ? '<div class="sparkline-wrap" style="margin-top:6px"><div class="sparkline-label">Phase Power</div><canvas class="sparkline-sm" id="sp-ph-' + d.key + '"></canvas></div>' : '') +
+      '<div class="sparkline-wrap" style="margin-top:8px"><div class="sparkline-label">' + t('web.kv.u', 'Voltage') + '</div><canvas class="sparkline-sm" id="sp-v-' + d.key + '"></canvas></div>' +
+      '<div class="sparkline-wrap" style="margin-top:6px"><div class="sparkline-label">' + t('web.kv.i', 'Current') + '</div><canvas class="sparkline-sm" id="sp-a-' + d.key + '"></canvas></div>' +
+      (phases ? '<div class="sparkline-wrap" style="margin-top:6px"><div class="sparkline-label">' + t('web.dash.phase_power', 'Phase Power') + '</div><canvas class="sparkline-sm" id="sp-ph-' + d.key + '"></canvas></div>' : '') +
       nilm +
     '</div>'
   );
@@ -1192,31 +1192,31 @@ function drawMultiSparkline(canvas, seriesArr, colors) {{
 ────────────────────────────────────────────── */
 async function loadCosts() {{
   const el = document.getElementById('costs-content');
-  el.innerHTML = '<p class="loading-msg">Loading…</p>';
+  el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   try {{
     const r = await fetch('/api/costs');
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     renderCosts(data, el);
   }} catch(e) {{
-    el.innerHTML = '<p class="error-msg">Error loading costs: ' + e.message + '</p>';
+    el.innerHTML = '<p class="error-msg">' + t('web.error', 'Error') + ': ' + e.message + '</p>';
   }}
 }}
 
 function renderCosts(data, el) {{
   if (!data || !data.devices || data.devices.length === 0) {{
-    el.innerHTML = '<p class="info-msg">No cost data available.</p>';
+    el.innerHTML = '<p class="info-msg">' + t('web.dash.no_cost_data', 'No cost data available.') + '</p>';
     return;
   }}
   let html = '';
   if (data.summary) {{
     const s = data.summary;
-    html += '<div class="card" style="margin-bottom:10px"><div class="card-title">Summary</div>' +
+    html += '<div class="card" style="margin-bottom:10px"><div class="card-title">' + t('web.dash.summary', 'Summary') + '</div>' +
       '<div class="metric-grid">' +
-      metricCardHtml('Today', fmt(s.today_eur,2,'€'), fmt(s.today_kwh,3,'kWh')) +
-      metricCardHtml('Week', fmt(s.week_eur,2,'€'), fmt(s.week_kwh,3,'kWh')) +
-      metricCardHtml('Month', fmt(s.month_eur,2,'€'), fmt(s.month_kwh,3,'kWh')) +
-      metricCardHtml('Year', fmt(s.year_eur,2,'€'), fmt(s.year_kwh,3,'kWh')) +
+      metricCardHtml(t('web.costs.today', 'Today'), fmt(s.today_eur,2,'\u20ac'), fmt(s.today_kwh,3,'kWh')) +
+      metricCardHtml(t('web.costs.week', 'Week'), fmt(s.week_eur,2,'\u20ac'), fmt(s.week_kwh,3,'kWh')) +
+      metricCardHtml(t('web.costs.month', 'Month'), fmt(s.month_eur,2,'\u20ac'), fmt(s.month_kwh,3,'kWh')) +
+      metricCardHtml(t('web.costs.year', 'Year'), fmt(s.year_eur,2,'\u20ac'), fmt(s.year_kwh,3,'kWh')) +
       '</div></div>';
   }}
   html += '<div class="card-grid">';
@@ -1224,10 +1224,10 @@ function renderCosts(data, el) {{
     html += '<div class="card">' +
       '<div class="card-title">' + esc(d.name || d.key) + '</div>' +
       '<div class="metric-grid">' +
-      metricCardHtml('Today', fmt(d.today_eur,2,'€'), fmt(d.today_kwh,3,'kWh')) +
-      metricCardHtml('Week', fmt(d.week_eur,2,'€'), '') +
-      metricCardHtml('Month', fmt(d.month_eur,2,'€'), '') +
-      metricCardHtml('Year (proj.)', fmt(d.year_eur,2,'€'), '') +
+      metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_eur,2,'\u20ac'), fmt(d.today_kwh,3,'kWh')) +
+      metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_eur,2,'\u20ac'), '') +
+      metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_eur,2,'\u20ac'), '') +
+      metricCardHtml(t('web.costs.projected', 'Year (proj.)'), fmt(d.year_eur,2,'\u20ac'), '') +
       '</div></div>';
   }});
   html += '</div>';
@@ -1285,9 +1285,9 @@ async function loadHeatmap() {{
   const unit = document.getElementById('hm-unit').value;
   const calWrap = document.getElementById('hm-calendar-wrap');
   const hrWrap = document.getElementById('hm-hourly-wrap');
-  calWrap.innerHTML = '<p class="loading-msg">Loading…</p>';
+  calWrap.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   hrWrap.innerHTML = '';
-  if (!device) {{ calWrap.innerHTML = '<p class="info-msg">Select a device.</p>'; return; }}
+  if (!device) {{ calWrap.innerHTML = '<p class="info-msg">' + t('web.dash.select_device', 'Select a device.') + '</p>'; return; }}
   try {{
     const r = await fetch('/api/heatmap?device=' + encodeURIComponent(device) + '&year=' + year + '&unit=' + unit);
     if (!r.ok) throw new Error(r.status);
@@ -1349,8 +1349,9 @@ function renderHeatmapCalendar(data, el, unit) {{
   const calCellSize = Math.max(10, Math.floor((availW - (numWeeks - 1) * 2) / numWeeks));
   const cellGap = 2;
 
-  // Month labels
-  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  // Month labels (locale-aware)
+  const _dtfMonth = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{month: 'short'}});
+  const monthNames = Array.from({{length: 12}}, function(_, i) {{ return _dtfMonth.format(new Date(2000, i, 1)); }});
   let monthLabelHtml = '<div class="hm-month-labels">';
   let lastMonth = -1;
   weeks.forEach(function(week) {{
@@ -1399,7 +1400,8 @@ function renderHeatmapCalendar(data, el, unit) {{
 function renderHeatmapHourly(data, el, unit) {{
   const hourly = data.hourly;
   if (!hourly) return;
-  const days = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+  const _dtfDay = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{weekday: 'short'}});
+  const days = Array.from({{length: 7}}, function(_, i) {{ return _dtfDay.format(new Date(2001, 0, 1 + i)); }});
   const vals = [];
   for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) {{
     const v = (hourly[d] && hourly[d][h]) ? hourly[d][h] : 0;
@@ -1413,7 +1415,7 @@ function renderHeatmapHourly(data, el, unit) {{
   const labelW = 22;
   const cellSize = Math.max(12, Math.floor((availW - labelW - 2 * 25) / 24));
 
-  let html = '<div class="card"><div class="card-title">Hourly Pattern</div>';
+  let html = '<div class="card"><div class="card-title">' + t('web.dash.hourly_pattern', 'Hourly Pattern') + '</div>';
   html += '<div class="hm-table-wrap"><table class="hm-table" style="table-layout:fixed;width:' + (labelW + 2 + 24 * (cellSize + 2)) + 'px"><thead><tr>';
   html += '<th style="width:' + labelW + 'px"></th>';
   for (let h = 0; h < 24; h++) {{
@@ -1464,10 +1466,16 @@ let solarPeriod = 'today';
 function initSolar() {{
   const row = document.getElementById('solar-periods');
   if (row.children.length === 0) {{
+    const _periodLbls = {{
+      'today': t('web.costs.today', 'Today'),
+      'week': t('web.costs.week', 'Week'),
+      'month': t('web.costs.month', 'Month'),
+      'year': t('web.costs.year', 'Year'),
+    }};
     ['today','week','month','year'].forEach(function(p) {{
       const btn = document.createElement('button');
       btn.className = 'btn btn-outline btn-sm';
-      btn.textContent = p.charAt(0).toUpperCase() + p.slice(1);
+      btn.textContent = _periodLbls[p] || (p.charAt(0).toUpperCase() + p.slice(1));
       btn.dataset.period = p;
       btn.addEventListener('click', function() {{
         solarPeriod = p;
@@ -1484,7 +1492,7 @@ function initSolar() {{
 
 async function loadSolar(period) {{
   const el = document.getElementById('solar-content');
-  el.innerHTML = '<p class="loading-msg">Loading…</p>';
+  el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   try {{
     const r = await fetch('/api/solar?period=' + period);
     if (!r.ok) throw new Error(r.status);
@@ -1497,17 +1505,17 @@ async function loadSolar(period) {{
 
 function renderSolar(data, el) {{
   if (data.configured === false || data.enabled === false) {{
-    el.innerHTML = '<p class="info-msg">Solar monitoring is not configured.</p>';
+    el.innerHTML = '<p class="info-msg">' + t('web.dash.solar_not_configured', 'Solar monitoring is not configured.') + '</p>';
     return;
   }}
   const fields = [
-    ['PV Production', fmt(data.pv_kwh,3,'kWh'), ''],
-    ['Feed-in', fmt(data.feed_in_kwh,3,'kWh'), ''],
-    ['Grid Draw', fmt(data.grid_kwh,3,'kWh'), ''],
-    ['Self-Consumption', fmt(data.self_kwh,3,'kWh'), ''],
-    ['Autarky', fmt(data.autarky_pct,1,'%'), ''],
-    ['Revenue', fmt(data.revenue_eur,2,'€'), ''],
-    ['Savings', fmt(data.savings_eur,2,'€'), ''],
+    [t('web.dash.pv_production', 'PV Production'), fmt(data.pv_kwh,3,'kWh'), ''],
+    [t('web.dash.feed_in', 'Feed-in'), fmt(data.feed_in_kwh,3,'kWh'), ''],
+    [t('web.dash.grid_draw', 'Grid Draw'), fmt(data.grid_kwh,3,'kWh'), ''],
+    [t('web.dash.self_consumption', 'Self-Consumption'), fmt(data.self_kwh,3,'kWh'), ''],
+    [t('web.dash.autarky', 'Autarky'), fmt(data.autarky_pct,1,'%'), ''],
+    [t('web.dash.revenue', 'Revenue'), fmt(data.revenue_eur,2,'\u20ac'), ''],
+    [t('web.dash.savings', 'Savings'), fmt(data.savings_eur,2,'\u20ac'), ''],
   ];
   let html = '<div class="card"><div class="metric-grid">';
   fields.forEach(function(f) {{ html += metricCardHtml(f[0], f[1], f[2]); }});
@@ -1533,28 +1541,33 @@ function initCompare() {{
 
   ctrl.innerHTML =
     '<div class="card">' +
-      '<div class="card-title">Device A</div>' +
+      '<div class="card-title">' + t('web.dash.device_a', 'Device A') + '</div>' +
       '<div class="controls-row">' +
         '<select id="cmp-da">' + devOptions + '</select>' +
         '<input type="date" id="cmp-fa" value="' + monthAgo + '">' +
         '<input type="date" id="cmp-ta" value="' + today + '">' +
       '</div>' +
-      '<div class="card-title" style="margin-top:8px">Device B</div>' +
+      '<div class="card-title" style="margin-top:8px">' + t('web.dash.device_b', 'Device B') + '</div>' +
       '<div class="controls-row">' +
         '<select id="cmp-db">' + devOptions + '</select>' +
         '<input type="date" id="cmp-fb" value="' + monthAgo + '">' +
         '<input type="date" id="cmp-tb" value="' + today + '">' +
       '</div>' +
       '<div class="controls-row" style="margin-top:8px">' +
-        '<select id="cmp-unit"><option value="kWh">kWh</option><option value="eur">€</option></select>' +
-        '<select id="cmp-gran"><option value="total">Total</option><option value="daily">Daily</option><option value="monthly">Monthly</option></select>' +
-        '<button class="btn btn-accent" onclick="loadCompare()">Compare</button>' +
+        '<select id="cmp-unit"><option value="kWh">kWh</option><option value="eur">\u20ac</option></select>' +
+        '<select id="cmp-gran"><option value="total">' + t('web.dash.gran.total', 'Total') + '</option><option value="daily">' + t('web.dash.gran.daily', 'Daily') + '</option><option value="monthly">' + t('web.dash.gran.monthly', 'Monthly') + '</option></select>' +
+        '<button class="btn btn-accent" onclick="loadCompare()">' + t('web.dash.compare', 'Compare') + '</button>' +
       '</div>' +
     '</div>';
 
   // Quick presets
   const quick = document.getElementById('cmp-quick');
-  const presets = [['month','Month'],['quarter','Quarter'],['halfyear','Half Year'],['year','Year']];
+  const presets = [
+    ['month', t('web.costs.month', 'Month')],
+    ['quarter', t('web.dash.quarter', 'Quarter')],
+    ['halfyear', t('web.dash.halfyear', 'Half Year')],
+    ['year', t('web.costs.year', 'Year')],
+  ];
   let qhtml = '<div class="controls-row">';
   presets.forEach(function(p) {{
     qhtml += '<button class="btn btn-outline btn-sm" onclick="loadComparePreset(\\'' + p[0] + '\\')">' + p[1] + '</button>';
@@ -1565,7 +1578,7 @@ function initCompare() {{
 
 async function loadComparePreset(preset) {{
   const result = document.getElementById('cmp-result');
-  result.innerHTML = '<p class="loading-msg">Loading…</p>';
+  result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   try {{
     const url = '/api/compare?preset=' + preset +
       '&device_a=' + encodeURIComponent((document.getElementById('cmp-da')||{{}}).value||'') +
@@ -1583,7 +1596,7 @@ async function loadComparePreset(preset) {{
 
 async function loadCompare() {{
   const result = document.getElementById('cmp-result');
-  result.innerHTML = '<p class="loading-msg">Loading…</p>';
+  result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   try {{
     const da = document.getElementById('cmp-da').value;
     const fa = document.getElementById('cmp-fa').value;
@@ -1608,7 +1621,7 @@ async function loadCompare() {{
 }}
 
 function renderCompare(data, el) {{
-  if (!data) {{ el.innerHTML = '<p class="info-msg">No data.</p>'; return; }}
+  if (!data) {{ el.innerHTML = '<p class="info-msg">' + t('web.no_data', 'No data.') + '</p>'; return; }}
   const unit = data.unit || 'kWh';
   const ta = data.total_a || 0;
   const tb = data.total_b || 0;
@@ -1731,7 +1744,7 @@ function drawBars(canvas, labels, series, opts) {{
 ────────────────────────────────────────────── */
 async function loadAnomalies() {{
   const el = document.getElementById('anom-content');
-  el.innerHTML = '<p class="loading-msg">Loading…</p>';
+  el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   try {{
     const r = await fetch('/api/anomalies');
     if (!r.ok) throw new Error(r.status);
@@ -1748,13 +1761,13 @@ function renderAnomalies(data, el) {{
   const enabled = data.enabled !== false;
   html += '<div style="margin-bottom:10px">' +
     '<span class="badge ' + (enabled ? 'badge-green' : 'badge-red') + '">' +
-    (enabled ? 'Enabled' : 'Disabled') + '</span>' +
+    (enabled ? t('web.dash.anomaly_enabled', 'Enabled') : t('web.dash.anomaly_disabled', 'Disabled')) + '</span>' +
     (data.model ? ' <span class="badge badge-yellow">' + esc(data.model) + '</span>' : '') +
     '</div>';
 
   const events = data.events || [];
   if (events.length === 0) {{
-    html += '<p class="info-msg">No anomaly events found.</p>';
+    html += '<p class="info-msg">' + t('web.dash.no_anomalies', 'No anomaly events found.') + '</p>';
     el.innerHTML = html;
     return;
   }}
@@ -3866,6 +3879,22 @@ class LiveWebDashboard:
                 "web_nav_control": _t(self.lang, "web.nav.control"),
                 "web_pill_window": _t(self.lang, "web.pill.window"),
                 "web_pill_url": _t(self.lang, "web.pill.url"),
+                # Tab nav labels
+                "web_tab_live": _t(self.lang, "web.tab.live"),
+                "web_tab_costs": _t(self.lang, "web.tab.costs"),
+                "web_tab_heatmap": _t(self.lang, "web.tab.heatmap"),
+                "web_tab_solar": _t(self.lang, "web.tab.solar"),
+                "web_tab_compare": _t(self.lang, "web.tab.compare"),
+                "web_tab_anomalies": _t(self.lang, "web.tab.anomalies"),
+                # Button titles
+                "web_btn_freeze_title": _t(self.lang, "web.dash.freeze_resume"),
+                "web_btn_settings_title": _t(self.lang, "web.dash.device_settings"),
+                "web_btn_theme_title": _t(self.lang, "web.btn.theme"),
+                # Loading placeholder (server-rendered initial HTML)
+                "web_loading": _t(self.lang, "web.loading"),
+                # Modal
+                "web_dash_device_order": _t(self.lang, "web.dash.device_order"),
+                "web_dash_done": _t(self.lang, "web.dash.done"),
                 "refresh_ms": str(int(max(250, self.refresh_seconds * 1000))),
                 "window_min": str(int(max(1, self.window_minutes))),
                 "window_options_json": json.dumps(self.available_windows),
