@@ -560,6 +560,61 @@ _HTML_TEMPLATE = """<!doctype html>
       display: block;
       border-radius: 10px;
     }}
+    /* ── Live settings modal ── */
+    .modal-overlay {{
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }}
+    .modal-overlay.open {{ display: flex; }}
+    .modal-panel {{
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      width: min(92vw, 380px);
+      max-height: 80vh;
+      overflow-y: auto;
+    }}
+    .modal-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      font-weight: 700;
+      font-size: 15px;
+    }}
+    .settings-device-row {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--border);
+    }}
+    .settings-device-row:last-child {{ border-bottom: none; }}
+    .settings-device-name {{ flex: 1; font-size: 14px; }}
+    .settings-btn {{
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px 9px;
+      cursor: pointer;
+      color: var(--fg);
+      font-size: 13px;
+      line-height: 1.2;
+    }}
+    .settings-btn:disabled {{ opacity: 0.2; cursor: default; }}
+    .toggle-vis {{
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: var(--accent);
+      flex-shrink: 0;
+    }}
     /* ── Loading / error ── */
     .loading-msg {{ color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }}
     .error-msg {{ color: var(--pwr-high); font-size: 13px; padding: 20px 0; text-align: center; }}
@@ -593,6 +648,7 @@ _HTML_TEMPLATE = """<!doctype html>
     <div id="hdr-actions" style="display:flex;gap:8px;align-items:center">
       <span id="live-stamp" style="font-size:11px;color:var(--muted)"></span>
       <button id="btn-freeze" class="icon-btn" title="Freeze/Resume">▶</button>
+      <button id="btn-live-settings" class="icon-btn" title="Device settings" onclick="openLiveSettings()">⚙</button>
       <button id="btn-theme" class="icon-btn" title="Toggle theme">☀</button>
     </div>
   </header>
@@ -672,6 +728,19 @@ _HTML_TEMPLATE = """<!doctype html>
 
 <div id="hm-tooltip"></div>
 
+<div id="live-settings-modal" class="modal-overlay">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <span>Device Order &amp; Visibility</span>
+      <button class="icon-btn" onclick="closeLiveSettings()">✕</button>
+    </div>
+    <div id="live-settings-list"></div>
+    <div style="text-align:right;margin-top:12px">
+      <button class="btn btn-accent" onclick="closeLiveSettings()">Done</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ── Injected constants ── */
 const REFRESH_MS = {refresh_ms};
@@ -727,6 +796,108 @@ function onPaneActivated(name) {{
 }}
 
 /* ──────────────────────────────────────────────
+   DEVICE SETTINGS (order & visibility)
+────────────────────────────────────────────── */
+let _lsOrder = null;
+let _lsHidden = null;
+
+function _loadLsSettings() {{
+  try {{ _lsOrder = JSON.parse(localStorage.getItem('device_order') || 'null'); }} catch(e) {{ _lsOrder = null; }}
+  try {{ _lsHidden = JSON.parse(localStorage.getItem('hidden_devices') || '[]'); }} catch(e) {{ _lsHidden = []; }}
+  if (!Array.isArray(_lsHidden)) _lsHidden = [];
+}}
+
+function _saveLsSettings() {{
+  try {{ localStorage.setItem('device_order', JSON.stringify(_lsOrder)); }} catch(e) {{}}
+  try {{ localStorage.setItem('hidden_devices', JSON.stringify(_lsHidden)); }} catch(e) {{}}
+}}
+
+function openLiveSettings() {{
+  _loadLsSettings();
+  const allKeys = DEVICES.map(function(d) {{ return d.key; }});
+  const order = (_lsOrder && _lsOrder.length) ? _lsOrder.slice() : allKeys.slice();
+  allKeys.forEach(function(k) {{ if (order.indexOf(k) === -1) order.push(k); }});
+  _lsOrder = order;
+
+  const list = document.getElementById('live-settings-list');
+  list.innerHTML = '';
+  order.forEach(function(key, idx) {{
+    const dev = DEVICES.find(function(d) {{ return d.key === key; }});
+    if (!dev) return;
+    const visible = _lsHidden.indexOf(key) === -1;
+    const row = document.createElement('div');
+    row.className = 'settings-device-row';
+    row.dataset.key = key;
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'toggle-vis';
+    cb.checked = visible;
+    (function(k) {{
+      cb.addEventListener('change', function() {{ toggleDeviceVis(k); }});
+    }})(key);
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'settings-device-name';
+    nameSpan.textContent = dev.name || key;
+
+    const upBtn = document.createElement('button');
+    upBtn.className = 'settings-btn';
+    upBtn.textContent = '\u25b2';
+    if (idx > 0) {{
+      (function(k) {{ upBtn.addEventListener('click', function() {{ moveDeviceUp(k); }}); }})(key);
+    }} else {{
+      upBtn.disabled = true;
+    }}
+
+    const dnBtn = document.createElement('button');
+    dnBtn.className = 'settings-btn';
+    dnBtn.textContent = '\u25bc';
+    if (idx < order.length - 1) {{
+      (function(k) {{ dnBtn.addEventListener('click', function() {{ moveDeviceDown(k); }}); }})(key);
+    }} else {{
+      dnBtn.disabled = true;
+    }}
+
+    row.appendChild(cb);
+    row.appendChild(nameSpan);
+    row.appendChild(upBtn);
+    row.appendChild(dnBtn);
+    list.appendChild(row);
+  }});
+
+  document.getElementById('live-settings-modal').classList.add('open');
+}}
+
+function closeLiveSettings() {{
+  document.getElementById('live-settings-modal').classList.remove('open');
+  _loadLsSettings();
+}}
+
+function toggleDeviceVis(key) {{
+  const idx = _lsHidden.indexOf(key);
+  if (idx === -1) _lsHidden.push(key);
+  else _lsHidden.splice(idx, 1);
+  _saveLsSettings();
+}}
+
+function moveDeviceUp(key) {{
+  const idx = _lsOrder.indexOf(key);
+  if (idx <= 0) return;
+  _lsOrder.splice(idx - 1, 0, _lsOrder.splice(idx, 1)[0]);
+  _saveLsSettings();
+  openLiveSettings();
+}}
+
+function moveDeviceDown(key) {{
+  const idx = _lsOrder.indexOf(key);
+  if (idx === -1 || idx >= _lsOrder.length - 1) return;
+  _lsOrder.splice(idx + 1, 0, _lsOrder.splice(idx, 1)[0]);
+  _saveLsSettings();
+  openLiveSettings();
+}}
+
+/* ──────────────────────────────────────────────
    LIVE TAB
 ────────────────────────────────────────────── */
 function pwrClass(w) {{
@@ -769,7 +940,22 @@ async function tick(first) {{
 
 function renderLive(data, first) {{
   const grid = document.getElementById('live-grid');
-  const devices = data.devices || [];
+  const hidden = _lsHidden || [];
+  const order = _lsOrder;
+
+  let devices = (data.devices || []).filter(function(d) {{
+    return hidden.indexOf(d.key) === -1;
+  }});
+  if (order && order.length) {{
+    devices.sort(function(a, b) {{
+      const ia = order.indexOf(a.key);
+      const ib = order.indexOf(b.key);
+      if (ia === -1 && ib === -1) return 0;
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    }});
+  }}
 
   // Init sparkline buffers
   devices.forEach(function(d) {{
@@ -1000,8 +1186,28 @@ async function loadHeatmap() {{
   }}
 }}
 
+/* Green→Yellow→Red gradient: 0=green, 0.5=yellow, 1=red */
+function ratioColor(ratio) {{
+  if (ratio <= 0.5) {{
+    const t = ratio * 2;
+    const r = Math.round(34 + (234 - 34) * t);
+    const g = Math.round(197 + (179 - 197) * t);
+    const b = Math.round(94 + (8 - 94) * t);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }} else {{
+    const t = (ratio - 0.5) * 2;
+    const r = Math.round(234 + (239 - 234) * t);
+    const g = Math.round(179 + (68 - 179) * t);
+    const b = Math.round(8 + (68 - 8) * t);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }}
+}}
+
 function renderHeatmapCalendar(data, el, unit) {{
-  const daily = data.daily || {{}};
+  // API returns calendar as [{date, value}, ...] — convert to dict
+  const calArr = data.calendar || [];
+  const daily = {{}};
+  calArr.forEach(function(item) {{ daily[item.date] = item.value; }});
   const year = parseInt(document.getElementById('hm-year').value);
   const start = new Date(year, 0, 1);
   // Align to Monday
@@ -1048,7 +1254,7 @@ function renderHeatmapCalendar(data, el, unit) {{
       const alpha = Math.round(ratio * 200);
       const label = unit === 'eur' ? fmt(v,2,'€') : fmt(v,3,'kWh');
       const inYear = day.getFullYear() === year;
-      const bg = inYear && v > 0 ? 'rgba(37,99,235,' + (0.12 + ratio*0.75).toFixed(2) + ')' : '';
+      const bg = inYear && v > 0 ? ratioColor(ratio) : '';
       gridHtml += '<div class="hm-day" style="' + (bg ? 'background:' + bg + ';' : '') + '" data-date="' + key + '" data-val="' + label + '"></div>';
     }});
     gridHtml += '</div>';
@@ -1091,7 +1297,7 @@ function renderHeatmapHourly(data, el, unit) {{
       const v = (hourly[d] && hourly[d][h]) ? hourly[d][h] : 0;
       const ratio = maxVal > 0 ? v / maxVal : 0;
       const label = v > 0 ? (unit === 'eur' ? fmt(v,2) : fmt(v,3)) : '';
-      const bg = v > 0 ? 'rgba(37,99,235,' + (0.10 + ratio*0.80).toFixed(2) + ')' : 'transparent';
+      const bg = v > 0 ? ratioColor(ratio) : 'transparent';
       const title = days[d] + ' ' + h + 'h: ' + (unit === 'eur' ? fmt(v,2,'€') : fmt(v,3,'kWh'));
       html += '<td class="hm-cell" style="background:' + bg + '" data-tip="' + title + '">' + label + '</td>';
     }}
@@ -1457,6 +1663,7 @@ function esc(s) {{
 /* ──────────────────────────────────────────────
    BOOT
 ────────────────────────────────────────────── */
+_loadLsSettings();
 (function() {{
   // Restore last pane
   const last = localStorage.getItem('sea_pane');

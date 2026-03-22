@@ -1,5 +1,25 @@
 # Changelog
 
+## 9.1.0 - 2026-03-22
+### Added
+- **Live tab: device order & visibility settings** — gear icon (⚙) in the
+  header opens a modal panel listing all devices.  Each row has a visibility
+  checkbox and ▲/▼ buttons to reorder.  Preferences are persisted in
+  `localStorage` (`device_order`, `hidden_devices`) and applied on every live
+  render.
+### Fixed
+- **Web heatmap calendar blank** — the `/api/heatmap` endpoint returns
+  `calendar` as a list of `{date, value}` objects, but the JS was reading
+  `data.daily` (undefined), so the calendar never rendered.  The frontend now
+  converts `data.calendar` into a date-keyed dict before building the grid.
+### Changed
+- **Heatmap colors green→yellow→red** — web heatmap (calendar and hourly
+  pattern) now uses a green→yellow→red gradient (`ratioColor` helper) instead
+  of the previous blue scale, giving an intuitive low→high energy indication.
+- **Desktop heatmap colormap** — both the calendar and hourly-pattern plots in
+  the Tkinter UI now use `RdYlGn_r` (reversed Red-Yellow-Green, i.e. green for
+  low, red for high) instead of `YlOrRd`.
+
 ## 9.0.3 - 2026-03-21
 ### Fixed
 - **Web UI STILL broken after v9.0.2** — A second `\'`-escaping bug existed in

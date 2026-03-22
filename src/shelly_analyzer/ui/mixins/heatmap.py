@@ -432,7 +432,7 @@ class HeatmapMixin:
                     d += timedelta(days=1)
 
             # Choose colormap and range
-            cmap = "YlOrRd"
+            cmap = "RdYlGn_r"
             valid = z[~np.isnan(z)]
             vmax = float(np.max(valid)) if len(valid) > 0 and np.max(valid) > 0 else 1.0
 
@@ -546,7 +546,7 @@ class HeatmapMixin:
                 if 0 <= wd < 7 and 0 <= hr < 24:
                     z[wd, hr] = val
 
-            cmap = "YlOrRd"
+            cmap = "RdYlGn_r"
             vmax = float(z.max()) if z.max() > 0 else 1.0
 
             x = np.arange(25)   # hour boundaries 0..24
