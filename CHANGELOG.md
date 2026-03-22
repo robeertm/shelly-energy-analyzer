@@ -1,5 +1,16 @@
 # Changelog
 
+## 9.5.0 - 2026-03-22
+### Fixed
+- **Desktop heatmap: empty cells for missing/future days** — calendar cells that
+  have no recorded data (including future dates) are now rendered in light grey
+  (`#E0E0E0` day / `#333333` night) instead of solid green. Only days with
+  actual consumption data participate in the green→yellow→red colour scale.
+  Previously all missing days received value `0.0` and were painted green
+  (the lowest-value colour of `RdYlGn_r`), making it impossible to distinguish
+  "zero real consumption" from "no data yet". Fixed by keeping those cells as
+  `NaN` in the grid and applying `cmap.set_bad()` to a neutral grey.
+
 ## 9.4.0 - 2026-03-22
 ### Changed
 - **Web dashboard: full i18n** — the web/mobile dashboard now renders in the
