@@ -1,5 +1,26 @@
 # Changelog
 
+## 9.3.0 - 2026-03-22
+### Changed
+- **Heatmap: responsive layout** — both the yearly calendar and the hourly
+  pattern (weekday × hour) heatmap now calculate cell size dynamically from the
+  available viewport width (`window.innerWidth`), so cells fill the full screen
+  on desktop and shrink gracefully on mobile instead of being cut off.
+- **Heatmap: full 0–23 hours visible** — the hourly pattern previously appeared
+  to show only 0–12 because the fixed 26 px cell width overflowed the card
+  without a visible scrollbar on narrow screens; cells are now sized to fit all
+  24 columns within the available pane width (minimum 12 px per cell).
+- **Heatmap: reduced hour labels** — hour axis now labels every 3rd hour
+  (0, 3, 6, 9, 12, 15, 18, 21) instead of every hour, reducing label clutter.
+- **Heatmap: German weekday abbreviations** — day labels changed from English
+  (Mo/Tu/We…) to German (Mo/Di/Mi/Do/Fr/Sa/So).
+- **Heatmap: unified design** — calendar and hourly pattern share the same
+  green→yellow→red gradient, 2 px border-radius, `var(--chipbg)` background for
+  empty cells, and responsive cell-sizing logic.
+- **Heatmap: re-renders on window resize** — a debounced `resize` listener
+  reloads the heatmap when the pane is active, keeping the layout correct after
+  orientation changes or browser window resizes.
+
 ## 9.2.0 - 2026-03-22
 ### Added
 - **Live tab: time scale selector** — six buttons (1min, 5min, 15min, 30min,
