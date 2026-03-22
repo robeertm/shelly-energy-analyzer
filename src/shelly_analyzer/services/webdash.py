@@ -493,26 +493,22 @@ _HTML_TEMPLATE = """<!doctype html>
     .hm-grid {{ display: flex; gap: 2px; }}
     .hm-week {{ display: flex; flex-direction: column; gap: 2px; }}
     .hm-day {{
-      width: 12px;
-      height: 12px;
       border-radius: 2px;
       background: var(--chipbg);
       position: relative;
+      flex-shrink: 0;
     }}
     .hm-month-labels {{ display: flex; gap: 2px; font-size: 9px; color: var(--muted); margin-bottom: 3px; }}
     .hm-month-labels span {{ overflow: hidden; }}
     /* Hourly heatmap table */
-    .hm-table-wrap {{ overflow-x: auto; }}
-    .hm-table {{ border-collapse: collapse; font-size: 9px; }}
+    .hm-table-wrap {{ overflow-x: auto; width: 100%; }}
+    .hm-table {{ border-collapse: separate; border-spacing: 2px; font-size: 9px; }}
     .hm-cell {{
-      width: 26px;
-      height: 26px;
-      text-align: center;
-      vertical-align: middle;
-      font-size: 9px;
+      border-radius: 2px;
+      padding: 0;
       border: none;
     }}
-    .hm-head {{ font-size: 9px; color: var(--muted); text-align: center; padding: 0 2px; }}
+    .hm-head {{ font-size: 9px; color: var(--muted); text-align: center; padding: 0 0 2px 0; font-weight: normal; }}
     /* Tooltip */
     #hm-tooltip {{
       position: fixed;
@@ -1249,6 +1245,7 @@ function metricCardHtml(label, value, sub) {{
 /* ──────────────────────────────────────────────
    HEATMAP TAB
 ────────────────────────────────────────────── */
+let _hmResizeInit = false;
 function initHeatmap() {{
   const sel = document.getElementById('hm-device');
   if (sel.children.length === 0) {{
@@ -1268,6 +1265,16 @@ function initHeatmap() {{
       opt.textContent = y;
       ySel.appendChild(opt);
     }}
+  }}
+  if (!_hmResizeInit) {{
+    _hmResizeInit = true;
+    let _hmResizeTimer = null;
+    window.addEventListener('resize', function() {{
+      clearTimeout(_hmResizeTimer);
+      _hmResizeTimer = setTimeout(function() {{
+        if (currentPane === 'heatmap') loadHeatmap();
+      }}, 200);
+    }});
   }}
   loadHeatmap();
 }}
@@ -1335,6 +1342,13 @@ function renderHeatmapCalendar(data, el, unit) {{
     weeks.push(week);
   }}
 
+  // Dynamic cell size matching hourly heatmap
+  const pane = el.closest('.pane') || document.body;
+  const availW = pane.clientWidth - 32;
+  const numWeeks = weeks.length;
+  const calCellSize = Math.max(10, Math.floor((availW - (numWeeks - 1) * 2) / numWeeks));
+  const cellGap = 2;
+
   // Month labels
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   let monthLabelHtml = '<div class="hm-month-labels">';
@@ -1342,10 +1356,10 @@ function renderHeatmapCalendar(data, el, unit) {{
   weeks.forEach(function(week) {{
     const m = week[0].getMonth();
     if (m !== lastMonth && week[0].getFullYear() === year) {{
-      monthLabelHtml += '<span style="width:' + (12+2) + 'px">' + monthNames[m] + '</span>';
+      monthLabelHtml += '<span style="width:' + (calCellSize + cellGap) + 'px">' + monthNames[m] + '</span>';
       lastMonth = m;
     }} else {{
-      monthLabelHtml += '<span style="width:' + (12+2) + 'px"></span>';
+      monthLabelHtml += '<span style="width:' + (calCellSize + cellGap) + 'px"></span>';
     }}
   }});
   monthLabelHtml += '</div>';
@@ -1357,11 +1371,10 @@ function renderHeatmapCalendar(data, el, unit) {{
       const key = day.toISOString().slice(0,10);
       const v = daily[key] || 0;
       const ratio = maxVal > 0 ? v / maxVal : 0;
-      const alpha = Math.round(ratio * 200);
       const label = unit === 'eur' ? fmt(v,2,'€') : fmt(v,3,'kWh');
       const inYear = day.getFullYear() === year;
-      const bg = inYear && v > 0 ? ratioColor(ratio) : '';
-      gridHtml += '<div class="hm-day" style="' + (bg ? 'background:' + bg + ';' : '') + '" data-date="' + key + '" data-val="' + label + '"></div>';
+      const bg = inYear && v > 0 ? ratioColor(ratio) : 'var(--chipbg)';
+      gridHtml += '<div class="hm-day" style="width:' + calCellSize + 'px;height:' + calCellSize + 'px;background:' + bg + '" data-date="' + key + '" data-val="' + label + '"></div>';
     }});
     gridHtml += '</div>';
   }});
@@ -1386,7 +1399,7 @@ function renderHeatmapCalendar(data, el, unit) {{
 function renderHeatmapHourly(data, el, unit) {{
   const hourly = data.hourly;
   if (!hourly) return;
-  const days = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+  const days = ['Mo','Di','Mi','Do','Fr','Sa','So'];
   const vals = [];
   for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) {{
     const v = (hourly[d] && hourly[d][h]) ? hourly[d][h] : 0;
@@ -1394,18 +1407,28 @@ function renderHeatmapHourly(data, el, unit) {{
   }}
   const maxVal = vals.length ? Math.max(...vals) : 1;
 
-  let html = '<div class="card"><div class="card-title">Hourly Pattern</div><div class="hm-table-wrap"><table class="hm-table"><thead><tr><th class="hm-head"></th>';
-  for (let h = 0; h < 24; h++) html += '<th class="hm-head">' + h + '</th>';
+  // Dynamic cell size: 24 cols + label col; use full available width
+  const pane = el.closest('.pane') || document.body;
+  const availW = pane.clientWidth - 32;
+  const labelW = 22;
+  const cellSize = Math.max(12, Math.floor((availW - labelW - 2 * 25) / 24));
+
+  let html = '<div class="card"><div class="card-title">Hourly Pattern</div>';
+  html += '<div class="hm-table-wrap"><table class="hm-table" style="table-layout:fixed;width:' + (labelW + 2 + 24 * (cellSize + 2)) + 'px"><thead><tr>';
+  html += '<th style="width:' + labelW + 'px"></th>';
+  for (let h = 0; h < 24; h++) {{
+    const lbl = (h % 3 === 0) ? String(h) : '';
+    html += '<th class="hm-head" style="width:' + cellSize + 'px">' + lbl + '</th>';
+  }}
   html += '</tr></thead><tbody>';
   for (let d = 0; d < 7; d++) {{
-    html += '<tr><td class="hm-head" style="padding-right:4px">' + days[d] + '</td>';
+    html += '<tr><td style="width:' + labelW + 'px;font-size:9px;color:var(--muted);text-align:right;padding-right:3px;white-space:nowrap">' + days[d] + '</td>';
     for (let h = 0; h < 24; h++) {{
       const v = (hourly[d] && hourly[d][h]) ? hourly[d][h] : 0;
       const ratio = maxVal > 0 ? v / maxVal : 0;
-      const label = v > 0 ? (unit === 'eur' ? fmt(v,2) : fmt(v,3)) : '';
-      const bg = v > 0 ? ratioColor(ratio) : 'transparent';
+      const bg = v > 0 ? ratioColor(ratio) : 'var(--chipbg)';
       const title = days[d] + ' ' + h + 'h: ' + (unit === 'eur' ? fmt(v,2,'€') : fmt(v,3,'kWh'));
-      html += '<td class="hm-cell" style="background:' + bg + '" data-tip="' + title + '">' + label + '</td>';
+      html += '<td class="hm-cell" style="width:' + cellSize + 'px;height:' + cellSize + 'px;background:' + bg + '" data-tip="' + title + '"></td>';
     }}
     html += '</tr>';
   }}
