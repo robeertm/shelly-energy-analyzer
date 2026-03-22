@@ -1,5 +1,21 @@
 # Changelog
 
+## 9.4.0 - 2026-03-22
+### Changed
+- **Web dashboard: full i18n** — the web/mobile dashboard now renders in the
+  same language as the desktop app (de, en, es, fr, pt, it, pl, cs, ru).
+  All UI texts are translated: tab navigation labels, button tooltips, device
+  card labels (Voltage/Current/Freq/Phase), costs summary (Today/Week/Month/
+  Year/Year proj.), heatmap hourly pattern title, solar field names, compare
+  controls and presets, anomaly status badges, loading/error/info messages,
+  and the device-order modal header and Done button.
+- **Heatmap: locale-aware month and day labels** — month abbreviations and
+  weekday names in the calendar and hourly heatmap are now generated via
+  `Intl.DateTimeFormat` using the active language instead of being hardcoded
+  in German/English.
+- **i18n: new `web.dash.*` translation keys** — 31 new keys added for all 9
+  supported languages covering the dashboard UI texts listed above.
+
 ## 9.3.0 - 2026-03-22
 ### Changed
 - **Heatmap: responsive layout** — both the yearly calendar and the hourly
