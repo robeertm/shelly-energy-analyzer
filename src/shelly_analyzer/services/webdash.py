@@ -473,11 +473,19 @@ _HTML_TEMPLATE = """<!doctype html>
     }}
     /* Sparkline canvas */
     .sparkline-wrap {{ margin-top: 10px; }}
+    .sparkline-label {{ font-size: 10px; color: var(--muted); margin-bottom: 2px; }}
     canvas.sparkline {{
       width: 100%;
       height: 56px;
       display: block;
       border-radius: 8px;
+      background: var(--chipbg);
+    }}
+    canvas.sparkline-sm {{
+      width: 100%;
+      height: 40px;
+      display: block;
+      border-radius: 6px;
       background: var(--chipbg);
     }}
     /* ── Heatmap ── */
@@ -656,6 +664,7 @@ _HTML_TEMPLATE = """<!doctype html>
   <div id="panes">
     <!-- Live -->
     <div id="pane-live" class="pane active">
+      <div id="live-timescale" style="display:flex;gap:6px;flex-wrap:wrap;padding:0 0 8px 0"></div>
       <div id="live-grid" class="card-grid"></div>
     </div>
 
@@ -754,8 +763,10 @@ function t(k, fb) {{ return (I18N && I18N[k]) ? I18N[k] : (fb || k); }}
 let frozen = false;
 let liveTimer = null;
 let currentPane = 'live';
-let sparkData = {{}};   // key -> [{{"ts":..,"w":..}}]
+let sparkData = {{}};   // key -> [{{"ts":..,"w":..,"v":..,"a":..,"phases":[...]}}]
 let cmpChart = null;
+let liveWindowSec = 60;
+const MAX_HIST_PTS = Math.ceil(7200000 / REFRESH_MS);
 
 /* ── Theme ── */
 document.getElementById('btn-theme').addEventListener('click', function() {{
@@ -910,8 +921,28 @@ function fmt(v, dec, unit) {{
   return v.toFixed(dec) + (unit ? ' ' + unit : '');
 }}
 
+function initTimescaleBtns() {{
+  const wrap = document.getElementById('live-timescale');
+  if (!wrap || wrap.children.length) return;
+  const scales = [{{l:'1min',s:60}},{{l:'5min',s:300}},{{l:'15min',s:900}},{{l:'30min',s:1800}},{{l:'1h',s:3600}},{{l:'2h',s:7200}}];
+  scales.forEach(function(sc) {{
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sm' + (liveWindowSec === sc.s ? ' btn-accent' : '');
+    btn.textContent = sc.l;
+    btn.dataset.sec = sc.s;
+    btn.addEventListener('click', function() {{
+      liveWindowSec = sc.s;
+      wrap.querySelectorAll('.btn').forEach(function(b) {{
+        b.className = 'btn btn-sm' + (parseInt(b.dataset.sec) === liveWindowSec ? ' btn-accent' : '');
+      }});
+      if (!frozen) tick(false);
+    }});
+    wrap.appendChild(btn);
+  }});
+}}
 function startLive() {{
   if (liveTimer) return;
+  initTimescaleBtns();
   tick(true);
   liveTimer = setInterval(function() {{ if (!frozen) tick(false); }}, REFRESH_MS);
   document.getElementById('btn-freeze').addEventListener('click', toggleFreeze);
@@ -961,11 +992,15 @@ function renderLive(data, first) {{
   devices.forEach(function(d) {{
     if (!sparkData[d.key]) sparkData[d.key] = [];
     const buf = sparkData[d.key];
-    buf.push({{ ts: Date.now(), w: d.power_w || 0 }});
-    if (buf.length > 60) buf.shift();
+    buf.push({{ ts: Date.now(), w: d.power_w || 0, v: d.voltage_v || 0, a: d.current_a || 0, phases: d.phases ? d.phases.slice() : [] }});
+    if (buf.length > MAX_HIST_PTS) buf.shift();
   }});
 
-  if (first || grid.children.length !== devices.length) {{
+  const firstKey = devices.length > 0 ? devices[0].key : null;
+  const firstCardId = grid.children.length > 0 ? grid.children[0].id : null;
+  const needsRebuild = first || grid.children.length !== devices.length ||
+    (firstKey && firstCardId !== 'dc-' + firstKey);
+  if (needsRebuild) {{
     grid.innerHTML = '';
     devices.forEach(function(d) {{
       const card = buildDeviceCard(d);
@@ -1018,15 +1053,38 @@ function devCardHTML(d) {{
       '<dl class="dev-kv">' +
         '<dt>Voltage</dt><dd>' + fmt(d.voltage_v, 1, 'V') + '</dd>' +
         '<dt>Current</dt><dd>' + fmt(d.current_a, 2, 'A') + '</dd>' +
-        '<dt>cos φ</dt><dd>' + (d.pf !== undefined ? fmt(d.pf, 2) : '—') + '</dd>' +
-        '<dt>Freq</dt><dd>' + (d.freq_hz !== undefined ? fmt(d.freq_hz, 1, 'Hz') : '—') + '</dd>' +
+        '<dt>cos \u03c6</dt><dd>' + (d.pf !== undefined ? fmt(d.pf, 2) : '\u2014') + '</dd>' +
+        '<dt>Freq</dt><dd>' + (d.freq_hz !== undefined ? fmt(d.freq_hz, 1, 'Hz') : '\u2014') + '</dd>' +
       '</dl>' +
       phaseHtml +
+      '<div class="sparkline-wrap" style="margin-top:8px"><div class="sparkline-label">Voltage</div><canvas class="sparkline-sm" id="sp-v-' + d.key + '"></canvas></div>' +
+      '<div class="sparkline-wrap" style="margin-top:6px"><div class="sparkline-label">Current</div><canvas class="sparkline-sm" id="sp-a-' + d.key + '"></canvas></div>' +
+      (phases ? '<div class="sparkline-wrap" style="margin-top:6px"><div class="sparkline-label">Phase Power</div><canvas class="sparkline-sm" id="sp-ph-' + d.key + '"></canvas></div>' : '') +
       nilm +
     '</div>'
   );
 }}
 
+function wndVals(buf, field) {{
+  if (!buf || !buf.length) return [];
+  const cutoff = Date.now() - liveWindowSec * 1000;
+  const pts = buf.filter(function(p) {{ return p.ts >= cutoff; }});
+  return pts.map(function(p) {{ return p[field] || 0; }});
+}}
+function wndPhaseSeries(buf, field) {{
+  if (!buf || !buf.length) return [];
+  const cutoff = Date.now() - liveWindowSec * 1000;
+  const pts = buf.filter(function(p) {{ return p.ts >= cutoff; }});
+  if (!pts.length) return [];
+  let maxPh = 0;
+  pts.forEach(function(p) {{ if (p.phases && p.phases.length > maxPh) maxPh = p.phases.length; }});
+  if (!maxPh) return [];
+  const series = [];
+  for (let i = 0; i < maxPh; i++) {{
+    series.push(pts.map(function(p) {{ return (p.phases && p.phases[i]) ? (p.phases[i][field] || 0) : 0; }}));
+  }}
+  return series;
+}}
 function updateDeviceCard(card, d) {{
   const pc = pwrClass(d.power_w || 0);
   const pw = card.querySelector('.dev-power');
@@ -1037,15 +1095,28 @@ function updateDeviceCard(card, d) {{
     if (spans[0]) spans[0].textContent = fmt(d.today_kwh, 3) + ' kWh';
     if (spans[1] && d.cost_today !== undefined) spans[1].textContent = fmt(d.cost_today, 2) + ' €';
   }}
-  // Redraw sparkline
-  const sp = card.querySelector('canvas.sparkline');
-  if (sp && sparkData[d.key]) drawSparkline(sp, sparkData[d.key].map(function(p) {{ return p.w; }}));
+  const buf = sparkData[d.key];
+  // Main power sparkline
+  const sp = document.getElementById('sp-' + d.key);
+  if (sp && buf) drawSparkline(sp, wndVals(buf, 'w'));
+  // Voltage sparkline (relative scale so variation is visible)
+  const spv = document.getElementById('sp-v-' + d.key);
+  if (spv && buf) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true);
+  // Current sparkline
+  const spa = document.getElementById('sp-a-' + d.key);
+  if (spa && buf) drawSparkline(spa, wndVals(buf, 'a'), '#10b981', true);
+  // Phase power sparkline (multi-line)
+  const spp = document.getElementById('sp-ph-' + d.key);
+  if (spp && buf) {{
+    const series = wndPhaseSeries(buf, 'power_w');
+    if (series.length) drawMultiSparkline(spp, series, ['#e05c5c','#5ca0e0','#5ce077']);
+  }}
 }}
 
 /* ──────────────────────────────────────────────
    SPARKLINE
 ────────────────────────────────────────────── */
-function drawSparkline(canvas, values) {{
+function drawSparkline(canvas, values, color, relMin) {{
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.offsetWidth || 200;
   const H = canvas.offsetHeight || 56;
@@ -1056,33 +1127,68 @@ function drawSparkline(canvas, values) {{
   ctx.clearRect(0, 0, W, H);
   if (!values || values.length < 2) return;
   const max = Math.max(...values, 1);
-  const min = 0;
+  const min = relMin ? Math.min(...values) * 0.98 : 0;
+  const range = max - min || 1;
   const pad = 4;
   const sx = (W - pad*2) / (values.length - 1);
+  const cs = getComputedStyle(document.documentElement);
+  const accent = color || cs.getPropertyValue('--accent').trim() || '#2563eb';
   // Fill
   ctx.beginPath();
   values.forEach(function(v, i) {{
     const x = pad + i * sx;
-    const y = H - pad - ((v - min) / (max - min)) * (H - pad*2);
+    const y = H - pad - ((v - min) / range) * (H - pad*2);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }});
   ctx.lineTo(pad + (values.length-1)*sx, H - pad);
   ctx.lineTo(pad, H - pad);
   ctx.closePath();
-  const cs = getComputedStyle(document.documentElement);
-  const accent = cs.getPropertyValue('--accent').trim() || '#2563eb';
   ctx.fillStyle = accent + '28';
   ctx.fill();
   // Line
   ctx.beginPath();
   values.forEach(function(v, i) {{
     const x = pad + i * sx;
-    const y = H - pad - ((v - min) / (max - min)) * (H - pad*2);
+    const y = H - pad - ((v - min) / range) * (H - pad*2);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }});
   ctx.strokeStyle = accent;
   ctx.lineWidth = 1.5;
   ctx.stroke();
+}}
+function drawMultiSparkline(canvas, seriesArr, colors) {{
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth || 200;
+  const H = canvas.offsetHeight || 40;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+  if (!seriesArr || !seriesArr.length) return;
+  const n = seriesArr[0].length;
+  if (n < 2) return;
+  let allMin = Infinity, allMax = -Infinity;
+  seriesArr.forEach(function(s) {{
+    s.forEach(function(v) {{ if (v < allMin) allMin = v; if (v > allMax) allMax = v; }});
+  }});
+  if (!isFinite(allMin)) allMin = 0;
+  if (!isFinite(allMax) || allMax <= allMin) allMax = allMin + 1;
+  const range = allMax - allMin;
+  const pad = 4;
+  const sx = (W - pad*2) / (n - 1);
+  seriesArr.forEach(function(s, si) {{
+    const col = (colors && colors[si]) ? colors[si] : '#888';
+    ctx.beginPath();
+    for (let i = 0; i < s.length; i++) {{
+      const x = pad + i * sx;
+      const y = H - pad - ((s[i] - allMin) / range) * (H - pad*2);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }}
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }});
 }}
 
 /* ──────────────────────────────────────────────
