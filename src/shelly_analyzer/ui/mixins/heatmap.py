@@ -428,11 +428,17 @@ class HeatmapMixin:
                 for row in range(n_rows):
                     if d.year == year:
                         key = d.strftime("%Y-%m-%d")
-                        z[row, col] = daily.get(key, 0.0)
+                        val = daily.get(key)
+                        if val is not None:
+                            z[row, col] = val
+                        # else: leave as NaN (no data / future day)
                     d += timedelta(days=1)
 
             # Choose colormap and range
-            cmap = "RdYlGn_r"
+            import matplotlib.pyplot as _plt
+            cmap = _plt.colormaps["RdYlGn_r"].copy()
+            bad_color = "#333333" if theme == "night" else "#E0E0E0"
+            cmap.set_bad(color=bad_color)
             valid = z[~np.isnan(z)]
             vmax = float(np.max(valid)) if len(valid) > 0 and np.max(valid) > 0 else 1.0
 
