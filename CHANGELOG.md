@@ -1,5 +1,26 @@
 # Changelog
 
+## 9.2.0 - 2026-03-22
+### Added
+- **Live tab: time scale selector** — six buttons (1min, 5min, 15min, 30min,
+  1h, 2h) above the device grid let users choose the visible history window.
+  All data points are kept in a JS ring-buffer of up to 2 hours
+  (`MAX_HIST_PTS = ceil(7200000 / REFRESH_MS)`); switching scale immediately
+  redraws the sparklines using only the points within the selected window.
+- **Live detail view: voltage & current sparklines** — expanding a device card
+  now shows two additional mini-sparklines (amber for voltage, green for
+  current) using a relative y-axis so small fluctuations are visible.
+- **Live detail view: phase power sparkline** — three-phase devices additionally
+  show a multi-line sparkline (red/blue/green per phase) for per-phase active
+  power in the expanded detail section.
+### Fixed
+- **Device labels not updating after reorder** — after changing device order in
+  the Settings modal, the live grid was rebuilt in-place by DOM position without
+  re-rendering card content, so device names and power values stayed associated
+  with the wrong cards until a full page reload.  `renderLive` now compares the
+  first card's DOM id against the expected first device key and triggers a
+  complete grid rebuild whenever the order has changed.
+
 ## 9.1.0 - 2026-03-22
 ### Added
 - **Live tab: device order & visibility settings** — gear icon (⚙) in the
