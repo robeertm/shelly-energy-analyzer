@@ -311,7 +311,7 @@ _HTML_TEMPLATE = """<!doctype html>
       overflow-y: auto;
       overflow-x: hidden;
       padding: 10px;
-      padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+      padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
     }}
     /* ── Panes ── */
     .pane {{ display: none; animation: fadeIn 0.2s ease; }}
@@ -1272,6 +1272,7 @@ function renderCosts(data, el) {{
     el.innerHTML = '<p class="info-msg">' + t('web.dash.no_cost_data', 'No cost data available.') + '</p>';
     return;
   }}
+  const co2Active = data.co2_g_per_kwh > 0;
   let html = '';
   if (data.summary) {{
     const s = data.summary;
@@ -1285,6 +1286,16 @@ function renderCosts(data, el) {{
   }}
   html += '<div class="card-grid">';
   data.devices.forEach(function(d) {{
+    const co2Row = co2Active
+      ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">' +
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">CO\u2082</div>' +
+          '<div class="metric-grid">' +
+          metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_co2_kg,3,'kg'), '') +
+          metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_co2_kg,3,'kg'), '') +
+          metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_co2_kg,3,'kg'), '') +
+          metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_co2_kg,2,'kg'), '') +
+          '</div></div>'
+      : '';
     html += '<div class="card">' +
       '<div class="card-title">' + esc(d.name || d.key) + '</div>' +
       '<div class="metric-grid">' +
@@ -1292,7 +1303,9 @@ function renderCosts(data, el) {{
       metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_eur,2,'\u20ac'), '') +
       metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_eur,2,'\u20ac'), '') +
       metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_eur,2,'\u20ac'), fmt(d.proj_kwh,1,'kWh')) +
-      '</div></div>';
+      '</div>' +
+      co2Row +
+      '</div>';
   }});
   html += '</div>';
   el.innerHTML = html;
@@ -1380,22 +1393,6 @@ function ratioColor(ratio) {{
   }}
 }}
 
-/* GitHub-style 4-level green for the yearly calendar heatmap */
-function calColor(ratio) {{
-  if (ratio <= 0) return 'var(--chipbg)';
-  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  if (dark) {{
-    if (ratio < 0.25) return '#0e4429';
-    if (ratio < 0.50) return '#006d32';
-    if (ratio < 0.75) return '#26a641';
-    return '#39d353';
-  }}
-  if (ratio < 0.25) return '#9be9a8';
-  if (ratio < 0.50) return '#40c463';
-  if (ratio < 0.75) return '#30a14e';
-  return '#216e39';
-}}
-
 function renderHeatmapCalendar(data, el, unit) {{
   // API returns calendar as [{date, value}, ...] — convert to dict
   const calArr = data.calendar || [];
@@ -1424,64 +1421,52 @@ function renderHeatmapCalendar(data, el, unit) {{
 
   // Dynamic cell size: fit within available width AND height (important for iPhone)
   const pane = el.closest('.pane') || document.body;
-  const dayLabelW = 18; // left column for Mon/Wed/Fri labels
-  const availW = pane.clientWidth - 32 - dayLabelW - 4; // reserve space for day-label column
+  const availW = pane.clientWidth - 32;
   const numWeeks = weeks.length;
-  const cellGap = 3;
-  const calCellFromW = Math.floor((availW - (numWeeks - 1) * cellGap) / numWeeks);
+  const calCellFromW = Math.floor((availW - (numWeeks - 1) * 2) / numWeeks);
   // Reserve ~290px for header, nav, controls, paddings, card titles, month labels,
   // and the hourly heatmap below (7 rows). Split remaining height evenly for 7 cal rows.
   const availH = window.innerHeight - 290;
-  const calCellFromH = Math.floor((availH - 15) / 7 - cellGap); // 15=month-labels
-  // Cap at 13px max for a professional compact look (GitHub-style)
-  const calCellSize = Math.max(4, Math.min(calCellFromW, calCellFromH, 13));
+  const calCellFromH = Math.floor((availH - 15) / 7 - 2); // 15=month-labels, 2=gap
+  const calCellSize = Math.max(4, Math.min(calCellFromW, calCellFromH));
+  const cellGap = 2;
 
   // Month labels — narrow (1 char) on portrait/small screens, short (3 chars) on landscape/wide
-  const _isNarrow = availW < 460;
+  const _isNarrow = availW < 500;
   const _monthFmt = _isNarrow ? 'narrow' : 'short';
   const _dtfMonth = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{month: _monthFmt}});
   const monthNames = Array.from({{length: 12}}, function(_, i) {{ return _dtfMonth.format(new Date(2000, i, 1)); }});
   const _lblFontSize = _isNarrow ? '8px' : '9px';
-  let monthLabelHtml = '<div style="display:flex;gap:' + cellGap + 'px;font-size:' + _lblFontSize + ';color:var(--muted);margin-bottom:4px;overflow:hidden">';
+  let monthLabelHtml = '<div class="hm-month-labels" style="font-size:' + _lblFontSize + '">';
   let lastMonth = -1;
   weeks.forEach(function(week) {{
     const m = week[0].getMonth();
     if (m !== lastMonth && week[0].getFullYear() === year) {{
-      monthLabelHtml += '<span style="width:' + (calCellSize + cellGap) + 'px;flex-shrink:0;overflow:visible;white-space:nowrap">' + monthNames[m] + '</span>';
+      monthLabelHtml += '<span style="width:' + (calCellSize + cellGap) + 'px">' + monthNames[m] + '</span>';
       lastMonth = m;
     }} else {{
-      monthLabelHtml += '<span style="width:' + (calCellSize + cellGap) + 'px;flex-shrink:0"></span>';
+      monthLabelHtml += '<span style="width:' + (calCellSize + cellGap) + 'px"></span>';
     }}
   }});
   monthLabelHtml += '</div>';
 
-  // Day-of-week labels (Mon, Wed, Fri only)
-  const _dtfDay2 = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{weekday: 'short'}});
-  const _showDayIdx = [0, 2, 4]; // Mon(0), Wed(2), Fri(4)
-  let dayColHtml = '<div style="display:flex;flex-direction:column;gap:' + cellGap + 'px;padding-top:' + (parseInt(_lblFontSize) + 4 + 4) + 'px;align-items:flex-end;flex-shrink:0;width:' + dayLabelW + 'px;margin-right:' + cellGap + 'px">';
-  for (let di = 0; di < 7; di++) {{
-    const lbl = _showDayIdx.indexOf(di) >= 0 ? _dtfDay2.format(new Date(2001, 0, 1 + di)) : '';
-    dayColHtml += '<span style="height:' + calCellSize + 'px;line-height:' + calCellSize + 'px;font-size:8px;color:var(--muted);white-space:nowrap">' + lbl + '</span>';
-  }}
-  dayColHtml += '</div>';
-
-  let gridHtml = '<div style="display:flex;gap:' + cellGap + 'px">';
+  let gridHtml = '<div class="hm-grid">';
   weeks.forEach(function(week) {{
-    gridHtml += '<div style="display:flex;flex-direction:column;gap:' + cellGap + 'px">';
+    gridHtml += '<div class="hm-week">';
     week.forEach(function(day) {{
       const key = day.toISOString().slice(0,10);
       const v = daily[key] || 0;
       const ratio = maxVal > 0 ? v / maxVal : 0;
-      const label = unit === 'eur' ? fmt(v,2,'€') : fmt(v,3,'kWh');
+      const label = unit === 'eur' ? fmt(v,2,'\u20ac') : fmt(v,3,'kWh');
       const inYear = day.getFullYear() === year;
-      const bg = inYear ? calColor(inYear && v > 0 ? ratio : 0) : 'var(--chipbg)';
-      gridHtml += '<div class="hm-day" style="width:' + calCellSize + 'px;height:' + calCellSize + 'px;background:' + bg + ';border-radius:2px;flex-shrink:0" data-date="' + key + '" data-val="' + label + '"></div>';
+      const bg = inYear && v > 0 ? ratioColor(ratio) : 'var(--chipbg)';
+      gridHtml += '<div class="hm-day" style="width:' + calCellSize + 'px;height:' + calCellSize + 'px;background:' + bg + '" data-date="' + key + '" data-val="' + label + '"></div>';
     }});
     gridHtml += '</div>';
   }});
   gridHtml += '</div>';
 
-  el.innerHTML = '<div class="card"><div class="card-title">' + t('web.hm.year_overview', 'Jahres\xfcbersicht') + '</div><div class="hm-calendar"><div style="display:flex;align-items:flex-start">' + dayColHtml + '<div style="overflow-x:auto">' + monthLabelHtml + gridHtml + '</div></div></div></div>';
+  el.innerHTML = '<div class="card"><div class="card-title">' + t('web.hm.year_overview', 'Jahres\xfcbersicht') + '</div><div class="hm-calendar">' + monthLabelHtml + gridHtml + '</div></div>';
 
   // Tooltip
   el.querySelectorAll('.hm-day').forEach(function(cell) {{
