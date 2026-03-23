@@ -624,6 +624,7 @@ class LiveWebMixin:
                         _unit = float(self.cfg.pricing.unit_price_gross())
                     except Exception:
                         _unit = float(getattr(getattr(self.cfg, "pricing", None), "electricity_price_eur_per_kwh", 0.30) or 0.30)
+                    _co2_g = float(getattr(getattr(self.cfg, "pricing", None), "co2_intensity_g_per_kwh", 380.0) or 0.0)
 
                     _ranges = {
                         "today": (_today_start, _now),
@@ -661,6 +662,7 @@ class LiveWebMixin:
                                 pass
                             dev_data[rng_key + "_kwh"] = round(kwh, 3)
                             dev_data[rng_key + "_eur"] = round(kwh * _unit, 2)
+                            dev_data[rng_key + "_co2_kg"] = round(kwh * _co2_g / 1000.0, 3)
 
                         # Projection
                         try:
@@ -670,9 +672,11 @@ class LiveWebMixin:
                             _mk = dev_data.get("month_kwh", 0.0)
                             dev_data["proj_kwh"] = round(_mk / _elapsed * _dim, 1)
                             dev_data["proj_eur"] = round(dev_data["proj_kwh"] * _unit, 2)
+                            dev_data["proj_co2_kg"] = round(dev_data["proj_kwh"] * _co2_g / 1000.0, 2)
                         except Exception:
                             dev_data["proj_kwh"] = 0.0
                             dev_data["proj_eur"] = 0.0
+                            dev_data["proj_co2_kg"] = 0.0
 
                         # vs last month
                         _lm = dev_data.get("last_month_kwh", 0.0)
@@ -686,7 +690,7 @@ class LiveWebMixin:
 
                         devices_out.append(dev_data)
 
-                    return {"ok": True, "devices": devices_out, "unit_eur": _unit}
+                    return {"ok": True, "devices": devices_out, "unit_eur": _unit, "co2_g_per_kwh": _co2_g}
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
 
