@@ -1,5 +1,23 @@
 # Changelog
 
+## 9.10.0 - 2026-03-23
+### Fixed
+- **Web heatmap: revert GitHub-style redesign** — the yearly calendar heatmap
+  is restored to the original Green→Yellow→Red gradient (`ratioColor`) with the
+  classic CSS grid classes (`.hm-grid` / `.hm-week`). The GitHub-style 4-level
+  green palette, day-of-week side labels, and 13 px cell cap introduced in
+  v9.9.0 are removed.
+- **Web: bottom navigation still covers content** — `#panes` padding-bottom
+  increased to `calc(120px + env(safe-area-inset-bottom, 0px))` to provide
+  ample clearance below the last card even on fully-expanded views and iPhone
+  home-indicator devices.
+
+### Added
+- **Web costs tab: CO₂ display** — each device card in the Costs tab now shows
+  a CO₂ section (Today / Week / Month / Prognose in kg) calculated from the
+  configured CO₂ intensity (g/kWh, default 380 g/kWh). The section is hidden
+  when CO₂ intensity is set to 0.
+
 ## 9.9.0 - 2026-03-23
 ### Fixed
 - **Web heatmap: unprofessional appearance** — yearly calendar heatmap redesigned to
