@@ -1,5 +1,27 @@
 # Changelog
 
+## 9.6.0 - 2026-03-23
+### Fixed
+- **Web live view: historical sparklines on page load** — on first open, the
+  live tab now pre-populates sparklines with all data already collected by the
+  app instead of starting from empty buffers. A new `/api/history` endpoint
+  returns the full in-memory store (server-side UNIX timestamps converted to
+  JS milliseconds) and `loadHistory()` merges it into `sparkData` on startup.
+  The 1 min–2 h timescale selector buttons work correctly with this pre-loaded
+  data.
+- **Web costs: wrong forecast value** — the "Prognose (Monat)" metric card was
+  displaying `year_eur` (full-year energy cost) instead of the correctly
+  calculated `proj_eur` (month-to-date ÷ elapsed days × days-in-month). The
+  formula now matches the desktop app. The card also shows the projected kWh as
+  sub-label.
+- **Web calendar heatmap: no border + overflow on iPhone** — the yearly calendar
+  is now wrapped in a `.card` div (matching the hourly heatmap styling). Cell
+  size is calculated from both viewport width and height so both the calendar
+  and hourly heatmap fit within the visible area on narrow/short screens
+  (e.g. iPhone) without a horizontal or vertical scroll bar. Minimum cell size
+  reduced from 10 px to 4 px (calendar) and from 12 px to 8 px (hourly) to
+  accommodate small displays.
+
 ## 9.5.0 - 2026-03-22
 ### Fixed
 - **Desktop heatmap: empty cells for missing/future days** — calendar cells that
