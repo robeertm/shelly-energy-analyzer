@@ -460,8 +460,8 @@ _HTML_TEMPLATE = """<!doctype html>
     .dev-meta {{ font-size: 12px; color: var(--muted); margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }}
     .dev-expand {{ display: none; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }}
     .dev-expand.open {{ display: block; }}
-    .dev-kv {{ display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12px; }}
-    .dev-kv dt {{ color: var(--muted); }}
+    .dev-kv {{ display: grid; grid-template-columns: minmax(100px, auto) 1fr; gap: 4px 12px; font-size: 12px; }}
+    .dev-kv dt {{ color: var(--muted); min-width: 100px; }}
     .dev-kv dd {{ margin: 0; font-weight: 600; }}
     /* NILM chips */
     .appl-list {{ display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }}
@@ -1644,7 +1644,7 @@ function initCompare() {{
       '</div>' +
       '<div class="controls-row" style="margin-top:8px">' +
         '<select id="cmp-unit"><option value="kWh">kWh</option><option value="eur">\u20ac</option></select>' +
-        '<select id="cmp-gran"><option value="total">' + t('web.dash.gran.total', 'Total') + '</option><option value="daily">' + t('web.dash.gran.daily', 'Daily') + '</option><option value="monthly">' + t('web.dash.gran.monthly', 'Monthly') + '</option></select>' +
+        '<select id="cmp-gran"><option value="total">' + t('web.dash.gran.total', 'Total') + '</option><option value="daily">' + t('web.dash.gran.daily', 'Daily') + '</option><option value="weekly">' + t('web.dash.gran.weekly', 'Weekly') + '</option><option value="monthly">' + t('web.dash.gran.monthly', 'Monthly') + '</option></select>' +
         '<button class="btn btn-accent" onclick="loadCompare()">' + t('web.dash.compare', 'Compare') + '</button>' +
       '</div>' +
     '</div>';
@@ -1669,8 +1669,11 @@ async function loadComparePreset(preset) {{
   const result = document.getElementById('cmp-result');
   result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   try {{
-    // "month" preset: always show individual days for fine-grained comparison
-    const autoGran = (preset === 'month') ? 'daily' : ((document.getElementById('cmp-gran')||{{}}).value||'total');
+    // Auto-granularity per preset: month→daily, quarter→weekly, halfyear/year→monthly
+    const autoGran = preset === 'month' ? 'daily'
+      : preset === 'quarter' ? 'weekly'
+      : (preset === 'halfyear' || preset === 'year') ? 'monthly'
+      : ((document.getElementById('cmp-gran')||{{}}).value||'total');
     const url = '/api/compare?preset=' + preset +
       '&device_a=' + encodeURIComponent((document.getElementById('cmp-da')||{{}}).value||'') +
       '&device_b=' + encodeURIComponent((document.getElementById('cmp-db')||{{}}).value||'') +
