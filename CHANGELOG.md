@@ -1,6 +1,6 @@
 # Changelog
 
-## 9.6.0 - 2026-03-23
+## 9.7.0 - 2026-03-23
 ### Fixed
 - **Web live view: historical sparklines on page load** — on first open, the
   live tab now pre-populates sparklines with all data already collected by the
@@ -21,6 +21,19 @@
   (e.g. iPhone) without a horizontal or vertical scroll bar. Minimum cell size
   reduced from 10 px to 4 px (calendar) and from 12 px to 8 px (hourly) to
   accommodate small displays.
+- **Web heatmap: month labels no longer clipped on narrow screens** — portrait/mobile
+  views (width < 500 px) now show single-character month abbreviations (J F M A …)
+  via `Intl.DateTimeFormat month:'narrow'`; landscape/wide views show three-character
+  abbreviations (Jan Feb Mär …) via `month:'short'`. Font size is reduced to 8 px
+  on narrow screens. Span `overflow` changed from `hidden` to `visible` so labels
+  can spill into the adjacent empty week columns without being clipped.
+
+### Changed
+- **Web compare tab: bar chart always shown** — the comparison bar chart now renders
+  for all granularities including "Total". When only aggregate totals are available
+  (no per-day/month series), a simple side-by-side 2-bar chart is drawn showing
+  Device A vs Device B using the existing canvas `drawBars` function. The daily and
+  monthly granularities continue to render the full time-series chart as before.
 
 ## 9.5.0 - 2026-03-22
 ### Fixed
