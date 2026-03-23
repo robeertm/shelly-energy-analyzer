@@ -1,5 +1,18 @@
 # Changelog
 
+## 9.11.0 - 2026-03-23
+### Improved
+- **Web live view: key-value label alignment** — device detail cards now use
+  `minmax(100px, auto)` for the label column and a `min-width: 100px` on `dt`
+  elements, so U / I / cos φ / Netzfrequenz / Phase 1–3 / Iₙ all start at the
+  same horizontal position regardless of label length.
+- **Web compare tab: smart granularity per preset** — quick-preset buttons now
+  automatically select the most meaningful granularity:
+  Month → daily (unchanged), Quarter → weekly, Half Year → monthly, Year → monthly.
+  A new "Weekly" option is also available in the granularity dropdown for manual use.
+  The backend (`_cmp_align_weekly`) aggregates daily data into ISO calendar weeks
+  (labelled W01, W02 …).
+
 ## 9.10.0 - 2026-03-23
 ### Fixed
 - **Web heatmap: revert GitHub-style redesign** — the yearly calendar heatmap

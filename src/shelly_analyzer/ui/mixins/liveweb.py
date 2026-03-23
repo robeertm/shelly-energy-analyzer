@@ -1129,6 +1129,8 @@ class LiveWebMixin:
                     # Build aligned series for the chart
                     if gran == "monthly":
                         vals_a, vals_b, labels = self._cmp_align_monthly(daily_a, from_a, to_a, daily_b, from_b, to_b)
+                    elif gran == "weekly":
+                        vals_a, vals_b, labels = self._cmp_align_weekly(daily_a, from_a, to_a, daily_b, from_b, to_b)
                     elif gran == "daily":
                         vals_a, vals_b, labels = self._cmp_align_daily(daily_a, from_a, to_a, daily_b, from_b, to_b)
                     else:  # total
