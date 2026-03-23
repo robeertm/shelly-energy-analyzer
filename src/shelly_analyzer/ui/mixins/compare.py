@@ -276,6 +276,41 @@ class CompareMixin:
             x_labels.append(f"+{i}d")
         return vals_a, vals_b, x_labels
 
+    def _cmp_align_weekly(
+        self,
+        daily_a: Dict[str, float],
+        from_a: date,
+        to_a: date,
+        daily_b: Dict[str, float],
+        from_b: date,
+        to_b: date,
+    ) -> Tuple[List[float], List[float], List[str]]:
+        """Group daily data into ISO calendar weeks, aligned by relative week index."""
+
+        def _weekly(daily: Dict[str, float], from_d: date, to_d: date):
+            w: Dict[Tuple[int, int], float] = defaultdict(float)
+            d = from_d
+            while d <= to_d:
+                iso = d.isocalendar()
+                w[(iso[0], iso[1])] += daily.get(d.strftime("%Y-%m-%d"), 0.0)
+                d += timedelta(days=1)
+            return dict(w)
+
+        w_a = _weekly(daily_a, from_a, to_a)
+        w_b = _weekly(daily_b, from_b, to_b)
+        keys_a = sorted(w_a)
+        keys_b = sorted(w_b)
+        n = max(len(keys_a), len(keys_b), 1)
+        vals_a, vals_b, x_labels = [], [], []
+        for i in range(n):
+            ka = keys_a[i] if i < len(keys_a) else None
+            kb = keys_b[i] if i < len(keys_b) else None
+            vals_a.append(w_a.get(ka, 0.0) if ka else 0.0)
+            vals_b.append(w_b.get(kb, 0.0) if kb else 0.0)
+            lbl = f"W{ka[1]:02d}" if ka else (f"W{kb[1]:02d}" if kb else "–")
+            x_labels.append(lbl)
+        return vals_a, vals_b, x_labels
+
     def _cmp_align_monthly(
         self,
         daily_a: Dict[str, float],
