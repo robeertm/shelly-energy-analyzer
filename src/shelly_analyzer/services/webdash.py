@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import json
 import html
 import inspect
@@ -1138,6 +1139,29 @@ function updateDeviceCard(card, d) {{
   if (spp && buf) {{
     const series = wndPhaseSeries(buf, 'power_w');
     if (series.length) drawMultiSparkline(spp, series, ['#e05c5c','#5ca0e0','#5ce077']);
+  }}
+  // Update expand section detail values (voltage, current, cos φ, freq, phases)
+  const exp = card.querySelector('.dev-expand');
+  if (exp) {{
+    const firstKv = exp.querySelector('.dev-kv');
+    if (firstKv) {{
+      const kvDds = firstKv.querySelectorAll('dd');
+      if (kvDds[0]) kvDds[0].textContent = fmt(d.voltage_v, 1, 'V');
+      if (kvDds[1]) kvDds[1].textContent = fmt(d.current_a, 2, 'A');
+      if (kvDds[2]) kvDds[2].textContent = d.pf !== undefined ? fmt(d.pf, 2) : '\u2014';
+      if (kvDds[3]) kvDds[3].textContent = d.freq_hz !== undefined ? fmt(d.freq_hz, 1, 'Hz') : '\u2014';
+    }}
+    const phases = d.phases && d.phases.length > 0 ? d.phases : null;
+    if (phases) {{
+      const allKvs = exp.querySelectorAll('.dev-kv');
+      const phaseDl = allKvs.length > 1 ? allKvs[1] : null;
+      if (phaseDl) {{
+        const pDds = phaseDl.querySelectorAll('dd');
+        phases.forEach(function(ph, i) {{
+          if (pDds[i]) pDds[i].textContent = fmt(ph.voltage_v,1,'V') + ' \xb7 ' + fmt(ph.current_a,2,'A') + ' \xb7 ' + fmt(ph.power_w,0,'W');
+        }});
+      }}
+    }}
   }}
 }}
 
@@ -3631,9 +3655,14 @@ class _Handler(BaseHTTPRequestHandler):
                 return
 
             if path_only == "/plots" or path_only.startswith("/plots/"):
-                body = self.dashboard.plots_html_bytes
+                _ae = self.headers.get("Accept-Encoding", "")
+                _gz = self.dashboard.plots_html_bytes_gz
+                _use_gz = "gzip" in _ae and bool(_gz)
+                body = _gz if _use_gz else self.dashboard.plots_html_bytes
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
+                if _use_gz:
+                    self.send_header("Content-Encoding", "gzip")
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
@@ -3641,9 +3670,14 @@ class _Handler(BaseHTTPRequestHandler):
                 return
 
             if path_only.startswith("/control"):
-                body = self.dashboard.control_html_bytes
+                _ae = self.headers.get("Accept-Encoding", "")
+                _gz = self.dashboard.control_html_bytes_gz
+                _use_gz = "gzip" in _ae and bool(_gz)
+                body = _gz if _use_gz else self.dashboard.control_html_bytes
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
+                if _use_gz:
+                    self.send_header("Content-Encoding", "gzip")
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
@@ -3651,9 +3685,14 @@ class _Handler(BaseHTTPRequestHandler):
                 return
 
             if path_only == "/" or path_only.startswith("/index.html"):
-                body = self.html_bytes
+                _ae = self.headers.get("Accept-Encoding", "")
+                _gz = getattr(self, "html_bytes_gz", None)
+                _use_gz = "gzip" in _ae and bool(_gz)
+                body = _gz if _use_gz else self.html_bytes
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
+                if _use_gz:
+                    self.send_header("Content-Encoding", "gzip")
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
@@ -4001,6 +4040,7 @@ class LiveWebDashboard:
             },
         )
         self._html_bytes = html.encode("utf-8")
+        self._html_bytes_gz = gzip.compress(self._html_bytes, compresslevel=6)
 
         self._control_bytes = _render_template(
             _CONTROL_TEMPLATE,
@@ -4033,6 +4073,7 @@ class LiveWebDashboard:
                 "web_control_jobs_meta": _t(self.lang, "web.control.jobs.meta"),
             },
         ).encode("utf-8")
+        self._control_bytes_gz = gzip.compress(self._control_bytes, compresslevel=6)
 
         # Plotly plots page (used by desktop Plots tab)
         # Build device pills as server-rendered HTML so the page stays usable even if JS fails.
@@ -4087,6 +4128,7 @@ class LiveWebDashboard:
                 ),
             },
         ).encode("utf-8")
+        self._plots_bytes_gz = gzip.compress(self._plots_bytes, compresslevel=6)
 
     def read_file_bytes(self, rel_path: str) -> Tuple[bytes, str]:
         """Serve files from <project>/exports only.
@@ -4120,8 +4162,16 @@ class LiveWebDashboard:
         return self._control_bytes
 
     @property
+    def control_html_bytes_gz(self) -> bytes:
+        return getattr(self, "_control_bytes_gz", b"")
+
+    @property
     def plots_html_bytes(self) -> bytes:
         return getattr(self, "_plots_bytes", b"")
+
+    @property
+    def plots_html_bytes_gz(self) -> bytes:
+        return getattr(self, "_plots_bytes_gz", b"")
 
     def get_jobs(self) -> Dict[str, Any]:
         return {"jobs": self.list_jobs()}
@@ -4232,6 +4282,7 @@ class LiveWebDashboard:
         handler = type("LiveDashHandler", (_Handler,), {})
         handler.store = self.store
         handler.html_bytes = self._html_bytes
+        handler.html_bytes_gz = self._html_bytes_gz
         handler.control_bytes = self._control_bytes
         handler.dashboard = self
 

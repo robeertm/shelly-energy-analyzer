@@ -1,5 +1,16 @@
 # Changelog
 
+## 9.8.0 - 2026-03-23
+### Fixed
+- **Web live view: detail values not updating** — voltage (U), current (I),
+  cos φ, frequency, and per-phase values in the expanded device card were only
+  rendered once when the card was built; `updateDeviceCard` now refreshes all
+  detail `<dd>` elements on every polling tick.
+- **Web mobile: slow initial page load** — HTML pages are now served
+  gzip-compressed (~75 % smaller) when the browser sends `Accept-Encoding: gzip`.
+  All three HTML endpoints (live dashboard, control, plots) are pre-compressed
+  at startup for zero per-request overhead.
+
 ## 9.7.0 - 2026-03-23
 ### Fixed
 - **Web live view: historical sparklines on page load** — on first open, the
