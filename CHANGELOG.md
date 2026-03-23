@@ -1,5 +1,25 @@
 # Changelog
 
+## 9.9.0 - 2026-03-23
+### Fixed
+- **Web heatmap: unprofessional appearance** — yearly calendar heatmap redesigned to
+  GitHub contribution style: cells capped at 13 px, 3 px gap, 4-level green colour
+  scale (light→dark), day-of-week labels (Mon/Wed/Fri) on the left side, and month
+  labels correctly aligned with week columns.
+- **Web: bottom navigation covers content** — `#panes` padding-bottom now uses
+  `calc(80px + env(safe-area-inset-bottom, 0px))` so the last card is never
+  hidden under the nav bar even on iPhone with a home indicator.
+- **Web compare tab: daily chart never rendered** — the frontend was checking
+  `data.series_a` while the API returns `data.values_a`; fixed field names so
+  daily/monthly granularity bar charts now display correctly.
+- **Web compare tab: "Month" preset shows only total** — the Month quick-preset
+  button now automatically uses `gran=daily` so all individual days are plotted
+  (matching the desktop app behaviour).
+- **Web live view: I_N (neutral current) missing for 3-phase devices** — the
+  `/api/state` response now includes the computed neutral current `i_n`; the
+  device detail card shows an "I_N (N)" row (in Ampere) when the value is
+  non-zero, and it updates on every polling tick.
+
 ## 9.8.0 - 2026-03-23
 ### Fixed
 - **Web live view: detail values not updating** — voltage (U), current (I),
