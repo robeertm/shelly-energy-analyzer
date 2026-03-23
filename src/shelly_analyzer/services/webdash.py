@@ -499,7 +499,7 @@ _HTML_TEMPLATE = """<!doctype html>
       flex-shrink: 0;
     }}
     .hm-month-labels {{ display: flex; gap: 2px; font-size: 9px; color: var(--muted); margin-bottom: 3px; }}
-    .hm-month-labels span {{ overflow: hidden; }}
+    .hm-month-labels span {{ overflow: visible; white-space: nowrap; }}
     /* Hourly heatmap table */
     .hm-table-wrap {{ overflow-x: auto; width: 100%; }}
     .hm-table {{ border-collapse: separate; border-spacing: 2px; font-size: 9px; }}
@@ -1386,10 +1386,13 @@ function renderHeatmapCalendar(data, el, unit) {{
   const calCellSize = Math.max(4, Math.min(calCellFromW, calCellFromH));
   const cellGap = 2;
 
-  // Month labels (locale-aware)
-  const _dtfMonth = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{month: 'short'}});
+  // Month labels — narrow (1 char) on portrait/small screens, short (3 chars) on landscape/wide
+  const _isNarrow = availW < 500;
+  const _monthFmt = _isNarrow ? 'narrow' : 'short';
+  const _dtfMonth = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{month: _monthFmt}});
   const monthNames = Array.from({{length: 12}}, function(_, i) {{ return _dtfMonth.format(new Date(2000, i, 1)); }});
-  let monthLabelHtml = '<div class="hm-month-labels">';
+  const _lblFontSize = _isNarrow ? '8px' : '9px';
+  let monthLabelHtml = '<div class="hm-month-labels" style="font-size:' + _lblFontSize + '">';
   let lastMonth = -1;
   weeks.forEach(function(week) {{
     const m = week[0].getMonth();
@@ -1677,17 +1680,21 @@ function renderCompare(data, el) {{
     metricCardHtml('Δ %', (pct >= 0 ? '+' : '') + fmt(pct,1,'%'), '') +
     '</div></div>';
 
-  // Bar chart
-  if (data.series_a && data.series_b && data.labels) {{
-    html += '<div class="card"><canvas class="bar-chart" id="cmp-canvas"></canvas></div>';
-  }}
+  // Bar chart — always shown (series for daily/monthly, totals comparison for "total" granularity)
+  html += '<div class="card"><canvas class="bar-chart" id="cmp-canvas"></canvas></div>';
   el.innerHTML = html;
 
+  const canvas = document.getElementById('cmp-canvas');
   if (data.series_a && data.series_b && data.labels) {{
-    const canvas = document.getElementById('cmp-canvas');
     drawBars(canvas, data.labels, [
       {{ values: data.series_a, color: 'rgba(37,99,235,0.75)', label: data.label_a || 'A' }},
       {{ values: data.series_b, color: 'rgba(217,119,6,0.75)', label: data.label_b || 'B' }}
+    ], {{ unit: unit }});
+  }} else {{
+    // Total-only: simple side-by-side comparison of A vs B
+    drawBars(canvas, [data.label_a || 'A', data.label_b || 'B'], [
+      {{ values: [ta, 0], color: 'rgba(37,99,235,0.75)', label: data.label_a || 'A' }},
+      {{ values: [0, tb], color: 'rgba(217,119,6,0.75)', label: data.label_b || 'B' }}
     ], {{ unit: unit }});
   }}
 }}
