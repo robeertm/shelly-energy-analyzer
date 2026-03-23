@@ -936,10 +936,42 @@ function initTimescaleBtns() {{
     wrap.appendChild(btn);
   }});
 }}
+let _historyLoaded = false;
+async function loadHistory() {{
+  if (_historyLoaded) return;
+  _historyLoaded = true;
+  try {{
+    const r = await fetch('/api/history');
+    if (!r.ok) return;
+    const data = await r.json();
+    const hist = data.history || {{}};
+    for (const key in hist) {{
+      if (!sparkData[key]) sparkData[key] = [];
+      // Prepend server-side history; keep within MAX_HIST_PTS
+      const merged = hist[key].concat(sparkData[key]);
+      sparkData[key] = merged.slice(-MAX_HIST_PTS);
+    }}
+    // Redraw sparklines if cards are already in the DOM
+    const grid = document.getElementById('live-grid');
+    if (grid && grid.children.length > 0) {{
+      for (const key in sparkData) {{
+        const buf = sparkData[key];
+        if (!buf || !buf.length) continue;
+        const sp = document.getElementById('sp-' + key);
+        if (sp) drawSparkline(sp, wndVals(buf, 'w'));
+        const spv = document.getElementById('sp-v-' + key);
+        if (spv) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true);
+        const spa = document.getElementById('sp-a-' + key);
+        if (spa) drawSparkline(spa, wndVals(buf, 'a'), '#10b981', true);
+      }}
+    }}
+  }} catch(e) {{ /* silent */ }}
+}}
 function startLive() {{
   if (liveTimer) return;
   initTimescaleBtns();
   tick(true);
+  loadHistory();
   liveTimer = setInterval(function() {{ if (!frozen) tick(false); }}, REFRESH_MS);
   document.getElementById('btn-freeze').addEventListener('click', toggleFreeze);
 }}
@@ -1227,7 +1259,7 @@ function renderCosts(data, el) {{
       metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_eur,2,'\u20ac'), fmt(d.today_kwh,3,'kWh')) +
       metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_eur,2,'\u20ac'), '') +
       metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_eur,2,'\u20ac'), '') +
-      metricCardHtml(t('web.costs.projected', 'Year (proj.)'), fmt(d.year_eur,2,'\u20ac'), '') +
+      metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_eur,2,'\u20ac'), fmt(d.proj_kwh,1,'kWh')) +
       '</div></div>';
   }});
   html += '</div>';
@@ -1342,11 +1374,16 @@ function renderHeatmapCalendar(data, el, unit) {{
     weeks.push(week);
   }}
 
-  // Dynamic cell size matching hourly heatmap
+  // Dynamic cell size: fit within available width AND height (important for iPhone)
   const pane = el.closest('.pane') || document.body;
   const availW = pane.clientWidth - 32;
   const numWeeks = weeks.length;
-  const calCellSize = Math.max(10, Math.floor((availW - (numWeeks - 1) * 2) / numWeeks));
+  const calCellFromW = Math.floor((availW - (numWeeks - 1) * 2) / numWeeks);
+  // Reserve ~290px for header, nav, controls, paddings, card titles, month labels,
+  // and the hourly heatmap below (7 rows). Split remaining height evenly for 7 cal rows.
+  const availH = window.innerHeight - 290;
+  const calCellFromH = Math.floor((availH - 15) / 7 - 2); // 15=month-labels, 2=gap
+  const calCellSize = Math.max(4, Math.min(calCellFromW, calCellFromH));
   const cellGap = 2;
 
   // Month labels (locale-aware)
@@ -1381,7 +1418,7 @@ function renderHeatmapCalendar(data, el, unit) {{
   }});
   gridHtml += '</div>';
 
-  el.innerHTML = '<div class="hm-calendar">' + monthLabelHtml + gridHtml + '</div>';
+  el.innerHTML = '<div class="card"><div class="card-title">' + t('web.hm.year_overview', 'Jahres\xfcbersicht') + '</div><div class="hm-calendar">' + monthLabelHtml + gridHtml + '</div></div>';
 
   // Tooltip
   el.querySelectorAll('.hm-day').forEach(function(cell) {{
@@ -1413,7 +1450,11 @@ function renderHeatmapHourly(data, el, unit) {{
   const pane = el.closest('.pane') || document.body;
   const availW = pane.clientWidth - 32;
   const labelW = 22;
-  const cellSize = Math.max(12, Math.floor((availW - labelW - 2 * 25) / 24));
+  const cellFromW = Math.floor((availW - labelW - 2 * 25) / 24);
+  // Height constraint: reserve same ~290px overhead; remaining split between cal (7) and hourly (7)
+  const availHHr = window.innerHeight - 290;
+  const cellFromH = Math.floor((availHHr - 20) / 7 - 2); // 20=head row, 2=gap
+  const cellSize = Math.max(8, Math.min(cellFromW, cellFromH));
 
   let html = '<div class="card"><div class="card-title">' + t('web.dash.hourly_pattern', 'Hourly Pattern') + '</div>';
   html += '<div class="hm-table-wrap"><table class="hm-table" style="table-layout:fixed;width:' + (labelW + 2 + 24 * (cellSize + 2)) + 'px"><thead><tr>';
@@ -3424,6 +3465,54 @@ class _Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
 
+
+            if path_only.startswith("/api/history"):
+                # Return all stored sparkline history so the browser can pre-populate
+                # sparklines on first page load instead of starting from empty buffers.
+                raw_snap = self.store.snapshot()
+                hist: Dict[str, List[Dict[str, Any]]] = {}
+                for dkey, points in raw_snap.items():
+                    if dkey.startswith("_") or not isinstance(points, list) or not points:
+                        continue
+                    pts_out = []
+                    for p in points:
+                        va = float(p.get("va") or 0)
+                        vb = float(p.get("vb") or 0)
+                        vc = float(p.get("vc") or 0)
+                        ia = float(p.get("ia") or 0)
+                        ib = float(p.get("ib") or 0)
+                        ic = float(p.get("ic") or 0)
+                        pa = float(p.get("pa") or 0)
+                        pb = float(p.get("pb") or 0)
+                        pc = float(p.get("pc") or 0)
+                        non_zero_v = [v for v in [va, vb, vc] if v > 0]
+                        voltage_v = sum(non_zero_v) / len(non_zero_v) if non_zero_v else 0.0
+                        current_a = ia + ib + ic if (ib > 0 or ic > 0) else ia
+                        phases: List[Dict[str, float]] = []
+                        if vb > 0 or vc > 0:
+                            if va > 0:
+                                phases.append({"voltage_v": va, "current_a": ia, "power_w": pa})
+                            if vb > 0:
+                                phases.append({"voltage_v": vb, "current_a": ib, "power_w": pb})
+                            if vc > 0:
+                                phases.append({"voltage_v": vc, "current_a": ic, "power_w": pc})
+                        pts_out.append({
+                            # ts from LivePoint is UNIX seconds; JS expects milliseconds
+                            "ts": int(p.get("ts") or 0) * 1000,
+                            "w": float(p.get("power_total_w") or 0),
+                            "v": voltage_v,
+                            "a": current_a,
+                            "phases": phases,
+                        })
+                    hist[dkey] = pts_out
+                body = json.dumps({"history": hist}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
 
             if path_only.startswith("/api/costs"):
                 try:
