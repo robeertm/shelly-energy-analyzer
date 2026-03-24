@@ -9905,7 +9905,7 @@ class CoreMixin:
                             continue
                         # Find power column
                         pwr_col = None
-                        for c in ("total_act_power", "a_act_power", "power_w"):
+                        for c in ("total_power", "a_act_power", "power_w"):
                             if c in df.columns:
                                 pwr_col = c
                                 break
@@ -9914,11 +9914,14 @@ class CoreMixin:
                         max_w = max(powers) if powers else 0.0
                         # Compute kWh from energy column or integrate power
                         kwh = 0.0
-                        for c in ("total_act", "energy_wh"):
+                        for c in ("energy_kwh", "total_act", "energy_wh"):
                             if c in df.columns:
                                 vals = df[c].dropna()
                                 if not vals.empty:
-                                    kwh = (vals.max() - vals.min()) / 1000.0
+                                    if c == "energy_kwh":
+                                        kwh = float(vals.sum())
+                                    else:
+                                        kwh = (vals.max() - vals.min()) / 1000.0
                                     break
                         if kwh <= 0 and powers and "timestamp" in df.columns:
                             # Fallback: integrate power over time
