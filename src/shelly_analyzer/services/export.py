@@ -828,23 +828,23 @@ def _make_hourly_chart(hourly_kwh: List[float], lang: str, tmp_dir: Path) -> Opt
         max_v = max(vals) if vals else 1.0
         colors = ["#F0A500" if v == max_v and max_v > 0 else "#1E6B8C" for v in vals]
 
-        fig, ax = plt.subplots(figsize=(10, 3.4))
+        fig, ax = plt.subplots(figsize=(6, 2.5))
         fig.patch.set_facecolor("#F8FBFD")
         ax.set_facecolor("#F8FBFD")
         ax.bar(hours, vals, color=colors, width=0.7, zorder=3)
-        ax.set_xlabel("Hour" if normalize_lang(lang) == "en" else "Stunde", fontsize=9)
-        ax.set_ylabel("kWh", fontsize=9)
+        ax.set_xlabel("Hour" if normalize_lang(lang) == "en" else "Stunde", fontsize=8)
+        ax.set_ylabel("kWh", fontsize=8)
         ax.set_xticks(hours)
-        ax.set_xticklabels([f"{h:02d}" for h in hours], fontsize=7)
+        ax.set_xticklabels([f"{h:02d}" for h in hours], fontsize=6)
         ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
-        ax.tick_params(axis="y", labelsize=8)
+        ax.tick_params(axis="y", labelsize=7)
         ax.grid(axis="y", color="#D0DDE8", linewidth=0.6, zorder=0)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
-        fig.tight_layout(pad=0.6)
+        fig.tight_layout(pad=0.4)
 
         out = tmp_dir / "_chart_hourly.png"
-        fig.savefig(str(out), dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+        fig.savefig(str(out), dpi=110, bbox_inches="tight", facecolor=fig.get_facecolor())
         plt.close(fig)
         return out
     except Exception:
@@ -867,24 +867,24 @@ def _make_daily_chart(daily_kwh: List[Tuple[date, float]], lang: str, tmp_dir: P
         colors = ["#F0A500" if v == max_v and max_v > 0 else "#1E6B8C" for v in vals]
         labels = [str(d.day) for d in days]
 
-        fig_w = max(8.0, len(days) * 0.38)
-        fig, ax = plt.subplots(figsize=(fig_w, 3.4))
+        fig_w = max(6.0, len(days) * 0.28)
+        fig, ax = plt.subplots(figsize=(fig_w, 2.5))
         fig.patch.set_facecolor("#F8FBFD")
         ax.set_facecolor("#F8FBFD")
         ax.bar(range(len(days)), vals, color=colors, width=0.7, zorder=3)
-        ax.set_xlabel("Day" if normalize_lang(lang) == "en" else "Tag", fontsize=9)
-        ax.set_ylabel("kWh", fontsize=9)
+        ax.set_xlabel("Day" if normalize_lang(lang) == "en" else "Tag", fontsize=8)
+        ax.set_ylabel("kWh", fontsize=8)
         ax.set_xticks(range(len(days)))
-        ax.set_xticklabels(labels, fontsize=7)
+        ax.set_xticklabels(labels, fontsize=6)
         ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
-        ax.tick_params(axis="y", labelsize=8)
+        ax.tick_params(axis="y", labelsize=7)
         ax.grid(axis="y", color="#D0DDE8", linewidth=0.6, zorder=0)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
-        fig.tight_layout(pad=0.6)
+        fig.tight_layout(pad=0.4)
 
         out = tmp_dir / "_chart_daily.png"
-        fig.savefig(str(out), dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+        fig.savefig(str(out), dpi=110, bbox_inches="tight", facecolor=fig.get_facecolor())
         plt.close(fig)
         return out
     except Exception:
@@ -927,7 +927,7 @@ def _make_stacked_hourly_chart(
         if not names:
             return None
         hours = list(range(24))
-        fig, ax = plt.subplots(figsize=(10, 3.8))
+        fig, ax = plt.subplots(figsize=(6, 2.5))
         fig.patch.set_facecolor("#F8FBFD")
         ax.set_facecolor("#F8FBFD")
         bottoms = np.zeros(24)
@@ -935,20 +935,20 @@ def _make_stacked_hourly_chart(
             vals = np.array([per_device_hourly[name][h] if h < len(per_device_hourly[name]) else 0.0 for h in hours])
             ax.bar(hours, vals, bottom=bottoms, color=_device_color(idx), width=0.7, label=name[:25], zorder=3)
             bottoms += vals
-        ax.set_xlabel("Hour" if normalize_lang(lang) == "en" else "Stunde", fontsize=9)
-        ax.set_ylabel("kWh", fontsize=9)
+        ax.set_xlabel("Hour" if normalize_lang(lang) == "en" else "Stunde", fontsize=8)
+        ax.set_ylabel("kWh", fontsize=8)
         ax.set_xticks(hours)
-        ax.set_xticklabels([f"{h:02d}" for h in hours], fontsize=7)
+        ax.set_xticklabels([f"{h:02d}" for h in hours], fontsize=6)
         ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
-        ax.tick_params(axis="y", labelsize=8)
+        ax.tick_params(axis="y", labelsize=7)
         ax.grid(axis="y", color="#D0DDE8", linewidth=0.6, zorder=0)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         if len(names) > 1:
-            ax.legend(fontsize=7, loc="upper right", framealpha=0.7)
-        fig.tight_layout(pad=0.6)
+            ax.legend(fontsize=6, loc="upper right", framealpha=0.7)
+        fig.tight_layout(pad=0.4)
         out = tmp_dir / "_chart_stacked_hourly.png"
-        fig.savefig(str(out), dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+        fig.savefig(str(out), dpi=110, bbox_inches="tight", facecolor=fig.get_facecolor())
         plt.close(fig)
         return out
     except Exception:
@@ -979,8 +979,8 @@ def _make_stacked_daily_chart(
         date_idx = {d: i for i, d in enumerate(all_dates)}
         n = len(all_dates)
         labels = [str(d.day) for d in all_dates]
-        fig_w = max(8.0, n * 0.38)
-        fig, ax = plt.subplots(figsize=(fig_w, 3.8))
+        fig_w = max(6.0, n * 0.28)
+        fig, ax = plt.subplots(figsize=(fig_w, 2.5))
         fig.patch.set_facecolor("#F8FBFD")
         ax.set_facecolor("#F8FBFD")
         bottoms = np.zeros(n)
@@ -991,20 +991,20 @@ def _make_stacked_daily_chart(
                     vals[date_idx[d]] = float(v or 0.0)
             ax.bar(range(n), vals, bottom=bottoms, color=_device_color(idx), width=0.7, label=name[:25], zorder=3)
             bottoms += vals
-        ax.set_xlabel("Day" if normalize_lang(lang) == "en" else "Tag", fontsize=9)
-        ax.set_ylabel("kWh", fontsize=9)
+        ax.set_xlabel("Day" if normalize_lang(lang) == "en" else "Tag", fontsize=8)
+        ax.set_ylabel("kWh", fontsize=8)
         ax.set_xticks(range(n))
-        ax.set_xticklabels(labels, fontsize=7)
+        ax.set_xticklabels(labels, fontsize=6)
         ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
-        ax.tick_params(axis="y", labelsize=8)
+        ax.tick_params(axis="y", labelsize=7)
         ax.grid(axis="y", color="#D0DDE8", linewidth=0.6, zorder=0)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
         if len(names) > 1:
-            ax.legend(fontsize=7, loc="upper right", framealpha=0.7)
-        fig.tight_layout(pad=0.6)
+            ax.legend(fontsize=6, loc="upper right", framealpha=0.7)
+        fig.tight_layout(pad=0.4)
         out = tmp_dir / "_chart_stacked_daily.png"
-        fig.savefig(str(out), dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+        fig.savefig(str(out), dpi=110, bbox_inches="tight", facecolor=fig.get_facecolor())
         plt.close(fig)
         return out
     except Exception:
@@ -1027,7 +1027,7 @@ def _make_device_mini_chart_hourly(
 
         hours = list(range(24))
         vals = [hourly_vals[h] if h < len(hourly_vals) else 0.0 for h in hours]
-        fig, ax = plt.subplots(figsize=(5.5, 1.8))
+        fig, ax = plt.subplots(figsize=(5.0, 1.5))
         fig.patch.set_facecolor("#F8FBFD")
         ax.set_facecolor("#F8FBFD")
         ax.bar(hours, vals, color=color, width=0.7, zorder=3)
@@ -1038,9 +1038,9 @@ def _make_device_mini_chart_hourly(
         ax.grid(axis="y", color="#D0DDE8", linewidth=0.5, zorder=0)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
-        fig.tight_layout(pad=0.3)
+        fig.tight_layout(pad=0.2)
         out = tmp_dir / f"_mini_h_{suffix}.png"
-        fig.savefig(str(out), dpi=130, bbox_inches="tight", facecolor=fig.get_facecolor())
+        fig.savefig(str(out), dpi=100, bbox_inches="tight", facecolor=fig.get_facecolor())
         plt.close(fig)
         return out
     except Exception:
@@ -1066,8 +1066,8 @@ def _make_device_mini_chart_daily(
         labels = [str(d.day) for d, _ in daily_vals]
         vals = [float(v or 0.0) for _, v in daily_vals]
         n = len(vals)
-        fig_w = max(5.5, n * 0.22)
-        fig, ax = plt.subplots(figsize=(fig_w, 1.8))
+        fig_w = max(5.0, n * 0.20)
+        fig, ax = plt.subplots(figsize=(fig_w, 1.5))
         fig.patch.set_facecolor("#F8FBFD")
         ax.set_facecolor("#F8FBFD")
         ax.bar(range(n), vals, color=color, width=0.7, zorder=3)
@@ -1079,9 +1079,9 @@ def _make_device_mini_chart_daily(
         ax.grid(axis="y", color="#D0DDE8", linewidth=0.5, zorder=0)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
-        fig.tight_layout(pad=0.3)
+        fig.tight_layout(pad=0.2)
         out = tmp_dir / f"_mini_d_{suffix}.png"
-        fig.savefig(str(out), dpi=130, bbox_inches="tight", facecolor=fig.get_facecolor())
+        fig.savefig(str(out), dpi=100, bbox_inches="tight", facecolor=fig.get_facecolor())
         plt.close(fig)
         return out
     except Exception:
@@ -1107,7 +1107,7 @@ def _make_top5_bar_chart(
         vals = [r.kwh_total for r in reversed(sorted_t)]
         colors = [_device_color(totals.index(r) if r in totals else 0) for r in reversed(sorted_t)]
 
-        fig, ax = plt.subplots(figsize=(7, max(2.0, len(names) * 0.55)))
+        fig, ax = plt.subplots(figsize=(6, max(1.5, len(names) * 0.45)))
         fig.patch.set_facecolor("#F8FBFD")
         ax.set_facecolor("#F8FBFD")
         bars = ax.barh(range(len(names)), vals, color=colors, zorder=3)
@@ -1123,9 +1123,9 @@ def _make_top5_bar_chart(
         for bar, v in zip(bars, vals):
             ax.text(bar.get_width() * 1.01, bar.get_y() + bar.get_height() / 2,
                     f"{v:.2f}", va="center", fontsize=7)
-        fig.tight_layout(pad=0.5)
+        fig.tight_layout(pad=0.4)
         out = tmp_dir / "_chart_top5.png"
-        fig.savefig(str(out), dpi=130, bbox_inches="tight", facecolor=fig.get_facecolor())
+        fig.savefig(str(out), dpi=110, bbox_inches="tight", facecolor=fig.get_facecolor())
         plt.close(fig)
         return out
     except Exception:
@@ -1512,101 +1512,119 @@ def export_pdf_email_daily(
                 if y > 3.5 * cm:
                     c.drawString(margin, y, f"{ph_low_lbl}  {h_min[0]:02d}:00  ({_fmt_kwh(h_min[1], lang)} kWh)")
 
-    _draw_footer(c, pw, page_n, data.version, lang)
-
-    # ------------------------------------------------------------------ Page 2: Stacked hourly chart
+    # ------------------------------------------------------------------ Overview chart: embed on page 1 if space allows
     if stacked_chart and stacked_chart.exists():
-        c.showPage()
-        page_n += 1
         ch_title = "Stundenverbrauch (gestapelt)" if not is_en else "Hourly Consumption (stacked)"
-        y2 = _draw_header_band(c, pw, ph, ch_title, date_str)
-        y2 -= 0.4 * cm
-        _embed_chart(c, pw, y2, stacked_chart, ch_title, ph - 5.0 * cm)
-        _draw_footer(c, pw, page_n, data.version, lang)
+        if y > 7.0 * cm:
+            # Enough room on page 1 – embed directly
+            y -= 0.3 * cm
+            _rl_set_stroke(c, _C_LINE)
+            c.setLineWidth(0.4)
+            c.line(margin, y, pw - margin, y)
+            y -= 0.4 * cm
+            _rl_set_fill(c, _C_TEXT)
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(margin, y, ch_title)
+            y -= 0.35 * cm
+            y = _embed_chart(c, pw, y, stacked_chart, ch_title, min(5.5 * cm, y - 2.0 * cm))
+            _draw_footer(c, pw, page_n, data.version, lang)
+        else:
+            # Not enough room – use separate page
+            _draw_footer(c, pw, page_n, data.version, lang)
+            c.showPage()
+            page_n += 1
+            y2 = _draw_header_band(c, pw, ph, ch_title, date_str)
+            y2 -= 0.4 * cm
+            _embed_chart(c, pw, y2, stacked_chart, ch_title, ph - 5.0 * cm)
+            _draw_footer(c, pw, page_n, data.version, lang)
         try:
             stacked_chart.unlink(missing_ok=True)
         except Exception:
             pass
-
-    # ------------------------------------------------------------------ Pages 3+: Per-device detail
-    dev_names = list(data.per_device_hourly.keys()) if data.per_device_hourly else []
-    for dev_idx, dev_name in enumerate(dev_names):
-        hourly_dev = data.per_device_hourly.get(dev_name, [0.0] * 24)
-        # Find matching totals row
-        row = next((r for r in data.totals if r.name == dev_name), None)
-        mini_chart = _make_device_mini_chart_hourly(
-            hourly_dev, _device_color(dev_idx), lang, tmp_dir, f"d{dev_idx}"
-        )
-        c.showPage()
-        page_n += 1
-        dev_date = data.period_start.strftime("%Y-%m-%d")
-        sub_title = f"{(title_str)} – {dev_name}"
-        y = _draw_header_band(c, pw, ph, sub_title, dev_date)
-
-        # Device stat boxes
-        if row:
-            pct = row.kwh_total / total_kwh * 100 if total_kwh > 0 else 0.0
-            kpi_w3 = (pw - 2 * margin - 2 * kpi_gap) / 3
-            _draw_kpi_box(c, margin,                          y, kpi_w3, kpi_h,
-                          "kWh", _fmt_kwh(row.kwh_total, lang), "kWh")
-            _draw_kpi_box(c, margin + kpi_w3 + kpi_gap,      y, kpi_w3, kpi_h,
-                          "EUR", _fmt_money(row.cost_eur, lang), "EUR")
-            _draw_kpi_box(c, margin + 2 * (kpi_w3 + kpi_gap), y, kpi_w3, kpi_h,
-                          "Anteil" if not is_en else "Share", f"{pct:.1f}", "%")
-            y -= kpi_h + 0.3 * cm
-
-        # Operating hours + min/avg/max from hourly data
-        nonzero_h = [v for v in hourly_dev if v and v > 0]
-        op_hours   = len(nonzero_h)
-        min_h      = min(nonzero_h) if nonzero_h else 0.0
-        max_h      = max(nonzero_h) if nonzero_h else 0.0
-        avg_h      = sum(nonzero_h) / len(nonzero_h) if nonzero_h else 0.0
-        if row:
-            c.setFont("Helvetica", 9)
-            _rl_set_fill(c, _C_TEXT)
-            lbl_op   = "Betriebsstunden:" if not is_en else "Operating hours:"
-            lbl_minH = "Min kWh/h:" if not is_en else "Min kWh/h:"
-            lbl_avgH = "Avg kWh/h:" if not is_en else "Avg kWh/h:"
-            lbl_maxH = "Max kWh/h:" if not is_en else "Max kWh/h:"
-            lbl_avgW = "Mittl. Leistung:" if not is_en else "Avg power:"
-            lbl_pkW  = "Spitzenleistung:" if not is_en else "Peak power:"
-            stats = [
-                (lbl_op,   f"{op_hours} h"),
-                (lbl_minH, _fmt_kwh(min_h, lang)),
-                (lbl_avgH, _fmt_kwh(avg_h, lang)),
-                (lbl_maxH, _fmt_kwh(max_h, lang)),
-                (lbl_avgW, f"{_fmt_int(row.avg_power_w, lang)} W"),
-                (lbl_pkW,  f"{_fmt_int(row.max_power_w, lang)} W"),
-            ]
-            col2_x = margin + (pw - 2 * margin) / 2
-            for si, (lbl, val) in enumerate(stats):
-                xx = margin if si % 2 == 0 else col2_x
-                if si % 2 == 0 and si > 0:
-                    y -= 0.45 * cm
-                c.setFont("Helvetica", 8)
-                _rl_set_fill(c, _C_NEUTRAL)
-                c.drawString(xx, y, lbl)
-                _rl_set_fill(c, _C_TEXT)
-                c.setFont("Helvetica-Bold", 8)
-                c.drawString(xx + 4.2 * cm, y, val)
-            _rl_set_fill(c, _C_TEXT)
-            y -= 0.55 * cm
-
-        # Mini chart
-        if mini_chart and mini_chart.exists():
-            ch_lbl = "Stundenverbrauch" if not is_en else "Hourly Consumption"
-            y -= 0.2 * cm
-            _rl_set_fill(c, _C_TEXT)
-            c.setFont("Helvetica-Bold", 9)
-            c.drawString(margin, y, ch_lbl)
-            y -= 0.3 * cm
-            _embed_chart(c, pw, y, mini_chart, ch_lbl, min(8.0 * cm, y - 2.5 * cm))
-            try:
-                mini_chart.unlink(missing_ok=True)
-            except Exception:
-                pass
-
+    else:
         _draw_footer(c, pw, page_n, data.version, lang)
+
+    # ------------------------------------------------------------------ Per-device detail: 2 per page (side-by-side columns)
+    dev_names = list(data.per_device_hourly.keys()) if data.per_device_hourly else []
+    if dev_names:
+        col_gap = 0.8 * cm
+        col_w   = (pw - 2 * margin - col_gap) / 2
+        col_r   = margin + col_w + col_gap   # x-start of right column
+        kpi_h2  = 1.6 * cm
+        kpi_gap2 = 0.2 * cm
+        detail_title = "Gerätedetails" if not is_en else "Device Details"
+
+        for pair_start in range(0, len(dev_names), 2):
+            c.showPage()
+            page_n += 1
+            y_page = _draw_header_band(c, pw, ph, detail_title, date_str)
+
+            for col_pos in range(2):
+                di = pair_start + col_pos
+                if di >= len(dev_names):
+                    break
+                dev_name  = dev_names[di]
+                dev_idx   = di
+                hourly_dev = data.per_device_hourly.get(dev_name, [0.0] * 24)
+                row = next((r for r in data.totals if r.name == dev_name), None)
+                mini_chart = _make_device_mini_chart_hourly(
+                    hourly_dev, _device_color(dev_idx), lang, tmp_dir, f"d{dev_idx}"
+                )
+
+                col_x = margin if col_pos == 0 else col_r
+                y_col = y_page
+
+                # Device heading (coloured)
+                _rl_set_fill(c, _device_color(dev_idx))
+                c.setFont("Helvetica-Bold", 9)
+                c.drawString(col_x, y_col, dev_name[:32])
+                _rl_set_fill(c, _C_TEXT)
+                y_col -= 0.5 * cm
+
+                # KPI boxes (3 in column width)
+                if row:
+                    pct = row.kwh_total / total_kwh * 100 if total_kwh > 0 else 0.0
+                    kw3 = (col_w - 2 * kpi_gap2) / 3
+                    _draw_kpi_box(c, col_x,                       y_col, kw3, kpi_h2, "kWh", _fmt_kwh(row.kwh_total, lang), "kWh")
+                    _draw_kpi_box(c, col_x + kw3 + kpi_gap2,      y_col, kw3, kpi_h2, "EUR", _fmt_money(row.cost_eur, lang), "EUR")
+                    _draw_kpi_box(c, col_x + 2*(kw3 + kpi_gap2),  y_col, kw3, kpi_h2, "Ant." if not is_en else "Share", f"{pct:.1f}", "%")
+                    y_col -= kpi_h2 + 0.25 * cm
+
+                # Compact stats line
+                nonzero_h = [v for v in hourly_dev if v and v > 0]
+                op_hours  = len(nonzero_h)
+                if row:
+                    _rl_set_fill(c, _C_NEUTRAL)
+                    c.setFont("Helvetica", 7)
+                    op_lbl = "Betrieb" if not is_en else "Active"
+                    avg_lbl = "Ø" if not is_en else "Avg"
+                    pk_lbl = "Max"
+                    c.drawString(col_x, y_col,
+                        f"{op_lbl}: {op_hours}h  ·  {avg_lbl}: {_fmt_int(row.avg_power_w, lang)} W  ·  {pk_lbl}: {_fmt_int(row.max_power_w, lang)} W")
+                    _rl_set_fill(c, _C_TEXT)
+                    y_col -= 0.4 * cm
+
+                # Mini chart (column-width)
+                if mini_chart and mini_chart.exists():
+                    max_chart_h = min(3.5 * cm, y_col - 2.0 * cm)
+                    if max_chart_h > 0.5 * cm:
+                        try:
+                            from reportlab.lib.utils import ImageReader as _IR
+                            _img = _IR(str(mini_chart))
+                            _iw, _ih = _img.getSize()
+                            _scale = min(col_w / _iw, max_chart_h / _ih)
+                            _dw, _dh = _iw * _scale, _ih * _scale
+                            c.drawImage(_img, col_x, y_col - _dh,
+                                        width=_dw, height=_dh,
+                                        preserveAspectRatio=True, mask="auto")
+                        except Exception:
+                            pass
+                    try:
+                        mini_chart.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+
+            _draw_footer(c, pw, page_n, data.version, lang)
 
     c.save()
     return out_path
@@ -1732,99 +1750,127 @@ def export_pdf_email_monthly(
         y = _draw_device_table_enhanced(c, pw, y, data.totals, data.co2_intensity_g_per_kwh, lang)
         y = _draw_totals_row(c, pw, y, data.totals, co2_disp, lang)
 
-    _draw_footer(c, pw, page_n, data.version, lang)
-
-    # ------------------------------------------------------------------ Page 2: Stacked daily chart
+    # ------------------------------------------------------------------ Overview chart: embed on page 1 if space allows
     if stacked_chart and stacked_chart.exists():
-        c.showPage()
-        page_n += 1
         ch_title = "Tagesverbrauch (gestapelt)" if not is_en else "Daily Consumption (stacked)"
-        y2 = _draw_header_band(c, pw, ph, ch_title, period_str)
-        y2 -= 0.4 * cm
-        _embed_chart(c, pw, y2, stacked_chart, ch_title, ph - 5.0 * cm)
-        _draw_footer(c, pw, page_n, data.version, lang)
+        if y > 7.0 * cm:
+            # Enough room on page 1 – embed directly
+            y -= 0.3 * cm
+            _rl_set_stroke(c, _C_LINE)
+            c.setLineWidth(0.4)
+            c.line(margin, y, pw - margin, y)
+            y -= 0.4 * cm
+            _rl_set_fill(c, _C_TEXT)
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(margin, y, ch_title)
+            y -= 0.35 * cm
+            y = _embed_chart(c, pw, y, stacked_chart, ch_title, min(5.5 * cm, y - 2.0 * cm))
+            _draw_footer(c, pw, page_n, data.version, lang)
+        else:
+            # Not enough room – use separate page
+            _draw_footer(c, pw, page_n, data.version, lang)
+            c.showPage()
+            page_n += 1
+            y2 = _draw_header_band(c, pw, ph, ch_title, period_str)
+            y2 -= 0.4 * cm
+            _embed_chart(c, pw, y2, stacked_chart, ch_title, ph - 5.0 * cm)
+            _draw_footer(c, pw, page_n, data.version, lang)
         try:
             stacked_chart.unlink(missing_ok=True)
         except Exception:
             pass
-
-    # ------------------------------------------------------------------ Pages 3+: Per-device detail
-    dev_names = list(data.per_device_daily.keys()) if data.per_device_daily else []
-    for dev_idx, dev_name in enumerate(dev_names):
-        daily_dev = data.per_device_daily.get(dev_name, [])
-        row = next((r for r in data.totals if r.name == dev_name), None)
-        mini_chart = _make_device_mini_chart_daily(
-            daily_dev, _device_color(dev_idx), lang, tmp_dir, f"m{dev_idx}"
-        )
-        c.showPage()
-        page_n += 1
-        sub_title = f"{title_str} – {dev_name}"
-        y = _draw_header_band(c, pw, ph, sub_title, period_str)
-
-        if row:
-            pct = row.kwh_total / total_kwh * 100 if total_kwh > 0 else 0.0
-            kpi_w3 = (pw - 2 * margin - 2 * kpi_gap) / 3
-            _draw_kpi_box(c, margin,                          y, kpi_w3, kpi_h,
-                          "kWh", _fmt_kwh(row.kwh_total, lang), "kWh")
-            _draw_kpi_box(c, margin + kpi_w3 + kpi_gap,      y, kpi_w3, kpi_h,
-                          "EUR", _fmt_money(row.cost_eur, lang), "EUR")
-            _draw_kpi_box(c, margin + 2 * (kpi_w3 + kpi_gap), y, kpi_w3, kpi_h,
-                          "Anteil" if not is_en else "Share", f"{pct:.1f}", "%")
-            y -= kpi_h + 0.4 * cm
-
-        # Day-level stats from per_device_daily
-        day_vals = [v for _, v in daily_dev if v > 0]
-        if day_vals:
-            min_d = min(day_vals)
-            max_d = max(day_vals)
-            avg_d = sum(day_vals) / len(day_vals)
-            # Trend: compare first half vs second half
-            half = max(1, len(day_vals) // 2)
-            first_half_avg  = sum(day_vals[:half]) / half
-            second_half_avg = sum(day_vals[half:]) / max(1, len(day_vals) - half)
-            if second_half_avg > first_half_avg * 1.05:
-                trend = "Steigend" if not is_en else "Rising"
-            elif second_half_avg < first_half_avg * 0.95:
-                trend = "Fallend" if not is_en else "Falling"
-            else:
-                trend = "Stabil" if not is_en else "Stable"
-
-            c.setFont("Helvetica", 8)
-            _rl_set_fill(c, _C_TEXT)
-            stats = [
-                ("Min kWh/d:", _fmt_kwh(min_d, lang)),
-                ("Avg kWh/d:", _fmt_kwh(avg_d, lang)),
-                ("Max kWh/d:", _fmt_kwh(max_d, lang)),
-                (("Trend:" if is_en else "Trend:"), trend),
-            ]
-            col2_x = margin + (pw - 2 * margin) / 2
-            for si, (lbl, val) in enumerate(stats):
-                xx = margin if si % 2 == 0 else col2_x
-                if si % 2 == 0 and si > 0:
-                    y -= 0.45 * cm
-                _rl_set_fill(c, _C_NEUTRAL)
-                c.setFont("Helvetica", 8)
-                c.drawString(xx, y, lbl)
-                _rl_set_fill(c, _C_TEXT)
-                c.setFont("Helvetica-Bold", 8)
-                c.drawString(xx + 3.5 * cm, y, val)
-            _rl_set_fill(c, _C_TEXT)
-            y -= 0.55 * cm
-
-        if mini_chart and mini_chart.exists():
-            ch_lbl = "Tagesverbrauch" if not is_en else "Daily Consumption"
-            y -= 0.2 * cm
-            _rl_set_fill(c, _C_TEXT)
-            c.setFont("Helvetica-Bold", 9)
-            c.drawString(margin, y, ch_lbl)
-            y -= 0.3 * cm
-            _embed_chart(c, pw, y, mini_chart, ch_lbl, min(8.0 * cm, y - 2.5 * cm))
-            try:
-                mini_chart.unlink(missing_ok=True)
-            except Exception:
-                pass
-
+    else:
         _draw_footer(c, pw, page_n, data.version, lang)
+
+    # ------------------------------------------------------------------ Per-device detail: 2 per page (side-by-side columns)
+    dev_names = list(data.per_device_daily.keys()) if data.per_device_daily else []
+    if dev_names:
+        col_gap = 0.8 * cm
+        col_w   = (pw - 2 * margin - col_gap) / 2
+        col_r   = margin + col_w + col_gap
+        kpi_h2  = 1.6 * cm
+        kpi_gap2 = 0.2 * cm
+        detail_title = "Gerätedetails" if not is_en else "Device Details"
+
+        for pair_start in range(0, len(dev_names), 2):
+            c.showPage()
+            page_n += 1
+            y_page = _draw_header_band(c, pw, ph, detail_title, period_str)
+
+            for col_pos in range(2):
+                di = pair_start + col_pos
+                if di >= len(dev_names):
+                    break
+                dev_name  = dev_names[di]
+                dev_idx   = di
+                daily_dev = data.per_device_daily.get(dev_name, [])
+                row = next((r for r in data.totals if r.name == dev_name), None)
+                mini_chart = _make_device_mini_chart_daily(
+                    daily_dev, _device_color(dev_idx), lang, tmp_dir, f"m{dev_idx}"
+                )
+
+                col_x = margin if col_pos == 0 else col_r
+                y_col = y_page
+
+                # Device heading (coloured)
+                _rl_set_fill(c, _device_color(dev_idx))
+                c.setFont("Helvetica-Bold", 9)
+                c.drawString(col_x, y_col, dev_name[:32])
+                _rl_set_fill(c, _C_TEXT)
+                y_col -= 0.5 * cm
+
+                # KPI boxes (3 in column width)
+                if row:
+                    pct = row.kwh_total / total_kwh * 100 if total_kwh > 0 else 0.0
+                    kw3 = (col_w - 2 * kpi_gap2) / 3
+                    _draw_kpi_box(c, col_x,                       y_col, kw3, kpi_h2, "kWh", _fmt_kwh(row.kwh_total, lang), "kWh")
+                    _draw_kpi_box(c, col_x + kw3 + kpi_gap2,      y_col, kw3, kpi_h2, "EUR", _fmt_money(row.cost_eur, lang), "EUR")
+                    _draw_kpi_box(c, col_x + 2*(kw3 + kpi_gap2),  y_col, kw3, kpi_h2, "Ant." if not is_en else "Share", f"{pct:.1f}", "%")
+                    y_col -= kpi_h2 + 0.25 * cm
+
+                # Compact day stats
+                day_vals = [v for _, v in daily_dev if v > 0]
+                if day_vals:
+                    min_d = min(day_vals)
+                    max_d = max(day_vals)
+                    avg_d = sum(day_vals) / len(day_vals)
+                    half  = max(1, len(day_vals) // 2)
+                    fh_avg = sum(day_vals[:half]) / half
+                    sh_avg = sum(day_vals[half:]) / max(1, len(day_vals) - half)
+                    if sh_avg > fh_avg * 1.05:
+                        trend = "Steigend" if not is_en else "Rising"
+                    elif sh_avg < fh_avg * 0.95:
+                        trend = "Fallend" if not is_en else "Falling"
+                    else:
+                        trend = "Stabil" if not is_en else "Stable"
+                    _rl_set_fill(c, _C_NEUTRAL)
+                    c.setFont("Helvetica", 7)
+                    c.drawString(col_x, y_col,
+                        f"Min: {_fmt_kwh(min_d, lang)}  Ø: {_fmt_kwh(avg_d, lang)}  Max: {_fmt_kwh(max_d, lang)} kWh/d  ·  {trend}")
+                    _rl_set_fill(c, _C_TEXT)
+                    y_col -= 0.4 * cm
+
+                # Mini chart (column-width)
+                if mini_chart and mini_chart.exists():
+                    max_chart_h = min(3.5 * cm, y_col - 2.0 * cm)
+                    if max_chart_h > 0.5 * cm:
+                        try:
+                            from reportlab.lib.utils import ImageReader as _IR
+                            _img = _IR(str(mini_chart))
+                            _iw, _ih = _img.getSize()
+                            _scale = min(col_w / _iw, max_chart_h / _ih)
+                            _dw, _dh = _iw * _scale, _ih * _scale
+                            c.drawImage(_img, col_x, y_col - _dh,
+                                        width=_dw, height=_dh,
+                                        preserveAspectRatio=True, mask="auto")
+                        except Exception:
+                            pass
+                    try:
+                        mini_chart.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+
+            _draw_footer(c, pw, page_n, data.version, lang)
 
     # ------------------------------------------------------------------ Last page: Top-5 ranking chart
     if top5_chart and top5_chart.exists():
