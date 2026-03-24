@@ -9687,6 +9687,7 @@ class CoreMixin:
                                 msg_text = self._build_telegram_summary("daily", start_dt, end_dt)
 
                                 # Generate rich PDF attachment
+                                _pdf_log = logging.getLogger(__name__)
                                 pdf_path = None
                                 try:
                                     from shelly_analyzer.services.export import export_pdf_email_daily, export_pdf_summary
@@ -9696,10 +9697,12 @@ class CoreMixin:
                                     report_data = self._build_email_report_data(
                                         start_dt, end_dt, prev_start, start_dt, report_type="daily"
                                     )
+                                    _pdf_log.info("Email daily PDF: report_data totals=%s", len(report_data.totals) if report_data else "None")
                                     if report_data and report_data.totals:
                                         export_pdf_email_daily(report_data, pdf_path, lang=lang)
                                     else:
                                         totals = self._build_report_totals(start_dt, end_dt)
+                                        _pdf_log.info("Email daily PDF fallback: totals=%s", len(totals) if totals else "None")
                                         if totals:
                                             export_pdf_summary(
                                                 title="Shelly Energy Analyzer \u2013 Daily Report",
@@ -9708,10 +9711,16 @@ class CoreMixin:
                                                 out_path=pdf_path,
                                                 lang=lang,
                                             )
-                                except Exception:
+                                        else:
+                                            _pdf_log.warning("Email daily PDF: no data found, sending email without attachment")
+                                            pdf_path = None
+                                    if pdf_path and pdf_path.exists():
+                                        _pdf_log.info("Email daily PDF generated: %s (%d bytes)", pdf_path, pdf_path.stat().st_size)
+                                except Exception as _pdf_exc:
+                                    _pdf_log.warning("Email daily PDF generation failed: %s", _pdf_exc, exc_info=True)
                                     pdf_path = None
 
-                                attachments = [str(pdf_path)] if pdf_path and pdf_path.exists() else []
+                                attachments = [str(pdf_path)] if pdf_path and pdf_path.exists() and pdf_path.stat().st_size > 0 else []
                                 ok, err = self._email_send_sync(
                                     subject=f"Shelly Energy Analyzer \u2013 Daily Report {due.strftime('%Y-%m-%d')}",
                                     body=msg_text,
@@ -9751,6 +9760,7 @@ class CoreMixin:
                                 msg_text = self._build_telegram_summary("monthly", start_dt, end_dt)
 
                                 # Generate rich PDF attachment
+                                _pdf_log = logging.getLogger(__name__)
                                 pdf_path = None
                                 try:
                                     from shelly_analyzer.services.export import export_pdf_email_monthly, export_pdf_summary
@@ -9760,10 +9770,12 @@ class CoreMixin:
                                     report_data = self._build_email_report_data(
                                         start_dt, end_dt, prev_start, start_dt, report_type="monthly"
                                     )
+                                    _pdf_log.info("Email monthly PDF: report_data totals=%s", len(report_data.totals) if report_data else "None")
                                     if report_data and report_data.totals:
                                         export_pdf_email_monthly(report_data, pdf_path, lang=lang)
                                     else:
                                         totals = self._build_report_totals(start_dt, end_dt)
+                                        _pdf_log.info("Email monthly PDF fallback: totals=%s", len(totals) if totals else "None")
                                         if totals:
                                             export_pdf_summary(
                                                 title="Shelly Energy Analyzer \u2013 Monthly Report",
@@ -9772,10 +9784,16 @@ class CoreMixin:
                                                 out_path=pdf_path,
                                                 lang=lang,
                                             )
-                                except Exception:
+                                        else:
+                                            _pdf_log.warning("Email monthly PDF: no data found, sending email without attachment")
+                                            pdf_path = None
+                                    if pdf_path and pdf_path.exists():
+                                        _pdf_log.info("Email monthly PDF generated: %s (%d bytes)", pdf_path, pdf_path.stat().st_size)
+                                except Exception as _pdf_exc:
+                                    _pdf_log.warning("Email monthly PDF generation failed: %s", _pdf_exc, exc_info=True)
                                     pdf_path = None
 
-                                attachments = [str(pdf_path)] if pdf_path and pdf_path.exists() else []
+                                attachments = [str(pdf_path)] if pdf_path and pdf_path.exists() and pdf_path.stat().st_size > 0 else []
                                 ok, err = self._email_send_sync(
                                     subject=f"Shelly Energy Analyzer – Monthly Report {now_m.strftime('%Y-%m')}",
                                     body=msg_text,
@@ -9803,6 +9821,7 @@ class CoreMixin:
             except Exception:
                 pass
             def _worker():
+                _wlog = logging.getLogger(__name__)
                 now = datetime.now()
                 yesterday = now.date() - timedelta(days=1)
                 start_dt = datetime.combine(yesterday, datetime.min.time())
@@ -9812,9 +9831,11 @@ class CoreMixin:
                 try:
                     summary_text = self._build_telegram_summary("daily", start_dt, end_dt)
                     lang = str(getattr(self, "lang", None) or getattr(self.cfg.ui, "language", "de") or "de")
+                    _wlog.info("_email_send_daily_now: building report data for %s to %s", start_dt, end_dt)
                     report_data = self._build_email_report_data(
                         start_dt, end_dt, prev_start, prev_end, report_type="daily"
                     )
+                    _wlog.info("_email_send_daily_now: report_data totals=%s", len(report_data.totals) if report_data else "None")
                     import tempfile
                     tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
                     pdf_path = Path(tmp.name)
@@ -9822,9 +9843,11 @@ class CoreMixin:
                     if report_data and report_data.totals:
                         from shelly_analyzer.services.export import export_pdf_email_daily
                         export_pdf_email_daily(report_data, pdf_path, lang=lang)
+                        _wlog.info("_email_send_daily_now: rich PDF generated, size=%d", pdf_path.stat().st_size if pdf_path.exists() else -1)
                     else:
                         from shelly_analyzer.services.export import export_pdf_summary
                         totals = self._build_report_totals(start_dt, end_dt)
+                        _wlog.info("_email_send_daily_now: fallback totals=%s", len(totals) if totals else "None")
                         export_pdf_summary(
                             title=f"Daily Report {yesterday.strftime('%Y-%m-%d')}",
                             period_label=f"{start_dt.strftime('%Y-%m-%d')} \u2013 {end_dt.strftime('%Y-%m-%d')}",
@@ -9832,7 +9855,8 @@ class CoreMixin:
                             out_path=pdf_path,
                             lang=lang,
                         )
-                    attachments = [str(pdf_path)] if pdf_path.exists() else []
+                        _wlog.info("_email_send_daily_now: fallback PDF generated, size=%d", pdf_path.stat().st_size if pdf_path.exists() else -1)
+                    attachments = [str(pdf_path)] if pdf_path.exists() and pdf_path.stat().st_size > 0 else []
                     ok, err = self._email_send_sync(
                         subject=f"Shelly Energy Analyzer \u2013 Daily Report {yesterday.strftime('%Y-%m-%d')}",
                         body=summary_text,
@@ -9871,6 +9895,7 @@ class CoreMixin:
             except Exception:
                 pass
             def _worker():
+                _wlog = logging.getLogger(__name__)
                 now = datetime.now()
                 if now.month == 1:
                     py, pm = now.year - 1, 12
@@ -9888,9 +9913,11 @@ class CoreMixin:
                 try:
                     summary_text = self._build_telegram_summary("monthly", start_dt, end_dt)
                     lang = str(getattr(self, "lang", None) or getattr(self.cfg.ui, "language", "de") or "de")
+                    _wlog.info("_email_send_monthly_now: building report data for %s to %s", start_dt, end_dt)
                     report_data = self._build_email_report_data(
                         start_dt, end_dt, prev_start, prev_end, report_type="monthly"
                     )
+                    _wlog.info("_email_send_monthly_now: report_data totals=%s", len(report_data.totals) if report_data else "None")
                     import tempfile
                     tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
                     pdf_path = Path(tmp.name)
@@ -9898,9 +9925,11 @@ class CoreMixin:
                     if report_data and report_data.totals:
                         from shelly_analyzer.services.export import export_pdf_email_monthly
                         export_pdf_email_monthly(report_data, pdf_path, lang=lang)
+                        _wlog.info("_email_send_monthly_now: rich PDF generated, size=%d", pdf_path.stat().st_size if pdf_path.exists() else -1)
                     else:
                         from shelly_analyzer.services.export import export_pdf_summary
                         totals = self._build_report_totals(start_dt, end_dt)
+                        _wlog.info("_email_send_monthly_now: fallback totals=%s", len(totals) if totals else "None")
                         export_pdf_summary(
                             title=f"Monthly Report {start_dt.strftime('%Y-%m')}",
                             period_label=f"{start_dt.strftime('%Y-%m-%d')} \u2013 {end_dt.strftime('%Y-%m-%d')}",
@@ -9908,7 +9937,8 @@ class CoreMixin:
                             out_path=pdf_path,
                             lang=lang,
                         )
-                    attachments = [str(pdf_path)] if pdf_path.exists() else []
+                        _wlog.info("_email_send_monthly_now: fallback PDF generated, size=%d", pdf_path.stat().st_size if pdf_path.exists() else -1)
+                    attachments = [str(pdf_path)] if pdf_path.exists() and pdf_path.stat().st_size > 0 else []
 
                     # Optionally attach invoice PDF
                     invoice_path = None
@@ -9986,18 +10016,22 @@ class CoreMixin:
 
     def _build_report_totals(self, start_dt, end_dt):
             """Build ReportTotals list for PDF export from DB data."""
+            _log = logging.getLogger(__name__)
             try:
                 from shelly_analyzer.services.export import ReportTotals
                 totals = []
-                db = getattr(self, "storage", None)
-                if db is None:
+                storage = getattr(self, "storage", None)
+                if storage is None:
+                    _log.warning("_build_report_totals: self.storage is None")
                     return None
                 start_ts = int(start_dt.timestamp())
                 end_ts = int(end_dt.timestamp())
+                _log.info("_build_report_totals: querying %s to %s (ts %d..%d)", start_dt, end_dt, start_ts, end_ts)
                 for dev in (self.cfg.devices or []):
                     try:
-                        df = db.query_samples(dev.key, start_ts=start_ts, end_ts=end_ts)
+                        df = storage.read_device_df(dev.key, start_ts=start_ts, end_ts=end_ts)
                         if df is None or df.empty:
+                            _log.info("_build_report_totals: no data for device %s in range", dev.key)
                             continue
                         pwr_col = None
                         for c in ("total_power", "a_act_power", "power_w"):
@@ -10032,19 +10066,24 @@ class CoreMixin:
                             max_power_w=round(max_w, 1),
                             cost_eur=round(cost, 2),
                         ))
-                    except Exception:
+                    except Exception as _dev_exc:
+                        _log.warning("_build_report_totals: error for device %s: %s", dev.key, _dev_exc)
                         continue
+                _log.info("_build_report_totals: built %d device totals", len(totals))
                 return totals if totals else None
-            except Exception:
+            except Exception as _exc:
+                _log.warning("_build_report_totals failed: %s", _exc, exc_info=True)
                 return None
 
     def _build_email_report_data(self, start_dt, end_dt, prev_start_dt=None, prev_end_dt=None, report_type="daily"):
             """Build an EmailReportData object with totals, time-series and comparison data."""
+            _log = logging.getLogger(__name__)
             try:
                 import shelly_analyzer as _pkg
                 from shelly_analyzer.services.export import ReportTotals, EmailReportData
-                db = getattr(self, "storage", None)
-                if db is None:
+                storage = getattr(self, "storage", None)
+                if storage is None:
+                    _log.warning("_build_email_report_data: self.storage is None")
                     return None
 
                 start_ts = int(start_dt.timestamp())
@@ -10056,10 +10095,12 @@ class CoreMixin:
                 hourly_kwh:  list = [0.0] * 24
                 daily_map:   dict = {}
 
+                _log.info("_build_email_report_data: type=%s, querying %s to %s (ts %d..%d)", report_type, start_dt, end_dt, start_ts, end_ts)
                 for dev in (self.cfg.devices or []):
                     try:
-                        df = db.query_samples(dev.key, start_ts=start_ts, end_ts=end_ts)
+                        df = storage.read_device_df(dev.key, start_ts=start_ts, end_ts=end_ts)
                         if df is None or df.empty:
+                            _log.info("_build_email_report_data: no data for device %s in range", dev.key)
                             continue
 
                         pwr_col = None
@@ -10133,9 +10174,10 @@ class CoreMixin:
                                             d_key = ts_d.date()
                                             if not pd.isna(e_val):
                                                 daily_map[d_key] = daily_map.get(d_key, 0.0) + float(e_val)
-                            except Exception:
-                                pass
-                    except Exception:
+                            except Exception as _ts_exc:
+                                _log.warning("_build_email_report_data: timeseries error for device %s: %s", dev.key, _ts_exc)
+                    except Exception as _dev_exc:
+                        _log.warning("_build_email_report_data: error for device %s: %s", dev.key, _dev_exc)
                         continue
 
                 # Build sorted daily_kwh list
@@ -10163,6 +10205,7 @@ class CoreMixin:
 
                 version = getattr(_pkg, "__version__", "")
 
+                _log.info("_build_email_report_data: done, totals=%d devices, total_kwh=%.3f", len(totals), sum(r.kwh_total for r in totals))
                 return EmailReportData(
                     report_type=report_type,
                     period_start=start_dt,
@@ -10178,7 +10221,8 @@ class CoreMixin:
                     vat_rate=vat_rate,
                     version=version,
                 )
-            except Exception:
+            except Exception as _exc:
+                _log.warning("_build_email_report_data failed: %s", _exc, exc_info=True)
                 return None
 
     def _build_telegram_summary(self, kind: str, start: datetime, end: datetime) -> str:
