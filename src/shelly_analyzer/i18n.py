@@ -3431,7 +3431,7 @@ _I18N.setdefault("de", {}).update({
     "pdf.email_report.top_consumers": "Top-Verbraucher",
 
     # Email settings – invoice option
-    "settings.email.monthly_invoice_enabled": "Rechnung anhangen",
+    "settings.email.monthly_invoice_enabled": "Rechnung anhängen",
 })
 
 

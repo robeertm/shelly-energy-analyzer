@@ -10182,11 +10182,15 @@ class CoreMixin:
                                                 hourly_kwh[h_idx]      += v
                                                 dev_hourly_vals[h_idx] += v
                                     else:
-                                        dly = tdf[pwr_col].resample("D").mean()
-                                        for ts_d, w_val in dly.items():
+                                        # Correct kWh: resample to hourly mean (W), divide by 1000
+                                        # to get kWh per hour, then sum to daily totals.
+                                        # resample("D").mean() / 1000 would give kW not kWh.
+                                        hrly_kwh = tdf[pwr_col].resample("h").mean() / 1000.0
+                                        dly = hrly_kwh.resample("D").sum()
+                                        for ts_d, kwh_val in dly.items():
                                             d_key = ts_d.date()
-                                            if not pd.isna(w_val):
-                                                v = float(w_val) / 1000.0
+                                            if not pd.isna(kwh_val) and kwh_val > 0:
+                                                v = float(kwh_val)
                                                 daily_map[d_key] = daily_map.get(d_key, 0.0) + v
                                                 dev_day_map[d_key] = dev_day_map.get(d_key, 0.0) + v
                                 elif "energy_kwh" in df.columns:
