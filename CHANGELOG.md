@@ -1,5 +1,12 @@
 # Changelog
 
+## 10.1.1 - 2026-03-24
+### Fixed
+- **PDF-Reports kompakter**: Alle Matplotlib-Figuren auf 6×2,5 Zoll und DPI 110 (Mini-Charts 5×1,5 / DPI 100) reduziert. Übersichts-Plot wird jetzt direkt auf Seite 1 eingebettet sofern Platz vorhanden; Pro-Gerät-Mini-Plots erscheinen je zwei nebeneinander auf einer Seite (2-Spalten-Layout).
+- **Monatsbericht – teuerster/günstigster Tag falsch**: Tagesverbrauch aus Leistungsdaten (`resample("D").mean() / 1000` → nur kW, nicht kWh) korrigiert. Berechnung erfolgt jetzt korrekt als stündliche Integration: `resample("h").mean() / 1000` → kWh/h, dann Tagessumme.
+- **„Rechnung anhängen" wird nicht gespeichert**: `email_monthly_invoice_enabled` fehlte in `save_config` und `load_config` in `config.py` – der Haken wurde nach Neustart immer zurückgesetzt.
+- **Tippfehler**: „Rechnung anhangen" → „Rechnung anhängen" in der deutschen Übersetzung.
+
 ## 10.1.0 - 2026-03-24
 ### Added
 - **Massiv erweiterter Tagesreport (PDF)**

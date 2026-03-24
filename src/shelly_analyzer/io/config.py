@@ -540,6 +540,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         email_monthly_summary_enabled=bool(ui_raw.get("email_monthly_summary_enabled", UiConfig.email_monthly_summary_enabled)),
         email_daily_summary_time=str(ui_raw.get("email_daily_summary_time", UiConfig.email_daily_summary_time) or UiConfig.email_daily_summary_time),
         email_monthly_summary_time=str(ui_raw.get("email_monthly_summary_time", UiConfig.email_monthly_summary_time) or UiConfig.email_monthly_summary_time),
+        email_monthly_invoice_enabled=bool(ui_raw.get("email_monthly_invoice_enabled", UiConfig.email_monthly_invoice_enabled)),
         live_daynight_mode=str(ui_raw.get("live_daynight_mode", UiConfig.live_daynight_mode) or UiConfig.live_daynight_mode),
         live_day_start=str(ui_raw.get("live_day_start", UiConfig.live_day_start) or UiConfig.live_day_start),
         live_night_start=str(ui_raw.get("live_night_start", UiConfig.live_night_start) or UiConfig.live_night_start),
@@ -855,6 +856,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "email_monthly_summary_enabled": bool(getattr(cfg.ui, "email_monthly_summary_enabled", False)),
             "email_daily_summary_time": str(getattr(cfg.ui, "email_daily_summary_time", "00:00") or "00:00"),
             "email_monthly_summary_time": str(getattr(cfg.ui, "email_monthly_summary_time", "00:00") or "00:00"),
+            "email_monthly_invoice_enabled": bool(getattr(cfg.ui, "email_monthly_invoice_enabled", False)),
             "plot_theme_mode": getattr(cfg.ui, "plot_theme_mode", UiConfig.plot_theme_mode),
         },
         "updates": {
