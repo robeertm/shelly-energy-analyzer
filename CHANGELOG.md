@@ -1,5 +1,30 @@
 # Changelog
 
+## 10.0.0 - 2026-03-24
+### Added
+- **Rich email PDF reports** — daily and monthly email reports now contain real
+  data, professional layout and embedded matplotlib charts instead of a bare header:
+  - **Daily report**: Branded header band, KPI tiles (kWh / cost / CO₂), device
+    breakdown table with alternating rows, % comparison to previous day, and a
+    full-page 24-hour bar chart (peak hour highlighted in amber).
+  - **Monthly report**: Same KPI tiles, device table, % comparison to previous
+    month, top-5 consumer ranking with share percentages, and a full-page
+    per-day bar chart for the entire month.
+  - All charts are rendered via matplotlib (Agg backend) and embedded as PNG in
+    the PDF; a fallback to the existing plain-text summary is used if no device
+    data is available.
+- **Invoice attachment for monthly email** — a new checkbox
+  "Rechnung anhängen" / "Attach invoice" in the e-mail settings lets users
+  automatically attach an A4 invoice PDF (consumption × price, optional VAT)
+  to the monthly summary e-mail.
+- **`EmailReportData` dataclass** in `services/export.py` carries the full
+  time-series payload (hourly kWh, per-day kWh, previous-period totals, CO₂,
+  VAT) used by the two new export functions
+  `export_pdf_email_daily` / `export_pdf_email_monthly`.
+- **`_build_email_report_data`** method in core builds the rich payload
+  (including hourly/daily pandas resampling and prior-period comparison) that
+  is passed to the new PDF functions.
+
 ## 9.11.0 - 2026-03-23
 ### Improved
 - **Web live view: key-value label alignment** — device detail cards now use

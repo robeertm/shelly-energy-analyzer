@@ -156,6 +156,8 @@ class UiConfig:
     email_monthly_summary_enabled: bool = False
     email_daily_summary_time: str = "00:00"    # HH:MM, local time
     email_monthly_summary_time: str = "00:00"  # HH:MM, local time
+    # Attach an invoice PDF to the monthly report email
+    email_monthly_invoice_enabled: bool = False
 
     # Which device page is selected in the desktop UI (0-based). Each page shows up to 2 devices.
     device_page_index: int = 0
