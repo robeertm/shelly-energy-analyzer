@@ -1,5 +1,9 @@
 # Changelog
 
+## 10.2.0 - 2026-03-24
+### Added
+- **Per-device invoice PDFs in monthly e-mail**: When "Attach invoice" is enabled, the monthly e-mail now generates and attaches a separate invoice PDF for each configured device (e.g. House, Garage, Office). Each per-device invoice contains only the energy consumption and cost for that single device. If more than one device is configured, the combined invoice (all devices as individual line items) is also attached. This applies to both the scheduled monthly send (`_email_summary_tick`) and the manual "Send Now" button (`_email_send_monthly_now`).
+
 ## 10.1.2 - 2026-03-24
 ### Fixed
 - **PDF report crash on e-mail send**: `_rl_set_fill` / `_rl_set_stroke` unpacked hex color strings (e.g. `"#1E6B8C"`) char-by-char into `setFillColorRGB()`, producing 7 + self = 8 arguments and crashing with *"takes from 4 to 5 positional arguments but 8 were given"*. Helper `_hex_to_rgb` added; both helpers now convert hex strings to `(r, g, b)` float tuples before calling reportlab.
