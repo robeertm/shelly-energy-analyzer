@@ -9794,11 +9794,123 @@ class CoreMixin:
                                     pdf_path = None
 
                                 attachments = [str(pdf_path)] if pdf_path and pdf_path.exists() and pdf_path.stat().st_size > 0 else []
+
+                                # Optionally attach invoice PDFs – one per device + combined (if >1 device)
+                                tick_invoice_paths: list = []
+                                if bool(getattr(self.cfg.ui, "email_monthly_invoice_enabled", False)):
+                                    try:
+                                        import tempfile as _tf
+                                        from shelly_analyzer.services.export import (
+                                            export_pdf_invoice as _exp_inv, InvoiceLine as _IL
+                                        )
+                                        _price_net   = self.cfg.pricing.unit_price_net() if hasattr(self.cfg.pricing, "unit_price_net") else self.cfg.pricing.unit_price_gross()
+                                        _vat_enabled = bool(getattr(self.cfg.pricing, "vat_enabled", False))
+                                        _vat_rate    = float(getattr(self.cfg.pricing, "vat_rate_percent", 0.0) or 0.0)
+                                        _inv_totals  = (report_data.totals if report_data else None) or self._build_report_totals(start_dt, end_dt) or []
+                                        _billing  = getattr(self.cfg, "billing", None)
+                                        _iss      = getattr(_billing, "issuer", None) if _billing else None
+                                        _cus      = getattr(_billing, "customer", None) if _billing else None
+                                        _inv_pfx  = str(getattr(_billing, "invoice_prefix", "INV") or "INV") if _billing else "INV"
+                                        _pay_days = int(getattr(_billing, "payment_terms_days", 14) or 14) if _billing else 14
+                                        _logo     = str(getattr(_billing, "invoice_logo_path", "") or "") if _billing else ""
+                                        _issuer_d = {
+                                            "name":          str(getattr(_iss, "name", "") or "") if _iss else "",
+                                            "address_lines": list(getattr(_iss, "address_lines", []) or []) if _iss else [],
+                                            "vat_id":        str(getattr(_iss, "vat_id", "") or "") if _iss else "",
+                                            "email":         str(getattr(_iss, "email", "") or "") if _iss else "",
+                                            "iban":          str(getattr(_iss, "iban", "") or "") if _iss else "",
+                                            "bic":           str(getattr(_iss, "bic", "") or "") if _iss else "",
+                                        }
+                                        _cust_d = {
+                                            "name":          str(getattr(_cus, "name", "") or "") if _cus else "",
+                                            "address_lines": list(getattr(_cus, "address_lines", []) or []) if _cus else [],
+                                            "email":         str(getattr(_cus, "email", "") or "") if _cus else "",
+                                        }
+                                        _issue_dt   = end_dt.date() if hasattr(end_dt, "date") else end_dt
+                                        _due_dt     = _issue_dt + timedelta(days=_pay_days)
+                                        _period_lbl = f"{start_dt.strftime('%Y-%m-%d')} \u2013 {end_dt.strftime('%Y-%m-%d')}"
+                                        _month_lbl  = now_m.strftime('%Y-%m')
+
+                                        # Per-device invoices
+                                        for _idx, _row in enumerate(_inv_totals, start=1):
+                                            try:
+                                                _tmp_d = _tf.NamedTemporaryFile(suffix=".pdf", delete=False)
+                                                _dev_p = Path(_tmp_d.name)
+                                                _tmp_d.close()
+                                                _exp_inv(
+                                                    out_path=_dev_p,
+                                                    invoice_no=f"{_inv_pfx}-{_month_lbl}-{_idx:02d}",
+                                                    issue_date=_issue_dt,
+                                                    due_date=_due_dt,
+                                                    issuer=_issuer_d,
+                                                    customer=_cust_d,
+                                                    vat_rate_percent=_vat_rate,
+                                                    vat_enabled=_vat_enabled,
+                                                    lines=[
+                                                        _IL(
+                                                            description=f"{_row.name} \u2013 {now_m.strftime('%B %Y')}",
+                                                            quantity=round(_row.kwh_total, 3),
+                                                            unit="kWh",
+                                                            unit_price_net=_price_net,
+                                                        )
+                                                    ],
+                                                    period_label=_period_lbl,
+                                                    device_label=_row.name,
+                                                    lang=lang,
+                                                    logo_path=_logo or None,
+                                                )
+                                                if _dev_p.exists() and _dev_p.stat().st_size > 0:
+                                                    tick_invoice_paths.append(_dev_p)
+                                                    attachments.append(str(_dev_p))
+                                            except Exception:
+                                                pass
+
+                                        # Combined invoice (all devices) – only if more than one device
+                                        if len(_inv_totals) > 1:
+                                            try:
+                                                _tmp_c = _tf.NamedTemporaryFile(suffix=".pdf", delete=False)
+                                                _comb_p = Path(_tmp_c.name)
+                                                _tmp_c.close()
+                                                _exp_inv(
+                                                    out_path=_comb_p,
+                                                    invoice_no=f"{_inv_pfx}-{_month_lbl}-000",
+                                                    issue_date=_issue_dt,
+                                                    due_date=_due_dt,
+                                                    issuer=_issuer_d,
+                                                    customer=_cust_d,
+                                                    vat_rate_percent=_vat_rate,
+                                                    vat_enabled=_vat_enabled,
+                                                    lines=[
+                                                        _IL(
+                                                            description=f"{_r.name} \u2013 {now_m.strftime('%B %Y')}",
+                                                            quantity=round(_r.kwh_total, 3),
+                                                            unit="kWh",
+                                                            unit_price_net=_price_net,
+                                                        )
+                                                        for _r in _inv_totals
+                                                    ],
+                                                    period_label=_period_lbl,
+                                                    lang=lang,
+                                                    logo_path=_logo or None,
+                                                )
+                                                if _comb_p.exists() and _comb_p.stat().st_size > 0:
+                                                    tick_invoice_paths.append(_comb_p)
+                                                    attachments.append(str(_comb_p))
+                                            except Exception:
+                                                pass
+                                    except Exception:
+                                        pass
+
                                 ok, err = self._email_send_sync(
                                     subject=f"Shelly Energy Analyzer – Monthly Report {now_m.strftime('%Y-%m')}",
                                     body=msg_text,
                                     attachments=attachments,
                                 )
+                                for _inv_p in tick_invoice_paths:
+                                    try:
+                                        _inv_p.unlink(missing_ok=True)
+                                    except Exception:
+                                        pass
                             except Exception as e:
                                 ok, err = False, str(e)
                             if ok:
@@ -9940,28 +10052,17 @@ class CoreMixin:
                         _wlog.info("_email_send_monthly_now: fallback PDF generated, size=%d", pdf_path.stat().st_size if pdf_path.exists() else -1)
                     attachments = [str(pdf_path)] if pdf_path.exists() and pdf_path.stat().st_size > 0 else []
 
-                    # Optionally attach invoice PDF
-                    invoice_path = None
+                    # Optionally attach invoice PDFs – one per device + combined (if >1 device)
+                    invoice_paths: list = []
                     if bool(getattr(self.cfg.ui, "email_monthly_invoice_enabled", False)):
                         try:
                             from shelly_analyzer.services.export import (
                                 export_pdf_invoice, InvoiceLine, ReportTotals as _RT
                             )
-                            import calendar as _cal
-                            from datetime import date as _date
                             price_net   = self.cfg.pricing.unit_price_net() if hasattr(self.cfg.pricing, "unit_price_net") else self.cfg.pricing.unit_price_gross()
                             vat_enabled = bool(getattr(self.cfg.pricing, "vat_enabled", False))
                             vat_rate    = float(getattr(self.cfg.pricing, "vat_rate_percent", 0.0) or 0.0)
                             inv_totals  = (report_data.totals if report_data else None) or self._build_report_totals(start_dt, end_dt) or []
-                            inv_lines   = [
-                                InvoiceLine(
-                                    description=f"{row.name} \u2013 {start_dt.strftime('%B %Y')}",
-                                    quantity=round(row.kwh_total, 3),
-                                    unit="kWh",
-                                    unit_price_net=price_net,
-                                )
-                                for row in inv_totals
-                            ]
                             # Build issuer/customer dicts from BillingConfig
                             billing = getattr(self.cfg, "billing", None)
                             _iss = getattr(billing, "issuer", None) if billing else None
@@ -9982,31 +10083,83 @@ class CoreMixin:
                                 "address_lines": list(getattr(_cus, "address_lines", []) or []) if _cus else [],
                                 "email":         str(getattr(_cus, "email", "") or "") if _cus else "",
                             }
-                            invoice_no  = f"{inv_prefix}-{start_dt.strftime('%Y-%m')}-001"
                             issue_date  = end_dt.date()
                             from datetime import timedelta as _td
                             due_date    = issue_date + _td(days=pay_days)
-                            tmp_inv = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
-                            invoice_path = Path(tmp_inv.name)
-                            tmp_inv.close()
-                            export_pdf_invoice(
-                                out_path=invoice_path,
-                                invoice_no=invoice_no,
-                                issue_date=issue_date,
-                                due_date=due_date,
-                                issuer=issuer_dict,
-                                customer=customer_dict,
-                                vat_rate_percent=vat_rate,
-                                vat_enabled=vat_enabled,
-                                lines=inv_lines,
-                                period_label=f"{start_dt.strftime('%Y-%m-%d')} \u2013 {end_dt.strftime('%Y-%m-%d')}",
-                                lang=lang,
-                                logo_path=logo_path or None,
-                            )
-                            if invoice_path.exists():
-                                attachments.append(str(invoice_path))
+                            period_lbl  = f"{start_dt.strftime('%Y-%m-%d')} \u2013 {end_dt.strftime('%Y-%m-%d')}"
+                            month_lbl   = start_dt.strftime('%Y-%m')
+
+                            # Per-device invoices
+                            for idx, row in enumerate(inv_totals, start=1):
+                                try:
+                                    dev_lines = [
+                                        InvoiceLine(
+                                            description=f"{row.name} \u2013 {start_dt.strftime('%B %Y')}",
+                                            quantity=round(row.kwh_total, 3),
+                                            unit="kWh",
+                                            unit_price_net=price_net,
+                                        )
+                                    ]
+                                    tmp_dev = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+                                    dev_path = Path(tmp_dev.name)
+                                    tmp_dev.close()
+                                    export_pdf_invoice(
+                                        out_path=dev_path,
+                                        invoice_no=f"{inv_prefix}-{month_lbl}-{idx:02d}",
+                                        issue_date=issue_date,
+                                        due_date=due_date,
+                                        issuer=issuer_dict,
+                                        customer=customer_dict,
+                                        vat_rate_percent=vat_rate,
+                                        vat_enabled=vat_enabled,
+                                        lines=dev_lines,
+                                        period_label=period_lbl,
+                                        device_label=row.name,
+                                        lang=lang,
+                                        logo_path=logo_path or None,
+                                    )
+                                    if dev_path.exists() and dev_path.stat().st_size > 0:
+                                        invoice_paths.append(dev_path)
+                                        attachments.append(str(dev_path))
+                                except Exception:
+                                    pass
+
+                            # Combined invoice (all devices as line items) – only if more than one device
+                            if len(inv_totals) > 1:
+                                try:
+                                    comb_lines = [
+                                        InvoiceLine(
+                                            description=f"{row.name} \u2013 {start_dt.strftime('%B %Y')}",
+                                            quantity=round(row.kwh_total, 3),
+                                            unit="kWh",
+                                            unit_price_net=price_net,
+                                        )
+                                        for row in inv_totals
+                                    ]
+                                    tmp_comb = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+                                    comb_path = Path(tmp_comb.name)
+                                    tmp_comb.close()
+                                    export_pdf_invoice(
+                                        out_path=comb_path,
+                                        invoice_no=f"{inv_prefix}-{month_lbl}-000",
+                                        issue_date=issue_date,
+                                        due_date=due_date,
+                                        issuer=issuer_dict,
+                                        customer=customer_dict,
+                                        vat_rate_percent=vat_rate,
+                                        vat_enabled=vat_enabled,
+                                        lines=comb_lines,
+                                        period_label=period_lbl,
+                                        lang=lang,
+                                        logo_path=logo_path or None,
+                                    )
+                                    if comb_path.exists() and comb_path.stat().st_size > 0:
+                                        invoice_paths.append(comb_path)
+                                        attachments.append(str(comb_path))
+                                except Exception:
+                                    pass
                         except Exception:
-                            invoice_path = None
+                            pass
 
                     ok, err = self._email_send_sync(
                         subject=f"Shelly Energy Analyzer \u2013 Monthly Report {start_dt.strftime('%Y-%m')}",
@@ -10017,9 +10170,9 @@ class CoreMixin:
                         pdf_path.unlink(missing_ok=True)
                     except Exception:
                         pass
-                    if invoice_path:
+                    for _inv_p in invoice_paths:
                         try:
-                            invoice_path.unlink(missing_ok=True)
+                            _inv_p.unlink(missing_ok=True)
                         except Exception:
                             pass
                 except Exception as e:
