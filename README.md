@@ -4,7 +4,7 @@ A cross-platform desktop application to analyze, visualize and export energy dat
 
 This repository is **GitHub-ready** (MIT license, clean structure, no secrets). Releases are published via **GitHub Releases** so the built‑in updater can find and download new versions.
 
-> **Current version: v8.4.0** — all major feature modules complete.
+> **Current version: v10.1.1** — all major feature modules complete.
 
 ---
 
