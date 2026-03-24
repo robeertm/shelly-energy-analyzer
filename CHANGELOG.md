@@ -1,5 +1,10 @@
 # Changelog
 
+## 10.1.2 - 2026-03-24
+### Fixed
+- **PDF report crash on e-mail send**: `_rl_set_fill` / `_rl_set_stroke` unpacked hex color strings (e.g. `"#1E6B8C"`) char-by-char into `setFillColorRGB()`, producing 7 + self = 8 arguments and crashing with *"takes from 4 to 5 positional arguments but 8 were given"*. Helper `_hex_to_rgb` added; both helpers now convert hex strings to `(r, g, b)` float tuples before calling reportlab.
+- **Hourly heatmap day order (App)**: Weekdays in the weekday × hour heatmap were rendered bottom-to-top (Monday at the bottom, Sunday at the top). Y-axis is now inverted (`ylim(7, 0)`) so Monday appears at the top and Sunday at the bottom.
+
 ## 10.1.1 - 2026-03-24
 ### Fixed
 - **PDF reports more compact**: All matplotlib figures reduced to 6×2.5 inches at 110 DPI (mini-charts 5×1.5 / 100 DPI). The overview plot is now embedded directly on page 1 if space permits; per-device mini-plots appear two per row in a 2-column layout.
