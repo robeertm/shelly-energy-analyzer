@@ -1134,11 +1134,21 @@ def _make_top5_bar_chart(
 
 # ---------- Layout helpers ----------
 
-def _rl_set_fill(c: canvas.Canvas, rgb: Tuple) -> None:
+def _hex_to_rgb(h: str) -> Tuple[float, float, float]:
+    """Convert '#RRGGBB' hex string to (r, g, b) floats in range 0–1."""
+    h = h.lstrip("#")
+    return (int(h[0:2], 16) / 255, int(h[2:4], 16) / 255, int(h[4:6], 16) / 255)
+
+
+def _rl_set_fill(c: canvas.Canvas, rgb) -> None:
+    if isinstance(rgb, str):
+        rgb = _hex_to_rgb(rgb)
     c.setFillColorRGB(*rgb)
 
 
-def _rl_set_stroke(c: canvas.Canvas, rgb: Tuple) -> None:
+def _rl_set_stroke(c: canvas.Canvas, rgb) -> None:
+    if isinstance(rgb, str):
+        rgb = _hex_to_rgb(rgb)
     c.setStrokeColorRGB(*rgb)
 
 

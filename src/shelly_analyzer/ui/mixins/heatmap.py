@@ -581,7 +581,7 @@ class HeatmapMixin:
             ax.set_yticklabels(day_labels, color=fg, fontsize=9)
 
             ax.set_xlim(0, 24)
-            ax.set_ylim(0, 7)
+            ax.set_ylim(7, 0)  # Mon (row 0) at top, Sun (row 6) at bottom
 
             for spine in ax.spines.values():
                 spine.set_color(fg)
