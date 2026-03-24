@@ -2,50 +2,50 @@
 
 ## 10.1.1 - 2026-03-24
 ### Fixed
-- **PDF-Reports kompakter**: Alle Matplotlib-Figuren auf 6×2,5 Zoll und DPI 110 (Mini-Charts 5×1,5 / DPI 100) reduziert. Übersichts-Plot wird jetzt direkt auf Seite 1 eingebettet sofern Platz vorhanden; Pro-Gerät-Mini-Plots erscheinen je zwei nebeneinander auf einer Seite (2-Spalten-Layout).
-- **Monatsbericht – teuerster/günstigster Tag falsch**: Tagesverbrauch aus Leistungsdaten (`resample("D").mean() / 1000` → nur kW, nicht kWh) korrigiert. Berechnung erfolgt jetzt korrekt als stündliche Integration: `resample("h").mean() / 1000` → kWh/h, dann Tagessumme.
-- **„Rechnung anhängen" wird nicht gespeichert**: `email_monthly_invoice_enabled` fehlte in `save_config` und `load_config` in `config.py` – der Haken wurde nach Neustart immer zurückgesetzt.
-- **Tippfehler**: „Rechnung anhangen" → „Rechnung anhängen" in der deutschen Übersetzung.
+- **PDF reports more compact**: All matplotlib figures reduced to 6×2.5 inches at 110 DPI (mini-charts 5×1.5 / 100 DPI). The overview plot is now embedded directly on page 1 if space permits; per-device mini-plots appear two per row in a 2-column layout.
+- **Monthly report – most/least expensive day incorrect**: Daily consumption calculated from power data (`resample("D").mean() / 1000` → kW only, not kWh) corrected. Calculation now uses correct hourly integration: `resample("h").mean() / 1000` → kWh/h, then daily sum.
+- **"Attach invoice" not saved**: `email_monthly_invoice_enabled` was missing from `save_config` and `load_config` in `config.py` – the checkbox was always reset to unchecked after restart.
+- **Typo**: "Rechnung anhangen" → "Rechnung anhängen" in the German translation.
 
 ## 10.1.0 - 2026-03-24
 ### Added
-- **Massiv erweiterter Tagesreport (PDF)**
-  - 6 KPI-Kacheln statt 3: Gesamt-kWh, Kosten, CO2, mittlere Leistung, Spitzenleistung, Spitzenstunde
-  - Vergleich zum Vortag **und** zum gleichen Wochentag der Vorwoche (mit farbigem +/-%  )
-  - Erweitertes Gerätebau-Tabelle mit Anteilsspalte (%)
-  - Highlights / Lowlights: Spitzenverbraucher, sparsamster Verbraucher, Stunde mit höchstem und niedrigstem Verbrauch
-  - Seite 2: **Gestapeltes 24h-Balkendiagramm** (jedes Gerät in eigener Farbe mit Legende)
-  - Ab Seite 3: **Pro-Gerät-Sektion** mit Mini-24h-Balkendiagramm, Betriebsstunden, Min/Avg/Max kWh/h, mittlere und Spitzenleistung, Anteil am Gesamtverbrauch
+- **Massively expanded daily report (PDF)**
+  - 6 KPI tiles instead of 3: total kWh, cost, CO₂, average power, peak power, peak hour
+  - Comparison to the previous day **and** the same weekday of the previous week (with colour-coded +/-%)
+  - Expanded device breakdown table with share column (%)
+  - Highlights / lowlights: top consumer, most efficient consumer, hour with highest and lowest consumption
+  - Page 2: **Stacked 24h bar chart** (each device in its own colour with legend)
+  - From page 3: **Per-device section** with mini 24h bar chart, operating hours, Min/Avg/Max kWh/h, average and peak power, share of total consumption
 
-- **Massiv erweiterter Monatsreport (PDF)**
-  - 6 KPI-Kacheln: Gesamt-kWh, Kosten, CO2, Tagesdurchschnitt, teuerster Tag, günstigster Tag
-  - Vergleich zum Vormonat mit absolutem und prozentualem Delta
-  - **Wochentag vs. Wochenende** Durchschnittsvergleich
-  - Seite 2: **Gestapeltes Tages-Balkendiagramm** (alle Geräte)
-  - Ab Seite 3: **Pro-Gerät-Sektion** mit Mini-Tages-Balkendiagramm, Min/Avg/Max kWh/Tag, Trend (Steigend/Fallend/Stabil)
-  - Letzte Seite: **Top-5-Verbraucher-Ranking** als horizontales Balkendiagramm + Rangliste mit kWh und Anteil
+- **Massively expanded monthly report (PDF)**
+  - 6 KPI tiles: total kWh, cost, CO₂, daily average, most expensive day, cheapest day
+  - Comparison to previous month with absolute and percentage delta
+  - **Weekday vs. weekend** average comparison
+  - Page 2: **Stacked daily bar chart** (all devices)
+  - From page 3: **Per-device section** with mini daily bar chart, Min/Avg/Max kWh/day, trend (Rising/Falling/Stable)
+  - Last page: **Top-5 consumer ranking** as a horizontal bar chart + ranking table with kWh and share
 
-- **Verbesserte Rechnung (PDF)**
-  - Absender und Empfänger werden jetzt vollständig aus `BillingConfig` gelesen (Name, Adresse, USt-ID, E-Mail, IBAN, BIC)
-  - Rechnungsnummer im Format `{Prefix}-{YYYY}-{MM}-001` (konfigurierbar über `billing.invoice_prefix`)
-  - Fälligkeitsdatum errechnet sich automatisch aus `billing.payment_terms_days`
-  - Logo aus `billing.invoice_logo_path` wird eingebettet wenn vorhanden
+- **Improved invoice (PDF)**
+  - Sender and recipient are now fully read from `BillingConfig` (name, address, VAT ID, email, IBAN, BIC)
+  - Invoice number in format `{Prefix}-{YYYY}-{MM}-001` (configurable via `billing.invoice_prefix`)
+  - Due date is automatically calculated from `billing.payment_terms_days`
+  - Logo from `billing.invoice_logo_path` is embedded when present
 
-- **Neue Matplotlib-Hilfsfunktionen** in `services/export.py`
-  - `_DEVICE_PALETTE` – konsistente 10-Farben-Palette, jedes Gerät bekommt überall dieselbe Farbe
-  - `_make_stacked_hourly_chart` / `_make_stacked_daily_chart` – gestapelte Balkendiagramme
-  - `_make_device_mini_chart_hourly` / `_make_device_mini_chart_daily` – kleine Gerätediagramme
-  - `_make_top5_bar_chart` – horizontales Top-5-Balkendiagramm
-  - `_draw_device_table_enhanced` – Gerätetabelle mit Anteilsspalte (%)
+- **New matplotlib helper functions** in `services/export.py`
+  - `_DEVICE_PALETTE` – consistent 10-colour palette; each device always gets the same colour
+  - `_make_stacked_hourly_chart` / `_make_stacked_daily_chart` – stacked bar charts
+  - `_make_device_mini_chart_hourly` / `_make_device_mini_chart_daily` – small per-device charts
+  - `_make_top5_bar_chart` – horizontal top-5 bar chart
+  - `_draw_device_table_enhanced` – device table with share column (%)
 
-- **`EmailReportData`** um 11 neue Felder erweitert (alle optional/mit Default für Rückwärtskompatibilität):
+- **`EmailReportData`** extended by 11 new fields (all optional/with defaults for backward compatibility):
   `per_device_hourly`, `per_device_daily`, `peak_hour`, `avg_power_w`, `peak_power_w`,
   `prev_same_weekday_kwh`, `weekday_avg_kwh`, `weekend_avg_kwh`,
   `best_day_date`, `best_day_kwh`, `worst_day_date`, `worst_day_kwh`
 
-- **`_build_email_report_data`** jetzt vollständig: sammelt pro Gerät Stunden- und Tageszeitreihen,
-  berechnet Spitzenstunde, Wochentag/Wochenende-Split, besten/schlechtesten Tag und
-  Vergleich zum gleichen Wochentag der Vorwoche
+- **`_build_email_report_data`** now complete: collects per-device hourly and daily time series,
+  computes peak hour, weekday/weekend split, best/worst day, and comparison to the same
+  weekday of the previous week
 
 ## 10.0.3 - 2026-03-24
 ### Fixed
@@ -109,7 +109,7 @@
 ### Improved
 - **Web live view: key-value label alignment** — device detail cards now use
   `minmax(100px, auto)` for the label column and a `min-width: 100px` on `dt`
-  elements, so U / I / cos φ / Netzfrequenz / Phase 1–3 / Iₙ all start at the
+  elements, so U / I / cos φ / Grid frequency / Phase 1–3 / I_N all start at the
   same horizontal position regardless of label length.
 - **Web compare tab: smart granularity per preset** — quick-preset buttons now
   automatically select the most meaningful granularity:
@@ -132,7 +132,7 @@
 
 ### Added
 - **Web costs tab: CO₂ display** — each device card in the Costs tab now shows
-  a CO₂ section (Today / Week / Month / Prognose in kg) calculated from the
+  a CO₂ section (Today / Week / Month / Forecast in kg) calculated from the
   configured CO₂ intensity (g/kWh, default 380 g/kWh). The section is hidden
   when CO₂ intensity is set to 0.
 
@@ -176,7 +176,7 @@
   JS milliseconds) and `loadHistory()` merges it into `sparkData` on startup.
   The 1 min–2 h timescale selector buttons work correctly with this pre-loaded
   data.
-- **Web costs: wrong forecast value** — the "Prognose (Monat)" metric card was
+- **Web costs: wrong forecast value** — the "Forecast (Month)" metric card was
   displaying `year_eur` (full-year energy cost) instead of the correctly
   calculated `proj_eur` (month-to-date ÷ elapsed days × days-in-month). The
   formula now matches the desktop app. The card also shows the projected kWh as
@@ -336,11 +336,11 @@
 - **Complete Web UI rewrite (major).** The mobile web dashboard is now a
   full-featured single-page app (SPA) with a bottom navigation bar matching
   all tabs of the desktop application.
-- **6 tabs in the web UI:** Live, Kosten, Heatmap, Solar, Vergleich, Anomalien.
+- **6 tabs in the web UI:** Live, Costs, Heatmap, Solar, Comparison, Anomalies.
 - **Live tab** — real-time device cards with color-coded power (green/yellow/red),
   sparkline canvas chart, collapsible detail rows (voltage, current, cos φ),
   and NILM appliance chips.  Freeze button in the header.
-- **Kosten tab** — cost overview per device with today/week/month/year and
+- **Costs tab** — cost overview per device with today/week/month/year and
   monthly projection, powered by the existing `/api/costs` endpoint.
 - **Heatmap tab** — interactive GitHub-style calendar heatmap (daily kWh/€)
   and a 7 × 24 weekday × hour heatmap with color scale.  Device, unit and
@@ -348,11 +348,11 @@
 - **Solar tab** — PV dashboard with feed-in, grid consumption, self-consumption,
   autarky %, PV production, feed-in revenue and cost savings.  Period buttons
   (Today/Week/Month/Year).  New `/api/solar` endpoint.
-- **Vergleich tab** — period-over-period comparison with device A/B selectors,
+- **Comparison tab** — period-over-period comparison with device A/B selectors,
   date range inputs, unit (kWh/€) and granularity (total/daily/monthly) toggles,
   quick-preset buttons (month/quarter/half-year/year), grouped Canvas bar chart
   and delta display.  New `/api/compare` endpoint.
-- **Anomalien tab** — lists detected anomaly events (type, device, timestamp,
+- **Anomalies tab** — lists detected anomaly events (type, device, timestamp,
   sigma, description) with an enabled/disabled status badge.  New `/api/anomalies`
   endpoint.
 - **Mobile-first design** — bottom navigation bar with emoji icons, min 44 px
@@ -514,7 +514,7 @@
 
 ## 8.0.3 - 2026-03-20
 ### Fixed
-- **Responsive tab scaling (Kosten, Heatmap, Solar):** Charts in these tabs now correctly rescale when the window is resized. Previously, plots were only rendered at their initial size and did not adapt to window size changes.
+- **Responsive tab scaling (Costs, Heatmap, Solar):** Charts in these tabs now correctly rescale when the window is resized. Previously, plots were only rendered at their initial size and did not adapt to window size changes.
 
 ## 8.0.2 - 2026-03-20
 ### Fixed
@@ -578,7 +578,7 @@
   - **Costs tab aggregation:** When a group or "Total" is selected, the costs tab displays an additional aggregate section at the top showing summed kWh, cost (€), CO₂, TOU breakdown, projected month cost, and comparison vs. previous month for all devices in the selection.
   - **Plots / Live tab compatibility:** When a group is selected, the plots and live tabs show the first two devices of the group (consistent with the existing 2-device display limit). The costs tab always aggregates all member devices.
   - **Settings → Groups tab (new subtab):** A dedicated scrollable "Groups" editor in the Settings tab allows creating, editing, and deleting groups. Each group has a name field and per-device checkboxes. Changes are saved to `config.json` and the dropdown is updated immediately.
-  - **Telegram summary groups section:** When groups are configured, the Telegram daily/monthly summary now appends a "📦 Gruppen" section listing each group's total kWh, cost, and share of overall consumption.
+  - **Telegram summary groups section:** When groups are configured, the Telegram daily/monthly summary now appends a "📦 Groups" section listing each group's total kWh, cost, and share of overall consumption.
   - **Full i18n support** in all 9 languages (de, en, es, fr, pt, it, pl, cs, ru): settings tab name, editor labels (name, devices, add, delete, save), costs aggregate title, and total label.
   - **Backward compatible:** `groups` array is written back to `config.json` on first use; existing configs without this key continue to work with no migration needed.
 
@@ -623,14 +623,14 @@
 
 ## 7.6.0 - 2026-03-20
 ### Added
-- **Time-of-Use (TOU) / Multi-Tariff Pricing.** The app now supports time-variable electricity tariffs (Mehrtarif / Doppeltarif), replacing the single flat rate when enabled.
+- **Time-of-Use (TOU) / Multi-Tariff Pricing.** The app now supports time-variable electricity tariffs (peak/off-peak), replacing the single flat rate when enabled.
   - **TouConfig** dataclass with `enabled` flag and a list of **TouRate** entries, each defining a name (e.g. HT/NT or Peak/Off-Peak), price (€/kWh), start hour, end hour (overnight windows supported when end < start), and an optional weekdays-only flag (Mon–Fri).
   - **Default rates:** HT (0.35 €/kWh, 06:00–22:00) and NT (0.22 €/kWh, 22:00–06:00); fully configurable.
   - **Timestamp-based cost calculation:** Each energy interval is matched to the applicable tariff window, enabling accurate cost breakdowns regardless of mix of peak/off-peak consumption. Falls back gracefully to flat rate if TOU is disabled or no rates are defined.
   - **Costs tab breakdown:** Each time-range card (Today, Week, Month, Year) now shows a per-tariff breakdown line, e.g. `HT: 12.34 kWh / 4.32 € | NT: 8.00 kWh / 1.76 €`.
   - **Month projection** and **previous month comparison** are also computed using the TOU cost model.
   - **Telegram & Webhook summaries** include the TOU cost breakdown per tariff name when TOU is active.
-  - **Settings UI – TOU editor:** A new "Mehrtarif / Zeit-variable Preise (TOU)" section in Settings → main tab allows enabling TOU, adding/editing/removing tariff windows via a Treeview with add/edit/remove buttons and an inline dialog (name, price, start hour, end hour, weekdays-only checkbox).
+  - **Settings UI – TOU editor:** A new "Time-of-Use / Time-variable Pricing (TOU)" section in Settings → main tab allows enabling TOU, adding/editing/removing tariff windows via a Treeview with add/edit/remove buttons and an inline dialog (name, price, start hour, end hour, weekdays-only checkbox).
   - **Persisted in config.json** under the `tou` key with full serialisation/deserialisation, including backward-compatible defaults for existing installations.
   - **Full i18n support** in all 9 languages (de, en, es, fr, pt, it, pl, cs, ru).
 
@@ -714,7 +714,7 @@
 
 ## 6.0.1.4 - 2026-03-16
 ### Changed
-- **Global plot theme setting.** Day/Night theme moved from Live tab quick-controls to Settings → Live & Preis → Darstellung. Now applies to **all** plots (Live + History/Plots tab). Options: Auto (System), Tag (hell), Nacht (dunkel). Auto detects OS dark mode.
+- **Global plot theme setting.** Day/Night theme moved from Live tab quick-controls to Settings → Live & Pricing → Display. Now applies to **all** plots (Live + History/Plots tab). Options: Auto (System), Day (light), Night (dark). Auto detects OS dark mode.
 - **Removed per-plot theme toggle** from the Live tab control bar. Theme is now centrally managed in Settings.
 
 ### Added
