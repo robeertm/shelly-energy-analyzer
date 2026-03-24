@@ -9835,7 +9835,7 @@ class CoreMixin:
                     report_data = self._build_email_report_data(
                         start_dt, end_dt, prev_start, prev_end, report_type="daily"
                     )
-                    _wlog.info("_email_send_daily_now: report_data totals=%s", len(report_data.totals) if report_data else "None")
+                    _wlog.info("PDF report data: devices=%d, total_kwh=%.2f", len(report_data.totals) if report_data else 0, sum(r.kwh_total for r in report_data.totals) if report_data else 0.0)
                     import tempfile
                     tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
                     pdf_path = Path(tmp.name)
