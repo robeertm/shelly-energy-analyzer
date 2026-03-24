@@ -10063,7 +10063,7 @@ class CoreMixin:
                             continue
 
                         pwr_col = None
-                        for col in ("total_act_power", "a_act_power", "power_w"):
+                        for col in ("total_power", "total_act_power", "a_act_power", "power_w"):
                             if col in df.columns:
                                 pwr_col = col
                                 break
@@ -10072,14 +10072,17 @@ class CoreMixin:
                         max_w  = max(powers) if powers else 0.0
 
                         kwh = 0.0
-                        for col in ("total_act", "energy_wh"):
+                        for col in ("energy_kwh", "total_act", "energy_wh"):
                             if col in df.columns:
                                 vals = df[col].dropna()
                                 if not vals.empty:
-                                    kwh = (vals.max() - vals.min()) / 1000.0
+                                    if col == "energy_kwh":
+                                        kwh = float(vals.sum())
+                                    else:
+                                        kwh = (vals.max() - vals.min()) / 1000.0
                                     break
                         if kwh <= 0 and powers and "timestamp" in df.columns:
-                            ts_col = df["timestamp"].dropna()
+                            ts_col = pd.to_datetime(df["timestamp"], errors="coerce").dropna()
                             if len(ts_col) > 1:
                                 th = (ts_col.max() - ts_col.min()).total_seconds() / 3600.0
                                 if th > 0:
@@ -10096,26 +10099,40 @@ class CoreMixin:
                         # Build hourly / daily time series (aggregate across all devices)
                         if "timestamp" in df.columns:
                             try:
-                                ts_series = pd.to_datetime(df["timestamp"], errors="coerce").dropna()
-                                if pwr_col and not ts_series.empty:
+                                if pwr_col:
                                     tdf = df[["timestamp", pwr_col]].copy()
                                     tdf["timestamp"] = pd.to_datetime(tdf["timestamp"], errors="coerce")
                                     tdf = tdf.dropna(subset=["timestamp"]).set_index("timestamp").sort_index()
                                     tdf[pwr_col] = tdf[pwr_col].astype(float)
                                     if report_type == "daily":
-                                        # Resample to hourly mean W -> kWh per hour
                                         hrly = tdf[pwr_col].resample("h").mean()
                                         for ts_h, w_val in hrly.items():
                                             h_idx = ts_h.hour
                                             if 0 <= h_idx < 24 and not pd.isna(w_val):
                                                 hourly_kwh[h_idx] += float(w_val) / 1000.0
                                     else:
-                                        # Resample to daily mean W -> kWh per day
                                         dly = tdf[pwr_col].resample("D").mean()
                                         for ts_d, w_val in dly.items():
                                             d_key = ts_d.date()
                                             if not pd.isna(w_val):
                                                 daily_map[d_key] = daily_map.get(d_key, 0.0) + float(w_val) / 1000.0
+                                elif "energy_kwh" in df.columns:
+                                    tdf = df[["timestamp", "energy_kwh"]].copy()
+                                    tdf["timestamp"] = pd.to_datetime(tdf["timestamp"], errors="coerce")
+                                    tdf = tdf.dropna(subset=["timestamp"]).set_index("timestamp").sort_index()
+                                    tdf["energy_kwh"] = tdf["energy_kwh"].astype(float)
+                                    if report_type == "daily":
+                                        hrly = tdf["energy_kwh"].resample("h").sum()
+                                        for ts_h, e_val in hrly.items():
+                                            h_idx = ts_h.hour
+                                            if 0 <= h_idx < 24 and not pd.isna(e_val):
+                                                hourly_kwh[h_idx] += float(e_val)
+                                    else:
+                                        dly = tdf["energy_kwh"].resample("D").sum()
+                                        for ts_d, e_val in dly.items():
+                                            d_key = ts_d.date()
+                                            if not pd.isna(e_val):
+                                                daily_map[d_key] = daily_map.get(d_key, 0.0) + float(e_val)
                             except Exception:
                                 pass
                     except Exception:
