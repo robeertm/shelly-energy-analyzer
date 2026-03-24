@@ -9949,8 +9949,7 @@ class CoreMixin:
                             )
                             import calendar as _cal
                             from datetime import date as _date
-                            days_in_month = _cal.monthrange(py, pm)[1]
-                            price_net = self.cfg.pricing.unit_price_net() if hasattr(self.cfg.pricing, "unit_price_net") else self.cfg.pricing.unit_price_gross()
+                            price_net   = self.cfg.pricing.unit_price_net() if hasattr(self.cfg.pricing, "unit_price_net") else self.cfg.pricing.unit_price_gross()
                             vat_enabled = bool(getattr(self.cfg.pricing, "vat_enabled", False))
                             vat_rate    = float(getattr(self.cfg.pricing, "vat_rate_percent", 0.0) or 0.0)
                             inv_totals  = (report_data.totals if report_data else None) or self._build_report_totals(start_dt, end_dt) or []
@@ -9963,21 +9962,46 @@ class CoreMixin:
                                 )
                                 for row in inv_totals
                             ]
+                            # Build issuer/customer dicts from BillingConfig
+                            billing = getattr(self.cfg, "billing", None)
+                            _iss = getattr(billing, "issuer", None) if billing else None
+                            _cus = getattr(billing, "customer", None) if billing else None
+                            inv_prefix = str(getattr(billing, "invoice_prefix", "INV") or "INV") if billing else "INV"
+                            pay_days   = int(getattr(billing, "payment_terms_days", 14) or 14) if billing else 14
+                            logo_path  = str(getattr(billing, "invoice_logo_path", "") or "") if billing else ""
+                            issuer_dict = {
+                                "name":          str(getattr(_iss, "name", "") or "") if _iss else "",
+                                "address_lines": list(getattr(_iss, "address_lines", []) or []) if _iss else [],
+                                "vat_id":        str(getattr(_iss, "vat_id", "") or "") if _iss else "",
+                                "email":         str(getattr(_iss, "email", "") or "") if _iss else "",
+                                "iban":          str(getattr(_iss, "iban", "") or "") if _iss else "",
+                                "bic":           str(getattr(_iss, "bic", "") or "") if _iss else "",
+                            }
+                            customer_dict = {
+                                "name":          str(getattr(_cus, "name", "") or "") if _cus else "",
+                                "address_lines": list(getattr(_cus, "address_lines", []) or []) if _cus else [],
+                                "email":         str(getattr(_cus, "email", "") or "") if _cus else "",
+                            }
+                            invoice_no  = f"{inv_prefix}-{start_dt.strftime('%Y-%m')}-001"
+                            issue_date  = end_dt.date()
+                            from datetime import timedelta as _td
+                            due_date    = issue_date + _td(days=pay_days)
                             tmp_inv = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
                             invoice_path = Path(tmp_inv.name)
                             tmp_inv.close()
                             export_pdf_invoice(
                                 out_path=invoice_path,
-                                invoice_no=f"SEA-{start_dt.strftime('%Y%m')}",
-                                issue_date=end_dt.date(),
-                                due_date=end_dt.date(),
-                                issuer={"name": "Shelly Energy Analyzer"},
-                                customer={},
+                                invoice_no=invoice_no,
+                                issue_date=issue_date,
+                                due_date=due_date,
+                                issuer=issuer_dict,
+                                customer=customer_dict,
                                 vat_rate_percent=vat_rate,
                                 vat_enabled=vat_enabled,
                                 lines=inv_lines,
                                 period_label=f"{start_dt.strftime('%Y-%m-%d')} \u2013 {end_dt.strftime('%Y-%m-%d')}",
                                 lang=lang,
+                                logo_path=logo_path or None,
                             )
                             if invoice_path.exists():
                                 attachments.append(str(invoice_path))
@@ -10076,7 +10100,7 @@ class CoreMixin:
                 return None
 
     def _build_email_report_data(self, start_dt, end_dt, prev_start_dt=None, prev_end_dt=None, report_type="daily"):
-            """Build an EmailReportData object with totals, time-series and comparison data."""
+            """Build an EmailReportData object with per-device time-series and extended stats."""
             _log = logging.getLogger(__name__)
             try:
                 import shelly_analyzer as _pkg
@@ -10091,9 +10115,11 @@ class CoreMixin:
                 price    = self.cfg.pricing.unit_price_gross()
                 co2_int  = float(getattr(getattr(self.cfg, "pricing", None), "co2_intensity_g_per_kwh", 380.0) or 380.0)
 
-                totals:      list = []
-                hourly_kwh:  list = [0.0] * 24
-                daily_map:   dict = {}
+                totals:               list = []
+                hourly_kwh:           list = [0.0] * 24
+                daily_map:            dict = {}
+                per_device_hourly:    dict = {}  # dev_name -> List[float] len 24
+                per_device_daily_map: dict = {}  # dev_name -> Dict[date, float]
 
                 _log.info("_build_email_report_data: type=%s, querying %s to %s (ts %d..%d)", report_type, start_dt, end_dt, start_ts, end_ts)
                 for dev in (self.cfg.devices or []):
@@ -10137,9 +10163,11 @@ class CoreMixin:
                             cost_eur=round(kwh * price, 2),
                         ))
 
-                        # Build hourly / daily time series (aggregate across all devices)
+                        # Build aggregate + per-device hourly/daily time series
                         if "timestamp" in df.columns:
                             try:
+                                dev_hourly_vals = [0.0] * 24
+                                dev_day_map: dict = {}
                                 if pwr_col:
                                     tdf = df[["timestamp", pwr_col]].copy()
                                     tdf["timestamp"] = pd.to_datetime(tdf["timestamp"], errors="coerce")
@@ -10150,13 +10178,17 @@ class CoreMixin:
                                         for ts_h, w_val in hrly.items():
                                             h_idx = ts_h.hour
                                             if 0 <= h_idx < 24 and not pd.isna(w_val):
-                                                hourly_kwh[h_idx] += float(w_val) / 1000.0
+                                                v = float(w_val) / 1000.0
+                                                hourly_kwh[h_idx]      += v
+                                                dev_hourly_vals[h_idx] += v
                                     else:
                                         dly = tdf[pwr_col].resample("D").mean()
                                         for ts_d, w_val in dly.items():
                                             d_key = ts_d.date()
                                             if not pd.isna(w_val):
-                                                daily_map[d_key] = daily_map.get(d_key, 0.0) + float(w_val) / 1000.0
+                                                v = float(w_val) / 1000.0
+                                                daily_map[d_key] = daily_map.get(d_key, 0.0) + v
+                                                dev_day_map[d_key] = dev_day_map.get(d_key, 0.0) + v
                                 elif "energy_kwh" in df.columns:
                                     tdf = df[["timestamp", "energy_kwh"]].copy()
                                     tdf["timestamp"] = pd.to_datetime(tdf["timestamp"], errors="coerce")
@@ -10167,21 +10199,38 @@ class CoreMixin:
                                         for ts_h, e_val in hrly.items():
                                             h_idx = ts_h.hour
                                             if 0 <= h_idx < 24 and not pd.isna(e_val):
-                                                hourly_kwh[h_idx] += float(e_val)
+                                                v = float(e_val)
+                                                hourly_kwh[h_idx]      += v
+                                                dev_hourly_vals[h_idx] += v
                                     else:
                                         dly = tdf["energy_kwh"].resample("D").sum()
                                         for ts_d, e_val in dly.items():
                                             d_key = ts_d.date()
                                             if not pd.isna(e_val):
-                                                daily_map[d_key] = daily_map.get(d_key, 0.0) + float(e_val)
+                                                v = float(e_val)
+                                                daily_map[d_key] = daily_map.get(d_key, 0.0) + v
+                                                dev_day_map[d_key] = dev_day_map.get(d_key, 0.0) + v
+                                per_device_hourly[dev.name] = dev_hourly_vals
+                                per_device_daily_map[dev.name] = dev_day_map
                             except Exception as _ts_exc:
                                 _log.warning("_build_email_report_data: timeseries error for device %s: %s", dev.key, _ts_exc)
                     except Exception as _dev_exc:
                         _log.warning("_build_email_report_data: error for device %s: %s", dev.key, _dev_exc)
                         continue
 
-                # Build sorted daily_kwh list
+                # Build sorted aggregate daily_kwh list
                 daily_kwh = sorted(daily_map.items(), key=lambda x: x[0])
+                # Build per-device daily sorted lists
+                per_device_daily = {
+                    nm: sorted(dm.items(), key=lambda x: x[0])
+                    for nm, dm in per_device_daily_map.items()
+                }
+
+                # Extra stats
+                peak_hour = int(hourly_kwh.index(max(hourly_kwh))) if any(v > 0 for v in hourly_kwh) else -1
+                valid_avgs = [r.avg_power_w for r in totals if r.avg_power_w > 0]
+                avg_power_w = sum(valid_avgs) / len(valid_avgs) if valid_avgs else 0.0
+                peak_power_w = max((r.max_power_w for r in totals), default=0.0)
 
                 # Previous period totals for comparison
                 prev_kwh  = 0.0
@@ -10191,6 +10240,35 @@ class CoreMixin:
                     if prev_totals:
                         prev_kwh  = sum(r.kwh_total for r in prev_totals)
                         prev_cost = sum(r.cost_eur  for r in prev_totals)
+
+                # Same-weekday-last-week comparison (daily only)
+                prev_same_weekday_kwh = 0.0
+                if report_type == "daily":
+                    try:
+                        wk_start = start_dt - timedelta(days=7)
+                        wk_end   = start_dt - timedelta(days=6)
+                        wk_totals = self._build_report_totals(wk_start, wk_end)
+                        if wk_totals:
+                            prev_same_weekday_kwh = round(sum(r.kwh_total for r in wk_totals), 3)
+                    except Exception:
+                        pass
+
+                # Monthly-specific stats from daily_map
+                weekday_avg_kwh  = 0.0
+                weekend_avg_kwh  = 0.0
+                best_day_date    = None
+                best_day_kwh     = 0.0
+                worst_day_date   = None
+                worst_day_kwh    = 0.0
+                if daily_map:
+                    wk_vals  = [v for d, v in daily_map.items() if d.weekday() < 5]
+                    we_vals  = [v for d, v in daily_map.items() if d.weekday() >= 5]
+                    weekday_avg_kwh  = round(sum(wk_vals) / len(wk_vals), 3) if wk_vals else 0.0
+                    weekend_avg_kwh  = round(sum(we_vals) / len(we_vals), 3) if we_vals else 0.0
+                    best_day_date  = min(daily_map, key=daily_map.get)
+                    best_day_kwh   = round(daily_map[best_day_date], 3)
+                    worst_day_date = max(daily_map, key=daily_map.get)
+                    worst_day_kwh  = round(daily_map[worst_day_date], 3)
 
                 total_kwh = sum(r.kwh_total for r in totals)
                 co2_kg    = total_kwh * co2_int / 1000.0
@@ -10205,7 +10283,7 @@ class CoreMixin:
 
                 version = getattr(_pkg, "__version__", "")
 
-                _log.info("_build_email_report_data: done, totals=%d devices, total_kwh=%.3f", len(totals), sum(r.kwh_total for r in totals))
+                _log.info("_build_email_report_data: done, totals=%d devices, total_kwh=%.3f, peak_hour=%d", len(totals), total_kwh, peak_hour)
                 return EmailReportData(
                     report_type=report_type,
                     period_start=start_dt,
@@ -10220,6 +10298,18 @@ class CoreMixin:
                     price_per_kwh=price,
                     vat_rate=vat_rate,
                     version=version,
+                    per_device_hourly=per_device_hourly,
+                    per_device_daily=per_device_daily,
+                    peak_hour=peak_hour,
+                    avg_power_w=round(avg_power_w, 1),
+                    peak_power_w=round(peak_power_w, 1),
+                    prev_same_weekday_kwh=prev_same_weekday_kwh,
+                    weekday_avg_kwh=weekday_avg_kwh,
+                    weekend_avg_kwh=weekend_avg_kwh,
+                    best_day_date=best_day_date,
+                    best_day_kwh=best_day_kwh,
+                    worst_day_date=worst_day_date,
+                    worst_day_kwh=worst_day_kwh,
                 )
             except Exception as _exc:
                 _log.warning("_build_email_report_data failed: %s", _exc, exc_info=True)

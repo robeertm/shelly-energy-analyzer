@@ -1,5 +1,45 @@
 # Changelog
 
+## 10.1.0 - 2026-03-24
+### Added
+- **Massiv erweiterter Tagesreport (PDF)**
+  - 6 KPI-Kacheln statt 3: Gesamt-kWh, Kosten, CO2, mittlere Leistung, Spitzenleistung, Spitzenstunde
+  - Vergleich zum Vortag **und** zum gleichen Wochentag der Vorwoche (mit farbigem +/-%  )
+  - Erweitertes Gerätebau-Tabelle mit Anteilsspalte (%)
+  - Highlights / Lowlights: Spitzenverbraucher, sparsamster Verbraucher, Stunde mit höchstem und niedrigstem Verbrauch
+  - Seite 2: **Gestapeltes 24h-Balkendiagramm** (jedes Gerät in eigener Farbe mit Legende)
+  - Ab Seite 3: **Pro-Gerät-Sektion** mit Mini-24h-Balkendiagramm, Betriebsstunden, Min/Avg/Max kWh/h, mittlere und Spitzenleistung, Anteil am Gesamtverbrauch
+
+- **Massiv erweiterter Monatsreport (PDF)**
+  - 6 KPI-Kacheln: Gesamt-kWh, Kosten, CO2, Tagesdurchschnitt, teuerster Tag, günstigster Tag
+  - Vergleich zum Vormonat mit absolutem und prozentualem Delta
+  - **Wochentag vs. Wochenende** Durchschnittsvergleich
+  - Seite 2: **Gestapeltes Tages-Balkendiagramm** (alle Geräte)
+  - Ab Seite 3: **Pro-Gerät-Sektion** mit Mini-Tages-Balkendiagramm, Min/Avg/Max kWh/Tag, Trend (Steigend/Fallend/Stabil)
+  - Letzte Seite: **Top-5-Verbraucher-Ranking** als horizontales Balkendiagramm + Rangliste mit kWh und Anteil
+
+- **Verbesserte Rechnung (PDF)**
+  - Absender und Empfänger werden jetzt vollständig aus `BillingConfig` gelesen (Name, Adresse, USt-ID, E-Mail, IBAN, BIC)
+  - Rechnungsnummer im Format `{Prefix}-{YYYY}-{MM}-001` (konfigurierbar über `billing.invoice_prefix`)
+  - Fälligkeitsdatum errechnet sich automatisch aus `billing.payment_terms_days`
+  - Logo aus `billing.invoice_logo_path` wird eingebettet wenn vorhanden
+
+- **Neue Matplotlib-Hilfsfunktionen** in `services/export.py`
+  - `_DEVICE_PALETTE` – konsistente 10-Farben-Palette, jedes Gerät bekommt überall dieselbe Farbe
+  - `_make_stacked_hourly_chart` / `_make_stacked_daily_chart` – gestapelte Balkendiagramme
+  - `_make_device_mini_chart_hourly` / `_make_device_mini_chart_daily` – kleine Gerätediagramme
+  - `_make_top5_bar_chart` – horizontales Top-5-Balkendiagramm
+  - `_draw_device_table_enhanced` – Gerätetabelle mit Anteilsspalte (%)
+
+- **`EmailReportData`** um 11 neue Felder erweitert (alle optional/mit Default für Rückwärtskompatibilität):
+  `per_device_hourly`, `per_device_daily`, `peak_hour`, `avg_power_w`, `peak_power_w`,
+  `prev_same_weekday_kwh`, `weekday_avg_kwh`, `weekend_avg_kwh`,
+  `best_day_date`, `best_day_kwh`, `worst_day_date`, `worst_day_kwh`
+
+- **`_build_email_report_data`** jetzt vollständig: sammelt pro Gerät Stunden- und Tageszeitreihen,
+  berechnet Spitzenstunde, Wochentag/Wochenende-Split, besten/schlechtesten Tag und
+  Vergleich zum gleichen Wochentag der Vorwoche
+
 ## 10.0.3 - 2026-03-24
 ### Fixed
 - **Critical: PDF email attachments always empty** — `_build_email_report_data` and

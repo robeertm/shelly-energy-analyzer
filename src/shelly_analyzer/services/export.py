@@ -784,13 +784,13 @@ _C_TEXT        = (0.173, 0.243, 0.314)
 
 @dataclass
 class EmailReportData:
-    """Rich data payload for email report PDF generation (v10)."""
+    """Rich data payload for email report PDF generation (v10.1)."""
     report_type: str                            # "daily" | "monthly"
     period_start: datetime
     period_end: datetime
     totals: List[ReportTotals]                  # per-device totals
-    hourly_kwh: List[float] = field(default_factory=list)   # len 24 for daily
-    daily_kwh: List[Tuple[date, float]] = field(default_factory=list)   # for monthly
+    hourly_kwh: List[float] = field(default_factory=list)   # len 24 for daily (aggregate)
+    daily_kwh: List[Tuple[date, float]] = field(default_factory=list)   # for monthly (aggregate)
     co2_kg: float = 0.0
     co2_intensity_g_per_kwh: float = 380.0
     prev_kwh: float = 0.0                       # previous period total kWh
@@ -798,6 +798,19 @@ class EmailReportData:
     price_per_kwh: float = 0.0
     vat_rate: float = 0.0                       # 0.0 if disabled
     version: str = ""
+    # v10.1 additions – all optional (default_factory keeps backward compat)
+    per_device_hourly: Dict[str, List[float]] = field(default_factory=dict)   # name -> 24 vals
+    per_device_daily: Dict[str, List[Tuple[date, float]]] = field(default_factory=dict)  # name -> days
+    peak_hour: int = -1                         # hour index 0-23 with highest kWh
+    avg_power_w: float = 0.0                    # overall weighted average W
+    peak_power_w: float = 0.0                   # overall peak W across all devices
+    prev_same_weekday_kwh: float = 0.0          # daily: same weekday last week
+    weekday_avg_kwh: float = 0.0               # monthly: avg weekday day-kWh
+    weekend_avg_kwh: float = 0.0               # monthly: avg weekend day-kWh
+    best_day_date: Optional[date] = None       # monthly: day with lowest consumption
+    best_day_kwh: float = 0.0
+    worst_day_date: Optional[date] = None      # monthly: day with highest consumption
+    worst_day_kwh: float = 0.0
 
 
 # ---------- Matplotlib chart helpers ----------
@@ -872,6 +885,247 @@ def _make_daily_chart(daily_kwh: List[Tuple[date, float]], lang: str, tmp_dir: P
 
         out = tmp_dir / "_chart_daily.png"
         fig.savefig(str(out), dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+        plt.close(fig)
+        return out
+    except Exception:
+        return None
+
+
+# Consistent per-device colour palette (up to 10 devices)
+_DEVICE_PALETTE = [
+    "#1E6B8C",  # blue  (matches brand header)
+    "#E67E22",  # orange
+    "#27AE60",  # green
+    "#8E44AD",  # purple
+    "#E74C3C",  # red
+    "#16A085",  # teal
+    "#F39C12",  # amber
+    "#2980B9",  # light blue
+    "#C0392B",  # dark red
+    "#1ABC9C",  # mint
+]
+
+
+def _device_color(idx: int) -> str:
+    return _DEVICE_PALETTE[idx % len(_DEVICE_PALETTE)]
+
+
+def _make_stacked_hourly_chart(
+    per_device_hourly: Dict[str, List[float]],
+    lang: str,
+    tmp_dir: Path,
+) -> Optional[Path]:
+    """Render a stacked 24-hour bar chart (one colour per device) to a temp PNG."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.ticker as mticker
+        import numpy as np
+
+        names = list(per_device_hourly.keys())
+        if not names:
+            return None
+        hours = list(range(24))
+        fig, ax = plt.subplots(figsize=(10, 3.8))
+        fig.patch.set_facecolor("#F8FBFD")
+        ax.set_facecolor("#F8FBFD")
+        bottoms = np.zeros(24)
+        for idx, name in enumerate(names):
+            vals = np.array([per_device_hourly[name][h] if h < len(per_device_hourly[name]) else 0.0 for h in hours])
+            ax.bar(hours, vals, bottom=bottoms, color=_device_color(idx), width=0.7, label=name[:25], zorder=3)
+            bottoms += vals
+        ax.set_xlabel("Hour" if normalize_lang(lang) == "en" else "Stunde", fontsize=9)
+        ax.set_ylabel("kWh", fontsize=9)
+        ax.set_xticks(hours)
+        ax.set_xticklabels([f"{h:02d}" for h in hours], fontsize=7)
+        ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
+        ax.tick_params(axis="y", labelsize=8)
+        ax.grid(axis="y", color="#D0DDE8", linewidth=0.6, zorder=0)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        if len(names) > 1:
+            ax.legend(fontsize=7, loc="upper right", framealpha=0.7)
+        fig.tight_layout(pad=0.6)
+        out = tmp_dir / "_chart_stacked_hourly.png"
+        fig.savefig(str(out), dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+        plt.close(fig)
+        return out
+    except Exception:
+        return None
+
+
+def _make_stacked_daily_chart(
+    per_device_daily: Dict[str, List[Tuple[date, float]]],
+    lang: str,
+    tmp_dir: Path,
+) -> Optional[Path]:
+    """Render a stacked per-day bar chart (one colour per device) to a temp PNG."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.ticker as mticker
+        import numpy as np
+        from datetime import date as _date
+
+        names = list(per_device_daily.keys())
+        if not names:
+            return None
+        # Collect all unique dates in order
+        all_dates: list = sorted(set(d for nm in names for d, _ in per_device_daily[nm]))
+        if not all_dates:
+            return None
+        date_idx = {d: i for i, d in enumerate(all_dates)}
+        n = len(all_dates)
+        labels = [str(d.day) for d in all_dates]
+        fig_w = max(8.0, n * 0.38)
+        fig, ax = plt.subplots(figsize=(fig_w, 3.8))
+        fig.patch.set_facecolor("#F8FBFD")
+        ax.set_facecolor("#F8FBFD")
+        bottoms = np.zeros(n)
+        for idx, name in enumerate(names):
+            vals = np.zeros(n)
+            for d, v in per_device_daily[name]:
+                if d in date_idx:
+                    vals[date_idx[d]] = float(v or 0.0)
+            ax.bar(range(n), vals, bottom=bottoms, color=_device_color(idx), width=0.7, label=name[:25], zorder=3)
+            bottoms += vals
+        ax.set_xlabel("Day" if normalize_lang(lang) == "en" else "Tag", fontsize=9)
+        ax.set_ylabel("kWh", fontsize=9)
+        ax.set_xticks(range(n))
+        ax.set_xticklabels(labels, fontsize=7)
+        ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
+        ax.tick_params(axis="y", labelsize=8)
+        ax.grid(axis="y", color="#D0DDE8", linewidth=0.6, zorder=0)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        if len(names) > 1:
+            ax.legend(fontsize=7, loc="upper right", framealpha=0.7)
+        fig.tight_layout(pad=0.6)
+        out = tmp_dir / "_chart_stacked_daily.png"
+        fig.savefig(str(out), dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+        plt.close(fig)
+        return out
+    except Exception:
+        return None
+
+
+def _make_device_mini_chart_hourly(
+    hourly_vals: List[float],
+    color: str,
+    lang: str,
+    tmp_dir: Path,
+    suffix: str,
+) -> Optional[Path]:
+    """Render a small 24h bar chart for one device."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.ticker as mticker
+
+        hours = list(range(24))
+        vals = [hourly_vals[h] if h < len(hourly_vals) else 0.0 for h in hours]
+        fig, ax = plt.subplots(figsize=(5.5, 1.8))
+        fig.patch.set_facecolor("#F8FBFD")
+        ax.set_facecolor("#F8FBFD")
+        ax.bar(hours, vals, color=color, width=0.7, zorder=3)
+        ax.set_xticks(range(0, 24, 3))
+        ax.set_xticklabels([f"{h:02d}" for h in range(0, 24, 3)], fontsize=6)
+        ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
+        ax.tick_params(axis="y", labelsize=6)
+        ax.grid(axis="y", color="#D0DDE8", linewidth=0.5, zorder=0)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        fig.tight_layout(pad=0.3)
+        out = tmp_dir / f"_mini_h_{suffix}.png"
+        fig.savefig(str(out), dpi=130, bbox_inches="tight", facecolor=fig.get_facecolor())
+        plt.close(fig)
+        return out
+    except Exception:
+        return None
+
+
+def _make_device_mini_chart_daily(
+    daily_vals: List[Tuple[date, float]],
+    color: str,
+    lang: str,
+    tmp_dir: Path,
+    suffix: str,
+) -> Optional[Path]:
+    """Render a small daily bar chart for one device."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.ticker as mticker
+
+        if not daily_vals:
+            return None
+        labels = [str(d.day) for d, _ in daily_vals]
+        vals = [float(v or 0.0) for _, v in daily_vals]
+        n = len(vals)
+        fig_w = max(5.5, n * 0.22)
+        fig, ax = plt.subplots(figsize=(fig_w, 1.8))
+        fig.patch.set_facecolor("#F8FBFD")
+        ax.set_facecolor("#F8FBFD")
+        ax.bar(range(n), vals, color=color, width=0.7, zorder=3)
+        step = max(1, n // 10)
+        ax.set_xticks(range(0, n, step))
+        ax.set_xticklabels(labels[::step], fontsize=6)
+        ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
+        ax.tick_params(axis="y", labelsize=6)
+        ax.grid(axis="y", color="#D0DDE8", linewidth=0.5, zorder=0)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        fig.tight_layout(pad=0.3)
+        out = tmp_dir / f"_mini_d_{suffix}.png"
+        fig.savefig(str(out), dpi=130, bbox_inches="tight", facecolor=fig.get_facecolor())
+        plt.close(fig)
+        return out
+    except Exception:
+        return None
+
+
+def _make_top5_bar_chart(
+    totals: List[ReportTotals],
+    lang: str,
+    tmp_dir: Path,
+) -> Optional[Path]:
+    """Render a horizontal bar chart of top-5 consumers."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.ticker as mticker
+
+        sorted_t = sorted(totals, key=lambda r: r.kwh_total, reverse=True)[:5]
+        if not sorted_t:
+            return None
+        names = [r.name[:30] for r in reversed(sorted_t)]
+        vals = [r.kwh_total for r in reversed(sorted_t)]
+        colors = [_device_color(totals.index(r) if r in totals else 0) for r in reversed(sorted_t)]
+
+        fig, ax = plt.subplots(figsize=(7, max(2.0, len(names) * 0.55)))
+        fig.patch.set_facecolor("#F8FBFD")
+        ax.set_facecolor("#F8FBFD")
+        bars = ax.barh(range(len(names)), vals, color=colors, zorder=3)
+        ax.set_yticks(range(len(names)))
+        ax.set_yticklabels(names, fontsize=8)
+        ax.set_xlabel("kWh", fontsize=9)
+        ax.xaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
+        ax.tick_params(axis="x", labelsize=8)
+        ax.grid(axis="x", color="#D0DDE8", linewidth=0.6, zorder=0)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        # Value labels on bars
+        for bar, v in zip(bars, vals):
+            ax.text(bar.get_width() * 1.01, bar.get_y() + bar.get_height() / 2,
+                    f"{v:.2f}", va="center", fontsize=7)
+        fig.tight_layout(pad=0.5)
+        out = tmp_dir / "_chart_top5.png"
+        fig.savefig(str(out), dpi=130, bbox_inches="tight", facecolor=fig.get_facecolor())
         plt.close(fig)
         return out
     except Exception:
@@ -1003,6 +1257,68 @@ def _draw_device_table(c: canvas.Canvas, w: float, y: float,
     return y - 0.3 * cm
 
 
+def _draw_device_table_enhanced(
+    c: canvas.Canvas, pw: float, y: float,
+    totals: List[ReportTotals], co2_intensity: float, lang: str,
+) -> float:
+    """Device table with % share column: name | kWh | % | EUR | avg W | max W."""
+    margin = 1.8 * cm
+    tw = pw - 2 * margin
+    # Column right-edges (relative to margin): name=38%, kWh=52%, %=60%, EUR=72%, avgW=84%, maxW=100%
+    col_x = [margin,
+              margin + tw * 0.38,
+              margin + tw * 0.52,
+              margin + tw * 0.62,
+              margin + tw * 0.74,
+              margin + tw * 0.87,
+              margin + tw]
+    total_kwh = sum(r.kwh_total for r in totals) or 1.0
+
+    row_h = 0.55 * cm
+    _rl_set_fill(c, _C_TH_BG)
+    c.rect(margin, y - row_h, tw, row_h, stroke=0, fill=1)
+    _rl_set_fill(c, _C_TH_TEXT)
+    c.setFont("Helvetica-Bold", 8)
+    hdrs = [
+        t(lang, "pdf.col.name"),
+        "kWh", "%",
+        t(lang, "pdf.col.cost") + " (EUR)",
+        t(lang, "pdf.col.avg_w"),
+        t(lang, "pdf.col.max_w"),
+        "CO\u2082 (kg)",
+    ]
+    c.drawString(col_x[0] + 0.1 * cm, y - 0.38 * cm, hdrs[0])
+    for i in range(1, 7):
+        c.drawRightString(col_x[i] - 0.08 * cm, y - 0.38 * cm, hdrs[i])
+    y -= row_h
+    _rl_set_fill(c, _C_TEXT)
+
+    for idx, row in enumerate(totals):
+        if y < 3.5 * cm:
+            break
+        bg = _C_ROW_ALT if idx % 2 == 0 else (1.0, 1.0, 1.0)
+        _rl_set_fill(c, bg)
+        c.rect(margin, y - row_h, tw, row_h, stroke=0, fill=1)
+        _rl_set_fill(c, _C_TEXT)
+        pct = row.kwh_total / total_kwh * 100.0
+        co2 = row.kwh_total * co2_intensity / 1000.0
+        c.setFont("Helvetica", 8)
+        c.drawString(col_x[0] + 0.1 * cm, y - 0.38 * cm, (row.name or "")[:32])
+        c.drawRightString(col_x[1] - 0.08 * cm, y - 0.38 * cm, _fmt_kwh(row.kwh_total, lang))
+        c.drawRightString(col_x[2] - 0.08 * cm, y - 0.38 * cm, f"{pct:.1f}%")
+        c.drawRightString(col_x[3] - 0.08 * cm, y - 0.38 * cm, _fmt_money(row.cost_eur, lang))
+        c.drawRightString(col_x[4] - 0.08 * cm, y - 0.38 * cm, _fmt_int(row.avg_power_w, lang))
+        c.drawRightString(col_x[5] - 0.08 * cm, y - 0.38 * cm, _fmt_int(row.max_power_w, lang))
+        c.drawRightString(col_x[6] - 0.08 * cm, y - 0.38 * cm, f"{co2:.2f}")
+        y -= row_h
+
+    _rl_set_stroke(c, _C_LINE)
+    c.setLineWidth(0.5)
+    c.line(margin, y, margin + tw, y)
+    _rl_set_stroke(c, _C_TEXT)
+    return y - 0.3 * cm
+
+
 def _draw_totals_row(c: canvas.Canvas, w: float, y: float,
                      totals: List[ReportTotals], co2_kg: float, lang: str) -> float:
     """Draw a bold totals row below the device table."""
@@ -1066,52 +1382,77 @@ def export_pdf_email_daily(
     out_path: Path,
     lang: str = "de",
 ) -> Path:
-    """Generate a rich daily-report PDF with KPI cards, device table and hourly chart."""
-    import tempfile as _tf
-
+    """Generate a detailed daily-report PDF:
+    overview KPIs, enhanced device table, comparisons, stacked hourly chart,
+    per-device sections with mini charts and operating stats.
+    """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     lang = normalize_lang(lang)
-
+    is_en = lang == "en"
     tmp_dir = out_path.parent
-    chart_path = _make_hourly_chart(data.hourly_kwh, lang, tmp_dir)
+    margin = 1.8 * cm
+
+    total_kwh = sum(r.kwh_total for r in data.totals)
+    total_eur = sum(r.cost_eur  for r in data.totals)
+    co2_disp  = data.co2_kg if data.co2_kg > 0 else total_kwh * data.co2_intensity_g_per_kwh / 1000.0
+
+    # Derive extra KPI values
+    avg_w   = data.avg_power_w
+    peak_w  = data.peak_power_w
+    if not avg_w and data.totals:
+        valid_avgs = [r.avg_power_w for r in data.totals if r.avg_power_w > 0]
+        avg_w = sum(valid_avgs) / len(valid_avgs) if valid_avgs else 0.0
+    if not peak_w and data.totals:
+        peak_w = max((r.max_power_w for r in data.totals), default=0.0)
+    peak_hour_lbl = f"{data.peak_hour:02d}:00" if data.peak_hour >= 0 else "—"
+
+    # Build charts
+    stacked_chart = _make_stacked_hourly_chart(data.per_device_hourly, lang, tmp_dir) \
+        if data.per_device_hourly else _make_hourly_chart(data.hourly_kwh, lang, tmp_dir)
 
     c = canvas.Canvas(str(out_path), pagesize=A4)
     pw, ph = A4
     page_n = 1
 
-    # --- Page 1: summary ---
     date_str = data.period_start.strftime("%Y-%m-%d")
-    title_str = t(lang, "pdf.email_report.daily_title")
-    if not title_str or title_str.startswith("pdf."):
-        title_str = "Daily Energy Report" if lang == "en" else "Tagesreport Energie"
+    title_str = "Daily Energy Report" if is_en else "Tagesreport Energie"
+
+    # ------------------------------------------------------------------ Page 1: Overview
     y = _draw_header_band(c, pw, ph, title_str, date_str)
 
-    # KPI row
-    total_kwh  = sum(r.kwh_total for r in data.totals)
-    total_eur  = sum(r.cost_eur  for r in data.totals)
-    co2_disp   = data.co2_kg if data.co2_kg > 0 else total_kwh * data.co2_intensity_g_per_kwh / 1000.0
-    margin     = 1.8 * cm
-    kpi_gap    = 0.4 * cm
-    kpi_w      = (pw - 2 * margin - 2 * kpi_gap) / 3
-    kpi_h      = 2.2 * cm
-
+    # Row 1 of KPIs: kWh | EUR | CO2
+    kpi_gap = 0.4 * cm
+    kpi_w   = (pw - 2 * margin - 2 * kpi_gap) / 3
+    kpi_h   = 2.0 * cm
     _draw_kpi_box(c, margin,                         y, kpi_w, kpi_h,
-                  t(lang, "pdf.report.total_energy") or "Total kWh",
+                  t(lang, "pdf.report.total_energy") or "Gesamt kWh",
                   _fmt_kwh(total_kwh, lang), "kWh")
     _draw_kpi_box(c, margin + kpi_w + kpi_gap,       y, kpi_w, kpi_h,
-                  t(lang, "pdf.report.total_cost") or "Cost",
+                  t(lang, "pdf.report.total_cost") or "Kosten",
                   _fmt_money(total_eur, lang), "EUR")
     _draw_kpi_box(c, margin + 2 * (kpi_w + kpi_gap), y, kpi_w, kpi_h,
                   "CO\u2082",
-                  f"{co2_disp:.2f}", "kg")
+                  f"{co2_disp:.3f}", "kg")
+    y -= kpi_h + 0.3 * cm
+
+    # Row 2 of KPIs: avg W | peak W | peak hour
+    avg_w_lbl  = "Mittl. Leistung" if not is_en else "Avg Power"
+    peak_w_lbl = "Spitzenleistung" if not is_en else "Peak Power"
+    peak_h_lbl = "Spitzenstunde"   if not is_en else "Peak Hour"
+    _draw_kpi_box(c, margin,                         y, kpi_w, kpi_h,
+                  avg_w_lbl, _fmt_int(avg_w, lang), "W")
+    _draw_kpi_box(c, margin + kpi_w + kpi_gap,       y, kpi_w, kpi_h,
+                  peak_w_lbl, _fmt_int(peak_w, lang), "W")
+    _draw_kpi_box(c, margin + 2 * (kpi_w + kpi_gap), y, kpi_w, kpi_h,
+                  peak_h_lbl, peak_hour_lbl, "")
     y -= kpi_h + 0.5 * cm
 
-    # Comparison to previous day
-    cmp_label = t(lang, "pdf.email_report.vs_prev_day") or ""
-    if not cmp_label or cmp_label.startswith("pdf."):
-        cmp_label = "vs. previous day:" if lang == "en" else "vs. Vortag:"
-    y = _draw_comparison_line(c, margin, y, cmp_label, total_kwh, data.prev_kwh, lang)
+    # Comparisons
+    prev_day_lbl = "vs. Vortag:" if not is_en else "vs. previous day:"
+    prev_wk_lbl  = "vs. gleicher Wochentag (Vorwoche):" if not is_en else "vs. same weekday last week:"
+    y = _draw_comparison_line(c, margin, y, prev_day_lbl, total_kwh, data.prev_kwh, lang)
+    y = _draw_comparison_line(c, margin, y, prev_wk_lbl,  total_kwh, data.prev_same_weekday_kwh, lang)
     y -= 0.3 * cm
 
     # Separator
@@ -1120,37 +1461,152 @@ def export_pdf_email_daily(
     c.line(margin, y, pw - margin, y)
     y -= 0.5 * cm
 
-    # Section heading: device table
+    # Device table
     _rl_set_fill(c, _C_TEXT)
     c.setFont("Helvetica-Bold", 10)
-    sec_lbl = t(lang, "pdf.email_report.devices_section") or ""
-    if not sec_lbl or sec_lbl.startswith("pdf."):
-        sec_lbl = "Consumption by Device" if lang == "en" else "Verbrauch je Gerat"
+    sec_lbl = "Verbrauch je Gerat" if not is_en else "Consumption by Device"
     c.drawString(margin, y, sec_lbl)
     y -= 0.6 * cm
 
     if data.totals:
-        y = _draw_device_table(c, pw, y, data.totals, lang)
+        y = _draw_device_table_enhanced(c, pw, y, data.totals, data.co2_intensity_g_per_kwh, lang)
         y = _draw_totals_row(c, pw, y, data.totals, co2_disp, lang)
 
-    y -= 0.4 * cm
+    # Highlights / Lowlights
+    if data.totals and y > 4.0 * cm:
+        y -= 0.5 * cm
+        _rl_set_stroke(c, _C_LINE)
+        c.setLineWidth(0.4)
+        c.line(margin, y, pw - margin, y)
+        y -= 0.45 * cm
+        hl_lbl = "Highlights / Lowlights"
+        _rl_set_fill(c, _C_TEXT)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(margin, y, hl_lbl)
+        y -= 0.45 * cm
+        sorted_t = sorted(data.totals, key=lambda r: r.kwh_total, reverse=True)
+        c.setFont("Helvetica", 8)
+        hl_high_lbl = "Spitzenverbraucher:" if not is_en else "Top consumer:"
+        hl_low_lbl  = "Sparsamster Verbraucher:" if not is_en else "Lowest consumer:"
+        ph_high_lbl = "Stunde mit h. Verbrauch:" if not is_en else "Highest-consumption hour:"
+        ph_low_lbl  = "Stunde mit n. Verbrauch:" if not is_en else "Lowest-consumption hour:"
+        _rl_set_fill(c, _C_TEXT)
+        if sorted_t:
+            best = sorted_t[0]
+            worst = sorted_t[-1]
+            pct_best  = best.kwh_total  / total_kwh * 100 if total_kwh > 0 else 0.0
+            pct_worst = worst.kwh_total / total_kwh * 100 if total_kwh > 0 else 0.0
+            if y > 3.5 * cm:
+                c.drawString(margin, y, f"{hl_high_lbl}  {best.name}  ({_fmt_kwh(best.kwh_total, lang)} kWh, {pct_best:.1f}%)")
+                y -= 0.40 * cm
+            if y > 3.5 * cm:
+                c.drawString(margin, y, f"{hl_low_lbl}  {worst.name}  ({_fmt_kwh(worst.kwh_total, lang)} kWh, {pct_worst:.1f}%)")
+                y -= 0.40 * cm
+        if data.hourly_kwh and y > 3.5 * cm:
+            nonzero = [(h, v) for h, v in enumerate(data.hourly_kwh) if v > 0]
+            if nonzero:
+                h_max = max(nonzero, key=lambda x: x[1])
+                h_min = min(nonzero, key=lambda x: x[1])
+                c.drawString(margin, y, f"{ph_high_lbl}  {h_max[0]:02d}:00  ({_fmt_kwh(h_max[1], lang)} kWh)")
+                y -= 0.40 * cm
+                if y > 3.5 * cm:
+                    c.drawString(margin, y, f"{ph_low_lbl}  {h_min[0]:02d}:00  ({_fmt_kwh(h_min[1], lang)} kWh)")
+
     _draw_footer(c, pw, page_n, data.version, lang)
 
-    # --- Page 2: hourly chart ---
-    if chart_path and chart_path.exists():
+    # ------------------------------------------------------------------ Page 2: Stacked hourly chart
+    if stacked_chart and stacked_chart.exists():
         c.showPage()
         page_n += 1
-        ch_title = t(lang, "pdf.email_report.hourly_chart") or ""
-        if not ch_title or ch_title.startswith("pdf."):
-            ch_title = "Hourly Consumption" if lang == "en" else "Stundenverbrauch"
+        ch_title = "Stundenverbrauch (gestapelt)" if not is_en else "Hourly Consumption (stacked)"
         y2 = _draw_header_band(c, pw, ph, ch_title, date_str)
         y2 -= 0.4 * cm
-        _embed_chart(c, pw, y2, chart_path, ch_title, ph - 5.0 * cm)
+        _embed_chart(c, pw, y2, stacked_chart, ch_title, ph - 5.0 * cm)
         _draw_footer(c, pw, page_n, data.version, lang)
         try:
-            chart_path.unlink(missing_ok=True)
+            stacked_chart.unlink(missing_ok=True)
         except Exception:
             pass
+
+    # ------------------------------------------------------------------ Pages 3+: Per-device detail
+    dev_names = list(data.per_device_hourly.keys()) if data.per_device_hourly else []
+    for dev_idx, dev_name in enumerate(dev_names):
+        hourly_dev = data.per_device_hourly.get(dev_name, [0.0] * 24)
+        # Find matching totals row
+        row = next((r for r in data.totals if r.name == dev_name), None)
+        mini_chart = _make_device_mini_chart_hourly(
+            hourly_dev, _device_color(dev_idx), lang, tmp_dir, f"d{dev_idx}"
+        )
+        c.showPage()
+        page_n += 1
+        dev_date = data.period_start.strftime("%Y-%m-%d")
+        sub_title = f"{(title_str)} – {dev_name}"
+        y = _draw_header_band(c, pw, ph, sub_title, dev_date)
+
+        # Device stat boxes
+        if row:
+            pct = row.kwh_total / total_kwh * 100 if total_kwh > 0 else 0.0
+            kpi_w3 = (pw - 2 * margin - 2 * kpi_gap) / 3
+            _draw_kpi_box(c, margin,                          y, kpi_w3, kpi_h,
+                          "kWh", _fmt_kwh(row.kwh_total, lang), "kWh")
+            _draw_kpi_box(c, margin + kpi_w3 + kpi_gap,      y, kpi_w3, kpi_h,
+                          "EUR", _fmt_money(row.cost_eur, lang), "EUR")
+            _draw_kpi_box(c, margin + 2 * (kpi_w3 + kpi_gap), y, kpi_w3, kpi_h,
+                          "Anteil" if not is_en else "Share", f"{pct:.1f}", "%")
+            y -= kpi_h + 0.3 * cm
+
+        # Operating hours + min/avg/max from hourly data
+        nonzero_h = [v for v in hourly_dev if v and v > 0]
+        op_hours   = len(nonzero_h)
+        min_h      = min(nonzero_h) if nonzero_h else 0.0
+        max_h      = max(nonzero_h) if nonzero_h else 0.0
+        avg_h      = sum(nonzero_h) / len(nonzero_h) if nonzero_h else 0.0
+        if row:
+            c.setFont("Helvetica", 9)
+            _rl_set_fill(c, _C_TEXT)
+            lbl_op   = "Betriebsstunden:" if not is_en else "Operating hours:"
+            lbl_minH = "Min kWh/h:" if not is_en else "Min kWh/h:"
+            lbl_avgH = "Avg kWh/h:" if not is_en else "Avg kWh/h:"
+            lbl_maxH = "Max kWh/h:" if not is_en else "Max kWh/h:"
+            lbl_avgW = "Mittl. Leistung:" if not is_en else "Avg power:"
+            lbl_pkW  = "Spitzenleistung:" if not is_en else "Peak power:"
+            stats = [
+                (lbl_op,   f"{op_hours} h"),
+                (lbl_minH, _fmt_kwh(min_h, lang)),
+                (lbl_avgH, _fmt_kwh(avg_h, lang)),
+                (lbl_maxH, _fmt_kwh(max_h, lang)),
+                (lbl_avgW, f"{_fmt_int(row.avg_power_w, lang)} W"),
+                (lbl_pkW,  f"{_fmt_int(row.max_power_w, lang)} W"),
+            ]
+            col2_x = margin + (pw - 2 * margin) / 2
+            for si, (lbl, val) in enumerate(stats):
+                xx = margin if si % 2 == 0 else col2_x
+                if si % 2 == 0 and si > 0:
+                    y -= 0.45 * cm
+                c.setFont("Helvetica", 8)
+                _rl_set_fill(c, _C_NEUTRAL)
+                c.drawString(xx, y, lbl)
+                _rl_set_fill(c, _C_TEXT)
+                c.setFont("Helvetica-Bold", 8)
+                c.drawString(xx + 4.2 * cm, y, val)
+            _rl_set_fill(c, _C_TEXT)
+            y -= 0.55 * cm
+
+        # Mini chart
+        if mini_chart and mini_chart.exists():
+            ch_lbl = "Stundenverbrauch" if not is_en else "Hourly Consumption"
+            y -= 0.2 * cm
+            _rl_set_fill(c, _C_TEXT)
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(margin, y, ch_lbl)
+            y -= 0.3 * cm
+            _embed_chart(c, pw, y, mini_chart, ch_lbl, min(8.0 * cm, y - 2.5 * cm))
+            try:
+                mini_chart.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        _draw_footer(c, pw, page_n, data.version, lang)
 
     c.save()
     return out_path
@@ -1161,52 +1617,103 @@ def export_pdf_email_monthly(
     out_path: Path,
     lang: str = "de",
 ) -> Path:
-    """Generate a rich monthly-report PDF with KPI cards, device table and daily chart."""
+    """Generate a detailed monthly-report PDF:
+    overview KPIs, weekday/weekend split, stacked daily chart,
+    per-device sections with mini charts, top-5 ranking chart.
+    """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     lang = normalize_lang(lang)
+    is_en  = lang == "en"
+    tmp_dir = out_path.parent
+    margin  = 1.8 * cm
 
-    tmp_dir    = out_path.parent
-    chart_path = _make_daily_chart(data.daily_kwh, lang, tmp_dir)
+    total_kwh = sum(r.kwh_total for r in data.totals)
+    total_eur = sum(r.cost_eur  for r in data.totals)
+    co2_disp  = data.co2_kg if data.co2_kg > 0 else total_kwh * data.co2_intensity_g_per_kwh / 1000.0
+
+    # Derive day-level KPIs
+    n_days = max(1, len(data.daily_kwh))
+    day_avg = total_kwh / n_days
+    worst_day_str = (
+        f"{data.worst_day_date.strftime('%d.%m')} ({_fmt_kwh(data.worst_day_kwh, lang)} kWh)"
+        if data.worst_day_date else "—"
+    )
+    best_day_str = (
+        f"{data.best_day_date.strftime('%d.%m')} ({_fmt_kwh(data.best_day_kwh, lang)} kWh)"
+        if data.best_day_date else "—"
+    )
+
+    # Build charts
+    stacked_chart = _make_stacked_daily_chart(data.per_device_daily, lang, tmp_dir) \
+        if data.per_device_daily else _make_daily_chart(data.daily_kwh, lang, tmp_dir)
+    top5_chart = _make_top5_bar_chart(data.totals, lang, tmp_dir) if len(data.totals) > 1 else None
 
     c = canvas.Canvas(str(out_path), pagesize=A4)
     pw, ph = A4
     page_n  = 1
 
-    # --- Page 1: summary ---
-    month_str = data.period_start.strftime("%B %Y")
-    title_str = t(lang, "pdf.email_report.monthly_title")
-    if not title_str or title_str.startswith("pdf."):
-        title_str = "Monthly Energy Report" if lang == "en" else "Monatsreport Energie"
     period_str = f"{data.period_start.strftime('%Y-%m-%d')} \u2013 {data.period_end.strftime('%Y-%m-%d')}"
+    title_str  = "Monthly Energy Report" if is_en else "Monatsreport Energie"
+
+    # ------------------------------------------------------------------ Page 1: Overview
     y = _draw_header_band(c, pw, ph, title_str, period_str)
 
-    # KPI row
-    total_kwh = sum(r.kwh_total for r in data.totals)
-    total_eur = sum(r.cost_eur  for r in data.totals)
-    co2_disp  = data.co2_kg if data.co2_kg > 0 else total_kwh * data.co2_intensity_g_per_kwh / 1000.0
-    margin    = 1.8 * cm
-    kpi_gap   = 0.4 * cm
-    kpi_w     = (pw - 2 * margin - 2 * kpi_gap) / 3
-    kpi_h     = 2.2 * cm
+    kpi_gap = 0.4 * cm
+    kpi_w   = (pw - 2 * margin - 2 * kpi_gap) / 3
+    kpi_h   = 2.0 * cm
 
+    # Row 1: kWh | EUR | CO2
     _draw_kpi_box(c, margin,                         y, kpi_w, kpi_h,
-                  t(lang, "pdf.report.total_energy") or "Total kWh",
+                  "Gesamt kWh" if not is_en else "Total kWh",
                   _fmt_kwh(total_kwh, lang), "kWh")
     _draw_kpi_box(c, margin + kpi_w + kpi_gap,       y, kpi_w, kpi_h,
-                  t(lang, "pdf.report.total_cost") or "Cost",
+                  "Gesamt EUR" if not is_en else "Total Cost",
                   _fmt_money(total_eur, lang), "EUR")
     _draw_kpi_box(c, margin + 2 * (kpi_w + kpi_gap), y, kpi_w, kpi_h,
                   "CO\u2082",
-                  f"{co2_disp:.2f}", "kg")
+                  f"{co2_disp:.3f}", "kg")
+    y -= kpi_h + 0.3 * cm
+
+    # Row 2: day avg | worst day | best day
+    _draw_kpi_box(c, margin,                         y, kpi_w, kpi_h,
+                  "Tagesdurchschnitt" if not is_en else "Daily avg",
+                  _fmt_kwh(day_avg, lang), "kWh/d")
+    _draw_kpi_box(c, margin + kpi_w + kpi_gap,       y, kpi_w, kpi_h,
+                  "Teuerster Tag" if not is_en else "Peak day",
+                  worst_day_str, "")
+    _draw_kpi_box(c, margin + 2 * (kpi_w + kpi_gap), y, kpi_w, kpi_h,
+                  "Gunstigster Tag" if not is_en else "Best day",
+                  best_day_str, "")
     y -= kpi_h + 0.5 * cm
 
-    # Comparison to previous month
-    cmp_label = t(lang, "pdf.email_report.vs_prev_month") or ""
-    if not cmp_label or cmp_label.startswith("pdf."):
-        cmp_label = "vs. previous month:" if lang == "en" else "vs. Vormonat:"
-    y = _draw_comparison_line(c, margin, y, cmp_label, total_kwh, data.prev_kwh, lang)
-    y -= 0.3 * cm
+    # Comparisons
+    prev_mo_lbl = "vs. Vormonat:" if not is_en else "vs. previous month:"
+    y = _draw_comparison_line(c, margin, y, prev_mo_lbl, total_kwh, data.prev_kwh, lang)
+    # Absolute difference line
+    if data.prev_kwh and data.prev_kwh > 0:
+        diff_abs = total_kwh - data.prev_kwh
+        diff_eur = total_eur - data.prev_cost_eur
+        sign_k = "+" if diff_abs >= 0 else ""
+        sign_e = "+" if diff_eur >= 0 else ""
+        _rl_set_fill(c, _C_NEUTRAL)
+        c.setFont("Helvetica", 8)
+        abs_str = f"({sign_k}{_fmt_kwh(diff_abs, lang)} kWh, {sign_e}{_fmt_money(diff_eur, lang)} EUR)"
+        c.drawString(margin + 5.5 * cm, y, abs_str)
+        _rl_set_fill(c, _C_TEXT)
+    y -= 0.4 * cm
+
+    # Weekday / weekend split
+    if data.weekday_avg_kwh > 0 or data.weekend_avg_kwh > 0:
+        _rl_set_fill(c, _C_NEUTRAL)
+        c.setFont("Helvetica", 8)
+        wk_lbl = "Wochentag Ø:" if not is_en else "Weekday avg:"
+        we_lbl = "Wochenende Ø:" if not is_en else "Weekend avg:"
+        c.drawString(margin, y, f"{wk_lbl}  {_fmt_kwh(data.weekday_avg_kwh, lang)} kWh/d")
+        c.drawString(margin + (pw - 2 * margin) / 2, y, f"{we_lbl}  {_fmt_kwh(data.weekend_avg_kwh, lang)} kWh/d")
+        _rl_set_fill(c, _C_TEXT)
+        y -= 0.45 * cm
+    y -= 0.15 * cm
 
     # Separator
     _rl_set_stroke(c, _C_LINE)
@@ -1214,56 +1721,142 @@ def export_pdf_email_monthly(
     c.line(margin, y, pw - margin, y)
     y -= 0.5 * cm
 
-    # Section heading
+    # Enhanced device table
     _rl_set_fill(c, _C_TEXT)
     c.setFont("Helvetica-Bold", 10)
-    sec_lbl = t(lang, "pdf.email_report.devices_section") or ""
-    if not sec_lbl or sec_lbl.startswith("pdf."):
-        sec_lbl = "Consumption by Device" if lang == "en" else "Verbrauch je Gerat"
+    sec_lbl = "Verbrauch je Gerat" if not is_en else "Consumption by Device"
     c.drawString(margin, y, sec_lbl)
     y -= 0.6 * cm
 
     if data.totals:
-        y = _draw_device_table(c, pw, y, data.totals, lang)
+        y = _draw_device_table_enhanced(c, pw, y, data.totals, data.co2_intensity_g_per_kwh, lang)
         y = _draw_totals_row(c, pw, y, data.totals, co2_disp, lang)
-
-    # Top consumers
-    if len(data.totals) > 1:
-        y -= 0.5 * cm
-        if y > 3.5 * cm:
-            _rl_set_fill(c, _C_TEXT)
-            c.setFont("Helvetica-Bold", 9)
-            top_lbl = t(lang, "pdf.email_report.top_consumers") or ""
-            if not top_lbl or top_lbl.startswith("pdf."):
-                top_lbl = "Top consumers" if lang == "en" else "Top-Verbraucher"
-            c.drawString(margin, y, top_lbl)
-            y -= 0.5 * cm
-            sorted_totals = sorted(data.totals, key=lambda r: r.kwh_total, reverse=True)[:5]
-            c.setFont("Helvetica", 8)
-            for rank, row in enumerate(sorted_totals, 1):
-                if y < 3.0 * cm:
-                    break
-                pct = (row.kwh_total / total_kwh * 100) if total_kwh > 0 else 0.0
-                c.drawString(margin + 0.2 * cm, y, f"{rank}. {row.name[:40]}")
-                c.drawRightString(pw - margin, y,
-                                  f"{_fmt_kwh(row.kwh_total, lang)} kWh  ({pct:.1f}%)")
-                y -= 0.48 * cm
 
     _draw_footer(c, pw, page_n, data.version, lang)
 
-    # --- Page 2: daily chart ---
-    if chart_path and chart_path.exists():
+    # ------------------------------------------------------------------ Page 2: Stacked daily chart
+    if stacked_chart and stacked_chart.exists():
         c.showPage()
         page_n += 1
-        ch_title = t(lang, "pdf.email_report.daily_chart") or ""
-        if not ch_title or ch_title.startswith("pdf."):
-            ch_title = "Daily Consumption" if lang == "en" else "Tagesverbrauch"
+        ch_title = "Tagesverbrauch (gestapelt)" if not is_en else "Daily Consumption (stacked)"
         y2 = _draw_header_band(c, pw, ph, ch_title, period_str)
         y2 -= 0.4 * cm
-        _embed_chart(c, pw, y2, chart_path, ch_title, ph - 5.0 * cm)
+        _embed_chart(c, pw, y2, stacked_chart, ch_title, ph - 5.0 * cm)
         _draw_footer(c, pw, page_n, data.version, lang)
         try:
-            chart_path.unlink(missing_ok=True)
+            stacked_chart.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------ Pages 3+: Per-device detail
+    dev_names = list(data.per_device_daily.keys()) if data.per_device_daily else []
+    for dev_idx, dev_name in enumerate(dev_names):
+        daily_dev = data.per_device_daily.get(dev_name, [])
+        row = next((r for r in data.totals if r.name == dev_name), None)
+        mini_chart = _make_device_mini_chart_daily(
+            daily_dev, _device_color(dev_idx), lang, tmp_dir, f"m{dev_idx}"
+        )
+        c.showPage()
+        page_n += 1
+        sub_title = f"{title_str} – {dev_name}"
+        y = _draw_header_band(c, pw, ph, sub_title, period_str)
+
+        if row:
+            pct = row.kwh_total / total_kwh * 100 if total_kwh > 0 else 0.0
+            kpi_w3 = (pw - 2 * margin - 2 * kpi_gap) / 3
+            _draw_kpi_box(c, margin,                          y, kpi_w3, kpi_h,
+                          "kWh", _fmt_kwh(row.kwh_total, lang), "kWh")
+            _draw_kpi_box(c, margin + kpi_w3 + kpi_gap,      y, kpi_w3, kpi_h,
+                          "EUR", _fmt_money(row.cost_eur, lang), "EUR")
+            _draw_kpi_box(c, margin + 2 * (kpi_w3 + kpi_gap), y, kpi_w3, kpi_h,
+                          "Anteil" if not is_en else "Share", f"{pct:.1f}", "%")
+            y -= kpi_h + 0.4 * cm
+
+        # Day-level stats from per_device_daily
+        day_vals = [v for _, v in daily_dev if v > 0]
+        if day_vals:
+            min_d = min(day_vals)
+            max_d = max(day_vals)
+            avg_d = sum(day_vals) / len(day_vals)
+            # Trend: compare first half vs second half
+            half = max(1, len(day_vals) // 2)
+            first_half_avg  = sum(day_vals[:half]) / half
+            second_half_avg = sum(day_vals[half:]) / max(1, len(day_vals) - half)
+            if second_half_avg > first_half_avg * 1.05:
+                trend = "Steigend" if not is_en else "Rising"
+            elif second_half_avg < first_half_avg * 0.95:
+                trend = "Fallend" if not is_en else "Falling"
+            else:
+                trend = "Stabil" if not is_en else "Stable"
+
+            c.setFont("Helvetica", 8)
+            _rl_set_fill(c, _C_TEXT)
+            stats = [
+                ("Min kWh/d:", _fmt_kwh(min_d, lang)),
+                ("Avg kWh/d:", _fmt_kwh(avg_d, lang)),
+                ("Max kWh/d:", _fmt_kwh(max_d, lang)),
+                (("Trend:" if is_en else "Trend:"), trend),
+            ]
+            col2_x = margin + (pw - 2 * margin) / 2
+            for si, (lbl, val) in enumerate(stats):
+                xx = margin if si % 2 == 0 else col2_x
+                if si % 2 == 0 and si > 0:
+                    y -= 0.45 * cm
+                _rl_set_fill(c, _C_NEUTRAL)
+                c.setFont("Helvetica", 8)
+                c.drawString(xx, y, lbl)
+                _rl_set_fill(c, _C_TEXT)
+                c.setFont("Helvetica-Bold", 8)
+                c.drawString(xx + 3.5 * cm, y, val)
+            _rl_set_fill(c, _C_TEXT)
+            y -= 0.55 * cm
+
+        if mini_chart and mini_chart.exists():
+            ch_lbl = "Tagesverbrauch" if not is_en else "Daily Consumption"
+            y -= 0.2 * cm
+            _rl_set_fill(c, _C_TEXT)
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(margin, y, ch_lbl)
+            y -= 0.3 * cm
+            _embed_chart(c, pw, y, mini_chart, ch_lbl, min(8.0 * cm, y - 2.5 * cm))
+            try:
+                mini_chart.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        _draw_footer(c, pw, page_n, data.version, lang)
+
+    # ------------------------------------------------------------------ Last page: Top-5 ranking chart
+    if top5_chart and top5_chart.exists():
+        c.showPage()
+        page_n += 1
+        top_title = "Top-5 Verbraucher" if not is_en else "Top-5 Consumers"
+        y3 = _draw_header_band(c, pw, ph, top_title, period_str)
+        y3 -= 0.4 * cm
+        _embed_chart(c, pw, y3, top5_chart, top_title, ph - 5.0 * cm)
+        # Ranking list below chart
+        sorted_t = sorted(data.totals, key=lambda r: r.kwh_total, reverse=True)[:5]
+        y3 -= min(12.0 * cm, ph - 6.0 * cm)
+        if y3 > 5.0 * cm:
+            _rl_set_fill(c, _C_TEXT)
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(margin, y3, top_title)
+            y3 -= 0.5 * cm
+            for rank, tr in enumerate(sorted_t, 1):
+                if y3 < 3.0 * cm:
+                    break
+                pct = tr.kwh_total / total_kwh * 100 if total_kwh > 0 else 0.0
+                c.setFont("Helvetica", 8)
+                _rl_set_fill(c, _C_TEXT)
+                c.drawString(margin + 0.2 * cm, y3,
+                             f"{rank}. {tr.name[:35]}")
+                c.drawRightString(pw - margin, y3,
+                                  f"{_fmt_kwh(tr.kwh_total, lang)} kWh  "
+                                  f"({pct:.1f}%)  {_fmt_money(tr.cost_eur, lang)} EUR")
+                y3 -= 0.48 * cm
+        _draw_footer(c, pw, page_n, data.version, lang)
+        try:
+            top5_chart.unlink(missing_ok=True)
         except Exception:
             pass
 
