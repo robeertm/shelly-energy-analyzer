@@ -3419,6 +3419,19 @@ _I18N.setdefault("de", {}).update({
     "msg.report_written": "Report geschrieben",
     "pdf.report.title.day": "Energy Report – Tagesreport",
     "pdf.report.title.month": "Energy Report – Monatsreport",
+
+    # Rich email report PDFs (v10)
+    "pdf.email_report.daily_title": "Tagesreport Energie",
+    "pdf.email_report.monthly_title": "Monatsreport Energie",
+    "pdf.email_report.vs_prev_day": "vs. Vortag:",
+    "pdf.email_report.vs_prev_month": "vs. Vormonat:",
+    "pdf.email_report.devices_section": "Verbrauch je Gerat",
+    "pdf.email_report.hourly_chart": "Stundenverbrauch",
+    "pdf.email_report.daily_chart": "Tagesverbrauch",
+    "pdf.email_report.top_consumers": "Top-Verbraucher",
+
+    # Email settings – invoice option
+    "settings.email.monthly_invoice_enabled": "Rechnung anhangen",
 })
 
 
@@ -3448,6 +3461,19 @@ _I18N.setdefault("en", {}).update({
     "export.invoice_written": "Invoice written: {path}",
     "export.excel_written": "Excel written: {path}",
     "export.pdf_summary_written": "PDF Summary (incl. plots) written: {path}",
+
+    # Rich email report PDFs (v10)
+    "pdf.email_report.daily_title": "Daily Energy Report",
+    "pdf.email_report.monthly_title": "Monthly Energy Report",
+    "pdf.email_report.vs_prev_day": "vs. previous day:",
+    "pdf.email_report.vs_prev_month": "vs. previous month:",
+    "pdf.email_report.devices_section": "Consumption by Device",
+    "pdf.email_report.hourly_chart": "Hourly Consumption",
+    "pdf.email_report.daily_chart": "Daily Consumption",
+    "pdf.email_report.top_consumers": "Top consumers",
+
+    # Email settings - invoice option
+    "settings.email.monthly_invoice_enabled": "Attach invoice",
 })
 
 _I18N.setdefault("es", {}).update({
