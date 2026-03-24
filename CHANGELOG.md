@@ -1,5 +1,38 @@
 # Changelog
 
+## 10.0.3 - 2026-03-24
+### Fixed
+- **Critical: PDF email attachments always empty** — `_build_email_report_data` and
+  `_build_report_totals` called `storage.query_samples()`, a method that does not
+  exist on the `Storage` class. This raised an `AttributeError` for every device,
+  which was silently swallowed by the per-device `except` handler, leaving `totals`
+  permanently empty and producing blank PDFs. Both functions now correctly call
+  `storage.read_device_df(dev.key, start_ts=..., end_ts=...)`.
+- **Silent exception swallowing** — PDF generation errors in `_email_summary_tick`,
+  `_email_send_daily_now`, and `_email_send_monthly_now` are now logged as
+  warnings (with full traceback) instead of being silently dropped.
+- **0-byte attachment guard** — email attachment lists now only include files where
+  `stat().st_size > 0`, preventing empty-file attachments when PDF generation is
+  skipped due to missing data.
+
+### Added
+- **Detailed logging** throughout the PDF-report pipeline:
+  `_build_email_report_data`, `_build_report_totals`, and all email-send workers
+  now emit `INFO`-level log lines showing device count, kWh totals, PDF file size,
+  and any per-device errors — making future diagnosis straightforward.
+
+## 10.0.2 - 2026-03-24
+### Fixed
+- **`_build_email_report_data` DB column names** — corrected column lookup order so
+  `total_power` and `energy_kwh` (the actual DB columns) are tried before the
+  non-existent aliases `total_act_power` / `total_act` / `energy_wh`.
+
+## 10.0.1 - 2026-03-24
+### Fixed
+- **`_build_report_totals` DB column names** — same column-name correction applied
+  to the fallback totals builder used when the rich `EmailReportData` path is
+  unavailable.
+
 ## 10.0.0 - 2026-03-24
 ### Added
 - **Rich email PDF reports** — daily and monthly email reports now contain real
