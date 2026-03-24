@@ -5305,6 +5305,7 @@ class CoreMixin:
                 self._em_daily_time_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_daily_summary_time", "00:00") or "00:00"))
                 self._em_monthly_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "email_monthly_summary_enabled", False)))
                 self._em_monthly_time_var = tk.StringVar(value=str(getattr(self.cfg.ui, "email_monthly_summary_time", "00:00") or "00:00"))
+                self._em_monthly_invoice_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "email_monthly_invoice_enabled", False)))
 
             # Row 0: Enable + SMTP server + port + TLS
             ttk.Checkbutton(
@@ -5372,7 +5373,14 @@ class CoreMixin:
                 command=self._email_send_monthly_now,
             ).grid(row=4, column=5, padx=(4, 8), pady=(0, 6), sticky="e")
 
-            # Row 5: Test button
+            # Row 4b: Invoice option for monthly report
+            ttk.Checkbutton(
+                em_box,
+                text=self.t("settings.email.monthly_invoice_enabled"),
+                variable=self._em_monthly_invoice_var,
+            ).grid(row=5, column=1, padx=(12, 4), pady=(0, 6), sticky="w", columnspan=3)
+
+            # Row 6: Test button (shifted from row 5)
             def _em_send_test() -> None:
                 try:
                     self._save_settings()
@@ -5398,11 +5406,11 @@ class CoreMixin:
                     messagebox.showwarning(self.t("settings.email.title"), f"Fehler: {_e}")
 
             ttk.Button(em_box, text=self.t("settings.email.test"), command=_em_send_test).grid(
-                row=5, column=0, padx=8, pady=(0, 6), sticky="w"
+                row=6, column=0, padx=8, pady=(0, 6), sticky="w"
             )
 
             ttk.Label(em_box, text=self.t("settings.email.hint"), foreground="gray").grid(
-                row=6, column=0, columnspan=6, padx=8, pady=(0, 6), sticky="w"
+                row=7, column=0, columnspan=6, padx=8, pady=(0, 6), sticky="w"
             )
 
             try:
@@ -6854,6 +6862,7 @@ class CoreMixin:
     email_monthly_summary_enabled=bool(getattr(self, "_em_monthly_var", tk.BooleanVar(value=False)).get()),
     email_daily_summary_time=str(getattr(self, "_em_daily_time_var", tk.StringVar(value="00:00")).get() or "00:00"),
     email_monthly_summary_time=str(getattr(self, "_em_monthly_time_var", tk.StringVar(value="00:00")).get() or "00:00"),
+    email_monthly_invoice_enabled=bool(getattr(self, "_em_monthly_invoice_var", tk.BooleanVar(value=False)).get()),
 
                 autosync_enabled=bool(self.set_autosync_enabled_var.get()),
                 autosync_interval_hours=int(self.set_autosync_interval_var.get() or 12),
@@ -9674,30 +9683,37 @@ class CoreMixin:
                                 tz = ZoneInfo("Europe/Berlin")
                                 end_dt = datetime.now(tz)
                                 start_dt = end_dt - timedelta(hours=24)
+                                prev_start = start_dt - timedelta(hours=24)
                                 msg_text = self._build_telegram_summary("daily", start_dt, end_dt)
 
-                                # Generate PDF attachment
+                                # Generate rich PDF attachment
                                 pdf_path = None
                                 try:
-                                    from shelly_analyzer.services.export import export_pdf_summary, ReportTotals
+                                    from shelly_analyzer.services.export import export_pdf_email_daily, export_pdf_summary
                                     tmp_dir = Path(base_dir) / "data" / "email_tmp"
                                     tmp_dir.mkdir(parents=True, exist_ok=True)
                                     pdf_path = tmp_dir / f"daily_report_{due.strftime('%Y-%m-%d')}.pdf"
-                                    totals = self._build_report_totals(start_dt, end_dt)
-                                    if totals:
-                                        export_pdf_summary(
-                                            title="Shelly Energy Analyzer – Daily Report",
-                                            period_label=f"{start_dt.strftime('%Y-%m-%d')} – {end_dt.strftime('%Y-%m-%d')}",
-                                            totals=totals,
-                                            out_path=pdf_path,
-                                            lang=lang,
-                                        )
+                                    report_data = self._build_email_report_data(
+                                        start_dt, end_dt, prev_start, start_dt, report_type="daily"
+                                    )
+                                    if report_data and report_data.totals:
+                                        export_pdf_email_daily(report_data, pdf_path, lang=lang)
+                                    else:
+                                        totals = self._build_report_totals(start_dt, end_dt)
+                                        if totals:
+                                            export_pdf_summary(
+                                                title="Shelly Energy Analyzer \u2013 Daily Report",
+                                                period_label=f"{start_dt.strftime('%Y-%m-%d')} \u2013 {end_dt.strftime('%Y-%m-%d')}",
+                                                totals=totals,
+                                                out_path=pdf_path,
+                                                lang=lang,
+                                            )
                                 except Exception:
                                     pdf_path = None
 
                                 attachments = [str(pdf_path)] if pdf_path and pdf_path.exists() else []
                                 ok, err = self._email_send_sync(
-                                    subject=f"Shelly Energy Analyzer – Daily Report {due.strftime('%Y-%m-%d')}",
+                                    subject=f"Shelly Energy Analyzer \u2013 Daily Report {due.strftime('%Y-%m-%d')}",
                                     body=msg_text,
                                     attachments=attachments,
                                 )
@@ -9731,24 +9747,31 @@ class CoreMixin:
                                 tz = ZoneInfo("Europe/Berlin")
                                 end_dt = datetime.now(tz)
                                 start_dt = end_dt - timedelta(days=30)
+                                prev_start = start_dt - timedelta(days=30)
                                 msg_text = self._build_telegram_summary("monthly", start_dt, end_dt)
 
-                                # Generate PDF attachment
+                                # Generate rich PDF attachment
                                 pdf_path = None
                                 try:
-                                    from shelly_analyzer.services.export import export_pdf_summary, ReportTotals
+                                    from shelly_analyzer.services.export import export_pdf_email_monthly, export_pdf_summary
                                     tmp_dir = Path(base_dir) / "data" / "email_tmp"
                                     tmp_dir.mkdir(parents=True, exist_ok=True)
                                     pdf_path = tmp_dir / f"monthly_report_{now_m.strftime('%Y-%m')}.pdf"
-                                    totals = self._build_report_totals(start_dt, end_dt)
-                                    if totals:
-                                        export_pdf_summary(
-                                            title="Shelly Energy Analyzer – Monthly Report",
-                                            period_label=f"{start_dt.strftime('%Y-%m-%d')} – {end_dt.strftime('%Y-%m-%d')}",
-                                            totals=totals,
-                                            out_path=pdf_path,
-                                            lang=lang,
-                                        )
+                                    report_data = self._build_email_report_data(
+                                        start_dt, end_dt, prev_start, start_dt, report_type="monthly"
+                                    )
+                                    if report_data and report_data.totals:
+                                        export_pdf_email_monthly(report_data, pdf_path, lang=lang)
+                                    else:
+                                        totals = self._build_report_totals(start_dt, end_dt)
+                                        if totals:
+                                            export_pdf_summary(
+                                                title="Shelly Energy Analyzer \u2013 Monthly Report",
+                                                period_label=f"{start_dt.strftime('%Y-%m-%d')} \u2013 {end_dt.strftime('%Y-%m-%d')}",
+                                                totals=totals,
+                                                out_path=pdf_path,
+                                                lang=lang,
+                                            )
                                 except Exception:
                                     pdf_path = None
 
@@ -9783,26 +9806,35 @@ class CoreMixin:
                 now = datetime.now()
                 yesterday = now.date() - timedelta(days=1)
                 start_dt = datetime.combine(yesterday, datetime.min.time())
-                end_dt = datetime.combine(now.date(), datetime.min.time())
+                end_dt   = datetime.combine(now.date(), datetime.min.time())
+                prev_start = start_dt - timedelta(days=1)
+                prev_end   = start_dt
                 try:
                     summary_text = self._build_telegram_summary("daily", start_dt, end_dt)
-                    totals = self._build_report_totals(start_dt, end_dt)
-                    from shelly_analyzer.services.export import export_pdf_summary
+                    lang = str(getattr(self, "lang", None) or getattr(self.cfg.ui, "language", "de") or "de")
+                    report_data = self._build_email_report_data(
+                        start_dt, end_dt, prev_start, prev_end, report_type="daily"
+                    )
                     import tempfile
-                    lang = str(getattr(self, "lang", "de") or "de")
                     tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
                     pdf_path = Path(tmp.name)
                     tmp.close()
-                    export_pdf_summary(
-                        title=f"Daily Report {yesterday.strftime('%Y-%m-%d')}",
-                        period_label=f"{start_dt.strftime('%Y-%m-%d')} – {end_dt.strftime('%Y-%m-%d')}",
-                        totals=totals or [],
-                        out_path=pdf_path,
-                        lang=lang,
-                    )
+                    if report_data and report_data.totals:
+                        from shelly_analyzer.services.export import export_pdf_email_daily
+                        export_pdf_email_daily(report_data, pdf_path, lang=lang)
+                    else:
+                        from shelly_analyzer.services.export import export_pdf_summary
+                        totals = self._build_report_totals(start_dt, end_dt)
+                        export_pdf_summary(
+                            title=f"Daily Report {yesterday.strftime('%Y-%m-%d')}",
+                            period_label=f"{start_dt.strftime('%Y-%m-%d')} \u2013 {end_dt.strftime('%Y-%m-%d')}",
+                            totals=totals or [],
+                            out_path=pdf_path,
+                            lang=lang,
+                        )
                     attachments = [str(pdf_path)] if pdf_path.exists() else []
                     ok, err = self._email_send_sync(
-                        subject=f"Shelly Energy Analyzer – Daily Report {yesterday.strftime('%Y-%m-%d')}",
+                        subject=f"Shelly Energy Analyzer \u2013 Daily Report {yesterday.strftime('%Y-%m-%d')}",
                         body=summary_text,
                         attachments=attachments,
                     )
@@ -9845,26 +9877,85 @@ class CoreMixin:
                 else:
                     py, pm = now.year, now.month - 1
                 start_dt = datetime(py, pm, 1, 0, 0, 0)
-                end_dt = datetime(now.year, now.month, 1, 0, 0, 0)
+                end_dt   = datetime(now.year, now.month, 1, 0, 0, 0)
+                # Previous month for comparison
+                if pm == 1:
+                    ppy, ppm = py - 1, 12
+                else:
+                    ppy, ppm = py, pm - 1
+                prev_start = datetime(ppy, ppm, 1, 0, 0, 0)
+                prev_end   = start_dt
                 try:
                     summary_text = self._build_telegram_summary("monthly", start_dt, end_dt)
-                    totals = self._build_report_totals(start_dt, end_dt)
-                    from shelly_analyzer.services.export import export_pdf_summary
+                    lang = str(getattr(self, "lang", None) or getattr(self.cfg.ui, "language", "de") or "de")
+                    report_data = self._build_email_report_data(
+                        start_dt, end_dt, prev_start, prev_end, report_type="monthly"
+                    )
                     import tempfile
-                    lang = str(getattr(self, "lang", "de") or "de")
                     tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
                     pdf_path = Path(tmp.name)
                     tmp.close()
-                    export_pdf_summary(
-                        title=f"Monthly Report {start_dt.strftime('%Y-%m')}",
-                        period_label=f"{start_dt.strftime('%Y-%m-%d')} – {end_dt.strftime('%Y-%m-%d')}",
-                        totals=totals or [],
-                        out_path=pdf_path,
-                        lang=lang,
-                    )
+                    if report_data and report_data.totals:
+                        from shelly_analyzer.services.export import export_pdf_email_monthly
+                        export_pdf_email_monthly(report_data, pdf_path, lang=lang)
+                    else:
+                        from shelly_analyzer.services.export import export_pdf_summary
+                        totals = self._build_report_totals(start_dt, end_dt)
+                        export_pdf_summary(
+                            title=f"Monthly Report {start_dt.strftime('%Y-%m')}",
+                            period_label=f"{start_dt.strftime('%Y-%m-%d')} \u2013 {end_dt.strftime('%Y-%m-%d')}",
+                            totals=totals or [],
+                            out_path=pdf_path,
+                            lang=lang,
+                        )
                     attachments = [str(pdf_path)] if pdf_path.exists() else []
+
+                    # Optionally attach invoice PDF
+                    invoice_path = None
+                    if bool(getattr(self.cfg.ui, "email_monthly_invoice_enabled", False)):
+                        try:
+                            from shelly_analyzer.services.export import (
+                                export_pdf_invoice, InvoiceLine, ReportTotals as _RT
+                            )
+                            import calendar as _cal
+                            from datetime import date as _date
+                            days_in_month = _cal.monthrange(py, pm)[1]
+                            price_net = self.cfg.pricing.unit_price_net() if hasattr(self.cfg.pricing, "unit_price_net") else self.cfg.pricing.unit_price_gross()
+                            vat_enabled = bool(getattr(self.cfg.pricing, "vat_enabled", False))
+                            vat_rate    = float(getattr(self.cfg.pricing, "vat_rate_percent", 0.0) or 0.0)
+                            inv_totals  = (report_data.totals if report_data else None) or self._build_report_totals(start_dt, end_dt) or []
+                            inv_lines   = [
+                                InvoiceLine(
+                                    description=f"{row.name} \u2013 {start_dt.strftime('%B %Y')}",
+                                    quantity=round(row.kwh_total, 3),
+                                    unit="kWh",
+                                    unit_price_net=price_net,
+                                )
+                                for row in inv_totals
+                            ]
+                            tmp_inv = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+                            invoice_path = Path(tmp_inv.name)
+                            tmp_inv.close()
+                            export_pdf_invoice(
+                                out_path=invoice_path,
+                                invoice_no=f"SEA-{start_dt.strftime('%Y%m')}",
+                                issue_date=end_dt.date(),
+                                due_date=end_dt.date(),
+                                issuer={"name": "Shelly Energy Analyzer"},
+                                customer={},
+                                vat_rate_percent=vat_rate,
+                                vat_enabled=vat_enabled,
+                                lines=inv_lines,
+                                period_label=f"{start_dt.strftime('%Y-%m-%d')} \u2013 {end_dt.strftime('%Y-%m-%d')}",
+                                lang=lang,
+                            )
+                            if invoice_path.exists():
+                                attachments.append(str(invoice_path))
+                        except Exception:
+                            invoice_path = None
+
                     ok, err = self._email_send_sync(
-                        subject=f"Shelly Energy Analyzer – Monthly Report {start_dt.strftime('%Y-%m')}",
+                        subject=f"Shelly Energy Analyzer \u2013 Monthly Report {start_dt.strftime('%Y-%m')}",
                         body=summary_text,
                         attachments=attachments,
                     )
@@ -9872,6 +9963,11 @@ class CoreMixin:
                         pdf_path.unlink(missing_ok=True)
                     except Exception:
                         pass
+                    if invoice_path:
+                        try:
+                            invoice_path.unlink(missing_ok=True)
+                        except Exception:
+                            pass
                 except Exception as e:
                     ok, err = False, str(e)
                 def _done():
@@ -9903,7 +9999,6 @@ class CoreMixin:
                         df = db.query_samples(dev.key, start_ts=start_ts, end_ts=end_ts)
                         if df is None or df.empty:
                             continue
-                        # Find power column
                         pwr_col = None
                         for c in ("total_act_power", "a_act_power", "power_w"):
                             if c in df.columns:
@@ -9912,7 +10007,6 @@ class CoreMixin:
                         powers = df[pwr_col].dropna().astype(float).tolist() if pwr_col else []
                         avg_w = sum(powers) / len(powers) if powers else 0.0
                         max_w = max(powers) if powers else 0.0
-                        # Compute kWh from energy column or integrate power
                         kwh = 0.0
                         for c in ("total_act", "energy_wh"):
                             if c in df.columns:
@@ -9921,7 +10015,6 @@ class CoreMixin:
                                     kwh = (vals.max() - vals.min()) / 1000.0
                                     break
                         if kwh <= 0 and powers and "timestamp" in df.columns:
-                            # Fallback: integrate power over time
                             ts_col = df["timestamp"].dropna()
                             if len(ts_col) > 1:
                                 total_hours = (ts_col.max() - ts_col.min()).total_seconds() / 3600.0
@@ -9939,6 +10032,132 @@ class CoreMixin:
                     except Exception:
                         continue
                 return totals if totals else None
+            except Exception:
+                return None
+
+    def _build_email_report_data(self, start_dt, end_dt, prev_start_dt=None, prev_end_dt=None, report_type="daily"):
+            """Build an EmailReportData object with totals, time-series and comparison data."""
+            try:
+                import shelly_analyzer as _pkg
+                from shelly_analyzer.services.export import ReportTotals, EmailReportData
+                db = getattr(self, "storage", None)
+                if db is None:
+                    return None
+
+                start_ts = int(start_dt.timestamp())
+                end_ts   = int(end_dt.timestamp())
+                price    = self.cfg.pricing.unit_price_gross()
+                co2_int  = float(getattr(getattr(self.cfg, "pricing", None), "co2_intensity_g_per_kwh", 380.0) or 380.0)
+
+                totals:      list = []
+                hourly_kwh:  list = [0.0] * 24
+                daily_map:   dict = {}
+
+                for dev in (self.cfg.devices or []):
+                    try:
+                        df = db.query_samples(dev.key, start_ts=start_ts, end_ts=end_ts)
+                        if df is None or df.empty:
+                            continue
+
+                        pwr_col = None
+                        for col in ("total_act_power", "a_act_power", "power_w"):
+                            if col in df.columns:
+                                pwr_col = col
+                                break
+                        powers = df[pwr_col].dropna().astype(float).tolist() if pwr_col else []
+                        avg_w  = sum(powers) / len(powers) if powers else 0.0
+                        max_w  = max(powers) if powers else 0.0
+
+                        kwh = 0.0
+                        for col in ("total_act", "energy_wh"):
+                            if col in df.columns:
+                                vals = df[col].dropna()
+                                if not vals.empty:
+                                    kwh = (vals.max() - vals.min()) / 1000.0
+                                    break
+                        if kwh <= 0 and powers and "timestamp" in df.columns:
+                            ts_col = df["timestamp"].dropna()
+                            if len(ts_col) > 1:
+                                th = (ts_col.max() - ts_col.min()).total_seconds() / 3600.0
+                                if th > 0:
+                                    kwh = avg_w * th / 1000.0
+
+                        totals.append(ReportTotals(
+                            name=dev.name,
+                            kwh_total=round(kwh, 3),
+                            avg_power_w=round(avg_w, 1),
+                            max_power_w=round(max_w, 1),
+                            cost_eur=round(kwh * price, 2),
+                        ))
+
+                        # Build hourly / daily time series (aggregate across all devices)
+                        if "timestamp" in df.columns:
+                            try:
+                                ts_series = pd.to_datetime(df["timestamp"], errors="coerce").dropna()
+                                if pwr_col and not ts_series.empty:
+                                    tdf = df[["timestamp", pwr_col]].copy()
+                                    tdf["timestamp"] = pd.to_datetime(tdf["timestamp"], errors="coerce")
+                                    tdf = tdf.dropna(subset=["timestamp"]).set_index("timestamp").sort_index()
+                                    tdf[pwr_col] = tdf[pwr_col].astype(float)
+                                    if report_type == "daily":
+                                        # Resample to hourly mean W -> kWh per hour
+                                        hrly = tdf[pwr_col].resample("h").mean()
+                                        for ts_h, w_val in hrly.items():
+                                            h_idx = ts_h.hour
+                                            if 0 <= h_idx < 24 and not pd.isna(w_val):
+                                                hourly_kwh[h_idx] += float(w_val) / 1000.0
+                                    else:
+                                        # Resample to daily mean W -> kWh per day
+                                        dly = tdf[pwr_col].resample("D").mean()
+                                        for ts_d, w_val in dly.items():
+                                            d_key = ts_d.date()
+                                            if not pd.isna(w_val):
+                                                daily_map[d_key] = daily_map.get(d_key, 0.0) + float(w_val) / 1000.0
+                            except Exception:
+                                pass
+                    except Exception:
+                        continue
+
+                # Build sorted daily_kwh list
+                daily_kwh = sorted(daily_map.items(), key=lambda x: x[0])
+
+                # Previous period totals for comparison
+                prev_kwh  = 0.0
+                prev_cost = 0.0
+                if prev_start_dt and prev_end_dt:
+                    prev_totals = self._build_report_totals(prev_start_dt, prev_end_dt)
+                    if prev_totals:
+                        prev_kwh  = sum(r.kwh_total for r in prev_totals)
+                        prev_cost = sum(r.cost_eur  for r in prev_totals)
+
+                total_kwh = sum(r.kwh_total for r in totals)
+                co2_kg    = total_kwh * co2_int / 1000.0
+
+                vat_rate = 0.0
+                try:
+                    p = getattr(self.cfg, "pricing", None)
+                    if p and getattr(p, "vat_enabled", False):
+                        vat_rate = float(getattr(p, "vat_rate_percent", 0.0) or 0.0) / 100.0
+                except Exception:
+                    pass
+
+                version = getattr(_pkg, "__version__", "")
+
+                return EmailReportData(
+                    report_type=report_type,
+                    period_start=start_dt,
+                    period_end=end_dt,
+                    totals=totals,
+                    hourly_kwh=hourly_kwh,
+                    daily_kwh=daily_kwh,
+                    co2_kg=round(co2_kg, 3),
+                    co2_intensity_g_per_kwh=co2_int,
+                    prev_kwh=round(prev_kwh, 3),
+                    prev_cost_eur=round(prev_cost, 2),
+                    price_per_kwh=price,
+                    vat_rate=vat_rate,
+                    version=version,
+                )
             except Exception:
                 return None
 
