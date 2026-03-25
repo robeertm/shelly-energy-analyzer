@@ -394,6 +394,13 @@ class EnergyDB:
             delta_s = float(ts_int - prev_ts) if prev_ts is not None and prev_ts < ts_int else 0.0
             tp, kwh = _compute_energy_row(total_p, delta_s, a_e, b_e, c_e)
 
+            # Frequency: prefer pre-computed column; else average the per-phase columns.
+            # Read each key exactly once to avoid redundant dict lookups.
+            _fhz = _get("freq_hz")
+            if _fhz is None:
+                _fphase = [v for v in (_get("a_freq"), _get("b_freq"), _get("c_freq")) if v is not None]
+                _fhz = sum(_fphase) / len(_fphase) if _fphase else None
+
             insert_rows.append((
                 device_key, ts_int,
                 # Base columns
@@ -425,12 +432,7 @@ class EnergyDB:
                 _get("b_max_current"), _get("b_min_current"), _get("b_avg_current"),
                 _get("c_max_current"), _get("c_min_current"), _get("c_avg_current"),
                 _get("n_max_current"), _get("n_min_current"), _get("n_avg_current"),
-                # Frequency: prefer pre-computed column, else average per-phase freq columns
-                _get("freq_hz") if _get("freq_hz") is not None else (
-                    lambda fa, fb, fc: sum(v for v in (fa, fb, fc) if v is not None) / max(1, sum(1 for v in (fa, fb, fc) if v is not None))
-                    if any(v is not None for v in (_get("a_freq"), _get("b_freq"), _get("c_freq")))
-                    else None
-                )(_get("a_freq"), _get("b_freq"), _get("c_freq")),
+                _fhz,
             ))
             prev_ts = ts_int
 

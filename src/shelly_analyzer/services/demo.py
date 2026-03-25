@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import random
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -46,7 +46,7 @@ def default_demo_devices() -> List[DeviceConfig]:
 class DemoState:
     seed: int
     scenario: str = "household"
-    started_at: float = time.time()
+    started_at: float = field(default_factory=time.time)
     # Mutable per-device switch state (for demo switch devices)
     switches: Dict[str, bool] = None  # key -> on/off
     rw_p: Dict[str, float] = None  # key -> random-walk power component

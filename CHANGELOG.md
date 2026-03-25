@@ -1,5 +1,11 @@
 # Changelog
 
+## 10.3.1 - 2026-03-25
+### Fixed
+- **`ShellyHttp.get/post` crash with Python `-O` flag or `retries < 1`** – Both retry loops used `assert last_err is not None` before `raise last_err`. Python's optimised mode (`-O`) silently disables assertions, turning `raise last_err` into `raise None` which throws `TypeError: exceptions must derive from BaseException` instead of the original network error. The `assert` is replaced with an explicit `if last_err is None: raise RuntimeError(...)`. The loop bounds now also guard against a misconfigured `retries=0` via `max(self.cfg.retries, 1)`.
+- **`DemoState.started_at` shared across all instances** – The dataclass field `started_at: float = time.time()` evaluated `time.time()` once at *module import time*, so every `DemoState` instance shared the same timestamp (the time the app was first launched). Changed to `field(default_factory=time.time)` so each instance records its own creation time.
+- **Frequency calculation in `database.py` called `_get("freq_hz")` twice** – The previous inline conditional expression evaluated `_get("freq_hz")` twice (once for the truthiness check, once for the value) and used an unreadable immediately-invoked lambda. Refactored to a readable three-line pre-computation that reads each CSV column exactly once.
+
 ## 10.3.0 - 2026-03-25
 ### Fixed
 - **Critical: broken auto-update check** – GitHub repository URL in `UpdatesConfig` contained a typo (`robeertm` instead of `robertm`), causing all update checks to silently fail with a 404. The default value in `config.py` is now correct.
