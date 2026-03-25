@@ -300,6 +300,21 @@ class ScheduleMixin:
                 swid = 0
             time_on = time_on_var.get().strip() or "06:00"
             time_off = time_off_var.get().strip() or "07:00"
+
+            def _is_valid_time(t: str) -> bool:
+                try:
+                    parts = t.split(":")
+                    if len(parts) != 2:
+                        return False
+                    hh, mm = int(parts[0]), int(parts[1])
+                    return 0 <= hh <= 23 and 0 <= mm <= 59
+                except Exception:
+                    return False
+
+            if not _is_valid_time(time_on) or not _is_valid_time(time_off):
+                messagebox.showwarning(self.t("sched.dlg.title_add"), self.t("sched.msg.invalid_time"))
+                return
+
             weekdays = [i for i, v in enumerate(wd_vars) if v.get()]
             if not weekdays:
                 messagebox.showwarning(self.t("sched.dlg.title_add"), self.t("sched.msg.need_day"))

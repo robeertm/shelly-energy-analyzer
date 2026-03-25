@@ -1,5 +1,12 @@
 # Changelog
 
+## 10.3.0 - 2026-03-25
+### Fixed
+- **Critical: broken auto-update check** – GitHub repository URL in `UpdatesConfig` contained a typo (`robeertm` instead of `robertm`), causing all update checks to silently fail with a 404. The default value in `config.py` is now correct.
+- **Duplicate `groups` field in `AppConfig`** – The `groups: List[DeviceGroup]` field was declared twice in the `AppConfig` dataclass (once after `devices` and again after `anomaly`). Python silently kept only the last occurrence, misplacing the field in the serialisation order. The redundant second declaration has been removed.
+- **Schedule time validation** – `build_shelly_timespec()` in `scheduler.py` now validates that hour (0–23) and minute (0–59) are in range and logs a warning when falling back to `00:00`, instead of silently producing a wrong cron expression. The schedule editor dialog also validates the time inputs before saving and shows a localised error message (`sched.msg.invalid_time`) if the entered value is not a valid `HH:MM` time.
+- **i18n: added `sched.msg.invalid_time`** – New translation key added for all 9 supported languages (de, en, es, fr, pt, it, pl, cs, ru).
+
 ## 10.2.0 - 2026-03-24
 ### Added
 - **Per-device invoice PDFs in monthly e-mail**: When "Attach invoice" is enabled, the monthly e-mail now generates and attaches a separate invoice PDF for each configured device (e.g. House, Garage, Office). Each per-device invoice contains only the energy consumption and cost for that single device. If more than one device is configured, the combined invoice (all devices as individual line items) is also attached. This applies to both the scheduled monthly send (`_email_summary_tick`) and the manual "Send Now" button (`_email_send_monthly_now`).
