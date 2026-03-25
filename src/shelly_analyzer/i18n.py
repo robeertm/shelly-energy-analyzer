@@ -5288,6 +5288,53 @@ _I18N.setdefault("ru", {}).update({
     "updates.no_asset_warning": "⚠ Для этой версии нет доступного файла загрузки.",
 })
 
+# -------- Changelog viewer strings (all languages) --------
+_I18N.setdefault("de", {}).update({
+    "updates.changelog_title": "Changelog",
+    "updates.changelog_loading": "Changelog wird geladen…",
+    "updates.changelog_error": "Changelog konnte nicht geladen werden.",
+})
+_I18N.setdefault("en", {}).update({
+    "updates.changelog_title": "Changelog",
+    "updates.changelog_loading": "Loading changelog…",
+    "updates.changelog_error": "Could not load changelog.",
+})
+_I18N.setdefault("es", {}).update({
+    "updates.changelog_title": "Changelog",
+    "updates.changelog_loading": "Cargando changelog…",
+    "updates.changelog_error": "No se pudo cargar el changelog.",
+})
+_I18N.setdefault("fr", {}).update({
+    "updates.changelog_title": "Changelog",
+    "updates.changelog_loading": "Chargement du changelog…",
+    "updates.changelog_error": "Impossible de charger le changelog.",
+})
+_I18N.setdefault("pt", {}).update({
+    "updates.changelog_title": "Changelog",
+    "updates.changelog_loading": "Carregando changelog…",
+    "updates.changelog_error": "Não foi possível carregar o changelog.",
+})
+_I18N.setdefault("it", {}).update({
+    "updates.changelog_title": "Changelog",
+    "updates.changelog_loading": "Caricamento changelog…",
+    "updates.changelog_error": "Impossibile caricare il changelog.",
+})
+_I18N.setdefault("pl", {}).update({
+    "updates.changelog_title": "Changelog",
+    "updates.changelog_loading": "Ładowanie changelogu…",
+    "updates.changelog_error": "Nie można załadować changelogu.",
+})
+_I18N.setdefault("cs", {}).update({
+    "updates.changelog_title": "Changelog",
+    "updates.changelog_loading": "Načítání changelogu…",
+    "updates.changelog_error": "Changelog se nepodařilo načíst.",
+})
+_I18N.setdefault("ru", {}).update({
+    "updates.changelog_title": "Список изменений",
+    "updates.changelog_loading": "Загрузка списка изменений…",
+    "updates.changelog_error": "Не удалось загрузить список изменений.",
+})
+
 # -------- Sync progress bar strings (all languages) --------
 _I18N.setdefault("es", {}).update({
     "sync.progress.started": "Sync ejecutándose …",

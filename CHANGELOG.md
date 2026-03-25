@@ -1,5 +1,9 @@
 # Changelog
 
+## 10.4.0 - 2026-03-25
+### Added
+- **Changelog viewer on Updates tab**: The Updates tab now contains a scrollable changelog section at the bottom. On startup it fetches `CHANGELOG.md` directly from the GitHub repository (`raw.githubusercontent.com`) in a background thread and renders it with minimal markdown formatting (headings `#`/`##`/`###` are displayed bold). Network errors (offline, timeout) are shown as a localised error message. All 9 UI languages (de, en, es, fr, pt, it, pl, cs, ru) have localized strings for the section title, loading indicator, and error state.
+
 ## 10.3.3 - 2026-03-25
 ### Fixed
 - **Costs tab: missing kWh on week/month device cards** – Per-device cost cards for WOCHE and MONAT showed only the euro amount with no kWh sub-value, while HEUTE and PROGNOSE showed kWh correctly. The frontend template was passing an empty string instead of `fmt(d.week_kwh,3,'kWh')` and `fmt(d.month_kwh,3,'kWh')`. The API already returned these fields; only the rendering was broken.

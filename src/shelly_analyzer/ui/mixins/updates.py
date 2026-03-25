@@ -501,6 +501,62 @@ class UpdatesMixin:
             raise SystemExit(0)
 
 
+    def _updates_fetch_changelog_async(self) -> None:
+            """Fetch CHANGELOG.md from GitHub in a background thread and render it in the changelog Text widget."""
+            txt = getattr(self, "upd_changelog_text", None)
+            if txt is None:
+                return
+
+            try:
+                txt.configure(state="normal")
+                txt.delete("1.0", "end")
+                txt.insert("end", self.t("updates.changelog_loading"))
+                txt.configure(state="disabled")
+            except Exception:
+                pass
+
+            def worker() -> None:
+                repo = self._updates_repo()
+                url = f"https://raw.githubusercontent.com/{repo}/main/CHANGELOG.md"
+                content: Optional[str] = None
+                try:
+                    req = urllib.request.Request(url, headers={"User-Agent": "shelly-energy-analyzer"})
+                    with urllib.request.urlopen(req, timeout=10.0) as resp:
+                        content = resp.read().decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+
+                def apply() -> None:
+                    txt2 = getattr(self, "upd_changelog_text", None)
+                    if txt2 is None:
+                        return
+                    try:
+                        txt2.configure(state="normal")
+                        txt2.delete("1.0", "end")
+                        if content is None:
+                            txt2.insert("end", self.t("updates.changelog_error"))
+                        else:
+                            for line in content.splitlines():
+                                if line.startswith("### "):
+                                    txt2.insert("end", line[4:] + "\n", "h3")
+                                elif line.startswith("## "):
+                                    txt2.insert("end", line[3:] + "\n", "h2")
+                                elif line.startswith("# "):
+                                    txt2.insert("end", line[2:] + "\n", "h1")
+                                else:
+                                    txt2.insert("end", line + "\n")
+                        txt2.configure(state="disabled")
+                        txt2.yview_moveto(0.0)
+                    except Exception:
+                        pass
+
+                try:
+                    self.after(0, apply)
+                except Exception:
+                    apply()
+
+            threading.Thread(target=worker, daemon=True).start()
+
     # Backwards-compatible handlers for older button wiring.
     def _updates_on_check_clicked(self) -> None:
         try:
