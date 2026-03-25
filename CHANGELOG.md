@@ -1,5 +1,9 @@
 # Changelog
 
+## 10.3.3 - 2026-03-25
+### Fixed
+- **Costs tab: missing kWh on week/month device cards** – Per-device cost cards for WOCHE and MONAT showed only the euro amount with no kWh sub-value, while HEUTE and PROGNOSE showed kWh correctly. The frontend template was passing an empty string instead of `fmt(d.week_kwh,3,'kWh')` and `fmt(d.month_kwh,3,'kWh')`. The API already returned these fields; only the rendering was broken.
+
 ## 10.3.2 - 2026-03-25
 ### Added
 - **Sync progress bar**: A `ttk.Progressbar` and a status label now appear in the Sync tab while a sync is running. The bar fills from 0 → 100 % as chunks are downloaded across all devices, and the label shows the current device index and chunk count (e.g. "Device 2/3 · Chunk 5/12"). Both are reset to empty once the sync completes. All 9 UI languages (de, en, es, fr, pt, it, pl, cs, ru) have localized strings for the progress states.
