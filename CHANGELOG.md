@@ -1,5 +1,27 @@
 # Changelog
 
+## 10.5.0 - 2026-03-25
+### Summary
+Consolidation release grouping all features and fixes from v10.3.0–v10.4.0 into a single tagged version so that the auto-updater picks up the full set of improvements.
+
+### Added
+- **Live view: clickable mini-plots with zoomable detail chart** – Clicking any sparkline in a device card opens a full-screen detail chart overlay showing all collected live data. 3-phase devices render L1/L2/L3 as separate coloured lines plus a dashed aggregate total. Supports scroll-wheel zoom, pinch-to-zoom on touch screens, drag-to-pan, auto-scaled Y-axis labels (W/kW, V, A), and a zoom-percentage indicator. Dismissable via ✕ button or backdrop tap. Chart updates live with each polling interval.
+- **Changelog viewer on Updates tab** – The Updates tab now contains a scrollable changelog section fetched from GitHub (`raw.githubusercontent.com`) at startup in a background thread. Headings are rendered bold; network errors are shown as a localised message. All 9 UI languages (de, en, es, fr, pt, it, pl, cs, ru) have localised strings.
+- **Sync progress bar** – A `ttk.Progressbar` and status label appear in the Sync tab during an active sync, filling 0 → 100 % as chunks are downloaded across all devices. The label shows current device index and chunk count (e.g. "Device 2/3 · Chunk 5/12"). Localised in all 9 languages.
+- **Per-device invoice PDFs in monthly e-mail** – When "Attach invoice" is enabled, the monthly e-mail attaches a separate PDF invoice for each configured device. If more than one device is configured, the combined invoice is also attached. Applies to both scheduled send and the manual "Send Now" button.
+
+### Fixed
+- **Costs tab: missing kWh on week/month device cards** – WOCHE and MONAT cost cards were missing the kWh sub-value; the frontend template was passing an empty string. The API already returned the data; only the rendering was broken.
+- **Invoice PDF: overlapping column headers** – Widened the unit-price column; added a coloured header row, alternating row shading, and highlighted totals band for a professional appearance.
+- **Critical: broken auto-update check** – GitHub repository URL in `UpdatesConfig` contained a typo (`robeertm` → `robertm`), causing all update checks to silently fail with a 404.
+- **Duplicate `groups` field in `AppConfig`** – Field was declared twice; the redundant declaration was removed.
+- **Schedule time validation** – `build_shelly_timespec()` now validates hour/minute range and logs a warning on fallback. The schedule editor shows a localised error if the time is invalid.
+- **`ShellyHttp.get/post` crash with `-O` flag or `retries < 1`** – Replaced `assert last_err is not None` with an explicit guard to avoid `TypeError` in optimised Python mode.
+- **`DemoState.started_at` shared across instances** – Changed from a module-level `time.time()` default to `field(default_factory=time.time)`.
+- **Frequency calculation in `database.py`** – `_get("freq_hz")` was evaluated twice per call; refactored to read each CSV column exactly once.
+- **PDF report crash on e-mail send** – `_rl_set_fill`/`_rl_set_stroke` unpacked hex colour strings char-by-char into `setFillColorRGB`, producing too many arguments. Added `_hex_to_rgb` helper.
+- **Hourly heatmap day order** – Y-axis inverted so Monday appears at top and Sunday at bottom.
+
 ## 10.4.0 - 2026-03-25
 ### Added
 - **Changelog viewer on Updates tab**: The Updates tab now contains a scrollable changelog section at the bottom. On startup it fetches `CHANGELOG.md` directly from the GitHub repository (`raw.githubusercontent.com`) in a background thread and renders it with minimal markdown formatting (headings `#`/`##`/`###` are displayed bold). Network errors (offline, timeout) are shown as a localised error message. All 9 UI languages (de, en, es, fr, pt, it, pl, cs, ru) have localized strings for the section title, loading indicator, and error state.
