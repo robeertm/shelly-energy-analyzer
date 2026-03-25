@@ -243,6 +243,10 @@ class CoreMixin:
             # Background sync
             self._sync_q: "queue.Queue[str]" = queue.Queue()
             self._sync_thread: Optional[threading.Thread] = None
+            # Progress bar state (widgets set in _build_sync_tab)
+            self._progress_q: "queue.Queue[tuple]" = queue.Queue()
+            self._sync_progressbar: Optional[ttk.Progressbar] = None
+            self._sync_progress_label_var: Optional[tk.StringVar] = None
             # UI commands from the web dashboard (handled on Tk main thread)
             # queue items are tuples: (cmd:str, payload:any)
             self._ui_cmd_q: "queue.Queue[tuple]" = queue.Queue()
@@ -1000,6 +1004,13 @@ class CoreMixin:
             self.autosync_mode_cmb.pack(side="left")
             self.autosync_status = tk.StringVar(value="Autosync: aus")
             ttk.Label(auto, textvariable=self.autosync_status).pack(side="left", padx=12)
+            # Progress bar (shown during active sync)
+            prog_frm = ttk.Frame(frm)
+            prog_frm.pack(fill="x", padx=12, pady=(0, 4))
+            self._sync_progress_label_var = tk.StringVar(value="")
+            ttk.Label(prog_frm, textvariable=self._sync_progress_label_var).pack(anchor="w")
+            self._sync_progressbar = ttk.Progressbar(prog_frm, mode="determinate", maximum=100)
+            self._sync_progressbar.pack(fill="x", pady=(2, 0))
             mid = ttk.Frame(frm)
             mid.pack(fill="both", expand=True, padx=12, pady=10)
             self.sync_log = tk.Text(mid, height=18)
@@ -1079,9 +1090,24 @@ class CoreMixin:
                 range_override = self._sync_range_override(mode)
             shown = label or mode
             self._log_sync(f"Sync gestartet ({shown}) …")
+            # Reset progress bar
+            self._progress_q.put((0, 100, self.t("sync.progress.started")))
             def worker():
+                total_devices = max(1, len([d for d in self.cfg.devices if getattr(d, "enabled", True)]))
+                seen_devices: list = []
+
+                def on_progress(device_key: str, done: int, total: int, msg: str) -> None:
+                    if device_key not in seen_devices:
+                        seen_devices.append(device_key)
+                    dev_idx = seen_devices.index(device_key)
+                    dev_fraction = dev_idx / total_devices
+                    chunk_fraction = (done / max(1, total)) / total_devices
+                    pct = min(99, int((dev_fraction + chunk_fraction) * 100))
+                    lbl = self.t("sync.progress.label", dev=dev_idx + 1, total_devs=total_devices, done=done, total=total)
+                    self._progress_q.put((pct, 100, lbl))
+
                 try:
-                    results = sync_all(self.cfg, self.storage, range_override=range_override, fallback_last_days=7)
+                    results = sync_all(self.cfg, self.storage, range_override=range_override, fallback_last_days=7, progress=on_progress)
                     for r in results:
                         a, b = r.requested_range
                         ok_chunks = sum(1 for c in r.chunks if c.ok)
@@ -1096,12 +1122,14 @@ class CoreMixin:
                             self._sync_q.put(
                                 f"{r.device_name}: {ok_chunks}/{len(r.chunks)} Chunks OK, last_end_ts={r.updated_last_end_ts} (Range {a}..{b})"
                             )
+                    self._progress_q.put((100, 100, self.t("sync.progress.done")))
                     self._sync_q.put("__SYNC_DONE__")
                 except Exception as e:
                     try:
                         self._sync_q.put(self.t('sync.err.generic', e=e))
                     except Exception:
                         self._sync_q.put(f"Sync ERROR: {e}")
+                    self._progress_q.put((0, 100, ""))
                     self._sync_q.put("__SYNC_DONE__")
             self._sync_thread = threading.Thread(target=worker, daemon=True)
             self._sync_thread.start()
@@ -7143,6 +7171,20 @@ class CoreMixin:
                 return
 
     def _drain_queues_loop(self) -> None:
+            # Progress bar updates from sync worker
+            while True:
+                try:
+                    pct, maximum, lbl = self._progress_q.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    if self._sync_progressbar is not None:
+                        self._sync_progressbar["value"] = pct
+                    if self._sync_progress_label_var is not None:
+                        self._sync_progress_label_var.set(lbl)
+                except Exception:
+                    pass
+
             # Sync messages
             while True:
                 try:
@@ -7151,6 +7193,14 @@ class CoreMixin:
                     break
                 if msg == "__SYNC_DONE__":
                     self._log_sync("Sync beendet.")
+                    # Clear progress bar after sync finishes
+                    try:
+                        if self._sync_progressbar is not None:
+                            self._sync_progressbar["value"] = 0
+                        if self._sync_progress_label_var is not None:
+                            self._sync_progress_label_var.set("")
+                    except Exception:
+                        pass
                     try:
                         self._reload_data()
                     except Exception:

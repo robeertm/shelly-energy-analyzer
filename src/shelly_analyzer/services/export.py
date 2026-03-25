@@ -310,33 +310,39 @@ def export_pdf_invoice(
         c.drawString(2.0 * cm, y, str(period_label))
         y -= 0.5 * cm
 
-    # Table header
+    # Column layout — generous spacing so "Einzelpreis"/"Unit Price" never overlaps
+    col_desc_x  = 2.0 * cm   # left-align: description
+    col_qty_x   = 10.0 * cm  # right-align: quantity (Menge)
+    col_unit_x  = 10.3 * cm  # left-align: unit (kWh, Stk …)
+    col_price_x = 16.5 * cm  # right-align: unit price (Einzelpreis) — wide gap
+    col_amt_x   = w - 2.0 * cm  # right-align: line amount
+
+    # Table header row — colored background band
+    row_h = 0.7 * cm
     y -= 0.2 * cm
-    c.setLineWidth(0.6)
-    c.line(2.0 * cm, y, w - 2.0 * cm, y)
-    y -= 0.5 * cm
+    c.setLineWidth(0)
+    _rl_set_fill(c, _C_TH_BG)
+    c.rect(2.0 * cm, y - row_h, w - 4.0 * cm, row_h, stroke=0, fill=1)
+    y -= row_h * 0.78  # baseline inside the band
 
-    col_desc_x = 2.0 * cm
-    col_qty_x = 11.2 * cm
-    col_unit_x = 13.0 * cm
-    col_price_x = 14.5 * cm
-    col_amt_x = w - 2.0 * cm
-
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(col_desc_x, y, t(lang, "pdf.col.description"))
+    _rl_set_fill(c, (1.0, 1.0, 1.0))  # white text on dark header
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(col_desc_x + 0.15 * cm, y, t(lang, "pdf.col.description"))
     c.drawRightString(col_qty_x, y, t(lang, "pdf.col.quantity"))
-    c.drawString(col_unit_x, y, t(lang, "pdf.col.unit"))
+    c.drawString(col_unit_x + 0.1 * cm, y, t(lang, "pdf.col.unit"))
     c.drawRightString(col_price_x, y, t(lang, "pdf.col.unit_price"))
     c.drawRightString(col_amt_x, y, t(lang, "pdf.col.amount"))
-    y -= 0.35 * cm
+    _rl_set_fill(c, _C_TEXT)  # restore
+
+    y -= row_h * 0.22  # move below band bottom edge
     c.setLineWidth(0.4)
     c.line(2.0 * cm, y, w - 2.0 * cm, y)
 
-    # Lines
+    # Lines with alternating row shading
     net_total = 0.0
     c.setFont("Helvetica", 10)
     y -= 0.55 * cm
-    for ln in lines:
+    for row_idx, ln in enumerate(lines):
         # Wrap long descriptions gently
         desc = str(getattr(ln, "description", ""))
         qty = float(getattr(ln, "quantity", 0.0) or 0.0)
@@ -345,10 +351,17 @@ def export_pdf_invoice(
         amount = qty * unit_price
         net_total += amount
 
-        # Description wrapping (max 2 lines)
-        maxw = (col_qty_x - col_desc_x - 0.3 * cm)
+        maxw = col_qty_x - col_desc_x - 0.3 * cm
         parts = _wrap_text(c, desc, maxw, max_lines=2)
+        line_h = 0.95 * cm if len(parts) > 1 else 0.55 * cm
 
+        # Alternate row background
+        if row_idx % 2 == 1:
+            _rl_set_fill(c, _C_KPI_BG)
+            c.rect(2.0 * cm, y - line_h + 0.45 * cm, w - 4.0 * cm, line_h, stroke=0, fill=1)
+            _rl_set_fill(c, _C_TEXT)
+
+        c.setFont("Helvetica", 10)
         c.drawString(col_desc_x, y, parts[0])
         if len(parts) > 1:
             c.drawString(col_desc_x, y - 0.45 * cm, parts[1])
@@ -358,7 +371,7 @@ def export_pdf_invoice(
         c.drawRightString(col_price_x, y, _fmt_money(unit_price, lang))
         c.drawRightString(col_amt_x, y, _fmt_money(amount, lang))
 
-        y -= 0.95 * cm if len(parts) > 1 else 0.55 * cm
+        y -= line_h
         if y < 5.0 * cm:
             c.showPage()
             y = h - 2.0 * cm
@@ -368,28 +381,39 @@ def export_pdf_invoice(
     vat_amount = net_total * vat_rate
     gross_total = net_total + vat_amount
 
-    # Totals box
+    # Separator above totals
     y -= 0.15 * cm
     c.setLineWidth(0.6)
     c.line(2.0 * cm, y, w - 2.0 * cm, y)
+
+    # Subtotal row
     y -= 0.65 * cm
     c.setFont("Helvetica", 10)
-    c.drawRightString(15.5 * cm, y, t(lang, "pdf.subtotal"))
+    _rl_set_fill(c, _C_NEUTRAL)
+    c.drawRightString(col_price_x, y, t(lang, "pdf.subtotal"))
+    _rl_set_fill(c, _C_TEXT)
     c.drawRightString(col_amt_x, y, _fmt_money(net_total, lang))
     y -= 0.55 * cm
+
     if vat_enabled and vat_rate > 0:
-        c.drawRightString(15.5 * cm, y, f"{t(lang, 'pdf.vat')} ({vat_rate_percent:.1f}%)")
+        _rl_set_fill(c, _C_NEUTRAL)
+        c.drawRightString(col_price_x, y, f"{t(lang, 'pdf.vat')} ({vat_rate_percent:.1f}%)")
+        _rl_set_fill(c, _C_TEXT)
         c.drawRightString(col_amt_x, y, _fmt_money(vat_amount, lang))
         y -= 0.55 * cm
-        c.setFont("Helvetica-Bold", 11)
-        c.drawRightString(15.5 * cm, y, t(lang, "pdf.total"))
-        c.drawRightString(col_amt_x, y, _fmt_money(gross_total, lang))
-    else:
-        c.setFont("Helvetica-Bold", 11)
-        c.drawRightString(15.5 * cm, y, t(lang, "pdf.total"))
-        c.drawRightString(col_amt_x, y, _fmt_money(net_total, lang))
 
-# Payment details
+    # Total — highlighted band
+    total_val = gross_total if (vat_enabled and vat_rate > 0) else net_total
+    band_h = 0.75 * cm
+    _rl_set_fill(c, _C_HEADER_BG)
+    c.rect(2.0 * cm, y - band_h + 0.55 * cm, w - 4.0 * cm, band_h, stroke=0, fill=1)
+    _rl_set_fill(c, (1.0, 1.0, 1.0))
+    c.setFont("Helvetica-Bold", 11)
+    c.drawRightString(col_price_x, y, t(lang, "pdf.total"))
+    c.drawRightString(col_amt_x, y, _fmt_money(total_val, lang))
+    _rl_set_fill(c, _C_TEXT)
+
+    # Payment details
     y -= 1.2 * cm
     c.setFont("Helvetica", 9)
     if issuer.get("iban"):
