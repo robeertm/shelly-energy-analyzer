@@ -4,7 +4,7 @@ A cross-platform desktop application to analyze, visualize and export energy dat
 
 This repository is **GitHub-ready** (MIT license, clean structure, no secrets). Releases are published via **GitHub Releases** so the built‑in updater can find and download new versions.
 
-> **Current version: v10.1.1** — all major feature modules complete.
+> **Current version: v10.3.2** — all major feature modules complete.
 
 ---
 
@@ -24,6 +24,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Monthly cost projection based on current usage
 - Previous month comparison (% change)
 - Per-device breakdown with cost share and bar chart
+- **CO₂ tracking** — per-device CO₂ footprint (Today / Week / Month / Year forecast in kg) based on configurable CO₂ intensity (g/kWh, default 380 g/kWh); available in both the desktop app and the web dashboard
 
 ### 💱 Time-of-Use (TOU) Tariffs
 - Define multiple time-based electricity price zones (peak, off-peak, etc.)
@@ -43,8 +44,9 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 
 ### 🔍 Comparison Mode
 - Compare two arbitrary date ranges side-by-side (e.g. this week vs. last week)
-- **Quick-compare buttons** — one click to compare Month, Quarter, Half-Year or Year against the previous period
+- **Quick-compare buttons** — one click to compare Month, Quarter, Half-Year or Year against the previous period; smart granularity auto-selection per preset (Month → daily, Quarter → weekly, Half-Year / Year → monthly)
 - Overlaid line charts for any metric (kWh, W, cost, …)
+- **Weekly granularity** — aggregate daily data into ISO calendar weeks (W01, W02 …)
 - Percentage delta indicators for quick at-a-glance diff
 - EUR unit support in addition to kWh for cost comparisons
 
@@ -62,11 +64,38 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Time-series chart of production, consumption and net grid draw
 - Works with any Shelly EM/PM device installed at the grid connection point
 
-### 📤 Exports
+### 📤 Exports & E-mail Reports
+
+#### CSV / PDF
 - CSV export for further analysis
-- PDF energy reports (daily / monthly)
-- PDF invoices with optional company logo
-- **E-mail reports** with PDF attachment — send scheduled or on-demand reports via SMTP
+- **Rich daily PDF report**:
+  - 6 KPI tiles: total kWh, cost, CO₂, average power, peak power, peak hour
+  - Comparison to the previous day **and** the same weekday of the previous week (colour-coded ±%)
+  - Device breakdown table with consumption share (%)
+  - Highlights / lowlights: top consumer, most efficient consumer, highest/lowest hour
+  - Page 2: stacked 24-hour bar chart with one colour per device and legend
+  - From page 3: per-device section with mini 24h bar chart, operating hours, Min/Avg/Max kWh/h, average & peak power, share of total
+- **Rich monthly PDF report**:
+  - 6 KPI tiles: total kWh, cost, CO₂, daily average, most expensive day, cheapest day
+  - Comparison to previous month (absolute + percentage delta)
+  - Weekday vs. weekend average comparison
+  - Page 2: stacked daily bar chart (all devices)
+  - From page 3: per-device section with mini daily bar chart, Min/Avg/Max kWh/day, trend (Rising / Falling / Stable)
+  - Last page: Top-5 consumer ranking as horizontal bar chart + table with kWh and share
+
+#### Invoices (PDF)
+- Professional A4 invoice with sender/recipient from `BillingConfig` (name, address, VAT ID, email, IBAN, BIC)
+- Invoice number format `{Prefix}-{YYYY}-{MM}-001` (configurable prefix)
+- Due date automatically calculated from `billing.payment_terms_days`
+- Optional company logo embedded from `billing.invoice_logo_path`
+- Coloured table header, alternating row shading, highlighted totals band
+- **Per-device invoices**: each device gets its own individual invoice PDF
+
+#### Scheduled E-mail
+- **Automated daily and monthly e-mail reports** via SMTP with rich PDF attachments
+- **Monthly e-mail invoice attachment** — optional "Attach invoice" checkbox: attaches a separate invoice PDF per device **plus** a combined invoice when multiple devices are configured
+- Send-now buttons for immediate on-demand delivery
+- 0-byte attachment guard and detailed logging for easy diagnosis
 
 ### 🔔 Notifications
 - **Telegram bot** — threshold alerts (W, V, A, A_N, VAR, cos φ, Hz) with optional plots; daily & monthly summaries with kWh bar charts; previous period comparison; standby base-load detection
@@ -89,6 +118,11 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Visual schedule editor (time slots, days-of-week)
 - Manage and delete existing schedules directly from the app
 
+### 🔄 Data Sync
+- Pull historical data from Shelly devices into the local SQLite database
+- **Sync progress bar** — a progress bar and status label show the sync progress in real time (e.g. "Device 2/3 · Chunk 5/12"), filling from 0 → 100 % as chunks are downloaded across all devices; resets automatically when the sync completes
+- All 9 UI languages include localised sync-progress strings
+
 ### 🧙 Setup Wizard
 - Automatic discovery (mDNS / IP scan)
 - Manual IP/host entry
@@ -99,10 +133,25 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Realistic demo data (live + history CSVs)
 - Great for testing and screenshots
 
+### 🌐 Web Dashboard (Mobile-Friendly SPA)
+- Full single-page app (SPA) accessible from any device on the local network
+- **6 tabs** matching the desktop application:
+  - **Live** — real-time device cards with colour-coded power (green/yellow/red), sparkline charts, collapsible detail rows (voltage, current, cos φ, grid frequency, per-phase values, neutral current I_N), NILM appliance chips, freeze button, time-scale selector (1 min → 2 h), voltage & current sparklines in expanded view
+  - **Costs** — per-device cost overview (Today / Week / Month / Year + monthly projection) with CO₂ display (Today / Week / Month / Forecast in kg)
+  - **Heatmap** — interactive yearly calendar heatmap (daily kWh / €) and 7 × 24 weekday × hour heatmap; device, unit and year selectors; touch tooltip; responsive cell sizing
+  - **Solar** — PV dashboard with feed-in, grid consumption, self-consumption, autarky %, PV production, feed-in revenue and cost savings; period buttons (Today / Week / Month / Year)
+  - **Comparison** — period-over-period comparison with device A/B selectors, date range inputs, unit (kWh / €) and granularity (Total / Daily / Weekly / Monthly) toggles, quick-preset buttons (Month / Quarter / Half-Year / Year), grouped bar chart and delta display
+  - **Anomalies** — lists detected anomaly events with type, device, timestamp, sigma and description; enabled/disabled status badge
+- **Dark / Light mode** toggle with `prefers-color-scheme` auto-detection and `localStorage` persistence
+- **Full i18n** — web dashboard renders in the same language as the desktop app (all 9 supported languages); locale-aware month and weekday labels via `Intl.DateTimeFormat`
+- Device order & visibility settings — gear icon opens a modal to show/hide devices and reorder them; preferences persisted in `localStorage`
+- Gzip-compressed HTML served at startup (~75 % smaller payload) for fast mobile page loads
+- Historical sparkline pre-population on first open via `/api/history`
+- Mobile-first design: bottom navigation bar, min 44 px touch targets, works at 360 px viewport width, responsive up to 1920 px
+
 ### 🖥 Cross‑Platform
 - macOS / Windows / Linux
 - One-click start scripts
-- Web dashboard (accessible from any device on the network) with live charts, neutral current (dashed N line), phase balance, cost overview and NILM appliance detection
 
 ---
 
