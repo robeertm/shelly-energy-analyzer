@@ -29,16 +29,17 @@ class ShellyHttp:
             base_headers.update(headers)
 
         last_err: Optional[BaseException] = None
-        for attempt in range(1, self.cfg.retries + 1):
+        for attempt in range(1, max(self.cfg.retries, 1) + 1):
             try:
                 r = self._sess.get(url, params=params, headers=base_headers, timeout=self.cfg.timeout_seconds)
                 r.raise_for_status()
                 return r
             except Exception as e:
                 last_err = e
-                if attempt < self.cfg.retries:
+                if attempt < max(self.cfg.retries, 1):
                     time.sleep(self.cfg.backoff_base_seconds * (2 ** (attempt - 1)))
-        assert last_err is not None
+        if last_err is None:
+            raise RuntimeError("ShellyHttp.get: no attempts were made (retries < 1)")
         raise last_err
 
     def post(
@@ -52,16 +53,17 @@ class ShellyHttp:
             base_headers.update(headers)
 
         last_err: Optional[BaseException] = None
-        for attempt in range(1, self.cfg.retries + 1):
+        for attempt in range(1, max(self.cfg.retries, 1) + 1):
             try:
                 r = self._sess.post(url, json=json_body or {}, headers=base_headers, timeout=self.cfg.timeout_seconds)
                 r.raise_for_status()
                 return r
             except Exception as e:
                 last_err = e
-                if attempt < self.cfg.retries:
+                if attempt < max(self.cfg.retries, 1):
                     time.sleep(self.cfg.backoff_base_seconds * (2 ** (attempt - 1)))
-        assert last_err is not None
+        if last_err is None:
+            raise RuntimeError("ShellyHttp.post: no attempts were made (retries < 1)")
         raise last_err
 
 
