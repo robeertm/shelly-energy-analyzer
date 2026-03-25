@@ -160,10 +160,15 @@ def build_shelly_timespec(time_str: str, weekdays: List[int]) -> str:
     Our weekdays: 0=Mon … 6=Sun (Python weekday() convention).
     """
     try:
-        hh, mm = time_str.split(":")
-        hh = int(hh)
-        mm = int(mm)
+        parts = time_str.split(":")
+        if len(parts) != 2:
+            raise ValueError(f"Expected HH:MM, got {time_str!r}")
+        hh = int(parts[0])
+        mm = int(parts[1])
+        if not (0 <= hh <= 23 and 0 <= mm <= 59):
+            raise ValueError(f"Time out of range: {hh:02d}:{mm:02d}")
     except Exception:
+        logger.warning("Invalid time spec %r – defaulting to 00:00", time_str)
         hh, mm = 0, 0
 
     # Convert Python weekday to cron dow: Mon→1, Tue→2, … Sat→6, Sun→0
