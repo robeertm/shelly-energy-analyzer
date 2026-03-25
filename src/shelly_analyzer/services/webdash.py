@@ -489,6 +489,38 @@ _HTML_TEMPLATE = """<!doctype html>
       border-radius: 6px;
       background: var(--chipbg);
     }}
+    /* ── Chart detail modal ── */
+    .chart-detail-panel {{
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      width: min(96vw, 720px);
+      height: min(85vh, 500px);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }}
+    .chart-detail-legend {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--text);
+    }}
+    .chart-detail-legend-item {{ display: flex; align-items: center; gap: 5px; }}
+    .chart-detail-legend-dot {{ width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }}
+    #chart-detail-canvas {{
+      flex: 1;
+      width: 100%;
+      cursor: grab;
+      touch-action: none;
+      border-radius: 6px;
+      min-height: 0;
+    }}
+    #chart-detail-canvas:active {{ cursor: grabbing; }}
+    .sparkline-wrap[data-metric] {{ cursor: pointer; transition: opacity .15s; }}
+    .sparkline-wrap[data-metric]:hover {{ opacity: .7; }}
     /* ── Heatmap ── */
     .hm-calendar {{ overflow-x: auto; padding-bottom: 4px; }}
     .hm-grid {{ display: flex; gap: 2px; }}
@@ -744,6 +776,17 @@ _HTML_TEMPLATE = """<!doctype html>
     <div style="text-align:right;margin-top:12px">
       <button class="btn btn-accent" onclick="closeLiveSettings()">{web_dash_done}</button>
     </div>
+  </div>
+</div>
+
+<div id="chart-detail-modal" class="modal-overlay" onclick="closeDetailChartIfBg(event)">
+  <div class="chart-detail-panel">
+    <div class="modal-header">
+      <span id="chart-detail-title"></span>
+      <button class="icon-btn" onclick="closeDetailChart()">✕</button>
+    </div>
+    <div class="chart-detail-legend" id="chart-detail-legend"></div>
+    <canvas id="chart-detail-canvas"></canvas>
   </div>
 </div>
 
@@ -1040,6 +1083,7 @@ function renderLive(data, first) {{
       updateDeviceCard(grid.children[i], d);
     }});
   }}
+  if (_cdState) requestAnimationFrame(_drawDetailChart);
 }}
 
 function buildDeviceCard(d) {{
@@ -1050,6 +1094,19 @@ function buildDeviceCard(d) {{
   div.querySelector('.dev-header').addEventListener('click', function() {{
     const exp = div.querySelector('.dev-expand');
     exp.classList.toggle('open');
+  }});
+  div.querySelectorAll('.sparkline-wrap[data-metric]').forEach(function(wrap) {{
+    wrap.addEventListener('click', function(e) {{
+      e.stopPropagation();
+      const metric = wrap.dataset.metric;
+      const devKey = wrap.dataset.devkey;
+      let title;
+      if (metric === 'w') title = t('web.chart.power', 'Power (W)');
+      else if (metric === 'v') title = t('web.chart.voltage', 'Voltage (V)');
+      else if (metric === 'a') title = t('web.chart.current', 'Current (A)');
+      else title = t('web.dash.phase_power', 'Phase Power');
+      openDetailChart(devKey, metric, title);
+    }});
   }});
   return div;
 }}
@@ -1078,7 +1135,7 @@ function devCardHTML(d) {{
       '</div>' +
       '<div class="dev-power ' + pc + '">' + fmt(d.power_w, 0) + ' W</div>' +
     '</div>' +
-    '<div class="sparkline-wrap"><canvas class="sparkline" id="sp-' + d.key + '"></canvas></div>' +
+    '<div class="sparkline-wrap" data-metric="w" data-devkey="' + d.key + '"><canvas class="sparkline" id="sp-' + d.key + '"></canvas></div>' +
     '<div class="dev-expand">' +
       '<dl class="dev-kv">' +
         '<dt>' + t('web.kv.u', 'Voltage') + '</dt><dd>' + fmt(d.voltage_v, 1, 'V') + '</dd>' +
@@ -1088,9 +1145,9 @@ function devCardHTML(d) {{
       '</dl>' +
       phaseHtml +
       inHtml +
-      '<div class="sparkline-wrap" style="margin-top:8px"><div class="sparkline-label">' + t('web.kv.u', 'Voltage') + '</div><canvas class="sparkline-sm" id="sp-v-' + d.key + '"></canvas></div>' +
-      '<div class="sparkline-wrap" style="margin-top:6px"><div class="sparkline-label">' + t('web.kv.i', 'Current') + '</div><canvas class="sparkline-sm" id="sp-a-' + d.key + '"></canvas></div>' +
-      (phases ? '<div class="sparkline-wrap" style="margin-top:6px"><div class="sparkline-label">' + t('web.dash.phase_power', 'Phase Power') + '</div><canvas class="sparkline-sm" id="sp-ph-' + d.key + '"></canvas></div>' : '') +
+      '<div class="sparkline-wrap" style="margin-top:8px" data-metric="v" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.u', 'Voltage') + '</div><canvas class="sparkline-sm" id="sp-v-' + d.key + '"></canvas></div>' +
+      '<div class="sparkline-wrap" style="margin-top:6px" data-metric="a" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.i', 'Current') + '</div><canvas class="sparkline-sm" id="sp-a-' + d.key + '"></canvas></div>' +
+      (phases ? '<div class="sparkline-wrap" style="margin-top:6px" data-metric="ph" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.dash.phase_power', 'Phase Power') + '</div><canvas class="sparkline-sm" id="sp-ph-' + d.key + '"></canvas></div>' : '') +
       nilm +
     '</div>'
   );
@@ -1250,6 +1307,224 @@ function drawMultiSparkline(canvas, seriesArr, colors) {{
     ctx.stroke();
   }});
 }}
+
+/* ──────────────────────────────────────────────
+   CHART DETAIL MODAL  (click mini-plot → zoom)
+────────────────────────────────────────────── */
+const _PHASE_COLORS = ['#e05c5c','#5ca0e0','#5ce077'];
+let _cdState = null;
+
+function openDetailChart(devKey, metric, title) {{
+  const buf = sparkData[devKey];
+  if (!buf || buf.length < 2) return;
+  _cdState = {{ devKey: devKey, metric: metric, xScale: 1.0, xOffset: 0,
+    dragging: false, dragX: 0, dragOff: 0, pinchDist: null, pinchScale: 1 }};
+  document.getElementById('chart-detail-title').textContent = title;
+  _buildDetailLegend(devKey, metric);
+  document.getElementById('chart-detail-modal').classList.add('open');
+  requestAnimationFrame(_drawDetailChart);
+}}
+
+function closeDetailChart() {{
+  document.getElementById('chart-detail-modal').classList.remove('open');
+  _cdState = null;
+}}
+
+function closeDetailChartIfBg(e) {{
+  if (e.target.id === 'chart-detail-modal') closeDetailChart();
+}}
+
+function _buildDetailLegend(devKey, metric) {{
+  const buf = sparkData[devKey];
+  const legend = document.getElementById('chart-detail-legend');
+  legend.innerHTML = '';
+  let maxPh = 0;
+  if (buf) buf.forEach(function(p) {{ if (p.phases && p.phases.length > maxPh) maxPh = p.phases.length; }});
+  const cs = getComputedStyle(document.documentElement);
+  const accent = cs.getPropertyValue('--accent').trim() || '#2563eb';
+  const totalColor = metric === 'v' ? '#f59e0b' : metric === 'a' ? '#10b981' : accent;
+  const items = [];
+  if (metric === 'ph') {{
+    for (let i = 0; i < maxPh; i++) items.push({{ label: 'L'+(i+1), color: _PHASE_COLORS[i]||'#888' }});
+  }} else if (maxPh > 0) {{
+    items.push({{ label: t('web.plots.series.total','Total'), color: totalColor }});
+    for (let i = 0; i < maxPh; i++) items.push({{ label: 'L'+(i+1), color: _PHASE_COLORS[i]||'#888' }});
+  }}
+  items.forEach(function(item) {{
+    const el = document.createElement('div');
+    el.className = 'chart-detail-legend-item';
+    el.innerHTML = '<div class="chart-detail-legend-dot" style="background:'+item.color+'"></div><span>'+esc(item.label)+'</span>';
+    legend.appendChild(el);
+  }});
+}}
+
+function _drawDetailChart() {{
+  if (!_cdState) return;
+  const canvas = document.getElementById('chart-detail-canvas');
+  if (!canvas || !canvas.offsetWidth) return;
+  const buf = sparkData[_cdState.devKey];
+  if (!buf || buf.length < 2) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight || 300;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const cs = getComputedStyle(document.documentElement);
+  const mutedColor = cs.getPropertyValue('--muted').trim() || '#64748b';
+  const borderColor = cs.getPropertyValue('--border').trim() || '#334155';
+  const accent = cs.getPropertyValue('--accent').trim() || '#2563eb';
+  const metric = _cdState.metric;
+  const n = buf.length;
+  const xScale = Math.max(1.0, Math.min(n/2, _cdState.xScale));
+  const visCount = Math.max(2, Math.round(n / xScale));
+  let startIdx = Math.round(_cdState.xOffset || 0);
+  startIdx = Math.max(0, Math.min(n - visCount, startIdx));
+  const endIdx = Math.min(n, startIdx + visCount);
+  const visPts = buf.slice(startIdx, endIdx);
+  if (visPts.length < 2) return;
+  let maxPh = 0;
+  buf.forEach(function(p) {{ if (p.phases && p.phases.length > maxPh) maxPh = p.phases.length; }});
+  const totalColorMap = {{ w: accent, v: '#f59e0b', a: '#10b981' }};
+  const series = [], colors = [];
+  if (metric === 'ph') {{
+    for (let i = 0; i < maxPh; i++) {{
+      series.push(visPts.map(function(p) {{ return (p.phases&&p.phases[i]) ? (p.phases[i].power_w||0) : 0; }}));
+      colors.push(_PHASE_COLORS[i]||'#888');
+    }}
+  }} else {{
+    const phField = metric==='w' ? 'power_w' : metric==='v' ? 'voltage_v' : 'current_a';
+    series.push(visPts.map(function(p) {{ return p[metric]||0; }}));
+    colors.push(totalColorMap[metric]||accent);
+    for (let i = 0; i < maxPh; i++) {{
+      series.push(visPts.map(function(p) {{ return (p.phases&&p.phases[i]) ? (p.phases[i][phField]||0) : 0; }}));
+      colors.push(_PHASE_COLORS[i]||'#888');
+    }}
+  }}
+  if (!series.length) return;
+  let allMin = Infinity, allMax = -Infinity;
+  series.forEach(function(s) {{ s.forEach(function(v) {{ if (v<allMin) allMin=v; if (v>allMax) allMax=v; }}); }});
+  if (!isFinite(allMin)) allMin = 0;
+  if (!isFinite(allMax)||allMax<=allMin) allMax = allMin+1;
+  if (metric !== 'v') allMin = Math.min(0, allMin);
+  const yPad = (allMax-allMin)*0.06;
+  const yMin = allMin-yPad, yMax = allMax+yPad, yRange = yMax-yMin||1;
+  const padL=52, padR=12, padT=12, padB=34;
+  const cW=W-padL-padR, cH=H-padT-padB;
+  function toX(i) {{ return padL+(i/(visPts.length-1))*cW; }}
+  function toY(v) {{ return padT+cH-((v-yMin)/yRange)*cH; }}
+  // Grid + Y-axis labels
+  for (let g=0; g<=4; g++) {{
+    const v = yMin+(yMax-yMin)*(g/4);
+    const y = toY(v);
+    ctx.strokeStyle=borderColor; ctx.lineWidth=0.5;
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(W-padR,y); ctx.stroke();
+    ctx.fillStyle=mutedColor; ctx.font='10px system-ui,sans-serif'; ctx.textAlign='right';
+    ctx.fillText(_fmtAxisVal(v,metric), padL-4, y+4);
+  }}
+  // X-axis time labels
+  const xIdxs = [0, Math.floor(visPts.length/4), Math.floor(visPts.length/2), Math.floor(visPts.length*3/4), visPts.length-1];
+  ctx.fillStyle=mutedColor; ctx.font='10px system-ui,sans-serif'; ctx.textAlign='center';
+  xIdxs.forEach(function(i) {{
+    if (i>=0&&i<visPts.length) {{
+      const d2=new Date(visPts[i].ts);
+      const lbl=String(d2.getHours()).padStart(2,'0')+':'+String(d2.getMinutes()).padStart(2,'0')+':'+String(d2.getSeconds()).padStart(2,'0');
+      ctx.fillText(lbl, toX(i), H-padB+14);
+    }}
+  }});
+  // Series lines
+  series.forEach(function(s, si) {{
+    ctx.setLineDash((si===0&&series.length>1) ? [5,3] : []);
+    ctx.strokeStyle=colors[si];
+    ctx.lineWidth=(si===0&&series.length>1) ? 1.5 : 2;
+    ctx.beginPath();
+    s.forEach(function(v,i) {{ i===0 ? ctx.moveTo(toX(i),toY(v)) : ctx.lineTo(toX(i),toY(v)); }});
+    ctx.stroke();
+  }});
+  ctx.setLineDash([]);
+  // Zoom % indicator when zoomed
+  if (xScale > 1.05) {{
+    const pct = Math.round((endIdx-startIdx)/n*100);
+    ctx.fillStyle=mutedColor; ctx.font='10px system-ui,sans-serif'; ctx.textAlign='right';
+    ctx.fillText(pct+'%', W-padR, padT+10);
+  }}
+}}
+
+function _fmtAxisVal(v, metric) {{
+  if (metric==='w'||metric==='ph') {{ if (Math.abs(v)>=1000) return (v/1000).toFixed(1)+'k'; return Math.round(v)+''; }}
+  if (metric==='v') return v.toFixed(0);
+  if (metric==='a') return v.toFixed(1);
+  return Math.round(v)+'';
+}}
+
+(function() {{
+  function _cdSetup() {{
+    const canvas = document.getElementById('chart-detail-canvas');
+    if (!canvas) return;
+    canvas.addEventListener('wheel', function(e) {{
+      e.preventDefault();
+      if (!_cdState) return;
+      const rect = canvas.getBoundingClientRect();
+      const cx = (e.clientX-rect.left)/rect.width;
+      const buf = sparkData[_cdState.devKey]; if (!buf) return;
+      const n = buf.length;
+      const factor = e.deltaY > 0 ? 0.75 : 1.33;
+      const oldScale = Math.max(1.0, _cdState.xScale);
+      const newScale = Math.min(n/2, Math.max(1.0, oldScale*factor));
+      const oldVis = n/oldScale, newVis = n/newScale;
+      _cdState.xOffset = (_cdState.xOffset||0) + cx*(oldVis-newVis);
+      _cdState.xScale = newScale;
+      requestAnimationFrame(_drawDetailChart);
+    }}, {{passive: false}});
+    canvas.addEventListener('mousedown', function(e) {{
+      if (!_cdState) return;
+      _cdState.dragging = true; _cdState.dragX = e.clientX; _cdState.dragOff = _cdState.xOffset||0;
+    }});
+    window.addEventListener('mousemove', function(e) {{
+      if (!_cdState||!_cdState.dragging) return;
+      const buf = sparkData[_cdState.devKey]; if (!buf) return;
+      const n = buf.length;
+      const visCount = n/Math.max(1.0, _cdState.xScale||1);
+      const pxPerPt = (canvas.offsetWidth-64)/visCount;
+      _cdState.xOffset = (_cdState.dragOff||0) - (e.clientX-_cdState.dragX)/pxPerPt;
+      requestAnimationFrame(_drawDetailChart);
+    }});
+    window.addEventListener('mouseup', function() {{ if (_cdState) _cdState.dragging = false; }});
+    canvas.addEventListener('touchstart', function(e) {{
+      if (!_cdState) return;
+      if (e.touches.length === 1) {{
+        _cdState.dragging = true; _cdState.dragX = e.touches[0].clientX;
+        _cdState.dragOff = _cdState.xOffset||0; _cdState.pinchDist = null;
+      }} else if (e.touches.length === 2) {{
+        _cdState.dragging = false;
+        _cdState.pinchDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+        _cdState.pinchScale = _cdState.xScale||1;
+      }}
+    }}, {{passive: true}});
+    canvas.addEventListener('touchmove', function(e) {{
+      if (!_cdState) return;
+      if (e.touches.length === 1 && _cdState.dragging) {{
+        const buf = sparkData[_cdState.devKey]; if (!buf) return;
+        const n = buf.length;
+        const visCount = n/Math.max(1.0, _cdState.xScale||1);
+        const pxPerPt = (canvas.offsetWidth-64)/visCount;
+        _cdState.xOffset = (_cdState.dragOff||0) - (e.touches[0].clientX-_cdState.dragX)/pxPerPt;
+        requestAnimationFrame(_drawDetailChart);
+      }} else if (e.touches.length === 2 && _cdState.pinchDist) {{
+        const dist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+        const buf = sparkData[_cdState.devKey]; if (!buf) return;
+        const n = buf.length;
+        _cdState.xScale = Math.min(n/2, Math.max(1.0, (_cdState.pinchScale||1)*(dist/_cdState.pinchDist)));
+        requestAnimationFrame(_drawDetailChart);
+      }}
+    }}, {{passive: true}});
+    canvas.addEventListener('touchend', function() {{ if (_cdState) {{ _cdState.dragging = false; _cdState.pinchDist = null; }} }}, {{passive: true}});
+  }}
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _cdSetup);
+  else _cdSetup();
+}})();
 
 /* ──────────────────────────────────────────────
    COSTS TAB

@@ -3,6 +3,14 @@
 ## 10.4.0 - 2026-03-25
 ### Added
 - **Changelog viewer on Updates tab**: The Updates tab now contains a scrollable changelog section at the bottom. On startup it fetches `CHANGELOG.md` directly from the GitHub repository (`raw.githubusercontent.com`) in a background thread and renders it with minimal markdown formatting (headings `#`/`##`/`###` are displayed bold). Network errors (offline, timeout) are shown as a localised error message. All 9 UI languages (de, en, es, fr, pt, it, pl, cs, ru) have localized strings for the section title, loading indicator, and error state.
+- **Live view: clickable mini-plots with zoomable detail chart** – Clicking any sparkline in the device card (power W, voltage V, current A, or phase-power) now opens a full-screen detail chart overlay. The detail chart shows all collected live data points for the selected metric and — for 3-phase devices — renders each phase (L1/L2/L3) as a separate coloured line alongside the aggregate total (dashed). The chart supports:
+  - **Scroll-wheel zoom** on desktop (zoom in/out centred on the cursor position)
+  - **Pinch-to-zoom** on mobile/touch screens
+  - **Drag to pan** (mouse or single-finger touch) across the time axis
+  - Y-axis with auto-scaled labels (W/kW, V, A), time labels on the X-axis, and a zoom-percentage indicator when zoomed in
+  - A colour-coded legend (Total + L1/L2/L3) for 3-phase devices
+  - Dismiss by clicking the ✕ button or tapping the backdrop
+  The chart updates live as new data arrives from the polling interval.
 
 ## 10.3.3 - 2026-03-25
 ### Fixed
