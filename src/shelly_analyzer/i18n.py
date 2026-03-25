@@ -476,6 +476,9 @@ _I18N: Dict[str, Dict[str, str]] = {
         "autosync.next_run": "Nächster Lauf: {nxt} ({interval_h}h)",
         "autosync.off": "Autosync: aus",
         "sync.err.generic": "Sync FEHLER: {e}",
+        "sync.progress.started": "Sync läuft …",
+        "sync.progress.label": "Gerät {dev}/{total_devs} · Chunk {done}/{total}",
+        "sync.progress.done": "Fertig",
         "log.open_error": "Konnte Log nicht öffnen:\n{e}",
         "live.smoothing": "Glätten",
         "live.daynight": "Tag/Nacht",
@@ -1204,6 +1207,9 @@ _I18N: Dict[str, Dict[str, str]] = {
         "autosync.next_run": "Next run: {nxt} ({interval_h}h)",
         "autosync.off": "Autosync: off",
         "sync.err.generic": "Sync ERROR: {e}",
+        "sync.progress.started": "Sync running …",
+        "sync.progress.label": "Device {dev}/{total_devs} · Chunk {done}/{total}",
+        "sync.progress.done": "Done",
         "log.open_error": "Could not open log:\n{e}",
         "live.smoothing": "Smoothing",
         "live.daynight": "Day/Night",
@@ -5280,6 +5286,43 @@ _I18N.setdefault("ru", {}).update({
     "updates.downgrade_warning": "⚠ Внимание: Это более старая версия (откат)!",
     "updates.reinstall_note": "ℹ Эта версия уже установлена.",
     "updates.no_asset_warning": "⚠ Для этой версии нет доступного файла загрузки.",
+})
+
+# -------- Sync progress bar strings (all languages) --------
+_I18N.setdefault("es", {}).update({
+    "sync.progress.started": "Sync ejecutándose …",
+    "sync.progress.label": "Dispositivo {dev}/{total_devs} · Bloque {done}/{total}",
+    "sync.progress.done": "Listo",
+})
+_I18N.setdefault("fr", {}).update({
+    "sync.progress.started": "Sync en cours …",
+    "sync.progress.label": "Appareil {dev}/{total_devs} · Bloc {done}/{total}",
+    "sync.progress.done": "Terminé",
+})
+_I18N.setdefault("pt", {}).update({
+    "sync.progress.started": "Sync a correr …",
+    "sync.progress.label": "Dispositivo {dev}/{total_devs} · Bloco {done}/{total}",
+    "sync.progress.done": "Concluído",
+})
+_I18N.setdefault("it", {}).update({
+    "sync.progress.started": "Sync in corso …",
+    "sync.progress.label": "Dispositivo {dev}/{total_devs} · Blocco {done}/{total}",
+    "sync.progress.done": "Completato",
+})
+_I18N.setdefault("pl", {}).update({
+    "sync.progress.started": "Sync w toku …",
+    "sync.progress.label": "Urządzenie {dev}/{total_devs} · Blok {done}/{total}",
+    "sync.progress.done": "Gotowe",
+})
+_I18N.setdefault("cs", {}).update({
+    "sync.progress.started": "Sync probíhá …",
+    "sync.progress.label": "Zařízení {dev}/{total_devs} · Blok {done}/{total}",
+    "sync.progress.done": "Hotovo",
+})
+_I18N.setdefault("ru", {}).update({
+    "sync.progress.started": "Синхронизация …",
+    "sync.progress.label": "Устройство {dev}/{total_devs} · Блок {done}/{total}",
+    "sync.progress.done": "Готово",
 })
 
 # -------- Local formatting helpers (dates/numbers) --------

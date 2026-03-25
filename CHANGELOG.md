@@ -1,5 +1,12 @@
 # Changelog
 
+## 10.3.2 - 2026-03-25
+### Added
+- **Sync progress bar**: A `ttk.Progressbar` and a status label now appear in the Sync tab while a sync is running. The bar fills from 0 → 100 % as chunks are downloaded across all devices, and the label shows the current device index and chunk count (e.g. "Device 2/3 · Chunk 5/12"). Both are reset to empty once the sync completes. All 9 UI languages (de, en, es, fr, pt, it, pl, cs, ru) have localized strings for the progress states.
+
+### Fixed
+- **Invoice PDF: overlapping column headers** – Widened the unit-price column in `export_pdf_invoice()` so that "Einzelpreis"/"Unit Price" no longer overlaps adjacent columns. Added a colored table-header row, alternating row shading, and a highlighted totals band for a professional invoice appearance.
+
 ## 10.3.1 - 2026-03-25
 ### Fixed
 - **`ShellyHttp.get/post` crash with Python `-O` flag or `retries < 1`** – Both retry loops used `assert last_err is not None` before `raise last_err`. Python's optimised mode (`-O`) silently disables assertions, turning `raise last_err` into `raise None` which throws `TypeError: exceptions must derive from BaseException` instead of the original network error. The `assert` is replaced with an explicit `if last_err is None: raise RuntimeError(...)`. The loop bounds now also guard against a misconfigured `retries=0` via `max(self.cfg.retries, 1)`.
