@@ -4826,6 +4826,24 @@ class CoreMixin:
             self.btn_upd_install_sel = ttk.Button(up_outer, text=self.t('updates.install_selected'), command=self._updates_install_selected, state='disabled')
             self.btn_upd_install_sel.pack(anchor='w', pady=(6, 0))
 
+            # --- Changelog ---
+            ttk.Separator(up_outer, orient='horizontal').pack(fill='x', pady=(14, 8))
+            ttk.Label(up_outer, text=self.t('updates.changelog_title'), font=('TkDefaultFont', 11, 'bold')).pack(anchor='w', pady=(0, 6))
+
+            cl_frame = ttk.Frame(up_outer)
+            cl_frame.pack(fill='both', expand=True, pady=(0, 4))
+
+            self.upd_changelog_text = tk.Text(cl_frame, height=14, wrap='word', state='disabled', relief='sunken', borderwidth=1)
+            self.upd_changelog_text.tag_configure('h1', font=('TkDefaultFont', 13, 'bold'))
+            self.upd_changelog_text.tag_configure('h2', font=('TkDefaultFont', 11, 'bold'))
+            self.upd_changelog_text.tag_configure('h3', font=('TkDefaultFont', 10, 'bold'))
+            cl_vsb = ttk.Scrollbar(cl_frame, orient='vertical', command=self.upd_changelog_text.yview)
+            self.upd_changelog_text.configure(yscrollcommand=cl_vsb.set)
+            cl_vsb.pack(side='right', fill='y')
+            self.upd_changelog_text.pack(side='left', fill='both', expand=True)
+
+            self.after(200, self._updates_fetch_changelog_async)
+
     # ---------------- Gruppen ----------------
             self._build_groups_settings_tab(tab_groups)
 
