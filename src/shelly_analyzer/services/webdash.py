@@ -1300,8 +1300,8 @@ function renderCosts(data, el) {{
       '<div class="card-title">' + esc(d.name || d.key) + '</div>' +
       '<div class="metric-grid">' +
       metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_eur,2,'\u20ac'), fmt(d.today_kwh,3,'kWh')) +
-      metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_eur,2,'\u20ac'), '') +
-      metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_eur,2,'\u20ac'), '') +
+      metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_eur,2,'\u20ac'), fmt(d.week_kwh,3,'kWh')) +
+      metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_eur,2,'\u20ac'), fmt(d.month_kwh,3,'kWh')) +
       metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_eur,2,'\u20ac'), fmt(d.proj_kwh,1,'kWh')) +
       '</div>' +
       co2Row +
