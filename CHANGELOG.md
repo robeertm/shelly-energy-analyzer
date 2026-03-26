@@ -1,5 +1,9 @@
 # Changelog
 
+## 10.6.1 - 2026-03-26
+### Fixed
+- **Voltage detail chart: L1 shown as dashed line** – The dashed-line style was incorrectly applied to the first series (`si===0`) whenever multiple series were present. For voltage (and phase-power / neutral-current) charts the first series is a phase line, not an aggregate total. The dash is now only applied when the chart actually contains a total/aggregate series (power `w` and current `a` with 3-phase data). All three phase voltage lines (L1, L2, L3) are now drawn as solid lines with equal weight.
+
 ## 10.6.0 - 2026-03-26
 ### Changed
 - **Live view: removed Phase Power mini-plot** – The per-phase power (W) sparkline in the device card expand section has been removed.
