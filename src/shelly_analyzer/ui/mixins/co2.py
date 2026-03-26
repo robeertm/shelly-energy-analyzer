@@ -47,6 +47,9 @@ class Co2Mixin:
         self._co2_fetch_svc.set_progress_callback(
             lambda day, total: self._co2_progress_q.put((day, total))
         )
+        self._co2_fetch_svc.set_log_callback(
+            lambda msg: self.after(0, lambda m=msg: self._log_sync(m))
+        )
         self._co2_fetch_svc.start()
         self.protocol("WM_DELETE_WINDOW", self._co2_on_close)
 

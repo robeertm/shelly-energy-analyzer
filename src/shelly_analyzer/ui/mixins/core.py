@@ -6035,10 +6035,103 @@ class CoreMixin:
             ttk.Entry(co2_box, textvariable=self._co2_dirty_thr_var, width=8).grid(row=4, column=3, padx=8, pady=4, sticky="w")
 
             def _co2_backfill_now():
-                svc = getattr(self, "_co2_fetch_svc", None)
-                if svc is not None:
-                    svc.trigger_now(force=True)
+                token = getattr(self, "_co2_token_var", tk.StringVar()).get().strip()
+                zone = (getattr(self, "_co2_zone_var", tk.StringVar(value="DE_LU")).get() or "DE_LU").strip()
+                try:
+                    backfill_days = int(getattr(self, "_co2_backfill_var", tk.IntVar(value=7)).get() or 7)
+                except Exception:
+                    backfill_days = 7
+
+                if not token:
+                    self._co2_status_var.set(self.t("co2.error.no_token"))
+                    return
+
+                def _log(msg):
+                    try:
+                        self.after(0, lambda m=msg: self._log_sync(m))
+                    except Exception:
+                        pass
+
+                def _put_progress(day, total):
+                    try:
+                        q = getattr(self, "_co2_progress_q", None)
+                        if q is not None:
+                            q.put((day, total))
+                    except Exception:
+                        pass
+
                 self._co2_status_var.set(self.t("co2.status.fetching"))
+                _log(f"CO₂ Backfill gestartet: {backfill_days} Tage, Zone {zone}")
+
+                def _run():
+                    import math as _math
+                    import time as _time
+                    from datetime import datetime as _dt, timezone as _tz
+                    from shelly_analyzer.services.entsoe import EntsoeClient
+
+                    try:
+                        client = EntsoeClient(
+                            api_token=token,
+                            bidding_zone=zone,
+                            min_request_interval=1.0,
+                        )
+                        now_ts = int(_time.time())
+                        start_ts = (now_ts - backfill_days * 86400) // 3600 * 3600
+                        end_ts = ((now_ts // 3600) + 1) * 3600
+                        total_days = max(1, _math.ceil((end_ts - start_ts) / 86400))
+                        d_from = _dt.fromtimestamp(start_ts, tz=_tz.utc).strftime("%Y-%m-%d")
+                        d_to = _dt.fromtimestamp(end_ts, tz=_tz.utc).strftime("%Y-%m-%d")
+                        _log(f"  Zeitraum: {d_from} → {d_to} ({total_days} Tage)")
+
+                        chunk_s = 7 * 86400
+                        all_rows = []
+                        cursor = start_ts
+                        days_fetched = 0
+
+                        while cursor < end_ts:
+                            chunk_end = min(cursor + chunk_s, end_ts)
+                            c_from = _dt.fromtimestamp(cursor, tz=_tz.utc).strftime("%Y-%m-%d")
+                            c_to = _dt.fromtimestamp(chunk_end, tz=_tz.utc).strftime("%Y-%m-%d")
+                            _log(f"  ENTSO-E Abfrage: {c_from} bis {c_to}...")
+                            _put_progress(days_fetched, total_days)
+                            try:
+                                rows = client.fetch_intensity(cursor, chunk_end)
+                                all_rows.extend(rows)
+                                _log(f"    Empfangen: {len(rows)} Datenpunkte")
+                            except Exception as exc:
+                                _log(f"    Fehler: {exc}")
+                                try:
+                                    self.after(0, lambda e=str(exc)[:80]: self._co2_status_var.set(e))
+                                except Exception:
+                                    pass
+                                break
+                            days_fetched += max(1, round((chunk_end - cursor) / 86400))
+                            cursor = chunk_end
+
+                        _put_progress(total_days, total_days)
+
+                        if all_rows:
+                            written = self.db.upsert_co2_intensity(all_rows)
+                            done = f"CO₂ Backfill abgeschlossen: {written} Werte importiert"
+                        else:
+                            done = "CO₂ Backfill abgeschlossen: 0 Werte – keine Daten empfangen"
+                        _log(done)
+                        try:
+                            self.after(0, lambda m=done[:80]: self._co2_status_var.set(m))
+                            self.after(200, self._refresh_co2_tab)
+                        except Exception:
+                            pass
+
+                    except Exception as exc:
+                        err = f"CO₂ Backfill Fehler: {exc}"
+                        logger.exception("CO2 backfill thread error")
+                        _log(err)
+                        try:
+                            self.after(0, lambda m=err[:80]: self._co2_status_var.set(m))
+                        except Exception:
+                            pass
+
+                threading.Thread(target=_run, daemon=True).start()
 
             ttk.Button(
                 co2_box,

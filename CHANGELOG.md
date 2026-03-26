@@ -1,5 +1,11 @@
 # Changelog
 
+## 11.1.3 - 2026-03-26
+### Fixed
+- **"Backfill now" still silent when settings not yet saved** – The button previously called `svc.trigger_now(force=True)` which ran through the background `Co2FetchService`. The service reads the *saved* config, so if the user had not pressed "Save Settings" after entering the token, `_tick()` returned silently (token empty or `enabled=False`). The button now runs its own background thread and reads the token, zone, and backfill-days directly from the current UI fields — identical to how the "Test Connection" button works — so it always uses what is currently on screen.
+- **No visibility into backfill progress in the Sync tab** – Backfill activity (start, each ENTSO-E API chunk, received data point count, errors, and final summary) is now written to the Sync tab's log area. `Co2FetchService` gained a `set_log_callback()` hook wired to `_log_sync()` on startup, so the automatic background service also logs there. The manual backfill button logs via `after(0, …)` to keep all Tkinter writes on the main thread.
+- **Silent empty-response failures** – `EntsoeClient.fetch_intensity()` now raises an explicit `RuntimeError` if the API returns an empty body, and logs a warning with the first 300 chars of the response if no `GL_MarketDocument` is found, making unexpected ENTSO-E error documents visible in the application log.
+
 ## 11.1.2 - 2026-03-26
 ### Fixed
 - **"Backfill now" button did nothing when data already existed** – `trigger_now()` woke the background fetch service, but `_tick()` immediately returned early because it saw `start_ts >= end_ts` (data was current). The button now passes `force=True`, which resets the fetch window back to `backfill_days` ago so the full historical range is re-imported regardless of what is already in the database.
