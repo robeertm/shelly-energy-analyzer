@@ -5417,6 +5417,7 @@ _I18N.setdefault("de", {}).update({
     "co2.source.entsoe": "ENTSO-E",
     "co2.source.static": "Statisch",
     "co2.status.fetching": "Daten werden abgerufen …",
+    "co2.status.importing": "CO₂-Daten werden importiert … Tag {day}/{total}",
     "co2.status.ok": "Daten aktuell ({ts})",
 })
 _I18N.setdefault("en", {}).update({
@@ -5454,6 +5455,7 @@ _I18N.setdefault("en", {}).update({
     "co2.source.entsoe": "ENTSO-E",
     "co2.source.static": "Static",
     "co2.status.fetching": "Fetching data…",
+    "co2.status.importing": "Importing CO₂ data… day {day}/{total}",
     "co2.status.ok": "Data current ({ts})",
 })
 _I18N.setdefault("es", {}).update({
@@ -5491,6 +5493,7 @@ _I18N.setdefault("es", {}).update({
     "co2.source.entsoe": "ENTSO-E",
     "co2.source.static": "Estático",
     "co2.status.fetching": "Obteniendo datos…",
+    "co2.status.importing": "Importando datos CO₂… día {day}/{total}",
     "co2.status.ok": "Datos actualizados ({ts})",
 })
 _I18N.setdefault("fr", {}).update({
@@ -5528,6 +5531,7 @@ _I18N.setdefault("fr", {}).update({
     "co2.source.entsoe": "ENTSO-E",
     "co2.source.static": "Statique",
     "co2.status.fetching": "Récupération des données…",
+    "co2.status.importing": "Import données CO₂… jour {day}/{total}",
     "co2.status.ok": "Données à jour ({ts})",
 })
 _I18N.setdefault("pt", {}).update({
@@ -5565,6 +5569,7 @@ _I18N.setdefault("pt", {}).update({
     "co2.source.entsoe": "ENTSO-E",
     "co2.source.static": "Estático",
     "co2.status.fetching": "Buscando dados…",
+    "co2.status.importing": "Importando dados CO₂… dia {day}/{total}",
     "co2.status.ok": "Dados atuais ({ts})",
 })
 _I18N.setdefault("it", {}).update({
@@ -5602,6 +5607,7 @@ _I18N.setdefault("it", {}).update({
     "co2.source.entsoe": "ENTSO-E",
     "co2.source.static": "Statico",
     "co2.status.fetching": "Recupero dati…",
+    "co2.status.importing": "Importazione dati CO₂… giorno {day}/{total}",
     "co2.status.ok": "Dati aggiornati ({ts})",
 })
 _I18N.setdefault("pl", {}).update({
@@ -5639,6 +5645,7 @@ _I18N.setdefault("pl", {}).update({
     "co2.source.entsoe": "ENTSO-E",
     "co2.source.static": "Statyczny",
     "co2.status.fetching": "Pobieranie danych…",
+    "co2.status.importing": "Importowanie danych CO₂… dzień {day}/{total}",
     "co2.status.ok": "Dane aktualne ({ts})",
 })
 _I18N.setdefault("cs", {}).update({
@@ -5676,6 +5683,7 @@ _I18N.setdefault("cs", {}).update({
     "co2.source.entsoe": "ENTSO-E",
     "co2.source.static": "Statické",
     "co2.status.fetching": "Načítám data…",
+    "co2.status.importing": "Import dat CO₂… den {day}/{total}",
     "co2.status.ok": "Data aktuální ({ts})",
 })
 _I18N.setdefault("ru", {}).update({
@@ -5713,6 +5721,7 @@ _I18N.setdefault("ru", {}).update({
     "co2.source.entsoe": "ENTSO-E",
     "co2.source.static": "Статический",
     "co2.status.fetching": "Получение данных…",
+    "co2.status.importing": "Импорт данных CO₂… день {day}/{total}",
     "co2.status.ok": "Данные актуальны ({ts})",
 })
 
