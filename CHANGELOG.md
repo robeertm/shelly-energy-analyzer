@@ -1,5 +1,10 @@
 # Changelog
 
+## 11.1.5 - 2026-03-26
+### Fixed
+- **CO₂ tab: still empty when `co2.enabled` not yet saved** – `_refresh_co2_tab()` previously returned early (showing "No CO₂ data") whenever `co2.enabled = false` in the saved config, even if data had just been imported via the "Backfill now" button. The `enabled` flag correctly controls whether the background fetch service runs auto-fetches — it must not prevent already-stored local data from being displayed. The early-exit guard is removed; the method now always queries the local `co2_intensity` table and shows whatever is available.
+- **CO₂ tab: wrong zone after backfill without saving settings** – If the user changed the bidding zone in the dropdown and clicked "Backfill now" before pressing "Save Settings", data was stored under the UI zone (e.g. `AT`) but `_refresh_co2_tab()` queried the saved zone (`DE_LU`), returning an empty result. The method now falls back to the zone currently shown in the UI when the saved-config query returns empty.
+
 ## 11.1.4 - 2026-03-26
 ### Fixed
 - **CO₂ tab: data not shown after backfill** – After a successful ENTSO-E backfill the CO₂ tab remained empty. The polling loop now triggers a `_refresh_co2_tab()` call 500 ms after the import completes so charts, live value, and summary cards are populated immediately without a manual tab switch.
