@@ -87,6 +87,14 @@ CREATE TABLE IF NOT EXISTS device_meta (
     last_end_ts INTEGER,
     updated_at  INTEGER
 );
+
+CREATE TABLE IF NOT EXISTS co2_intensity (
+    hour_ts            INTEGER PRIMARY KEY,  -- Unix seconds: start of hour UTC
+    zone               TEXT    NOT NULL,
+    intensity_g_per_kwh REAL   NOT NULL,
+    source             TEXT,                 -- e.g. "entsoe" or "static"
+    fetched_at         INTEGER               -- Unix seconds when this row was written
+);
 """
 
 # Additional columns added in v6.0.0.2 for full Shelly EMData CSV support.
@@ -974,5 +982,65 @@ class EnergyDB:
         row = conn.execute(
             "SELECT MIN(month_ts) FROM monthly_energy WHERE device_key = ?",
             (device_key,),
+        ).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
+
+    # ── CO₂ intensity helpers ─────────────────────────────────────────────
+
+    def upsert_co2_intensity(self, rows: List[Tuple[int, str, float, str, int]]) -> int:
+        """Insert or replace CO₂ intensity rows.
+
+        Each row is (hour_ts, zone, intensity_g_per_kwh, source, fetched_at).
+        Returns the number of rows written.
+        """
+        if not rows:
+            return 0
+        conn = self._conn()
+        with self._write_lock:
+            with conn:
+                conn.executemany(
+                    "INSERT OR REPLACE INTO co2_intensity "
+                    "(hour_ts, zone, intensity_g_per_kwh, source, fetched_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    rows,
+                )
+        return len(rows)
+
+    def query_co2_intensity(
+        self,
+        zone: str,
+        start_ts: int,
+        end_ts: int,
+    ) -> pd.DataFrame:
+        """Return CO₂ intensity rows for a zone in [start_ts, end_ts).
+
+        Columns: hour_ts, zone, intensity_g_per_kwh, source, fetched_at.
+        """
+        conn = self._conn()
+        df = pd.read_sql_query(
+            "SELECT hour_ts, zone, intensity_g_per_kwh, source, fetched_at "
+            "FROM co2_intensity "
+            "WHERE zone = ? AND hour_ts >= ? AND hour_ts < ? "
+            "ORDER BY hour_ts",
+            conn,
+            params=(zone, start_ts, end_ts),
+        )
+        return df
+
+    def latest_co2_ts(self, zone: str) -> Optional[int]:
+        """Return the most recent hour_ts for a zone, or None."""
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT MAX(hour_ts) FROM co2_intensity WHERE zone = ?",
+            (zone,),
+        ).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
+
+    def oldest_co2_ts(self, zone: str) -> Optional[int]:
+        """Return the oldest hour_ts for a zone, or None."""
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT MIN(hour_ts) FROM co2_intensity WHERE zone = ?",
+            (zone,),
         ).fetchone()
         return int(row[0]) if row and row[0] is not None else None

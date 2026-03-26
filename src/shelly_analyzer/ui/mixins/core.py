@@ -44,6 +44,7 @@ from shelly_analyzer.io.config import (
     AppConfig,
     BillingConfig,
     BillingParty,
+    Co2Config,
     CsvPackConfig,
     DeviceConfig,
     DownloadConfig,
@@ -526,6 +527,8 @@ class CoreMixin:
                     self.after(50, self._refresh_solar_tab)
                 elif sel == str(getattr(self, 'tab_compare', None)):
                     self.after(50, self._refresh_compare)
+                elif sel == str(getattr(self, 'tab_co2', None)):
+                    self.after(50, self._refresh_co2_tab)
             except Exception:
                 pass
 
@@ -712,6 +715,7 @@ class CoreMixin:
             self.tab_compare = ttk.Frame(self.notebook)
             self.tab_anomaly = ttk.Frame(self.notebook)
             self.tab_schedule = ttk.Frame(self.notebook)
+            self.tab_co2 = ttk.Frame(self.notebook)
             self.tab_export = ttk.Frame(self.notebook)
             self.tab_settings = ttk.Frame(self.notebook)
             # Notebook tab labels are translated based on the selected UI language.
@@ -724,6 +728,7 @@ class CoreMixin:
             self.notebook.add(self.tab_compare, text=self.t("tabs.compare"))
             self.notebook.add(self.tab_anomaly, text=self.t("tabs.anomaly"))
             self.notebook.add(self.tab_schedule, text=self.t("tabs.schedule"))
+            self.notebook.add(self.tab_co2, text=self.t("tabs.co2"))
             self.notebook.add(self.tab_export, text=self.t("tabs.export"))
             self.notebook.add(self.tab_settings, text=self.t("tabs.settings"))
 
@@ -734,7 +739,7 @@ class CoreMixin:
                 self.notebook.insert(0, self.tab_setup, text=self.t("tabs.setup"))
 
                 # Put placeholders into disabled tabs (avoid CSV warnings on first run)
-                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_compare, self.tab_anomaly, self.tab_schedule, self.tab_export):
+                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_compare, self.tab_anomaly, self.tab_schedule, self.tab_co2, self.tab_export):
                     try:
                         ttk.Label(
                             tab,
@@ -767,6 +772,7 @@ class CoreMixin:
                 self._build_compare_tab()
                 self._build_anomaly_tab()
                 self._build_schedule_tab()
+                self._build_co2_tab()
                 self._build_export_tab()
                 self._build_settings_tab()
                 self._schedule_init()
@@ -5978,6 +5984,68 @@ class CoreMixin:
             self._solar_tariff_var = tk.StringVar(value=str(getattr(_solar_cfg, "feed_in_tariff_eur_per_kwh", 0.082)))
             ttk.Entry(solar_box, textvariable=self._solar_tariff_var, width=10).grid(row=2, column=1, padx=8, pady=(4, 8), sticky="w")
 
+            # ── CO₂ / ENTSO-E settings ────────────────────────────────────────
+            _co2_cfg = getattr(self.cfg, "co2", None)
+            co2_box = ttk.LabelFrame(tab_main, text=self.t("co2.settings.title"))
+            co2_box.pack(fill="x", pady=(0, 10))
+
+            self._co2_enabled_var = tk.BooleanVar(value=bool(getattr(_co2_cfg, "enabled", False)))
+            ttk.Checkbutton(
+                co2_box,
+                text=self.t("co2.settings.enabled"),
+                variable=self._co2_enabled_var,
+            ).grid(row=0, column=0, columnspan=4, padx=8, pady=(6, 2), sticky="w")
+
+            ttk.Label(co2_box, text=self.t("co2.settings.token")).grid(row=1, column=0, padx=8, pady=4, sticky="w")
+            self._co2_token_var = tk.StringVar(value=str(getattr(_co2_cfg, "entso_e_api_token", "") or ""))
+            ttk.Entry(co2_box, textvariable=self._co2_token_var, width=40, show="*").grid(row=1, column=1, columnspan=3, padx=8, pady=4, sticky="w")
+
+            ttk.Label(co2_box, text=self.t("co2.settings.zone")).grid(row=2, column=0, padx=8, pady=4, sticky="w")
+            self._co2_zone_var = tk.StringVar(value=str(getattr(_co2_cfg, "bidding_zone", "DE_LU") or "DE_LU"))
+            _zone_options = [
+                "AT", "BE", "BG", "CH", "CZ", "DE_LU", "DK_1", "DK_2",
+                "EE", "ES", "FI", "FR", "GR", "HR", "HU", "IE_SEM",
+                "IT_CNOR", "IT_CSUD", "IT_NORD", "IT_SUD", "LT", "LV",
+                "NL", "NO_1", "NO_2", "NO_3", "NO_4", "NO_5",
+                "PL", "PT", "RO", "RS", "SE_1", "SE_2", "SE_3", "SE_4",
+                "SI", "SK", "GB",
+            ]
+            ttk.Combobox(
+                co2_box,
+                textvariable=self._co2_zone_var,
+                values=_zone_options,
+                width=12,
+                state="readonly",
+            ).grid(row=2, column=1, padx=8, pady=4, sticky="w")
+
+            ttk.Label(co2_box, text=self.t("co2.settings.interval")).grid(row=3, column=0, padx=8, pady=4, sticky="w")
+            self._co2_interval_var = tk.IntVar(value=int(getattr(_co2_cfg, "fetch_interval_hours", 1)))
+            ttk.Entry(co2_box, textvariable=self._co2_interval_var, width=6).grid(row=3, column=1, padx=8, pady=4, sticky="w")
+
+            ttk.Label(co2_box, text=self.t("co2.settings.backfill")).grid(row=3, column=2, padx=8, pady=4, sticky="w")
+            self._co2_backfill_var = tk.IntVar(value=int(getattr(_co2_cfg, "backfill_days", 7)))
+            ttk.Entry(co2_box, textvariable=self._co2_backfill_var, width=6).grid(row=3, column=3, padx=8, pady=4, sticky="w")
+
+            ttk.Label(co2_box, text=self.t("co2.settings.green_threshold")).grid(row=4, column=0, padx=8, pady=4, sticky="w")
+            self._co2_green_thr_var = tk.DoubleVar(value=float(getattr(_co2_cfg, "green_threshold_g_per_kwh", 150.0)))
+            ttk.Entry(co2_box, textvariable=self._co2_green_thr_var, width=8).grid(row=4, column=1, padx=8, pady=4, sticky="w")
+
+            ttk.Label(co2_box, text=self.t("co2.settings.dirty_threshold")).grid(row=4, column=2, padx=8, pady=4, sticky="w")
+            self._co2_dirty_thr_var = tk.DoubleVar(value=float(getattr(_co2_cfg, "dirty_threshold_g_per_kwh", 400.0)))
+            ttk.Entry(co2_box, textvariable=self._co2_dirty_thr_var, width=8).grid(row=4, column=3, padx=8, pady=4, sticky="w")
+
+            def _co2_backfill_now():
+                svc = getattr(self, "_co2_fetch_svc", None)
+                if svc is not None:
+                    svc.trigger_now()
+                self._co2_status_var.set(self.t("co2.status.fetching"))
+
+            ttk.Button(
+                co2_box,
+                text=self.t("co2.settings.backfill_btn"),
+                command=_co2_backfill_now,
+            ).grid(row=5, column=0, columnspan=2, padx=8, pady=(4, 8), sticky="w")
+
             live_box = ttk.LabelFrame(tab_main, text=self.t('settings.live.title'))
             live_box.pack(fill="x", pady=(0, 10))
             self.set_live_poll_var = tk.DoubleVar(value=float(self.cfg.ui.live_poll_seconds))
@@ -7038,6 +7106,21 @@ class CoreMixin:
             except Exception:
                 tou = getattr(self.cfg, "tou", TouConfig())
 
+            # CO₂ / ENTSO-E config
+            try:
+                co2 = Co2Config(
+                    enabled=bool(getattr(self, "_co2_enabled_var", tk.BooleanVar(value=False)).get()),
+                    entso_e_api_token=str(getattr(self, "_co2_token_var", tk.StringVar()).get() or ""),
+                    bidding_zone=str(getattr(self, "_co2_zone_var", tk.StringVar(value="DE_LU")).get() or "DE_LU"),
+                    fetch_interval_hours=int(getattr(self, "_co2_interval_var", tk.IntVar(value=1)).get() or 1),
+                    backfill_days=int(getattr(self, "_co2_backfill_var", tk.IntVar(value=7)).get() or 7),
+                    show_green_dirty_hours=True,
+                    green_threshold_g_per_kwh=float(getattr(self, "_co2_green_thr_var", tk.DoubleVar(value=150.0)).get() or 150.0),
+                    dirty_threshold_g_per_kwh=float(getattr(self, "_co2_dirty_thr_var", tk.DoubleVar(value=400.0)).get() or 400.0),
+                )
+            except Exception:
+                co2 = getattr(self.cfg, "co2", Co2Config())
+
             self.cfg = AppConfig(
                 version=__version__,
                 devices=devs,
@@ -7050,6 +7133,7 @@ class CoreMixin:
                 alerts=alerts,
                 solar=solar,
                 tou=tou,
+                co2=co2,
             )
             save_config(self.cfg, self.cfg_path)
 

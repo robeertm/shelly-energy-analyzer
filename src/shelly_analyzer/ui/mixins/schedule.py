@@ -54,6 +54,11 @@ class ScheduleMixin:
             get_http=lambda: getattr(self, "_http", ShellyHttp()),
         )
         self._local_scheduler.start()
+        # Start CO₂ fetch service if the mixin is present
+        try:
+            self._co2_service_init()
+        except AttributeError:
+            pass
 
     def _schedule_stop(self) -> None:
         try:
