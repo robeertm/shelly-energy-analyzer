@@ -6037,7 +6037,7 @@ class CoreMixin:
             def _co2_backfill_now():
                 svc = getattr(self, "_co2_fetch_svc", None)
                 if svc is not None:
-                    svc.trigger_now()
+                    svc.trigger_now(force=True)
                 self._co2_status_var.set(self.t("co2.status.fetching"))
 
             ttk.Button(
