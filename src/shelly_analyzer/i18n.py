@@ -5716,6 +5716,71 @@ _I18N.setdefault("ru", {}).update({
     "co2.status.ok": "Данные актуальны ({ts})",
 })
 
+# -------- CO₂ test button + import progress bar (v11.1.0) --------
+_I18N.setdefault("de", {}).update({
+    "co2.settings.test_btn": "Verbindung testen",
+    "co2.settings.test_ok": "Verbindung erfolgreich ✓",
+    "co2.settings.test_fail": "Fehler: {err}",
+    "co2.import.progress": "Lade CO₂-Daten… Tag {day}/{total}",
+    "co2.import.done": "CO₂-Import abgeschlossen",
+})
+_I18N.setdefault("en", {}).update({
+    "co2.settings.test_btn": "Test Connection",
+    "co2.settings.test_ok": "Connection successful ✓",
+    "co2.settings.test_fail": "Error: {err}",
+    "co2.import.progress": "Importing CO₂ data… Day {day}/{total}",
+    "co2.import.done": "CO₂ import complete",
+})
+_I18N.setdefault("es", {}).update({
+    "co2.settings.test_btn": "Probar conexión",
+    "co2.settings.test_ok": "Conexión exitosa ✓",
+    "co2.settings.test_fail": "Error: {err}",
+    "co2.import.progress": "Importando CO₂… Día {day}/{total}",
+    "co2.import.done": "Importación CO₂ completa",
+})
+_I18N.setdefault("fr", {}).update({
+    "co2.settings.test_btn": "Tester la connexion",
+    "co2.settings.test_ok": "Connexion réussie ✓",
+    "co2.settings.test_fail": "Erreur : {err}",
+    "co2.import.progress": "Import CO₂… Jour {day}/{total}",
+    "co2.import.done": "Import CO₂ terminé",
+})
+_I18N.setdefault("pt", {}).update({
+    "co2.settings.test_btn": "Testar ligação",
+    "co2.settings.test_ok": "Ligação bem-sucedida ✓",
+    "co2.settings.test_fail": "Erro: {err}",
+    "co2.import.progress": "Importando CO₂… Dia {day}/{total}",
+    "co2.import.done": "Importação CO₂ concluída",
+})
+_I18N.setdefault("it", {}).update({
+    "co2.settings.test_btn": "Testa connessione",
+    "co2.settings.test_ok": "Connessione riuscita ✓",
+    "co2.settings.test_fail": "Errore: {err}",
+    "co2.import.progress": "Import CO₂… Giorno {day}/{total}",
+    "co2.import.done": "Import CO₂ completato",
+})
+_I18N.setdefault("pl", {}).update({
+    "co2.settings.test_btn": "Testuj połączenie",
+    "co2.settings.test_ok": "Połączenie udane ✓",
+    "co2.settings.test_fail": "Błąd: {err}",
+    "co2.import.progress": "Import CO₂… Dzień {day}/{total}",
+    "co2.import.done": "Import CO₂ zakończony",
+})
+_I18N.setdefault("cs", {}).update({
+    "co2.settings.test_btn": "Otestovat připojení",
+    "co2.settings.test_ok": "Připojení úspěšné ✓",
+    "co2.settings.test_fail": "Chyba: {err}",
+    "co2.import.progress": "Import CO₂… Den {day}/{total}",
+    "co2.import.done": "Import CO₂ dokončen",
+})
+_I18N.setdefault("ru", {}).update({
+    "co2.settings.test_btn": "Проверить подключение",
+    "co2.settings.test_ok": "Подключение успешно ✓",
+    "co2.settings.test_fail": "Ошибка: {err}",
+    "co2.import.progress": "Импорт CO₂… День {day}/{total}",
+    "co2.import.done": "Импорт CO₂ завершён",
+})
+
 # -------- Local formatting helpers (dates/numbers) --------
 
 _DATE_FORMATS = {

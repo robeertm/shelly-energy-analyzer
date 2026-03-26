@@ -10,6 +10,7 @@ Provides:
 from __future__ import annotations
 
 import logging
+import queue
 import time
 import threading
 from datetime import datetime, timezone, timedelta
@@ -38,9 +39,13 @@ class Co2Mixin:
     def _co2_service_init(self) -> None:
         """Start the background CO₂ fetch service (called once after app init)."""
         from shelly_analyzer.services.entsoe import Co2FetchService
+        self._co2_progress_q: "queue.Queue[tuple]" = queue.Queue()
         self._co2_fetch_svc = Co2FetchService(
             db=self.db,
             get_config=lambda: self.cfg,
+        )
+        self._co2_fetch_svc.set_progress_callback(
+            lambda day, total: self._co2_progress_q.put((day, total))
         )
         self._co2_fetch_svc.start()
         self.protocol("WM_DELETE_WINDOW", self._co2_on_close)
@@ -73,6 +78,22 @@ class Co2Mixin:
             textvariable=self._co2_status_var,
             foreground="gray",
         ).pack(side="right", padx=(0, 4))
+
+        # ── Import progress bar ───────────────────────────────────────────────
+        prog_frm = ttk.Frame(frm)
+        prog_frm.pack(fill="x", padx=14, pady=(0, 2))
+        self._co2_progress_label_var = tk.StringVar(value="")
+        ttk.Label(
+            prog_frm,
+            textvariable=self._co2_progress_label_var,
+            foreground="gray",
+        ).pack(anchor="w")
+        self._co2_progressbar = ttk.Progressbar(
+            prog_frm,
+            mode="determinate",
+            maximum=100,
+        )
+        self._co2_progressbar.pack(fill="x", pady=(2, 0))
 
         # ── Scrollable content ───────────────────────────────────────────────
         outer = ttk.Frame(frm)
