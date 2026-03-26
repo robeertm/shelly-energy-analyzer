@@ -1,5 +1,10 @@
 # Changelog
 
+## 11.1.1 - 2026-03-26
+### Fixed
+- **ENTSO-E API: wrong base URL caused DNS resolution error** – The API base URL was incorrectly set to `https://web.api.entsoe.eu/api` (non-existent host), causing "nodename nor servname provided, or not known" errors on every request. Corrected to `https://web-api.tp.entsoe.eu/api`.
+- **ENTSO-E API: bidding zone names not mapped to EIC codes** – The `in_Domain` parameter was sent with human-readable zone names (e.g. `DE_LU`) instead of the required EIC codes (e.g. `10Y1001A1001A83F`). Added a complete `_EIC_CODES` mapping for 40 European bidding zones; unknown zones fall back to passing the raw value.
+
 ## 11.1.0 - 2026-03-26
 ### Added
 - **ENTSO-E "Test Connection" button** – New button in the CO₂ settings panel (next to "Backfill now"). Sends a minimal test request to the ENTSO-E API with the currently-entered token and bidding zone, then shows a green "Connection successful ✓" or a red error message ("Token invalid", "API unreachable", etc.) inline below the button. Runs in a background thread so the UI stays responsive. Translated into all 9 UI languages (de, en, es, fr, pt, it, pl, cs, ru).

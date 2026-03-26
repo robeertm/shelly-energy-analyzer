@@ -24,7 +24,49 @@ from typing import Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # ENTSO-E REST API base URL
-_API_BASE = "https://web.api.entsoe.eu/api"
+_API_BASE = "https://web-api.tp.entsoe.eu/api"
+
+# EIC codes for ENTSO-E bidding zones
+_EIC_CODES: Dict[str, str] = {
+    "DE_LU":    "10Y1001A1001A83F",
+    "AT":       "10YAT-APG------L",
+    "BE":       "10YBE----------2",
+    "BG":       "10YCA-BULGARIA-R",
+    "CH":       "10YCH-SWISSGRIDZ",
+    "CZ":       "10YCZ-CEPS-----N",
+    "DE_AT_LU": "10Y1001A1001A63L",
+    "DK_1":     "10YDK-1--------W",
+    "DK_2":     "10YDK-2--------M",
+    "EE":       "10Y1001A1001A39I",
+    "ES":       "10YES-REE------0",
+    "FI":       "10YFI-1--------U",
+    "FR":       "10YFR-RTE------C",
+    "GB":       "10YGB----------A",
+    "GR":       "10YGR-HTSO-----Y",
+    "HR":       "10YHR-HEP------M",
+    "HU":       "10YHU-MAVIR----U",
+    "IE_SEM":   "10Y1001A1001A59C",
+    "IT_NORD":  "10Y1001A1001A73I",
+    "LT":       "10YLT-1001A0008Q",
+    "LU":       "10YLU-CEGEDEL-NQ",
+    "LV":       "10YLV-1001A00074",
+    "NL":       "10YNL----------L",
+    "NO_1":     "10YNO-1--------2",
+    "NO_2":     "10YNO-2--------T",
+    "NO_3":     "10YNO-3--------J",
+    "NO_4":     "10YNO-4--------9",
+    "NO_5":     "10Y1001A1001A48H",
+    "PL":       "10YPL-AREA-----S",
+    "PT":       "10YPT-REN------W",
+    "RO":       "10YRO-TEL------P",
+    "RS":       "10YCS-SERBIATSOV",
+    "SE_1":     "10Y1001A1001A44P",
+    "SE_2":     "10Y1001A1001A45N",
+    "SE_3":     "10Y1001A1001A46L",
+    "SE_4":     "10Y1001A1001A47J",
+    "SI":       "10YSI-ELES-----O",
+    "SK":       "10YSK-SEPS-----K",
+}
 
 # ENTSO-E psrType codes → human-readable fuel names
 _PSR_NAMES: Dict[str, str] = {
@@ -255,11 +297,12 @@ class EntsoeClient:
 
         self._wait_rate_limit()
 
+        eic = _EIC_CODES.get(self.bidding_zone, self.bidding_zone)
         params = {
             "securityToken": self.api_token,
             "documentType": "A75",
             "processType": "A16",
-            "in_Domain": self.bidding_zone,
+            "in_Domain": eic,
             "periodStart": _ts_to_entsoe_fmt(start_ts),
             "periodEnd": _ts_to_entsoe_fmt(end_ts),
         }
