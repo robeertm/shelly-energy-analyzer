@@ -1441,11 +1441,12 @@ function _drawDetailChart() {{
       ctx.fillText(lbl, toX(i), H-padB+14);
     }}
   }});
-  // Series lines
+  // Series lines — only dash si===0 when it is the aggregate total (w/a), not a phase line (v/ph/in)
+  const _hasTotalSeries = (metric==='w'||metric==='a') && maxPh>0;
   series.forEach(function(s, si) {{
-    ctx.setLineDash((si===0&&series.length>1) ? [5,3] : []);
+    ctx.setLineDash((si===0&&_hasTotalSeries) ? [5,3] : []);
     ctx.strokeStyle=colors[si];
-    ctx.lineWidth=(si===0&&series.length>1) ? 1.5 : 2;
+    ctx.lineWidth=(si===0&&_hasTotalSeries) ? 1.5 : 2;
     ctx.beginPath();
     s.forEach(function(v,i) {{ i===0 ? ctx.moveTo(toX(i),toY(v)) : ctx.lineTo(toX(i),toY(v)); }});
     ctx.stroke();
