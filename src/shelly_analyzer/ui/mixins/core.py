@@ -6046,6 +6046,82 @@ class CoreMixin:
                 command=_co2_backfill_now,
             ).grid(row=5, column=0, columnspan=2, padx=8, pady=(4, 8), sticky="w")
 
+            # ── Test Connection button ────────────────────────────────────────
+            self._co2_test_status_var = tk.StringVar(value="")
+            self._co2_test_label = ttk.Label(
+                co2_box,
+                textvariable=self._co2_test_status_var,
+            )
+            self._co2_test_label.grid(row=6, column=0, columnspan=4, padx=8, pady=(0, 6), sticky="w")
+
+            def _co2_test_connection():
+                token = self._co2_token_var.get().strip()
+                zone = self._co2_zone_var.get().strip() or "DE_LU"
+                if not token:
+                    self._co2_test_status_var.set(self.t("co2.error.no_token"))
+                    try:
+                        self._co2_test_label.configure(foreground="#c62828")
+                    except Exception:
+                        pass
+                    return
+                self._co2_test_status_var.set("…")
+                try:
+                    self._co2_test_label.configure(foreground="gray")
+                except Exception:
+                    pass
+
+                def _run():
+                    from shelly_analyzer.services.entsoe import EntsoeClient
+                    import time as _time
+                    client = EntsoeClient(
+                        api_token=token,
+                        bidding_zone=zone,
+                        min_request_interval=0,
+                    )
+                    end_ts = (_time.time() // 3600) * 3600
+                    start_ts = int(end_ts) - 3600
+                    try:
+                        client.fetch_intensity(int(start_ts), int(end_ts))
+
+                        def _ok():
+                            self._co2_test_status_var.set(self.t("co2.settings.test_ok"))
+                            try:
+                                self._co2_test_label.configure(foreground="#2e7d32")
+                            except Exception:
+                                pass
+                        try:
+                            self.after(0, _ok)
+                        except Exception:
+                            _ok()
+                    except Exception as exc:
+                        err_str = str(exc)
+                        if "401" in err_str or "nauthorized" in err_str or "ecurity" in err_str:
+                            short = "Token ungültig / Invalid token"
+                        elif "timeout" in err_str.lower() or "onnect" in err_str:
+                            short = "API nicht erreichbar / Unreachable"
+                        else:
+                            short = err_str[:80]
+                        msg = self.t("co2.settings.test_fail", err=short)
+
+                        def _fail(m=msg):
+                            self._co2_test_status_var.set(m)
+                            try:
+                                self._co2_test_label.configure(foreground="#c62828")
+                            except Exception:
+                                pass
+                        try:
+                            self.after(0, _fail)
+                        except Exception:
+                            _fail()
+
+                threading.Thread(target=_run, daemon=True).start()
+
+            ttk.Button(
+                co2_box,
+                text=self.t("co2.settings.test_btn"),
+                command=_co2_test_connection,
+            ).grid(row=5, column=2, columnspan=2, padx=8, pady=(4, 8), sticky="w")
+
             live_box = ttk.LabelFrame(tab_main, text=self.t('settings.live.title'))
             live_box.pack(fill="x", pady=(0, 10))
             self.set_live_poll_var = tk.DoubleVar(value=float(self.cfg.ui.live_poll_seconds))
@@ -7361,6 +7437,44 @@ class CoreMixin:
                 self._email_summary_tick()
             except Exception:
                 pass
+
+            # CO₂ import progress bar
+            try:
+                co2_q = getattr(self, "_co2_progress_q", None)
+                if co2_q is not None:
+                    day = total = None
+                    while True:
+                        try:
+                            day, total = co2_q.get_nowait()
+                        except queue.Empty:
+                            break
+                    # Process only the latest queued update (discard intermediate)
+                    if day is not None and total is not None:
+                        pb = getattr(self, "_co2_progressbar", None)
+                        lv = getattr(self, "_co2_progress_label_var", None)
+                        if pb is not None:
+                            if total > 0 and day < total:
+                                pb["value"] = int(day * 100 / total)
+                                if lv is not None:
+                                    lv.set(self.t("co2.import.progress", day=day, total=total))
+                            else:
+                                pb["value"] = 0
+                                if lv is not None:
+                                    lv.set(self.t("co2.import.done"))
+                                def _clear_co2_progress():
+                                    try:
+                                        lv2 = getattr(self, "_co2_progress_label_var", None)
+                                        if lv2 is not None:
+                                            lv2.set("")
+                                    except Exception:
+                                        pass
+                                try:
+                                    self.after(3000, _clear_co2_progress)
+                                except Exception:
+                                    pass
+            except Exception:
+                pass
+
             self.after(500, self._drain_queues_loop)
 
     def _mdns_refresh_tree(self) -> None:

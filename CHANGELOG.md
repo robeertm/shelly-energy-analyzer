@@ -1,5 +1,10 @@
 # Changelog
 
+## 11.1.0 - 2026-03-26
+### Added
+- **ENTSO-E "Test Connection" button** – New button in the CO₂ settings panel (next to "Backfill now"). Sends a minimal test request to the ENTSO-E API with the currently-entered token and bidding zone, then shows a green "Connection successful ✓" or a red error message ("Token invalid", "API unreachable", etc.) inline below the button. Runs in a background thread so the UI stays responsive. Translated into all 9 UI languages (de, en, es, fr, pt, it, pl, cs, ru).
+- **CO₂ import progress bar** – A `ttk.Progressbar` with a status label is now displayed at the top of the CO₂ tab while historical data is being backfilled from ENTSO-E. Shows "Importing CO₂ data… Day 7/30" (translated per language) and advances as each 7-day API chunk completes. Resets and clears automatically when the import finishes. Implemented via the existing queue-drain loop to keep all UI updates on the main thread.
+
 ## 11.0.0 - 2026-03-26
 ### Added
 - **CO₂ intensity tab** – New "🌿 CO₂" tab showing real-time and historical grid carbon intensity sourced from the [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/).
