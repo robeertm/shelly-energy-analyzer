@@ -1,5 +1,12 @@
 # Changelog
 
+## 11.1.2 - 2026-03-26
+### Fixed
+- **"Backfill now" button did nothing when data already existed** – `trigger_now()` woke the background fetch service, but `_tick()` immediately returned early because it saw `start_ts >= end_ts` (data was current). The button now passes `force=True`, which resets the fetch window back to `backfill_days` ago so the full historical range is re-imported regardless of what is already in the database.
+- **Progress bar never advanced during backfill** – The `Co2FetchService` was writing progress updates into a queue, but nothing on the main thread ever read from it. A `_co2_poll_progress()` loop (rescheduled every 400 ms via `after()`) now drains the queue, updates `ttk.Progressbar` value and the status label with "Importing CO₂ data… day N/M", and resets the bar when the import finishes.
+- **Fetch errors not shown to the user** – If a backfill chunk failed, `last_error` was set on the service but never surfaced in the UI. The progress-poll loop now reads `last_error` on completion and displays it in both the progress label and the status label so the user can see what went wrong.
+- **`co2.status.importing` translation key added** – New i18n key with day/total placeholders translated into all 9 UI languages (de, en, es, fr, pt, it, pl, cs, ru).
+
 ## 11.1.1 - 2026-03-26
 ### Fixed
 - **ENTSO-E API: wrong base URL caused DNS resolution error** – The API base URL was incorrectly set to `https://web.api.entsoe.eu/api` (non-existent host), causing "nodename nor servname provided, or not known" errors on every request. Corrected to `https://web-api.tp.entsoe.eu/api`.
