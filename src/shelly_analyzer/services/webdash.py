@@ -1064,7 +1064,7 @@ function renderLive(data, first) {{
   devices.forEach(function(d) {{
     if (!sparkData[d.key]) sparkData[d.key] = [];
     const buf = sparkData[d.key];
-    buf.push({{ ts: Date.now(), w: d.power_w || 0, v: d.voltage_v || 0, a: d.current_a || 0, phases: d.phases ? d.phases.slice() : [] }});
+    buf.push({{ ts: Date.now(), w: d.power_w || 0, v: d.voltage_v || 0, a: d.current_a || 0, phases: d.phases ? d.phases.slice() : [], i_n: d.i_n || 0 }});
     if (buf.length > MAX_HIST_PTS) buf.shift();
   }});
 
@@ -1104,7 +1104,7 @@ function buildDeviceCard(d) {{
       if (metric === 'w') title = t('web.chart.power', 'Power (W)');
       else if (metric === 'v') title = t('web.chart.voltage', 'Voltage (V)');
       else if (metric === 'a') title = t('web.chart.current', 'Current (A)');
-      else title = t('web.dash.phase_power', 'Phase Power');
+      else title = t('web.chart.neutral_current', 'I\u2099 Neutral (A)');
       openDetailChart(devKey, metric, title);
     }});
   }});
@@ -1147,7 +1147,7 @@ function devCardHTML(d) {{
       inHtml +
       '<div class="sparkline-wrap" style="margin-top:8px" data-metric="v" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.u', 'Voltage') + '</div><canvas class="sparkline-sm" id="sp-v-' + d.key + '"></canvas></div>' +
       '<div class="sparkline-wrap" style="margin-top:6px" data-metric="a" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.i', 'Current') + '</div><canvas class="sparkline-sm" id="sp-a-' + d.key + '"></canvas></div>' +
-      (phases ? '<div class="sparkline-wrap" style="margin-top:6px" data-metric="ph" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.dash.phase_power', 'Phase Power') + '</div><canvas class="sparkline-sm" id="sp-ph-' + d.key + '"></canvas></div>' : '') +
+      (phases ? '<div class="sparkline-wrap" style="margin-top:6px" data-metric="in" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.chart.neutral_current', 'I\u2099 Neutral (A)') + '</div><canvas class="sparkline-sm" id="sp-in-' + d.key + '"></canvas></div>' : '') +
       nilm +
     '</div>'
   );
@@ -1193,12 +1193,9 @@ function updateDeviceCard(card, d) {{
   // Current sparkline
   const spa = document.getElementById('sp-a-' + d.key);
   if (spa && buf) drawSparkline(spa, wndVals(buf, 'a'), '#10b981', true);
-  // Phase power sparkline (multi-line)
-  const spp = document.getElementById('sp-ph-' + d.key);
-  if (spp && buf) {{
-    const series = wndPhaseSeries(buf, 'power_w');
-    if (series.length) drawMultiSparkline(spp, series, ['#e05c5c','#5ca0e0','#5ce077']);
-  }}
+  // Neutral current sparkline
+  const spin = document.getElementById('sp-in-' + d.key);
+  if (spin && buf) drawSparkline(spin, wndVals(buf, 'i_n'), '#a855f7', true);
   // Update expand section detail values (voltage, current, cos φ, freq, phases)
   const exp = card.querySelector('.dev-expand');
   if (exp) {{
@@ -1344,8 +1341,10 @@ function _buildDetailLegend(devKey, metric) {{
   const accent = cs.getPropertyValue('--accent').trim() || '#2563eb';
   const totalColor = metric === 'v' ? '#f59e0b' : metric === 'a' ? '#10b981' : accent;
   const items = [];
-  if (metric === 'ph') {{
+  if (metric === 'ph' || metric === 'v') {{
     for (let i = 0; i < maxPh; i++) items.push({{ label: 'L'+(i+1), color: _PHASE_COLORS[i]||'#888' }});
+  }} else if (metric === 'in') {{
+    items.push({{ label: t('web.chart.neutral_current', 'I\u2099 Neutral (A)'), color: '#a855f7' }});
   }} else if (maxPh > 0) {{
     items.push({{ label: t('web.plots.series.total','Total'), color: totalColor }});
     for (let i = 0; i < maxPh; i++) items.push({{ label: 'L'+(i+1), color: _PHASE_COLORS[i]||'#888' }});
@@ -1392,6 +1391,14 @@ function _drawDetailChart() {{
   if (metric === 'ph') {{
     for (let i = 0; i < maxPh; i++) {{
       series.push(visPts.map(function(p) {{ return (p.phases&&p.phases[i]) ? (p.phases[i].power_w||0) : 0; }}));
+      colors.push(_PHASE_COLORS[i]||'#888');
+    }}
+  }} else if (metric === 'in') {{
+    series.push(visPts.map(function(p) {{ return p.i_n||0; }}));
+    colors.push('#a855f7');
+  }} else if (metric === 'v' && maxPh > 0) {{
+    for (let i = 0; i < maxPh; i++) {{
+      series.push(visPts.map(function(p) {{ return (p.phases&&p.phases[i]) ? (p.phases[i].voltage_v||0) : 0; }}));
       colors.push(_PHASE_COLORS[i]||'#888');
     }}
   }} else {{
@@ -1455,7 +1462,7 @@ function _drawDetailChart() {{
 function _fmtAxisVal(v, metric) {{
   if (metric==='w'||metric==='ph') {{ if (Math.abs(v)>=1000) return (v/1000).toFixed(1)+'k'; return Math.round(v)+''; }}
   if (metric==='v') return v.toFixed(0);
-  if (metric==='a') return v.toFixed(1);
+  if (metric==='a'||metric==='in') return v.toFixed(2);
   return Math.round(v)+'';
 }}
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 10.6.0 - 2026-03-26
+### Changed
+- **Live view: removed Phase Power mini-plot** – The per-phase power (W) sparkline in the device card expand section has been removed.
+- **Live view: added Neutral Current (I_N) mini-plot** – A new sparkline showing the neutral conductor current (I_N) is now displayed for 3-phase devices. Clicking the plot opens the zoomable detail chart. Colour: purple (#a855f7). Localised label in all 9 UI languages.
+- **Voltage detail chart: phases only** – The zoomable voltage detail chart no longer shows the average/total voltage line. Only the three individual phase voltages (L1, L2, L3) are plotted, giving a cleaner view of per-phase voltage balance.
+
 ## 10.5.0 - 2026-03-25
 ### Summary
 Consolidation release grouping all features and fixes from v10.3.0–v10.4.0 into a single tagged version so that the auto-updater picks up the full set of improvements.
