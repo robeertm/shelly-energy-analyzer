@@ -3846,6 +3846,7 @@ class _Handler(BaseHTTPRequestHandler):
                             "v": voltage_v,
                             "a": current_a,
                             "phases": phases,
+                            "i_n": float(p.get("i_n") or 0),
                         })
                     hist[dkey] = pts_out
                 body = json.dumps({"history": hist}).encode("utf-8")
