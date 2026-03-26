@@ -1,5 +1,10 @@
 # Changelog
 
+## 11.1.4 - 2026-03-26
+### Fixed
+- **CO₂ tab: data not shown after backfill** – After a successful ENTSO-E backfill the CO₂ tab remained empty. The polling loop now triggers a `_refresh_co2_tab()` call 500 ms after the import completes so charts, live value, and summary cards are populated immediately without a manual tab switch.
+- **Settings "Live & Preis": vertical scrollbar** – The settings sub-tab containing language, pricing, TOU, auto-sync, appearance, solar, CO₂, live, and web settings had no scrollbar, causing controls to be clipped on small screens. The content is now wrapped in a `Canvas`+`Scrollbar` scrollable frame that also responds to the mouse wheel while hovered.
+
 ## 11.1.3 - 2026-03-26
 ### Fixed
 - **"Backfill now" still silent when settings not yet saved** – The button previously called `svc.trigger_now(force=True)` which ran through the background `Co2FetchService`. The service reads the *saved* config, so if the user had not pressed "Save Settings" after entering the token, `_tick()` returned silently (token empty or `enabled=False`). The button now runs its own background thread and reads the token, zone, and backfill-days directly from the current UI fields — identical to how the "Test Connection" button works — so it always uses what is currently on screen.
