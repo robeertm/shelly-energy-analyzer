@@ -262,7 +262,23 @@ class EntsoeClient:
             raise RuntimeError("No ENTSO-E API token configured.")
 
         xml_text = self._fetch_generation_xml(start_ts, end_ts)
+        if not xml_text or not xml_text.strip():
+            raise RuntimeError("ENTSO-E API returned an empty response.")
+        if "GL_MarketDocument" not in xml_text[:600]:
+            logger.warning(
+                "EntsoeClient: unexpected response (no GL_MarketDocument). "
+                "Response prefix: %s", xml_text[:300]
+            )
         mix = _parse_generation_xml(xml_text)
+        if not mix:
+            logger.warning(
+                "EntsoeClient: no generation time series found in XML "
+                "(zone=%s, start=%s, end=%s). Response prefix: %s",
+                self.bidding_zone,
+                _ts_to_entsoe_fmt(start_ts),
+                _ts_to_entsoe_fmt(end_ts),
+                xml_text[:200],
+            )
         intensity = calculate_intensity(mix)
 
         now_ts = int(time.time())
@@ -350,6 +366,7 @@ class Co2FetchService:
         self._last_error: Optional[str] = None
         self._force_backfill: bool = False
         self._progress_callback = None  # callable(day_fetched: int, total_days: int) | None
+        self._log_callback = None       # callable(msg: str) | None – for Sync tab
 
     def set_progress_callback(self, cb) -> None:
         """Set a callback invoked during chunk fetching: cb(day_fetched, total_days).
@@ -358,6 +375,24 @@ class Co2FetchService:
         Pass None to remove.
         """
         self._progress_callback = cb
+
+    def set_log_callback(self, cb) -> None:
+        """Set a callback for log messages: cb(msg: str).
+
+        Called from the background thread – the callback must schedule any UI
+        updates on the main thread (e.g. via widget.after(0, ...)).
+        Pass None to remove.
+        """
+        self._log_callback = cb
+
+    def _svc_log(self, msg: str) -> None:
+        logger.info("Co2FetchService: %s", msg)
+        cb = self._log_callback
+        if cb is not None:
+            try:
+                cb(msg)
+            except Exception:
+                pass
 
     @property
     def last_error(self) -> Optional[str]:
@@ -446,12 +481,18 @@ class Co2FetchService:
             logger.debug("Co2FetchService: data is up to date for zone %s", zone)
             return
 
+        total_days = max(1, math.ceil((end_ts - start_ts) / 86400))
+        d_from = datetime.fromtimestamp(start_ts, tz=timezone.utc).strftime("%Y-%m-%d")
+        d_to = datetime.fromtimestamp(end_ts, tz=timezone.utc).strftime("%Y-%m-%d")
+        self._svc_log(
+            f"CO₂ Backfill gestartet: {total_days} Tage, Zone {zone} ({d_from} → {d_to})"
+        )
+
         # Split into chunks of at most 7 days to stay within API limits
         client = EntsoeClient(api_token=token, bidding_zone=zone)
         chunk_s = 7 * 86400
         all_rows = []
         cursor = start_ts
-        total_days = max(1, math.ceil((end_ts - start_ts) / 86400))
         days_fetched = 0
         cb = self._progress_callback
         while cursor < end_ts and not self._stop_event.is_set():
@@ -461,12 +502,17 @@ class Co2FetchService:
                     cb(days_fetched, total_days)
                 except Exception:
                     pass
+            c_from = datetime.fromtimestamp(cursor, tz=timezone.utc).strftime("%Y-%m-%d")
+            c_to = datetime.fromtimestamp(chunk_end, tz=timezone.utc).strftime("%Y-%m-%d")
+            self._svc_log(f"  ENTSO-E Abfrage: {c_from} bis {c_to}...")
             try:
                 rows = client.fetch_intensity(cursor, chunk_end)
                 all_rows.extend(rows)
                 self._last_error = None
+                self._svc_log(f"    Empfangen: {len(rows)} Datenpunkte")
             except Exception as exc:
                 self._last_error = str(exc)
+                self._svc_log(f"    Fehler: {exc}")
                 logger.warning("Co2FetchService: fetch failed: %s", exc)
                 if cb is not None:
                     try:
@@ -485,5 +531,8 @@ class Co2FetchService:
 
         if all_rows:
             written = self._db.upsert_co2_intensity(all_rows)
+            self._svc_log(f"CO₂ Backfill abgeschlossen: {written} Werte gespeichert")
             logger.info("Co2FetchService: stored %d intensity points", written)
+        else:
+            self._svc_log("CO₂ Backfill abgeschlossen: 0 Werte – keine Daten empfangen")
         self._last_fetch_ts = time.time()
