@@ -197,6 +197,9 @@ class Co2Mixin:
         # Trigger initial refresh after a short delay
         self.after(800, self._refresh_co2_tab)
 
+        # Start the progress-bar polling loop
+        self.after(500, self._co2_poll_progress)
+
     # ── Refresh ───────────────────────────────────────────────────────────────
 
     def _refresh_co2_tab(self) -> None:
@@ -260,6 +263,51 @@ class Co2Mixin:
 
         except Exception:
             logger.exception("Co2Mixin: refresh error")
+
+    def _co2_poll_progress(self) -> None:
+        """Drain the progress queue and update the progress bar / status label.
+
+        Runs on the Tk main thread via after(); reschedules itself every 400 ms.
+        """
+        try:
+            last_day: Optional[int] = None
+            last_total: Optional[int] = None
+            while True:
+                try:
+                    day, total = self._co2_progress_q.get_nowait()
+                    last_day, last_total = day, total
+                except queue.Empty:
+                    break
+
+            if last_day is not None and last_total is not None:
+                total = last_total
+                day = last_day
+                if total > 0 and day < total:
+                    pct = min(99, int(day / total * 100))
+                    self._co2_progressbar["value"] = pct
+                    self._co2_progress_label_var.set(
+                        self.t("co2.status.importing", day=day, total=total)
+                    )
+                else:
+                    # Fetch round complete
+                    svc = getattr(self, "_co2_fetch_svc", None)
+                    err = getattr(svc, "last_error", None) if svc else None
+                    self._co2_progressbar["value"] = 0
+                    if err:
+                        self._co2_progress_label_var.set(f"⚠ {err[:120]}")
+                        try:
+                            self._co2_status_var.set(f"⚠ {err[:80]}")
+                        except Exception:
+                            pass
+                    else:
+                        self._co2_progress_label_var.set("")
+                        self.after(300, self._refresh_co2_tab)
+        except Exception:
+            logger.debug("Co2Mixin: progress poll error", exc_info=True)
+        try:
+            self.after(400, self._co2_poll_progress)
+        except Exception:
+            pass
 
     def _co2_show_disabled(self) -> None:
         self._co2_live_intensity_var.set("–")

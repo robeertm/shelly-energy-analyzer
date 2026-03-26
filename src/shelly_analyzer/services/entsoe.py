@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # ENTSO-E REST API base URL
-_API_BASE = "https://web.api.entsoe.eu/api"
+_API_BASE = "https://web-api.entsoe.eu/api"
 
 # ENTSO-E psrType codes → human-readable fuel names
 _PSR_NAMES: Dict[str, str] = {
@@ -305,6 +305,7 @@ class Co2FetchService:
         self._trigger_event = threading.Event()
         self._last_fetch_ts: float = 0.0
         self._last_error: Optional[str] = None
+        self._force_backfill: bool = False
         self._progress_callback = None  # callable(day_fetched: int, total_days: int) | None
 
     def set_progress_callback(self, cb) -> None:
@@ -338,9 +339,15 @@ class Co2FetchService:
             self._thread.join(timeout=10)
         logger.info("Co2FetchService stopped")
 
-    def trigger_now(self) -> None:
-        """Force an immediate fetch (e.g. after config change)."""
+    def trigger_now(self, force: bool = False) -> None:
+        """Force an immediate fetch.
+
+        force=True re-fetches from backfill_days ago, ignoring any already-stored
+        data (useful for the "Backfill now" button).
+        """
         self._last_fetch_ts = 0.0
+        if force:
+            self._force_backfill = True
         self._trigger_event.set()
 
     def _run(self) -> None:
@@ -377,9 +384,12 @@ class Co2FetchService:
         backfill_days = getattr(co2_cfg, "backfill_days", 7) or 7
 
         now_ts = int(time.time())
-        # Determine fetch start: either last known hour or backfill start
+        # Determine fetch start: force-backfill resets to backfill_days ago;
+        # otherwise start from the next hour after the latest stored hour.
+        force = self._force_backfill
+        self._force_backfill = False
         latest_ts = self._db.latest_co2_ts(zone)
-        if latest_ts is None:
+        if force or latest_ts is None:
             start_ts = now_ts - backfill_days * 86400
         else:
             # Start from the next hour after the latest stored hour
