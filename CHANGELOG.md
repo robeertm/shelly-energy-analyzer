@@ -1,5 +1,19 @@
 # Changelog
 
+## 11.0.0 - 2026-03-26
+### Added
+- **CO₂ intensity tab** – New "🌿 CO₂" tab showing real-time and historical grid carbon intensity sourced from the [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/).
+  - **Live section**: current grid CO₂ intensity in g CO₂/kWh, colour-coded green / yellow / red against configurable thresholds; per-device CO₂ emission rate (g/h) based on current power draw.
+  - **24 h intensity chart**: line chart with fill showing the last 24 hours of grid CO₂ intensity; green and dirty threshold lines overlaid.
+  - **Summary cards**: total CO₂ emitted today / this week / this month (in kg) with equivalents – car kilometres driven and trees needed per year to offset – calculated from actual device energy consumption.
+  - **24 h heatmap strip**: colour-coded hour-by-hour bar showing green → yellow → red intensity profile for the last 24 hours.
+- **ENTSO-E API client** (`services/entsoe.py`) – `EntsoeClient` fetches actual generation per production type (DocumentType A75) for any ENTSO-E bidding zone, parses the XML response, and computes weighted-average CO₂ intensity using standard IPCC lifecycle emission factors (lignite 1100, coal 820, gas 490, oil 650, nuclear 12, hydro 4, wind 11, solar 45, biomass 230 g CO₂eq/kWh). Enforces a 62-second inter-request rate limit.
+- **Background fetch service** (`Co2FetchService`) – Daemon thread that periodically fetches new intensity data from ENTSO-E, automatically backfills missing historical hours up to the configured number of days, and stores results in the new `co2_intensity` SQLite table.
+- **`co2_intensity` database table** – New SQLite table with columns `hour_ts` (primary key), `zone`, `intensity_g_per_kwh`, `source`, `fetched_at`; EnergyDB gains `upsert_co2_intensity`, `query_co2_intensity`, `latest_co2_ts`, and `oldest_co2_ts` helpers.
+- **`Co2Config` dataclass** – New configuration block (`co2` key in `config.json`) with: `enabled`, `entso_e_api_token`, `bidding_zone` (default `DE_LU`), `fetch_interval_hours`, `backfill_days`, `show_green_dirty_hours`, `green_threshold_g_per_kwh` (150), `dirty_threshold_g_per_kwh` (400). Fully wired into `load_config` / `save_config`.
+- **CO₂ settings section** – New panel in the Settings tab for configuring the ENTSO-E API token (masked input), bidding zone (dropdown with all ENTSO-E zones), fetch interval, backfill days, green/dirty thresholds, and a "Backfill now" button.
+- **Internationalisation** – ~30 new translation keys (`co2.*`) added for all 9 UI languages (de, en, es, fr, pt, it, pl, cs, ru).
+
 ## 10.7.1 - 2026-03-26
 ### Fixed
 - **Live view: I_N neutral current plot empty on first load** – The `/api/history` endpoint returned historical sparkline data for power, voltage, and current but omitted the `i_n` field. As a result, the neutral current plot appeared flat until new live readings arrived. The field is now included in every history point so the plot is pre-populated from stored data on first page load.
