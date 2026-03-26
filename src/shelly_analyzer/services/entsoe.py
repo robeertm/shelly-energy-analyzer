@@ -305,6 +305,15 @@ class Co2FetchService:
         self._trigger_event = threading.Event()
         self._last_fetch_ts: float = 0.0
         self._last_error: Optional[str] = None
+        self._progress_callback = None  # callable(day_fetched: int, total_days: int) | None
+
+    def set_progress_callback(self, cb) -> None:
+        """Set a callback invoked during chunk fetching: cb(day_fetched, total_days).
+
+        Called from the background thread – must be thread-safe (use a queue).
+        Pass None to remove.
+        """
+        self._progress_callback = cb
 
     @property
     def last_error(self) -> Optional[str]:
@@ -389,8 +398,16 @@ class Co2FetchService:
         chunk_s = 7 * 86400
         all_rows = []
         cursor = start_ts
+        total_days = max(1, math.ceil((end_ts - start_ts) / 86400))
+        days_fetched = 0
+        cb = self._progress_callback
         while cursor < end_ts and not self._stop_event.is_set():
             chunk_end = min(cursor + chunk_s, end_ts)
+            if cb is not None:
+                try:
+                    cb(days_fetched, total_days)
+                except Exception:
+                    pass
             try:
                 rows = client.fetch_intensity(cursor, chunk_end)
                 all_rows.extend(rows)
@@ -398,8 +415,20 @@ class Co2FetchService:
             except Exception as exc:
                 self._last_error = str(exc)
                 logger.warning("Co2FetchService: fetch failed: %s", exc)
+                if cb is not None:
+                    try:
+                        cb(days_fetched, total_days)
+                    except Exception:
+                        pass
                 break
+            days_fetched += max(1, round((chunk_end - cursor) / 86400))
             cursor = chunk_end
+
+        if cb is not None:
+            try:
+                cb(total_days, total_days)
+            except Exception:
+                pass
 
         if all_rows:
             written = self._db.upsert_co2_intensity(all_rows)
