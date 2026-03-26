@@ -321,6 +321,25 @@ class AnomalyConfig:
 
 
 @dataclass(frozen=True)
+class Co2Config:
+    """ENTSO-E CO₂ intensity integration settings."""
+    enabled: bool = False
+    entso_e_api_token: str = ""
+    # ENTSO-E bidding zone (e.g. "DE_LU", "AT", "CH", "FR", "PL", ...)
+    bidding_zone: str = "DE_LU"
+    # How often to fetch new data from the ENTSO-E API (hours)
+    fetch_interval_hours: int = 1
+    # How many days of historical data to backfill on first run
+    backfill_days: int = 7
+    # Whether to highlight green / dirty hours in the 24h heatmap
+    show_green_dirty_hours: bool = True
+    # g CO₂/kWh threshold for "green" grid hours
+    green_threshold_g_per_kwh: float = 150.0
+    # g CO₂/kWh threshold for "dirty" grid hours
+    dirty_threshold_g_per_kwh: float = 400.0
+
+
+@dataclass(frozen=True)
 class DeviceGroup:
     """A logical group of devices (e.g. 'Apartment 1', 'Workshop')."""
     name: str
@@ -364,6 +383,7 @@ class AppConfig:
     solar: SolarConfig = field(default_factory=SolarConfig)
     tou: TouConfig = field(default_factory=TouConfig)
     anomaly: AnomalyConfig = field(default_factory=AnomalyConfig)
+    co2: Co2Config = field(default_factory=Co2Config)
     schedules: List[DeviceSchedule] = field(default_factory=list)
 
 
@@ -681,6 +701,18 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         max_history=_coerce_int(anomaly_raw.get("max_history", AnomalyConfig.max_history), AnomalyConfig.max_history),
     )
 
+    co2_raw = raw.get("co2", {}) if isinstance(raw.get("co2"), dict) else {}
+    co2 = Co2Config(
+        enabled=bool(co2_raw.get("enabled", Co2Config.enabled)),
+        entso_e_api_token=str(co2_raw.get("entso_e_api_token", Co2Config.entso_e_api_token) or ""),
+        bidding_zone=str(co2_raw.get("bidding_zone", Co2Config.bidding_zone) or "DE_LU"),
+        fetch_interval_hours=_coerce_int(co2_raw.get("fetch_interval_hours", Co2Config.fetch_interval_hours), Co2Config.fetch_interval_hours),
+        backfill_days=_coerce_int(co2_raw.get("backfill_days", Co2Config.backfill_days), Co2Config.backfill_days),
+        show_green_dirty_hours=bool(co2_raw.get("show_green_dirty_hours", Co2Config.show_green_dirty_hours)),
+        green_threshold_g_per_kwh=_coerce_float(co2_raw.get("green_threshold_g_per_kwh", Co2Config.green_threshold_g_per_kwh), Co2Config.green_threshold_g_per_kwh),
+        dirty_threshold_g_per_kwh=_coerce_float(co2_raw.get("dirty_threshold_g_per_kwh", Co2Config.dirty_threshold_g_per_kwh), Co2Config.dirty_threshold_g_per_kwh),
+    )
+
     groups: List[DeviceGroup] = []
     groups_raw = raw.get("groups", [])
     if isinstance(groups_raw, list):
@@ -737,6 +769,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         solar=solar,
         tou=tou,
         anomaly=anomaly,
+        co2=co2,
         groups=groups,
         schedules=schedules,
     )
@@ -973,6 +1006,16 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "action_webhook": bool(getattr(cfg.anomaly, "action_webhook", False)),
             "action_email": bool(getattr(cfg.anomaly, "action_email", False)),
             "max_history": int(getattr(cfg.anomaly, "max_history", 200)),
+        },
+        "co2": {
+            "enabled": bool(getattr(cfg.co2, "enabled", False)),
+            "entso_e_api_token": str(getattr(cfg.co2, "entso_e_api_token", "") or ""),
+            "bidding_zone": str(getattr(cfg.co2, "bidding_zone", "DE_LU") or "DE_LU"),
+            "fetch_interval_hours": int(getattr(cfg.co2, "fetch_interval_hours", 1)),
+            "backfill_days": int(getattr(cfg.co2, "backfill_days", 7)),
+            "show_green_dirty_hours": bool(getattr(cfg.co2, "show_green_dirty_hours", True)),
+            "green_threshold_g_per_kwh": float(getattr(cfg.co2, "green_threshold_g_per_kwh", 150.0)),
+            "dirty_threshold_g_per_kwh": float(getattr(cfg.co2, "dirty_threshold_g_per_kwh", 400.0)),
         },
     }
     path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
