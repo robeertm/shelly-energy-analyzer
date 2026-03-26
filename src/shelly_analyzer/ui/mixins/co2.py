@@ -206,22 +206,43 @@ class Co2Mixin:
     # ── Refresh ───────────────────────────────────────────────────────────────
 
     def _refresh_co2_tab(self) -> None:
-        """Refresh all CO₂ tab sections from the database."""
+        """Refresh all CO₂ tab sections from the database.
+
+        The ``co2.enabled`` flag controls background auto-fetching but must NOT
+        block displaying data that is already stored locally.  This method always
+        queries the DB so that a manual backfill (which bypasses the enabled
+        check) becomes visible immediately.
+        """
         try:
             cfg = self.cfg
             co2_cfg = getattr(cfg, "co2", None)
-            if co2_cfg is None or not getattr(co2_cfg, "enabled", False):
-                self._co2_show_disabled()
-                return
 
+            # Read display settings with safe fallbacks – no early return for
+            # enabled=False so that manually-imported data is always shown.
             zone = getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU"
-            green_thr = getattr(co2_cfg, "green_threshold_g_per_kwh", 150.0)
-            dirty_thr = getattr(co2_cfg, "dirty_threshold_g_per_kwh", 400.0)
+            # Also try the zone that is currently selected in the UI (may differ
+            # from the saved config if the user changed it without saving).
+            ui_zone = ""
+            try:
+                ui_zone = (getattr(self, "_co2_zone_var", None) or tk.StringVar()).get().strip()
+            except Exception:
+                pass
+            green_thr = getattr(co2_cfg, "green_threshold_g_per_kwh", 150.0) if co2_cfg else 150.0
+            dirty_thr = getattr(co2_cfg, "dirty_threshold_g_per_kwh", 400.0) if co2_cfg else 400.0
 
             db = self.db
             now_ts = int(time.time())
             start_24h = now_ts - 86400
             df = db.query_co2_intensity(zone, start_24h, now_ts + 3600)
+
+            # If saved-config zone returned nothing, try the zone shown in the UI
+            # (happens when the user changed the zone and ran a backfill without
+            # saving settings first).
+            if df.empty and ui_zone and ui_zone != zone:
+                df2 = db.query_co2_intensity(ui_zone, start_24h, now_ts + 3600)
+                if not df2.empty:
+                    zone = ui_zone
+                    df = df2
 
             if df.empty:
                 self._co2_live_intensity_var.set("–")
