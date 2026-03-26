@@ -1,5 +1,10 @@
 # Changelog
 
+## 11.1.1 - 2026-03-26
+### Fixed
+- **CO₂ tab: data not shown after backfill** – After a successful ENTSO-E backfill the CO₂ tab remained empty. The polling loop now triggers a `_refresh_co2_tab()` call 500 ms after the import completes so charts, live value, and summary cards are populated immediately without a manual tab switch.
+- **Settings "Live & Preis": vertical scrollbar** – The settings sub-tab containing language, pricing, TOU, auto-sync, appearance, solar, CO₂, live, and web settings had no scrollbar, causing controls to be clipped on small screens. The content is now wrapped in a `Canvas`+`Scrollbar` scrollable frame that also responds to the mouse wheel while hovered.
+
 ## 11.1.0 - 2026-03-26
 ### Added
 - **ENTSO-E "Test Connection" button** – New button in the CO₂ settings panel (next to "Backfill now"). Sends a minimal test request to the ENTSO-E API with the currently-entered token and bidding zone, then shows a green "Connection successful ✓" or a red error message ("Token invalid", "API unreachable", etc.) inline below the button. Runs in a background thread so the UI stays responsive. Translated into all 9 UI languages (de, en, es, fr, pt, it, pl, cs, ru).
