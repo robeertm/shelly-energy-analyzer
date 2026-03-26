@@ -564,6 +564,7 @@ class UpdatesMixin:
         except Exception:
             pass
         self._updates_check_async(auto_install=False)
+        self._updates_fetch_changelog_async()
 
     def _updates_on_download_clicked(self) -> None:
         self._updates_install_latest()
