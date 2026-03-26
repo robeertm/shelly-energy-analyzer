@@ -1,5 +1,9 @@
 # Changelog
 
+## 10.7.1 - 2026-03-26
+### Fixed
+- **Live view: I_N neutral current plot empty on first load** – The `/api/history` endpoint returned historical sparkline data for power, voltage, and current but omitted the `i_n` field. As a result, the neutral current plot appeared flat until new live readings arrived. The field is now included in every history point so the plot is pre-populated from stored data on first page load.
+
 ## 10.7.0 - 2026-03-26
 ### Changed
 - **Updates tab: changelog refreshes on every update check** – Clicking "Check for updates" now also re-fetches `CHANGELOG.md` from GitHub in a background thread, so the changelog viewer always shows the latest remote content before the user decides to install an update.
