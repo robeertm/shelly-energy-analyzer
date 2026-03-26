@@ -4783,6 +4783,29 @@ class CoreMixin:
             nb.add(tab_groups, text=self.t('settings.groups'))
             nb.add(tab_main, text=self.t('settings.main'))
             nb.add(tab_advanced, text=self.t('settings.advanced'))
+
+            # Scrollable container for the "Live & Preis" settings tab
+            _tm_outer = ttk.Frame(tab_main)
+            _tm_outer.pack(fill="both", expand=True)
+            _tm_canvas = tk.Canvas(_tm_outer, highlightthickness=0)
+            _tm_sb = ttk.Scrollbar(_tm_outer, orient="vertical", command=_tm_canvas.yview)
+            tab_main_sf = ttk.Frame(_tm_canvas)
+            tab_main_sf.bind(
+                "<Configure>",
+                lambda e: _tm_canvas.configure(scrollregion=_tm_canvas.bbox("all")),
+            )
+            _tm_win = _tm_canvas.create_window((0, 0), window=tab_main_sf, anchor="nw")
+            _tm_canvas.configure(yscrollcommand=_tm_sb.set)
+            _tm_canvas.bind("<Configure>", lambda e: _tm_canvas.itemconfigure(_tm_win, width=e.width))
+            _tm_canvas.pack(side="left", fill="both", expand=True)
+            _tm_sb.pack(side="right", fill="y")
+            def _tm_mousewheel(event):
+                try:
+                    _tm_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+                except Exception:
+                    pass
+            tab_main_sf.bind("<Enter>", lambda e: _tm_canvas.bind_all("<MouseWheel>", _tm_mousewheel))
+            tab_main_sf.bind("<Leave>", lambda e: _tm_canvas.unbind_all("<MouseWheel>"))
             nb.add(tab_expert, text=self.t('settings.expert'))
             nb.add(tab_billing, text=self.t('tabs.billing'))
             nb.add(tab_updates, text=self.t('settings.updates'))
@@ -5687,7 +5710,7 @@ class CoreMixin:
 
             # ---------------- Live & Preis ----------------
             # Language
-            lang_box = ttk.LabelFrame(tab_main, text=self.t('settings.language'))
+            lang_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.language'))
             lang_box.pack(fill="x", pady=(0, 10))
             if not getattr(self, 'set_language_var', None):
                 self.set_language_var = tk.StringVar(value=str(getattr(self.cfg.ui, 'language', 'de')))
@@ -5710,7 +5733,7 @@ class CoreMixin:
             cb.grid(row=0, column=1, padx=8, pady=8, sticky='w')
             cb.bind('<<ComboboxSelected>>', _on_lang_pick)
 
-            pricing_box = ttk.LabelFrame(tab_main, text=self.t('settings.pricing.title'))
+            pricing_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.pricing.title'))
             pricing_box.pack(fill="x", pady=(0, 10))
             ttk.Label(pricing_box, text=self.t('settings.pricing.price')).grid(row=0, column=0, padx=8, pady=8, sticky="w")
             self.price_var = tk.StringVar(value=str(self.cfg.pricing.electricity_price_eur_per_kwh))
@@ -5763,7 +5786,7 @@ class CoreMixin:
             self._co2_preset_btn = btn_co2_presets
 
             # ---------- TOU / Mehrtarif settings ----------
-            tou_box = ttk.LabelFrame(tab_main, text=self.t('settings.tou.title'))
+            tou_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.tou.title'))
             tou_box.pack(fill="x", pady=(0, 10))
 
             _tou_cfg = getattr(self.cfg, "tou", TouConfig())
@@ -5901,7 +5924,7 @@ class CoreMixin:
             ttk.Button(btn_col, text=self.t('settings.tou.edit'), command=_tou_edit, width=10).pack(pady=2)
             ttk.Button(btn_col, text=self.t('settings.tou.remove'), command=_tou_remove, width=10).pack(pady=2)
 
-            autosync_box = ttk.LabelFrame(tab_main, text=self.t('settings.autosync.title'))
+            autosync_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.autosync.title'))
             autosync_box.pack(fill="x", pady=(0, 10))
             self.set_autosync_enabled_var = tk.BooleanVar(value=bool(self.cfg.ui.autosync_enabled))
             self.set_autosync_interval_var = tk.IntVar(value=int(self.cfg.ui.autosync_interval_hours))
@@ -5927,7 +5950,7 @@ class CoreMixin:
             ).grid(row=0, column=4, padx=8, pady=8, sticky="w")
 
             # ---------- Appearance / Theme ----------
-            appearance_box = ttk.LabelFrame(tab_main, text=self.t('settings.appearance.title'))
+            appearance_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.appearance.title'))
             appearance_box.pack(fill="x", pady=(0, 10))
             _theme_mode0 = str(getattr(self.cfg.ui, "plot_theme_mode", "auto") or "auto").strip().lower()
             if _theme_mode0 not in ("auto", "day", "night"):
@@ -5949,7 +5972,7 @@ class CoreMixin:
             ).grid(row=0, column=1, padx=8, pady=8, sticky='w')
 
             # ---------- Solar / PV settings ----------
-            solar_box = ttk.LabelFrame(tab_main, text=self.t('settings.solar.title'))
+            solar_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.solar.title'))
             solar_box.pack(fill="x", pady=(0, 10))
             _solar_cfg = getattr(self.cfg, "solar", None)
             self._solar_enabled_var = tk.BooleanVar(value=bool(getattr(_solar_cfg, "enabled", False)))
@@ -5986,7 +6009,7 @@ class CoreMixin:
 
             # ── CO₂ / ENTSO-E settings ────────────────────────────────────────
             _co2_cfg = getattr(self.cfg, "co2", None)
-            co2_box = ttk.LabelFrame(tab_main, text=self.t("co2.settings.title"))
+            co2_box = ttk.LabelFrame(tab_main_sf, text=self.t("co2.settings.title"))
             co2_box.pack(fill="x", pady=(0, 10))
 
             self._co2_enabled_var = tk.BooleanVar(value=bool(getattr(_co2_cfg, "enabled", False)))
@@ -6215,7 +6238,7 @@ class CoreMixin:
                 command=_co2_test_connection,
             ).grid(row=5, column=2, columnspan=2, padx=8, pady=(4, 8), sticky="w")
 
-            live_box = ttk.LabelFrame(tab_main, text=self.t('settings.live.title'))
+            live_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.live.title'))
             live_box.pack(fill="x", pady=(0, 10))
             self.set_live_poll_var = tk.DoubleVar(value=float(self.cfg.ui.live_poll_seconds))
             self.set_live_window_var = tk.IntVar(value=int(self.cfg.ui.live_window_minutes))
@@ -6236,7 +6259,7 @@ class CoreMixin:
                 row=1, column=0, columnspan=6, padx=8, pady=(0, 8), sticky="w"
             )
 
-            web_box = ttk.LabelFrame(tab_main, text=self.t('settings.web.title'))
+            web_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.web.title'))
             web_box.pack(fill="x")
             self.set_live_web_enabled_var = tk.BooleanVar(value=bool(self.cfg.ui.live_web_enabled))
             self.set_live_web_port_var = tk.IntVar(value=int(self.cfg.ui.live_web_port))
@@ -7563,6 +7586,11 @@ class CoreMixin:
                                         pass
                                 try:
                                     self.after(3000, _clear_co2_progress)
+                                except Exception:
+                                    pass
+                                # Refresh CO₂ tab so newly imported data is shown immediately
+                                try:
+                                    self.after(500, self._refresh_co2_tab)
                                 except Exception:
                                     pass
             except Exception:
