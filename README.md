@@ -4,7 +4,7 @@ A cross-platform desktop application to analyze, visualize and export energy dat
 
 This repository is **GitHub-ready** (MIT license, clean structure, no secrets). Releases are published via **GitHub Releases** so the built‑in updater can find and download new versions.
 
-> **Current version: v10.3.2** — all major feature modules complete.
+> **Current version: v11.10.0** — all major feature modules complete.
 
 ---
 
@@ -24,7 +24,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Monthly cost projection based on current usage
 - Previous month comparison (% change)
 - Per-device breakdown with cost share and bar chart
-- **CO₂ tracking** — per-device CO₂ footprint (Today / Week / Month / Year forecast in kg) based on configurable CO₂ intensity (g/kWh, default 380 g/kWh); available in both the desktop app and the web dashboard
+- **CO₂ tracking with real grid data** — per-device CO₂ footprint (Today / Week / Month / Year / Forecast in kg) using real hourly ENTSO-E grid intensity data (joined with per-device hourly energy); falls back to configurable static CO₂ intensity (g/kWh, default 380 g/kWh) if ENTSO-E is not configured; available in both the desktop app and the web dashboard
 
 ### 💱 Time-of-Use (TOU) Tariffs
 - Define multiple time-based electricity price zones (peak, off-peak, etc.)
@@ -33,14 +33,17 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Seamless integration with cost dashboard and exports
 
 ### 📈 Historical Analysis
-- Plots for W / V / A / kWh / VAR / cosφ / **Hz (grid frequency)**
+- Plots for W / V / A / kWh / VAR / cosφ / **Hz (grid frequency)** / **CO₂ emissions**
+- **CO₂ emissions plot tab** — hourly energy × real grid CO₂ intensity (ENTSO-E), colour-coded bars (green → yellow → red) by intensity level, dual kWh + CO₂ labels above bars, custom "Last N units" range selector
 - Per-device and per-phase views
 - SQLite-based storage (fast range queries, WAL mode)
 
 ### 🗓 Heatmap Calendar
 - Calendar-style heatmap showing daily energy consumption at a glance
 - Hourly heatmap view — spot usage patterns by hour-of-day vs. day-of-week
+- **Three unit modes**: kWh, €, and **g CO₂** — CO₂ mode uses real ENTSO-E hourly grid intensity data with distinct yellow → orange → red colour scheme; falls back to static g/kWh factor if ENTSO-E is not configured
 - Colour intensity scales automatically to the selected period
+- Available in both the desktop app and the web dashboard
 
 ### 🔍 Comparison Mode
 - Compare two arbitrary date ranges side-by-side (e.g. this week vs. last week)
@@ -137,8 +140,8 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Full single-page app (SPA) accessible from any device on the local network
 - **6 tabs** matching the desktop application:
   - **Live** — real-time device cards with colour-coded power (green/yellow/red), sparkline charts, collapsible detail rows (voltage, current, cos φ, grid frequency, per-phase values, neutral current I_N), NILM appliance chips, freeze button, time-scale selector (1 min → 2 h), voltage & current sparklines in expanded view
-  - **Costs** — per-device cost overview (Today / Week / Month / Year + monthly projection) with CO₂ display (Today / Week / Month / Forecast in kg)
-  - **Heatmap** — interactive yearly calendar heatmap (daily kWh / €) and 7 × 24 weekday × hour heatmap; device, unit and year selectors; touch tooltip; responsive cell sizing
+  - **Costs** — per-device cost overview (Today / Week / Month / Year + monthly projection) with real ENTSO-E CO₂ tracking (falls back to static g/kWh if ENTSO-E is unavailable)
+  - **Heatmap** — interactive yearly calendar heatmap and 7 × 24 weekday × hour heatmap; three unit modes (kWh / € / g CO₂) with distinct colour schemes; device and year selectors; touch tooltip; responsive cell sizing
   - **Solar** — PV dashboard with feed-in, grid consumption, self-consumption, autarky %, PV production, feed-in revenue and cost savings; period buttons (Today / Week / Month / Year)
   - **Comparison** — period-over-period comparison with device A/B selectors, date range inputs, unit (kWh / €) and granularity (Total / Daily / Weekly / Monthly) toggles, quick-preset buttons (Month / Quarter / Half-Year / Year), grouped bar chart and delta display
   - **Anomalies** — lists detected anomaly events with type, device, timestamp, sigma and description; enabled/disabled status badge
