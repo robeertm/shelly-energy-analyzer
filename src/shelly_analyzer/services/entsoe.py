@@ -498,15 +498,23 @@ class Co2FetchService:
 
         now_ts = int(time.time())
         # Determine fetch start: force-backfill resets to backfill_days ago;
-        # otherwise start from the next hour after the latest stored hour.
+        # otherwise start from the oldest gap or next hour after latest stored.
         force = self._force_backfill
         self._force_backfill = False
         latest_ts = self._db.latest_co2_ts(zone)
         if force or latest_ts is None:
             start_ts = now_ts - backfill_days * 86400
         else:
-            # Start from the next hour after the latest stored hour
-            start_ts = latest_ts + 3600
+            # Check for gaps with estimated data that should be replaced
+            oldest_ts = self._db.oldest_co2_ts(zone) or (now_ts - backfill_days * 86400)
+            end_check = ((now_ts // 3600) + 1) * 3600
+            gaps = self._db.find_co2_gaps(zone, oldest_ts, end_check, include_estimated=True)
+            if gaps:
+                # Start from the earliest gap to try re-fetching real data
+                start_ts = gaps[0][0]
+            else:
+                # No gaps – start from the next hour after the latest stored hour
+                start_ts = latest_ts + 3600
 
         # Snap to hour boundary
         start_ts = (start_ts // 3600) * 3600
@@ -526,10 +534,13 @@ class Co2FetchService:
         # Split into chunks of at most 7 days to stay within API limits
         client = EntsoeClient(api_token=token, bidding_zone=zone)
         chunk_s = 7 * 86400
-        all_rows = []
+        all_rows: list = []
+        failed_ranges: list = []  # (start, end) ranges that failed all retries
         cursor = start_ts
         days_fetched = 0
         cb = self._progress_callback
+        max_retries = 3
+
         while cursor < end_ts and not self._stop_event.is_set():
             chunk_end = min(cursor + chunk_s, end_ts)
             if cb is not None:
@@ -540,46 +551,111 @@ class Co2FetchService:
             c_from = datetime.fromtimestamp(cursor, tz=timezone.utc).strftime("%Y-%m-%d")
             c_to = datetime.fromtimestamp(chunk_end, tz=timezone.utc).strftime("%Y-%m-%d")
             self._svc_log(f"  ENTSO-E Abfrage: {c_from} bis {c_to}...")
-            try:
-                rows = client.fetch_intensity(cursor, chunk_end)
-                all_rows.extend(rows)
-                self._last_error = None
-                self._svc_log(f"    Empfangen: {len(rows)} Datenpunkte")
-                # Cache the most recent hour's fuel mix for UI display
-                raw_mix = client.last_mix
-                if raw_mix:
-                    all_hours = {h for fh in raw_mix.values() for h in fh}
-                    if all_hours:
-                        latest_h = max(all_hours)
-                        hour_mix = {
-                            fuel: fh[latest_h]
-                            for fuel, fh in raw_mix.items()
-                            if fh.get(latest_h, 0.0) > 0
-                        }
-                        if latest_h >= (self._latest_mix_hour or 0):
-                            self._latest_mix_hour = latest_h
-                            self._latest_mix = hour_mix
-                        # Log fuel breakdown
-                        total_mw = sum(hour_mix.values())
-                        lh_str = datetime.fromtimestamp(latest_h, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-                        self._svc_log(f"    Kraftwerksmix ({lh_str}, {total_mw:.0f} MW gesamt):")
-                        for fuel, mw in sorted(hour_mix.items(), key=lambda x: -x[1]):
-                            share = mw / total_mw * 100 if total_mw else 0
-                            factor = _CO2_FACTORS.get(fuel, 400.0)
-                            name = FUEL_DISPLAY_NAMES.get(fuel, fuel)
-                            self._svc_log(f"      {name}: {mw:.0f} MW ({share:.1f}%) – {factor:.0f} g/kWh")
-            except Exception as exc:
-                self._last_error = str(exc)
-                self._svc_log(f"    Fehler: {exc}")
-                logger.warning("Co2FetchService: fetch failed: %s", exc)
-                if cb is not None:
-                    try:
-                        cb(days_fetched, total_days)
-                    except Exception:
-                        pass
-                break
+
+            chunk_ok = False
+            for attempt in range(1, max_retries + 1):
+                if self._stop_event.is_set():
+                    break
+                try:
+                    rows = client.fetch_intensity(cursor, chunk_end)
+                    all_rows.extend(rows)
+                    self._last_error = None
+                    self._svc_log(f"    Empfangen: {len(rows)} Datenpunkte")
+                    # Cache the most recent hour's fuel mix for UI display
+                    raw_mix = client.last_mix
+                    if raw_mix:
+                        all_hours = {h for fh in raw_mix.values() for h in fh}
+                        if all_hours:
+                            latest_h = max(all_hours)
+                            hour_mix = {
+                                fuel: fh[latest_h]
+                                for fuel, fh in raw_mix.items()
+                                if fh.get(latest_h, 0.0) > 0
+                            }
+                            if latest_h >= (self._latest_mix_hour or 0):
+                                self._latest_mix_hour = latest_h
+                                self._latest_mix = hour_mix
+                            # Log fuel breakdown
+                            total_mw = sum(hour_mix.values())
+                            lh_str = datetime.fromtimestamp(latest_h, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                            self._svc_log(f"    Kraftwerksmix ({lh_str}, {total_mw:.0f} MW gesamt):")
+                            for fuel, mw in sorted(hour_mix.items(), key=lambda x: -x[1]):
+                                share = mw / total_mw * 100 if total_mw else 0
+                                factor = _CO2_FACTORS.get(fuel, 400.0)
+                                name = FUEL_DISPLAY_NAMES.get(fuel, fuel)
+                                self._svc_log(f"      {name}: {mw:.0f} MW ({share:.1f}%) – {factor:.0f} g/kWh")
+                    chunk_ok = True
+                    break
+                except Exception as exc:
+                    self._last_error = str(exc)
+                    if attempt < max_retries:
+                        wait_s = attempt * 30  # 30s, 60s backoff
+                        self._svc_log(
+                            f"    Fehler (Versuch {attempt}/{max_retries}): {exc} – "
+                            f"Wiederholung in {wait_s}s..."
+                        )
+                        logger.warning(
+                            "Co2FetchService: chunk %s→%s attempt %d/%d failed: %s",
+                            c_from, c_to, attempt, max_retries, exc,
+                        )
+                        self._stop_event.wait(wait_s)
+                    else:
+                        self._svc_log(
+                            f"    Fehler (Versuch {attempt}/{max_retries}): {exc} – "
+                            f"Chunk übersprungen, fahre mit nächstem fort."
+                        )
+                        logger.warning(
+                            "Co2FetchService: chunk %s→%s failed after %d retries, skipping",
+                            c_from, c_to, max_retries,
+                        )
+
+            if not chunk_ok:
+                failed_ranges.append((cursor, chunk_end))
+
             days_fetched += max(1, round((chunk_end - cursor) / 86400))
             cursor = chunk_end
+
+        # Store successfully fetched rows immediately
+        if all_rows:
+            written = self._db.upsert_co2_intensity(all_rows)
+            self._svc_log(f"CO₂ Backfill: {written} Werte gespeichert")
+            logger.info("Co2FetchService: stored %d intensity points", written)
+
+        # ── Gap detection & estimated-value fill ──────────────────────────
+        # Find hours in [start_ts, end_ts) that are still missing after fetch
+        # and fill them with estimated values so every hour up to now is covered.
+        if not self._stop_event.is_set():
+            gaps = self._db.find_co2_gaps(zone, start_ts, end_ts)
+            if gaps:
+                total_missing = sum((e - s) // 3600 for s, e in gaps)
+                self._svc_log(
+                    f"CO₂ Lückenerkennung: {total_missing} fehlende Stunden gefunden"
+                )
+
+                # Try to compute a fallback intensity from the data we do have
+                df = self._db.query_co2_intensity(zone, start_ts, end_ts)
+                if not df.empty:
+                    avg_intensity = float(df["intensity_g_per_kwh"].mean())
+                else:
+                    # No data at all – use a conservative default for DE grid
+                    avg_intensity = 400.0
+
+                now_ts_fill = int(time.time())
+                estimated_rows = []
+                for gap_start, gap_end in gaps:
+                    ts = gap_start
+                    while ts < gap_end:
+                        estimated_rows.append(
+                            (ts, zone, round(avg_intensity, 1), "estimated", now_ts_fill)
+                        )
+                        ts += 3600
+
+                if estimated_rows:
+                    est_written = self._db.upsert_co2_intensity(estimated_rows)
+                    self._svc_log(
+                        f"CO₂ Lücken gefüllt: {est_written} geschätzte Werte "
+                        f"({avg_intensity:.0f} g/kWh Durchschnitt) eingefügt"
+                    )
 
         if cb is not None:
             try:
@@ -587,10 +663,14 @@ class Co2FetchService:
             except Exception:
                 pass
 
-        if all_rows:
-            written = self._db.upsert_co2_intensity(all_rows)
-            self._svc_log(f"CO₂ Backfill abgeschlossen: {written} Werte gespeichert")
-            logger.info("Co2FetchService: stored %d intensity points", written)
-        else:
+        if failed_ranges:
+            n = len(failed_ranges)
+            self._svc_log(
+                f"CO₂ Backfill abgeschlossen mit {n} fehlgeschlagenen Chunk(s) – "
+                f"Lücken wurden mit Schätzwerten aufgefüllt"
+            )
+        elif not all_rows and not failed_ranges:
             self._svc_log("CO₂ Backfill abgeschlossen: 0 Werte – keine Daten empfangen")
+        else:
+            self._svc_log("CO₂ Backfill abgeschlossen")
         self._last_fetch_ts = time.time()

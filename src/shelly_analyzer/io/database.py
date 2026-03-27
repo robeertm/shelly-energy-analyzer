@@ -1045,6 +1045,59 @@ class EnergyDB:
         ).fetchone()
         return int(row[0]) if row and row[0] is not None else None
 
+    def find_co2_gaps(
+        self,
+        zone: str,
+        start_ts: int,
+        end_ts: int,
+        include_estimated: bool = False,
+    ) -> List[Tuple[int, int]]:
+        """Find missing hourly slots in [start_ts, end_ts) and return gap ranges.
+
+        If *include_estimated* is True, hours with ``source='estimated'`` are
+        also treated as gaps (useful for re-fetching real data).
+
+        Returns a list of (gap_start_ts, gap_end_ts) tuples where each range
+        covers one or more consecutive missing hours.
+        """
+        conn = self._conn()
+        if include_estimated:
+            # Only count non-estimated rows as "present"
+            existing = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT hour_ts FROM co2_intensity "
+                    "WHERE zone = ? AND hour_ts >= ? AND hour_ts < ? "
+                    "AND source != 'estimated'",
+                    (zone, start_ts, end_ts),
+                ).fetchall()
+            }
+        else:
+            existing = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT hour_ts FROM co2_intensity "
+                    "WHERE zone = ? AND hour_ts >= ? AND hour_ts < ?",
+                    (zone, start_ts, end_ts),
+                ).fetchall()
+            }
+        # Walk hourly slots and collect contiguous gaps
+        gaps: List[Tuple[int, int]] = []
+        ts = (start_ts // 3600) * 3600
+        gap_start: Optional[int] = None
+        while ts < end_ts:
+            if ts not in existing:
+                if gap_start is None:
+                    gap_start = ts
+            else:
+                if gap_start is not None:
+                    gaps.append((gap_start, ts))
+                    gap_start = None
+            ts += 3600
+        if gap_start is not None:
+            gaps.append((gap_start, end_ts))
+        return gaps
+
     def delete_all_co2_data(self) -> int:
         """Delete all rows from the co2_intensity table. Returns rows deleted."""
         conn = self._conn()
