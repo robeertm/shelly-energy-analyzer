@@ -53,6 +53,13 @@ class Co2Mixin:
         self._co2_fetch_svc.start()
         self.protocol("WM_DELETE_WINDOW", self._co2_on_close)
 
+    def _co2_reload(self) -> None:
+        """Trigger an immediate CO₂ data fetch from the background service."""
+        try:
+            self._co2_fetch_svc.trigger_now()
+        except Exception:
+            pass
+
     def _co2_on_close(self) -> None:
         """Stop the fetch service on window close."""
         try:
@@ -81,6 +88,12 @@ class Co2Mixin:
             textvariable=self._co2_status_var,
             foreground="gray",
         ).pack(side="right", padx=(0, 4))
+
+        ttk.Button(
+            top,
+            text=self.t("co2.btn.reload"),
+            command=self._co2_reload,
+        ).pack(side="right", padx=(0, 8))
 
         # ── Import progress bar ───────────────────────────────────────────────
         prog_frm = ttk.Frame(frm)
