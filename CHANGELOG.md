@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.15.0 - 2026-03-27
+### Added
+- **Web live view: Export tab** – New "Export" tab (📥) in the bottom navigation bar of the live web dashboard. Provides the same full export functionality previously only available on the /control page: PDF summaries, invoices, Excel export, daily/monthly reports, and ZIP bundles – all with inline preview (PDF iframe, image grid, download links), quick date presets, configurable bundle hours, and loading spinners on buttons. Translated in all 9 languages.
+
 ## 11.14.0 - 2026-03-27
 ### Improved
 - **Web export tab: complete redesign** – Export card now spans full width with a two-column layout: date range (with quick-select buttons for Today/Week/Month/Year/All and native date pickers) on the left, invoice & bundle settings on the right. Six action buttons with icons and labels in a responsive grid, each showing a loading spinner during generation.

@@ -322,7 +322,7 @@ _HTML_TEMPLATE = """<!doctype html>
       position: fixed;
       bottom: 0; left: 0; right: 0;
       display: grid;
-      grid-template-columns: repeat(6,1fr);
+      grid-template-columns: repeat(7,1fr);
       background: var(--card);
       border-top: 1px solid var(--border);
       padding-bottom: env(safe-area-inset-bottom, 0);
@@ -654,6 +654,41 @@ _HTML_TEMPLATE = """<!doctype html>
     }}
     /* ── Loading / error ── */
     .loading-msg {{ color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }}
+    /* ── Export pane ── */
+    .exp-sections {{ display: grid; grid-template-columns: 1fr; gap: 10px; }}
+    @media (min-width: 700px) {{ .exp-sections {{ grid-template-columns: 1fr 1fr; }} }}
+    .exp-section {{ border: 1px solid var(--border); border-radius: 12px; padding: 10px; background: var(--chipbg); }}
+    .exp-section h3 {{ margin: 0 0 8px; font-size: 12px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }}
+    .exp-quick {{ display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }}
+    .exp-quick button {{ font-size: 11px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--chipbg); color: var(--muted); cursor: pointer; min-height: auto; }}
+    .exp-quick button:hover {{ color: var(--fg); border-color: rgba(106,167,255,0.35); }}
+    .exp-field {{ display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }}
+    .exp-field label {{ min-width: 30px; font-size: 12px; color: var(--muted); }}
+    .exp-field input, .exp-field select {{ flex: 1; min-width: 0; }}
+    .exp-actions {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }}
+    @media (min-width: 700px) {{ .exp-actions {{ grid-template-columns: repeat(3, 1fr); }} }}
+    .exp-actions button {{ display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; font-size: 12px; text-align: center; min-height: 54px; justify-content: center; }}
+    .exp-actions button .eico {{ font-size: 18px; line-height: 1; }}
+    .exp-actions button .elbl {{ font-size: 11px; line-height: 1.2; }}
+    .exp-actions button:disabled {{ opacity: 0.5; cursor: default; }}
+    .exp-actions button.busy {{ position: relative; color: transparent; }}
+    .exp-actions button.busy::after {{ content: ""; position: absolute; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: exp-spin 0.6s linear infinite; }}
+    @keyframes exp-spin {{ to {{ transform: rotate(360deg); }} }}
+    .exp-preview {{ margin-top: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--chipbg); min-height: 120px; overflow: hidden; }}
+    .exp-preview-hdr {{ display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 6px; }}
+    .exp-preview-hdr h3 {{ margin: 0; font-size: 12px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }}
+    .exp-preview-hdr .exp-dl {{ display: flex; flex-wrap: wrap; gap: 6px; }}
+    .exp-preview-hdr .exp-dl a {{ font-size: 11px; color: var(--accent); text-decoration: none; padding: 2px 8px; border: 1px solid rgba(106,167,255,0.25); border-radius: 999px; }}
+    .exp-preview-hdr .exp-dl a:hover {{ border-color: var(--accent); }}
+    .exp-preview-body {{ padding: 10px; }}
+    .exp-preview-ph {{ display: flex; align-items: center; justify-content: center; min-height: 100px; color: var(--muted); font-size: 12px; }}
+    .exp-preview-body iframe {{ width: 100%; height: 500px; border: none; border-radius: 8px; background: #fff; }}
+    .exp-preview-body .exp-imgs {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }}
+    .exp-preview-body .exp-imgs img {{ width: 100%; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; transition: transform 0.15s; }}
+    .exp-preview-body .exp-imgs img:hover {{ transform: scale(1.02); }}
+    .exp-preview-body .exp-flinks {{ display: flex; flex-wrap: wrap; gap: 6px; }}
+    .exp-preview-body .exp-flinks a {{ display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--accent); text-decoration: none; padding: 6px 12px; border: 1px solid rgba(106,167,255,0.25); border-radius: 10px; background: rgba(106,167,255,0.06); }}
+    .exp-preview-body .exp-flinks a:hover {{ border-color: var(--accent); background: rgba(106,167,255,0.12); }}
     .error-msg {{ color: var(--pwr-high); font-size: 13px; padding: 20px 0; text-align: center; }}
     .info-msg {{ color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }}
     /* ── Compare delta ── */
@@ -735,6 +770,66 @@ _HTML_TEMPLATE = """<!doctype html>
     <div id="pane-anomalies" class="pane">
       <div id="anom-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
+
+    <!-- Export -->
+    <div id="pane-export" class="pane">
+      <div class="exp-sections">
+        <div class="exp-section">
+          <h3>{exp_daterange}</h3>
+          <div class="exp-quick" id="exp-quick-dates"></div>
+          <div class="exp-field">
+            <label for="exp-start">{exp_from}</label>
+            <input id="exp-start" type="date" />
+          </div>
+          <div class="exp-field">
+            <label for="exp-end">{exp_to}</label>
+            <input id="exp-end" type="date" />
+          </div>
+        </div>
+        <div class="exp-section">
+          <h3>{exp_invoice_settings}</h3>
+          <div class="exp-field">
+            <label for="exp-inv-period">{exp_invoice}</label>
+            <select id="exp-inv-period">
+              <option value="custom">custom</option>
+              <option value="day">day</option>
+              <option value="week">week</option>
+              <option value="month" selected>month</option>
+              <option value="year">year</option>
+            </select>
+          </div>
+          <div class="exp-field">
+            <label for="exp-inv-anchor">{exp_anchor}</label>
+            <input id="exp-inv-anchor" type="date" />
+          </div>
+          <span style="font-size:11px;color:var(--muted)">{exp_custom_note}</span>
+          <div class="exp-field" style="margin-top:6px">
+            <label for="exp-bundle-h">{exp_bundle_hours}</label>
+            <input id="exp-bundle-h" type="number" value="48" min="1" max="8760" style="width:80px;flex:0 0 80px;" />
+          </div>
+        </div>
+      </div>
+      <div class="exp-section" style="margin-top:10px">
+        <h3>{exp_actions}</h3>
+        <div class="exp-actions">
+          <button id="exp-btn-summary"><span class="eico">📄</span><span class="elbl">{exp_btn_pdf}</span></button>
+          <button id="exp-btn-invoices"><span class="eico">🧾</span><span class="elbl">{exp_btn_invoices}</span></button>
+          <button id="exp-btn-excel"><span class="eico">📊</span><span class="elbl">{exp_btn_excel}</span></button>
+          <button id="exp-btn-report-day"><span class="eico">📅</span><span class="elbl">{exp_btn_report_day}</span></button>
+          <button id="exp-btn-report-month"><span class="eico">📆</span><span class="elbl">{exp_btn_report_month}</span></button>
+          <button id="exp-btn-bundle"><span class="eico">📦</span><span class="elbl">{exp_btn_bundle}</span></button>
+        </div>
+      </div>
+      <div class="exp-preview" id="exp-preview">
+        <div class="exp-preview-hdr">
+          <h3>{exp_preview}</h3>
+          <div class="exp-dl" id="exp-dl-links"></div>
+        </div>
+        <div class="exp-preview-body" id="exp-preview-body">
+          <div class="exp-preview-ph" id="exp-preview-ph">{exp_no_preview}</div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <nav id="bottom-nav">
@@ -761,6 +856,10 @@ _HTML_TEMPLATE = """<!doctype html>
     <button class="nav-btn" onclick="switchPane('anomalies',this)">
       <span class="nav-icon">🔍</span>
       <span class="nav-label">{web_tab_anomalies}</span>
+    </button>
+    <button class="nav-btn" onclick="switchPane('export',this)">
+      <span class="nav-icon">📥</span>
+      <span class="nav-label">{web_tab_export}</span>
     </button>
   </nav>
 </div>
@@ -844,6 +943,7 @@ function onPaneActivated(name) {{
     else if (name === 'solar') initSolar();
     else if (name === 'compare') initCompare();
     else if (name === 'anomalies') loadAnomalies();
+    else if (name === 'export') initExport();
   }}
 }}
 
@@ -2259,6 +2359,167 @@ function esc(s) {{
     .replace(/</g,'&lt;')
     .replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;');
+}}
+
+/* ──────────────────────────────────────────────
+   EXPORT PANE
+────────────────────────────────────────────── */
+let _expInited = false;
+function initExport() {{
+  if (_expInited) return;
+  _expInited = true;
+
+  // Quick date presets
+  const qd = document.getElementById('exp-quick-dates');
+  const presets = [
+    ['today', '{exp_today}'],
+    ['week', '{exp_this_week}'],
+    ['month', '{exp_this_month}'],
+    ['year', '{exp_this_year}'],
+    ['all', '{exp_all}'],
+  ];
+  presets.forEach(([k, lbl]) => {{
+    const b = document.createElement('button');
+    b.textContent = lbl;
+    b.addEventListener('click', () => {{
+      const now = new Date();
+      const fmt = d => d.toISOString().slice(0,10);
+      const eS = document.getElementById('exp-start');
+      const eE = document.getElementById('exp-end');
+      if (k==='today') {{ eS.value=fmt(now); eE.value=fmt(now); }}
+      else if (k==='week') {{ const m=new Date(now); m.setDate(now.getDate()-now.getDay()+(now.getDay()===0?-6:1)); eS.value=fmt(m); eE.value=fmt(now); }}
+      else if (k==='month') {{ eS.value=fmt(new Date(now.getFullYear(),now.getMonth(),1)); eE.value=fmt(now); }}
+      else if (k==='year') {{ eS.value=fmt(new Date(now.getFullYear(),0,1)); eE.value=fmt(now); }}
+      else {{ eS.value=''; eE.value=''; }}
+    }});
+    qd.appendChild(b);
+  }});
+
+  // Helpers
+  function setBusy(btn, on) {{
+    if (on) {{ btn.disabled=true; btn.classList.add('busy'); }}
+    else {{ btn.disabled=false; btn.classList.remove('busy'); }}
+  }}
+  function expPreview(files) {{
+    const body = document.getElementById('exp-preview-body');
+    const dl = document.getElementById('exp-dl-links');
+    const ph = document.getElementById('exp-preview-ph');
+    if (ph) ph.style.display='none';
+    body.querySelectorAll('iframe,.exp-imgs,.exp-flinks,.exp-preview-ph').forEach(e => {{ if(e!==ph) e.remove(); }});
+    dl.innerHTML='';
+    if (!files || !files.length) {{ if(ph){{ ph.style.display=''; ph.textContent='–'; }} return; }}
+    files.forEach(f => {{
+      const a = document.createElement('a');
+      a.href = f.url||''; a.textContent = f.name||'file'; a.target='_blank';
+      dl.appendChild(a);
+    }});
+    const pdfs = files.filter(f => (f.name||'').toLowerCase().endsWith('.pdf'));
+    const imgs = files.filter(f => /[.](png|jpg|jpeg|svg)$/i.test(f.name||''));
+    const rest = files.filter(f => !pdfs.includes(f) && !imgs.includes(f));
+    if (pdfs.length) {{
+      const ifr = document.createElement('iframe');
+      ifr.src = pdfs[0].url; body.appendChild(ifr);
+    }}
+    if (imgs.length) {{
+      const g = document.createElement('div'); g.className='exp-imgs';
+      imgs.forEach(f => {{
+        const im = document.createElement('img');
+        im.src=f.url; im.alt=f.name; im.title=f.name;
+        im.addEventListener('click', ()=>window.open(f.url,'_blank'));
+        g.appendChild(im);
+      }});
+      body.appendChild(g);
+    }}
+    if (rest.length || (!pdfs.length && !imgs.length)) {{
+      const l = document.createElement('div'); l.className='exp-flinks';
+      ((!pdfs.length && !imgs.length) ? files : rest).forEach(f => {{
+        const a = document.createElement('a');
+        a.href=f.url||''; a.target='_blank'; a.textContent=f.name||'file';
+        l.appendChild(a);
+      }});
+      body.appendChild(l);
+    }}
+  }}
+  function expError(msg) {{
+    const body = document.getElementById('exp-preview-body');
+    const ph = document.getElementById('exp-preview-ph');
+    body.querySelectorAll('iframe,.exp-imgs,.exp-flinks').forEach(e=>e.remove());
+    document.getElementById('exp-dl-links').innerHTML='';
+    if(ph){{ ph.style.display=''; ph.textContent=msg; ph.style.color='var(--accent)'; }}
+  }}
+  function expJobStarted(jid) {{
+    const body = document.getElementById('exp-preview-body');
+    const ph = document.getElementById('exp-preview-ph');
+    body.querySelectorAll('iframe,.exp-imgs,.exp-flinks').forEach(e=>e.remove());
+    document.getElementById('exp-dl-links').innerHTML='';
+    if(ph){{ ph.style.display=''; ph.textContent='Job #'+jid+' gestartet – siehe Jobs.'; ph.style.color=''; }}
+  }}
+
+  async function expRun(action, params) {{
+    const r = await fetch('/api/run', {{
+      method: 'POST',
+      headers: {{'Content-Type':'application/json'}},
+      body: JSON.stringify({{action, params: params||{{}}}})
+    }});
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }}
+
+  // Button handlers
+  document.getElementById('exp-btn-summary').addEventListener('click', async function() {{
+    setBusy(this,true);
+    try {{
+      const res = await expRun('export_summary', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value}});
+      if (res && res.files) expPreview(res.files); else expError(JSON.stringify(res,null,2));
+    }} catch(e){{ expError('Error: '+(e.message||e)); }}
+    setBusy(this,false);
+  }});
+
+  document.getElementById('exp-btn-invoices').addEventListener('click', async function() {{
+    setBusy(this,true);
+    try {{
+      const res = await expRun('export_invoices', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value, period: document.getElementById('exp-inv-period').value, anchor: document.getElementById('exp-inv-anchor').value}});
+      if (res && res.files) expPreview(res.files); else expError(JSON.stringify(res,null,2));
+    }} catch(e){{ expError('Error: '+(e.message||e)); }}
+    setBusy(this,false);
+  }});
+
+  document.getElementById('exp-btn-excel').addEventListener('click', async function() {{
+    setBusy(this,true);
+    try {{
+      const res = await expRun('export_excel', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value}});
+      if (res && res.files) expPreview(res.files); else expError(JSON.stringify(res,null,2));
+    }} catch(e){{ expError('Error: '+(e.message||e)); }}
+    setBusy(this,false);
+  }});
+
+  document.getElementById('exp-btn-bundle').addEventListener('click', async function() {{
+    setBusy(this,true);
+    try {{
+      const hours = parseInt(document.getElementById('exp-bundle-h').value)||48;
+      const res = await expRun('bundle', {{hours}});
+      if (res && res.files) expPreview(res.files); else expError(JSON.stringify(res,null,2));
+    }} catch(e){{ expError('Error: '+(e.message||e)); }}
+    setBusy(this,false);
+  }});
+
+  document.getElementById('exp-btn-report-day').addEventListener('click', async function() {{
+    setBusy(this,true);
+    try {{
+      const res = await expRun('report', {{period:'day', anchor: document.getElementById('exp-inv-anchor').value}});
+      if (res && res.job && res.job.id) expJobStarted(res.job.id); else expError(JSON.stringify(res,null,2));
+    }} catch(e){{ expError('Error: '+(e.message||e)); }}
+    setBusy(this,false);
+  }});
+
+  document.getElementById('exp-btn-report-month').addEventListener('click', async function() {{
+    setBusy(this,true);
+    try {{
+      const res = await expRun('report', {{period:'month', anchor: document.getElementById('exp-inv-anchor').value}});
+      if (res && res.job && res.job.id) expJobStarted(res.job.id); else expError(JSON.stringify(res,null,2));
+    }} catch(e){{ expError('Error: '+(e.message||e)); }}
+    setBusy(this,false);
+  }});
 }}
 
 /* ──────────────────────────────────────────────
@@ -4569,6 +4830,30 @@ class LiveWebDashboard:
                 "web_tab_solar": _t(self.lang, "web.tab.solar"),
                 "web_tab_compare": _t(self.lang, "web.tab.compare"),
                 "web_tab_anomalies": _t(self.lang, "web.tab.anomalies"),
+                "web_tab_export": _t(self.lang, "web.tab.export"),
+                # Export pane
+                "exp_daterange": _t(self.lang, "web.control.export.daterange"),
+                "exp_from": _t(self.lang, "web.control.plots.from"),
+                "exp_to": _t(self.lang, "web.control.plots.to"),
+                "exp_invoice_settings": _t(self.lang, "web.control.export.invoice_settings"),
+                "exp_invoice": _t(self.lang, "web.control.invoice"),
+                "exp_anchor": _t(self.lang, "web.control.anchor"),
+                "exp_custom_note": _t(self.lang, "web.control.custom_note"),
+                "exp_bundle_hours": _t(self.lang, "web.control.export.bundle_hours"),
+                "exp_actions": _t(self.lang, "web.control.export.actions"),
+                "exp_btn_pdf": _t(self.lang, "web.control.btn.pdf"),
+                "exp_btn_invoices": _t(self.lang, "web.control.btn.invoices"),
+                "exp_btn_excel": _t(self.lang, "web.control.btn.excel"),
+                "exp_btn_bundle": _t(self.lang, "web.control.btn.bundle"),
+                "exp_btn_report_day": _t(self.lang, "web.control.btn.report_day"),
+                "exp_btn_report_month": _t(self.lang, "web.control.btn.report_month"),
+                "exp_preview": _t(self.lang, "web.control.export.preview"),
+                "exp_no_preview": _t(self.lang, "web.control.export.no_preview"),
+                "exp_today": _t(self.lang, "web.control.export.today"),
+                "exp_this_week": _t(self.lang, "web.control.export.this_week"),
+                "exp_this_month": _t(self.lang, "web.control.export.this_month"),
+                "exp_this_year": _t(self.lang, "web.control.export.this_year"),
+                "exp_all": _t(self.lang, "web.control.export.all"),
                 # Button titles
                 "web_btn_freeze_title": _t(self.lang, "web.dash.freeze_resume"),
                 "web_btn_settings_title": _t(self.lang, "web.dash.device_settings"),
