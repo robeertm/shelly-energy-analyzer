@@ -6213,6 +6213,8 @@ class CoreMixin:
                         err_str = str(exc)
                         if "401" in err_str or "nauthorized" in err_str or "ecurity" in err_str:
                             short = "Token ungültig / Invalid token"
+                        elif "503" in err_str or "502" in err_str or "504" in err_str:
+                            short = "ENTSO-E API nicht erreichbar (HTTP 5xx)"
                         elif "timeout" in err_str.lower() or "onnect" in err_str:
                             short = "API nicht erreichbar / Unreachable"
                         else:

@@ -332,13 +332,8 @@ class EntsoeClient:
                 raw = resp.read()
                 return raw.decode("utf-8", errors="replace")
         except urllib.error.HTTPError as exc:
-            body = ""
-            try:
-                body = exc.read().decode("utf-8", errors="replace")[:300]
-            except Exception:
-                pass
             raise RuntimeError(
-                f"ENTSO-E API HTTP {exc.code}: {exc.reason}. {body}"
+                f"ENTSO-E API HTTP {exc.code}: {exc.reason}"
             ) from exc
         except Exception as exc:
             raise RuntimeError(f"ENTSO-E API request failed: {exc}") from exc
