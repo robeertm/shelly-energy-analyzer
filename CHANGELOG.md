@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.17.2 - 2026-03-27
+### Fixed
+- **Web dashboard blank page fix** – The solar settings toggle button used escaped quotes in an inline `onclick` handler that broke the entire page's JavaScript execution. Replaced with a proper `addEventListener` binding after DOM insertion. Also fixed `_solarSettingsHtml()` to read config fields from both `data.config` (unconfigured response) and directly from `data` (configured response).
+
 ## 11.17.1 - 2026-03-27
 ### Added
 - **Desktop settings: new solar fields** – Settings → Solar / PV now shows input fields for installed capacity (kWp), battery storage (kWh), and lifecycle CO₂ per kWp. All three are persisted to config.json on save.
