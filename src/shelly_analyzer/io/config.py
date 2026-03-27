@@ -288,6 +288,12 @@ class SolarConfig:
     pv_meter_device_key: str = ""
     # Feed-in tariff (Einspeisevergütung) in €/kWh
     feed_in_tariff_eur_per_kwh: float = 0.082
+    # Installed PV capacity in kWp (0 = unknown/not set)
+    kw_peak: float = 0.0
+    # Battery storage capacity in kWh (0 = no battery)
+    battery_kwh: float = 0.0
+    # Embodied CO₂ of PV production in kg per kWp (lifecycle, default ~1000 kg/kWp for typical Si panels)
+    co2_production_kg_per_kwp: float = 1000.0
 
 
 @dataclass(frozen=True)
@@ -652,6 +658,12 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
             solar_raw.get("feed_in_tariff_eur_per_kwh", SolarConfig.feed_in_tariff_eur_per_kwh),
             SolarConfig.feed_in_tariff_eur_per_kwh,
         ),
+        kw_peak=_coerce_float(solar_raw.get("kw_peak", SolarConfig.kw_peak), SolarConfig.kw_peak),
+        battery_kwh=_coerce_float(solar_raw.get("battery_kwh", SolarConfig.battery_kwh), SolarConfig.battery_kwh),
+        co2_production_kg_per_kwp=_coerce_float(
+            solar_raw.get("co2_production_kg_per_kwp", SolarConfig.co2_production_kg_per_kwp),
+            SolarConfig.co2_production_kg_per_kwp,
+        ),
     )
 
     tou_raw = raw.get("tou", {}) if isinstance(raw.get("tou"), dict) else {}
@@ -918,6 +930,9 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "enabled": bool(getattr(cfg.solar, "enabled", False)),
             "pv_meter_device_key": str(getattr(cfg.solar, "pv_meter_device_key", "") or ""),
             "feed_in_tariff_eur_per_kwh": float(getattr(cfg.solar, "feed_in_tariff_eur_per_kwh", 0.082)),
+            "kw_peak": float(getattr(cfg.solar, "kw_peak", 0.0)),
+            "battery_kwh": float(getattr(cfg.solar, "battery_kwh", 0.0)),
+            "co2_production_kg_per_kwp": float(getattr(cfg.solar, "co2_production_kg_per_kwp", 1000.0)),
         },
         "pricing": {
             "electricity_price_eur_per_kwh": cfg.pricing.electricity_price_eur_per_kwh,

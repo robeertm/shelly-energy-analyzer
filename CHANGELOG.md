@@ -1,5 +1,19 @@
 # Changelog
 
+## 11.17.0 - 2026-03-27
+### Added
+- **Solar CO₂ savings** – The Solar tab (web + desktop) now calculates and displays how much CO₂ was avoided by PV production. Uses real ENTSO-E grid intensity when available, falls back to static 380 g/kWh. Shows:
+  - CO₂ saved (kg) – PV production × grid intensity
+  - CO₂ from grid (kg) – actual grid import × intensity
+  - Equivalents: tree-days and car-km avoided
+- **Solar system config** – New configurable fields in `solar` config section:
+  - `kw_peak` – installed PV capacity in kWp
+  - `battery_kwh` – battery storage capacity in kWh (0 = no battery)
+  - `co2_production_kg_per_kwp` – embodied CO₂ per kWp for lifecycle analysis (default 1000 kg)
+- **Web Solar tab: system info cards** – When `kw_peak` is configured, shows installed capacity, battery size, and embodied CO₂ from panel production
+- **Costs tab: solar CO₂ offset** – Monthly costs API response now includes `solar_co2_saved_month_kg` showing PV-displaced CO₂ emissions
+- **Desktop Solar tab: 4 new CO₂ cards** – CO₂ saved, CO₂ grid, tree-days equivalent, car-km avoided
+
 ## 11.16.0 - 2026-03-27
 ### Improved
 - **Web export: professional PDF reports** – Both "PDF Summary + Plots" and "Report (Tag/Monat)" now generate the same rich, professional multi-page PDFs previously only available in email reports. Includes:
