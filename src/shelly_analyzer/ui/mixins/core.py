@@ -4821,7 +4821,7 @@ class CoreMixin:
             row = ttk.Frame(up_outer)
             row.pack(anchor='w', pady=(0, 10))
 
-            self.btn_upd_check = ttk.Button(row, text=self.t('updates.check_now'), command=lambda: self._updates_check_async(auto_install=False))
+            self.btn_upd_check = ttk.Button(row, text=self.t('updates.check_now'), command=self._updates_on_check_clicked)
             self.btn_upd_check.pack(side='left', padx=(0, 8))
 
             self.btn_upd_install = ttk.Button(row, text=self.t('updates.install'), command=self._updates_install_latest, state="disabled")
