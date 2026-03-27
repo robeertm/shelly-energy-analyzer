@@ -1,5 +1,13 @@
 # Changelog
 
+## 11.8.1 - 2026-03-27
+### Fixed
+- **CO₂ bar labels now shown on all bars up to 31** – Previously labels were thinned starting at 25 bars, causing every-other-bar gaps in "Days" mode (30 bars). Threshold raised to 31.
+- **More spacing between kWh and CO₂ text** – Increased line spacing (0.85 → 1.15) and vertical offset above bars to prevent text overlap.
+
+### Improved
+- **Cost tab uses real ENTSO-E CO₂ data** – The cost tab now computes CO₂ emissions using actual hourly grid intensity from ENTSO-E (joined with per-device hourly energy) instead of a static g/kWh factor. Falls back to the configured static intensity if ENTSO-E is not set up or has no data for the period.
+
 ## 11.8.0 - 2026-03-27
 ### Added
 - **CO₂ bar coloring by intensity** – Bars in the CO₂ plots tab are now colored on a green → yellow → red gradient based on the average grid CO₂ intensity for each time bucket. Uses the existing green/dirty threshold settings.

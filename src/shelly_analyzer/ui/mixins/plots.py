@@ -1538,8 +1538,8 @@ class PlotsMixin:
                     if hs:
                         y0, y1 = ax.get_ylim()
                         hmax = max(hs)
-                        # Extra headroom for two-line labels
-                        margin = max(0.4, abs(hmax) * 0.22)
+                        # Extra headroom for two-line labels (kWh + CO₂)
+                        margin = max(0.5, abs(hmax) * 0.28)
                         ax.set_ylim(y0, max(y1, hmax + margin))
                 except Exception:
                     pass
@@ -1547,8 +1547,8 @@ class PlotsMixin:
                 try:
                     n_bars = len(bars)
                     step = 1
-                    if n_bars > 24:
-                        step = max(1, int(math.ceil(n_bars / 24)))
+                    if n_bars > 31:
+                        step = max(1, int(math.ceil(n_bars / 31)))
                     fontsize = max(4, min(10, int(base) - 1))
 
                     for i, b in enumerate(bars):
@@ -1580,11 +1580,11 @@ class PlotsMixin:
                         ax.annotate(
                             label_txt,
                             xy=(b.get_x() + b.get_width() / 2, h),
-                            xytext=(0, 3),
+                            xytext=(0, 4),
                             textcoords="offset points",
                             ha="center", va="bottom",
                             fontsize=fontsize,
-                            linespacing=0.85,
+                            linespacing=1.15,
                         )
                 except Exception:
                     pass
