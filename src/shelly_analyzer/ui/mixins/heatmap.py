@@ -52,7 +52,7 @@ class HeatmapMixin:
         self._heatmap_unit_var = tk.StringVar(value="kWh")
         unit_cb = ttk.Combobox(
             ctrl, textvariable=self._heatmap_unit_var,
-            values=["kWh", "€"], width=7, state="readonly",
+            values=["kWh", "€", "g CO₂"], width=7, state="readonly",
         )
         unit_cb.current(0)
         unit_cb.pack(side="left", padx=(0, 14))
@@ -127,8 +127,10 @@ class HeatmapMixin:
         self._heatmap_cal_grid_start: Optional[date] = None
         self._heatmap_cal_year: Optional[int] = None
         self._heatmap_cal_use_eur: bool = False
+        self._heatmap_cal_use_co2: bool = False
         self._heatmap_hourly_z: Optional[np.ndarray] = None
         self._heatmap_hourly_use_eur: bool = False
+        self._heatmap_hourly_use_co2: bool = False
 
         # Connect mouse-motion events (connections survive fig.clf())
         self._heatmap_cal_canvas.mpl_connect(
@@ -239,7 +241,7 @@ class HeatmapMixin:
             logger.debug("heatmap load_df error for '%s' year=%s: %s", device_key, year, e)
             return None
 
-    def _heatmap_daily(self, df, use_eur: bool, price_kwh: float) -> Dict[str, float]:
+    def _heatmap_daily(self, df, use_eur: bool, price_kwh: float, use_co2: bool = False) -> Dict[str, float]:
         """Aggregate DataFrame to daily totals.  Returns {date_str: value}."""
         result: Dict[str, float] = {}
         try:
@@ -250,26 +252,32 @@ class HeatmapMixin:
             # Convert Unix timestamp → local date
             # datetime.fromtimestamp uses local timezone (DST-aware)
             local_dates = df[ts_col].apply(lambda ts: datetime.fromtimestamp(int(ts)).date())
-            kwh_series = df["energy_kwh"].fillna(0.0)
 
             tmp = df.copy()
             tmp["_date"] = local_dates
-            tmp["_kwh"] = kwh_series
-            daily = tmp.groupby("_date")["_kwh"].sum()
 
-            for d, kwh in daily.items():
-                val = float(kwh) * price_kwh if use_eur else float(kwh)
-                result[d.strftime("%Y-%m-%d")] = max(0.0, val)
+            if use_co2 and "co2_g" in df.columns:
+                tmp["_val"] = df["co2_g"].fillna(0.0)
+            else:
+                tmp["_val"] = df["energy_kwh"].fillna(0.0)
+
+            daily = tmp.groupby("_date")["_val"].sum()
+
+            for d, val in daily.items():
+                v = float(val)
+                if use_eur and not use_co2:
+                    v = v * price_kwh
+                result[d.strftime("%Y-%m-%d")] = max(0.0, v)
         except Exception as e:
             logger.debug("heatmap _daily error: %s", e)
         return result
 
-    def _heatmap_hourly(self, df, use_eur: bool, price_kwh: float) -> Dict[Tuple[int, int], float]:
+    def _heatmap_hourly(self, df, use_eur: bool, price_kwh: float, use_co2: bool = False) -> Dict[Tuple[int, int], float]:
         """Aggregate DataFrame to weekday×hour averages.
 
         Returns {(weekday, hour): value}  where weekday 0=Mon … 6=Sun.
-        Each cell holds the *mean* kWh across all occurrences of that
-        weekday/hour combination in the selected year (e.g. ~52 Thursdays),
+        Each cell holds the *mean* kWh (or g CO₂) across all occurrences of
+        that weekday/hour combination in the selected year (e.g. ~52 Thursdays),
         so the value represents a typical hourly consumption rather than a
         yearly sum.
         """
@@ -283,14 +291,88 @@ class HeatmapMixin:
 
             tmp = df.copy()
             tmp["_wd_hr"] = tmp[ts_col].apply(_wd_hr)
-            tmp["_kwh"] = df["energy_kwh"].fillna(0.0)
-            grouped = tmp.groupby("_wd_hr")["_kwh"].mean()
 
-            for (wd, hr), kwh in grouped.items():
-                val = float(kwh) * price_kwh if use_eur else float(kwh)
-                result[(int(wd), int(hr))] = max(0.0, val)
+            if use_co2 and "co2_g" in df.columns:
+                tmp["_val"] = df["co2_g"].fillna(0.0)
+            else:
+                tmp["_val"] = df["energy_kwh"].fillna(0.0)
+
+            grouped = tmp.groupby("_wd_hr")["_val"].mean()
+
+            for (wd, hr), val in grouped.items():
+                v = float(val)
+                if use_eur and not use_co2:
+                    v = v * price_kwh
+                result[(int(wd), int(hr))] = max(0.0, v)
         except Exception as e:
             logger.debug("heatmap _hourly error: %s", e)
+        return result
+
+    def _heatmap_enrich_co2(self, df, device_key: str, year: int):
+        """Add a ``co2_g`` column by joining hourly energy with CO₂ intensity.
+
+        If real ENTSO-E data is available it is used; otherwise a static
+        fallback factor from the pricing config is applied.
+        """
+        import pandas as pd
+
+        ts_col = "timestamp" if "timestamp" in df.columns else "ts"
+        result = df.copy()
+        result["co2_g"] = 0.0
+
+        co2_cfg = getattr(self.cfg, "co2", None)
+        zone = getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU"
+
+        start_ts = int(datetime(year, 1, 1).timestamp())
+        end_ts = int(datetime(year + 1, 1, 1).timestamp())
+
+        entsoe_used = False
+        try:
+            entsoe_token = getattr(co2_cfg, "entsoe_token", "") or ""
+            if entsoe_token and hasattr(self.storage, "db"):
+                df_co2 = self.storage.db.query_co2_intensity(zone, start_ts, end_ts)
+                if not df_co2.empty:
+                    # Align on hour_ts
+                    merged = pd.merge(
+                        result[[ts_col, "energy_kwh"]].rename(columns={ts_col: "hour_ts"}),
+                        df_co2[["hour_ts", "intensity_g_per_kwh"]],
+                        on="hour_ts", how="left",
+                    )
+                    # Fill missing intensities with NaN (will use fallback below)
+                    matched = merged["intensity_g_per_kwh"].notna()
+                    if matched.any():
+                        result.loc[matched.values, "co2_g"] = (
+                            merged.loc[matched, "energy_kwh"].values
+                            * merged.loc[matched, "intensity_g_per_kwh"].values
+                        )
+                        entsoe_used = True
+                        # For rows without ENTSO-E data, use static fallback
+                        unmatched = ~matched
+                        if unmatched.any():
+                            try:
+                                fallback_g = float(
+                                    getattr(getattr(self.cfg, "pricing", None),
+                                            "co2_intensity_g_per_kwh", 380.0) or 380.0
+                                )
+                            except Exception:
+                                fallback_g = 380.0
+                            result.loc[unmatched.values, "co2_g"] = (
+                                result.loc[unmatched.values, "energy_kwh"].fillna(0.0) * fallback_g
+                            )
+        except Exception as e:
+            logger.debug("heatmap CO₂ ENTSO-E join failed: %s", e)
+
+        if not entsoe_used:
+            # Static fallback: use configured g/kWh
+            try:
+                fallback_g = float(
+                    getattr(getattr(self.cfg, "pricing", None),
+                            "co2_intensity_g_per_kwh", 380.0) or 380.0
+                )
+            except Exception:
+                fallback_g = 380.0
+            result["co2_g"] = result["energy_kwh"].fillna(0.0) * fallback_g
+
         return result
 
     # ── Public refresh ────────────────────────────────────────────────────────
@@ -313,7 +395,9 @@ class HeatmapMixin:
             except (ValueError, IndexError):
                 device_key = dev_keys[0]
 
-            use_eur = self._heatmap_unit_var.get() == "€"
+            unit_sel = self._heatmap_unit_var.get()
+            use_eur = unit_sel == "€"
+            use_co2 = unit_sel == "g CO₂"
             try:
                 year = int(self._heatmap_year_var.get())
             except Exception:
@@ -331,11 +415,15 @@ class HeatmapMixin:
                 self._heatmap_show_no_data()
                 return
 
-            daily = self._heatmap_daily(df, use_eur, price_kwh)
-            hourly = self._heatmap_hourly(df, use_eur, price_kwh)
+            if use_co2:
+                # Join hourly energy with CO₂ intensity from ENTSO-E
+                df = self._heatmap_enrich_co2(df, device_key, year)
 
-            self._draw_calendar_heatmap(daily, year, use_eur)
-            self._draw_hourly_heatmap(hourly, year, use_eur)
+            daily = self._heatmap_daily(df, use_eur, price_kwh, use_co2)
+            hourly = self._heatmap_hourly(df, use_eur, price_kwh, use_co2)
+
+            self._draw_calendar_heatmap(daily, year, use_eur, use_co2)
+            self._draw_hourly_heatmap(hourly, year, use_eur, use_co2)
         except Exception as e:
             logger.debug("_refresh_heatmap error: %s", e)
 
@@ -380,6 +468,7 @@ class HeatmapMixin:
         daily: Dict[str, float],
         year: int,
         use_eur: bool,
+        use_co2: bool = False,
     ) -> None:
         """Draw a GitHub-contribution-style calendar heatmap."""
         try:
@@ -449,7 +538,7 @@ class HeatmapMixin:
 
             # Colorbar
             try:
-                unit_label = "€" if use_eur else "kWh"
+                unit_label = "g CO₂" if use_co2 else ("€" if use_eur else "kWh")
                 cb = fig.colorbar(pc, ax=ax, orientation="vertical", pad=0.01, fraction=0.025)
                 cb.ax.tick_params(colors=fg, labelsize=8)
                 cb.set_label(unit_label, color=fg, fontsize=9)
@@ -483,7 +572,7 @@ class HeatmapMixin:
                 spine.set_color(fg)
             ax.tick_params(axis="both", colors=fg)
 
-            unit_label = "€" if use_eur else "kWh"
+            unit_label = "g CO₂" if use_co2 else ("€" if use_eur else "kWh")
             ax.set_title(
                 self.t("heatmap.calendar.subtitle", year=year, unit=unit_label),
                 color=fg, fontsize=10, pad=4,
@@ -494,6 +583,7 @@ class HeatmapMixin:
             self._heatmap_cal_grid_start = grid_start
             self._heatmap_cal_year = year
             self._heatmap_cal_use_eur = use_eur
+            self._heatmap_cal_use_co2 = use_co2
 
             try:
                 canvas.get_tk_widget().configure(bg=bg)
@@ -512,6 +602,7 @@ class HeatmapMixin:
         hourly: Dict[Tuple[int, int], float],
         year: int,
         use_eur: bool,
+        use_co2: bool = False,
     ) -> None:
         """Draw a weekday × hour heatmap."""
         try:
@@ -561,7 +652,7 @@ class HeatmapMixin:
 
             # Colorbar
             try:
-                unit_label = "€" if use_eur else "kWh"
+                unit_label = "g CO₂" if use_co2 else ("€" if use_eur else "kWh")
                 cb = fig.colorbar(pc, ax=ax, orientation="vertical", pad=0.01, fraction=0.025)
                 cb.ax.tick_params(colors=fg, labelsize=8)
                 cb.set_label(unit_label, color=fg, fontsize=9)
@@ -587,7 +678,7 @@ class HeatmapMixin:
                 spine.set_color(fg)
             ax.tick_params(axis="both", colors=fg)
 
-            unit_label = "€" if use_eur else "kWh"
+            unit_label = "g CO₂" if use_co2 else ("€" if use_eur else "kWh")
             ax.set_title(
                 self.t("heatmap.hourly.subtitle", year=year, unit=unit_label),
                 color=fg, fontsize=10, pad=4,
@@ -598,6 +689,7 @@ class HeatmapMixin:
             # Store data for tooltip callbacks
             self._heatmap_hourly_z = z
             self._heatmap_hourly_use_eur = use_eur
+            self._heatmap_hourly_use_co2 = use_co2
 
             try:
                 canvas.get_tk_widget().configure(bg=bg)
@@ -642,7 +734,10 @@ class HeatmapMixin:
                 tooltip.place_forget()
                 return
 
-            unit = "€" if self._heatmap_cal_use_eur else "kWh"
+            if getattr(self, "_heatmap_cal_use_co2", False):
+                unit = "g CO₂"
+            else:
+                unit = "€" if self._heatmap_cal_use_eur else "kWh"
             text = f"{d.strftime('%d.%m.%Y')}: {val:.2f} {unit}"
 
             canvas_h = self._heatmap_cal_canvas.get_tk_widget().winfo_height()
@@ -677,7 +772,10 @@ class HeatmapMixin:
             val = z[row, col]
             day_labels = self._heatmap_day_labels()
             day_name = day_labels[row]
-            unit = "€" if self._heatmap_hourly_use_eur else "kWh"
+            if getattr(self, "_heatmap_hourly_use_co2", False):
+                unit = "g CO₂"
+            else:
+                unit = "€" if self._heatmap_hourly_use_eur else "kWh"
             text = f"{day_name} {col:02d}:00–{col + 1:02d}:00: {val:.2f} {unit}"
 
             canvas_h = self._heatmap_hourly_canvas.get_tk_widget().winfo_height()

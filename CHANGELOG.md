@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.9.0 - 2026-03-27
+### Added
+- **Heatmap: CO₂ display mode** – The heatmap tab now offers "g CO₂" as a third unit alongside kWh and €. When selected, both the calendar heatmap and the weekday×hour heatmap show CO₂ emissions per cell using real ENTSO-E hourly grid intensity data. Falls back to the static g/kWh factor from pricing settings if ENTSO-E is not configured or has no data for the period. Tooltips and colorbar also display g CO₂.
+
 ## 11.8.1 - 2026-03-27
 ### Fixed
 - **CO₂ bar labels now shown on all bars up to 31** – Previously labels were thinned starting at 25 bars, causing every-other-bar gaps in "Days" mode (30 bars). Threshold raised to 31.
