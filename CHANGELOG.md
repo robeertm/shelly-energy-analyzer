@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.4.0 - 2026-03-27
+### Added
+- **CO₂ tab: "Reload" button** – A button in the CO₂ tab title bar lets the user trigger an immediate data fetch from ENTSO-E without waiting for the next scheduled auto-fetch. Clicking it calls `Co2FetchService.trigger_now()` which wakes the background service instantly. Button label translated into all 9 languages (de, en, es, fr, pt, it, pl, cs, ru).
+
 ## 11.3.0 - 2026-03-27
 ### Fixed
 - **Critical: ENTSO-E PSR type mapping was completely wrong** – The `_PSR_NAMES` dictionary in `entsoe.py` mapped every code from B03 onwards to the wrong fuel type. The mapping appeared to have been constructed by skipping B03 (Fossil Coal-derived gas) and then shifting all subsequent codes by one position. Concrete examples of the corruption: B05 (Fossil Hard coal) was labelled `"oil"` and received an oil CO₂ factor (650 g/kWh instead of 820); B08 (Fossil Peat, ~1150 g/kWh) was labelled `"hydro_pumped"` and received a lifecycle factor of 24 g/kWh; B14 (Nuclear, 12 g/kWh) was labelled `"solar"` and received 45 g/kWh; B16 (Solar, 45 g/kWh) was labelled `"wind_offshore"` and received 12 g/kWh. All 20 PSR codes (B01–B20) are now mapped correctly according to the official ENTSO-E API documentation (Table 8).
