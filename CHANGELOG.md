@@ -1,5 +1,12 @@
 # Changelog
 
+## 11.14.0 - 2026-03-27
+### Improved
+- **Web export tab: complete redesign** – Export card now spans full width with a two-column layout: date range (with quick-select buttons for Today/Week/Month/Year/All and native date pickers) on the left, invoice & bundle settings on the right. Six action buttons with icons and labels in a responsive grid, each showing a loading spinner during generation.
+- **Web export tab: inline preview** – New preview area at the bottom of the export card displays generated PDFs as embedded iframes, images in a clickable grid, and download links in the header for quick access.
+- **Web export tab: Excel export** – New "Excel Export" button exports device energy data as `.xlsx` with one sheet per device, optionally filtered by date range.
+- **Web export tab: configurable bundle hours** – ZIP bundle hours are now adjustable via an input field (default 48h) instead of being hardcoded.
+
 ## 11.13.0 - 2026-03-27
 ### Improved
 - **CO₂ charts: smooth intensity-based gradient coloring** – CO₂ bar charts in Telegram summaries and email/PDF reports now use the same smooth green→yellow→red gradient as the desktop app, colored by actual ENTSO-E grid intensity (g CO₂/kWh) per bar instead of fixed absolute thresholds. Uses configurable green/dirty thresholds from CO₂ settings.
