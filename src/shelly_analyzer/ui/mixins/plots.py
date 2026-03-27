@@ -1303,8 +1303,13 @@ class PlotsMixin:
                     b = pend.date().isoformat() if pend is not None else "…"
                     range_lbl = f" | {a}–{b}"
                 try:
-                    _co2_g = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
-                    co2_lbl = f" / {total * _co2_g / 1000.0:.2f} kg CO₂" if _co2_g > 0 else ""
+                    _ps = int(pstart.timestamp()) if pstart is not None else 0
+                    _pe = int(pend.timestamp()) if pend is not None else 0
+                    if _ps and _pe:
+                        _co2_kg, _co2_g, _ = self._calc_co2_for_range(_ps, _pe, device_key=key, kwh_fallback=total)
+                    else:
+                        _co2_kg, _co2_g = total * 380.0 / 1000.0, 380.0
+                    co2_lbl = f" / {_co2_kg:.2f} kg CO₂" if _co2_kg > 0 else ""
                 except Exception:
                     co2_lbl = ""
                 ax.set_title(f"{dcfg.name} – {self._pretty_kwh_mode(mode)}{range_lbl} | {_fmt_kwh(total)} ({_fmt_eur(cost)}){co2_lbl}")
@@ -2165,8 +2170,13 @@ class PlotsMixin:
                     b = pend.date().isoformat() if pend is not None else "…"
                     range_lbl = f" | {a}–{b}"
                 try:
-                    _co2_g = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
-                    co2_lbl = f" / {total * _co2_g / 1000.0:.2f} kg CO₂" if _co2_g > 0 else ""
+                    _ps = int(pstart.timestamp()) if pstart is not None else 0
+                    _pe = int(pend.timestamp()) if pend is not None else 0
+                    if _ps and _pe:
+                        _co2_kg, _, _ = self._calc_co2_for_range(_ps, _pe, device_key=d.key, kwh_fallback=total)
+                    else:
+                        _co2_kg = total * 380.0 / 1000.0
+                    co2_lbl = f" / {_co2_kg:.2f} kg CO₂" if _co2_kg > 0 else ""
                 except Exception:
                     co2_lbl = ""
                 ax.set_title(f"{d.name} – {self._pretty_kwh_mode(mode)}{range_lbl} | {_fmt_kwh(total)} ({_fmt_eur(cost)}){co2_lbl}")
@@ -2190,8 +2200,14 @@ class PlotsMixin:
             unit_gross = float(self.cfg.pricing.unit_price_gross())
             total = float(sum(values))
             try:
-                _co2_g = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
-                co2_lbl = f" / {total * _co2_g / 1000.0:.2f} kg CO₂" if _co2_g > 0 else ""
+                _ts_col = cd.df.get("timestamp")
+                if _ts_col is not None and len(_ts_col) > 0:
+                    _ps = int(pd.Timestamp(_ts_col.iloc[0]).timestamp())
+                    _pe = int(pd.Timestamp(_ts_col.iloc[-1]).timestamp())
+                    _co2_kg, _, _ = self._calc_co2_for_range(_ps, _pe, device_key=cd.device_key, kwh_fallback=total)
+                else:
+                    _co2_kg = total * 380.0 / 1000.0
+                co2_lbl = f" / {_co2_kg:.2f} kg CO₂" if _co2_kg > 0 else ""
             except Exception:
                 co2_lbl = ""
             ax.set_title(f"{cd.device_name} – {self._pretty_kwh_mode(mode)} | {_fmt_kwh(total)} ({_fmt_eur(total * unit_gross)}){co2_lbl}")

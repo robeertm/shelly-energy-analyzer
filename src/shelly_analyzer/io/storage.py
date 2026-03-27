@@ -253,12 +253,6 @@ class Storage:
         files.sort(key=lambda x: x.name)
         return files
 
-    # -- pack_csvs (deprecated, no-op in v6) ---------------------------------
-
-    def pack_csvs(self, device_key: str, **kwargs) -> Tuple[bool, Optional[Path]]:
-        """No-op in v6.0.0+ (DB handles deduplication automatically)."""
-        return False, None
-
     # -- CSV → DB migration --------------------------------------------------
 
     def needs_migration(self, device_keys: List[str]) -> bool:

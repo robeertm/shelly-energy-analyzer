@@ -48,31 +48,6 @@ def load_device(storage: Storage, device: DeviceConfig) -> ComputedDevice:
     return ComputedDevice(device_key=device.key, device_name=device.name, df=df)
 
 
-def combine_devices(devices: List[ComputedDevice], freq: str = "1min") -> pd.DataFrame:
-    """Combine devices by resampling to a common frequency.
-
-    - total_power: mean over the bin
-    - energy_kwh: sum over the bin
-    """
-    if not devices:
-        raise ValueError("No devices to combine")
-
-    frames: List[pd.DataFrame] = []
-    for d in devices:
-        x = d.df[["timestamp", "total_power", "energy_kwh"]].copy()
-        x = x.set_index("timestamp").sort_index()
-        # resample
-        p = x["total_power"].resample(freq).mean()
-        e = x["energy_kwh"].resample(freq).sum()
-        frames.append(pd.DataFrame({f"{d.device_key}_power": p, f"{d.device_key}_kwh": e}))
-
-    merged = pd.concat(frames, axis=1).fillna(0.0)
-    merged["total_power"] = merged[[c for c in merged.columns if c.endswith("_power")]].sum(axis=1)
-    merged["energy_kwh"] = merged[[c for c in merged.columns if c.endswith("_kwh")]].sum(axis=1)
-    out = merged.reset_index().rename(columns={"index": "timestamp"})
-    return out
-
-
 def summarize(df: pd.DataFrame) -> Tuple[float, float, float]:
     """Return (kwh_total, avg_power_w, max_power_w)."""
     kwh_total = float(pd.to_numeric(df["energy_kwh"], errors="coerce").fillna(0.0).sum())
