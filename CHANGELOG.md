@@ -1,5 +1,12 @@
 # Changelog
 
+## 11.8.0 - 2026-03-27
+### Added
+- **CO₂ bar coloring by intensity** – Bars in the CO₂ plots tab are now colored on a green → yellow → red gradient based on the average grid CO₂ intensity for each time bucket. Uses the existing green/dirty threshold settings.
+- **kWh + CO₂ labels above bars** – Each bar now shows both the energy consumption (kWh) and the CO₂ emissions (g/kg) as a two-line annotation. Font size adapts to widget size; labels are thinned on dense charts to avoid overlap.
+- **Custom range controls for CO₂ tab** – The CO₂ plots tab now has the same "Last N [hours/days/weeks/months]" input fields and Apply button as the kWh tab, allowing flexible time range selection.
+- **Total kWh in CO₂ chart title** – The chart title now shows both total kWh and total CO₂ for the displayed range.
+
 ## 11.7.0 - 2026-03-27
 ### Added
 - **CO₂ emissions plot tab** – New "CO₂" sub-tab in Plots joins hourly energy consumption with real-time grid CO₂ intensity data to show actual emissions per device. Supports four granularities (hours, days, weeks, months) with smart default time windows (24h, 30d, 12w, 1y). Bar chart automatically switches between g and kg CO₂ units. Uses the same device notebook, time range controls, theme, and annotation style as existing plot tabs.

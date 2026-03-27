@@ -1145,6 +1145,58 @@ class PlotsMixin:
                     text=self.t(f"plots.mode.{mode}"),
                     command=lambda m=mode: (self._plots_co2_mode.set(m), self._redraw_plots_metric("CO2")),
                 ).pack(side="left", padx=3)
+
+            # --- Custom range: last N units (hours/days/weeks/months) for CO₂ ---
+            co2_last_ctl = ttk.Frame(co2_ctl)
+            co2_last_ctl.pack(side="left", padx=(16, 0))
+            ttk.Label(co2_last_ctl, text=self.t("plots.kwh.last")).pack(side="left")
+
+            co2_sp_n = ttk.Spinbox(co2_last_ctl, from_=1, to=9999, width=5, textvariable=self._plots_co2_last_n)
+            co2_sp_n.pack(side="left", padx=(6, 0))
+
+            co2_unit_map = {
+                "hours": self.t("plots.mode.hours"),
+                "days": self.t("plots.mode.days"),
+                "weeks": self.t("plots.mode.weeks"),
+                "months": self.t("plots.mode.months"),
+            }
+            co2_inv_unit_map = {v: k for k, v in co2_unit_map.items()}
+            co2_unit_display = tk.StringVar(
+                value=co2_unit_map.get(str(self._plots_co2_last_unit.get() or "days"), co2_unit_map["days"])
+            )
+            co2_cb_unit = ttk.Combobox(
+                co2_last_ctl,
+                width=10,
+                state="readonly",
+                textvariable=co2_unit_display,
+                values=list(co2_unit_map.values()),
+            )
+            co2_cb_unit.pack(side="left", padx=(6, 0))
+
+            def _apply_co2_last_mode() -> None:
+                try:
+                    disp = str(co2_unit_display.get() or "").strip()
+                    unit = co2_inv_unit_map.get(disp, str(self._plots_co2_last_unit.get() or "days"))
+                except Exception:
+                    unit = str(self._plots_co2_last_unit.get() or "days")
+                try:
+                    n = int(self._plots_co2_last_n.get() or 0)
+                except Exception:
+                    n = 0
+                n = max(1, min(9999, n))
+                try:
+                    self._plots_co2_last_unit.set(unit)
+                except Exception:
+                    pass
+                self._plots_co2_mode.set(f"{unit}:{n}")
+                self._redraw_plots_metric("CO2")
+
+            try:
+                co2_cb_unit.bind("<<ComboboxSelected>>", lambda _e: _apply_co2_last_mode())
+            except Exception:
+                pass
+            ttk.Button(co2_last_ctl, text=self.t("btn.apply"), command=_apply_co2_last_mode).pack(side="left", padx=(8, 0))
+
             _make_device_notebook(tab_co2, "CO2")
 
             # Redraw when switching metric tabs
@@ -1277,6 +1329,17 @@ class PlotsMixin:
 
             mode = str(getattr(self, "_plots_co2_mode", tk.StringVar(value="hours")).get() or "hours")
 
+            # Support "unit:n" format (e.g. "days:7") from custom range controls
+            custom_n: int | None = None
+            base_mode = mode
+            if ":" in mode:
+                parts = mode.split(":", 1)
+                base_mode = parts[0]
+                try:
+                    custom_n = max(1, int(parts[1]))
+                except Exception:
+                    custom_n = None
+
             pstart = _parse_date_flexible(self._plots_start.get())
             pend = _parse_date_flexible(self._plots_end.get())
             if pstart is not None and pend is not None and pend < pstart:
@@ -1289,15 +1352,26 @@ class PlotsMixin:
             else:
                 pend_eff = pend
             if pstart is None:
-                # Default windows based on mode
-                if mode == "hours":
-                    pstart_eff = pend_eff - timedelta(hours=24)
-                elif mode == "days":
-                    pstart_eff = pend_eff - timedelta(days=30)
-                elif mode == "weeks":
-                    pstart_eff = pend_eff - timedelta(weeks=12)
-                else:  # months
-                    pstart_eff = pend_eff - timedelta(days=365)
+                if custom_n is not None:
+                    # Custom "last N units" range
+                    if base_mode == "hours":
+                        pstart_eff = pend_eff - timedelta(hours=custom_n)
+                    elif base_mode == "days":
+                        pstart_eff = pend_eff - timedelta(days=custom_n)
+                    elif base_mode == "weeks":
+                        pstart_eff = pend_eff - timedelta(weeks=custom_n)
+                    else:  # months
+                        pstart_eff = pend_eff - timedelta(days=custom_n * 30)
+                else:
+                    # Default windows based on mode
+                    if base_mode == "hours":
+                        pstart_eff = pend_eff - timedelta(hours=24)
+                    elif base_mode == "days":
+                        pstart_eff = pend_eff - timedelta(days=30)
+                    elif base_mode == "weeks":
+                        pstart_eff = pend_eff - timedelta(weeks=12)
+                    else:  # months
+                        pstart_eff = pend_eff - timedelta(days=365)
             else:
                 pstart_eff = pstart
 
@@ -1368,57 +1442,165 @@ class PlotsMixin:
                 merged = merged.sort_values("dt")
 
                 # Aggregate by mode
-                if mode == "hours":
+                if base_mode == "hours":
                     labels = [dt.strftime("%H:%M\n%d.%m") for dt in merged["dt"]]
                     values = merged["co2_g"].tolist()
-                elif mode == "days":
+                    kwh_values = merged["kwh"].tolist()
+                    avg_intensities = merged["intensity_g_per_kwh"].tolist()
+                elif base_mode == "days":
                     merged["bucket"] = merged["dt"].dt.date
-                    grp = merged.groupby("bucket")["co2_g"].sum().reset_index()
+                    grp = merged.groupby("bucket").agg(
+                        co2_g=("co2_g", "sum"), kwh=("kwh", "sum"),
+                        intensity=("intensity_g_per_kwh", "mean"),
+                    ).reset_index()
                     grp = grp.sort_values("bucket")
                     labels = [str(d) for d in grp["bucket"]]
                     values = grp["co2_g"].tolist()
-                elif mode == "weeks":
+                    kwh_values = grp["kwh"].tolist()
+                    avg_intensities = grp["intensity"].tolist()
+                elif base_mode == "weeks":
                     merged["bucket"] = merged["dt"].dt.isocalendar().week.astype(int)
                     merged["year"] = merged["dt"].dt.isocalendar().year.astype(int)
-                    grp = merged.groupby(["year", "bucket"])["co2_g"].sum().reset_index()
+                    grp = merged.groupby(["year", "bucket"]).agg(
+                        co2_g=("co2_g", "sum"), kwh=("kwh", "sum"),
+                        intensity=("intensity_g_per_kwh", "mean"),
+                    ).reset_index()
                     grp = grp.sort_values(["year", "bucket"])
                     labels = [f"KW{int(w)}" for w in grp["bucket"]]
                     values = grp["co2_g"].tolist()
+                    kwh_values = grp["kwh"].tolist()
+                    avg_intensities = grp["intensity"].tolist()
                 else:  # months
                     merged["bucket"] = merged["dt"].dt.to_period("M")
-                    grp = merged.groupby("bucket")["co2_g"].sum().reset_index()
+                    grp = merged.groupby("bucket").agg(
+                        co2_g=("co2_g", "sum"), kwh=("kwh", "sum"),
+                        intensity=("intensity_g_per_kwh", "mean"),
+                    ).reset_index()
                     grp = grp.sort_values("bucket")
                     labels = [str(p) for p in grp["bucket"]]
                     values = grp["co2_g"].tolist()
+                    kwh_values = grp["kwh"].tolist()
+                    avg_intensities = grp["intensity"].tolist()
 
                 total_g = sum(values)
+                total_kwh = sum(kwh_values)
                 # Use kg if total > 1000g
                 if total_g >= 1000:
                     unit_label = "kg CO₂"
                     values_plot = [v / 1000.0 for v in values]
-                    total_display = f"{total_g / 1000.0:.2f} kg"
+                    total_display = f"{total_g / 1000.0:.2f} kg CO₂"
+                    use_kg = True
                 else:
                     unit_label = "g CO₂"
                     values_plot = values
-                    total_display = f"{total_g:.1f} g"
+                    total_display = f"{total_g:.1f} g CO₂"
+                    use_kg = False
+
+                # Color bars by average CO₂ intensity (green → yellow → red)
+                co2_thresh_green = float(getattr(co2_cfg, "green_threshold", 150) or 150)
+                co2_thresh_dirty = float(getattr(co2_cfg, "dirty_threshold", 400) or 400)
+                bar_colors = []
+                for intensity in avg_intensities:
+                    try:
+                        iv = float(intensity)
+                    except Exception:
+                        iv = 0.0
+                    if iv <= co2_thresh_green:
+                        bar_colors.append("#4caf50")  # green – clean
+                    elif iv >= co2_thresh_dirty:
+                        bar_colors.append("#e53935")  # red – dirty
+                    else:
+                        # Linear interpolation green → yellow → red
+                        ratio = (iv - co2_thresh_green) / max(1, co2_thresh_dirty - co2_thresh_green)
+                        if ratio <= 0.5:
+                            # green → yellow
+                            t = ratio * 2.0
+                            r = int(0x4c + (0xfb - 0x4c) * t)
+                            g = int(0xaf + (0xc0 - 0xaf) * t)
+                            b = int(0x50 + (0x2e - 0x50) * t)
+                            bar_colors.append(f"#{r:02x}{g:02x}{b:02x}")
+                        else:
+                            # yellow → red
+                            t = (ratio - 0.5) * 2.0
+                            r = int(0xfb + (0xe5 - 0xfb) * t)
+                            g = int(0xc0 + (0x39 - 0xc0) * t)
+                            b = int(0x2e + (0x35 - 0x2e) * t)
+                            bar_colors.append(f"#{r:02x}{g:02x}{b:02x}")
 
                 ax.set_ylabel(unit_label)
-                bars = ax.bar(range(len(values_plot)), values_plot, color="#43a047")
+                bars = ax.bar(range(len(values_plot)), values_plot, color=bar_colors)
                 base = self._font_base_for_widget(w)
                 self._apply_xticks(ax, labels, base_font=base)
-                self._annotate_bars(ax, bars)
+
+                # Custom annotation: show both kWh and CO₂ above each bar
+                try:
+                    hs = [float(b.get_height()) for b in bars if math.isfinite(float(b.get_height()))]
+                    if hs:
+                        y0, y1 = ax.get_ylim()
+                        hmax = max(hs)
+                        # Extra headroom for two-line labels
+                        margin = max(0.4, abs(hmax) * 0.22)
+                        ax.set_ylim(y0, max(y1, hmax + margin))
+                except Exception:
+                    pass
+
+                try:
+                    n_bars = len(bars)
+                    step = 1
+                    if n_bars > 24:
+                        step = max(1, int(math.ceil(n_bars / 24)))
+                    fontsize = max(4, min(10, int(base) - 1))
+
+                    for i, b in enumerate(bars):
+                        if step > 1 and (i % step) != 0:
+                            continue
+                        try:
+                            h = float(b.get_height())
+                        except Exception:
+                            continue
+                        if not math.isfinite(h):
+                            continue
+                        # Format CO₂ value
+                        co2_raw = values[i]
+                        if use_kg:
+                            co2_txt = f"{co2_raw / 1000.0:.2f} kg"
+                        elif co2_raw >= 100:
+                            co2_txt = f"{co2_raw:.0f} g"
+                        else:
+                            co2_txt = f"{co2_raw:.1f} g"
+                        # Format kWh value
+                        kwh_v = kwh_values[i]
+                        if kwh_v >= 10:
+                            kwh_txt = f"{kwh_v:.1f} kWh"
+                        elif kwh_v >= 1:
+                            kwh_txt = f"{kwh_v:.2f} kWh"
+                        else:
+                            kwh_txt = f"{kwh_v:.3f} kWh"
+                        label_txt = f"{kwh_txt}\n{co2_txt}"
+                        ax.annotate(
+                            label_txt,
+                            xy=(b.get_x() + b.get_width() / 2, h),
+                            xytext=(0, 3),
+                            textcoords="offset points",
+                            ha="center", va="bottom",
+                            fontsize=fontsize,
+                            linespacing=0.85,
+                        )
+                except Exception:
+                    pass
 
                 range_lbl = ""
                 if pstart is not None or pend is not None:
                     a = pstart_eff.strftime("%Y-%m-%d")
-                    b = pend_eff.strftime("%Y-%m-%d")
-                    range_lbl = f" | {a}–{b}"
+                    b_str = pend_eff.strftime("%Y-%m-%d")
+                    range_lbl = f" | {a}–{b_str}"
                 ax.set_title(
-                    f"{dcfg.name} – CO₂ ({self._pretty_kwh_mode(mode)}){range_lbl} | {total_display}"
+                    f"{dcfg.name} – CO₂ ({self._pretty_kwh_mode(mode)}){range_lbl}"
+                    f" | {_fmt_kwh(total_kwh)} | {total_display}"
                 )
                 ax.grid(True, axis="y", alpha=0.3)
                 try:
-                    fig.subplots_adjust(left=0.10, right=0.97, top=0.92, bottom=0.32)
+                    fig.subplots_adjust(left=0.10, right=0.97, top=0.90, bottom=0.32)
                 except Exception:
                     pass
                 self._apply_axis_layout(fig, ax, w, legend=False)
