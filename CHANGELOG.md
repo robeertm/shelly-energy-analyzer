@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.6.0 - 2026-03-27
+### Improved
+- **CO₂ backfill: retry, skip & gap-fill** – When an ENTSO-E API request fails (e.g. HTTP 503), the service now retries the chunk up to 3 times with increasing backoff (30s, 60s) before skipping it and continuing with the next chunk. Previously a single failure aborted the entire backfill. On subsequent fetches, the service detects gaps (missing hours or hours filled with estimated data) and automatically attempts to reload real data for those ranges. Any hours that remain unfilled after all retries are populated with estimated intensity values (average of surrounding real data, or 400 g/kWh fallback) marked with `source="estimated"` so they are clearly identifiable and will be replaced by real data on the next successful fetch.
+
 ## 11.5.0 - 2026-03-27
 ### Added
 - **CO₂ tab: "Reset DB" button** – A new button in the CO₂ tab title bar lets the user delete all stored CO₂ intensity data and trigger a complete re-fetch from ENTSO-E. A confirmation dialog prevents accidental resets. After deletion, the background service automatically starts a fresh backfill. Useful when data quality is suspect (e.g. after correcting PSR mappings or bidding zone changes). Button label and dialog text translated into all 9 languages.
