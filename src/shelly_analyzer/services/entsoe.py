@@ -68,52 +68,79 @@ _EIC_CODES: Dict[str, str] = {
     "SK":       "10YSK-SEPS-----K",
 }
 
-# ENTSO-E psrType codes → human-readable fuel names
+# ENTSO-E psrType codes → internal fuel names
+# Source: ENTSO-E Transparency Platform API Guide, Table 8 (psrType)
+# https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html
 _PSR_NAMES: Dict[str, str] = {
-    "B01": "biomass",
-    "B02": "lignite",
-    "B03": "coal",        # Fossil Hard coal
-    "B04": "gas",         # Fossil Gas
-    "B05": "oil",         # Fossil Oil
-    "B06": "oil_shale",
-    "B07": "peat",
-    "B08": "hydro_pumped",
-    "B09": "hydro_run",
-    "B10": "hydro_reservoir",
-    "B11": "marine",
-    "B12": "nuclear",
-    "B13": "other_renewable",
-    "B14": "solar",
-    "B15": "geothermal",
-    "B16": "wind_offshore",
-    "B17": "wind_onshore",
-    "B18": "other",
-    "B19": "waste",
-    "B20": "wind",          # aggregated fallback
+    "B01": "biomass",           # Biomass
+    "B02": "lignite",           # Fossil Brown coal/Lignite
+    "B03": "coal_gas",          # Fossil Coal-derived gas
+    "B04": "gas",               # Fossil Gas
+    "B05": "hard_coal",         # Fossil Hard coal
+    "B06": "oil",               # Fossil Oil
+    "B07": "oil_shale",         # Fossil Oil shale
+    "B08": "peat",              # Fossil Peat
+    "B09": "geothermal",        # Geothermal
+    "B10": "hydro_pumped",      # Hydro Pumped Storage
+    "B11": "hydro_run",         # Hydro Run-of-river and poundage
+    "B12": "hydro_reservoir",   # Hydro Water Reservoir
+    "B13": "marine",            # Marine
+    "B14": "nuclear",           # Nuclear
+    "B15": "other_renewable",   # Other renewable
+    "B16": "solar",             # Solar
+    "B17": "waste",             # Waste
+    "B18": "wind_offshore",     # Wind Offshore
+    "B19": "wind_onshore",      # Wind Onshore
+    "B20": "other",             # Other
+}
+
+# Human-readable display names for the CO₂ tab fuel-mix table
+FUEL_DISPLAY_NAMES: Dict[str, str] = {
+    "biomass":          "Biomass (B01)",
+    "lignite":          "Lignite / Brown coal (B02)",
+    "coal_gas":         "Coal-derived gas (B03)",
+    "gas":              "Natural gas (B04)",
+    "hard_coal":        "Hard coal (B05)",
+    "oil":              "Oil (B06)",
+    "oil_shale":        "Oil shale (B07)",
+    "peat":             "Peat (B08)",
+    "geothermal":       "Geothermal (B09)",
+    "hydro_pumped":     "Hydro – Pumped storage (B10)",
+    "hydro_run":        "Hydro – Run-of-river (B11)",
+    "hydro_reservoir":  "Hydro – Reservoir (B12)",
+    "marine":           "Marine (B13)",
+    "nuclear":          "Nuclear (B14)",
+    "other_renewable":  "Other renewable (B15)",
+    "solar":            "Solar (B16)",
+    "waste":            "Waste (B17)",
+    "wind_offshore":    "Wind offshore (B18)",
+    "wind_onshore":     "Wind onshore (B19)",
+    "other":            "Other (B20)",
 }
 
 # CO₂ emission factors in g CO₂eq/kWh (lifecycle, IPCC AR5 median values)
+# References: IPCC AR5 WG3 Annex II Table A.III.2; EEA 2023
 _CO2_FACTORS: Dict[str, float] = {
-    "biomass":        230.0,
-    "lignite":       1100.0,
-    "coal":           820.0,
-    "gas":            490.0,
-    "oil":            650.0,
-    "oil_shale":      650.0,
-    "peat":           900.0,
-    "hydro_pumped":    24.0,
-    "hydro_run":        4.0,
-    "hydro_reservoir":  4.0,
-    "marine":           8.0,
-    "nuclear":         12.0,
-    "other_renewable": 30.0,
-    "solar":           45.0,
-    "geothermal":      38.0,
-    "wind_offshore":   12.0,
-    "wind_onshore":    11.0,
-    "wind":            11.0,
-    "other":          300.0,
-    "waste":          300.0,
+    "biomass":          230.0,   # Biomass (B01)
+    "lignite":         1100.0,   # Fossil Brown coal/Lignite (B02)
+    "coal_gas":         700.0,   # Fossil Coal-derived gas (B03)
+    "gas":              490.0,   # Fossil Gas (B04)
+    "hard_coal":        820.0,   # Fossil Hard coal (B05)
+    "oil":              650.0,   # Fossil Oil (B06)
+    "oil_shale":        800.0,   # Fossil Oil shale (B07)
+    "peat":            1150.0,   # Fossil Peat (B08)
+    "geothermal":        38.0,   # Geothermal (B09)
+    "hydro_pumped":      24.0,   # Hydro Pumped Storage (B10) – lifecycle incl. pumping losses
+    "hydro_run":          4.0,   # Hydro Run-of-river (B11)
+    "hydro_reservoir":    4.0,   # Hydro Water Reservoir (B12)
+    "marine":             8.0,   # Marine (B13)
+    "nuclear":           12.0,   # Nuclear (B14)
+    "other_renewable":   30.0,   # Other renewable (B15)
+    "solar":             45.0,   # Solar (B16)
+    "waste":            330.0,   # Waste (B17)
+    "wind_offshore":     12.0,   # Wind Offshore (B18)
+    "wind_onshore":      11.0,   # Wind Onshore (B19)
+    "other":            400.0,   # Other (B20) – conservative estimate
 }
 
 # XML namespace used in ENTSO-E responses
@@ -243,6 +270,8 @@ class EntsoeClient:
         self._min_interval = min_request_interval
         self._last_request_ts: float = 0.0
         self._lock = threading.Lock()
+        # Raw generation mix from the most recent fetch: {fuel: {hour_ts: MW}}
+        self.last_mix: Dict[str, Dict[int, float]] = {}
 
     # ── Public ───────────────────────────────────────────────────────────────
 
@@ -279,6 +308,7 @@ class EntsoeClient:
                 _ts_to_entsoe_fmt(end_ts),
                 xml_text[:200],
             )
+        self.last_mix = mix  # cache for caller inspection
         intensity = calculate_intensity(mix)
 
         now_ts = int(time.time())
@@ -362,6 +392,9 @@ class Co2FetchService:
         self._force_backfill: bool = False
         self._progress_callback = None  # callable(day_fetched: int, total_days: int) | None
         self._log_callback = None       # callable(msg: str) | None – for Sync tab
+        # Latest fuel mix for UI display: {fuel: mw_for_most_recent_hour}
+        self._latest_mix_hour: Optional[int] = None
+        self._latest_mix: Dict[str, float] = {}
 
     def set_progress_callback(self, cb) -> None:
         """Set a callback invoked during chunk fetching: cb(day_fetched, total_days).
@@ -379,6 +412,13 @@ class Co2FetchService:
         Pass None to remove.
         """
         self._log_callback = cb
+
+    def get_latest_mix(self) -> Tuple[Optional[int], Dict[str, float]]:
+        """Return (hour_ts, {fuel: mw}) for the most recent fetched hour.
+
+        Returns (None, {}) if no fetch has occurred in this session.
+        """
+        return self._latest_mix_hour, dict(self._latest_mix)
 
     def _svc_log(self, msg: str) -> None:
         logger.info("Co2FetchService: %s", msg)
@@ -505,6 +545,29 @@ class Co2FetchService:
                 all_rows.extend(rows)
                 self._last_error = None
                 self._svc_log(f"    Empfangen: {len(rows)} Datenpunkte")
+                # Cache the most recent hour's fuel mix for UI display
+                raw_mix = client.last_mix
+                if raw_mix:
+                    all_hours = {h for fh in raw_mix.values() for h in fh}
+                    if all_hours:
+                        latest_h = max(all_hours)
+                        hour_mix = {
+                            fuel: fh[latest_h]
+                            for fuel, fh in raw_mix.items()
+                            if fh.get(latest_h, 0.0) > 0
+                        }
+                        if latest_h >= (self._latest_mix_hour or 0):
+                            self._latest_mix_hour = latest_h
+                            self._latest_mix = hour_mix
+                        # Log fuel breakdown
+                        total_mw = sum(hour_mix.values())
+                        lh_str = datetime.fromtimestamp(latest_h, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                        self._svc_log(f"    Kraftwerksmix ({lh_str}, {total_mw:.0f} MW gesamt):")
+                        for fuel, mw in sorted(hour_mix.items(), key=lambda x: -x[1]):
+                            share = mw / total_mw * 100 if total_mw else 0
+                            factor = _CO2_FACTORS.get(fuel, 400.0)
+                            name = FUEL_DISPLAY_NAMES.get(fuel, fuel)
+                            self._svc_log(f"      {name}: {mw:.0f} MW ({share:.1f}%) – {factor:.0f} g/kWh")
             except Exception as exc:
                 self._last_error = str(exc)
                 self._svc_log(f"    Fehler: {exc}")

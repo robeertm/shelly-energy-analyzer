@@ -5882,6 +5882,107 @@ _I18N.setdefault("ru", {}).update({
     "co2.table.col_co2": "CO₂ (г)",
 })
 
+# -------- CO₂ fuel-mix table (v11.3.0) --------
+_I18N.setdefault("de", {}).update({
+    "co2.mix.title":      "Kraftwerksmix – neueste abgerufene Stunde",
+    "co2.mix.no_data":    "Keine Daten – bitte 'Jetzt rückfüllen' ausführen.",
+    "co2.mix.ts_label":   "Stunde: {ts}",
+    "co2.mix.col_fuel":   "Energieträger",
+    "co2.mix.col_mw":     "MW",
+    "co2.mix.col_share":  "Anteil",
+    "co2.mix.col_factor": "CO₂-Faktor (g/kWh)",
+    "co2.mix.col_contrib":"CO₂-Beitrag",
+    "co2.mix.total":      "Gesamt",
+})
+_I18N.setdefault("en", {}).update({
+    "co2.mix.title":      "Generation Mix – most recently fetched hour",
+    "co2.mix.no_data":    "No data – please run 'Backfill now'.",
+    "co2.mix.ts_label":   "Hour: {ts}",
+    "co2.mix.col_fuel":   "Fuel type",
+    "co2.mix.col_mw":     "MW",
+    "co2.mix.col_share":  "Share",
+    "co2.mix.col_factor": "CO₂ factor (g/kWh)",
+    "co2.mix.col_contrib":"CO₂ contrib.",
+    "co2.mix.total":      "Total",
+})
+_I18N.setdefault("es", {}).update({
+    "co2.mix.title":      "Mix de generación – última hora obtenida",
+    "co2.mix.no_data":    "Sin datos – ejecute 'Rellenar ahora'.",
+    "co2.mix.ts_label":   "Hora: {ts}",
+    "co2.mix.col_fuel":   "Fuente de energía",
+    "co2.mix.col_mw":     "MW",
+    "co2.mix.col_share":  "Cuota",
+    "co2.mix.col_factor": "Factor CO₂ (g/kWh)",
+    "co2.mix.col_contrib":"Contrib. CO₂",
+    "co2.mix.total":      "Total",
+})
+_I18N.setdefault("fr", {}).update({
+    "co2.mix.title":      "Mix de production – dernière heure récupérée",
+    "co2.mix.no_data":    "Aucune donnée – lancez 'Remplir maintenant'.",
+    "co2.mix.ts_label":   "Heure : {ts}",
+    "co2.mix.col_fuel":   "Source d'énergie",
+    "co2.mix.col_mw":     "MW",
+    "co2.mix.col_share":  "Part",
+    "co2.mix.col_factor": "Facteur CO₂ (g/kWh)",
+    "co2.mix.col_contrib":"Contrib. CO₂",
+    "co2.mix.total":      "Total",
+})
+_I18N.setdefault("pt", {}).update({
+    "co2.mix.title":      "Mix de geração – última hora obtida",
+    "co2.mix.no_data":    "Sem dados – execute 'Preencher agora'.",
+    "co2.mix.ts_label":   "Hora: {ts}",
+    "co2.mix.col_fuel":   "Fonte de energia",
+    "co2.mix.col_mw":     "MW",
+    "co2.mix.col_share":  "Parcela",
+    "co2.mix.col_factor": "Fator CO₂ (g/kWh)",
+    "co2.mix.col_contrib":"Contrib. CO₂",
+    "co2.mix.total":      "Total",
+})
+_I18N.setdefault("it", {}).update({
+    "co2.mix.title":      "Mix di generazione – ultima ora recuperata",
+    "co2.mix.no_data":    "Nessun dato – eseguire 'Riempi ora'.",
+    "co2.mix.ts_label":   "Ora: {ts}",
+    "co2.mix.col_fuel":   "Fonte energetica",
+    "co2.mix.col_mw":     "MW",
+    "co2.mix.col_share":  "Quota",
+    "co2.mix.col_factor": "Fattore CO₂ (g/kWh)",
+    "co2.mix.col_contrib":"Contrib. CO₂",
+    "co2.mix.total":      "Totale",
+})
+_I18N.setdefault("pl", {}).update({
+    "co2.mix.title":      "Miks energetyczny – ostatnia pobrana godzina",
+    "co2.mix.no_data":    "Brak danych – uruchom 'Uzupełnij teraz'.",
+    "co2.mix.ts_label":   "Godzina: {ts}",
+    "co2.mix.col_fuel":   "Nośnik energii",
+    "co2.mix.col_mw":     "MW",
+    "co2.mix.col_share":  "Udział",
+    "co2.mix.col_factor": "Wsp. CO₂ (g/kWh)",
+    "co2.mix.col_contrib":"Udział CO₂",
+    "co2.mix.total":      "Razem",
+})
+_I18N.setdefault("cs", {}).update({
+    "co2.mix.title":      "Energetický mix – naposledy načtená hodina",
+    "co2.mix.no_data":    "Žádná data – spusťte 'Doplnit nyní'.",
+    "co2.mix.ts_label":   "Hodina: {ts}",
+    "co2.mix.col_fuel":   "Zdroj energie",
+    "co2.mix.col_mw":     "MW",
+    "co2.mix.col_share":  "Podíl",
+    "co2.mix.col_factor": "Faktor CO₂ (g/kWh)",
+    "co2.mix.col_contrib":"Příspěvek CO₂",
+    "co2.mix.total":      "Celkem",
+})
+_I18N.setdefault("ru", {}).update({
+    "co2.mix.title":      "Структура генерации – последний загруженный час",
+    "co2.mix.no_data":    "Нет данных – запустите «Заполнить сейчас».",
+    "co2.mix.ts_label":   "Час: {ts}",
+    "co2.mix.col_fuel":   "Источник энергии",
+    "co2.mix.col_mw":     "МВт",
+    "co2.mix.col_share":  "Доля",
+    "co2.mix.col_factor": "Фактор CO₂ (г/кВтч)",
+    "co2.mix.col_contrib":"Вклад CO₂",
+    "co2.mix.total":      "Итого",
+})
+
 # -------- Local formatting helpers (dates/numbers) --------
 
 _DATE_FORMATS = {

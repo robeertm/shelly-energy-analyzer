@@ -1,5 +1,15 @@
 # Changelog
 
+## 11.3.0 - 2026-03-27
+### Fixed
+- **Critical: ENTSO-E PSR type mapping was completely wrong** – The `_PSR_NAMES` dictionary in `entsoe.py` mapped every code from B03 onwards to the wrong fuel type. The mapping appeared to have been constructed by skipping B03 (Fossil Coal-derived gas) and then shifting all subsequent codes by one position. Concrete examples of the corruption: B05 (Fossil Hard coal) was labelled `"oil"` and received an oil CO₂ factor (650 g/kWh instead of 820); B08 (Fossil Peat, ~1150 g/kWh) was labelled `"hydro_pumped"` and received a lifecycle factor of 24 g/kWh; B14 (Nuclear, 12 g/kWh) was labelled `"solar"` and received 45 g/kWh; B16 (Solar, 45 g/kWh) was labelled `"wind_offshore"` and received 12 g/kWh. All 20 PSR codes (B01–B20) are now mapped correctly according to the official ENTSO-E API documentation (Table 8).
+- **CO₂ emission factors corrected** – Several factors were wrong or missing: `coal_gas` (B03, Fossil Coal-derived gas) added at 700 g/kWh; `hard_coal` (B05) added at 820 g/kWh; `oil_shale` (B07) corrected from 650 → 800 g/kWh; `peat` (B08) corrected from 900 → 1150 g/kWh; `waste` (B17) corrected from 300 → 330 g/kWh; `other` (B20) raised from 300 → 400 g/kWh. Stale internal names (`"coal"`, `"wind"`) removed.
+
+### Added
+- **CO₂ tab: Generation Mix table** – A new "Generation Mix – most recently fetched hour" section appears in the CO₂ tab. After any backfill the table is populated automatically and shows each fuel type present in the ENTSO-E response with its MW, percentage share, CO₂ factor (g/kWh), and percentage CO₂ contribution. A footer row shows totals and the resulting intensity (g/kWh) for cross-checking. The mix is also logged line-by-line to the Sync tab during each backfill chunk.
+- **`FUEL_DISPLAY_NAMES` dict** – All 20 internal fuel keys mapped to human-readable strings including the ENTSO-E B-code (e.g. `"Wind onshore (B19)"`), exported from `entsoe.py` for use in the UI.
+- **i18n**: all new `co2.mix.*` UI strings translated into all 9 languages (de, en, es, fr, pt, it, pl, cs, ru).
+
 ## 11.2.0 - 2026-03-27
 ### Added
 - **CO₂ tab: two scrollable data tables for value verification** – Two `ttk.Treeview` tables are now displayed below the heatmap strip so the user can inspect the raw imported numbers:
