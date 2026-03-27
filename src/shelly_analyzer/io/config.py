@@ -244,14 +244,6 @@ class PricingConfig:
             return p
         return p / (1.0 + r) if self.base_fee_includes_vat else p
 
-    def base_fee_year_gross(self) -> float:
-        """Return base fee per year as GROSS price."""
-        p = float(self.base_fee_eur_per_year)
-        r = self.vat_rate()
-        if r <= 0:
-            return p
-        return p if self.base_fee_includes_vat else p * (1.0 + r)
-
     def base_fee_day_net(self, days_in_year: float = 365.0) -> float:
         """Net base fee per day (pro-rated from yearly)."""
         return self.base_fee_year_net() / float(days_in_year)

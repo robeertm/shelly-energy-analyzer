@@ -755,26 +755,6 @@ class EnergyDB:
         """
         conn.execute(sql, (device_key, hour_start, hour_end))
 
-    def rebuild_hourly(self, device_key: str) -> None:
-        """Full rebuild of hourly aggregation for a device."""
-        with self._write_lock:
-            conn = self._conn()
-            with conn:
-                conn.execute("DELETE FROM hourly_energy WHERE device_key = ?", (device_key,))
-                conn.execute("""
-                    INSERT INTO hourly_energy (device_key, hour_ts, kwh, avg_power_w, max_power_w, sample_count)
-                    SELECT
-                        device_key,
-                        (timestamp / 3600) * 3600 AS hour_ts,
-                        COALESCE(SUM(energy_kwh), 0),
-                        AVG(total_power),
-                        MAX(total_power),
-                        COUNT(*)
-                    FROM samples
-                    WHERE device_key = ?
-                    GROUP BY device_key, (timestamp / 3600) * 3600
-                """, (device_key,))
-
     # -- retention / monthly compression -------------------------------------
 
     @staticmethod
@@ -966,24 +946,6 @@ class EnergyDB:
                 pass
 
         return df
-
-    def oldest_sample_ts(self, device_key: str) -> Optional[int]:
-        """Return the oldest sample timestamp for a device, or None."""
-        conn = self._conn()
-        row = conn.execute(
-            "SELECT MIN(timestamp) FROM samples WHERE device_key = ?",
-            (device_key,),
-        ).fetchone()
-        return int(row[0]) if row and row[0] is not None else None
-
-    def oldest_monthly_ts(self, device_key: str) -> Optional[int]:
-        """Return the oldest monthly aggregate timestamp for a device, or None."""
-        conn = self._conn()
-        row = conn.execute(
-            "SELECT MIN(month_ts) FROM monthly_energy WHERE device_key = ?",
-            (device_key,),
-        ).fetchone()
-        return int(row[0]) if row and row[0] is not None else None
 
     # ── CO₂ intensity helpers ─────────────────────────────────────────────
 

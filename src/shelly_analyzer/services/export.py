@@ -90,13 +90,6 @@ def export_to_excel(sheets: Dict[str, pd.DataFrame], out_path: Path) -> Path:
     return out_path
 
 
-def export_dataframe_csv(df: pd.DataFrame, out_path: Path) -> Path:
-    out_path = Path(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(out_path, index=False)
-    return out_path
-
-
 def export_pdf_summary(
     title: str,
     period_label: str,
@@ -463,16 +456,6 @@ class DeviceReport:
     top_hours: Sequence[TopHour]
 
 
-@dataclass(frozen=True)
-class OverallReport:
-    kwh_total: float
-    cost_eur: float
-    peak_w: float
-    peak_ts: Optional[pd.Timestamp]
-    top_hours: Sequence[TopHour]
-    per_device: Sequence[DeviceReport]
-
-
 def _voltage_columns(df: pd.DataFrame) -> List[str]:
     """Try to locate voltage columns robustly across Shelly exports."""
     cols = []
@@ -835,6 +818,10 @@ class EmailReportData:
     best_day_kwh: float = 0.0
     worst_day_date: Optional[date] = None      # monthly: day with highest consumption
     worst_day_kwh: float = 0.0
+    # v11.11 – CO₂ time-series for charts (from ENTSO-E weighted data)
+    co2_hourly: List[float] = field(default_factory=list)   # len 24 for daily (g CO₂ per hour)
+    co2_daily: List[Tuple[date, float]] = field(default_factory=list)  # for monthly (date, g CO₂)
+    co2_source: str = "static"  # "entsoe" or "static"
 
 
 # ---------- Matplotlib chart helpers ----------
@@ -1156,6 +1143,103 @@ def _make_top5_bar_chart(
         return None
 
 
+def _make_co2_hourly_chart(co2_hourly: List[float], lang: str, tmp_dir: Path) -> Optional[Path]:
+    """Render a 24-hour CO₂ bar chart with green→yellow→red color coding."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        hours = list(range(24))
+        vals = [co2_hourly[h] / 1000.0 if h < len(co2_hourly) else 0.0 for h in hours]  # g → kg
+
+        def _co2_color(v: float) -> str:
+            # Green ≤0.05 kg/h, yellow ~0.15, red ≥0.3+
+            if v <= 0.05:
+                return "#4caf50"
+            elif v <= 0.15:
+                return "#f9a825"
+            else:
+                return "#c62828"
+
+        colors = [_co2_color(v) for v in vals]
+        total_kg = sum(vals)
+
+        fig, ax = plt.subplots(figsize=(6, 2.5))
+        fig.patch.set_facecolor("#F8FBFD")
+        ax.set_facecolor("#F8FBFD")
+        ax.bar(hours, vals, color=colors, width=0.7, zorder=3)
+        ax.set_xlabel("Hour" if normalize_lang(lang) == "en" else "Stunde", fontsize=8)
+        ax.set_ylabel("kg CO₂", fontsize=8)
+        ax.set_xticks(hours)
+        ax.set_xticklabels([f"{h:02d}" for h in hours], fontsize=6)
+        ax.tick_params(axis="y", labelsize=7)
+        ax.grid(axis="y", color="#D0DDE8", linewidth=0.6, zorder=0)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        title = f"CO₂ Emissions (ENTSO-E) – {total_kg:.3f} kg" if normalize_lang(lang) == "en" \
+            else f"CO₂-Emissionen (ENTSO-E) – {total_kg:.3f} kg"
+        ax.set_title(title, fontsize=9)
+        fig.tight_layout(pad=0.4)
+
+        out = tmp_dir / "_chart_co2_hourly.png"
+        fig.savefig(str(out), dpi=110, bbox_inches="tight", facecolor=fig.get_facecolor())
+        plt.close(fig)
+        return out
+    except Exception:
+        return None
+
+
+def _make_co2_daily_chart(co2_daily: List[Tuple[date, float]], lang: str, tmp_dir: Path) -> Optional[Path]:
+    """Render a per-day CO₂ bar chart with green→yellow→red color coding."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        days = [d for d, _ in co2_daily]
+        vals = [v / 1000.0 for _, v in co2_daily]  # g → kg
+        if not vals:
+            return None
+
+        def _co2_color(v: float) -> str:
+            if v <= 1.0:
+                return "#4caf50"
+            elif v <= 3.0:
+                return "#f9a825"
+            else:
+                return "#c62828"
+
+        colors = [_co2_color(v) for v in vals]
+        labels = [str(d.day) for d in days]
+        total_kg = sum(vals)
+
+        fig_w = max(6.0, len(days) * 0.28)
+        fig, ax = plt.subplots(figsize=(fig_w, 2.5))
+        fig.patch.set_facecolor("#F8FBFD")
+        ax.set_facecolor("#F8FBFD")
+        ax.bar(range(len(days)), vals, color=colors, width=0.7, zorder=3)
+        ax.set_xlabel("Day" if normalize_lang(lang) == "en" else "Tag", fontsize=8)
+        ax.set_ylabel("kg CO₂", fontsize=8)
+        ax.set_xticks(range(len(days)))
+        ax.set_xticklabels(labels, fontsize=6, rotation=45, ha="right")
+        ax.tick_params(axis="y", labelsize=7)
+        ax.grid(axis="y", color="#D0DDE8", linewidth=0.6, zorder=0)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        title = f"CO₂ Emissions (ENTSO-E) – {total_kg:.3f} kg" if normalize_lang(lang) == "en" \
+            else f"CO₂-Emissionen (ENTSO-E) – {total_kg:.3f} kg"
+        ax.set_title(title, fontsize=9)
+        fig.tight_layout(pad=0.4)
+
+        out = tmp_dir / "_chart_co2_daily.png"
+        fig.savefig(str(out), dpi=110, bbox_inches="tight", facecolor=fig.get_facecolor())
+        plt.close(fig)
+        return out
+    except Exception:
+        return None
+
+
 # ---------- Layout helpers ----------
 
 def _hex_to_rgb(h: str) -> Tuple[float, float, float]:
@@ -1233,62 +1317,6 @@ def _draw_comparison_line(c: canvas.Canvas, x: float, y: float,
     c.drawString(x + 5.5 * cm, y, diff_str)
     _rl_set_fill(c, _C_TEXT)
     return y - 0.55 * cm
-
-
-def _draw_device_table(c: canvas.Canvas, w: float, y: float,
-                       totals: List[ReportTotals], lang: str) -> float:
-    """Draw device breakdown table; returns y after table."""
-    margin = 1.8 * cm
-    tw     = w - 2 * margin
-    col_x  = [margin, margin + tw * 0.36, margin + tw * 0.54,
-               margin + tw * 0.72, margin + tw * 0.88, margin + tw]
-
-    # Header row
-    row_h = 0.55 * cm
-    _rl_set_fill(c, _C_TH_BG)
-    c.rect(margin, y - row_h, tw, row_h, stroke=0, fill=1)
-    _rl_set_fill(c, _C_TH_TEXT)
-    c.setFont("Helvetica-Bold", 8)
-    headers = [
-        t(lang, "pdf.col.name"),
-        "kWh",
-        t(lang, "pdf.col.cost") + " (EUR)",
-        t(lang, "pdf.col.avg_w"),
-        t(lang, "pdf.col.max_w"),
-        "CO\u2082 (kg)",
-    ]
-    for i, hdr in enumerate(headers):
-        if i == 0:
-            c.drawString(col_x[i] + 0.1 * cm, y - 0.38 * cm, hdr)
-        else:
-            c.drawRightString(col_x[i + 1] - 0.1 * cm if i < 5 else col_x[i] + (col_x[i] - col_x[i - 1]) - 0.1 * cm, y - 0.38 * cm, hdr)
-    y -= row_h
-    _rl_set_fill(c, _C_TEXT)
-
-    # Data rows
-    for idx, row in enumerate(totals):
-        if y < 3.5 * cm:
-            break
-        bg = _C_ROW_ALT if idx % 2 == 0 else (1.0, 1.0, 1.0)
-        _rl_set_fill(c, bg)
-        c.rect(margin, y - row_h, tw, row_h, stroke=0, fill=1)
-        _rl_set_fill(c, _C_TEXT)
-        co2 = row.kwh_total * 380.0 / 1000.0  # fallback estimate
-        c.setFont("Helvetica", 8)
-        c.drawString(col_x[0] + 0.1 * cm, y - 0.38 * cm, (row.name or "")[:35])
-        c.drawRightString(col_x[2] - 0.1 * cm, y - 0.38 * cm, _fmt_kwh(row.kwh_total, lang))
-        c.drawRightString(col_x[3] - 0.1 * cm, y - 0.38 * cm, _fmt_money(row.cost_eur, lang))
-        c.drawRightString(col_x[4] - 0.1 * cm, y - 0.38 * cm, _fmt_int(row.avg_power_w, lang))
-        c.drawRightString(col_x[5] - 0.1 * cm, y - 0.38 * cm, _fmt_int(row.max_power_w, lang))
-        c.drawRightString(col_x[5] + (tw - (col_x[5] - margin)) - 0.1 * cm, y - 0.38 * cm, f"{co2:.2f}")
-        y -= row_h
-
-    # Bottom line
-    _rl_set_stroke(c, _C_LINE)
-    c.setLineWidth(0.5)
-    c.line(margin, y, margin + tw, y)
-    _rl_set_stroke(c, _C_TEXT)
-    return y - 0.3 * cm
 
 
 def _draw_device_table_enhanced(
@@ -1578,6 +1606,23 @@ def export_pdf_email_daily(
     else:
         _draw_footer(c, pw, page_n, data.version, lang)
 
+    # ------------------------------------------------------------------ CO₂ chart page (if ENTSO-E data available)
+    co2_chart = None
+    if data.co2_hourly and any(v > 0 for v in data.co2_hourly) and data.co2_source == "entsoe":
+        co2_chart = _make_co2_hourly_chart(data.co2_hourly, lang, tmp_dir)
+    if co2_chart:
+        co2_title = "CO₂-Emissionen (ENTSO-E)" if not is_en else "CO₂ Emissions (ENTSO-E)"
+        c.showPage()
+        page_n += 1
+        y2 = _draw_header_band(c, pw, ph, co2_title, date_str)
+        y2 -= 0.4 * cm
+        _embed_chart(c, pw, y2, co2_chart, co2_title, ph - 5.0 * cm)
+        _draw_footer(c, pw, page_n, data.version, lang)
+        try:
+            co2_chart.unlink(missing_ok=True)
+        except Exception:
+            pass
+
     # ------------------------------------------------------------------ Per-device detail: 2 per page (side-by-side columns)
     dev_names = list(data.per_device_hourly.keys()) if data.per_device_hourly else []
     if dev_names:
@@ -1815,6 +1860,23 @@ def export_pdf_email_monthly(
             pass
     else:
         _draw_footer(c, pw, page_n, data.version, lang)
+
+    # ------------------------------------------------------------------ CO₂ chart page (if ENTSO-E data available)
+    co2_chart = None
+    if data.co2_daily and any(v > 0 for _, v in data.co2_daily) and data.co2_source == "entsoe":
+        co2_chart = _make_co2_daily_chart(data.co2_daily, lang, tmp_dir)
+    if co2_chart:
+        co2_title = "CO₂-Emissionen (ENTSO-E)" if not is_en else "CO₂ Emissions (ENTSO-E)"
+        c.showPage()
+        page_n += 1
+        y2 = _draw_header_band(c, pw, ph, co2_title, period_str)
+        y2 -= 0.4 * cm
+        _embed_chart(c, pw, y2, co2_chart, co2_title, ph - 5.0 * cm)
+        _draw_footer(c, pw, page_n, data.version, lang)
+        try:
+            co2_chart.unlink(missing_ok=True)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------ Per-device detail: 2 per page (side-by-side columns)
     dev_names = list(data.per_device_daily.keys()) if data.per_device_daily else []
