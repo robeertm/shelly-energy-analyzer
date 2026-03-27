@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.5.0 - 2026-03-27
+### Added
+- **CO₂ tab: "Reset DB" button** – A new button in the CO₂ tab title bar lets the user delete all stored CO₂ intensity data and trigger a complete re-fetch from ENTSO-E. A confirmation dialog prevents accidental resets. After deletion, the background service automatically starts a fresh backfill. Useful when data quality is suspect (e.g. after correcting PSR mappings or bidding zone changes). Button label and dialog text translated into all 9 languages.
+
 ## 11.4.1 - 2026-03-27
 ### Fixed
 - **"Check Now" button now refreshes the changelog** – Clicking "Jetzt prüfen" / "Check now" in Settings > Updates only checked for new versions but did not re-fetch the changelog from GitHub. The changelog text widget would only update on app restart or after installing a new version. The button now calls `_updates_on_check_clicked()` which triggers both the version check and a changelog re-fetch.

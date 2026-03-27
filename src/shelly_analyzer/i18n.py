@@ -5992,6 +5992,62 @@ _I18N.setdefault("ru", {}).update({
     "co2.mix.total":      "Итого",
 })
 
+# -------- CO₂ database reset (v11.5.0) --------
+_I18N.setdefault("de", {}).update({
+    "co2.btn.reset": "DB zurücksetzen",
+    "co2.reset.title": "CO₂-Datenbank zurücksetzen",
+    "co2.reset.confirm": "Alle gespeicherten CO₂-Daten löschen und komplett neu laden?",
+    "co2.reset.done": "CO₂-Datenbank zurückgesetzt ({n} Einträge gelöscht). Neuer Abruf gestartet.",
+})
+_I18N.setdefault("en", {}).update({
+    "co2.btn.reset": "Reset DB",
+    "co2.reset.title": "Reset CO₂ Database",
+    "co2.reset.confirm": "Delete all stored CO₂ data and reload everything from scratch?",
+    "co2.reset.done": "CO₂ database reset ({n} rows deleted). Fresh fetch started.",
+})
+_I18N.setdefault("es", {}).update({
+    "co2.btn.reset": "Restablecer BD",
+    "co2.reset.title": "Restablecer base de datos CO₂",
+    "co2.reset.confirm": "¿Eliminar todos los datos de CO₂ y recargar todo desde cero?",
+    "co2.reset.done": "Base de datos CO₂ restablecida ({n} filas eliminadas). Nueva carga iniciada.",
+})
+_I18N.setdefault("fr", {}).update({
+    "co2.btn.reset": "Réinitialiser BD",
+    "co2.reset.title": "Réinitialiser la base CO₂",
+    "co2.reset.confirm": "Supprimer toutes les données CO₂ et tout recharger depuis zéro ?",
+    "co2.reset.done": "Base CO₂ réinitialisée ({n} lignes supprimées). Nouveau chargement lancé.",
+})
+_I18N.setdefault("pt", {}).update({
+    "co2.btn.reset": "Reiniciar BD",
+    "co2.reset.title": "Reiniciar base de dados CO₂",
+    "co2.reset.confirm": "Apagar todos os dados de CO₂ e recarregar tudo do zero?",
+    "co2.reset.done": "Base de dados CO₂ reiniciada ({n} linhas apagadas). Nova busca iniciada.",
+})
+_I18N.setdefault("it", {}).update({
+    "co2.btn.reset": "Reimposta DB",
+    "co2.reset.title": "Reimposta database CO₂",
+    "co2.reset.confirm": "Eliminare tutti i dati CO₂ e ricaricare tutto da zero?",
+    "co2.reset.done": "Database CO₂ reimpostato ({n} righe eliminate). Nuovo caricamento avviato.",
+})
+_I18N.setdefault("pl", {}).update({
+    "co2.btn.reset": "Resetuj BD",
+    "co2.reset.title": "Resetuj bazę danych CO₂",
+    "co2.reset.confirm": "Usunąć wszystkie dane CO₂ i załadować wszystko od nowa?",
+    "co2.reset.done": "Baza danych CO₂ zresetowana ({n} wierszy usunięto). Nowe pobieranie rozpoczęte.",
+})
+_I18N.setdefault("cs", {}).update({
+    "co2.btn.reset": "Resetovat DB",
+    "co2.reset.title": "Resetovat databázi CO₂",
+    "co2.reset.confirm": "Smazat všechna data CO₂ a načíst vše znovu od začátku?",
+    "co2.reset.done": "Databáze CO₂ resetována ({n} řádků smazáno). Nové načítání zahájeno.",
+})
+_I18N.setdefault("ru", {}).update({
+    "co2.btn.reset": "Сброс БД",
+    "co2.reset.title": "Сброс базы данных CO₂",
+    "co2.reset.confirm": "Удалить все данные CO₂ и загрузить всё заново?",
+    "co2.reset.done": "База данных CO₂ сброшена ({n} строк удалено). Новая загрузка начата.",
+})
+
 # -------- Local formatting helpers (dates/numbers) --------
 
 _DATE_FORMATS = {

@@ -17,7 +17,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Tuple
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure
@@ -60,6 +60,27 @@ class Co2Mixin:
         except Exception:
             pass
 
+    def _co2_reset_db(self) -> None:
+        """Delete all CO₂ data after user confirmation, then trigger a fresh fetch."""
+        ok = messagebox.askyesno(
+            self.t("co2.reset.title"),
+            self.t("co2.reset.confirm"),
+        )
+        if not ok:
+            return
+        try:
+            deleted = self.storage.db.delete_all_co2_data()
+            logger.info("CO₂ database reset: %d rows deleted", deleted)
+            self._co2_status_var.set(
+                self.t("co2.reset.done", n=deleted)
+            )
+            self._refresh_co2_tab()
+            # trigger fresh backfill
+            self._co2_fetch_svc.trigger_now()
+        except Exception as exc:
+            logger.exception("CO₂ database reset failed")
+            self._co2_status_var.set(str(exc)[:80])
+
     def _co2_on_close(self) -> None:
         """Stop the fetch service on window close."""
         try:
@@ -87,6 +108,12 @@ class Co2Mixin:
             top,
             textvariable=self._co2_status_var,
             foreground="gray",
+        ).pack(side="right", padx=(0, 4))
+
+        ttk.Button(
+            top,
+            text=self.t("co2.btn.reset"),
+            command=self._co2_reset_db,
         ).pack(side="right", padx=(0, 4))
 
         ttk.Button(

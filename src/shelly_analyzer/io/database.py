@@ -1044,3 +1044,11 @@ class EnergyDB:
             (zone,),
         ).fetchone()
         return int(row[0]) if row and row[0] is not None else None
+
+    def delete_all_co2_data(self) -> int:
+        """Delete all rows from the co2_intensity table. Returns rows deleted."""
+        conn = self._conn()
+        with self._write_lock:
+            with conn:
+                cur = conn.execute("DELETE FROM co2_intensity")
+                return cur.rowcount
