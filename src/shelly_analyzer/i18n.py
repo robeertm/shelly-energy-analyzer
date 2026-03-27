@@ -5420,6 +5420,9 @@ _I18N.setdefault("de", {}).update({
     "co2.status.importing": "CO₂-Daten werden importiert … Tag {day}/{total}",
     "co2.status.ok": "Daten aktuell ({ts})",
     "co2.btn.reload": "Neu laden",
+    "plots.co2.title": "CO₂-Emissionen",
+    "plots.co2.ylabel": "g CO₂",
+    "plots.co2.no_data": "Keine CO₂-Daten für diesen Zeitraum",
 })
 _I18N.setdefault("en", {}).update({
     "tabs.co2": "🌿 CO₂",
@@ -5459,6 +5462,9 @@ _I18N.setdefault("en", {}).update({
     "co2.status.importing": "Importing CO₂ data… day {day}/{total}",
     "co2.status.ok": "Data current ({ts})",
     "co2.btn.reload": "Reload",
+    "plots.co2.title": "CO₂ Emissions",
+    "plots.co2.ylabel": "g CO₂",
+    "plots.co2.no_data": "No CO₂ data for this period",
 })
 _I18N.setdefault("es", {}).update({
     "tabs.co2": "🌿 CO₂",
