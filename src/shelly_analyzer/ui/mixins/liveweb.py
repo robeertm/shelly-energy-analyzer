@@ -439,71 +439,72 @@ class LiveWebMixin:
                 end = _pdate(params.get("end"))
                 if start is not None and end is not None and end < start:
                     start, end = end, start
-                # normalize date-only bounds like the GUI does
-                def _looks_like_date_only(x: Any) -> bool:
-                    s = str(x or "").strip()
-                    return (":" not in s) and (len(s) <= 10)
-                if end is not None and _looks_like_date_only(params.get("end")):
-                    end = end.normalize() + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
-                if start is not None and _looks_like_date_only(params.get("start")):
-                    start = start.normalize()
 
-                from shelly_analyzer.services.compute import load_device, summarize
-                from shelly_analyzer.core.energy import filter_by_time
+                from datetime import datetime as _dt_s, timedelta as _td_s
+                from zoneinfo import ZoneInfo as _ZI_s
+                _tz_s = _ZI_s("Europe/Berlin")
 
-                unit_gross = float(self.cfg.pricing.unit_price_gross())
-                totals: List[ReportTotals] = []
-                computed_local: Dict[str, ComputedDevice] = {}
-                for d in self.cfg.devices:
-                    cd = load_device(self.storage, d)
-                    computed_local[d.key] = cd
-                    df = filter_by_time(cd.df, start=start, end=end)
-                    kwh, avgp, maxp = summarize(df)
-                    totals.append(ReportTotals(name=d.name, kwh_total=kwh, cost_eur=kwh * unit_gross, avg_power_w=avgp, max_power_w=maxp))
+                # Determine date range
+                if start is not None:
+                    start_d = pd.Timestamp(start).date()
+                else:
+                    start_d = date.today().replace(day=1)
+                if end is not None:
+                    end_d = pd.Timestamp(end).date()
+                else:
+                    end_d = date.today()
+                # end is inclusive in UI, make exclusive for report
+                end_excl = end_d + _td_s(days=1)
+                span_days = (end_excl - start_d).days
 
-                label = self.t("period.all")
-                if start is not None or end is not None:
-                    label = f"{format_date_local(self.lang, start) if start is not None else '…'} {self.t('common.to')} {format_date_local(self.lang, end) if end is not None else '…'}"
+                # Choose daily vs monthly format
+                is_monthly = span_days > 2
+                report_type = "monthly" if is_monthly else "daily"
 
-                # embed plots (days/weeks/months) per Shelly
+                # Previous period for comparison
+                prev_span = _td_s(days=span_days)
+                prev_start_d = start_d - prev_span
+                prev_end_d = start_d
+
+                start_dt = _dt_s.combine(start_d, _dt_s.min.time(), tzinfo=_tz_s)
+                end_dt = _dt_s.combine(end_excl, _dt_s.min.time(), tzinfo=_tz_s)
+                prev_start_dt = _dt_s.combine(prev_start_d, _dt_s.min.time(), tzinfo=_tz_s)
+                prev_end_dt = _dt_s.combine(prev_end_d, _dt_s.min.time(), tzinfo=_tz_s)
+
+                report_data = self._build_email_report_data(
+                    start_dt, end_dt,
+                    prev_start_dt=prev_start_dt,
+                    prev_end_dt=prev_end_dt,
+                    report_type=report_type,
+                )
+
                 ts = time.strftime("%Y%m%d_%H%M%S")
-                plots_dir = out_root / "web" / "plots"
-                plots_dir.mkdir(parents=True, exist_ok=True)
-                plot_pages: List[Tuple[str, Path]] = []
-                for d in self.cfg.devices[:2]:
-                    cd = computed_local.get(d.key)
-                    if cd is None:
-                        continue
-                    df_f = filter_by_time(cd.df, start=start, end=end)
-                    tmp = ComputedDevice(device_key=cd.device_key, device_name=cd.device_name, df=df_f)
-                    for m in ("days", "weeks", "months"):
-                        # reuse plot generator above by calling ourselves (fast)
-                        # but keep title stable in PDF
-                        fig = self._make_stats_figure(tmp, m)
-                        safe = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in d.name).strip("_")
-                        png = plots_dir / f"{safe or d.key}_{m}_{ts}.png"
-                        export_figure_png(fig, png, dpi=180)
-                        plot_pages.append((f"{d.name} – {m}", png))
-
                 out = out_root / "web" / f"summary_{ts}.pdf"
-                vat_part = ""
-                if self.cfg.pricing.vat_enabled:
-                    vat_part = f" ({self.t('pdf.vat')} {format_number_local(self.lang, self.cfg.pricing.vat_rate_percent, 1)}%)"
-                note = self.t(
-                    "pdf.summary.note",
-                    price=format_number_local(self.lang, unit_gross, 4),
-                    vat_part=vat_part,
-                    version=__version__,
-                )
-                export_pdf_summary(
-                    title=self.t("pdf.summary.title"),
-                    period_label=label,
-                    totals=totals,
-                    out_path=out,
-                    note=note,
-                    plot_pages=plot_pages,
-                    lang=self.lang,
-                )
+
+                if report_data is not None:
+                    from shelly_analyzer.services.export import export_pdf_email_daily, export_pdf_email_monthly
+                    if is_monthly:
+                        export_pdf_email_monthly(report_data, out, lang=self.lang)
+                    else:
+                        export_pdf_email_daily(report_data, out, lang=self.lang)
+                else:
+                    # Fallback to old simple summary
+                    from shelly_analyzer.services.compute import load_device, summarize
+                    from shelly_analyzer.core.energy import filter_by_time
+                    unit_gross = float(self.cfg.pricing.unit_price_gross())
+                    totals: List[ReportTotals] = []
+                    for d in self.cfg.devices:
+                        cd = load_device(self.storage, d)
+                        df = filter_by_time(cd.df, start=pd.Timestamp(start_d), end=pd.Timestamp(end_excl))
+                        kwh, avgp, maxp = summarize(df)
+                        totals.append(ReportTotals(name=d.name, kwh_total=kwh, cost_eur=kwh * unit_gross, avg_power_w=avgp, max_power_w=maxp))
+                    export_pdf_summary(
+                        title=self.t("pdf.summary.title"),
+                        period_label=f"{start_d} – {end_d}",
+                        totals=totals,
+                        out_path=out,
+                        lang=self.lang,
+                    )
                 return {"ok": True, "files": [{"name": out.name, "url": f"/files/web/{out.name}"}]}
 
             if action == "export_invoices":
@@ -752,7 +753,7 @@ class LiveWebMixin:
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
 
-            # --- Etappe 6 (optional): Report Button im Web-Control ---
+            # --- Report Button im Web-Control (professional PDF like email reports) ---
             if action == "report":
                 period = str(params.get("period") or params.get("kind") or "day").strip().lower()
                 anchor = _pdate(params.get("anchor"))
@@ -760,91 +761,103 @@ class LiveWebMixin:
                     anchor = pd.Timestamp(date.today())
                 anchor = pd.Timestamp(anchor)
 
-                if period in {"month", "mon", "m"}:
-                    start = pd.Timestamp(anchor.replace(day=1).date())
-                    # first day of next month
-                    if int(start.month) == 12:
-                        end = pd.Timestamp(date(int(start.year) + 1, 1, 1))
+                from datetime import datetime as _dt_r, timedelta as _td_r
+                from zoneinfo import ZoneInfo as _ZI_r
+                _tz_r = _ZI_r("Europe/Berlin")
+
+                is_monthly = period in {"month", "mon", "m"}
+
+                if is_monthly:
+                    start_d = anchor.replace(day=1).date()
+                    if start_d.month == 12:
+                        end_d = date(start_d.year + 1, 1, 1)
                     else:
-                        end = pd.Timestamp(date(int(start.year), int(start.month) + 1, 1))
-                    title = self.t("pdf.report.title.month")
-                    fname = f"energy_report_month_{start.strftime('%Y%m')}_{time.strftime('%H%M%S')}.pdf"
+                        end_d = date(start_d.year, start_d.month + 1, 1)
+                    fname = f"energy_report_month_{start_d.strftime('%Y%m')}_{time.strftime('%H%M%S')}.pdf"
+                    # Previous month for comparison
+                    prev_end_d = start_d
+                    prev_start_d = (start_d - _td_r(days=1)).replace(day=1)
+                    report_type = "monthly"
                 else:
-                    start = pd.Timestamp(anchor.date())
-                    end = start + pd.Timedelta(days=1)
-                    title = self.t("pdf.report.title.day")
-                    fname = f"energy_report_day_{start.strftime('%Y%m%d')}_{time.strftime('%H%M%S')}.pdf"
+                    start_d = anchor.date()
+                    end_d = start_d + _td_r(days=1)
+                    fname = f"energy_report_day_{start_d.strftime('%Y%m%d')}_{time.strftime('%H%M%S')}.pdf"
+                    # Previous day for comparison
+                    prev_start_d = start_d - _td_r(days=1)
+                    prev_end_d = start_d
+                    report_type = "daily"
 
-                # Human friendly, consistent date range label (end is exclusive)
-                try:
-                    end_incl = (pd.Timestamp(end) - pd.Timedelta(seconds=1))
-                except Exception:
-                    end_incl = pd.Timestamp(end)
-                period_label = f"{format_date_local(self.lang, pd.Timestamp(start))} – {format_date_local(self.lang, pd.Timestamp(end_incl))}"
+                start_dt = _dt_r.combine(start_d, _dt_r.min.time(), tzinfo=_tz_r)
+                end_dt = _dt_r.combine(end_d, _dt_r.min.time(), tzinfo=_tz_r)
+                prev_start_dt = _dt_r.combine(prev_start_d, _dt_r.min.time(), tzinfo=_tz_r)
+                prev_end_dt = _dt_r.combine(prev_end_d, _dt_r.min.time(), tzinfo=_tz_r)
 
-                # Pricing (gross + net) for clear PDF header note
-                try:
-                    unit_gross = float(self.cfg.pricing.unit_price_gross())
-                    unit_net = float(self.cfg.pricing.unit_price_net())
-                    price_incl_vat = bool(getattr(self.cfg.pricing, "price_includes_vat", True))
-                    vat_enabled = bool(getattr(self.cfg.pricing, "vat_enabled", True))
-                    vat_rate = float(getattr(self.cfg.pricing, "vat_rate_percent", 0.0))
-                except Exception:
-                    unit_gross, unit_net, price_incl_vat, vat_enabled, vat_rate = 0.0, 0.0, True, True, 0.0
+                if progress:
+                    try:
+                        progress("report", 0, 3, "Daten sammeln …")
+                    except Exception:
+                        pass
 
-                # Pricing note (localized + clear VAT)
-                gross_s = format_number_local(self.lang, unit_gross, 4)
-                net_s = format_number_local(self.lang, unit_net, 4)
-                vat_s = format_number_local(self.lang, vat_rate, 0)
+                # Build rich report data (same as email reports)
+                report_data = self._build_email_report_data(
+                    start_dt, end_dt,
+                    prev_start_dt=prev_start_dt,
+                    prev_end_dt=prev_end_dt,
+                    report_type=report_type,
+                )
 
-                if (not vat_enabled) or vat_rate <= 0:
-                    pricing_note = self.t("pdf.pricing.no_vat", price=gross_s, vat=vat_s)
-                else:
-                    if price_incl_vat:
-                        pricing_note = self.t("pdf.pricing.gross_incl_vat", gross=gross_s, net=net_s, vat=vat_s)
-                    else:
-                        pricing_note = self.t("pdf.pricing.net_excl_vat", gross=gross_s, net=net_s, vat=vat_s)
-
-                from shelly_analyzer.services.compute import load_device
-                from shelly_analyzer.core.energy import filter_by_time
-                from shelly_analyzer.services.export import export_pdf_energy_report_variant1
+                if progress:
+                    try:
+                        progress("report", 1, 3, "PDF erzeugen …")
+                    except Exception:
+                        pass
 
                 rep_dir = out_root / "web" / "reports"
                 rep_dir.mkdir(parents=True, exist_ok=True)
-                out_path = rep_dir / fname
+                out_path_r = rep_dir / fname
 
-                devices_payload: List[Tuple[str, str, pd.DataFrame]] = []
-                total = max(1, len(self.cfg.devices))
-                for idx, d in enumerate(self.cfg.devices, start=1):
-                    if progress:
-                        try:
-                            progress(d.key, idx - 1, total, "Lade …")
-                        except Exception:
-                            pass
-                    cd = load_device(self.storage, d)
-                    df_use = filter_by_time(cd.df, start=start, end=end)
-                    devices_payload.append((d.key, d.name, df_use))
-                    if progress:
-                        try:
-                            progress(d.key, idx, total, "OK")
-                        except Exception:
-                            pass
+                if report_data is not None:
+                    from shelly_analyzer.services.export import export_pdf_email_daily, export_pdf_email_monthly
+                    if is_monthly:
+                        export_pdf_email_monthly(report_data, out_path_r, lang=self.lang)
+                    else:
+                        export_pdf_email_daily(report_data, out_path_r, lang=self.lang)
+                else:
+                    # Fallback to old report if _build_email_report_data failed
+                    from shelly_analyzer.services.compute import load_device
+                    from shelly_analyzer.core.energy import filter_by_time
+                    from shelly_analyzer.services.export import export_pdf_energy_report_variant1
+                    devices_payload: List[Tuple[str, str, pd.DataFrame]] = []
+                    for d in self.cfg.devices:
+                        cd = load_device(self.storage, d)
+                        df_use = filter_by_time(cd.df, start=pd.Timestamp(start_d), end=pd.Timestamp(end_d))
+                        devices_payload.append((d.key, d.name, df_use))
+                    try:
+                        unit_gross = float(self.cfg.pricing.unit_price_gross())
+                    except Exception:
+                        unit_gross = 0.30
+                    export_pdf_energy_report_variant1(
+                        out_path=out_path_r,
+                        title=self.t("pdf.report.title.month") if is_monthly else self.t("pdf.report.title.day"),
+                        period_label=f"{start_d} – {end_d}",
+                        pricing_note="",
+                        unit_price_gross=unit_gross,
+                        devices=devices_payload,
+                        lang=self.lang,
+                    )
 
-                export_pdf_energy_report_variant1(
-                    out_path=out_path,
-                    title=title,
-                    period_label=period_label,
-                    pricing_note=pricing_note,
-                    unit_price_gross=unit_gross,
-                    devices=devices_payload,
-                    lang=self.lang,
-                )
+                if progress:
+                    try:
+                        progress("report", 3, 3, "OK")
+                    except Exception:
+                        pass
 
+                period_label = f"{format_date_local(self.lang, pd.Timestamp(start_d))} – {format_date_local(self.lang, pd.Timestamp(end_d - _td_r(days=0 if is_monthly else 0)))}"
                 return {
                     "ok": True,
                     "period": period,
                     "period_label": period_label,
-                    "files": [{"name": out_path.name, "url": f"/files/web/reports/{out_path.name}"}],
+                    "files": [{"name": out_path_r.name, "url": f"/files/web/reports/{out_path_r.name}"}],
                 }
 
             if action == "bundle":
