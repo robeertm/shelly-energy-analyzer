@@ -822,6 +822,11 @@ class EmailReportData:
     co2_hourly: List[float] = field(default_factory=list)   # len 24 for daily (g CO₂ per hour)
     co2_daily: List[Tuple[date, float]] = field(default_factory=list)  # for monthly (date, g CO₂)
     co2_source: str = "static"  # "entsoe" or "static"
+    # v11.12 – per-bar intensity for smooth gradient coloring
+    co2_hourly_intensities: List[float] = field(default_factory=list)  # len 24 avg g/kWh per hour
+    co2_daily_intensities: List[float] = field(default_factory=list)   # avg g/kWh per day
+    co2_green_thresh: float = 150.0
+    co2_dirty_thresh: float = 400.0
 
 
 # ---------- Matplotlib chart helpers ----------
@@ -1143,8 +1148,38 @@ def _make_top5_bar_chart(
         return None
 
 
-def _make_co2_hourly_chart(co2_hourly: List[float], lang: str, tmp_dir: Path) -> Optional[Path]:
-    """Render a 24-hour CO₂ bar chart with green→yellow→red color coding."""
+def _co2_intensity_color(intensity: float, green_thresh: float = 150.0, dirty_thresh: float = 400.0) -> str:
+    """Smooth green→yellow→red color based on CO₂ intensity (g/kWh).
+
+    Matches the desktop app gradient from plots.py.
+    """
+    if intensity <= green_thresh:
+        return "#4caf50"
+    if intensity >= dirty_thresh:
+        return "#e53935"
+    ratio = (intensity - green_thresh) / max(1, dirty_thresh - green_thresh)
+    if ratio <= 0.5:
+        t = ratio * 2.0
+        r = int(0x4c + (0xfb - 0x4c) * t)
+        g = int(0xaf + (0xc0 - 0xaf) * t)
+        b = int(0x50 + (0x2e - 0x50) * t)
+    else:
+        t = (ratio - 0.5) * 2.0
+        r = int(0xfb + (0xe5 - 0xfb) * t)
+        g = int(0xc0 + (0x39 - 0xc0) * t)
+        b = int(0x2e + (0x35 - 0x2e) * t)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _make_co2_hourly_chart(
+    co2_hourly: List[float],
+    lang: str,
+    tmp_dir: Path,
+    intensities: Optional[List[float]] = None,
+    green_thresh: float = 150.0,
+    dirty_thresh: float = 400.0,
+) -> Optional[Path]:
+    """Render a 24-hour CO₂ bar chart with smooth green→yellow→red color coding by intensity."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1153,16 +1188,11 @@ def _make_co2_hourly_chart(co2_hourly: List[float], lang: str, tmp_dir: Path) ->
         hours = list(range(24))
         vals = [co2_hourly[h] / 1000.0 if h < len(co2_hourly) else 0.0 for h in hours]  # g → kg
 
-        def _co2_color(v: float) -> str:
-            # Green ≤0.05 kg/h, yellow ~0.15, red ≥0.3+
-            if v <= 0.05:
-                return "#4caf50"
-            elif v <= 0.15:
-                return "#f9a825"
-            else:
-                return "#c62828"
+        if intensities and len(intensities) >= 24:
+            colors = [_co2_intensity_color(intensities[h], green_thresh, dirty_thresh) for h in hours]
+        else:
+            colors = [_co2_intensity_color(green_thresh + 1) for _ in hours]  # fallback: mid-yellow
 
-        colors = [_co2_color(v) for v in vals]
         total_kg = sum(vals)
 
         fig, ax = plt.subplots(figsize=(6, 2.5))
@@ -1190,8 +1220,15 @@ def _make_co2_hourly_chart(co2_hourly: List[float], lang: str, tmp_dir: Path) ->
         return None
 
 
-def _make_co2_daily_chart(co2_daily: List[Tuple[date, float]], lang: str, tmp_dir: Path) -> Optional[Path]:
-    """Render a per-day CO₂ bar chart with green→yellow→red color coding."""
+def _make_co2_daily_chart(
+    co2_daily: List[Tuple[date, float]],
+    lang: str,
+    tmp_dir: Path,
+    intensities: Optional[List[float]] = None,
+    green_thresh: float = 150.0,
+    dirty_thresh: float = 400.0,
+) -> Optional[Path]:
+    """Render a per-day CO₂ bar chart with smooth green→yellow→red color coding by intensity."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1202,15 +1239,11 @@ def _make_co2_daily_chart(co2_daily: List[Tuple[date, float]], lang: str, tmp_di
         if not vals:
             return None
 
-        def _co2_color(v: float) -> str:
-            if v <= 1.0:
-                return "#4caf50"
-            elif v <= 3.0:
-                return "#f9a825"
-            else:
-                return "#c62828"
+        if intensities and len(intensities) == len(vals):
+            colors = [_co2_intensity_color(iv, green_thresh, dirty_thresh) for iv in intensities]
+        else:
+            colors = [_co2_intensity_color(green_thresh + 1) for _ in vals]
 
-        colors = [_co2_color(v) for v in vals]
         labels = [str(d.day) for d in days]
         total_kg = sum(vals)
 
@@ -1609,7 +1642,12 @@ def export_pdf_email_daily(
     # ------------------------------------------------------------------ CO₂ chart page (if ENTSO-E data available)
     co2_chart = None
     if data.co2_hourly and any(v > 0 for v in data.co2_hourly) and data.co2_source == "entsoe":
-        co2_chart = _make_co2_hourly_chart(data.co2_hourly, lang, tmp_dir)
+        co2_chart = _make_co2_hourly_chart(
+            data.co2_hourly, lang, tmp_dir,
+            intensities=data.co2_hourly_intensities or None,
+            green_thresh=data.co2_green_thresh,
+            dirty_thresh=data.co2_dirty_thresh,
+        )
     if co2_chart:
         co2_title = "CO₂-Emissionen (ENTSO-E)" if not is_en else "CO₂ Emissions (ENTSO-E)"
         c.showPage()
@@ -1864,7 +1902,12 @@ def export_pdf_email_monthly(
     # ------------------------------------------------------------------ CO₂ chart page (if ENTSO-E data available)
     co2_chart = None
     if data.co2_daily and any(v > 0 for _, v in data.co2_daily) and data.co2_source == "entsoe":
-        co2_chart = _make_co2_daily_chart(data.co2_daily, lang, tmp_dir)
+        co2_chart = _make_co2_daily_chart(
+            data.co2_daily, lang, tmp_dir,
+            intensities=data.co2_daily_intensities or None,
+            green_thresh=data.co2_green_thresh,
+            dirty_thresh=data.co2_dirty_thresh,
+        )
     if co2_chart:
         co2_title = "CO₂-Emissionen (ENTSO-E)" if not is_en else "CO₂ Emissions (ENTSO-E)"
         c.showPage()

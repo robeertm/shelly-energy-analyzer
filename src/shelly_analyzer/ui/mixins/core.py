@@ -8121,12 +8121,14 @@ class CoreMixin:
         ylabel: str,
         out_path: "Path",
         style: str = "line",
+        bar_colors: "list[str] | None" = None,
     ) -> "Path":
         """Create a simple plot PNG for Telegram (headless-safe).
 
         style:
           - "line": time series line
           - "bar":  bars (good for kWh buckets)
+        bar_colors: optional per-bar color list for intensity-based coloring.
         """
         from pathlib import Path
         out_path = Path(out_path)
@@ -8192,7 +8194,8 @@ class CoreMixin:
                     w = (x_num[1] - x_num[0]) * 0.9
                 else:
                     w = 0.03  # ~45 minutes in days
-                ax.bar(x_num, y_vals, width=w, align="center")
+                _bc = bar_colors if bar_colors and len(bar_colors) == len(y_vals) else None
+                ax.bar(x_num, y_vals, width=w, align="center", color=_bc)
                 ax.xaxis_date()
                 try:
                     ax.set_ylim(bottom=0.0)
@@ -8881,6 +8884,13 @@ class CoreMixin:
                             pass
                         co2_vals = df_co2_h["co2_g"] / 1000.0  # g → kg
                         total_co2_kg = float(co2_vals.sum())
+                        # Intensity-based bar coloring (green→yellow→red)
+                        from shelly_analyzer.services.export import _co2_intensity_color
+                        _co2c = getattr(self.cfg, "co2", None)
+                        _gt = float(getattr(_co2c, "green_threshold_g_per_kwh", 150) or 150)
+                        _dt = float(getattr(_co2c, "dirty_threshold_g_per_kwh", 400) or 400)
+                        _intensities = list(df_co2_h["intensity_g_per_kwh"].fillna(0))
+                        _bar_cols = [_co2_intensity_color(float(iv), _gt, _dt) for iv in _intensities]
                         p_co2 = out_dir / f"summary_daily_co2_{end_ts}.png"
                         self._telegram_plot_series_png(
                             x=co2_idx,
@@ -8889,6 +8899,7 @@ class CoreMixin:
                             ylabel="kg CO₂",
                             out_path=p_co2,
                             style="bar",
+                            bar_colors=_bar_cols,
                         )
                         out.append(_ensure_valid_png(p_co2))
                 except Exception:
@@ -8953,7 +8964,14 @@ class CoreMixin:
                             pass
                         df_co2_h["date"] = df_co2_h["date"].dt.floor("D")
                         co2_daily = df_co2_h.groupby("date")["co2_g"].sum() / 1000.0  # g → kg
+                        # Average intensity per day for coloring
+                        co2_daily_int = df_co2_h.groupby("date")["intensity_g_per_kwh"].mean()
                         total_co2_kg = float(co2_daily.sum())
+                        from shelly_analyzer.services.export import _co2_intensity_color
+                        _co2c = getattr(self.cfg, "co2", None)
+                        _gt = float(getattr(_co2c, "green_threshold_g_per_kwh", 150) or 150)
+                        _dt = float(getattr(_co2c, "dirty_threshold_g_per_kwh", 400) or 400)
+                        _bar_cols = [_co2_intensity_color(float(co2_daily_int.get(d, 0)), _gt, _dt) for d in co2_daily.index]
                         p_co2 = out_dir / f"summary_30d_co2_{end_ts}.png"
                         self._telegram_plot_series_png(
                             x=co2_daily.index,
@@ -8962,6 +8980,7 @@ class CoreMixin:
                             ylabel="kg CO₂",
                             out_path=p_co2,
                             style="bar",
+                            bar_colors=_bar_cols,
                         )
                         out.append(_ensure_valid_png(p_co2))
                 except Exception:
@@ -11042,29 +11061,56 @@ class CoreMixin:
                 # Build CO₂ time-series for PDF charts
                 co2_hourly_list = []
                 co2_daily_list = []
+                co2_hourly_intensities = []
+                co2_daily_intensities = []
                 try:
                     df_co2_ts = self._calc_co2_hourly_series(start_ts, end_ts)
                     if df_co2_ts is not None and not df_co2_ts.empty:
                         if report_type == "daily":
                             # 24-hour list (g CO₂ per hour bucket)
                             co2_hourly_list = [0.0] * 24
+                            _h_intensity_sum = [0.0] * 24
+                            _h_intensity_cnt = [0] * 24
                             for _, row in df_co2_ts.iterrows():
                                 import datetime as _dt_mod
                                 from zoneinfo import ZoneInfo as _ZI
                                 h_utc = _dt_mod.datetime.fromtimestamp(int(row["hour_ts"]), tz=_ZI("Europe/Berlin"))
                                 h = h_utc.hour
                                 co2_hourly_list[h] += float(row["co2_g"])
+                                _iv = float(row.get("intensity_g_per_kwh", 0) or 0)
+                                if _iv > 0:
+                                    _h_intensity_sum[h] += _iv
+                                    _h_intensity_cnt[h] += 1
+                            co2_hourly_intensities = [
+                                (_h_intensity_sum[h] / _h_intensity_cnt[h]) if _h_intensity_cnt[h] > 0 else 0.0
+                                for h in range(24)
+                            ]
                         else:
                             # Daily aggregation (date, g CO₂)
                             import datetime as _dt_mod
                             from zoneinfo import ZoneInfo as _ZI
                             day_map = {}
+                            day_int_sum = {}
+                            day_int_cnt = {}
                             for _, row in df_co2_ts.iterrows():
                                 d = _dt_mod.datetime.fromtimestamp(int(row["hour_ts"]), tz=_ZI("Europe/Berlin")).date()
                                 day_map[d] = day_map.get(d, 0.0) + float(row["co2_g"])
+                                _iv = float(row.get("intensity_g_per_kwh", 0) or 0)
+                                if _iv > 0:
+                                    day_int_sum[d] = day_int_sum.get(d, 0.0) + _iv
+                                    day_int_cnt[d] = day_int_cnt.get(d, 0) + 1
                             co2_daily_list = sorted(day_map.items(), key=lambda x: x[0])
+                            co2_daily_intensities = [
+                                (day_int_sum.get(d, 0.0) / day_int_cnt[d]) if day_int_cnt.get(d, 0) > 0 else 0.0
+                                for d, _ in co2_daily_list
+                            ]
                 except Exception:
                     pass
+
+                # CO₂ color thresholds from config
+                _co2_cfg = getattr(self.cfg, "co2", None)
+                _co2_green = float(getattr(_co2_cfg, "green_threshold_g_per_kwh", 150.0) or 150.0)
+                _co2_dirty = float(getattr(_co2_cfg, "dirty_threshold_g_per_kwh", 400.0) or 400.0)
 
                 _log.info("_build_email_report_data: done, totals=%d devices, total_kwh=%.3f, peak_hour=%d", len(totals), total_kwh, peak_hour)
                 return EmailReportData(
@@ -11096,6 +11142,10 @@ class CoreMixin:
                     co2_hourly=co2_hourly_list,
                     co2_daily=co2_daily_list,
                     co2_source=_co2_src,
+                    co2_hourly_intensities=co2_hourly_intensities,
+                    co2_daily_intensities=co2_daily_intensities,
+                    co2_green_thresh=_co2_green,
+                    co2_dirty_thresh=_co2_dirty,
                 )
             except Exception as _exc:
                 _log.warning("_build_email_report_data failed: %s", _exc, exc_info=True)
