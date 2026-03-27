@@ -5419,6 +5419,7 @@ _I18N.setdefault("de", {}).update({
     "co2.status.fetching": "Daten werden abgerufen …",
     "co2.status.importing": "CO₂-Daten werden importiert … Tag {day}/{total}",
     "co2.status.ok": "Daten aktuell ({ts})",
+    "co2.btn.reload": "Neu laden",
 })
 _I18N.setdefault("en", {}).update({
     "tabs.co2": "🌿 CO₂",
@@ -5457,6 +5458,7 @@ _I18N.setdefault("en", {}).update({
     "co2.status.fetching": "Fetching data…",
     "co2.status.importing": "Importing CO₂ data… day {day}/{total}",
     "co2.status.ok": "Data current ({ts})",
+    "co2.btn.reload": "Reload",
 })
 _I18N.setdefault("es", {}).update({
     "tabs.co2": "🌿 CO₂",
@@ -5495,6 +5497,7 @@ _I18N.setdefault("es", {}).update({
     "co2.status.fetching": "Obteniendo datos…",
     "co2.status.importing": "Importando datos CO₂… día {day}/{total}",
     "co2.status.ok": "Datos actualizados ({ts})",
+    "co2.btn.reload": "Recargar",
 })
 _I18N.setdefault("fr", {}).update({
     "tabs.co2": "🌿 CO₂",
@@ -5533,6 +5536,7 @@ _I18N.setdefault("fr", {}).update({
     "co2.status.fetching": "Récupération des données…",
     "co2.status.importing": "Import données CO₂… jour {day}/{total}",
     "co2.status.ok": "Données à jour ({ts})",
+    "co2.btn.reload": "Actualiser",
 })
 _I18N.setdefault("pt", {}).update({
     "tabs.co2": "🌿 CO₂",
@@ -5571,6 +5575,7 @@ _I18N.setdefault("pt", {}).update({
     "co2.status.fetching": "Buscando dados…",
     "co2.status.importing": "Importando dados CO₂… dia {day}/{total}",
     "co2.status.ok": "Dados atuais ({ts})",
+    "co2.btn.reload": "Recarregar",
 })
 _I18N.setdefault("it", {}).update({
     "tabs.co2": "🌿 CO₂",
@@ -5609,6 +5614,7 @@ _I18N.setdefault("it", {}).update({
     "co2.status.fetching": "Recupero dati…",
     "co2.status.importing": "Importazione dati CO₂… giorno {day}/{total}",
     "co2.status.ok": "Dati aggiornati ({ts})",
+    "co2.btn.reload": "Aggiorna",
 })
 _I18N.setdefault("pl", {}).update({
     "tabs.co2": "🌿 CO₂",
@@ -5647,6 +5653,7 @@ _I18N.setdefault("pl", {}).update({
     "co2.status.fetching": "Pobieranie danych…",
     "co2.status.importing": "Importowanie danych CO₂… dzień {day}/{total}",
     "co2.status.ok": "Dane aktualne ({ts})",
+    "co2.btn.reload": "Odśwież",
 })
 _I18N.setdefault("cs", {}).update({
     "tabs.co2": "🌿 CO₂",
@@ -5685,6 +5692,7 @@ _I18N.setdefault("cs", {}).update({
     "co2.status.fetching": "Načítám data…",
     "co2.status.importing": "Import dat CO₂… den {day}/{total}",
     "co2.status.ok": "Data aktuální ({ts})",
+    "co2.btn.reload": "Obnovit",
 })
 _I18N.setdefault("ru", {}).update({
     "tabs.co2": "🌿 CO₂",
@@ -5723,6 +5731,7 @@ _I18N.setdefault("ru", {}).update({
     "co2.status.fetching": "Получение данных…",
     "co2.status.importing": "Импорт данных CO₂… день {day}/{total}",
     "co2.status.ok": "Данные актуальны ({ts})",
+    "co2.btn.reload": "Обновить",
 })
 
 # -------- CO₂ test button + import progress bar (v11.1.0) --------
