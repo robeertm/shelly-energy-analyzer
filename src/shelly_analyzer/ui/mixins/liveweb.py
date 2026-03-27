@@ -607,6 +607,28 @@ class LiveWebMixin:
 
                 return {"ok": True, "files": files}
 
+            if action == "export_excel":
+                start = _pdate(params.get("start"))
+                end = _pdate(params.get("end"))
+                if start is not None and end is not None and end < start:
+                    start, end = end, start
+
+                from shelly_analyzer.services.compute import load_device
+                from shelly_analyzer.core.energy import filter_by_time
+
+                ts = time.strftime("%Y%m%d_%H%M%S")
+                web_dir = out_root / "web"
+                web_dir.mkdir(parents=True, exist_ok=True)
+                sheets: Dict[str, Any] = {}
+                for d in self.cfg.devices[:2]:
+                    cd = load_device(self.storage, d)
+                    df = filter_by_time(cd.df, start=start, end=end)
+                    if not df.empty:
+                        sheets[d.name[:31]] = df
+                out = web_dir / f"export_{ts}.xlsx"
+                export_to_excel(sheets, out)
+                return {"ok": True, "files": [{"name": out.name, "url": f"/files/web/{out.name}"}]}
+
             # --- Cost data for web dashboard ---
             if action == "costs":
                 try:

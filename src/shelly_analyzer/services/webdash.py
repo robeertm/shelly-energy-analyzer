@@ -3297,6 +3297,42 @@ _CONTROL_TEMPLATE = """<!doctype html>
     .thumbs {{ display:grid; grid-template-columns: 1fr; gap: 8px; margin-top: 8px; }}
     @media (min-width: 700px) {{ .thumbs {{ grid-template-columns: 1fr 1fr; }} }}
     img.thumb {{ width: 100%; border-radius: 12px; border: 1px solid var(--border); }}
+    /* Export card redesign */
+    .export-card {{ grid-column: 1 / -1; }}
+    .export-sections {{ display: grid; grid-template-columns: 1fr; gap: 10px; }}
+    @media (min-width: 700px) {{ .export-sections {{ grid-template-columns: 1fr 1fr; }} }}
+    .export-section {{ border: 1px solid var(--border); border-radius: 12px; padding: 10px; background: var(--chipbg); }}
+    .export-section h3 {{ margin: 0 0 8px; font-size: 12px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }}
+    .quick-dates {{ display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }}
+    .quick-dates button {{ font-size: 11px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--chipbg); color: var(--muted); cursor: pointer; }}
+    .quick-dates button:hover {{ color: var(--fg); border-color: rgba(106,167,255,0.35); }}
+    .export-actions {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }}
+    @media (min-width: 700px) {{ .export-actions {{ grid-template-columns: repeat(3, 1fr); }} }}
+    .export-actions button {{ display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; font-size: 12px; text-align: center; min-height: 54px; justify-content: center; }}
+    .export-actions button .btn-icon {{ font-size: 18px; line-height: 1; }}
+    .export-actions button .btn-label {{ font-size: 11px; line-height: 1.2; }}
+    .export-actions button:disabled {{ opacity: 0.5; cursor: default; }}
+    .export-actions button.loading {{ position: relative; color: transparent; }}
+    .export-actions button.loading::after {{ content: ""; position: absolute; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: btn-spin 0.6s linear infinite; }}
+    @keyframes btn-spin {{ to {{ transform: rotate(360deg); }} }}
+    .preview-area {{ margin-top: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--chipbg); min-height: 120px; overflow: hidden; }}
+    .preview-header {{ display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--border); }}
+    .preview-header h3 {{ margin: 0; font-size: 12px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }}
+    .preview-header .preview-links {{ display: flex; flex-wrap: wrap; gap: 6px; }}
+    .preview-header .preview-links a {{ font-size: 11px; color: var(--accent); text-decoration: none; padding: 2px 8px; border: 1px solid rgba(106,167,255,0.25); border-radius: 999px; }}
+    .preview-header .preview-links a:hover {{ border-color: var(--accent); }}
+    .preview-body {{ padding: 10px; }}
+    .preview-placeholder {{ display: flex; align-items: center; justify-content: center; min-height: 100px; color: var(--muted); font-size: 12px; }}
+    .preview-body iframe {{ width: 100%; height: 500px; border: none; border-radius: 8px; background: #fff; }}
+    .preview-body .preview-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }}
+    .preview-body .preview-grid img {{ width: 100%; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; transition: transform 0.15s; }}
+    .preview-body .preview-grid img:hover {{ transform: scale(1.02); }}
+    .preview-body .file-list {{ display: flex; flex-wrap: wrap; gap: 6px; }}
+    .preview-body .file-list a {{ display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--accent); text-decoration: none; padding: 6px 12px; border: 1px solid rgba(106,167,255,0.25); border-radius: 10px; background: rgba(106,167,255,0.06); }}
+    .preview-body .file-list a:hover {{ border-color: var(--accent); background: rgba(106,167,255,0.12); }}
+    .inline-field {{ display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }}
+    .inline-field label {{ min-width: 30px; }}
+    .inline-field input, .inline-field select {{ flex: 1; min-width: 0; }}
   </style>
 </head>
 <body>
@@ -3354,35 +3390,72 @@ _CONTROL_TEMPLATE = """<!doctype html>
         <div class="thumbs" id="plot_thumbs"></div>
       </div>
 
-      <div class="card">
+      <div class="card export-card">
         <h2>{web_control_export}</h2>
-        <div class="row">
-          <label for="exp_start">{web_control_plots_from}</label>
-          <input id="exp_start" placeholder="YYYY-MM-DD" />
-          <label for="exp_end">{web_control_plots_to}</label>
-          <input id="exp_end" placeholder="YYYY-MM-DD" />
+        <div class="export-sections">
+          <div class="export-section">
+            <h3>{web_control_export_daterange}</h3>
+            <div class="quick-dates">
+              <button data-quick="today">{web_control_export_today}</button>
+              <button data-quick="week">{web_control_export_this_week}</button>
+              <button data-quick="month">{web_control_export_this_month}</button>
+              <button data-quick="year">{web_control_export_this_year}</button>
+              <button data-quick="all">{web_control_export_all}</button>
+            </div>
+            <div class="inline-field">
+              <label for="exp_start">{web_control_plots_from}</label>
+              <input id="exp_start" type="date" />
+            </div>
+            <div class="inline-field">
+              <label for="exp_end">{web_control_plots_to}</label>
+              <input id="exp_end" type="date" />
+            </div>
+          </div>
+          <div class="export-section">
+            <h3>{web_control_export_invoice_settings}</h3>
+            <div class="inline-field">
+              <label for="inv_period">{web_control_invoice}</label>
+              <select id="inv_period">
+                <option value="custom">custom</option>
+                <option value="day">day</option>
+                <option value="week">week</option>
+                <option value="month" selected>month</option>
+                <option value="year">year</option>
+              </select>
+            </div>
+            <div class="inline-field">
+              <label for="inv_anchor">{web_control_anchor}</label>
+              <input id="inv_anchor" type="date" />
+            </div>
+            <span class="meta">{web_control_custom_note}</span>
+            <div class="inline-field" style="margin-top:6px">
+              <label for="bundle_hours">{web_control_export_bundle_hours}</label>
+              <input id="bundle_hours" type="number" value="48" min="1" max="8760" style="width:80px;flex:0 0 80px;" />
+            </div>
+          </div>
         </div>
-        <div class="row" style="margin-top:8px">
-          <label for="inv_period">{web_control_invoice}</label>
-          <select id="inv_period">
-            <option value="custom">custom</option>
-            <option value="day">day</option>
-            <option value="week">week</option>
-            <option value="month">month</option>
-            <option value="year">year</option>
-          </select>
-          <label for="inv_anchor">{web_control_anchor}</label>
-          <input id="inv_anchor" placeholder="TT.MM.JJJJ" />
-          <span class="meta">{web_control_custom_note}</span>
+
+        <div class="export-section" style="margin-top:10px">
+          <h3>{web_control_export_actions}</h3>
+          <div class="export-actions">
+            <button id="btn_summary"><span class="btn-icon">📄</span><span class="btn-label">{web_control_btn_summary}</span></button>
+            <button id="btn_invoices"><span class="btn-icon">🧾</span><span class="btn-label">{web_control_btn_invoices}</span></button>
+            <button id="btn_excel"><span class="btn-icon">📊</span><span class="btn-label">{web_control_btn_excel}</span></button>
+            <button id="btn_report_day"><span class="btn-icon">📅</span><span class="btn-label">{web_control_btn_report_day}</span></button>
+            <button id="btn_report_month"><span class="btn-icon">📆</span><span class="btn-label">{web_control_btn_report_month}</span></button>
+            <button id="btn_bundle"><span class="btn-icon">📦</span><span class="btn-label">{web_control_btn_bundle}</span></button>
+          </div>
         </div>
-        <div class="btnrow" style="margin-top:8px">
-          <button id="btn_summary">{web_control_btn_summary}</button>
-          <button id="btn_invoices">{web_control_btn_invoices}</button>
-          <button id="btn_bundle">{web_control_btn_bundle}</button>
-          <button id="btn_report_day">{web_control_btn_report_day}</button>
-          <button id="btn_report_month">{web_control_btn_report_month}</button>
+
+        <div class="preview-area" id="preview_area">
+          <div class="preview-header">
+            <h3>{web_control_export_preview}</h3>
+            <div class="preview-links" id="preview_links"></div>
+          </div>
+          <div class="preview-body" id="preview_body">
+            <div class="preview-placeholder" id="preview_placeholder">{web_control_export_no_preview}</div>
+          </div>
         </div>
-        <div class="log files" id="export_log">–</div>
       </div>
 
       <div class="card">
@@ -3558,108 +3631,168 @@ document.getElementById("btn_plots").addEventListener("click", async ()=>{
   }
 });
 
-document.getElementById("btn_summary").addEventListener("click", async ()=>{
-  const start = document.getElementById("exp_start").value;
-  const end = document.getElementById("exp_end").value;
-  const el = document.getElementById("export_log");
-  el.innerHTML = "";
-  try {
-    const res = await run("export_summary", {start, end});
-    if (res && res.files) {
-      res.files.forEach(f=>{
-        const a = document.createElement("a");
-        a.href = f.url + qs();
-        a.textContent = f.name;
-        a.target = "_blank";
-        el.appendChild(a);
-        el.appendChild(document.createElement("br"));
-      });
-    } else {
-      el.textContent = JSON.stringify(res, null, 2);
+// --- Quick date presets ---
+document.querySelectorAll(".quick-dates button[data-quick]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const q = btn.dataset.quick;
+    const now = new Date();
+    const fmt = d => d.toISOString().slice(0,10);
+    const elS = document.getElementById("exp_start");
+    const elE = document.getElementById("exp_end");
+    if (q === "today") {
+      elS.value = fmt(now); elE.value = fmt(now);
+    } else if (q === "week") {
+      const mon = new Date(now); mon.setDate(now.getDate() - now.getDay() + (now.getDay()===0?-6:1));
+      elS.value = fmt(mon); elE.value = fmt(now);
+    } else if (q === "month") {
+      const ms = new Date(now.getFullYear(), now.getMonth(), 1);
+      elS.value = fmt(ms); elE.value = fmt(now);
+    } else if (q === "year") {
+      const ys = new Date(now.getFullYear(), 0, 1);
+      elS.value = fmt(ys); elE.value = fmt(now);
+    } else if (q === "all") {
+      elS.value = ""; elE.value = "";
     }
-  } catch (e) {
-    el.textContent = "Fehler: " + (e && e.message ? e.message : String(e));
-  }
+  });
 });
 
-document.getElementById("btn_invoices").addEventListener("click", async ()=>{
-  const start = document.getElementById("exp_start").value;
-  const end = document.getElementById("exp_end").value;
-  const period = document.getElementById("inv_period").value;
-  const anchor = document.getElementById("inv_anchor").value;
-  const el = document.getElementById("export_log");
-  el.innerHTML = "";
-  try {
-    const res = await run("export_invoices", {start, end, period, anchor});
-    if (res && res.files) {
-      res.files.forEach(f=>{
-        const a = document.createElement("a");
-        a.href = f.url + qs();
-        a.textContent = f.name;
-        a.target = "_blank";
-        el.appendChild(a);
-        el.appendChild(document.createElement("br"));
-      });
-    } else {
-      el.textContent = JSON.stringify(res, null, 2);
-    }
-  } catch (e) {
-    el.textContent = "Fehler: " + (e && e.message ? e.message : String(e));
+// --- Export helpers ---
+function setButtonLoading(btn, loading) {
+  if (loading) { btn.disabled = true; btn.classList.add("loading"); }
+  else { btn.disabled = false; btn.classList.remove("loading"); }
+}
+function showPreview(files) {
+  const body = document.getElementById("preview_body");
+  const links = document.getElementById("preview_links");
+  const ph = document.getElementById("preview_placeholder");
+  if (ph) ph.style.display = "none";
+  body.querySelectorAll("iframe,.preview-grid,.file-list,.preview-placeholder").forEach(e => { if(e!==ph) e.remove(); });
+  links.innerHTML = "";
+  if (!files || !files.length) {
+    if (ph) { ph.style.display = ""; ph.textContent = "–"; }
+    return;
   }
+  // Download links
+  files.forEach(f => {
+    const a = document.createElement("a");
+    a.href = (f.url||"") + qs();
+    a.textContent = f.name || "file";
+    a.target = "_blank";
+    links.appendChild(a);
+  });
+  // Categorize files for inline preview
+  const pdfs = files.filter(f => (f.name||"").toLowerCase().endsWith(".pdf"));
+  const imgs = files.filter(f => /[.](png|jpg|jpeg|svg)$/i.test(f.name||""));
+  const others = files.filter(f => !pdfs.includes(f) && !imgs.includes(f));
+  // Show first PDF as iframe
+  if (pdfs.length > 0) {
+    const iframe = document.createElement("iframe");
+    iframe.src = pdfs[0].url + qs();
+    body.appendChild(iframe);
+  }
+  // Show images in grid
+  if (imgs.length > 0) {
+    const grid = document.createElement("div");
+    grid.className = "preview-grid";
+    imgs.forEach(f => {
+      const img = document.createElement("img");
+      img.src = f.url + qs();
+      img.alt = f.name;
+      img.title = f.name;
+      img.addEventListener("click", () => window.open(f.url + qs(), "_blank"));
+      grid.appendChild(img);
+    });
+    body.appendChild(grid);
+  }
+  // Show remaining as file links
+  if (others.length > 0 || (pdfs.length === 0 && imgs.length === 0)) {
+    const list = document.createElement("div");
+    list.className = "file-list";
+    (pdfs.length === 0 && imgs.length === 0 ? files : others).forEach(f => {
+      const a = document.createElement("a");
+      a.href = (f.url||"") + qs();
+      a.target = "_blank";
+      a.textContent = f.name || "file";
+      list.appendChild(a);
+    });
+    body.appendChild(list);
+  }
+}
+function showPreviewError(msg) {
+  const body = document.getElementById("preview_body");
+  const ph = document.getElementById("preview_placeholder");
+  body.querySelectorAll("iframe,.preview-grid,.file-list").forEach(e => e.remove());
+  document.getElementById("preview_links").innerHTML = "";
+  if (ph) { ph.style.display = ""; ph.textContent = msg; ph.style.color = "var(--accent)"; }
+}
+function showPreviewJobStarted(jobId) {
+  const body = document.getElementById("preview_body");
+  const ph = document.getElementById("preview_placeholder");
+  body.querySelectorAll("iframe,.preview-grid,.file-list").forEach(e => e.remove());
+  document.getElementById("preview_links").innerHTML = "";
+  if (ph) { ph.style.display = ""; ph.textContent = `Job #${jobId} gestartet – siehe Jobs unten.`; ph.style.color = ""; }
+}
+
+// --- Export button handlers ---
+document.getElementById("btn_summary").addEventListener("click", async function(){
+  setButtonLoading(this, true);
+  try {
+    const res = await run("export_summary", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value});
+    if (res && res.files) showPreview(res.files);
+    else showPreviewError(JSON.stringify(res, null, 2));
+  } catch (e) { showPreviewError("Fehler: " + (e&&e.message?e.message:String(e))); }
+  setButtonLoading(this, false);
 });
 
-document.getElementById("btn_bundle").addEventListener("click", async ()=>{
-  const el = document.getElementById("export_log");
-  el.innerHTML = "";
+document.getElementById("btn_invoices").addEventListener("click", async function(){
+  setButtonLoading(this, true);
   try {
-    const res = await run("bundle", {hours: 48});
-    if (res && res.files) {
-      res.files.forEach(f=>{
-        const a = document.createElement("a");
-        a.href = f.url + qs();
-        a.textContent = f.name;
-        a.target = "_blank";
-        el.appendChild(a);
-        el.appendChild(document.createElement("br"));
-      });
-    } else {
-      el.textContent = JSON.stringify(res, null, 2);
-    }
-  } catch (e) {
-    el.textContent = "Fehler: " + (e && e.message ? e.message : String(e));
-  }
+    const res = await run("export_invoices", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value, period: document.getElementById("inv_period").value, anchor: document.getElementById("inv_anchor").value});
+    if (res && res.files) showPreview(res.files);
+    else showPreviewError(JSON.stringify(res, null, 2));
+  } catch (e) { showPreviewError("Fehler: " + (e&&e.message?e.message:String(e))); }
+  setButtonLoading(this, false);
 });
 
-document.getElementById("btn_report_day").addEventListener("click", async ()=>{
-  const anchor = document.getElementById("inv_anchor").value;
-  const el = document.getElementById("export_log");
-  el.textContent = "Starte Tagesreport … (siehe Jobs unten)";
+document.getElementById("btn_excel").addEventListener("click", async function(){
+  setButtonLoading(this, true);
   try {
-    const res = await run("report", {period: "day", anchor});
-    if (res && res.job && res.job.id) {
-      el.textContent = `Job #${res.job.id} gestartet. Unten bei Jobs erscheint der Download.`;
-    } else {
-      el.textContent = JSON.stringify(res, null, 2);
-    }
-  } catch (e) {
-    el.textContent = "Fehler: " + (e && e.message ? e.message : String(e));
-  }
+    const res = await run("export_excel", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value});
+    if (res && res.files) showPreview(res.files);
+    else showPreviewError(JSON.stringify(res, null, 2));
+  } catch (e) { showPreviewError("Fehler: " + (e&&e.message?e.message:String(e))); }
+  setButtonLoading(this, false);
 });
 
-document.getElementById("btn_report_month").addEventListener("click", async ()=>{
-  const anchor = document.getElementById("inv_anchor").value;
-  const el = document.getElementById("export_log");
-  el.textContent = "Starte Monatsreport … (siehe Jobs unten)";
+document.getElementById("btn_bundle").addEventListener("click", async function(){
+  setButtonLoading(this, true);
   try {
-    const res = await run("report", {period: "month", anchor});
-    if (res && res.job && res.job.id) {
-      el.textContent = `Job #${res.job.id} gestartet. Unten bei Jobs erscheint der Download.`;
-    } else {
-      el.textContent = JSON.stringify(res, null, 2);
-    }
-  } catch (e) {
-    el.textContent = "Fehler: " + (e && e.message ? e.message : String(e));
-  }
+    const hours = parseInt(document.getElementById("bundle_hours").value) || 48;
+    const res = await run("bundle", {hours});
+    if (res && res.files) showPreview(res.files);
+    else showPreviewError(JSON.stringify(res, null, 2));
+  } catch (e) { showPreviewError("Fehler: " + (e&&e.message?e.message:String(e))); }
+  setButtonLoading(this, false);
+});
+
+document.getElementById("btn_report_day").addEventListener("click", async function(){
+  setButtonLoading(this, true);
+  try {
+    const res = await run("report", {period: "day", anchor: document.getElementById("inv_anchor").value});
+    if (res && res.job && res.job.id) showPreviewJobStarted(res.job.id);
+    else showPreviewError(JSON.stringify(res, null, 2));
+  } catch (e) { showPreviewError("Fehler: " + (e&&e.message?e.message:String(e))); }
+  setButtonLoading(this, false);
+});
+
+document.getElementById("btn_report_month").addEventListener("click", async function(){
+  setButtonLoading(this, true);
+  try {
+    const res = await run("report", {period: "month", anchor: document.getElementById("inv_anchor").value});
+    if (res && res.job && res.job.id) showPreviewJobStarted(res.job.id);
+    else showPreviewError(JSON.stringify(res, null, 2));
+  } catch (e) { showPreviewError("Fehler: " + (e&&e.message?e.message:String(e))); }
+  setButtonLoading(this, false);
 });
 </script>
 </body>
@@ -4482,9 +4615,21 @@ class LiveWebDashboard:
                 # Backwards compat: the UI button id is "btn_summary", but the translation key is "web.control.btn.pdf".
                 "web_control_btn_summary": _t(self.lang, "web.control.btn.pdf"),
                 "web_control_btn_invoices": _t(self.lang, "web.control.btn.invoices"),
+                "web_control_btn_excel": _t(self.lang, "web.control.btn.excel"),
                 "web_control_btn_bundle": _t(self.lang, "web.control.btn.bundle"),
                 "web_control_btn_report_day": _t(self.lang, "web.control.btn.report_day"),
                 "web_control_btn_report_month": _t(self.lang, "web.control.btn.report_month"),
+                "web_control_export_daterange": _t(self.lang, "web.control.export.daterange"),
+                "web_control_export_invoice_settings": _t(self.lang, "web.control.export.invoice_settings"),
+                "web_control_export_actions": _t(self.lang, "web.control.export.actions"),
+                "web_control_export_preview": _t(self.lang, "web.control.export.preview"),
+                "web_control_export_no_preview": _t(self.lang, "web.control.export.no_preview"),
+                "web_control_export_today": _t(self.lang, "web.control.export.today"),
+                "web_control_export_this_week": _t(self.lang, "web.control.export.this_week"),
+                "web_control_export_this_month": _t(self.lang, "web.control.export.this_month"),
+                "web_control_export_this_year": _t(self.lang, "web.control.export.this_year"),
+                "web_control_export_all": _t(self.lang, "web.control.export.all"),
+                "web_control_export_bundle_hours": _t(self.lang, "web.control.export.bundle_hours"),
                 "web_control_jobs_meta": _t(self.lang, "web.control.jobs.meta"),
             },
         ).encode("utf-8")
