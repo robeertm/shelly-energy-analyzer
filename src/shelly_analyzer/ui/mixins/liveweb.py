@@ -749,7 +749,26 @@ class LiveWebMixin:
 
                         devices_out.append(dev_data)
 
-                    return {"ok": True, "devices": devices_out, "unit_eur": _unit, "co2_g_per_kwh": _co2_g}
+                    # Solar CO₂ offset for the month (if solar configured)
+                    _solar_co2_saved_month_kg = 0.0
+                    try:
+                        _solar_cfg_c = getattr(self.cfg, "solar", None)
+                        _pv_key_c = str(getattr(_solar_cfg_c, "pv_meter_device_key", "") or "") if _solar_cfg_c else ""
+                        if _pv_key_c and getattr(_solar_cfg_c, "enabled", False):
+                            _pv_df_c = self.storage.db.query_hourly(_pv_key_c, start_ts=int(_month_start.timestamp()), end_ts=int(_now.timestamp()))
+                            if _pv_df_c is not None and not _pv_df_c.empty and "kwh" in _pv_df_c.columns:
+                                _kwh_col_c = pd.to_numeric(_pv_df_c["kwh"], errors="coerce").fillna(0.0)
+                                _feed_in_c = float(_kwh_col_c[_kwh_col_c < 0].abs().sum())
+                                _self_kwh_c = 0.0
+                                _grid_c = float(_kwh_col_c[_kwh_col_c >= 0].sum())
+                                _hh_c = sum(d.get("month_kwh", 0.0) for d in devices_out)
+                                _self_kwh_c = max(0.0, _hh_c - _grid_c)
+                                _pv_kwh_c = _self_kwh_c + _feed_in_c
+                                _solar_co2_saved_month_kg = _pv_kwh_c * _co2_g / 1000.0
+                    except Exception:
+                        pass
+
+                    return {"ok": True, "devices": devices_out, "unit_eur": _unit, "co2_g_per_kwh": _co2_g, "solar_co2_saved_month_kg": round(_solar_co2_saved_month_kg, 3)}
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
 
@@ -1131,6 +1150,36 @@ class LiveWebMixin:
                         feed_in_tariff = 0.082
                         unit_price = 0.30
 
+                    # CO₂ savings: PV production displaces grid electricity
+                    co2_g_per_kwh = float(getattr(getattr(self.cfg, "pricing", None), "co2_intensity_g_per_kwh", 380.0) or 380.0)
+                    # Try ENTSO-E average intensity for the period
+                    _co2_source = "static"
+                    try:
+                        _co2_cfg_s = getattr(self.cfg, "co2", None)
+                        _co2_zone_s = getattr(_co2_cfg_s, "bidding_zone", "DE_LU") or "DE_LU"
+                        _co2_token_s = getattr(_co2_cfg_s, "entsoe_token", "") or ""
+                        if _co2_token_s and hasattr(self.storage, "db"):
+                            df_co2_s = self.storage.db.query_co2_intensity(_co2_zone_s, start_ts3, end_ts3 + 3600)
+                            if df_co2_s is not None and not df_co2_s.empty and "intensity_g_per_kwh" in df_co2_s.columns:
+                                avg_int = float(pd.to_numeric(df_co2_s["intensity_g_per_kwh"], errors="coerce").mean())
+                                if avg_int > 0:
+                                    co2_g_per_kwh = avg_int
+                                    _co2_source = "entsoe"
+                    except Exception:
+                        pass
+
+                    # CO₂ saved = PV production * grid intensity (what would have been emitted)
+                    co2_saved_kg = pv_kwh * co2_g_per_kwh / 1000.0
+                    # Grid CO₂ (what the household actually caused)
+                    co2_grid_kg = grid_kwh * co2_g_per_kwh / 1000.0
+
+                    # System info from config
+                    kw_peak = float(getattr(solar_cfg, "kw_peak", 0.0) or 0.0)
+                    battery_kwh_cfg = float(getattr(solar_cfg, "battery_kwh", 0.0) or 0.0)
+                    co2_prod_per_kwp = float(getattr(solar_cfg, "co2_production_kg_per_kwp", 1000.0) or 1000.0)
+                    # Lifetime CO₂ amortization: total embodied CO₂ vs total saved
+                    co2_embodied_kg = kw_peak * co2_prod_per_kwp if kw_peak > 0 else 0.0
+
                     return {
                         "ok": True,
                         "configured": True,
@@ -1143,6 +1192,13 @@ class LiveWebMixin:
                         "household_kwh": round(household_kwh, 3),
                         "revenue_eur": round(feed_in_kwh * feed_in_tariff, 2),
                         "savings_eur": round(self_kwh * unit_price, 2),
+                        "co2_saved_kg": round(co2_saved_kg, 3),
+                        "co2_grid_kg": round(co2_grid_kg, 3),
+                        "co2_intensity_g_per_kwh": round(co2_g_per_kwh, 1),
+                        "co2_source": _co2_source,
+                        "kw_peak": round(kw_peak, 2),
+                        "battery_kwh": round(battery_kwh_cfg, 1),
+                        "co2_embodied_kg": round(co2_embodied_kg, 1),
                     }
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
