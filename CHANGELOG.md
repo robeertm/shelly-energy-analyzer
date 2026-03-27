@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.1.6 - 2026-03-27
+### Fixed
+- **CO₂ tab: `self.db` AttributeError prevents all data display and writes** – The CO₂ mixin and the backfill button in core referenced `self.db`, which does not exist on the App object (the correct accessor is `self.storage.db`). This caused a silent `AttributeError` on every refresh and every backfill write, meaning data was fetched from ENTSO-E successfully but never written to the database, and the tab always showed "No data". Fixed all five occurrences across `co2.py` (4×) and `core.py` (1×). Added a 60-second periodic auto-refresh timer so the tab updates automatically when background data arrives.
+
 ## 11.1.5 - 2026-03-26
 ### Fixed
 - **CO₂ tab: still empty when `co2.enabled` not yet saved** – `_refresh_co2_tab()` previously returned early (showing "No CO₂ data") whenever `co2.enabled = false` in the saved config, even if data had just been imported via the "Backfill now" button. The `enabled` flag correctly controls whether the background fetch service runs auto-fetches — it must not prevent already-stored local data from being displayed. The early-exit guard is removed; the method now always queries the local `co2_intensity` table and shows whatever is available.

@@ -41,7 +41,7 @@ class Co2Mixin:
         from shelly_analyzer.services.entsoe import Co2FetchService
         self._co2_progress_q: "queue.Queue[tuple]" = queue.Queue()
         self._co2_fetch_svc = Co2FetchService(
-            db=self.db,
+            db=self.storage.db,
             get_config=lambda: self.cfg,
         )
         self._co2_fetch_svc.set_progress_callback(
@@ -213,6 +213,12 @@ class Co2Mixin:
         queries the DB so that a manual backfill (which bypasses the enabled
         check) becomes visible immediately.
         """
+        # Schedule periodic auto-refresh so new data appears automatically
+        try:
+            self.after(60_000, self._refresh_co2_tab)
+        except Exception:
+            pass
+
         try:
             cfg = self.cfg
             co2_cfg = getattr(cfg, "co2", None)
@@ -230,7 +236,7 @@ class Co2Mixin:
             green_thr = getattr(co2_cfg, "green_threshold_g_per_kwh", 150.0) if co2_cfg else 150.0
             dirty_thr = getattr(co2_cfg, "dirty_threshold_g_per_kwh", 400.0) if co2_cfg else 400.0
 
-            db = self.db
+            db = self.storage.db
             now_ts = int(time.time())
             start_24h = now_ts - 86400
             df = db.query_co2_intensity(zone, start_24h, now_ts + 3600)
@@ -374,7 +380,7 @@ class Co2Mixin:
             devices = getattr(self.cfg, "devices", []) or []
             if not devices:
                 return
-            db = self.db
+            db = self.storage.db
             now_ts = int(time.time())
             start_ts = now_ts - 3600
             for dev in devices:
@@ -415,7 +421,7 @@ class Co2Mixin:
             "month": int(month_start.timestamp()),
         }
 
-        db = self.db
+        db = self.storage.db
         devices = getattr(self.cfg, "devices", []) or []
 
         for key, start_ts in periods.items():
