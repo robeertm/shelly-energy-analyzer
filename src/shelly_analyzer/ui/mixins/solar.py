@@ -131,6 +131,26 @@ class SolarMixin:
             )
             self._solar_vars[key] = v
 
+        # CO₂ cards row
+        co2_cards_frame = ttk.Frame(self._solar_scroll_frame)
+        co2_cards_frame.pack(fill="x", padx=14, pady=(0, 4))
+        co2_cards_frame.columnconfigure((0, 1, 2, 3), weight=1)
+
+        co2_card_defs = [
+            ("co2_saved",    "solar.card.co2_saved",    "🌱"),
+            ("co2_grid",     "solar.card.co2_grid",     "🏭"),
+            ("co2_avoided_trees", "solar.card.co2_trees", "🌳"),
+            ("co2_avoided_car",   "solar.card.co2_car",   "🚗"),
+        ]
+        for col, (key, label_key, icon) in enumerate(co2_card_defs):
+            card = ttk.LabelFrame(co2_cards_frame, text=f"{icon} {self.t(label_key)}")
+            card.grid(row=0, column=col, sticky="nsew", padx=3, pady=3)
+            v = tk.StringVar(value="–")
+            ttk.Label(card, textvariable=v, font=("", 13, "bold")).pack(
+                anchor="center", padx=8, pady=8
+            )
+            self._solar_vars[key] = v
+
         # Info label (shown when meter/devices missing)
         self._solar_info_var = tk.StringVar(value="")
         self._solar_info_label = ttk.Label(
@@ -472,6 +492,30 @@ class SolarMixin:
                 self._solar_vars["pv_production"].set("–")
 
             self._solar_vars["feed_in_revenue"].set(f"{feed_in * tariff:.2f} €")
+
+            # CO₂ calculations
+            co2_g_per_kwh = 380.0
+            try:
+                co2_g_per_kwh = float(getattr(getattr(self.cfg, "pricing", None), "co2_intensity_g_per_kwh", 380.0) or 380.0)
+                # Try ENTSO-E average
+                if hasattr(self, "_calc_co2_for_range"):
+                    start_ts = int(start.timestamp())
+                    end_ts = int(end.timestamp())
+                    co2_result = self._calc_co2_for_range(start_ts, end_ts)
+                    if co2_result and len(co2_result) >= 3 and co2_result[1] > 0:
+                        co2_g_per_kwh = co2_result[1]
+            except Exception:
+                pass
+
+            co2_saved_kg = (pv_kwh or 0.0) * co2_g_per_kwh / 1000.0
+            co2_grid_kg = (grid or 0.0) * co2_g_per_kwh / 1000.0
+            self._solar_vars["co2_saved"].set(f"{co2_saved_kg:.2f} kg")
+            self._solar_vars["co2_grid"].set(f"{co2_grid_kg:.2f} kg")
+            # Equivalents: 22 kg CO₂/tree/year, 170 g CO₂/km car
+            tree_days = co2_saved_kg / 22.0 * 365 if co2_saved_kg > 0 else 0.0
+            car_km = co2_saved_kg / 0.170 if co2_saved_kg > 0 else 0.0
+            self._solar_vars["co2_avoided_trees"].set(f"{tree_days:.0f} Baumt.")
+            self._solar_vars["co2_avoided_car"].set(f"{car_km:.0f} km")
 
             # Info label
             if household is None:

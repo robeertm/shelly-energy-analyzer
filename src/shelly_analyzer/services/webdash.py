@@ -2070,18 +2070,51 @@ function renderSolar(data, el) {{
     el.innerHTML = '<p class="info-msg">' + t('web.dash.solar_not_configured', 'Solar monitoring is not configured.') + '</p>';
     return;
   }}
+  // Energy metrics
   const fields = [
-    [t('web.dash.pv_production', 'PV Production'), fmt(data.pv_kwh,3,'kWh'), ''],
-    [t('web.dash.feed_in', 'Feed-in'), fmt(data.feed_in_kwh,3,'kWh'), ''],
-    [t('web.dash.grid_draw', 'Grid Draw'), fmt(data.grid_kwh,3,'kWh'), ''],
-    [t('web.dash.self_consumption', 'Self-Consumption'), fmt(data.self_kwh,3,'kWh'), ''],
-    [t('web.dash.autarky', 'Autarky'), fmt(data.autarky_pct,1,'%'), ''],
-    [t('web.dash.revenue', 'Revenue'), fmt(data.revenue_eur,2,'\u20ac'), ''],
-    [t('web.dash.savings', 'Savings'), fmt(data.savings_eur,2,'\u20ac'), ''],
+    [t('web.dash.pv_production', 'PV Production'), fmt(data.pv_kwh,3,'kWh'), '☀️'],
+    [t('web.dash.feed_in', 'Feed-in'), fmt(data.feed_in_kwh,3,'kWh'), '🔼'],
+    [t('web.dash.grid_draw', 'Grid Draw'), fmt(data.grid_kwh,3,'kWh'), '🔽'],
+    [t('web.dash.self_consumption', 'Self-Consumption'), fmt(data.self_kwh,3,'kWh'), '🏠'],
+    [t('web.dash.autarky', 'Autarky'), fmt(data.autarky_pct,1,'%'), '🌟'],
+    [t('web.dash.revenue', 'Revenue'), fmt(data.revenue_eur,2,'\u20ac'), '💶'],
+    [t('web.dash.savings', 'Savings'), fmt(data.savings_eur,2,'\u20ac'), '💰'],
   ];
   let html = '<div class="card"><div class="metric-grid">';
   fields.forEach(function(f) {{ html += metricCardHtml(f[0], f[1], f[2]); }});
   html += '</div></div>';
+
+  // CO₂ section
+  if (data.co2_saved_kg !== undefined) {{
+    const co2Fields = [
+      [t('web.dash.co2_saved', 'CO\u2082 saved'), fmt(data.co2_saved_kg,2,'kg'), '🌱'],
+      [t('web.dash.co2_grid', 'CO\u2082 grid'), fmt(data.co2_grid_kg,2,'kg'), '🏭'],
+      [t('web.dash.co2_intensity', 'Grid intensity'), fmt(data.co2_intensity_g_per_kwh,0,'g/kWh'), data.co2_source === 'entsoe' ? '📡' : '📊'],
+    ];
+    // Equivalent: trees absorb ~22 kg CO₂/year → per day ~0.06 kg
+    const treeDays = data.co2_saved_kg > 0 ? (data.co2_saved_kg / 22.0 * 365).toFixed(0) : '0';
+    const carKm = data.co2_saved_kg > 0 ? (data.co2_saved_kg / 0.170).toFixed(0) : '0';
+    co2Fields.push([t('web.dash.co2_equiv_trees', 'Trees (eq.)'), treeDays + ' ' + t('web.dash.tree_days', 'tree-days'), '🌳']);
+    co2Fields.push([t('web.dash.co2_equiv_car', 'Car km avoided'), carKm + ' km', '🚗']);
+
+    html += '<div class="card" style="margin-top:8px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">CO\u2082 ' + t('web.dash.solar_impact', 'Impact') + '</div><div class="metric-grid">';
+    co2Fields.forEach(function(f) {{ html += metricCardHtml(f[0], f[1], f[2]); }});
+    html += '</div></div>';
+  }}
+
+  // System info (if kw_peak configured)
+  if (data.kw_peak > 0) {{
+    html += '<div class="card" style="margin-top:8px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">' + t('web.dash.solar_system', 'System') + '</div><div class="metric-grid">';
+    html += metricCardHtml(t('web.dash.kw_peak', 'kWp installed'), fmt(data.kw_peak,1,'kWp'), '⚡');
+    if (data.battery_kwh > 0) {{
+      html += metricCardHtml(t('web.dash.battery', 'Battery'), fmt(data.battery_kwh,1,'kWh'), '🔋');
+    }}
+    if (data.co2_embodied_kg > 0) {{
+      html += metricCardHtml(t('web.dash.co2_embodied', 'CO\u2082 embodied'), fmt(data.co2_embodied_kg,0,'kg'), '🏗️');
+    }}
+    html += '</div></div>';
+  }}
+
   el.innerHTML = html;
 }}
 
