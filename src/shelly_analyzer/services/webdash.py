@@ -1008,6 +1008,8 @@ async function loadHistory() {{
         if (spv) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true);
         const spa = document.getElementById('sp-a-' + key);
         if (spa) drawSparkline(spa, wndVals(buf, 'a'), '#10b981', true);
+        const spq = document.getElementById('sp-q-' + key);
+        if (spq) drawSparkline(spq, wndVals(buf, 'q'), '#ef4444', true);
       }}
     }}
   }} catch(e) {{ /* silent */ }}
@@ -1065,7 +1067,7 @@ function renderLive(data, first) {{
   devices.forEach(function(d) {{
     if (!sparkData[d.key]) sparkData[d.key] = [];
     const buf = sparkData[d.key];
-    buf.push({{ ts: Date.now(), w: d.power_w || 0, v: d.voltage_v || 0, a: d.current_a || 0, phases: d.phases ? d.phases.slice() : [], i_n: d.i_n || 0 }});
+    buf.push({{ ts: Date.now(), w: d.power_w || 0, v: d.voltage_v || 0, a: d.current_a || 0, phases: d.phases ? d.phases.slice() : [], i_n: d.i_n || 0, q: d.q_total_var || 0, q_phases: d.q_phases ? d.q_phases.slice() : [] }});
     if (buf.length > MAX_HIST_PTS) buf.shift();
   }});
 
@@ -1105,6 +1107,7 @@ function buildDeviceCard(d) {{
       if (metric === 'w') title = t('web.chart.power', 'Power (W)');
       else if (metric === 'v') title = t('web.chart.voltage', 'Voltage (V)');
       else if (metric === 'a') title = t('web.chart.current', 'Current (A)');
+      else if (metric === 'q') title = t('web.chart.reactive', 'Reactive Power (VAR)');
       else title = t('web.chart.neutral_current', 'I\u2099 Neutral (A)');
       openDetailChart(devKey, metric, title);
     }});
@@ -1123,8 +1126,19 @@ function devCardHTML(d) {{
     }});
     phaseHtml += '</dl>';
   }}
-  const nilm = d.appliances && d.appliances.length ? '<div class="appl-list">' + d.appliances.map(function(a) {{ return '<span class="appl-chip">' + a + '</span>'; }}).join('') + '</div>' : '';
+  const nilm = d.appliances && d.appliances.length ? '<div class="appl-list">' + d.appliances.map(function(a) {{ return '<span class="appl-chip">' + esc(a.icon + ' ' + t('appliance.' + a.id + '.name', a.id)) + '</span>'; }}).join('') + '</div>' : '';
   const inHtml = (d.i_n && d.i_n > 0.01) ? '<dl class="dev-kv" id="kv-in-' + d.key + '"><dt>I\u2099 (N)</dt><dd>' + fmt(d.i_n, 2, 'A') + '</dd></dl>' : '';
+  const qHtml = '<dl class="dev-kv" id="kv-q-' + d.key + '"><dt>' + t('web.kv.var', 'Reactive power') + '</dt><dd>' + fmt(d.q_total_var || 0, 1, 'VAR') + '</dd></dl>';
+  let balanceHtml = '';
+  if (phases && phases.length > 1) {{
+    const totalP = phases.reduce(function(s, ph) {{ return s + Math.abs(ph.power_w || 0); }}, 0) || 1;
+    balanceHtml = '<dl class="dev-kv" id="kv-bal-' + d.key + '"><dt>' + t('web.kv.balance', 'Phase balance') + '</dt><dd>';
+    balanceHtml += phases.map(function(ph, i) {{
+      const pct = Math.round(Math.abs(ph.power_w || 0) / totalP * 100);
+      return 'L' + (i+1) + '&nbsp;' + pct + '%';
+    }}).join(' \xb7 ');
+    balanceHtml += '</dd></dl>';
+  }}
   return (
     '<div class="dev-header">' +
       '<div>' +
@@ -1144,10 +1158,13 @@ function devCardHTML(d) {{
         '<dt>cos \u03c6</dt><dd>' + (d.pf !== undefined ? fmt(d.pf, 2) : '\u2014') + '</dd>' +
         '<dt>' + t('web.kv.freq', 'Freq') + '</dt><dd>' + (d.freq_hz !== undefined ? fmt(d.freq_hz, 1, 'Hz') : '\u2014') + '</dd>' +
       '</dl>' +
+      qHtml +
+      balanceHtml +
       phaseHtml +
       inHtml +
       '<div class="sparkline-wrap" style="margin-top:8px" data-metric="v" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.u', 'Voltage') + '</div><canvas class="sparkline-sm" id="sp-v-' + d.key + '"></canvas></div>' +
       '<div class="sparkline-wrap" style="margin-top:6px" data-metric="a" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.i', 'Current') + '</div><canvas class="sparkline-sm" id="sp-a-' + d.key + '"></canvas></div>' +
+      '<div class="sparkline-wrap" style="margin-top:6px" data-metric="q" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.var', 'Reactive power') + ' (VAR)</div><canvas class="sparkline-sm" id="sp-q-' + d.key + '"></canvas></div>' +
       (phases ? '<div class="sparkline-wrap" style="margin-top:6px" data-metric="in" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.chart.neutral_current', 'I\u2099 Neutral (A)') + '</div><canvas class="sparkline-sm" id="sp-in-' + d.key + '"></canvas></div>' : '') +
       nilm +
     '</div>'
@@ -1194,6 +1211,9 @@ function updateDeviceCard(card, d) {{
   // Current sparkline
   const spa = document.getElementById('sp-a-' + d.key);
   if (spa && buf) drawSparkline(spa, wndVals(buf, 'a'), '#10b981', true);
+  // Reactive power sparkline
+  const spq = document.getElementById('sp-q-' + d.key);
+  if (spq && buf) drawSparkline(spq, wndVals(buf, 'q'), '#ef4444', true);
   // Neutral current sparkline
   const spin = document.getElementById('sp-in-' + d.key);
   if (spin && buf) drawSparkline(spin, wndVals(buf, 'i_n'), '#a855f7', true);
@@ -1224,6 +1244,24 @@ function updateDeviceCard(card, d) {{
     if (inDl) {{
       const inDd = inDl.querySelector('dd');
       if (inDd) inDd.textContent = fmt(d.i_n, 2, 'A');
+    }}
+    // Update reactive power
+    const qDl = exp.querySelector('#kv-q-' + d.key);
+    if (qDl) {{
+      const qDd = qDl.querySelector('dd');
+      if (qDd) qDd.textContent = fmt(d.q_total_var || 0, 1, 'VAR');
+    }}
+    // Update phase balance
+    const balDl = exp.querySelector('#kv-bal-' + d.key);
+    if (balDl && phases) {{
+      const balDd = balDl.querySelector('dd');
+      if (balDd) {{
+        const totalP = phases.reduce(function(s, ph) {{ return s + Math.abs(ph.power_w || 0); }}, 0) || 1;
+        balDd.innerHTML = phases.map(function(ph, i) {{
+          const pct = Math.round(Math.abs(ph.power_w || 0) / totalP * 100);
+          return 'L' + (i+1) + '&nbsp;' + pct + '%';
+        }}).join(' \xb7 ');
+      }}
     }}
   }}
 }}
@@ -1340,12 +1378,15 @@ function _buildDetailLegend(devKey, metric) {{
   if (buf) buf.forEach(function(p) {{ if (p.phases && p.phases.length > maxPh) maxPh = p.phases.length; }});
   const cs = getComputedStyle(document.documentElement);
   const accent = cs.getPropertyValue('--accent').trim() || '#2563eb';
-  const totalColor = metric === 'v' ? '#f59e0b' : metric === 'a' ? '#10b981' : accent;
+  const totalColor = metric === 'v' ? '#f59e0b' : metric === 'a' ? '#10b981' : metric === 'q' ? '#ef4444' : accent;
   const items = [];
   if (metric === 'ph' || metric === 'v') {{
     for (let i = 0; i < maxPh; i++) items.push({{ label: 'L'+(i+1), color: _PHASE_COLORS[i]||'#888' }});
   }} else if (metric === 'in') {{
     items.push({{ label: t('web.chart.neutral_current', 'I\u2099 Neutral (A)'), color: '#a855f7' }});
+  }} else if (metric === 'q') {{
+    items.push({{ label: t('web.plots.series.total','Total'), color: '#ef4444' }});
+    for (let i = 0; i < maxPh; i++) items.push({{ label: 'L'+(i+1), color: _PHASE_COLORS[i]||'#888' }});
   }} else if (maxPh > 0) {{
     items.push({{ label: t('web.plots.series.total','Total'), color: totalColor }});
     for (let i = 0; i < maxPh; i++) items.push({{ label: 'L'+(i+1), color: _PHASE_COLORS[i]||'#888' }});
@@ -1387,7 +1428,7 @@ function _drawDetailChart() {{
   if (visPts.length < 2) return;
   let maxPh = 0;
   buf.forEach(function(p) {{ if (p.phases && p.phases.length > maxPh) maxPh = p.phases.length; }});
-  const totalColorMap = {{ w: accent, v: '#f59e0b', a: '#10b981' }};
+  const totalColorMap = {{ w: accent, v: '#f59e0b', a: '#10b981', q: '#ef4444' }};
   const series = [], colors = [];
   if (metric === 'ph') {{
     for (let i = 0; i < maxPh; i++) {{
@@ -1397,6 +1438,13 @@ function _drawDetailChart() {{
   }} else if (metric === 'in') {{
     series.push(visPts.map(function(p) {{ return p.i_n||0; }}));
     colors.push('#a855f7');
+  }} else if (metric === 'q') {{
+    series.push(visPts.map(function(p) {{ return p.q||0; }}));
+    colors.push('#ef4444');
+    for (let i = 0; i < maxPh; i++) {{
+      series.push(visPts.map(function(p) {{ return (p.q_phases&&p.q_phases[i]) ? (p.q_phases[i].var||0) : 0; }}));
+      colors.push(_PHASE_COLORS[i]||'#888');
+    }}
   }} else if (metric === 'v' && maxPh > 0) {{
     for (let i = 0; i < maxPh; i++) {{
       series.push(visPts.map(function(p) {{ return (p.phases&&p.phases[i]) ? (p.phases[i].voltage_v||0) : 0; }}));
@@ -1443,7 +1491,7 @@ function _drawDetailChart() {{
     }}
   }});
   // Series lines — only dash si===0 when it is the aggregate total (w/a), not a phase line (v/ph/in)
-  const _hasTotalSeries = (metric==='w'||metric==='a') && maxPh>0;
+  const _hasTotalSeries = (metric==='w'||metric==='a'||metric==='q') && maxPh>0;
   series.forEach(function(s, si) {{
     ctx.setLineDash((si===0&&_hasTotalSeries) ? [5,3] : []);
     ctx.strokeStyle=colors[si];
@@ -1465,6 +1513,7 @@ function _fmtAxisVal(v, metric) {{
   if (metric==='w'||metric==='ph') {{ if (Math.abs(v)>=1000) return (v/1000).toFixed(1)+'k'; return Math.round(v)+''; }}
   if (metric==='v') return v.toFixed(0);
   if (metric==='a'||metric==='in') return v.toFixed(2);
+  if (metric==='q') {{ if (Math.abs(v)>=1000) return (v/1000).toFixed(1)+'k'; return Math.round(v)+''; }}
   return Math.round(v)+'';
 }}
 
@@ -3806,11 +3855,22 @@ class _Handler(BaseHTTPRequestHandler):
                         if vc > 0:
                             phases.append({"voltage_v": vc, "current_a": ic, "power_w": pc})
                     raw_appl = appliances_map.get(dkey, [])
-                    appl_strs: List[str] = [
-                        f"{a.get('icon', '')} {a.get('id', '')}".strip()
+                    appl_objs: List[Dict[str, str]] = [
+                        {"icon": a.get("icon", ""), "id": a.get("id", "")}
                         for a in raw_appl
                         if isinstance(a, dict)
                     ]
+                    qa_val = float(latest.get("qa") or 0)
+                    qb_val = float(latest.get("qb") or 0)
+                    qc_val = float(latest.get("qc") or 0)
+                    q_phases: List[Dict[str, float]] = []
+                    if vb > 0 or vc > 0:
+                        if va > 0:
+                            q_phases.append({"var": qa_val})
+                        if vb > 0:
+                            q_phases.append({"var": qb_val})
+                        if vc > 0:
+                            q_phases.append({"var": qc_val})
                     devices_list.append({
                         "key": dkey,
                         "name": name,
@@ -3822,8 +3882,10 @@ class _Handler(BaseHTTPRequestHandler):
                         "pf": float(latest.get("cosphi_total") or 0),
                         "freq_hz": float(latest.get("freq_hz") or 50),
                         "phases": phases,
-                        "appliances": appl_strs,
+                        "q_phases": q_phases,
+                        "appliances": appl_objs,
                         "i_n": float(latest.get("i_n") or 0),
+                        "q_total_var": float(latest.get("q_total_var") or 0),
                     })
                 payload = {"devices": devices_list}
                 body = json.dumps(payload).encode("utf-8")
@@ -3866,6 +3928,17 @@ class _Handler(BaseHTTPRequestHandler):
                                 phases.append({"voltage_v": vb, "current_a": ib, "power_w": pb})
                             if vc > 0:
                                 phases.append({"voltage_v": vc, "current_a": ic, "power_w": pc})
+                        h_qa = float(p.get("qa") or 0)
+                        h_qb = float(p.get("qb") or 0)
+                        h_qc = float(p.get("qc") or 0)
+                        h_q_phases: List[Dict[str, float]] = []
+                        if vb > 0 or vc > 0:
+                            if va > 0:
+                                h_q_phases.append({"var": h_qa})
+                            if vb > 0:
+                                h_q_phases.append({"var": h_qb})
+                            if vc > 0:
+                                h_q_phases.append({"var": h_qc})
                         pts_out.append({
                             # ts from LivePoint is UNIX seconds; JS expects milliseconds
                             "ts": int(p.get("ts") or 0) * 1000,
@@ -3874,6 +3947,8 @@ class _Handler(BaseHTTPRequestHandler):
                             "a": current_a,
                             "phases": phases,
                             "i_n": float(p.get("i_n") or 0),
+                            "q": float(p.get("q_total_var") or 0),
+                            "q_phases": h_q_phases,
                         })
                     hist[dkey] = pts_out
                 body = json.dumps({"history": hist}).encode("utf-8")
