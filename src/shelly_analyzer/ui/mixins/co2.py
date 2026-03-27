@@ -250,6 +250,25 @@ class Co2Mixin:
                     zone = ui_zone
                     df = df2
 
+            # No data for the last 24 h — fall back to the most recent 24 h
+            # window that actually exists in the DB (e.g. after a historical
+            # backfill the data may be weeks/months in the past).
+            if df.empty:
+                latest_ts = db.latest_co2_ts(zone)
+                if latest_ts is None and ui_zone and ui_zone != zone:
+                    latest_ts = db.latest_co2_ts(ui_zone)
+                    if latest_ts is not None:
+                        zone = ui_zone
+                if latest_ts is not None:
+                    df = db.query_co2_intensity(zone, latest_ts - 86400, latest_ts + 3600)
+                    logger.info(
+                        "Co2Mixin: no recent data, showing latest available window "
+                        "(%s … %s, %d rows)",
+                        datetime.fromtimestamp(latest_ts - 86400, tz=timezone.utc).isoformat(),
+                        datetime.fromtimestamp(latest_ts, tz=timezone.utc).isoformat(),
+                        len(df),
+                    )
+
             if df.empty:
                 self._co2_live_intensity_var.set("–")
                 self._co2_live_band_var.set(self.t("co2.error.no_data"))

@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.1.8 - 2026-03-27
+### Fixed
+- **CO₂ tab: historical backfill data never displayed** – `_refresh_co2_tab()` always queried only the last 24 hours (`now − 86400 … now`). When the user ran a backfill for a date range in the past (e.g. Feb 1–8) the query returned zero rows and the tab showed "No data", even though the 168 data points were successfully written to the database. The method now falls back to `db.latest_co2_ts(zone)` whenever the 24-hour window is empty, then queries the 24-hour window ending at that timestamp so any historically-imported data is always displayed.
+
 ## 11.1.7 - 2026-03-27
 ### Fixed
 - **ENTSO-E HTTP errors no longer show raw HTML in the UI** – When the ENTSO-E API returns an HTTP error (e.g. 503 Service Unavailable), the error response body (which is an HTML page) was appended to the RuntimeError message and displayed verbatim in the status label. The body is now discarded; only the HTTP status code and reason phrase are included (e.g. `"ENTSO-E API HTTP 503: Service Unavailable"`). The test-connection button also maps 502/503/504 errors to a clean `"ENTSO-E API nicht erreichbar (HTTP 5xx)"` message.
