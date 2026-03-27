@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.17.3 - 2026-03-27
+### Fixed
+- **Setup wizard: missing tabs after first-run** – The wizard finish handler did not enable or build the Solar, Anomaly, Schedule, and CO₂ tabs. Users completing the first-run wizard saw these 4 tabs remain disabled/empty until restarting the app. Now all tabs are correctly activated and built on wizard completion.
+
 ## 11.17.2 - 2026-03-27
 ### Fixed
 - **Web dashboard blank page fix** – The solar settings toggle button used escaped quotes in an inline `onclick` handler that broke the entire page's JavaScript execution. Replaced with a proper `addEventListener` binding after DOM insertion. Also fixed `_solarSettingsHtml()` to read config fields from both `data.config` (unconfigured response) and directly from `data` (configured response).

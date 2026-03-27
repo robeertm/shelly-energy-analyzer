@@ -12680,7 +12680,7 @@ class CoreMixin:
 
             # Enable tabs
             try:
-                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_compare, self.tab_export):
+                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_compare, self.tab_anomaly, self.tab_schedule, self.tab_co2, self.tab_export):
                     try:
                         self.notebook.tab(tab, state="normal")
                     except Exception:
@@ -12711,11 +12711,31 @@ class CoreMixin:
                 except Exception:
                     pass
                 try:
+                    self._clear_frame(self.tab_solar); self._build_solar_tab()
+                except Exception:
+                    pass
+                try:
                     self._clear_frame(self.tab_compare); self._build_compare_tab()
                 except Exception:
                     pass
                 try:
+                    self._clear_frame(self.tab_anomaly); self._build_anomaly_tab()
+                except Exception:
+                    pass
+                try:
+                    self._clear_frame(self.tab_schedule); self._build_schedule_tab()
+                except Exception:
+                    pass
+                try:
+                    self._clear_frame(self.tab_co2); self._build_co2_tab()
+                except Exception:
+                    pass
+                try:
                     self._clear_frame(self.tab_export); self._build_export_tab()
+                except Exception:
+                    pass
+                try:
+                    self._schedule_init()
                 except Exception:
                     pass
                 self._tabs_built = True
