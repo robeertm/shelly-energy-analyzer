@@ -2065,9 +2065,43 @@ async function loadSolar(period) {{
   }}
 }}
 
+function _solarSettingsHtml(data) {{
+  const cfg = data.config || {{}};
+  const devs = data.devices || DEVICES || [];
+  const devOpts = '<option value="">' + t('web.dash.none', '(none)') + '</option>' +
+    devs.map(function(d) {{ return '<option value="' + esc(d.key) + '"' + (d.key === (cfg.pv_meter_device_key||'') ? ' selected' : '') + '>' + esc(d.name||d.key) + '</option>'; }}).join('');
+  return '<div class="card" style="margin-top:8px" id="solar-cfg-panel">' +
+    '<div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">⚙️ ' + t('web.dash.solar_settings', 'Solar / PV Settings') + '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">' +
+    '<label style="display:flex;align-items:center;gap:6px;grid-column:1/-1"><input type="checkbox" id="scfg-enabled"' + (cfg.enabled ? ' checked' : '') + '/> ' + t('web.dash.solar_enabled', 'PV/Solar active') + '</label>' +
+    '<div><label style="font-size:11px;color:var(--muted)">' + t('web.dash.solar_pv_meter', 'PV meter') + '</label><select id="scfg-pv" style="width:100%">' + devOpts + '</select></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">' + t('web.dash.solar_tariff', 'Feed-in (€/kWh)') + '</label><input id="scfg-tariff" type="number" step="0.001" value="' + (cfg.feed_in_tariff||0.082) + '" style="width:100%"/></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">' + t('web.dash.solar_kwp', 'kWp installed') + '</label><input id="scfg-kwp" type="number" step="0.1" value="' + (cfg.kw_peak||0) + '" style="width:100%"/></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">' + t('web.dash.solar_battery', 'Battery (kWh)') + '</label><input id="scfg-bat" type="number" step="0.1" value="' + (cfg.battery_kwh||0) + '" style="width:100%"/></div>' +
+    '<div><label style="font-size:11px;color:var(--muted)">' + t('web.dash.solar_co2prod', 'CO₂/kWp (kg)') + '</label><input id="scfg-co2p" type="number" step="10" value="' + (cfg.co2_production_kg_per_kwp||1000) + '" style="width:100%"/></div>' +
+    '<div style="grid-column:1/-1;text-align:right;margin-top:4px"><button class="btn btn-accent btn-sm" onclick="saveSolarCfg()">' + t('web.dash.save', 'Save') + '</button></div>' +
+    '</div></div>';
+}}
+async function saveSolarCfg() {{
+  try {{
+    const p = {{
+      enabled: document.getElementById('scfg-enabled').checked,
+      pv_meter_device_key: document.getElementById('scfg-pv').value,
+      feed_in_tariff: parseFloat(document.getElementById('scfg-tariff').value)||0.082,
+      kw_peak: parseFloat(document.getElementById('scfg-kwp').value)||0,
+      battery_kwh: parseFloat(document.getElementById('scfg-bat').value)||0,
+      co2_production_kg_per_kwp: parseFloat(document.getElementById('scfg-co2p').value)||1000,
+    }};
+    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{action:'save_solar_config',params:p}})}});
+    const j = await r.json();
+    if (j && j.ok) {{ loadSolar(solarPeriod); }}
+    else {{ alert('Error: ' + (j.error||'unknown')); }}
+  }} catch(e) {{ alert('Error: ' + e.message); }}
+}}
+
 function renderSolar(data, el) {{
   if (data.configured === false || data.enabled === false) {{
-    el.innerHTML = '<p class="info-msg">' + t('web.dash.solar_not_configured', 'Solar monitoring is not configured.') + '</p>';
+    el.innerHTML = '<p class="info-msg">' + t('web.dash.solar_not_configured', 'Solar monitoring is not configured.') + '</p>' + _solarSettingsHtml(data);
     return;
   }}
   // Energy metrics
@@ -2114,6 +2148,10 @@ function renderSolar(data, el) {{
     }}
     html += '</div></div>';
   }}
+
+  // Settings toggle at bottom
+  html += '<div style="margin-top:8px;text-align:center"><button class="btn btn-outline btn-sm" onclick="document.getElementById(\'solar-cfg-toggle\').style.display=document.getElementById(\'solar-cfg-toggle\').style.display===\'none\'?\'block\':\'none\'">⚙️ ' + t('web.dash.solar_settings', 'Settings') + '</button></div>';
+  html += '<div id="solar-cfg-toggle" style="display:none">' + _solarSettingsHtml(data) + '</div>';
 
   el.innerHTML = html;
 }}

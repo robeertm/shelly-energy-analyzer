@@ -1,5 +1,11 @@
 # Changelog
 
+## 11.17.1 - 2026-03-27
+### Added
+- **Desktop settings: new solar fields** – Settings → Solar / PV now shows input fields for installed capacity (kWp), battery storage (kWh), and lifecycle CO₂ per kWp. All three are persisted to config.json on save.
+- **Web solar tab: inline settings** – Solar tab in the web live dashboard now shows a ⚙️ Settings button that expands a config panel for: enable/disable, PV meter device, feed-in tariff, kWp, battery, CO₂/kWp. Changes are saved live via the new `save_solar_config` API action.
+- **Web solar tab: setup form** – When solar is not yet configured, the tab shows the full settings form directly instead of just "not configured", so users can set it up from their phone.
+
 ## 11.17.0 - 2026-03-27
 ### Added
 - **Solar CO₂ savings** – The Solar tab (web + desktop) now calculates and displays how much CO₂ was avoided by PV production. Uses real ENTSO-E grid intensity when available, falls back to static 380 g/kWh. Shows:
