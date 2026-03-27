@@ -179,6 +179,40 @@ class Co2Mixin:
             self._co2_summary_vars[f"{key}_car"] = v_car
             self._co2_summary_vars[f"{key}_tree"] = v_tree
 
+        # ── Fuel mix details ──────────────────────────────────────────────────
+        mix_frame = ttk.LabelFrame(sf, text=self.t("co2.mix.title"))
+        mix_frame.pack(fill="x", padx=14, pady=(4, 4))
+
+        self._co2_mix_ts_var = tk.StringVar(value="")
+        ttk.Label(
+            mix_frame,
+            textvariable=self._co2_mix_ts_var,
+            foreground="gray",
+            font=("", 8),
+        ).pack(anchor="w", padx=8, pady=(4, 0))
+
+        mix_tbl_cols = ("col_fuel", "col_mw", "col_share", "col_factor", "col_contrib")
+        self._co2_mix_tbl = ttk.Treeview(
+            mix_frame,
+            columns=mix_tbl_cols,
+            show="headings",
+            height=7,
+            selectmode="none",
+        )
+        for col, key, width, anchor in [
+            ("col_fuel",    "co2.mix.col_fuel",    210, "w"),
+            ("col_mw",      "co2.mix.col_mw",       90, "e"),
+            ("col_share",   "co2.mix.col_share",    80, "e"),
+            ("col_factor",  "co2.mix.col_factor",  120, "e"),
+            ("col_contrib", "co2.mix.col_contrib",  120, "e"),
+        ]:
+            self._co2_mix_tbl.heading(col, text=self.t(key))
+            self._co2_mix_tbl.column(col, width=width, anchor=anchor)
+        mix_tbl_sb = ttk.Scrollbar(mix_frame, orient="vertical", command=self._co2_mix_tbl.yview)
+        self._co2_mix_tbl.configure(yscrollcommand=mix_tbl_sb.set)
+        mix_tbl_sb.pack(side="right", fill="y")
+        self._co2_mix_tbl.pack(side="left", fill="x", expand=True, padx=(4, 0), pady=(2, 4))
+
         # ── 24 h intensity chart ──────────────────────────────────────────────
         chart_frame = ttk.LabelFrame(sf, text=self.t("co2.chart.title"))
         chart_frame.pack(fill="both", padx=14, pady=(4, 4))
@@ -362,6 +396,9 @@ class Co2Mixin:
 
             # ── Heatmap ───────────────────────────────────────────────────────
             self._co2_draw_heatmap(df, green_thr, dirty_thr)
+
+            # ── Fuel mix details ──────────────────────────────────────────────
+            self._co2_update_mix_table()
 
             # ── Data tables ───────────────────────────────────────────────────
             self._co2_update_intensity_table(zone)
@@ -711,3 +748,51 @@ class Co2Mixin:
                 )
         except Exception:
             logger.debug("Co2Mixin: device table update error", exc_info=True)
+
+    def _co2_update_mix_table(self) -> None:
+        """Populate the fuel-mix Treeview from the service's cached latest mix."""
+        try:
+            tree = self._co2_mix_tbl
+        except AttributeError:
+            return
+        try:
+            from shelly_analyzer.services.entsoe import FUEL_DISPLAY_NAMES, _CO2_FACTORS
+            svc = getattr(self, "_co2_fetch_svc", None)
+            if svc is None:
+                return
+            hour_ts, mix = svc.get_latest_mix()
+            tree.delete(*tree.get_children())
+            if not mix or hour_ts is None:
+                self._co2_mix_ts_var.set(self.t("co2.mix.no_data"))
+                return
+
+            ts_str = datetime.fromtimestamp(hour_ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            self._co2_mix_ts_var.set(self.t("co2.mix.ts_label", ts=ts_str))
+
+            total_mw = sum(mix.values())
+            # Compute weighted CO₂ intensity for this hour
+            weighted = sum(mw * _CO2_FACTORS.get(fuel, 400.0) for fuel, mw in mix.items())
+            intensity_check = weighted / total_mw if total_mw else 0.0
+
+            for fuel, mw in sorted(mix.items(), key=lambda x: -x[1]):
+                share = mw / total_mw * 100 if total_mw else 0.0
+                factor = _CO2_FACTORS.get(fuel, 400.0)
+                contrib_pct = mw * factor / weighted * 100 if weighted else 0.0
+                name = FUEL_DISPLAY_NAMES.get(fuel, fuel)
+                tree.insert("", "end", values=(
+                    name,
+                    f"{mw:.0f}",
+                    f"{share:.1f}%",
+                    f"{factor:.0f}",
+                    f"{contrib_pct:.1f}%",
+                ))
+            # Footer row showing totals
+            tree.insert("", "end", values=(
+                f"∑ {self.t('co2.mix.total')}",
+                f"{total_mw:.0f}",
+                "100.0%",
+                f"→ {intensity_check:.1f}",
+                "100.0%",
+            ))
+        except Exception:
+            logger.debug("Co2Mixin: mix table update error", exc_info=True)
