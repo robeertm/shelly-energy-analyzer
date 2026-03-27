@@ -1,5 +1,19 @@
 # Changelog
 
+## 11.16.0 - 2026-03-27
+### Improved
+- **Web export: professional PDF reports** – Both "PDF Summary + Plots" and "Report (Tag/Monat)" now generate the same rich, professional multi-page PDFs previously only available in email reports. Includes:
+  - Header band with title/date, 6 KPI boxes (kWh, EUR, CO₂, avg W, peak W, peak hour)
+  - Color-coded +/- % comparison vs. previous period
+  - Enhanced device table with % share and CO₂ columns
+  - Highlights/Lowlights section (top/lowest consumer, peak hours)
+  - Stacked hourly/daily consumption chart (per-device colors)
+  - CO₂ emissions chart with ENTSO-E intensity-based green→yellow→red gradient
+  - Per-device detail pages with mini charts and operating stats
+  - Monthly reports additionally include weekday/weekend split, best/worst day, top-5 ranking chart
+- **Summary uses smart format selection** – Single-day ranges produce a daily report layout; multi-day ranges produce a monthly report layout with daily aggregation.
+- **Fallback to old format** – If the professional report data builder fails, the system falls back to the original simple PDF format instead of crashing.
+
 ## 11.15.2 - 2026-03-27
 ### Fixed
 - **Web export: no more raw JSON in results** – Async actions (invoices, reports) that return a job object (`{"ok":true,"job":{...}}`) are now correctly recognized and show a clean "✓ Job #N gestartet" info card instead of dumping raw JSON as an error.
