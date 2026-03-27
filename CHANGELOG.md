@@ -1,5 +1,11 @@
 # Changelog
 
+## 11.10.0 - 2026-03-27
+### Added
+- **Web dashboard: real ENTSO-E CO₂ in costs tab** – The web costs tab now computes CO₂ emissions using actual hourly grid intensity from ENTSO-E instead of a static g/kWh factor. Falls back to the configured static intensity if ENTSO-E is unavailable.
+- **Web dashboard: CO₂ heatmap mode** – The web heatmap now offers "g CO₂" as a third unit alongside kWh and €, with a distinct yellow → orange → red colour scheme. Uses real ENTSO-E data with static fallback.
+- **README updated** – Documents all new CO₂ features across plots, heatmap, cost tab, and web dashboard.
+
 ## 11.9.1 - 2026-03-27
 ### Added
 - **CO₂ bar coloring by intensity** – Bars in the CO₂ plots tab are now colored on a green → yellow → red gradient based on the average grid CO₂ intensity for each time bucket. Uses the existing green/dirty threshold settings.

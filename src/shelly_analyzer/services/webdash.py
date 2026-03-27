@@ -709,6 +709,7 @@ _HTML_TEMPLATE = """<!doctype html>
         <select id="hm-unit">
           <option value="kWh">kWh</option>
           <option value="eur">€</option>
+          <option value="co2">g CO₂</option>
         </select>
         <select id="hm-year"></select>
         <button class="btn btn-outline" onclick="loadHeatmap()">↻</button>
@@ -1676,6 +1677,30 @@ function ratioColor(ratio) {{
   }}
 }}
 
+/* Yellow→Orange→Red gradient for CO₂ mode */
+function ratioCo2Color(ratio) {{
+  if (ratio <= 0.5) {{
+    const t = ratio * 2;
+    const r = Math.round(255);
+    const g = Math.round(235 + (167 - 235) * t);
+    const b = Math.round(132 + (38 - 132) * t);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }} else {{
+    const t = (ratio - 0.5) * 2;
+    const r = Math.round(255 + (215 - 255) * t);
+    const g = Math.round(167 + (25 - 167) * t);
+    const b = Math.round(38 + (28 - 38) * t);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }}
+}}
+
+function hmColorFn(unit) {{ return unit === 'co2' ? ratioCo2Color : ratioColor; }}
+function hmFmtVal(v, unit) {{
+  if (unit === 'co2') return fmt(v, 1, 'g CO\u2082');
+  if (unit === 'eur') return fmt(v, 2, '\u20ac');
+  return fmt(v, 3, 'kWh');
+}}
+
 function renderHeatmapCalendar(data, el, unit) {{
   // API returns calendar as [{date, value}, ...] — convert to dict
   const calArr = data.calendar || [];
@@ -1740,9 +1765,10 @@ function renderHeatmapCalendar(data, el, unit) {{
       const key = day.toISOString().slice(0,10);
       const v = daily[key] || 0;
       const ratio = maxVal > 0 ? v / maxVal : 0;
-      const label = unit === 'eur' ? fmt(v,2,'\u20ac') : fmt(v,3,'kWh');
+      const label = hmFmtVal(v, unit);
       const inYear = day.getFullYear() === year;
-      const bg = inYear && v > 0 ? ratioColor(ratio) : 'var(--chipbg)';
+      const _colorFn = hmColorFn(unit);
+      const bg = inYear && v > 0 ? _colorFn(ratio) : 'var(--chipbg)';
       gridHtml += '<div class="hm-day" style="width:' + calCellSize + 'px;height:' + calCellSize + 'px;background:' + bg + '" data-date="' + key + '" data-val="' + label + '"></div>';
     }});
     gridHtml += '</div>';
@@ -1800,8 +1826,9 @@ function renderHeatmapHourly(data, el, unit) {{
     for (let h = 0; h < 24; h++) {{
       const v = (hourly[d] && hourly[d][h]) ? hourly[d][h] : 0;
       const ratio = maxVal > 0 ? v / maxVal : 0;
-      const bg = v > 0 ? ratioColor(ratio) : 'var(--chipbg)';
-      const title = days[d] + ' ' + h + 'h: ' + (unit === 'eur' ? fmt(v,2,'€') : fmt(v,3,'kWh'));
+      const _colorFn2 = hmColorFn(unit);
+      const bg = v > 0 ? _colorFn2(ratio) : 'var(--chipbg)';
+      const title = days[d] + ' ' + h + 'h: ' + hmFmtVal(v, unit);
       html += '<td class="hm-cell" style="width:' + cellSize + 'px;height:' + cellSize + 'px;background:' + bg + '" data-tip="' + title + '"></td>';
     }}
     html += '</tr>';
