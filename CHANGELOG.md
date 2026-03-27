@@ -1,5 +1,11 @@
 # Changelog
 
+## 11.15.1 - 2026-03-27
+### Fixed
+- **Web export: file cards instead of broken preview** – Export results now display as clear file cards with type icon (📄 PDF, 📊 Excel, 📦 ZIP), filename, and a prominent "Öffnen" button that opens the file directly on smartphone/tablet. Replaces the previous unreadable JSON/iframe preview.
+- **Web export: live jobs panel** – The export tab now includes a "Running Jobs" section that polls `/api/jobs` every 2 seconds, showing real-time progress bars, status badges (running/done/error), and clickable download links when jobs complete. Polling stops automatically when leaving the tab.
+- **Control page export: same file-card fix** – The /control page export section also uses the new file-card layout with direct "Öffnen" links instead of the old broken preview.
+
 ## 11.15.0 - 2026-03-27
 ### Added
 - **Web live view: Export tab** – New "Export" tab (📥) in the bottom navigation bar of the live web dashboard. Provides the same full export functionality previously only available on the /control page: PDF summaries, invoices, Excel export, daily/monthly reports, and ZIP bundles – all with inline preview (PDF iframe, image grid, download links), quick date presets, configurable bundle hours, and loading spinners on buttons. Translated in all 9 languages.

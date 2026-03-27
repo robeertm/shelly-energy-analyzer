@@ -674,21 +674,26 @@ _HTML_TEMPLATE = """<!doctype html>
     .exp-actions button.busy {{ position: relative; color: transparent; }}
     .exp-actions button.busy::after {{ content: ""; position: absolute; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: exp-spin 0.6s linear infinite; }}
     @keyframes exp-spin {{ to {{ transform: rotate(360deg); }} }}
-    .exp-preview {{ margin-top: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--chipbg); min-height: 120px; overflow: hidden; }}
-    .exp-preview-hdr {{ display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 6px; }}
-    .exp-preview-hdr h3 {{ margin: 0; font-size: 12px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }}
-    .exp-preview-hdr .exp-dl {{ display: flex; flex-wrap: wrap; gap: 6px; }}
-    .exp-preview-hdr .exp-dl a {{ font-size: 11px; color: var(--accent); text-decoration: none; padding: 2px 8px; border: 1px solid rgba(106,167,255,0.25); border-radius: 999px; }}
-    .exp-preview-hdr .exp-dl a:hover {{ border-color: var(--accent); }}
-    .exp-preview-body {{ padding: 10px; }}
-    .exp-preview-ph {{ display: flex; align-items: center; justify-content: center; min-height: 100px; color: var(--muted); font-size: 12px; }}
-    .exp-preview-body iframe {{ width: 100%; height: 500px; border: none; border-radius: 8px; background: #fff; }}
-    .exp-preview-body .exp-imgs {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }}
-    .exp-preview-body .exp-imgs img {{ width: 100%; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; transition: transform 0.15s; }}
-    .exp-preview-body .exp-imgs img:hover {{ transform: scale(1.02); }}
-    .exp-preview-body .exp-flinks {{ display: flex; flex-wrap: wrap; gap: 6px; }}
-    .exp-preview-body .exp-flinks a {{ display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--accent); text-decoration: none; padding: 6px 12px; border: 1px solid rgba(106,167,255,0.25); border-radius: 10px; background: rgba(106,167,255,0.06); }}
-    .exp-preview-body .exp-flinks a:hover {{ border-color: var(--accent); background: rgba(106,167,255,0.12); }}
+    .exp-placeholder {{ color: var(--muted); font-size: 12px; padding: 12px 0; text-align: center; }}
+    .exp-file-card {{ display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); margin-bottom: 6px; }}
+    .exp-file-icon {{ font-size: 28px; flex: 0 0 auto; }}
+    .exp-file-info {{ flex: 1; min-width: 0; }}
+    .exp-file-name {{ font-size: 13px; font-weight: 600; color: var(--fg); word-break: break-all; }}
+    .exp-file-meta {{ font-size: 11px; color: var(--muted); margin-top: 2px; }}
+    .exp-file-btn {{ display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 8px 16px; border-radius: 10px; border: 1px solid rgba(106,167,255,0.35); background: rgba(106,167,255,0.12); color: var(--accent); text-decoration: none; font-weight: 600; white-space: nowrap; cursor: pointer; min-height: 40px; }}
+    .exp-file-btn:hover {{ background: rgba(106,167,255,0.22); }}
+    .exp-job-card {{ padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); margin-bottom: 6px; }}
+    .exp-job-head {{ display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }}
+    .exp-job-title {{ font-size: 13px; font-weight: 600; color: var(--fg); }}
+    .exp-job-status {{ font-size: 11px; padding: 2px 8px; border-radius: 999px; }}
+    .exp-job-status.running {{ background: rgba(106,167,255,0.15); color: var(--accent); }}
+    .exp-job-status.done {{ background: rgba(34,197,94,0.15); color: #22c55e; }}
+    .exp-job-status.error {{ background: rgba(239,68,68,0.15); color: #ef4444; }}
+    .exp-job-progress {{ width: 100%; height: 8px; border-radius: 4px; appearance: none; -webkit-appearance: none; }}
+    .exp-job-progress::-webkit-progress-bar {{ background: var(--chipbg); border-radius: 4px; }}
+    .exp-job-progress::-webkit-progress-value {{ background: var(--accent); border-radius: 4px; }}
+    .exp-job-msg {{ font-size: 11px; color: var(--muted); margin-top: 4px; }}
+    .exp-job-files {{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }}
     .error-msg {{ color: var(--pwr-high); font-size: 13px; padding: 20px 0; text-align: center; }}
     .info-msg {{ color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }}
     /* ── Compare delta ── */
@@ -820,13 +825,16 @@ _HTML_TEMPLATE = """<!doctype html>
           <button id="exp-btn-bundle"><span class="eico">📦</span><span class="elbl">{exp_btn_bundle}</span></button>
         </div>
       </div>
-      <div class="exp-preview" id="exp-preview">
-        <div class="exp-preview-hdr">
-          <h3>{exp_preview}</h3>
-          <div class="exp-dl" id="exp-dl-links"></div>
+      <div class="exp-section" style="margin-top:10px" id="exp-results-section">
+        <h3>{exp_results}</h3>
+        <div id="exp-results">
+          <div class="exp-placeholder" id="exp-results-ph">{exp_no_results}</div>
         </div>
-        <div class="exp-preview-body" id="exp-preview-body">
-          <div class="exp-preview-ph" id="exp-preview-ph">{exp_no_preview}</div>
+      </div>
+      <div class="exp-section" style="margin-top:10px" id="exp-jobs-section">
+        <h3>{exp_jobs}</h3>
+        <div id="exp-jobs-list">
+          <div class="exp-placeholder">–</div>
         </div>
       </div>
     </div>
@@ -934,6 +942,8 @@ function switchPane(name, btn) {{
 }}
 
 function onPaneActivated(name) {{
+  // Stop polling when leaving export tab
+  if (name !== 'export' && typeof _expStopJobsPolling === 'function') _expStopJobsPolling();
   if (name === 'live') {{
     startLive();
   }} else {{
@@ -2365,161 +2375,244 @@ function esc(s) {{
    EXPORT PANE
 ────────────────────────────────────────────── */
 let _expInited = false;
+let _expJobsTimer = null;
+
+function _expFileIcon(name) {{
+  const n = (name||'').toLowerCase();
+  if (n.endsWith('.pdf')) return '📄';
+  if (n.endsWith('.xlsx') || n.endsWith('.xls')) return '📊';
+  if (n.endsWith('.zip')) return '📦';
+  if (n.endsWith('.png') || n.endsWith('.jpg') || n.endsWith('.jpeg') || n.endsWith('.svg')) return '🖼️';
+  return '📎';
+}}
+
+function _expRenderFileCard(f) {{
+  const icon = _expFileIcon(f.name);
+  const url = f.url || '';
+  const name = f.name || 'file';
+  const ext = name.split('.').pop().toUpperCase();
+  return `<div class="exp-file-card">
+    <div class="exp-file-icon">${{icon}}</div>
+    <div class="exp-file-info">
+      <div class="exp-file-name">${{name}}</div>
+      <div class="exp-file-meta">${{ext}}</div>
+    </div>
+    <a class="exp-file-btn" href="${{url}}" target="_blank">{exp_open_file}</a>
+  </div>`;
+}}
+
+function _expShowResults(files) {{
+  const el = document.getElementById('exp-results');
+  const ph = document.getElementById('exp-results-ph');
+  if (!files || !files.length) {{
+    if (ph) ph.style.display = '';
+    return;
+  }}
+  if (ph) ph.style.display = 'none';
+  // Prepend new results (newest on top), remove old placeholder
+  const frag = document.createElement('div');
+  frag.innerHTML = files.map(f => _expRenderFileCard(f)).join('');
+  // Insert before first child (or just append)
+  const first = el.querySelector('.exp-file-card');
+  if (first) {{ while (frag.firstChild) el.insertBefore(frag.firstChild, first); }}
+  else {{ el.innerHTML += files.map(f => _expRenderFileCard(f)).join(''); }}
+}}
+
+function _expShowError(msg) {{
+  const el = document.getElementById('exp-results');
+  const ph = document.getElementById('exp-results-ph');
+  if (ph) ph.style.display = 'none';
+  const card = document.createElement('div');
+  card.className = 'exp-file-card';
+  card.innerHTML = `<div class="exp-file-icon">⚠️</div>
+    <div class="exp-file-info">
+      <div class="exp-file-name" style="color:var(--accent)">{exp_job_error}</div>
+      <div class="exp-file-meta">${{msg}}</div>
+    </div>`;
+  const first = el.querySelector('.exp-file-card');
+  if (first) el.insertBefore(card, first); else el.appendChild(card);
+}}
+
+async function _expRefreshJobs() {{
+  try {{
+    const r = await fetch('/api/jobs', {{cache:'no-store'}});
+    const data = await r.json();
+    const arr = (data && data.jobs) ? data.jobs : [];
+    const el = document.getElementById('exp-jobs-list');
+    if (!el) return;
+    if (!arr.length) {{
+      el.innerHTML = '<div class="exp-placeholder">–</div>';
+      return;
+    }}
+    let html = '';
+    arr.forEach(j => {{
+      const st = j.status || '';
+      const pct = (j.progress_overall !== undefined && j.progress_overall !== null) ? parseInt(j.progress_overall,10) : 0;
+      const action = j.action || '';
+      const started = j.started_at ? new Date(j.started_at*1000).toLocaleString() : '';
+      let stClass = 'running', stLabel = '{exp_job_running}';
+      if (st === 'done' || st === 'completed') {{ stClass = 'done'; stLabel = '{exp_job_done}'; }}
+      else if (st === 'error' || st === 'failed') {{ stClass = 'error'; stLabel = '{exp_job_error}'; }}
+      let progHtml = '';
+      const prog = j.progress || {{}};
+      const keys = Object.keys(prog);
+      if (keys.length) {{
+        progHtml = keys.map(k => {{
+          const p = prog[k] || {{}};
+          const pp = parseInt(p.percent||0,10);
+          const pm = p.message || '';
+          return `<div class="exp-job-msg">${{k}}: ${{pp}}% ${{pm ? '– '+pm : ''}}</div>`;
+        }}).join('');
+      }}
+      let filesHtml = '';
+      const res = j.result || {{}};
+      if (res.files && Array.isArray(res.files) && res.files.length) {{
+        filesHtml = '<div class="exp-job-files">' + res.files.map(f => {{
+          const url = f.url || '';
+          const name = f.name || 'file';
+          return `<a class="exp-file-btn" href="${{url}}" target="_blank">${{_expFileIcon(name)}} ${{name}}</a>`;
+        }}).join('') + '</div>';
+      }}
+      let errHtml = '';
+      if (j.error) {{
+        errHtml = `<div class="exp-job-msg" style="color:#ef4444">${{j.error}}</div>`;
+      }}
+      html += `<div class="exp-job-card">
+        <div class="exp-job-head">
+          <div class="exp-job-title">#${{j.id}} · ${{action}}</div>
+          <span class="exp-job-status ${{stClass}}">${{stLabel}}</span>
+        </div>
+        <progress class="exp-job-progress" max="100" value="${{isNaN(pct)?0:pct}}"></progress>
+        <div class="exp-job-msg">${{pct}}% · ${{started}}</div>
+        ${{progHtml}}
+        ${{errHtml}}
+        ${{filesHtml}}
+      </div>`;
+    }});
+    el.innerHTML = html;
+  }} catch(e) {{}}
+}}
+
+function _expStartJobsPolling() {{
+  if (_expJobsTimer) return;
+  _expRefreshJobs();
+  _expJobsTimer = setInterval(_expRefreshJobs, 2000);
+}}
+
+function _expStopJobsPolling() {{
+  if (_expJobsTimer) {{ clearInterval(_expJobsTimer); _expJobsTimer = null; }}
+}}
+
 function initExport() {{
-  if (_expInited) return;
-  _expInited = true;
+  if (!_expInited) {{
+    _expInited = true;
 
-  // Quick date presets
-  const qd = document.getElementById('exp-quick-dates');
-  const presets = [
-    ['today', '{exp_today}'],
-    ['week', '{exp_this_week}'],
-    ['month', '{exp_this_month}'],
-    ['year', '{exp_this_year}'],
-    ['all', '{exp_all}'],
-  ];
-  presets.forEach(([k, lbl]) => {{
-    const b = document.createElement('button');
-    b.textContent = lbl;
-    b.addEventListener('click', () => {{
-      const now = new Date();
-      const fmt = d => d.toISOString().slice(0,10);
-      const eS = document.getElementById('exp-start');
-      const eE = document.getElementById('exp-end');
-      if (k==='today') {{ eS.value=fmt(now); eE.value=fmt(now); }}
-      else if (k==='week') {{ const m=new Date(now); m.setDate(now.getDate()-now.getDay()+(now.getDay()===0?-6:1)); eS.value=fmt(m); eE.value=fmt(now); }}
-      else if (k==='month') {{ eS.value=fmt(new Date(now.getFullYear(),now.getMonth(),1)); eE.value=fmt(now); }}
-      else if (k==='year') {{ eS.value=fmt(new Date(now.getFullYear(),0,1)); eE.value=fmt(now); }}
-      else {{ eS.value=''; eE.value=''; }}
-    }});
-    qd.appendChild(b);
-  }});
-
-  // Helpers
-  function setBusy(btn, on) {{
-    if (on) {{ btn.disabled=true; btn.classList.add('busy'); }}
-    else {{ btn.disabled=false; btn.classList.remove('busy'); }}
-  }}
-  function expPreview(files) {{
-    const body = document.getElementById('exp-preview-body');
-    const dl = document.getElementById('exp-dl-links');
-    const ph = document.getElementById('exp-preview-ph');
-    if (ph) ph.style.display='none';
-    body.querySelectorAll('iframe,.exp-imgs,.exp-flinks,.exp-preview-ph').forEach(e => {{ if(e!==ph) e.remove(); }});
-    dl.innerHTML='';
-    if (!files || !files.length) {{ if(ph){{ ph.style.display=''; ph.textContent='–'; }} return; }}
-    files.forEach(f => {{
-      const a = document.createElement('a');
-      a.href = f.url||''; a.textContent = f.name||'file'; a.target='_blank';
-      dl.appendChild(a);
-    }});
-    const pdfs = files.filter(f => (f.name||'').toLowerCase().endsWith('.pdf'));
-    const imgs = files.filter(f => /[.](png|jpg|jpeg|svg)$/i.test(f.name||''));
-    const rest = files.filter(f => !pdfs.includes(f) && !imgs.includes(f));
-    if (pdfs.length) {{
-      const ifr = document.createElement('iframe');
-      ifr.src = pdfs[0].url; body.appendChild(ifr);
-    }}
-    if (imgs.length) {{
-      const g = document.createElement('div'); g.className='exp-imgs';
-      imgs.forEach(f => {{
-        const im = document.createElement('img');
-        im.src=f.url; im.alt=f.name; im.title=f.name;
-        im.addEventListener('click', ()=>window.open(f.url,'_blank'));
-        g.appendChild(im);
+    // Quick date presets
+    const qd = document.getElementById('exp-quick-dates');
+    const presets = [
+      ['today', '{exp_today}'],
+      ['week', '{exp_this_week}'],
+      ['month', '{exp_this_month}'],
+      ['year', '{exp_this_year}'],
+      ['all', '{exp_all}'],
+    ];
+    presets.forEach(([k, lbl]) => {{
+      const b = document.createElement('button');
+      b.textContent = lbl;
+      b.addEventListener('click', () => {{
+        const now = new Date();
+        const fmt = d => d.toISOString().slice(0,10);
+        const eS = document.getElementById('exp-start');
+        const eE = document.getElementById('exp-end');
+        if (k==='today') {{ eS.value=fmt(now); eE.value=fmt(now); }}
+        else if (k==='week') {{ const m=new Date(now); m.setDate(now.getDate()-now.getDay()+(now.getDay()===0?-6:1)); eS.value=fmt(m); eE.value=fmt(now); }}
+        else if (k==='month') {{ eS.value=fmt(new Date(now.getFullYear(),now.getMonth(),1)); eE.value=fmt(now); }}
+        else if (k==='year') {{ eS.value=fmt(new Date(now.getFullYear(),0,1)); eE.value=fmt(now); }}
+        else {{ eS.value=''; eE.value=''; }}
       }});
-      body.appendChild(g);
-    }}
-    if (rest.length || (!pdfs.length && !imgs.length)) {{
-      const l = document.createElement('div'); l.className='exp-flinks';
-      ((!pdfs.length && !imgs.length) ? files : rest).forEach(f => {{
-        const a = document.createElement('a');
-        a.href=f.url||''; a.target='_blank'; a.textContent=f.name||'file';
-        l.appendChild(a);
-      }});
-      body.appendChild(l);
-    }}
-  }}
-  function expError(msg) {{
-    const body = document.getElementById('exp-preview-body');
-    const ph = document.getElementById('exp-preview-ph');
-    body.querySelectorAll('iframe,.exp-imgs,.exp-flinks').forEach(e=>e.remove());
-    document.getElementById('exp-dl-links').innerHTML='';
-    if(ph){{ ph.style.display=''; ph.textContent=msg; ph.style.color='var(--accent)'; }}
-  }}
-  function expJobStarted(jid) {{
-    const body = document.getElementById('exp-preview-body');
-    const ph = document.getElementById('exp-preview-ph');
-    body.querySelectorAll('iframe,.exp-imgs,.exp-flinks').forEach(e=>e.remove());
-    document.getElementById('exp-dl-links').innerHTML='';
-    if(ph){{ ph.style.display=''; ph.textContent='Job #'+jid+' gestartet – siehe Jobs.'; ph.style.color=''; }}
-  }}
-
-  async function expRun(action, params) {{
-    const r = await fetch('/api/run', {{
-      method: 'POST',
-      headers: {{'Content-Type':'application/json'}},
-      body: JSON.stringify({{action, params: params||{{}}}})
+      qd.appendChild(b);
     }});
-    if (!r.ok) throw new Error('HTTP '+r.status);
-    return r.json();
+
+    function setBusy(btn, on) {{
+      if (on) {{ btn.disabled=true; btn.classList.add('busy'); }}
+      else {{ btn.disabled=false; btn.classList.remove('busy'); }}
+    }}
+
+    async function expRun(action, params) {{
+      const r = await fetch('/api/run', {{
+        method: 'POST',
+        headers: {{'Content-Type':'application/json'}},
+        body: JSON.stringify({{action, params: params||{{}}}})
+      }});
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      return r.json();
+    }}
+
+    // Button handlers – synchronous exports show file cards, async jobs get polled
+    document.getElementById('exp-btn-summary').addEventListener('click', async function() {{
+      setBusy(this,true);
+      try {{
+        const res = await expRun('export_summary', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value}});
+        if (res && res.files) _expShowResults(res.files);
+        else if (res && res.error) _expShowError(res.error);
+        else _expShowError(JSON.stringify(res));
+      }} catch(e) {{ _expShowError(e.message||String(e)); }}
+      setBusy(this,false);
+    }});
+
+    document.getElementById('exp-btn-invoices').addEventListener('click', async function() {{
+      setBusy(this,true);
+      try {{
+        const res = await expRun('export_invoices', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value, period: document.getElementById('exp-inv-period').value, anchor: document.getElementById('exp-inv-anchor').value}});
+        if (res && res.files) _expShowResults(res.files);
+        else if (res && res.error) _expShowError(res.error);
+        else _expShowError(JSON.stringify(res));
+      }} catch(e) {{ _expShowError(e.message||String(e)); }}
+      setBusy(this,false);
+    }});
+
+    document.getElementById('exp-btn-excel').addEventListener('click', async function() {{
+      setBusy(this,true);
+      try {{
+        const res = await expRun('export_excel', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value}});
+        if (res && res.files) _expShowResults(res.files);
+        else if (res && res.error) _expShowError(res.error);
+        else _expShowError(JSON.stringify(res));
+      }} catch(e) {{ _expShowError(e.message||String(e)); }}
+      setBusy(this,false);
+    }});
+
+    document.getElementById('exp-btn-bundle').addEventListener('click', async function() {{
+      setBusy(this,true);
+      try {{
+        const hours = parseInt(document.getElementById('exp-bundle-h').value)||48;
+        const res = await expRun('bundle', {{hours}});
+        if (res && res.files) _expShowResults(res.files);
+        else if (res && res.error) _expShowError(res.error);
+        else _expShowError(JSON.stringify(res));
+      }} catch(e) {{ _expShowError(e.message||String(e)); }}
+      setBusy(this,false);
+    }});
+
+    document.getElementById('exp-btn-report-day').addEventListener('click', async function() {{
+      setBusy(this,true);
+      try {{
+        const res = await expRun('report', {{period:'day', anchor: document.getElementById('exp-inv-anchor').value}});
+        // async job – polling will show progress + files when done
+      }} catch(e) {{ _expShowError(e.message||String(e)); }}
+      setBusy(this,false);
+    }});
+
+    document.getElementById('exp-btn-report-month').addEventListener('click', async function() {{
+      setBusy(this,true);
+      try {{
+        const res = await expRun('report', {{period:'month', anchor: document.getElementById('exp-inv-anchor').value}});
+      }} catch(e) {{ _expShowError(e.message||String(e)); }}
+      setBusy(this,false);
+    }});
   }}
-
-  // Button handlers
-  document.getElementById('exp-btn-summary').addEventListener('click', async function() {{
-    setBusy(this,true);
-    try {{
-      const res = await expRun('export_summary', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value}});
-      if (res && res.files) expPreview(res.files); else expError(JSON.stringify(res,null,2));
-    }} catch(e){{ expError('Error: '+(e.message||e)); }}
-    setBusy(this,false);
-  }});
-
-  document.getElementById('exp-btn-invoices').addEventListener('click', async function() {{
-    setBusy(this,true);
-    try {{
-      const res = await expRun('export_invoices', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value, period: document.getElementById('exp-inv-period').value, anchor: document.getElementById('exp-inv-anchor').value}});
-      if (res && res.files) expPreview(res.files); else expError(JSON.stringify(res,null,2));
-    }} catch(e){{ expError('Error: '+(e.message||e)); }}
-    setBusy(this,false);
-  }});
-
-  document.getElementById('exp-btn-excel').addEventListener('click', async function() {{
-    setBusy(this,true);
-    try {{
-      const res = await expRun('export_excel', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value}});
-      if (res && res.files) expPreview(res.files); else expError(JSON.stringify(res,null,2));
-    }} catch(e){{ expError('Error: '+(e.message||e)); }}
-    setBusy(this,false);
-  }});
-
-  document.getElementById('exp-btn-bundle').addEventListener('click', async function() {{
-    setBusy(this,true);
-    try {{
-      const hours = parseInt(document.getElementById('exp-bundle-h').value)||48;
-      const res = await expRun('bundle', {{hours}});
-      if (res && res.files) expPreview(res.files); else expError(JSON.stringify(res,null,2));
-    }} catch(e){{ expError('Error: '+(e.message||e)); }}
-    setBusy(this,false);
-  }});
-
-  document.getElementById('exp-btn-report-day').addEventListener('click', async function() {{
-    setBusy(this,true);
-    try {{
-      const res = await expRun('report', {{period:'day', anchor: document.getElementById('exp-inv-anchor').value}});
-      if (res && res.job && res.job.id) expJobStarted(res.job.id); else expError(JSON.stringify(res,null,2));
-    }} catch(e){{ expError('Error: '+(e.message||e)); }}
-    setBusy(this,false);
-  }});
-
-  document.getElementById('exp-btn-report-month').addEventListener('click', async function() {{
-    setBusy(this,true);
-    try {{
-      const res = await expRun('report', {{period:'month', anchor: document.getElementById('exp-inv-anchor').value}});
-      if (res && res.job && res.job.id) expJobStarted(res.job.id); else expError(JSON.stringify(res,null,2));
-    }} catch(e){{ expError('Error: '+(e.message||e)); }}
-    setBusy(this,false);
-  }});
+  // Start jobs polling when export tab is active
+  _expStartJobsPolling();
 }}
 
 /* ──────────────────────────────────────────────
@@ -3576,21 +3669,6 @@ _CONTROL_TEMPLATE = """<!doctype html>
     .export-actions button.loading {{ position: relative; color: transparent; }}
     .export-actions button.loading::after {{ content: ""; position: absolute; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: btn-spin 0.6s linear infinite; }}
     @keyframes btn-spin {{ to {{ transform: rotate(360deg); }} }}
-    .preview-area {{ margin-top: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--chipbg); min-height: 120px; overflow: hidden; }}
-    .preview-header {{ display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--border); }}
-    .preview-header h3 {{ margin: 0; font-size: 12px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }}
-    .preview-header .preview-links {{ display: flex; flex-wrap: wrap; gap: 6px; }}
-    .preview-header .preview-links a {{ font-size: 11px; color: var(--accent); text-decoration: none; padding: 2px 8px; border: 1px solid rgba(106,167,255,0.25); border-radius: 999px; }}
-    .preview-header .preview-links a:hover {{ border-color: var(--accent); }}
-    .preview-body {{ padding: 10px; }}
-    .preview-placeholder {{ display: flex; align-items: center; justify-content: center; min-height: 100px; color: var(--muted); font-size: 12px; }}
-    .preview-body iframe {{ width: 100%; height: 500px; border: none; border-radius: 8px; background: #fff; }}
-    .preview-body .preview-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }}
-    .preview-body .preview-grid img {{ width: 100%; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; transition: transform 0.15s; }}
-    .preview-body .preview-grid img:hover {{ transform: scale(1.02); }}
-    .preview-body .file-list {{ display: flex; flex-wrap: wrap; gap: 6px; }}
-    .preview-body .file-list a {{ display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--accent); text-decoration: none; padding: 6px 12px; border: 1px solid rgba(106,167,255,0.25); border-radius: 10px; background: rgba(106,167,255,0.06); }}
-    .preview-body .file-list a:hover {{ border-color: var(--accent); background: rgba(106,167,255,0.12); }}
     .inline-field {{ display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }}
     .inline-field label {{ min-width: 30px; }}
     .inline-field input, .inline-field select {{ flex: 1; min-width: 0; }}
@@ -3708,13 +3786,10 @@ _CONTROL_TEMPLATE = """<!doctype html>
           </div>
         </div>
 
-        <div class="preview-area" id="preview_area">
-          <div class="preview-header">
-            <h3>{web_control_export_preview}</h3>
-            <div class="preview-links" id="preview_links"></div>
-          </div>
-          <div class="preview-body" id="preview_body">
-            <div class="preview-placeholder" id="preview_placeholder">{web_control_export_no_preview}</div>
+        <div class="export-section" style="margin-top:10px">
+          <h3>{web_control_export_preview}</h3>
+          <div id="ctrl_export_results">
+            <div class="ctrl-exp-ph" id="ctrl_export_ph" style="color:var(--muted);font-size:12px;text-align:center;padding:12px 0">{web_control_export_no_preview}</div>
           </div>
         </div>
       </div>
@@ -3922,76 +3997,46 @@ function setButtonLoading(btn, loading) {
   if (loading) { btn.disabled = true; btn.classList.add("loading"); }
   else { btn.disabled = false; btn.classList.remove("loading"); }
 }
-function showPreview(files) {
-  const body = document.getElementById("preview_body");
-  const links = document.getElementById("preview_links");
-  const ph = document.getElementById("preview_placeholder");
+function _ctrlFileIcon(name) {
+  const n = (name||"").toLowerCase();
+  if (n.endsWith(".pdf")) return "📄";
+  if (n.endsWith(".xlsx") || n.endsWith(".xls")) return "📊";
+  if (n.endsWith(".zip")) return "📦";
+  if (n.endsWith(".png") || n.endsWith(".jpg") || n.endsWith(".jpeg")) return "🖼️";
+  return "📎";
+}
+function _ctrlFileCard(f) {
+  const icon = _ctrlFileIcon(f.name);
+  const url = (f.url||"") + qs();
+  const name = esc(f.name || "file");
+  const ext = (f.name||"").split(".").pop().toUpperCase();
+  return `<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--card);margin-bottom:6px">
+    <div style="font-size:28px">${icon}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:600;word-break:break-all">${name}</div>
+      <div style="font-size:11px;color:var(--muted)">${ext}</div>
+    </div>
+    <a href="${url}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:8px 16px;border-radius:10px;border:1px solid rgba(106,167,255,0.35);background:rgba(106,167,255,0.12);color:var(--accent);text-decoration:none;font-weight:600;white-space:nowrap;min-height:40px">Öffnen</a>
+  </div>`;
+}
+function showResults(files) {
+  const el = document.getElementById("ctrl_export_results");
+  const ph = document.getElementById("ctrl_export_ph");
+  if (!files || !files.length) return;
   if (ph) ph.style.display = "none";
-  body.querySelectorAll("iframe,.preview-grid,.file-list,.preview-placeholder").forEach(e => { if(e!==ph) e.remove(); });
-  links.innerHTML = "";
-  if (!files || !files.length) {
-    if (ph) { ph.style.display = ""; ph.textContent = "–"; }
-    return;
-  }
-  // Download links
-  files.forEach(f => {
-    const a = document.createElement("a");
-    a.href = (f.url||"") + qs();
-    a.textContent = f.name || "file";
-    a.target = "_blank";
-    links.appendChild(a);
-  });
-  // Categorize files for inline preview
-  const pdfs = files.filter(f => (f.name||"").toLowerCase().endsWith(".pdf"));
-  const imgs = files.filter(f => /[.](png|jpg|jpeg|svg)$/i.test(f.name||""));
-  const others = files.filter(f => !pdfs.includes(f) && !imgs.includes(f));
-  // Show first PDF as iframe
-  if (pdfs.length > 0) {
-    const iframe = document.createElement("iframe");
-    iframe.src = pdfs[0].url + qs();
-    body.appendChild(iframe);
-  }
-  // Show images in grid
-  if (imgs.length > 0) {
-    const grid = document.createElement("div");
-    grid.className = "preview-grid";
-    imgs.forEach(f => {
-      const img = document.createElement("img");
-      img.src = f.url + qs();
-      img.alt = f.name;
-      img.title = f.name;
-      img.addEventListener("click", () => window.open(f.url + qs(), "_blank"));
-      grid.appendChild(img);
-    });
-    body.appendChild(grid);
-  }
-  // Show remaining as file links
-  if (others.length > 0 || (pdfs.length === 0 && imgs.length === 0)) {
-    const list = document.createElement("div");
-    list.className = "file-list";
-    (pdfs.length === 0 && imgs.length === 0 ? files : others).forEach(f => {
-      const a = document.createElement("a");
-      a.href = (f.url||"") + qs();
-      a.target = "_blank";
-      a.textContent = f.name || "file";
-      list.appendChild(a);
-    });
-    body.appendChild(list);
-  }
+  el.insertAdjacentHTML("afterbegin", files.map(f => _ctrlFileCard(f)).join(""));
 }
-function showPreviewError(msg) {
-  const body = document.getElementById("preview_body");
-  const ph = document.getElementById("preview_placeholder");
-  body.querySelectorAll("iframe,.preview-grid,.file-list").forEach(e => e.remove());
-  document.getElementById("preview_links").innerHTML = "";
-  if (ph) { ph.style.display = ""; ph.textContent = msg; ph.style.color = "var(--accent)"; }
-}
-function showPreviewJobStarted(jobId) {
-  const body = document.getElementById("preview_body");
-  const ph = document.getElementById("preview_placeholder");
-  body.querySelectorAll("iframe,.preview-grid,.file-list").forEach(e => e.remove());
-  document.getElementById("preview_links").innerHTML = "";
-  if (ph) { ph.style.display = ""; ph.textContent = `Job #${jobId} gestartet – siehe Jobs unten.`; ph.style.color = ""; }
+function showError(msg) {
+  const el = document.getElementById("ctrl_export_results");
+  const ph = document.getElementById("ctrl_export_ph");
+  if (ph) ph.style.display = "none";
+  el.insertAdjacentHTML("afterbegin", `<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--card);margin-bottom:6px">
+    <div style="font-size:28px">⚠️</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:600;color:var(--accent)">Fehler</div>
+      <div style="font-size:11px;color:var(--muted)">${esc(msg)}</div>
+    </div>
+  </div>`);
 }
 
 // --- Export button handlers ---
@@ -3999,9 +4044,10 @@ document.getElementById("btn_summary").addEventListener("click", async function(
   setButtonLoading(this, true);
   try {
     const res = await run("export_summary", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value});
-    if (res && res.files) showPreview(res.files);
-    else showPreviewError(JSON.stringify(res, null, 2));
-  } catch (e) { showPreviewError("Fehler: " + (e&&e.message?e.message:String(e))); }
+    if (res && res.files) showResults(res.files);
+    else if (res && res.error) showError(res.error);
+    else showError(JSON.stringify(res));
+  } catch (e) { showError(e&&e.message?e.message:String(e)); }
   setButtonLoading(this, false);
 });
 
@@ -4009,9 +4055,10 @@ document.getElementById("btn_invoices").addEventListener("click", async function
   setButtonLoading(this, true);
   try {
     const res = await run("export_invoices", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value, period: document.getElementById("inv_period").value, anchor: document.getElementById("inv_anchor").value});
-    if (res && res.files) showPreview(res.files);
-    else showPreviewError(JSON.stringify(res, null, 2));
-  } catch (e) { showPreviewError("Fehler: " + (e&&e.message?e.message:String(e))); }
+    if (res && res.files) showResults(res.files);
+    else if (res && res.error) showError(res.error);
+    else showError(JSON.stringify(res));
+  } catch (e) { showError(e&&e.message?e.message:String(e)); }
   setButtonLoading(this, false);
 });
 
@@ -4019,9 +4066,10 @@ document.getElementById("btn_excel").addEventListener("click", async function(){
   setButtonLoading(this, true);
   try {
     const res = await run("export_excel", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value});
-    if (res && res.files) showPreview(res.files);
-    else showPreviewError(JSON.stringify(res, null, 2));
-  } catch (e) { showPreviewError("Fehler: " + (e&&e.message?e.message:String(e))); }
+    if (res && res.files) showResults(res.files);
+    else if (res && res.error) showError(res.error);
+    else showError(JSON.stringify(res));
+  } catch (e) { showError(e&&e.message?e.message:String(e)); }
   setButtonLoading(this, false);
 });
 
@@ -4030,29 +4078,27 @@ document.getElementById("btn_bundle").addEventListener("click", async function()
   try {
     const hours = parseInt(document.getElementById("bundle_hours").value) || 48;
     const res = await run("bundle", {hours});
-    if (res && res.files) showPreview(res.files);
-    else showPreviewError(JSON.stringify(res, null, 2));
-  } catch (e) { showPreviewError("Fehler: " + (e&&e.message?e.message:String(e))); }
+    if (res && res.files) showResults(res.files);
+    else if (res && res.error) showError(res.error);
+    else showError(JSON.stringify(res));
+  } catch (e) { showError(e&&e.message?e.message:String(e)); }
   setButtonLoading(this, false);
 });
 
 document.getElementById("btn_report_day").addEventListener("click", async function(){
   setButtonLoading(this, true);
   try {
-    const res = await run("report", {period: "day", anchor: document.getElementById("inv_anchor").value});
-    if (res && res.job && res.job.id) showPreviewJobStarted(res.job.id);
-    else showPreviewError(JSON.stringify(res, null, 2));
-  } catch (e) { showPreviewError("Fehler: " + (e&&e.message?e.message:String(e))); }
+    await run("report", {period: "day", anchor: document.getElementById("inv_anchor").value});
+    // async job – Jobs section below shows progress
+  } catch (e) { showError(e&&e.message?e.message:String(e)); }
   setButtonLoading(this, false);
 });
 
 document.getElementById("btn_report_month").addEventListener("click", async function(){
   setButtonLoading(this, true);
   try {
-    const res = await run("report", {period: "month", anchor: document.getElementById("inv_anchor").value});
-    if (res && res.job && res.job.id) showPreviewJobStarted(res.job.id);
-    else showPreviewError(JSON.stringify(res, null, 2));
-  } catch (e) { showPreviewError("Fehler: " + (e&&e.message?e.message:String(e))); }
+    await run("report", {period: "month", anchor: document.getElementById("inv_anchor").value});
+  } catch (e) { showError(e&&e.message?e.message:String(e)); }
   setButtonLoading(this, false);
 });
 </script>
@@ -4854,6 +4900,13 @@ class LiveWebDashboard:
                 "exp_this_month": _t(self.lang, "web.control.export.this_month"),
                 "exp_this_year": _t(self.lang, "web.control.export.this_year"),
                 "exp_all": _t(self.lang, "web.control.export.all"),
+                "exp_results": _t(self.lang, "web.control.export.results"),
+                "exp_jobs": _t(self.lang, "web.control.export.jobs"),
+                "exp_open_file": _t(self.lang, "web.control.export.open_file"),
+                "exp_no_results": _t(self.lang, "web.control.export.no_results"),
+                "exp_job_running": _t(self.lang, "web.control.export.job_running"),
+                "exp_job_done": _t(self.lang, "web.control.export.job_done"),
+                "exp_job_error": _t(self.lang, "web.control.export.job_error"),
                 # Button titles
                 "web_btn_freeze_title": _t(self.lang, "web.dash.freeze_resume"),
                 "web_btn_settings_title": _t(self.lang, "web.dash.device_settings"),

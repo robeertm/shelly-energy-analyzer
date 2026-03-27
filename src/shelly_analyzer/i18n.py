@@ -644,6 +644,14 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.control.export.all": "Alles",
         "web.control.export.generating": "Wird erzeugt …",
         "web.control.export.bundle_hours": "Bundle Stunden",
+        "web.control.export.results": "Ergebnis",
+        "web.control.export.jobs": "Laufende Jobs",
+        "web.control.export.open_file": "Öffnen",
+        "web.control.export.download": "Download",
+        "web.control.export.no_results": "Noch keine Exports erstellt.",
+        "web.control.export.job_running": "läuft …",
+        "web.control.export.job_done": "fertig",
+        "web.control.export.job_error": "Fehler",
         "web.control.jobs.meta": "Letzte Aktionen (Browser ↔ App). Aktualisiert automatisch.",
 
         # Web: Token / errors
@@ -1395,6 +1403,14 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.control.export.all": "All",
         "web.control.export.generating": "Generating …",
         "web.control.export.bundle_hours": "Bundle hours",
+        "web.control.export.results": "Result",
+        "web.control.export.jobs": "Running jobs",
+        "web.control.export.open_file": "Open",
+        "web.control.export.download": "Download",
+        "web.control.export.no_results": "No exports generated yet.",
+        "web.control.export.job_running": "running …",
+        "web.control.export.job_done": "done",
+        "web.control.export.job_error": "Error",
         "web.control.jobs.meta": "Latest actions (browser ↔ app). Auto-refresh.",
 
         # Web: Token / errors
@@ -2071,6 +2087,14 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.control.export.all": "Todo",
         "web.control.export.generating": "Generando …",
         "web.control.export.bundle_hours": "Horas del paquete",
+        "web.control.export.results": "Resultado",
+        "web.control.export.jobs": "Tareas en curso",
+        "web.control.export.open_file": "Abrir",
+        "web.control.export.download": "Descargar",
+        "web.control.export.no_results": "Aún no se han creado exportaciones.",
+        "web.control.export.job_running": "en curso …",
+        "web.control.export.job_done": "listo",
+        "web.control.export.job_error": "Error",
         "web.control.jobs.meta": "Últimas acciones (navegador ↔ app). Actualiza automático.",
 
         # Web: Token / errors
