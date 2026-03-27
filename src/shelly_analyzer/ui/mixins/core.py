@@ -6134,7 +6134,7 @@ class CoreMixin:
                         _put_progress(total_days, total_days)
 
                         if all_rows:
-                            written = self.db.upsert_co2_intensity(all_rows)
+                            written = self.storage.db.upsert_co2_intensity(all_rows)
                             done = f"CO₂ Backfill abgeschlossen: {written} Werte importiert"
                         else:
                             done = "CO₂ Backfill abgeschlossen: 0 Werte – keine Daten empfangen"
