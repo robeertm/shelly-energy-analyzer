@@ -2066,7 +2066,15 @@ async function loadSolar(period) {{
 }}
 
 function _solarSettingsHtml(data) {{
-  const cfg = data.config || {{}};
+  // Config can come as data.config (when not configured) or directly on data (when configured)
+  const cfg = data.config || {{
+    enabled: data.configured !== false,
+    pv_meter_device_key: data.pv_meter_device_key || '',
+    feed_in_tariff: data.feed_in_tariff || 0.082,
+    kw_peak: data.kw_peak || 0,
+    battery_kwh: data.battery_kwh || 0,
+    co2_production_kg_per_kwp: data.co2_production_kg_per_kwp || 1000,
+  }};
   const devs = data.devices || DEVICES || [];
   const devOpts = '<option value="">' + t('web.dash.none', '(none)') + '</option>' +
     devs.map(function(d) {{ return '<option value="' + esc(d.key) + '"' + (d.key === (cfg.pv_meter_device_key||'') ? ' selected' : '') + '>' + esc(d.name||d.key) + '</option>'; }}).join('');
@@ -2150,10 +2158,18 @@ function renderSolar(data, el) {{
   }}
 
   // Settings toggle at bottom
-  html += '<div style="margin-top:8px;text-align:center"><button class="btn btn-outline btn-sm" onclick="document.getElementById(\'solar-cfg-toggle\').style.display=document.getElementById(\'solar-cfg-toggle\').style.display===\'none\'?\'block\':\'none\'">⚙️ ' + t('web.dash.solar_settings', 'Settings') + '</button></div>';
+  html += '<div style="margin-top:8px;text-align:center"><button class="btn btn-outline btn-sm" id="solar-cfg-btn">⚙️ ' + t('web.dash.solar_settings', 'Settings') + '</button></div>';
   html += '<div id="solar-cfg-toggle" style="display:none">' + _solarSettingsHtml(data) + '</div>';
 
   el.innerHTML = html;
+  // Bind settings toggle after DOM update
+  const _cfgBtn = document.getElementById('solar-cfg-btn');
+  if (_cfgBtn) {{
+    _cfgBtn.addEventListener('click', function() {{
+      const panel = document.getElementById('solar-cfg-toggle');
+      if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    }});
+  }}
 }}
 
 /* ──────────────────────────────────────────────
