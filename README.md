@@ -4,7 +4,7 @@ A cross-platform desktop application to analyze, visualize and export energy dat
 
 This repository is **GitHub-ready** (MIT license, clean structure, no secrets). Releases are published via **GitHub Releases** so the built‑in updater can find and download new versions.
 
-> **Current version: v11.10.0** — all major feature modules complete.
+> **Current version: v11.17.3** — all major feature modules complete.
 
 ---
 
@@ -65,12 +65,16 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Self-consumption calculation (solar energy used locally)
 - **Autarky rate** (% of demand covered by own solar production)
 - Time-series chart of production, consumption and net grid draw
+- **CO₂ savings** — displays avoided CO₂ (kg), CO₂ from grid, tree-day and car-km equivalents using real ENTSO-E grid intensity (static fallback)
+- **System config** — configurable installed capacity (kWp), battery storage (kWh), embodied CO₂ per kWp for lifecycle analysis
+- **Inline web settings** — Solar tab in the web dashboard includes a settings panel to configure PV parameters directly from the browser/phone
 - Works with any Shelly EM/PM device installed at the grid connection point
 
 ### 📤 Exports & E-mail Reports
 
-#### CSV / PDF
+#### CSV / PDF / Excel
 - CSV export for further analysis
+- **Excel export** — `.xlsx` with one sheet per device, optionally filtered by date range
 - **Rich daily PDF report**:
   - 6 KPI tiles: total kWh, cost, CO₂, average power, peak power, peak hour
   - Comparison to the previous day **and** the same weekday of the previous week (colour-coded ±%)
@@ -101,7 +105,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - 0-byte attachment guard and detailed logging for easy diagnosis
 
 ### 🔔 Notifications
-- **Telegram bot** — threshold alerts (W, V, A, A_N, VAR, cos φ, Hz) with optional plots; daily & monthly summaries with kWh bar charts; previous period comparison; standby base-load detection
+- **Telegram bot** — threshold alerts (W, V, A, A_N, VAR, cos φ, Hz) with optional plots; daily & monthly summaries with kWh bar charts and CO₂ emission charts (intensity-based green→yellow→red gradient); previous period comparison; standby base-load detection
 - **Webhook notifications** — HTTP POST to any endpoint (Home Assistant, n8n, Zapier, …) on threshold breach or scheduled events; fully configurable JSON payload template
 
 ### 📦 Device Grouping
@@ -138,13 +142,14 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 
 ### 🌐 Web Dashboard (Mobile-Friendly SPA)
 - Full single-page app (SPA) accessible from any device on the local network
-- **6 tabs** matching the desktop application:
-  - **Live** — real-time device cards with colour-coded power (green/yellow/red), sparkline charts, collapsible detail rows (voltage, current, cos φ, grid frequency, per-phase values, neutral current I_N), NILM appliance chips, freeze button, time-scale selector (1 min → 2 h), voltage & current sparklines in expanded view
-  - **Costs** — per-device cost overview (Today / Week / Month / Year + monthly projection) with real ENTSO-E CO₂ tracking (falls back to static g/kWh if ENTSO-E is unavailable)
+- **7 tabs** matching the desktop application:
+  - **Live** — real-time device cards with colour-coded power (green/yellow/red), sparkline charts, collapsible detail rows (voltage, current, reactive power (VAR), cos φ, grid frequency, per-phase values, neutral current I_N, phase balance indicator), NILM appliance chips with translated names, freeze button, time-scale selector (1 min → 2 h), voltage & current sparklines in expanded view
+  - **Costs** — per-device cost overview (Today / Week / Month / Year + monthly projection) with real ENTSO-E CO₂ tracking (falls back to static g/kWh if ENTSO-E is unavailable); includes solar CO₂ offset when PV is configured
   - **Heatmap** — interactive yearly calendar heatmap and 7 × 24 weekday × hour heatmap; three unit modes (kWh / € / g CO₂) with distinct colour schemes; device and year selectors; touch tooltip; responsive cell sizing
-  - **Solar** — PV dashboard with feed-in, grid consumption, self-consumption, autarky %, PV production, feed-in revenue and cost savings; period buttons (Today / Week / Month / Year)
+  - **Solar** — PV dashboard with feed-in, grid consumption, self-consumption, autarky %, PV production, CO₂ savings (tree-days, car-km equivalents), feed-in revenue and cost savings; inline settings panel to configure PV parameters directly; period buttons (Today / Week / Month / Year)
   - **Comparison** — period-over-period comparison with device A/B selectors, date range inputs, unit (kWh / €) and granularity (Total / Daily / Weekly / Monthly) toggles, quick-preset buttons (Month / Quarter / Half-Year / Year), grouped bar chart and delta display
   - **Anomalies** — lists detected anomaly events with type, device, timestamp, sigma and description; enabled/disabled status badge
+  - **Export** — full export functionality: PDF summaries, professional daily/monthly PDF reports (6 KPI boxes, device breakdown, stacked charts, CO₂ chart, per-device detail pages), invoices, Excel export, ZIP bundles; inline preview (PDF iframe, image grid); quick date presets; configurable bundle hours
 - **Dark / Light mode** toggle with `prefers-color-scheme` auto-detection and `localStorage` persistence
 - **Full i18n** — web dashboard renders in the same language as the desktop app (all 9 supported languages); locale-aware month and weekday labels via `Intl.DateTimeFormat`
 - Device order & visibility settings — gear icon opens a modal to show/hide devices and reorder them; preferences persisted in `localStorage`
@@ -242,8 +247,8 @@ To publish an update:
 git add -A
 git commit -m "Description of changes"
 git push
-git tag v8.0.0
-git push origin v8.0.0
+git tag v11.17.3
+git push origin v11.17.3
 ```
 
 The GitHub Actions workflow will automatically build the release ZIP and publish it.
