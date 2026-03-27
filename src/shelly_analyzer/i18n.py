@@ -5790,6 +5790,98 @@ _I18N.setdefault("ru", {}).update({
     "co2.import.done": "Импорт CO₂ завершён",
 })
 
+# -------- CO₂ data tables (v11.2.0) --------
+_I18N.setdefault("de", {}).update({
+    "co2.table.intensity.title": "Geladene CO₂-Intensitätswerte",
+    "co2.table.device.title": "CO₂ pro Gerät (letzte 24 h)",
+    "co2.table.col_datetime": "Datum/Zeit",
+    "co2.table.col_intensity": "CO₂-Intensität (g/kWh)",
+    "co2.table.col_source": "Quelle",
+    "co2.table.col_device": "Gerät",
+    "co2.table.col_kwh": "kWh",
+    "co2.table.col_co2": "CO₂ (g)",
+})
+_I18N.setdefault("en", {}).update({
+    "co2.table.intensity.title": "Loaded CO₂ Intensity Values",
+    "co2.table.device.title": "CO₂ per Device (last 24 h)",
+    "co2.table.col_datetime": "Date/Time",
+    "co2.table.col_intensity": "CO₂ Intensity (g/kWh)",
+    "co2.table.col_source": "Source",
+    "co2.table.col_device": "Device",
+    "co2.table.col_kwh": "kWh",
+    "co2.table.col_co2": "CO₂ (g)",
+})
+_I18N.setdefault("es", {}).update({
+    "co2.table.intensity.title": "Valores de intensidad CO₂ cargados",
+    "co2.table.device.title": "CO₂ por dispositivo (últ. 24 h)",
+    "co2.table.col_datetime": "Fecha/Hora",
+    "co2.table.col_intensity": "Intensidad CO₂ (g/kWh)",
+    "co2.table.col_source": "Fuente",
+    "co2.table.col_device": "Dispositivo",
+    "co2.table.col_kwh": "kWh",
+    "co2.table.col_co2": "CO₂ (g)",
+})
+_I18N.setdefault("fr", {}).update({
+    "co2.table.intensity.title": "Valeurs d'intensité CO₂ chargées",
+    "co2.table.device.title": "CO₂ par appareil (24 dern. h)",
+    "co2.table.col_datetime": "Date/Heure",
+    "co2.table.col_intensity": "Intensité CO₂ (g/kWh)",
+    "co2.table.col_source": "Source",
+    "co2.table.col_device": "Appareil",
+    "co2.table.col_kwh": "kWh",
+    "co2.table.col_co2": "CO₂ (g)",
+})
+_I18N.setdefault("pt", {}).update({
+    "co2.table.intensity.title": "Valores de intensidade CO₂ carregados",
+    "co2.table.device.title": "CO₂ por dispositivo (últ. 24 h)",
+    "co2.table.col_datetime": "Data/Hora",
+    "co2.table.col_intensity": "Intensidade CO₂ (g/kWh)",
+    "co2.table.col_source": "Fonte",
+    "co2.table.col_device": "Dispositivo",
+    "co2.table.col_kwh": "kWh",
+    "co2.table.col_co2": "CO₂ (g)",
+})
+_I18N.setdefault("it", {}).update({
+    "co2.table.intensity.title": "Valori intensità CO₂ caricati",
+    "co2.table.device.title": "CO₂ per dispositivo (ultime 24 h)",
+    "co2.table.col_datetime": "Data/Ora",
+    "co2.table.col_intensity": "Intensità CO₂ (g/kWh)",
+    "co2.table.col_source": "Fonte",
+    "co2.table.col_device": "Dispositivo",
+    "co2.table.col_kwh": "kWh",
+    "co2.table.col_co2": "CO₂ (g)",
+})
+_I18N.setdefault("pl", {}).update({
+    "co2.table.intensity.title": "Załadowane wartości intensywności CO₂",
+    "co2.table.device.title": "CO₂ na urządzenie (ostatnie 24 h)",
+    "co2.table.col_datetime": "Data/Godzina",
+    "co2.table.col_intensity": "Intensywność CO₂ (g/kWh)",
+    "co2.table.col_source": "Źródło",
+    "co2.table.col_device": "Urządzenie",
+    "co2.table.col_kwh": "kWh",
+    "co2.table.col_co2": "CO₂ (g)",
+})
+_I18N.setdefault("cs", {}).update({
+    "co2.table.intensity.title": "Načtené hodnoty intenzity CO₂",
+    "co2.table.device.title": "CO₂ na zařízení (posl. 24 h)",
+    "co2.table.col_datetime": "Datum/Čas",
+    "co2.table.col_intensity": "Intenzita CO₂ (g/kWh)",
+    "co2.table.col_source": "Zdroj",
+    "co2.table.col_device": "Zařízení",
+    "co2.table.col_kwh": "kWh",
+    "co2.table.col_co2": "CO₂ (g)",
+})
+_I18N.setdefault("ru", {}).update({
+    "co2.table.intensity.title": "Загруженные значения интенсивности CO₂",
+    "co2.table.device.title": "CO₂ по устройствам (посл. 24 ч)",
+    "co2.table.col_datetime": "Дата/Время",
+    "co2.table.col_intensity": "Интенсивность CO₂ (г/кВтч)",
+    "co2.table.col_source": "Источник",
+    "co2.table.col_device": "Устройство",
+    "co2.table.col_kwh": "кВтч",
+    "co2.table.col_co2": "CO₂ (г)",
+})
+
 # -------- Local formatting helpers (dates/numbers) --------
 
 _DATE_FORMATS = {
