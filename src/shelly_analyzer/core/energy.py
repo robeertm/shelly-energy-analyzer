@@ -102,10 +102,6 @@ def calculate_energy(
     return out
 
 
-def suggest_time_range(df: pd.DataFrame) -> TimeRange:
-    return TimeRange(start=df["timestamp"].min(), end=df["timestamp"].max())
-
-
 def filter_by_time(df: pd.DataFrame, start: Optional[pd.Timestamp] = None, end: Optional[pd.Timestamp] = None) -> pd.DataFrame:
     if start is None and end is None:
         return df.copy()

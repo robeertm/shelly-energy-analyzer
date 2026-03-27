@@ -4185,41 +4185,13 @@ class CoreMixin:
                 except Exception:
                     co2_g_per_kwh = 380.0
 
-                # Try to use real ENTSO-E CO₂ data if available
-                co2_cfg = getattr(self.cfg, "co2", None)
-                co2_zone = getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU"
-                _use_entsoe_co2 = False
-                try:
-                    _entsoe_token = getattr(co2_cfg, "entsoe_token", "") or ""
-                    if _entsoe_token and hasattr(self.storage, "db"):
-                        _use_entsoe_co2 = True
-                except Exception:
-                    pass
-
                 def _calc_co2_kg(device_key: str, rng_start, rng_end, kwh_fallback: float) -> float:
-                    """Compute CO₂ (kg) using real ENTSO-E hourly data; fall back to static."""
-                    if _use_entsoe_co2:
-                        try:
-                            s_ts = int(rng_start.timestamp())
-                            e_ts = int(rng_end.timestamp())
-                            db = self.storage.db
-                            df_co2 = db.query_co2_intensity(co2_zone, s_ts, e_ts + 3600)
-                            if not df_co2.empty:
-                                df_h = db.query_hourly(device_key, s_ts, e_ts + 3600)
-                                if df_h is not None and not df_h.empty:
-                                    merged = pd.merge(
-                                        df_h[["hour_ts", "kwh"]],
-                                        df_co2[["hour_ts", "intensity_g_per_kwh"]],
-                                        on="hour_ts", how="inner",
-                                    )
-                                    if not merged.empty:
-                                        return float((merged["kwh"] * merged["intensity_g_per_kwh"]).sum()) / 1000.0
-                        except Exception:
-                            pass
-                    # Fallback: static intensity
-                    if co2_g_per_kwh > 0:
-                        return kwh_fallback * co2_g_per_kwh / 1000.0
-                    return 0.0
+                    """Compute CO₂ (kg) using ENTSO-E hourly data; fall back to static."""
+                    co2_kg, _, _ = self._calc_co2_for_range(
+                        int(rng_start.timestamp()), int(rng_end.timestamp()),
+                        device_key=device_key, kwh_fallback=kwh_fallback,
+                    )
+                    return co2_kg
 
                 tou_enabled = getattr(tou, "enabled", False) and bool(getattr(tou, "rates", None))
 
@@ -8896,6 +8868,32 @@ class CoreMixin:
                     except Exception:
                         continue
 
+                # CO₂ emission plot (ENTSO-E weighted, hourly)
+                try:
+                    _s_ts = int(pd.Timestamp(start_dt).timestamp())
+                    _e_ts = int(pd.Timestamp(end_dt).timestamp())
+                    df_co2_h = self._calc_co2_hourly_series(_s_ts, _e_ts)
+                    if df_co2_h is not None and not df_co2_h.empty:
+                        co2_idx = pd.to_datetime(df_co2_h["hour_ts"], unit="s", utc=True)
+                        try:
+                            co2_idx = co2_idx.dt.tz_convert("Europe/Berlin").dt.tz_localize(None)
+                        except Exception:
+                            pass
+                        co2_vals = df_co2_h["co2_g"] / 1000.0  # g → kg
+                        total_co2_kg = float(co2_vals.sum())
+                        p_co2 = out_dir / f"summary_daily_co2_{end_ts}.png"
+                        self._telegram_plot_series_png(
+                            x=co2_idx,
+                            y=co2_vals,
+                            title=f"CO₂ – Vortag (pro Stunde, gesamt) · {total_co2_kg:.3f} kg (ENTSO-E)",
+                            ylabel="kg CO₂",
+                            out_path=p_co2,
+                            style="bar",
+                        )
+                        out.append(_ensure_valid_png(p_co2))
+                except Exception:
+                    pass
+
                 return out
 
             if kind == "monthly":
@@ -8940,6 +8938,34 @@ class CoreMixin:
                         out.append(_ensure_valid_png(pdv))
                     except Exception:
                         continue
+
+                # CO₂ emission plot (ENTSO-E weighted, daily buckets)
+                try:
+                    _s_ts = int(pd.Timestamp(s_start).timestamp())
+                    _e_ts = int(pd.Timestamp(end_dt).timestamp())
+                    df_co2_h = self._calc_co2_hourly_series(_s_ts, _e_ts)
+                    if df_co2_h is not None and not df_co2_h.empty:
+                        # Aggregate hourly CO₂ into daily buckets
+                        df_co2_h["date"] = pd.to_datetime(df_co2_h["hour_ts"], unit="s", utc=True)
+                        try:
+                            df_co2_h["date"] = df_co2_h["date"].dt.tz_convert("Europe/Berlin")
+                        except Exception:
+                            pass
+                        df_co2_h["date"] = df_co2_h["date"].dt.floor("D")
+                        co2_daily = df_co2_h.groupby("date")["co2_g"].sum() / 1000.0  # g → kg
+                        total_co2_kg = float(co2_daily.sum())
+                        p_co2 = out_dir / f"summary_30d_co2_{end_ts}.png"
+                        self._telegram_plot_series_png(
+                            x=co2_daily.index,
+                            y=co2_daily,
+                            title=f"CO₂ – letzte 30 Tage (gesamt) · {total_co2_kg:.3f} kg (ENTSO-E)",
+                            ylabel="kg CO₂",
+                            out_path=p_co2,
+                            style="bar",
+                        )
+                        out.append(_ensure_valid_png(p_co2))
+                except Exception:
+                    pass
 
                 return out
         except Exception:
@@ -9917,7 +9943,8 @@ class CoreMixin:
                                 end_dt = datetime.now(tz)
                                 start_dt = end_dt - timedelta(hours=24)
                                 msg_text = self._build_telegram_summary("daily", start_dt, end_dt)
-                                _co2_intensity = float(getattr(getattr(self.cfg, "pricing", None), "co2_intensity_g_per_kwh", 380.0) or 0.0)
+                                _, _co2_intensity, _ = self._calc_co2_for_range(
+                                    int(start_dt.timestamp()), int(end_dt.timestamp()))
                                 payload = {
                                     "type": "daily_summary",
                                     "timestamp": datetime.now().isoformat(),
@@ -9965,7 +9992,8 @@ class CoreMixin:
                                 end_dt = datetime.now(tz)
                                 start_dt = end_dt - timedelta(days=30)
                                 msg_text = self._build_telegram_summary("monthly", start_dt, end_dt)
-                                _co2_intensity = float(getattr(getattr(self.cfg, "pricing", None), "co2_intensity_g_per_kwh", 380.0) or 0.0)
+                                _, _co2_intensity, _ = self._calc_co2_for_range(
+                                    int(start_dt.timestamp()), int(end_dt.timestamp()))
                                 payload = {
                                     "type": "monthly_summary",
                                     "timestamp": datetime.now().isoformat(),
@@ -10701,6 +10729,125 @@ class CoreMixin:
                 _log.warning("_build_report_totals failed: %s", _exc, exc_info=True)
                 return None
 
+    def _calc_co2_for_range(self, start_ts: int, end_ts: int, device_key: str = "",
+                               kwh_fallback: float = 0.0) -> tuple:
+            """Compute CO₂ (kg) using real ENTSO-E hourly data; fall back to static.
+
+            Returns (co2_kg: float, avg_intensity_g_per_kwh: float, source: str).
+            source is "entsoe", "static", or "none".
+            If device_key is empty, sums across ALL devices.
+            """
+            import pandas as pd
+
+            co2_cfg = getattr(self.cfg, "co2", None)
+            zone = getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU"
+
+            # Static fallback intensity
+            try:
+                static_g = float(getattr(getattr(self.cfg, "pricing", None),
+                                         "co2_intensity_g_per_kwh", 380.0) or 380.0)
+            except Exception:
+                static_g = 380.0
+
+            # Try ENTSO-E DB first
+            try:
+                co2_enabled = getattr(co2_cfg, "enabled", False)
+                token = getattr(co2_cfg, "entso_e_api_token", "") or ""
+                if co2_enabled and token and hasattr(self.storage, "db"):
+                    db = self.storage.db
+                    df_co2 = db.query_co2_intensity(zone, start_ts, end_ts + 3600)
+                    if df_co2 is not None and not df_co2.empty:
+                        if device_key:
+                            df_h = db.query_hourly(device_key, start_ts, end_ts + 3600)
+                            if df_h is not None and not df_h.empty:
+                                merged = pd.merge(
+                                    df_h[["hour_ts", "kwh"]],
+                                    df_co2[["hour_ts", "intensity_g_per_kwh"]],
+                                    on="hour_ts", how="inner",
+                                )
+                                if not merged.empty:
+                                    co2_kg = float((merged["kwh"] * merged["intensity_g_per_kwh"]).sum()) / 1000.0
+                                    total_kwh = float(merged["kwh"].sum())
+                                    avg_int = co2_kg * 1000.0 / total_kwh if total_kwh > 0 else static_g
+                                    return co2_kg, avg_int, "entsoe"
+                        else:
+                            # Sum across all devices
+                            total_co2 = 0.0
+                            total_kwh_merged = 0.0
+                            for dev in list(getattr(self.cfg, "devices", []) or []):
+                                try:
+                                    df_h = db.query_hourly(dev.key, start_ts, end_ts + 3600)
+                                    if df_h is not None and not df_h.empty:
+                                        merged = pd.merge(
+                                            df_h[["hour_ts", "kwh"]],
+                                            df_co2[["hour_ts", "intensity_g_per_kwh"]],
+                                            on="hour_ts", how="inner",
+                                        )
+                                        if not merged.empty:
+                                            total_co2 += float((merged["kwh"] * merged["intensity_g_per_kwh"]).sum()) / 1000.0
+                                            total_kwh_merged += float(merged["kwh"].sum())
+                                except Exception:
+                                    continue
+                            if total_kwh_merged > 0:
+                                avg_int = total_co2 * 1000.0 / total_kwh_merged
+                                return total_co2, avg_int, "entsoe"
+            except Exception:
+                pass
+
+            # Fallback: static intensity
+            if static_g > 0 and kwh_fallback > 0:
+                return kwh_fallback * static_g / 1000.0, static_g, "static"
+            return 0.0, static_g, "none"
+
+    def _calc_co2_hourly_series(self, start_ts: int, end_ts: int) -> "pd.DataFrame":
+            """Return a DataFrame with columns [hour_ts, co2_g, intensity_g_per_kwh, kwh]
+            for the given range, joining all devices' hourly energy with ENTSO-E intensity.
+
+            Returns empty DataFrame if no ENTSO-E data available.
+            """
+            import pandas as pd
+
+            co2_cfg = getattr(self.cfg, "co2", None)
+            zone = getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU"
+
+            try:
+                co2_enabled = getattr(co2_cfg, "enabled", False)
+                token = getattr(co2_cfg, "entso_e_api_token", "") or ""
+                if not (co2_enabled and token and hasattr(self.storage, "db")):
+                    return pd.DataFrame()
+
+                db = self.storage.db
+                df_co2 = db.query_co2_intensity(zone, start_ts, end_ts + 3600)
+                if df_co2 is None or df_co2.empty:
+                    return pd.DataFrame()
+
+                # Aggregate hourly energy across all devices
+                all_h = []
+                for dev in list(getattr(self.cfg, "devices", []) or []):
+                    try:
+                        df_h = db.query_hourly(dev.key, start_ts, end_ts + 3600)
+                        if df_h is not None and not df_h.empty:
+                            all_h.append(df_h[["hour_ts", "kwh"]])
+                    except Exception:
+                        continue
+
+                if not all_h:
+                    return pd.DataFrame()
+
+                df_energy = pd.concat(all_h, ignore_index=True).groupby("hour_ts", as_index=False)["kwh"].sum()
+                merged = pd.merge(
+                    df_energy,
+                    df_co2[["hour_ts", "intensity_g_per_kwh"]],
+                    on="hour_ts", how="inner",
+                )
+                if merged.empty:
+                    return pd.DataFrame()
+
+                merged["co2_g"] = merged["kwh"] * merged["intensity_g_per_kwh"]
+                return merged
+            except Exception:
+                return pd.DataFrame()
+
     def _build_email_report_data(self, start_dt, end_dt, prev_start_dt=None, prev_end_dt=None, report_type="daily"):
             """Build an EmailReportData object with per-device time-series and extended stats."""
             _log = logging.getLogger(__name__)
@@ -10715,7 +10862,7 @@ class CoreMixin:
                 start_ts = int(start_dt.timestamp())
                 end_ts   = int(end_dt.timestamp())
                 price    = self.cfg.pricing.unit_price_gross()
-                co2_int  = float(getattr(getattr(self.cfg, "pricing", None), "co2_intensity_g_per_kwh", 380.0) or 380.0)
+                co2_int  = 380.0  # will be updated below with ENTSO-E data if available
 
                 totals:               list = []
                 hourly_kwh:           list = [0.0] * 24
@@ -10877,7 +11024,10 @@ class CoreMixin:
                     worst_day_kwh  = round(daily_map[worst_day_date], 3)
 
                 total_kwh = sum(r.kwh_total for r in totals)
-                co2_kg    = total_kwh * co2_int / 1000.0
+                # Use ENTSO-E weighted CO₂ if available, fall back to static
+                co2_kg, co2_int, _co2_src = self._calc_co2_for_range(
+                    start_ts, end_ts, device_key="", kwh_fallback=total_kwh,
+                )
 
                 vat_rate = 0.0
                 try:
@@ -10888,6 +11038,33 @@ class CoreMixin:
                     pass
 
                 version = getattr(_pkg, "__version__", "")
+
+                # Build CO₂ time-series for PDF charts
+                co2_hourly_list = []
+                co2_daily_list = []
+                try:
+                    df_co2_ts = self._calc_co2_hourly_series(start_ts, end_ts)
+                    if df_co2_ts is not None and not df_co2_ts.empty:
+                        if report_type == "daily":
+                            # 24-hour list (g CO₂ per hour bucket)
+                            co2_hourly_list = [0.0] * 24
+                            for _, row in df_co2_ts.iterrows():
+                                import datetime as _dt_mod
+                                from zoneinfo import ZoneInfo as _ZI
+                                h_utc = _dt_mod.datetime.fromtimestamp(int(row["hour_ts"]), tz=_ZI("Europe/Berlin"))
+                                h = h_utc.hour
+                                co2_hourly_list[h] += float(row["co2_g"])
+                        else:
+                            # Daily aggregation (date, g CO₂)
+                            import datetime as _dt_mod
+                            from zoneinfo import ZoneInfo as _ZI
+                            day_map = {}
+                            for _, row in df_co2_ts.iterrows():
+                                d = _dt_mod.datetime.fromtimestamp(int(row["hour_ts"]), tz=_ZI("Europe/Berlin")).date()
+                                day_map[d] = day_map.get(d, 0.0) + float(row["co2_g"])
+                            co2_daily_list = sorted(day_map.items(), key=lambda x: x[0])
+                except Exception:
+                    pass
 
                 _log.info("_build_email_report_data: done, totals=%d devices, total_kwh=%.3f, peak_hour=%d", len(totals), total_kwh, peak_hour)
                 return EmailReportData(
@@ -10916,6 +11093,9 @@ class CoreMixin:
                     best_day_kwh=best_day_kwh,
                     worst_day_date=worst_day_date,
                     worst_day_kwh=worst_day_kwh,
+                    co2_hourly=co2_hourly_list,
+                    co2_daily=co2_daily_list,
+                    co2_source=_co2_src,
                 )
             except Exception as _exc:
                 _log.warning("_build_email_report_data failed: %s", _exc, exc_info=True)
@@ -11253,12 +11433,18 @@ class CoreMixin:
                 except Exception:
                     pass
 
-            # CO₂ emissions
+            # CO₂ emissions (ENTSO-E weighted with static fallback)
+            _tg_co2_intensity = 0.0  # effective intensity for per-device/standby use
             try:
-                co2_g_per_kwh = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
-                if co2_g_per_kwh > 0:
-                    co2_kg = total_kwh * co2_g_per_kwh / 1000.0
-                    lines.append(f"🌿 CO₂: {co2_kg:.3f} kg ({co2_g_per_kwh:.0f} g/kWh)")
+                _s_ts = int(start_dt.timestamp())
+                _e_ts = int(end_dt.timestamp())
+                co2_kg, co2_avg_int, co2_src = self._calc_co2_for_range(
+                    _s_ts, _e_ts, device_key="", kwh_fallback=total_kwh,
+                )
+                _tg_co2_intensity = co2_avg_int
+                if co2_kg > 0:
+                    src_lbl = "ENTSO-E" if co2_src == "entsoe" else "statisch"
+                    lines.append(f"🌿 CO₂: {co2_kg:.3f} kg ({co2_avg_int:.0f} g/kWh, {src_lbl})")
             except Exception:
                 pass
 
@@ -11330,17 +11516,21 @@ class CoreMixin:
             # per device
             lines.append("")
             lines.append("🏠 Pro Gerät:")
-            try:
-                _co2_g = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
-            except Exception:
-                _co2_g = 0.0
             if per_dev_kwh:
                 for name, _key, kwh in per_dev_kwh:
                     parts_dev = [f"{kwh:.3f} kWh"]
                     if unit_gross is not None:
                         parts_dev.append(f"{(kwh * unit_gross):.2f} €")
-                    if _co2_g > 0:
-                        parts_dev.append(f"{kwh * _co2_g / 1000.0:.3f} kg CO₂")
+                    # Per-device CO₂ using ENTSO-E data with fallback
+                    try:
+                        _dev_co2, _, _ = self._calc_co2_for_range(
+                            _s_ts, _e_ts, device_key=_key, kwh_fallback=kwh,
+                        )
+                        if _dev_co2 > 0:
+                            parts_dev.append(f"{_dev_co2:.3f} kg CO₂")
+                    except Exception:
+                        if _tg_co2_intensity > 0:
+                            parts_dev.append(f"{kwh * _tg_co2_intensity / 1000.0:.3f} kg CO₂")
                     lines.append(f" - {name}: {' · '.join(parts_dev)}")
             else:
                 lines.append(" - (keine Daten)")
@@ -11407,10 +11597,9 @@ class CoreMixin:
                             standby_cost_year = standby_kwh_year * unit_gross
                             lines.append(f"   = ~{standby_cost_year:.0f} €/Jahr")
                         try:
-                            _sb_co2_g = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
-                            if _sb_co2_g > 0:
-                                standby_co2_year = standby_kwh_year * _sb_co2_g / 1000.0
-                                lines.append(f"   = ~{standby_co2_year:.0f} kg CO₂/Jahr")
+                            _sb_co2_g = _tg_co2_intensity if _tg_co2_intensity > 0 else 380.0
+                            standby_co2_year = standby_kwh_year * _sb_co2_g / 1000.0
+                            lines.append(f"   = ~{standby_co2_year:.0f} kg CO₂/Jahr")
                         except Exception:
                             pass
             except Exception:

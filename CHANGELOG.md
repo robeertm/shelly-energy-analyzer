@@ -1,5 +1,17 @@
 # Changelog
 
+## 11.11.0 - 2026-03-27
+### Added
+- **CO₂ plots in Telegram & email reports** – Daily and monthly Telegram summaries now include CO₂ emission bar charts (hourly/daily) when ENTSO-E data is available. Email/PDF reports add a dedicated CO₂ chart page with green→yellow→red color coding by emission intensity.
+- **Reusable CO₂ calculation helper** – New `_calc_co2_for_range()` and `_calc_co2_hourly_series()` methods provide a single source of truth for ENTSO-E-weighted CO₂ calculations with automatic static fallback.
+
+### Improved
+- **All CO₂ calculations now use ENTSO-E data** – Previously, email reports, Telegram summaries, webhook payloads, per-device breakdowns, standby estimates, and kWh plot labels all used a static 380 g/kWh factor. They now query the ENTSO-E database for real hourly grid intensity and fall back to the static value only when no ENTSO-E data is available. Affected: `_build_email_report_data`, `_build_telegram_summary`, webhook daily/monthly payloads, plots tab CO₂ labels, cost tab CO₂ calculations.
+- **CO₂ source indicator** – Telegram summaries now show "(ENTSO-E)" or "(statisch)" next to CO₂ values so users know the data source.
+
+### Removed
+- **Dead code cleanup** – Removed 12 unused functions/classes: `export_dataframe_csv`, `OverallReport`, `_draw_device_table` (non-enhanced), `suggest_time_range`, `combine_devices`, `download_file`, `install_update_zip`, `rebuild_hourly`, `oldest_sample_ts`, `oldest_monthly_ts`, `pack_csvs`, `base_fee_year_gross`.
+
 ## 11.10.0 - 2026-03-27
 ### Added
 - **Web dashboard: real ENTSO-E CO₂ in costs tab** – The web costs tab now computes CO₂ emissions using actual hourly grid intensity from ENTSO-E instead of a static g/kWh factor. Falls back to the configured static intensity if ENTSO-E is unavailable.
