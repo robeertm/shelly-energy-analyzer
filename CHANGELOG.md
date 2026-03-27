@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.9.1 - 2026-03-27
+### Fixed
+- **Heatmap CO₂ mode now uses distinct color scheme** – CO₂ mode uses the "YlOrRd" (yellow → orange → red) colormap instead of the same "RdYlGn_r" used for kWh/€. Previously the colors looked identical because CO₂ with static fallback is a linear scaling of kWh, producing the same relative color distribution.
+
 ## 11.9.0 - 2026-03-27
 ### Added
 - **Heatmap: CO₂ display mode** – The heatmap tab now offers "g CO₂" as a third unit alongside kWh and €. When selected, both the calendar heatmap and the weekday×hour heatmap show CO₂ emissions per cell using real ENTSO-E hourly grid intensity data. Falls back to the static g/kWh factor from pricing settings if ENTSO-E is not configured or has no data for the period. Tooltips and colorbar also display g CO₂.
