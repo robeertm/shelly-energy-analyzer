@@ -1,27 +1,14 @@
 # Changelog
 
 ## 11.9.1 - 2026-03-27
-### Fixed
-- **Heatmap CO₂ mode now uses distinct color scheme** – CO₂ mode uses the "YlOrRd" (yellow → orange → red) colormap instead of the same "RdYlGn_r" used for kWh/€. Previously the colors looked identical because CO₂ with static fallback is a linear scaling of kWh, producing the same relative color distribution.
-
-## 11.9.0 - 2026-03-27
-### Added
-- **Heatmap: CO₂ display mode** – The heatmap tab now offers "g CO₂" as a third unit alongside kWh and €. When selected, both the calendar heatmap and the weekday×hour heatmap show CO₂ emissions per cell using real ENTSO-E hourly grid intensity data. Falls back to the static g/kWh factor from pricing settings if ENTSO-E is not configured or has no data for the period. Tooltips and colorbar also display g CO₂.
-
-## 11.8.1 - 2026-03-27
-### Fixed
-- **CO₂ bar labels now shown on all bars up to 31** – Previously labels were thinned starting at 25 bars, causing every-other-bar gaps in "Days" mode (30 bars). Threshold raised to 31.
-- **More spacing between kWh and CO₂ text** – Increased line spacing (0.85 → 1.15) and vertical offset above bars to prevent text overlap.
-
-### Improved
-- **Cost tab uses real ENTSO-E CO₂ data** – The cost tab now computes CO₂ emissions using actual hourly grid intensity from ENTSO-E (joined with per-device hourly energy) instead of a static g/kWh factor. Falls back to the configured static intensity if ENTSO-E is not set up or has no data for the period.
-
-## 11.8.0 - 2026-03-27
 ### Added
 - **CO₂ bar coloring by intensity** – Bars in the CO₂ plots tab are now colored on a green → yellow → red gradient based on the average grid CO₂ intensity for each time bucket. Uses the existing green/dirty threshold settings.
-- **kWh + CO₂ labels above bars** – Each bar now shows both the energy consumption (kWh) and the CO₂ emissions (g/kg) as a two-line annotation. Font size adapts to widget size; labels are thinned on dense charts to avoid overlap.
-- **Custom range controls for CO₂ tab** – The CO₂ plots tab now has the same "Last N [hours/days/weeks/months]" input fields and Apply button as the kWh tab, allowing flexible time range selection.
-- **Total kWh in CO₂ chart title** – The chart title now shows both total kWh and total CO₂ for the displayed range.
+- **kWh + CO₂ labels above bars** – Each bar now shows both the energy consumption (kWh) and the CO₂ emissions (g/kg) as a two-line annotation above each bar.
+- **Custom range controls for CO₂ plot tab** – The CO₂ plots tab now has the same "Last N [hours/days/weeks/months]" input fields and Apply button as the kWh tab.
+- **Heatmap: CO₂ display mode** – The heatmap tab now offers "g CO₂" as a third unit alongside kWh and €. Uses a distinct YlOrRd (yellow → orange → red) color scheme. Both the calendar heatmap and the weekday×hour heatmap show CO₂ emissions using real ENTSO-E hourly grid intensity data, with fallback to the static g/kWh factor from pricing settings.
+
+### Improved
+- **Cost tab uses real ENTSO-E CO₂ data** – The cost tab now computes CO₂ emissions using actual hourly grid intensity from ENTSO-E instead of a static g/kWh factor. Falls back to the configured static intensity if ENTSO-E is not set up or has no data for the period.
 
 ## 11.7.0 - 2026-03-27
 ### Added
