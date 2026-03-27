@@ -4179,11 +4179,47 @@ class CoreMixin:
                 except Exception:
                     unit = float(getattr(pricing, "electricity_price_eur_per_kwh", 0.30) or 0.30)
 
-                # CO₂ intensity (g/kWh → kg/kWh factor)
+                # CO₂ intensity – static fallback (g/kWh)
                 try:
                     co2_g_per_kwh = float(getattr(pricing, "co2_intensity_g_per_kwh", 380.0) or 0.0)
                 except Exception:
                     co2_g_per_kwh = 380.0
+
+                # Try to use real ENTSO-E CO₂ data if available
+                co2_cfg = getattr(self.cfg, "co2", None)
+                co2_zone = getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU"
+                _use_entsoe_co2 = False
+                try:
+                    _entsoe_token = getattr(co2_cfg, "entsoe_token", "") or ""
+                    if _entsoe_token and hasattr(self.storage, "db"):
+                        _use_entsoe_co2 = True
+                except Exception:
+                    pass
+
+                def _calc_co2_kg(device_key: str, rng_start, rng_end, kwh_fallback: float) -> float:
+                    """Compute CO₂ (kg) using real ENTSO-E hourly data; fall back to static."""
+                    if _use_entsoe_co2:
+                        try:
+                            s_ts = int(rng_start.timestamp())
+                            e_ts = int(rng_end.timestamp())
+                            db = self.storage.db
+                            df_co2 = db.query_co2_intensity(co2_zone, s_ts, e_ts + 3600)
+                            if not df_co2.empty:
+                                df_h = db.query_hourly(device_key, s_ts, e_ts + 3600)
+                                if df_h is not None and not df_h.empty:
+                                    merged = pd.merge(
+                                        df_h[["hour_ts", "kwh"]],
+                                        df_co2[["hour_ts", "intensity_g_per_kwh"]],
+                                        on="hour_ts", how="inner",
+                                    )
+                                    if not merged.empty:
+                                        return float((merged["kwh"] * merged["intensity_g_per_kwh"]).sum()) / 1000.0
+                        except Exception:
+                            pass
+                    # Fallback: static intensity
+                    if co2_g_per_kwh > 0:
+                        return kwh_fallback * co2_g_per_kwh / 1000.0
+                    return 0.0
 
                 tou_enabled = getattr(tou, "enabled", False) and bool(getattr(tou, "rates", None))
 
@@ -4244,8 +4280,9 @@ class CoreMixin:
                         if key in vars_dev:
                             vars_dev[key]["kwh"].set(f"{kwh:.2f} kWh")
                             vars_dev[key]["eur"].set(f"{cost:.2f} €")
-                            if co2_g_per_kwh > 0:
-                                co2_kg = kwh * co2_g_per_kwh / 1000.0
+                            rng_s, rng_e = ranges[key]
+                            co2_kg = _calc_co2_kg(d.key, rng_s, rng_e, kwh)
+                            if co2_kg > 0:
                                 vars_dev[key]["co2"].set(f"🌿 {co2_kg:.3f} kg CO₂")
                             else:
                                 vars_dev[key]["co2"].set("")
@@ -4266,8 +4303,10 @@ class CoreMixin:
                         proj_cost = month_cost / days_elapsed * days_in_month
                         vars_dev["proj_kwh"].set(f"~{proj_kwh:.1f} kWh")
                         vars_dev["proj_eur"].set(f"~{proj_cost:.2f} €")
-                        if co2_g_per_kwh > 0:
-                            proj_co2_kg = proj_kwh * co2_g_per_kwh / 1000.0
+                        # Project CO₂ from month-to-date real data
+                        month_co2_kg = _calc_co2_kg(d.key, month_start, now, month_kwh)
+                        if month_co2_kg > 0:
+                            proj_co2_kg = month_co2_kg / days_elapsed * days_in_month
                             vars_dev["proj_co2"].set(f"🌿 ~{proj_co2_kg:.2f} kg CO₂")
                         else:
                             vars_dev["proj_co2"].set("")
@@ -4337,8 +4376,15 @@ class CoreMixin:
                         if key in agg_vars:
                             agg_vars[key]["kwh"].set(f"{kwh:.2f} kWh")
                             agg_vars[key]["eur"].set(f"{cost:.2f} €")
-                            if co2_g_per_kwh > 0:
-                                agg_vars[key]["co2"].set(f"🌿 {kwh * co2_g_per_kwh / 1000.0:.3f} kg CO₂")
+                            rng_s, rng_e = ranges[key]
+                            agg_co2_kg = sum(
+                                _calc_co2_kg(d.key, rng_s, rng_e, 0.0)
+                                for d in agg_devices
+                            )
+                            if agg_co2_kg <= 0 and co2_g_per_kwh > 0:
+                                agg_co2_kg = kwh * co2_g_per_kwh / 1000.0
+                            if agg_co2_kg > 0:
+                                agg_vars[key]["co2"].set(f"🌿 {agg_co2_kg:.3f} kg CO₂")
                             else:
                                 agg_vars[key]["co2"].set("")
                             if tou_enabled and breakdown:
@@ -4358,8 +4404,15 @@ class CoreMixin:
                         proj_cost = m_cost / days_elapsed * days_in_month
                         agg_vars["proj_kwh"].set(f"~{proj_kwh:.1f} kWh")
                         agg_vars["proj_eur"].set(f"~{proj_cost:.2f} €")
-                        if co2_g_per_kwh > 0:
-                            agg_vars["proj_co2"].set(f"🌿 ~{proj_kwh * co2_g_per_kwh / 1000.0:.2f} kg CO₂")
+                        agg_month_co2 = sum(
+                            _calc_co2_kg(d.key, month_start, now, 0.0)
+                            for d in agg_devices
+                        )
+                        if agg_month_co2 <= 0 and co2_g_per_kwh > 0:
+                            agg_month_co2 = m_kwh * co2_g_per_kwh / 1000.0
+                        if agg_month_co2 > 0:
+                            proj_co2 = agg_month_co2 / days_elapsed * days_in_month
+                            agg_vars["proj_co2"].set(f"🌿 ~{proj_co2:.2f} kg CO₂")
                         else:
                             agg_vars["proj_co2"].set("")
                     except Exception:
