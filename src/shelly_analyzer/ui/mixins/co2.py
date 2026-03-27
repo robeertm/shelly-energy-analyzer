@@ -190,12 +190,70 @@ class Co2Mixin:
 
         # ── Green/dirty hours heatmap strip ───────────────────────────────────
         heatmap_frame = ttk.LabelFrame(sf, text=self.t("co2.heatmap.title"))
-        heatmap_frame.pack(fill="x", padx=14, pady=(4, 12))
+        heatmap_frame.pack(fill="x", padx=14, pady=(4, 4))
 
         self._co2_heatmap_fig = Figure(figsize=(10, 0.7), dpi=96)
         self._co2_heatmap_ax = self._co2_heatmap_fig.add_subplot(111)
         self._co2_heatmap_canvas = FigureCanvasTkAgg(self._co2_heatmap_fig, master=heatmap_frame)
         self._co2_heatmap_canvas.get_tk_widget().pack(fill="x", expand=True, padx=4, pady=4)
+
+        # ── Table 1: Raw CO₂ intensity values ────────────────────────────────
+        tbl1_frame = ttk.LabelFrame(sf, text=self.t("co2.table.intensity.title"))
+        tbl1_frame.pack(fill="x", padx=14, pady=(4, 4))
+        tbl1_cols = (
+            "col_datetime",
+            "col_intensity",
+            "col_source",
+        )
+        self._co2_tbl1 = ttk.Treeview(
+            tbl1_frame,
+            columns=tbl1_cols,
+            show="headings",
+            height=8,
+            selectmode="none",
+        )
+        for col, key, width in [
+            ("col_datetime",  "co2.table.col_datetime",  155),
+            ("col_intensity", "co2.table.col_intensity", 175),
+            ("col_source",    "co2.table.col_source",     90),
+        ]:
+            self._co2_tbl1.heading(col, text=self.t(key))
+            self._co2_tbl1.column(col, width=width, anchor="center")
+        tbl1_sb = ttk.Scrollbar(tbl1_frame, orient="vertical", command=self._co2_tbl1.yview)
+        self._co2_tbl1.configure(yscrollcommand=tbl1_sb.set)
+        tbl1_sb.pack(side="right", fill="y")
+        self._co2_tbl1.pack(side="left", fill="x", expand=True, padx=(4, 0), pady=4)
+
+        # ── Table 2: CO₂ per device ──────────────────────────────────────────
+        tbl2_frame = ttk.LabelFrame(sf, text=self.t("co2.table.device.title"))
+        tbl2_frame.pack(fill="x", padx=14, pady=(4, 12))
+        tbl2_cols = (
+            "col_datetime",
+            "col_device",
+            "col_kwh",
+            "col_intensity",
+            "col_co2",
+        )
+        self._co2_tbl2 = ttk.Treeview(
+            tbl2_frame,
+            columns=tbl2_cols,
+            show="headings",
+            height=8,
+            selectmode="none",
+        )
+        for col, key, width in [
+            ("col_datetime",  "co2.table.col_datetime",  155),
+            ("col_device",    "co2.table.col_device",    130),
+            ("col_kwh",       "co2.table.col_kwh",        70),
+            ("col_intensity", "co2.table.col_intensity", 175),
+            ("col_co2",       "co2.table.col_co2",        90),
+        ]:
+            self._co2_tbl2.heading(col, text=self.t(key))
+            self._co2_tbl2.column(col, width=width, anchor="center")
+        tbl2_sb = ttk.Scrollbar(tbl2_frame, orient="vertical", command=self._co2_tbl2.yview)
+        self._co2_tbl2.configure(yscrollcommand=tbl2_sb.set)
+        tbl2_sb.pack(side="right", fill="y")
+        self._co2_tbl2.pack(side="left", fill="x", expand=True, padx=(4, 0), pady=4)
 
         # Trigger initial refresh after a short delay
         self.after(800, self._refresh_co2_tab)
@@ -304,6 +362,10 @@ class Co2Mixin:
 
             # ── Heatmap ───────────────────────────────────────────────────────
             self._co2_draw_heatmap(df, green_thr, dirty_thr)
+
+            # ── Data tables ───────────────────────────────────────────────────
+            self._co2_update_intensity_table(zone)
+            self._co2_update_device_table(zone, start_24h, now_ts + 3600)
 
             # Status
             latest_ts = int(df["hour_ts"].max())
@@ -567,3 +629,85 @@ class Co2Mixin:
             self._co2_heatmap_canvas.draw_idle()
         except Exception:
             logger.debug("Co2Mixin: heatmap draw error", exc_info=True)
+
+    def _co2_update_intensity_table(self, zone: str) -> None:
+        """Populate Table 1 with all stored CO₂ intensity rows for *zone*,
+        newest first (up to 500 rows to stay responsive)."""
+        try:
+            tree = self._co2_tbl1
+        except AttributeError:
+            return
+        try:
+            db = self.storage.db
+            # Query all available data for the zone (up to ~30 days to be safe)
+            now_ts = int(time.time())
+            df = db.query_co2_intensity(zone, now_ts - 30 * 86400, now_ts + 3600)
+            tree.delete(*tree.get_children())
+            if df.empty:
+                return
+            df = df.sort_values("hour_ts", ascending=False).head(500)
+            for _, row in df.iterrows():
+                dt_str = datetime.fromtimestamp(
+                    int(row["hour_ts"]), tz=timezone.utc
+                ).strftime("%Y-%m-%d %H:%M")
+                tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        dt_str,
+                        f"{float(row['intensity_g_per_kwh']):.1f}",
+                        str(row.get("source", "entsoe")),
+                    ),
+                )
+        except Exception:
+            logger.debug("Co2Mixin: intensity table update error", exc_info=True)
+
+    def _co2_update_device_table(self, zone: str, start_ts: int, end_ts: int) -> None:
+        """Populate Table 2: hourly_energy × co2_intensity join for last 24 h."""
+        try:
+            tree = self._co2_tbl2
+        except AttributeError:
+            return
+        try:
+            db = self.storage.db
+            df_co2 = db.query_co2_intensity(zone, start_ts, end_ts)
+            tree.delete(*tree.get_children())
+            if df_co2.empty:
+                return
+
+            devices = getattr(self.cfg, "devices", []) or []
+            rows_out: List[tuple] = []
+            for dev in devices:
+                try:
+                    df_h = db.query_hourly(dev.key, start_ts, end_ts)
+                    if df_h is None or df_h.empty:
+                        continue
+                    # merge on hour_ts
+                    merged = pd.merge(df_h, df_co2[["hour_ts", "intensity_g_per_kwh"]], on="hour_ts", how="inner")
+                    for _, r in merged.iterrows():
+                        kwh = float(r["kwh"]) if "kwh" in r else 0.0
+                        intensity = float(r["intensity_g_per_kwh"])
+                        co2_g = kwh * intensity
+                        dt_str = datetime.fromtimestamp(
+                            int(r["hour_ts"]), tz=timezone.utc
+                        ).strftime("%Y-%m-%d %H:%M")
+                        rows_out.append((int(r["hour_ts"]), dt_str, dev.name or dev.key, kwh, intensity, co2_g))
+                except Exception:
+                    pass
+
+            # Sort by timestamp descending
+            rows_out.sort(key=lambda x: x[0], reverse=True)
+            for _, dt_str, dev_name, kwh, intensity, co2_g in rows_out:
+                tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        dt_str,
+                        dev_name,
+                        f"{kwh:.3f}",
+                        f"{intensity:.1f}",
+                        f"{co2_g:.1f}",
+                    ),
+                )
+        except Exception:
+            logger.debug("Co2Mixin: device table update error", exc_info=True)

@@ -1,5 +1,13 @@
 # Changelog
 
+## 11.2.0 - 2026-03-27
+### Added
+- **CO₂ tab: two scrollable data tables for value verification** – Two `ttk.Treeview` tables are now displayed below the heatmap strip so the user can inspect the raw imported numbers:
+  - *Table 1 – Loaded CO₂ Intensity Values*: shows all stored hourly intensity rows for the active bidding zone (up to 500 rows, newest first). Columns: Date/Time | CO₂ Intensity (g/kWh) | Source.
+  - *Table 2 – CO₂ per Device (last 24 h)*: JOIN of `hourly_energy` × `co2_intensity` on `hour_ts`, one row per device per hour. Columns: Date/Time | Device | kWh | CO₂ Intensity (g/kWh) | CO₂ (g). This lets you verify that the calculation `kWh × g/kWh = g CO₂` is correct.
+- **CO₂ intensity values reviewed** – The IPCC lifecycle emission factors and the weighted-average calculation in `entsoe.py` are correct. Germany (DE_LU) typically shows 200–450 g/kWh depending on the generation mix; higher values during periods of high lignite/coal dispatch are expected.
+- **i18n**: all new UI strings translated into all 9 languages (de, en, es, fr, pt, it, pl, cs, ru).
+
 ## 11.1.8 - 2026-03-27
 ### Fixed
 - **CO₂ tab: historical backfill data never displayed** – `_refresh_co2_tab()` always queried only the last 24 hours (`now − 86400 … now`). When the user ran a backfill for a date range in the past (e.g. Feb 1–8) the query returned zero rows and the tab showed "No data", even though the 168 data points were successfully written to the database. The method now falls back to `db.latest_co2_ts(zone)` whenever the 24-hour window is empty, then queries the 24-hour window ending at that timestamp so any historically-imported data is always displayed.
