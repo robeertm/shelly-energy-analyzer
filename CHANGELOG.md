@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.13.0 - 2026-03-27
+### Improved
+- **CO₂ charts: smooth intensity-based gradient coloring** – CO₂ bar charts in Telegram summaries and email/PDF reports now use the same smooth green→yellow→red gradient as the desktop app, colored by actual ENTSO-E grid intensity (g CO₂/kWh) per bar instead of fixed absolute thresholds. Uses configurable green/dirty thresholds from CO₂ settings.
+
 ## 11.12.0 - 2026-03-27
 ### Added
 - **Web live view: reactive power display** – Each device card now shows total reactive power (VAR) in the expandable detail section, with a dedicated sparkline chart. Clicking the sparkline opens an enlarged detail chart with per-phase breakdown (L1/L2/L3), just like the existing power/voltage/current charts.
