@@ -295,6 +295,8 @@ class CoreMixin:
             self._wva_unit = tk.StringVar(value="hours")
             # Display variable so units can be localized while keeping internal values stable.
             self._wva_unit_display = tk.StringVar(value="hours")
+            # CO₂ plots granularity
+            self._plots_co2_mode = tk.StringVar(value="hours")
 
             # Plots debug: show which CSV columns were mapped to phases/total.
             self._plots_debug_mapping_enabled = tk.BooleanVar(value=False)
@@ -1399,6 +1401,9 @@ class CoreMixin:
                 tl = tnorm.lower().replace(" ", "").replace("φ", "phi")
                 if tl in {"cosphi"} or tl.startswith("cos"):
                     return "COSPHI"
+                # CO₂ tab
+                if "co2" in tnorm.lower().replace("₂", "2"):
+                    return "CO2"
                 return "kwh"
             except Exception:
                 return "kwh"

@@ -851,7 +851,7 @@ class PlotsMixin:
             # Keep device selection stable when switching between metric tabs.
             # We remember the last selected device-tab index and apply it across all metric tabs
             # to avoid the UI feeling like parameters "jump around".
-            self._plots_metric_key_order = ["kwh", "V", "A", "W", "VAR", "COSPHI", "HZ"]
+            self._plots_metric_key_order = ["kwh", "V", "A", "W", "VAR", "COSPHI", "HZ", "CO2"]
             if not hasattr(self, "_plots_last_device_idx"):
                 self._plots_last_device_idx = 0
             self._plots_syncing_tabs = False
@@ -1131,6 +1131,22 @@ class PlotsMixin:
             _make_wva_controls(tab_hz, "HZ")
             _make_device_notebook(tab_hz, "HZ", two_axes=False)
 
+            # --- CO₂ tab ---
+            tab_co2 = ttk.Frame(nb)
+            nb.add(tab_co2, text="CO₂")
+            co2_ctl = ttk.Frame(tab_co2)
+            co2_ctl.pack(fill="x", pady=(8, 6))
+            ttk.Label(co2_ctl, text=self.t("plots.kwh.granularity")).pack(side="left")
+            co2_btns = ttk.Frame(co2_ctl)
+            co2_btns.pack(side="left", padx=(10, 0))
+            for mode in ("hours", "days", "weeks", "months"):
+                ttk.Button(
+                    co2_btns,
+                    text=self.t(f"plots.mode.{mode}"),
+                    command=lambda m=mode: (self._plots_co2_mode.set(m), self._redraw_plots_metric("CO2")),
+                ).pack(side="left", padx=3)
+            _make_device_notebook(tab_co2, "CO2")
+
             # Redraw when switching metric tabs
             try:
                 nb.bind("<<NotebookTabChanged>>", lambda _e: self._redraw_plots_active())
@@ -1181,6 +1197,8 @@ class PlotsMixin:
             metric_key = str(metric_key or "kwh")
             if metric_key.lower() == "kwh":
                 self._redraw_plots_kwh2()
+            elif metric_key.upper() == "CO2":
+                self._redraw_plots_co2()
             else:
                 self._redraw_plots_wva2(metric_key.upper())
 
@@ -1246,6 +1264,164 @@ class PlotsMixin:
                     pass
                 self._apply_axis_layout(fig, ax, w, legend=False)
                 # Apply global theme to kWh history plots
+                try:
+                    self._apply_plot_theme(fig, ax, canvas=canvas)
+                except Exception:
+                    pass
+                canvas.draw_idle()
+
+    def _redraw_plots_co2(self) -> None:
+            """Draw CO₂ emission bar charts: hourly energy × grid CO₂ intensity."""
+            if not self._ensure_data_loaded():
+                return
+
+            mode = str(getattr(self, "_plots_co2_mode", tk.StringVar(value="hours")).get() or "hours")
+
+            pstart = _parse_date_flexible(self._plots_start.get())
+            pend = _parse_date_flexible(self._plots_end.get())
+            if pstart is not None and pend is not None and pend < pstart:
+                pstart, pend = pend, pstart
+
+            # Determine effective time range
+            now = datetime.now()
+            if pend is None:
+                pend_eff = now
+            else:
+                pend_eff = pend
+            if pstart is None:
+                # Default windows based on mode
+                if mode == "hours":
+                    pstart_eff = pend_eff - timedelta(hours=24)
+                elif mode == "days":
+                    pstart_eff = pend_eff - timedelta(days=30)
+                elif mode == "weeks":
+                    pstart_eff = pend_eff - timedelta(weeks=12)
+                else:  # months
+                    pstart_eff = pend_eff - timedelta(days=365)
+            else:
+                pstart_eff = pstart
+
+            start_ts = int(pstart_eff.timestamp())
+            end_ts = int(pend_eff.timestamp())
+
+            # Get CO₂ intensity data
+            co2_cfg = getattr(self.cfg, "co2", None)
+            zone = getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU"
+            db = self.storage.db
+            df_co2 = db.query_co2_intensity(zone, start_ts, end_ts + 3600)
+
+            dev_key = self._selected_device_key("CO2")
+            keys = [dev_key] if dev_key else list((self._plots_device_order.get("CO2") or []))
+
+            for key in keys:
+                if not key:
+                    continue
+                dcfg = next((d for d in self.cfg.devices if d.key == key), None)
+                fig = self._plots_figs2.get("CO2", {}).get(key)
+                canvas = self._plots_canvases2.get("CO2", {}).get(key)
+                if dcfg is None or fig is None or canvas is None:
+                    continue
+
+                w = canvas.get_tk_widget()
+                self._resize_figure_to_widget(fig, w, dpi=self._dpi_for_widget(w), min_h_px=320)
+                fig.clear()
+                ax = fig.add_subplot(111)
+
+                if df_co2.empty:
+                    ax.set_title(self.t("plots.co2.no_data"))
+                    try:
+                        self._apply_plot_theme(fig, ax, canvas=canvas)
+                    except Exception:
+                        pass
+                    canvas.draw_idle()
+                    continue
+
+                # Get hourly energy for this device
+                df_h = db.query_hourly(key, start_ts, end_ts + 3600)
+                if df_h is None or df_h.empty:
+                    ax.set_title(f"{dcfg.name} – {self.t('plots.co2.no_data')}")
+                    try:
+                        self._apply_plot_theme(fig, ax, canvas=canvas)
+                    except Exception:
+                        pass
+                    canvas.draw_idle()
+                    continue
+
+                # Join hourly energy with CO₂ intensity
+                merged = pd.merge(
+                    df_h[["hour_ts", "kwh"]],
+                    df_co2[["hour_ts", "intensity_g_per_kwh"]],
+                    on="hour_ts",
+                    how="inner",
+                )
+                if merged.empty:
+                    ax.set_title(f"{dcfg.name} – {self.t('plots.co2.no_data')}")
+                    try:
+                        self._apply_plot_theme(fig, ax, canvas=canvas)
+                    except Exception:
+                        pass
+                    canvas.draw_idle()
+                    continue
+
+                merged["co2_g"] = merged["kwh"] * merged["intensity_g_per_kwh"]
+                merged["dt"] = pd.to_datetime(merged["hour_ts"], unit="s", utc=True)
+                merged = merged.sort_values("dt")
+
+                # Aggregate by mode
+                if mode == "hours":
+                    labels = [dt.strftime("%H:%M\n%d.%m") for dt in merged["dt"]]
+                    values = merged["co2_g"].tolist()
+                elif mode == "days":
+                    merged["bucket"] = merged["dt"].dt.date
+                    grp = merged.groupby("bucket")["co2_g"].sum().reset_index()
+                    grp = grp.sort_values("bucket")
+                    labels = [str(d) for d in grp["bucket"]]
+                    values = grp["co2_g"].tolist()
+                elif mode == "weeks":
+                    merged["bucket"] = merged["dt"].dt.isocalendar().week.astype(int)
+                    merged["year"] = merged["dt"].dt.isocalendar().year.astype(int)
+                    grp = merged.groupby(["year", "bucket"])["co2_g"].sum().reset_index()
+                    grp = grp.sort_values(["year", "bucket"])
+                    labels = [f"KW{int(w)}" for w in grp["bucket"]]
+                    values = grp["co2_g"].tolist()
+                else:  # months
+                    merged["bucket"] = merged["dt"].dt.to_period("M")
+                    grp = merged.groupby("bucket")["co2_g"].sum().reset_index()
+                    grp = grp.sort_values("bucket")
+                    labels = [str(p) for p in grp["bucket"]]
+                    values = grp["co2_g"].tolist()
+
+                total_g = sum(values)
+                # Use kg if total > 1000g
+                if total_g >= 1000:
+                    unit_label = "kg CO₂"
+                    values_plot = [v / 1000.0 for v in values]
+                    total_display = f"{total_g / 1000.0:.2f} kg"
+                else:
+                    unit_label = "g CO₂"
+                    values_plot = values
+                    total_display = f"{total_g:.1f} g"
+
+                ax.set_ylabel(unit_label)
+                bars = ax.bar(range(len(values_plot)), values_plot, color="#43a047")
+                base = self._font_base_for_widget(w)
+                self._apply_xticks(ax, labels, base_font=base)
+                self._annotate_bars(ax, bars)
+
+                range_lbl = ""
+                if pstart is not None or pend is not None:
+                    a = pstart_eff.strftime("%Y-%m-%d")
+                    b = pend_eff.strftime("%Y-%m-%d")
+                    range_lbl = f" | {a}–{b}"
+                ax.set_title(
+                    f"{dcfg.name} – CO₂ ({self._pretty_kwh_mode(mode)}){range_lbl} | {total_display}"
+                )
+                ax.grid(True, axis="y", alpha=0.3)
+                try:
+                    fig.subplots_adjust(left=0.10, right=0.97, top=0.92, bottom=0.32)
+                except Exception:
+                    pass
+                self._apply_axis_layout(fig, ax, w, legend=False)
                 try:
                     self._apply_plot_theme(fig, ax, canvas=canvas)
                 except Exception:

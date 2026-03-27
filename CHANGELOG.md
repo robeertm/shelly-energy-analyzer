@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.7.0 - 2026-03-27
+### Added
+- **CO₂ emissions plot tab** – New "CO₂" sub-tab in Plots joins hourly energy consumption with real-time grid CO₂ intensity data to show actual emissions per device. Supports four granularities (hours, days, weeks, months) with smart default time windows (24h, 30d, 12w, 1y). Bar chart automatically switches between g and kg CO₂ units. Uses the same device notebook, time range controls, theme, and annotation style as existing plot tabs.
+
 ## 11.6.0 - 2026-03-27
 ### Improved
 - **CO₂ backfill: retry, skip & gap-fill** – When an ENTSO-E API request fails (e.g. HTTP 503), the service now retries the chunk up to 3 times with increasing backoff (30s, 60s) before skipping it and continuing with the next chunk. Previously a single failure aborted the entire backfill. On subsequent fetches, the service detects gaps (missing hours or hours filled with estimated data) and automatically attempts to reload real data for those ranges. Any hours that remain unfilled after all retries are populated with estimated intensity values (average of surrounding real data, or 400 g/kWh fallback) marked with `source="estimated"` so they are clearly identifiable and will be replaced by real data on the next successful fetch.
