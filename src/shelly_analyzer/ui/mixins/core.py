@@ -6035,9 +6035,24 @@ class CoreMixin:
                 foreground="gray",
             ).grid(row=1, column=2, padx=8, pady=4, sticky="w")
 
-            ttk.Label(solar_box, text=self.t('settings.solar.feed_in_tariff')).grid(row=2, column=0, padx=8, pady=(4, 8), sticky="w")
+            ttk.Label(solar_box, text=self.t('settings.solar.feed_in_tariff')).grid(row=2, column=0, padx=8, pady=4, sticky="w")
             self._solar_tariff_var = tk.StringVar(value=str(getattr(_solar_cfg, "feed_in_tariff_eur_per_kwh", 0.082)))
-            ttk.Entry(solar_box, textvariable=self._solar_tariff_var, width=10).grid(row=2, column=1, padx=8, pady=(4, 8), sticky="w")
+            ttk.Entry(solar_box, textvariable=self._solar_tariff_var, width=10).grid(row=2, column=1, padx=8, pady=4, sticky="w")
+
+            ttk.Label(solar_box, text=self.t('settings.solar.kw_peak')).grid(row=3, column=0, padx=8, pady=4, sticky="w")
+            self._solar_kwp_var = tk.StringVar(value=str(getattr(_solar_cfg, "kw_peak", 0.0)))
+            ttk.Entry(solar_box, textvariable=self._solar_kwp_var, width=10).grid(row=3, column=1, padx=8, pady=4, sticky="w")
+            ttk.Label(solar_box, text=self.t('settings.solar.kw_peak.hint'), foreground="gray").grid(row=3, column=2, padx=8, pady=4, sticky="w")
+
+            ttk.Label(solar_box, text=self.t('settings.solar.battery_kwh')).grid(row=4, column=0, padx=8, pady=4, sticky="w")
+            self._solar_battery_var = tk.StringVar(value=str(getattr(_solar_cfg, "battery_kwh", 0.0)))
+            ttk.Entry(solar_box, textvariable=self._solar_battery_var, width=10).grid(row=4, column=1, padx=8, pady=4, sticky="w")
+            ttk.Label(solar_box, text=self.t('settings.solar.battery_kwh.hint'), foreground="gray").grid(row=4, column=2, padx=8, pady=4, sticky="w")
+
+            ttk.Label(solar_box, text=self.t('settings.solar.co2_production')).grid(row=5, column=0, padx=8, pady=(4, 8), sticky="w")
+            self._solar_co2_prod_var = tk.StringVar(value=str(getattr(_solar_cfg, "co2_production_kg_per_kwp", 1000.0)))
+            ttk.Entry(solar_box, textvariable=self._solar_co2_prod_var, width=10).grid(row=5, column=1, padx=8, pady=(4, 8), sticky="w")
+            ttk.Label(solar_box, text=self.t('settings.solar.co2_production.hint'), foreground="gray").grid(row=5, column=2, padx=8, pady=(4, 8), sticky="w")
 
             # ── CO₂ / ENTSO-E settings ────────────────────────────────────────
             _co2_cfg = getattr(self.cfg, "co2", None)
@@ -7315,10 +7330,18 @@ class CoreMixin:
                     _tariff = float(_tariff_raw.replace(",", "."))
                 except Exception:
                     _tariff = 0.082
+                def _parse_solar_float(var_name, default):
+                    try:
+                        return float(str(getattr(self, var_name, tk.StringVar(value=str(default))).get() or str(default)).replace(",", "."))
+                    except Exception:
+                        return default
                 solar = SolarConfig(
                     enabled=bool(getattr(self, "_solar_enabled_var", tk.BooleanVar(value=False)).get()),
                     pv_meter_device_key=_pv_key,
                     feed_in_tariff_eur_per_kwh=_tariff,
+                    kw_peak=_parse_solar_float("_solar_kwp_var", 0.0),
+                    battery_kwh=_parse_solar_float("_solar_battery_var", 0.0),
+                    co2_production_kg_per_kwp=_parse_solar_float("_solar_co2_prod_var", 1000.0),
                 )
             except Exception:
                 solar = getattr(self.cfg, "solar", SolarConfig())

@@ -1079,15 +1079,44 @@ class LiveWebMixin:
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
 
+            # --- Save solar config from web ---
+            if action == "save_solar_config":
+                try:
+                    from shelly_analyzer.io.config import SolarConfig as _SC
+                    _old = getattr(self.cfg, "solar", _SC())
+                    _new = _SC(
+                        enabled=bool(params.get("enabled", getattr(_old, "enabled", False))),
+                        pv_meter_device_key=str(params.get("pv_meter_device_key", getattr(_old, "pv_meter_device_key", "")) or ""),
+                        feed_in_tariff_eur_per_kwh=float(params.get("feed_in_tariff", getattr(_old, "feed_in_tariff_eur_per_kwh", 0.082))),
+                        kw_peak=float(params.get("kw_peak", getattr(_old, "kw_peak", 0.0))),
+                        battery_kwh=float(params.get("battery_kwh", getattr(_old, "battery_kwh", 0.0))),
+                        co2_production_kg_per_kwp=float(params.get("co2_production_kg_per_kwp", getattr(_old, "co2_production_kg_per_kwp", 1000.0))),
+                    )
+                    import dataclasses
+                    self.cfg = dataclasses.replace(self.cfg, solar=_new)
+                    save_config(self.cfg, self.cfg_path)
+                    return {"ok": True}
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
             # --- Solar data for web dashboard ---
             if action == "solar":
                 try:
                     solar_cfg = getattr(self.cfg, "solar", None)
+                    _all_devs_s = [{"key": d.key, "name": d.name} for d in self.cfg.devices]
+                    _scfg_resp = {
+                        "enabled": bool(getattr(solar_cfg, "enabled", False)) if solar_cfg else False,
+                        "pv_meter_device_key": str(getattr(solar_cfg, "pv_meter_device_key", "") or "") if solar_cfg else "",
+                        "feed_in_tariff": float(getattr(solar_cfg, "feed_in_tariff_eur_per_kwh", 0.082)) if solar_cfg else 0.082,
+                        "kw_peak": float(getattr(solar_cfg, "kw_peak", 0.0) or 0.0) if solar_cfg else 0.0,
+                        "battery_kwh": float(getattr(solar_cfg, "battery_kwh", 0.0) or 0.0) if solar_cfg else 0.0,
+                        "co2_production_kg_per_kwp": float(getattr(solar_cfg, "co2_production_kg_per_kwp", 1000.0) or 1000.0) if solar_cfg else 1000.0,
+                    }
                     if solar_cfg is None or not getattr(solar_cfg, "enabled", False):
-                        return {"ok": True, "configured": False}
+                        return {"ok": True, "configured": False, "devices": _all_devs_s, "config": _scfg_resp}
                     pv_key = str(getattr(solar_cfg, "pv_meter_device_key", "") or "")
                     if not pv_key:
-                        return {"ok": True, "configured": False}
+                        return {"ok": True, "configured": False, "devices": _all_devs_s, "config": _scfg_resp}
 
                     period = str(params.get("period") or "today").strip()
                     from datetime import datetime as _dt3, timedelta as _td3
@@ -1180,6 +1209,7 @@ class LiveWebMixin:
                     # Lifetime CO₂ amortization: total embodied CO₂ vs total saved
                     co2_embodied_kg = kw_peak * co2_prod_per_kwp if kw_peak > 0 else 0.0
 
+                    _all_devices = [{"key": d.key, "name": d.name} for d in self.cfg.devices]
                     return {
                         "ok": True,
                         "configured": True,
@@ -1199,6 +1229,10 @@ class LiveWebMixin:
                         "kw_peak": round(kw_peak, 2),
                         "battery_kwh": round(battery_kwh_cfg, 1),
                         "co2_embodied_kg": round(co2_embodied_kg, 1),
+                        "co2_production_kg_per_kwp": round(co2_prod_per_kwp, 0),
+                        "feed_in_tariff": round(feed_in_tariff, 4),
+                        "pv_meter_device_key": pv_key,
+                        "devices": _all_devices,
                     }
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
