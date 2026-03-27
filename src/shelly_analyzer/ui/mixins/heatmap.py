@@ -525,7 +525,8 @@ class HeatmapMixin:
 
             # Choose colormap and range
             import matplotlib.pyplot as _plt
-            cmap = _plt.colormaps["RdYlGn_r"].copy()
+            cmap_name = "YlOrRd" if use_co2 else "RdYlGn_r"
+            cmap = _plt.colormaps[cmap_name].copy()
             bad_color = "#333333" if theme == "night" else "#E0E0E0"
             cmap.set_bad(color=bad_color)
             valid = z[~np.isnan(z)]
@@ -643,7 +644,9 @@ class HeatmapMixin:
                 if 0 <= wd < 7 and 0 <= hr < 24:
                     z[wd, hr] = val
 
-            cmap = "RdYlGn_r"
+            import matplotlib.pyplot as _plt
+            cmap_name = "YlOrRd" if use_co2 else "RdYlGn_r"
+            cmap = _plt.colormaps[cmap_name].copy()
             vmax = float(z.max()) if z.max() > 0 else 1.0
 
             x = np.arange(25)   # hour boundaries 0..24
