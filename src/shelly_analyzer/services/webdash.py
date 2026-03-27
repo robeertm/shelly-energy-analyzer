@@ -675,25 +675,29 @@ _HTML_TEMPLATE = """<!doctype html>
     .exp-actions button.busy::after {{ content: ""; position: absolute; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: exp-spin 0.6s linear infinite; }}
     @keyframes exp-spin {{ to {{ transform: rotate(360deg); }} }}
     .exp-placeholder {{ color: var(--muted); font-size: 12px; padding: 12px 0; text-align: center; }}
-    .exp-file-card {{ display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); margin-bottom: 6px; }}
-    .exp-file-icon {{ font-size: 28px; flex: 0 0 auto; }}
-    .exp-file-info {{ flex: 1; min-width: 0; }}
-    .exp-file-name {{ font-size: 13px; font-weight: 600; color: var(--fg); word-break: break-all; }}
+    .exp-file-card {{ display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); margin-bottom: 6px; overflow: hidden; }}
+    .exp-file-icon {{ font-size: 24px; flex: 0 0 auto; }}
+    .exp-file-info {{ flex: 1; min-width: 0; overflow: hidden; }}
+    .exp-file-name {{ font-size: 12px; font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
     .exp-file-meta {{ font-size: 11px; color: var(--muted); margin-top: 2px; }}
-    .exp-file-btn {{ display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 8px 16px; border-radius: 10px; border: 1px solid rgba(106,167,255,0.35); background: rgba(106,167,255,0.12); color: var(--accent); text-decoration: none; font-weight: 600; white-space: nowrap; cursor: pointer; min-height: 40px; }}
+    .exp-file-btn {{ display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-size: 12px; padding: 8px 14px; border-radius: 10px; border: 1px solid rgba(106,167,255,0.35); background: rgba(106,167,255,0.12); color: var(--accent); text-decoration: none; font-weight: 600; white-space: nowrap; cursor: pointer; min-height: 36px; flex: 0 0 auto; }}
     .exp-file-btn:hover {{ background: rgba(106,167,255,0.22); }}
     .exp-job-card {{ padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); margin-bottom: 6px; }}
-    .exp-job-head {{ display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }}
+    .exp-job-head {{ display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }}
     .exp-job-title {{ font-size: 13px; font-weight: 600; color: var(--fg); }}
-    .exp-job-status {{ font-size: 11px; padding: 2px 8px; border-radius: 999px; }}
+    .exp-job-status {{ font-size: 11px; padding: 2px 8px; border-radius: 999px; flex: 0 0 auto; }}
     .exp-job-status.running {{ background: rgba(106,167,255,0.15); color: var(--accent); }}
     .exp-job-status.done {{ background: rgba(34,197,94,0.15); color: #22c55e; }}
     .exp-job-status.error {{ background: rgba(239,68,68,0.15); color: #ef4444; }}
-    .exp-job-progress {{ width: 100%; height: 8px; border-radius: 4px; appearance: none; -webkit-appearance: none; }}
-    .exp-job-progress::-webkit-progress-bar {{ background: var(--chipbg); border-radius: 4px; }}
-    .exp-job-progress::-webkit-progress-value {{ background: var(--accent); border-radius: 4px; }}
-    .exp-job-msg {{ font-size: 11px; color: var(--muted); margin-top: 4px; }}
-    .exp-job-files {{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }}
+    .exp-job-progress {{ width: 100%; height: 6px; border-radius: 3px; appearance: none; -webkit-appearance: none; }}
+    .exp-job-progress::-webkit-progress-bar {{ background: var(--chipbg); border-radius: 3px; }}
+    .exp-job-progress::-webkit-progress-value {{ background: var(--accent); border-radius: 3px; }}
+    .exp-job-msg {{ font-size: 11px; color: var(--muted); margin-top: 3px; }}
+    .exp-job-files {{ display: grid; grid-template-columns: 1fr; gap: 4px; margin-top: 6px; }}
+    .exp-job-file-link {{ display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(106,167,255,0.25); background: rgba(106,167,255,0.06); color: var(--accent); text-decoration: none; overflow: hidden; }}
+    .exp-job-file-link span {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    .exp-job-file-link:hover {{ background: rgba(106,167,255,0.12); }}
+    .exp-info-card {{ display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid rgba(106,167,255,0.25); border-radius: 12px; background: rgba(106,167,255,0.06); margin-bottom: 6px; color: var(--accent); font-size: 12px; }}
     .error-msg {{ color: var(--pwr-high); font-size: 13px; padding: 20px 0; text-align: center; }}
     .info-msg {{ color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }}
     /* ── Compare delta ── */
@@ -2404,33 +2408,38 @@ function _expRenderFileCard(f) {{
 function _expShowResults(files) {{
   const el = document.getElementById('exp-results');
   const ph = document.getElementById('exp-results-ph');
-  if (!files || !files.length) {{
-    if (ph) ph.style.display = '';
-    return;
-  }}
+  if (!files || !files.length) return;
   if (ph) ph.style.display = 'none';
-  // Prepend new results (newest on top), remove old placeholder
-  const frag = document.createElement('div');
-  frag.innerHTML = files.map(f => _expRenderFileCard(f)).join('');
-  // Insert before first child (or just append)
-  const first = el.querySelector('.exp-file-card');
-  if (first) {{ while (frag.firstChild) el.insertBefore(frag.firstChild, first); }}
-  else {{ el.innerHTML += files.map(f => _expRenderFileCard(f)).join(''); }}
+  const html = files.map(f => _expRenderFileCard(f)).join('');
+  el.insertAdjacentHTML('afterbegin', html);
+}}
+
+function _expShowJobAccepted(jobId) {{
+  const el = document.getElementById('exp-results');
+  const ph = document.getElementById('exp-results-ph');
+  if (ph) ph.style.display = 'none';
+  el.insertAdjacentHTML('afterbegin', `<div class="exp-info-card">✓ Job #${{jobId}} gestartet – Fortschritt unten bei "Laufende Jobs".</div>`);
 }}
 
 function _expShowError(msg) {{
   const el = document.getElementById('exp-results');
   const ph = document.getElementById('exp-results-ph');
   if (ph) ph.style.display = 'none';
-  const card = document.createElement('div');
-  card.className = 'exp-file-card';
-  card.innerHTML = `<div class="exp-file-icon">⚠️</div>
+  el.insertAdjacentHTML('afterbegin', `<div class="exp-file-card">
+    <div class="exp-file-icon">⚠️</div>
     <div class="exp-file-info">
-      <div class="exp-file-name" style="color:var(--accent)">{exp_job_error}</div>
+      <div class="exp-file-name" style="color:#ef4444">{exp_job_error}</div>
       <div class="exp-file-meta">${{msg}}</div>
-    </div>`;
-  const first = el.querySelector('.exp-file-card');
-  if (first) el.insertBefore(card, first); else el.appendChild(card);
+    </div>
+  </div>`);
+}}
+
+function _expHandleResult(res) {{
+  if (res && res.files && res.files.length) _expShowResults(res.files);
+  else if (res && res.job && res.job.id) _expShowJobAccepted(res.job.id);
+  else if (res && res.ok) _expShowJobAccepted(res.job ? res.job.id : '?');
+  else if (res && res.error) _expShowError(res.error);
+  else _expShowError(JSON.stringify(res));
 }}
 
 async function _expRefreshJobs() {{
@@ -2470,7 +2479,7 @@ async function _expRefreshJobs() {{
         filesHtml = '<div class="exp-job-files">' + res.files.map(f => {{
           const url = f.url || '';
           const name = f.name || 'file';
-          return `<a class="exp-file-btn" href="${{url}}" target="_blank">${{_expFileIcon(name)}} ${{name}}</a>`;
+          return `<a class="exp-job-file-link" href="${{url}}" target="_blank">${{_expFileIcon(name)}}<span>${{name}}</span></a>`;
         }}).join('') + '</div>';
       }}
       let errHtml = '';
@@ -2548,67 +2557,31 @@ function initExport() {{
       return r.json();
     }}
 
-    // Button handlers – synchronous exports show file cards, async jobs get polled
-    document.getElementById('exp-btn-summary').addEventListener('click', async function() {{
-      setBusy(this,true);
-      try {{
-        const res = await expRun('export_summary', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value}});
-        if (res && res.files) _expShowResults(res.files);
-        else if (res && res.error) _expShowError(res.error);
-        else _expShowError(JSON.stringify(res));
-      }} catch(e) {{ _expShowError(e.message||String(e)); }}
-      setBusy(this,false);
-    }});
+    // Button handlers – all use _expHandleResult which handles files, jobs, and errors
+    async function expClick(btn, action, params) {{
+      setBusy(btn, true);
+      try {{ _expHandleResult(await expRun(action, params)); }}
+      catch(e) {{ _expShowError(e.message||String(e)); }}
+      setBusy(btn, false);
+    }}
 
-    document.getElementById('exp-btn-invoices').addEventListener('click', async function() {{
-      setBusy(this,true);
-      try {{
-        const res = await expRun('export_invoices', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value, period: document.getElementById('exp-inv-period').value, anchor: document.getElementById('exp-inv-anchor').value}});
-        if (res && res.files) _expShowResults(res.files);
-        else if (res && res.error) _expShowError(res.error);
-        else _expShowError(JSON.stringify(res));
-      }} catch(e) {{ _expShowError(e.message||String(e)); }}
-      setBusy(this,false);
+    document.getElementById('exp-btn-summary').addEventListener('click', function() {{
+      expClick(this, 'export_summary', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value}});
     }});
-
-    document.getElementById('exp-btn-excel').addEventListener('click', async function() {{
-      setBusy(this,true);
-      try {{
-        const res = await expRun('export_excel', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value}});
-        if (res && res.files) _expShowResults(res.files);
-        else if (res && res.error) _expShowError(res.error);
-        else _expShowError(JSON.stringify(res));
-      }} catch(e) {{ _expShowError(e.message||String(e)); }}
-      setBusy(this,false);
+    document.getElementById('exp-btn-invoices').addEventListener('click', function() {{
+      expClick(this, 'export_invoices', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value, period: document.getElementById('exp-inv-period').value, anchor: document.getElementById('exp-inv-anchor').value}});
     }});
-
-    document.getElementById('exp-btn-bundle').addEventListener('click', async function() {{
-      setBusy(this,true);
-      try {{
-        const hours = parseInt(document.getElementById('exp-bundle-h').value)||48;
-        const res = await expRun('bundle', {{hours}});
-        if (res && res.files) _expShowResults(res.files);
-        else if (res && res.error) _expShowError(res.error);
-        else _expShowError(JSON.stringify(res));
-      }} catch(e) {{ _expShowError(e.message||String(e)); }}
-      setBusy(this,false);
+    document.getElementById('exp-btn-excel').addEventListener('click', function() {{
+      expClick(this, 'export_excel', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value}});
     }});
-
-    document.getElementById('exp-btn-report-day').addEventListener('click', async function() {{
-      setBusy(this,true);
-      try {{
-        const res = await expRun('report', {{period:'day', anchor: document.getElementById('exp-inv-anchor').value}});
-        // async job – polling will show progress + files when done
-      }} catch(e) {{ _expShowError(e.message||String(e)); }}
-      setBusy(this,false);
+    document.getElementById('exp-btn-bundle').addEventListener('click', function() {{
+      expClick(this, 'bundle', {{hours: parseInt(document.getElementById('exp-bundle-h').value)||48}});
     }});
-
-    document.getElementById('exp-btn-report-month').addEventListener('click', async function() {{
-      setBusy(this,true);
-      try {{
-        const res = await expRun('report', {{period:'month', anchor: document.getElementById('exp-inv-anchor').value}});
-      }} catch(e) {{ _expShowError(e.message||String(e)); }}
-      setBusy(this,false);
+    document.getElementById('exp-btn-report-day').addEventListener('click', function() {{
+      expClick(this, 'report', {{period:'day', anchor: document.getElementById('exp-inv-anchor').value}});
+    }});
+    document.getElementById('exp-btn-report-month').addEventListener('click', function() {{
+      expClick(this, 'report', {{period:'month', anchor: document.getElementById('exp-inv-anchor').value}});
     }});
   }}
   // Start jobs polling when export tab is active
@@ -4026,80 +3999,57 @@ function showResults(files) {
   if (ph) ph.style.display = "none";
   el.insertAdjacentHTML("afterbegin", files.map(f => _ctrlFileCard(f)).join(""));
 }
+function showJobAccepted(jobId) {
+  const el = document.getElementById("ctrl_export_results");
+  const ph = document.getElementById("ctrl_export_ph");
+  if (ph) ph.style.display = "none";
+  el.insertAdjacentHTML("afterbegin", `<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid rgba(106,167,255,0.25);border-radius:12px;background:rgba(106,167,255,0.06);margin-bottom:6px;color:var(--accent);font-size:12px">✓ Job #${esc(String(jobId))} gestartet – siehe Jobs unten.</div>`);
+}
 function showError(msg) {
   const el = document.getElementById("ctrl_export_results");
   const ph = document.getElementById("ctrl_export_ph");
   if (ph) ph.style.display = "none";
   el.insertAdjacentHTML("afterbegin", `<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--card);margin-bottom:6px">
-    <div style="font-size:28px">⚠️</div>
+    <div style="font-size:24px">⚠️</div>
     <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:600;color:var(--accent)">Fehler</div>
+      <div style="font-size:13px;font-weight:600;color:#ef4444">Fehler</div>
       <div style="font-size:11px;color:var(--muted)">${esc(msg)}</div>
     </div>
   </div>`);
 }
+function handleResult(res) {
+  if (res && res.files && res.files.length) showResults(res.files);
+  else if (res && res.job && res.job.id) showJobAccepted(res.job.id);
+  else if (res && res.ok) showJobAccepted(res.job ? res.job.id : "?");
+  else if (res && res.error) showError(res.error);
+  else showError(JSON.stringify(res));
+}
 
 // --- Export button handlers ---
-document.getElementById("btn_summary").addEventListener("click", async function(){
-  setButtonLoading(this, true);
-  try {
-    const res = await run("export_summary", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value});
-    if (res && res.files) showResults(res.files);
-    else if (res && res.error) showError(res.error);
-    else showError(JSON.stringify(res));
-  } catch (e) { showError(e&&e.message?e.message:String(e)); }
-  setButtonLoading(this, false);
-});
+async function ctrlExport(btn, action, params) {
+  setButtonLoading(btn, true);
+  try { handleResult(await run(action, params)); }
+  catch (e) { showError(e&&e.message?e.message:String(e)); }
+  setButtonLoading(btn, false);
+}
 
-document.getElementById("btn_invoices").addEventListener("click", async function(){
-  setButtonLoading(this, true);
-  try {
-    const res = await run("export_invoices", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value, period: document.getElementById("inv_period").value, anchor: document.getElementById("inv_anchor").value});
-    if (res && res.files) showResults(res.files);
-    else if (res && res.error) showError(res.error);
-    else showError(JSON.stringify(res));
-  } catch (e) { showError(e&&e.message?e.message:String(e)); }
-  setButtonLoading(this, false);
+document.getElementById("btn_summary").addEventListener("click", function(){
+  ctrlExport(this, "export_summary", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value});
 });
-
-document.getElementById("btn_excel").addEventListener("click", async function(){
-  setButtonLoading(this, true);
-  try {
-    const res = await run("export_excel", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value});
-    if (res && res.files) showResults(res.files);
-    else if (res && res.error) showError(res.error);
-    else showError(JSON.stringify(res));
-  } catch (e) { showError(e&&e.message?e.message:String(e)); }
-  setButtonLoading(this, false);
+document.getElementById("btn_invoices").addEventListener("click", function(){
+  ctrlExport(this, "export_invoices", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value, period: document.getElementById("inv_period").value, anchor: document.getElementById("inv_anchor").value});
 });
-
-document.getElementById("btn_bundle").addEventListener("click", async function(){
-  setButtonLoading(this, true);
-  try {
-    const hours = parseInt(document.getElementById("bundle_hours").value) || 48;
-    const res = await run("bundle", {hours});
-    if (res && res.files) showResults(res.files);
-    else if (res && res.error) showError(res.error);
-    else showError(JSON.stringify(res));
-  } catch (e) { showError(e&&e.message?e.message:String(e)); }
-  setButtonLoading(this, false);
+document.getElementById("btn_excel").addEventListener("click", function(){
+  ctrlExport(this, "export_excel", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value});
 });
-
-document.getElementById("btn_report_day").addEventListener("click", async function(){
-  setButtonLoading(this, true);
-  try {
-    await run("report", {period: "day", anchor: document.getElementById("inv_anchor").value});
-    // async job – Jobs section below shows progress
-  } catch (e) { showError(e&&e.message?e.message:String(e)); }
-  setButtonLoading(this, false);
+document.getElementById("btn_bundle").addEventListener("click", function(){
+  ctrlExport(this, "bundle", {hours: parseInt(document.getElementById("bundle_hours").value) || 48});
 });
-
-document.getElementById("btn_report_month").addEventListener("click", async function(){
-  setButtonLoading(this, true);
-  try {
-    await run("report", {period: "month", anchor: document.getElementById("inv_anchor").value});
-  } catch (e) { showError(e&&e.message?e.message:String(e)); }
-  setButtonLoading(this, false);
+document.getElementById("btn_report_day").addEventListener("click", function(){
+  ctrlExport(this, "report", {period: "day", anchor: document.getElementById("inv_anchor").value});
+});
+document.getElementById("btn_report_month").addEventListener("click", function(){
+  ctrlExport(this, "report", {period: "month", anchor: document.getElementById("inv_anchor").value});
 });
 </script>
 </body>

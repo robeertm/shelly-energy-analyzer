@@ -1,5 +1,11 @@
 # Changelog
 
+## 11.15.2 - 2026-03-27
+### Fixed
+- **Web export: no more raw JSON in results** – Async actions (invoices, reports) that return a job object (`{"ok":true,"job":{...}}`) are now correctly recognized and show a clean "✓ Job #N gestartet" info card instead of dumping raw JSON as an error.
+- **Web export: mobile-friendly file names** – Long file names in both results and job cards now truncate with ellipsis instead of overflowing the screen. Job file links use a dedicated compact layout with icon + truncated name.
+- **Web export: cleaner styling** – Smaller icons (24px), slimmer progress bars (6px), tighter spacing. Unified `_expHandleResult()` / `handleResult()` dispatchers replace duplicated if/else chains in all button handlers.
+
 ## 11.15.1 - 2026-03-27
 ### Fixed
 - **Web export: file cards instead of broken preview** – Export results now display as clear file cards with type icon (📄 PDF, 📊 Excel, 📦 ZIP), filename, and a prominent "Öffnen" button that opens the file directly on smartphone/tablet. Replaces the previous unreadable JSON/iframe preview.
