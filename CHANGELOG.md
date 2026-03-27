@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.1.7 - 2026-03-27
+### Fixed
+- **ENTSO-E HTTP errors no longer show raw HTML in the UI** – When the ENTSO-E API returns an HTTP error (e.g. 503 Service Unavailable), the error response body (which is an HTML page) was appended to the RuntimeError message and displayed verbatim in the status label. The body is now discarded; only the HTTP status code and reason phrase are included (e.g. `"ENTSO-E API HTTP 503: Service Unavailable"`). The test-connection button also maps 502/503/504 errors to a clean `"ENTSO-E API nicht erreichbar (HTTP 5xx)"` message.
+
 ## 11.1.6 - 2026-03-27
 ### Fixed
 - **CO₂ tab: `self.db` AttributeError prevents all data display and writes** – The CO₂ mixin and the backfill button in core referenced `self.db`, which does not exist on the App object (the correct accessor is `self.storage.db`). This caused a silent `AttributeError` on every refresh and every backfill write, meaning data was fetched from ENTSO-E successfully but never written to the database, and the tab always showed "No data". Fixed all five occurrences across `co2.py` (4×) and `core.py` (1×). Added a 60-second periodic auto-refresh timer so the tab updates automatically when background data arrives.
