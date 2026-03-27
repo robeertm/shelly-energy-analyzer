@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.4.1 - 2026-03-27
+### Fixed
+- **"Check Now" button now refreshes the changelog** – Clicking "Jetzt prüfen" / "Check now" in Settings > Updates only checked for new versions but did not re-fetch the changelog from GitHub. The changelog text widget would only update on app restart or after installing a new version. The button now calls `_updates_on_check_clicked()` which triggers both the version check and a changelog re-fetch.
+
 ## 11.4.0 - 2026-03-27
 ### Added
 - **CO₂ tab: "Reload" button** – A button in the CO₂ tab title bar lets the user trigger an immediate data fetch from ENTSO-E without waiting for the next scheduled auto-fetch. Clicking it calls `Co2FetchService.trigger_now()` which wakes the background service instantly. Button label translated into all 9 languages (de, en, es, fr, pt, it, pl, cs, ru).
