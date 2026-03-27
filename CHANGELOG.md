@@ -1,5 +1,11 @@
 # Changelog
 
+## 11.12.0 - 2026-03-27
+### Added
+- **Web live view: reactive power display** – Each device card now shows total reactive power (VAR) in the expandable detail section, with a dedicated sparkline chart. Clicking the sparkline opens an enlarged detail chart with per-phase breakdown (L1/L2/L3), just like the existing power/voltage/current charts.
+- **Web live view: phase balance indicator** – Multi-phase devices now show a phase balance row displaying each phase's share of total power as a percentage (e.g. L1 33% · L2 35% · L3 32%).
+- **Web live view: translated appliance names** – NILM device analysis chips now display properly translated appliance names (e.g. "Refrigerator" instead of raw ID "fridge") using the i18n system for all supported languages.
+
 ## 11.11.0 - 2026-03-27
 ### Added
 - **CO₂ plots in Telegram & email reports** – Daily and monthly Telegram summaries now include CO₂ emission bar charts (hourly/daily) when ENTSO-E data is available. Email/PDF reports add a dedicated CO₂ chart page with green→yellow→red color coding by emission intensity.
