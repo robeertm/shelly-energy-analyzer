@@ -626,6 +626,41 @@ class LiveWebMixin:
                         _unit = float(getattr(getattr(self.cfg, "pricing", None), "electricity_price_eur_per_kwh", 0.30) or 0.30)
                     _co2_g = float(getattr(getattr(self.cfg, "pricing", None), "co2_intensity_g_per_kwh", 380.0) or 0.0)
 
+                    # Try real ENTSO-E CO₂ data
+                    _co2_cfg = getattr(self.cfg, "co2", None)
+                    _co2_zone = getattr(_co2_cfg, "bidding_zone", "DE_LU") or "DE_LU"
+                    _use_entsoe = False
+                    try:
+                        _entsoe_token = getattr(_co2_cfg, "entsoe_token", "") or ""
+                        if _entsoe_token and hasattr(self.storage, "db"):
+                            _use_entsoe = True
+                    except Exception:
+                        pass
+
+                    def _calc_co2(dev_key: str, rng_s, rng_e, kwh_fb: float) -> float:
+                        """CO₂ (kg) from ENTSO-E hourly data; fallback to static."""
+                        if _use_entsoe:
+                            try:
+                                s_ts = int(rng_s.timestamp())
+                                e_ts = int(rng_e.timestamp())
+                                db = self.storage.db
+                                df_co2 = db.query_co2_intensity(_co2_zone, s_ts, e_ts + 3600)
+                                if not df_co2.empty:
+                                    df_h = db.query_hourly(dev_key, s_ts, e_ts + 3600)
+                                    if df_h is not None and not df_h.empty:
+                                        merged = pd.merge(
+                                            df_h[["hour_ts", "kwh"]],
+                                            df_co2[["hour_ts", "intensity_g_per_kwh"]],
+                                            on="hour_ts", how="inner",
+                                        )
+                                        if not merged.empty:
+                                            return float((merged["kwh"] * merged["intensity_g_per_kwh"]).sum()) / 1000.0
+                            except Exception:
+                                pass
+                        if _co2_g > 0:
+                            return kwh_fb * _co2_g / 1000.0
+                        return 0.0
+
                     _ranges = {
                         "today": (_today_start, _now),
                         "week": (_week_start, _now),
@@ -662,7 +697,7 @@ class LiveWebMixin:
                                 pass
                             dev_data[rng_key + "_kwh"] = round(kwh, 3)
                             dev_data[rng_key + "_eur"] = round(kwh * _unit, 2)
-                            dev_data[rng_key + "_co2_kg"] = round(kwh * _co2_g / 1000.0, 3)
+                            dev_data[rng_key + "_co2_kg"] = round(_calc_co2(d.key, rng_start, rng_end, kwh), 3)
 
                         # Projection
                         try:
@@ -672,7 +707,8 @@ class LiveWebMixin:
                             _mk = dev_data.get("month_kwh", 0.0)
                             dev_data["proj_kwh"] = round(_mk / _elapsed * _dim, 1)
                             dev_data["proj_eur"] = round(dev_data["proj_kwh"] * _unit, 2)
-                            dev_data["proj_co2_kg"] = round(dev_data["proj_kwh"] * _co2_g / 1000.0, 2)
+                            _month_co2 = _calc_co2(d.key, _month_start, _now, _mk)
+                            dev_data["proj_co2_kg"] = round(_month_co2 / _elapsed * _dim, 2) if _month_co2 > 0 else 0.0
                         except Exception:
                             dev_data["proj_kwh"] = 0.0
                             dev_data["proj_eur"] = 0.0
@@ -884,6 +920,7 @@ class LiveWebMixin:
                         year = _dt2.now().year
                     unit = str(params.get("unit") or "kWh").strip()
                     use_eur = (unit.lower() in ("eur", "€", "euro"))
+                    use_co2 = (unit.lower() in ("co2", "g co₂", "gco2"))
                     try:
                         _unit_price = float(self.cfg.pricing.unit_price_gross())
                     except Exception:
@@ -904,6 +941,26 @@ class LiveWebMixin:
                     except Exception:
                         hourly_df = None
 
+                    # Load CO₂ intensity data if needed
+                    co2_intensity_map: Dict[int, float] = {}
+                    _co2_fallback_g = 0.0
+                    if use_co2:
+                        try:
+                            _co2_fallback_g = float(getattr(getattr(self.cfg, "pricing", None), "co2_intensity_g_per_kwh", 380.0) or 380.0)
+                        except Exception:
+                            _co2_fallback_g = 380.0
+                        try:
+                            _co2_cfg_hm = getattr(self.cfg, "co2", None)
+                            _zone_hm = getattr(_co2_cfg_hm, "bidding_zone", "DE_LU") or "DE_LU"
+                            _token_hm = getattr(_co2_cfg_hm, "entsoe_token", "") or ""
+                            if _token_hm and hasattr(self.storage, "db"):
+                                df_co2_hm = self.storage.db.query_co2_intensity(_zone_hm, start_ts, end_ts + 3600)
+                                if not df_co2_hm.empty:
+                                    for _, r in df_co2_hm.iterrows():
+                                        co2_intensity_map[int(r["hour_ts"])] = float(r["intensity_g_per_kwh"])
+                        except Exception:
+                            pass
+
                     calendar_data: List[Dict[str, Any]] = []
                     hourly_matrix: Dict[int, Dict[int, float]] = {wd: {h: 0.0 for h in range(24)} for wd in range(7)}
                     hourly_counts: Dict[int, Dict[int, int]] = {wd: {h: 0 for h in range(24)} for wd in range(7)}
@@ -917,17 +974,29 @@ class LiveWebMixin:
                                 kwh_val = float(row["kwh"] or 0.0)
                                 dt_local = _dt2.fromtimestamp(ts_val)
                                 date_str = dt_local.strftime("%Y-%m-%d")
-                                daily_totals[date_str] = daily_totals.get(date_str, 0.0) + kwh_val
+
+                                if use_co2:
+                                    intensity = co2_intensity_map.get(ts_val, _co2_fallback_g)
+                                    val_h = kwh_val * intensity  # g CO₂
+                                else:
+                                    val_h = kwh_val
+
+                                daily_totals[date_str] = daily_totals.get(date_str, 0.0) + val_h
                                 # Hourly matrix: weekday (0=Mon) × hour
                                 wd = dt_local.weekday()  # 0=Mon
                                 h = dt_local.hour
-                                hourly_matrix[wd][h] += kwh_val
+                                hourly_matrix[wd][h] += val_h
                                 hourly_counts[wd][h] += 1
                             except Exception:
                                 continue
 
-                        for date_str, kwh_val in daily_totals.items():
-                            val = kwh_val * _unit_price if use_eur else kwh_val
+                        for date_str, total_val in daily_totals.items():
+                            if use_eur:
+                                val = total_val * _unit_price
+                            elif use_co2:
+                                val = total_val  # already in g CO₂
+                            else:
+                                val = total_val
                             calendar_data.append({"date": date_str, "value": round(val, 3)})
 
                     # Build hourly matrix (averages) for weekday×hour heatmap
@@ -936,8 +1005,11 @@ class LiveWebMixin:
                         hourly_out[str(wd)] = {}
                         for h in range(24):
                             cnt = hourly_counts[wd][h]
-                            kwh_avg = (hourly_matrix[wd][h] / cnt) if cnt > 0 else 0.0
-                            val = kwh_avg * _unit_price if use_eur else kwh_avg
+                            avg_val = (hourly_matrix[wd][h] / cnt) if cnt > 0 else 0.0
+                            if use_eur and not use_co2:
+                                val = avg_val * _unit_price
+                            else:
+                                val = avg_val
                             hourly_out[str(wd)][str(h)] = round(val, 4)
 
                     devices_list = [{"key": d.key, "name": d.name} for d in self.cfg.devices]
