@@ -297,6 +297,8 @@ class CoreMixin:
             self._wva_unit_display = tk.StringVar(value="hours")
             # CO₂ plots granularity
             self._plots_co2_mode = tk.StringVar(value="hours")
+            self._plots_co2_last_n = tk.IntVar(value=7)
+            self._plots_co2_last_unit = tk.StringVar(value="days")
 
             # Plots debug: show which CSV columns were mapped to phases/total.
             self._plots_debug_mapping_enabled = tk.BooleanVar(value=False)
