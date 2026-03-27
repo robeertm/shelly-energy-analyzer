@@ -552,6 +552,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.tab.solar": "Solar",
         "web.tab.compare": "Vergleich",
         "web.tab.anomalies": "Anomalien",
+        "web.tab.export": "Export",
         "web.no_data": "Keine Daten",
 
         # Web: Dashboard UI (mobile/web app texts)
@@ -1299,6 +1300,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.tab.solar": "Solar",
         "web.tab.compare": "Compare",
         "web.tab.anomalies": "Anomalies",
+        "web.tab.export": "Export",
         "web.no_data": "No data",
 
         # Web: Dashboard UI (mobile/web app texts)
@@ -1977,6 +1979,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.tab.solar": "Solar",
         "web.tab.compare": "Comparar",
         "web.tab.anomalies": "Anomalías",
+        "web.tab.export": "Exportar",
         "web.no_data": "Sin datos",
 
         # Web: Dashboard UI
@@ -2311,6 +2314,7 @@ _I18N["fr"] = _mk_lang({
     "web.tab.solar": "Solaire",
     "web.tab.compare": "Comparer",
     "web.tab.anomalies": "Anomalies",
+    "web.tab.export": "Export",
     "web.no_data": "Pas de données",
     # Web: Dashboard UI
     "web.dash.device_order": "Ordre et visibilité des appareils",
@@ -3105,6 +3109,7 @@ _I18N.setdefault("pt", {}).update({
     "web.tab.solar": "Solar",
     "web.tab.compare": "Comparar",
     "web.tab.anomalies": "Anomalias",
+    "web.tab.export": "Exportar",
     "web.no_data": "Sem dados",
     "web.dash.device_order": "Ordem e visibilidade dos dispositivos",
     "web.dash.done": "Concluído",
@@ -3145,6 +3150,7 @@ _I18N.setdefault("it", {}).update({
     "web.tab.solar": "Solare",
     "web.tab.compare": "Confronto",
     "web.tab.anomalies": "Anomalie",
+    "web.tab.export": "Esporta",
     "web.no_data": "Nessun dato",
     "web.dash.device_order": "Ordine e visibilità dei dispositivi",
     "web.dash.done": "Fine",
@@ -3185,6 +3191,7 @@ _I18N.setdefault("pl", {}).update({
     "web.tab.solar": "Solar",
     "web.tab.compare": "Porównaj",
     "web.tab.anomalies": "Anomalie",
+    "web.tab.export": "Eksport",
     "web.no_data": "Brak danych",
     "web.dash.device_order": "Kolejność i widoczność urządzeń",
     "web.dash.done": "Gotowe",
@@ -3225,6 +3232,7 @@ _I18N.setdefault("cs", {}).update({
     "web.tab.solar": "Solár",
     "web.tab.compare": "Porovnat",
     "web.tab.anomalies": "Anomálie",
+    "web.tab.export": "Export",
     "web.no_data": "Žádná data",
     "web.dash.device_order": "Pořadí a viditelnost zařízení",
     "web.dash.done": "Hotovo",
@@ -3265,6 +3273,7 @@ _I18N.setdefault("ru", {}).update({
     "web.tab.solar": "Солнце",
     "web.tab.compare": "Сравнение",
     "web.tab.anomalies": "Аномалии",
+    "web.tab.export": "Экспорт",
     "web.no_data": "Нет данных",
     "web.dash.device_order": "Порядок и видимость устройств",
     "web.dash.done": "Готово",
