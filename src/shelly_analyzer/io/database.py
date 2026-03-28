@@ -95,6 +95,14 @@ CREATE TABLE IF NOT EXISTS co2_intensity (
     source             TEXT,                 -- e.g. "entsoe" or "static"
     fetched_at         INTEGER               -- Unix seconds when this row was written
 );
+
+CREATE TABLE IF NOT EXISTS co2_fuel_mix (
+    hour_ts INTEGER NOT NULL,
+    zone    TEXT    NOT NULL,
+    fuel    TEXT    NOT NULL,
+    mw      REAL    NOT NULL,
+    PRIMARY KEY (hour_ts, zone, fuel)
+);
 """
 
 # Additional columns added in v6.0.0.2 for full Shelly EMData CSV support.
@@ -997,6 +1005,39 @@ class EnergyDB:
             (zone,),
         ).fetchone()
         return int(row[0]) if row and row[0] is not None else None
+
+    def upsert_fuel_mix(self, hour_ts: int, zone: str, mix: Dict[str, float]) -> None:
+        """Store a fuel mix snapshot for a given hour."""
+        if not mix:
+            return
+        conn = self._conn()
+        rows = [(hour_ts, zone, fuel, mw) for fuel, mw in mix.items()]
+        with self._write_lock:
+            with conn:
+                conn.executemany(
+                    "INSERT OR REPLACE INTO co2_fuel_mix (hour_ts, zone, fuel, mw) "
+                    "VALUES (?, ?, ?, ?)",
+                    rows,
+                )
+
+    def query_latest_fuel_mix(self, zone: str) -> Tuple[Optional[int], Dict[str, float]]:
+        """Return the most recent fuel mix for a zone.
+
+        Returns (hour_ts, {fuel: mw}) or (None, {}) if no data.
+        """
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT MAX(hour_ts) FROM co2_fuel_mix WHERE zone = ?",
+            (zone,),
+        ).fetchone()
+        if not row or row[0] is None:
+            return None, {}
+        hour_ts = int(row[0])
+        rows = conn.execute(
+            "SELECT fuel, mw FROM co2_fuel_mix WHERE hour_ts = ? AND zone = ?",
+            (hour_ts, zone),
+        ).fetchall()
+        return hour_ts, {r[0]: float(r[1]) for r in rows}
 
     def oldest_co2_ts(self, zone: str) -> Optional[int]:
         """Return the oldest hour_ts for a zone, or None."""
