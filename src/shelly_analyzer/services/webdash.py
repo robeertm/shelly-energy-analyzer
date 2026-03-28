@@ -2788,13 +2788,15 @@ function renderAnomalies(data, el) {{
 async function loadForecast() {{
   const sel = document.getElementById('forecast-device');
   if (!sel.options.length) {{
-    (typeof DEVICES!=='undefined'?DEVICES:[]).forEach(function(d) {{
+    const devs = typeof DEVICES !== 'undefined' ? DEVICES : [];
+    devs.forEach(function(d) {{
       const o = document.createElement('option');
       o.value = d[0]; o.textContent = d[1];
       sel.appendChild(o);
     }});
+    if (sel.options.length) sel.selectedIndex = 0;
   }}
-  const dk = sel.value;
+  const dk = sel.value || '';
   const cont = document.getElementById('forecast-cards');
   cont.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
   try {{

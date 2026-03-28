@@ -1,5 +1,12 @@
 # Changelog
 
+## 12.0.5 - 2026-03-28
+### Fixed
+- **Weather tab: graceful empty state** – When not enough paired weather+energy data exists, the charts now show a helpful message ("Wetter-Daten werden stündlich gesammelt...") and the energy-only chart of the last 48h instead of empty axes. Cards and correlation values use proper LabelFrame + grid layout matching other tabs.
+- **Tenant tab: move-in date (Einzugsdatum)** – Added move-in date field to tenant settings. The yearly billing calculation now starts from the move-in date. Settings UI shows date field with explanation text.
+- **Tenant tab: chart redesign** – Grouped bar chart (kWh + € side by side), donut chart for single tenant, proper value labels, consistent colors and styling matching Solar/CO₂ tabs. Empty state shows info message instead of blank chart.
+- **Web forecast: fix empty state** – Fixed device selector initialization (ensure selectedIndex=0 on first load) so the forecast API receives a valid device_key. Added loading indicator and better error display.
+
 ## 12.0.4 - 2026-03-28
 ### Fixed
 - **Web dashboard crash: UTF-8 surrogate encoding error** – Removed UTF-16 surrogate escape sequences (`\ud83d\udfe2`) from the standby tab JavaScript that caused a `'utf-8' codec can't encode characters: surrogates not allowed` error during HTML template gzip compression. The web dashboard now starts correctly.
