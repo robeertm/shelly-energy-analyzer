@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.20.1 - 2026-03-28
+### Fixed
+- **Web CO₂: live intensity dropping to 0** – The `/api/co2_live` endpoint queried only the exact current hour slot from the database. When ENTSO-E data for the current hour hadn't been fetched yet (fetch lag), the intensity returned 0 g/kWh, overwriting the correct value from the initial load. Now queries the last 3 hours and uses the most recent available entry, matching the behavior of the full `/api/co2` endpoint.
+
 ## 11.20.0 - 2026-03-28
 ### Fixed
 - **Anomaly timestamps** – Anomaly events now show the actual time of the anomalous activity instead of always 00:00. Unusual daily consumption shows the hour of peak usage, night consumption shows the peak night hour, and power peak time shows the actual peak moment.
