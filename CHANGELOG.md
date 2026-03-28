@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.20.3 - 2026-03-28
+### Fixed
+- **Fuel mix recovery on empty DB** – When no fuel mix data exists in the database (e.g. after upgrade to v11.20.2), the service now automatically fetches generation data from the previous 48 hours to populate the mix. This covers the case where ENTSO-E has no data for the current hour yet but does have recent historical data. The recovered data is stored in the DB for future use.
+
 ## 11.20.2 - 2026-03-28
 ### Fixed
 - **Fuel mix always visible** – The generation/fuel mix (Kraftwerksmix) is now persisted to the database. Previously it was only held in memory and disappeared on app restart or when no ENTSO-E fetch had completed yet. Both the desktop app and web dashboard now fall back to the last stored mix from the DB, so the mix is always shown as long as data has been fetched at least once.
