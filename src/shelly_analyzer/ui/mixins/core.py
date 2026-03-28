@@ -6214,7 +6214,7 @@ class CoreMixin:
                 co2_box,
                 text=self.t("co2.settings.backfill_btn"),
                 command=_co2_backfill_now,
-            ).grid(row=5, column=0, columnspan=2, padx=8, pady=(4, 8), sticky="w")
+            ).grid(row=6, column=0, columnspan=2, padx=8, pady=(4, 8), sticky="w")
 
             # ── Test Connection button ────────────────────────────────────────
             self._co2_test_status_var = tk.StringVar(value="")
@@ -6222,7 +6222,7 @@ class CoreMixin:
                 co2_box,
                 textvariable=self._co2_test_status_var,
             )
-            self._co2_test_label.grid(row=6, column=0, columnspan=4, padx=8, pady=(0, 6), sticky="w")
+            self._co2_test_label.grid(row=7, column=0, columnspan=4, padx=8, pady=(0, 6), sticky="w")
 
             def _co2_test_connection():
                 token = self._co2_token_var.get().strip()
@@ -6292,7 +6292,7 @@ class CoreMixin:
                 co2_box,
                 text=self.t("co2.settings.test_btn"),
                 command=_co2_test_connection,
-            ).grid(row=5, column=2, columnspan=2, padx=8, pady=(4, 8), sticky="w")
+            ).grid(row=6, column=2, columnspan=2, padx=8, pady=(4, 8), sticky="w")
 
             live_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.live.title'))
             live_box.pack(fill="x", pady=(0, 10))
