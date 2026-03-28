@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.0.7 - 2026-03-28
+### Fixed
+- **Web forecast: weekday + hourly profile charts now render** – The profile data had integer keys in Python (`{0: 1.05}`) which became string keys in JSON (`{"0": 1.05}`). JS now accesses both `String(i)` and `i` to handle both formats. API also explicitly converts keys to strings for consistency.
+
 ## 12.0.6 - 2026-03-28
 ### Fixed
 - **Web forecast: device key not sent** – The forecast device selector accessed `d[0]`/`d[1]` but DEVICES is an array of `{key, name}` objects. Fixed to use `d.key`/`d.name`, so the API now receives a valid device key and returns forecast data.

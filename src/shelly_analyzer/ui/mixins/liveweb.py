@@ -1491,8 +1491,8 @@ class LiveWebMixin:
                         "forecast_kwh": r.forecast_kwh,
                         "forecast_upper": r.forecast_upper,
                         "forecast_lower": r.forecast_lower,
-                        "weekday_profile": r.weekday_profile,
-                        "hourly_profile": r.hourly_profile,
+                        "weekday_profile": {str(k): v for k, v in r.weekday_profile.items()},
+                        "hourly_profile": {str(k): v for k, v in r.hourly_profile.items()},
                     }
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
