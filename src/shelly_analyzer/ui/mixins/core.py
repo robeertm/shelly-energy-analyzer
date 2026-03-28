@@ -286,6 +286,23 @@ class CoreMixin:
             # Live Web Dashboard
             self._live_state_store: LiveStateStore = LiveStateStore(max_points=1200)
             self._live_web: Optional[LiveWebDashboard] = None
+            # ML NILM transition learner
+            try:
+                from shelly_analyzer.services.appliance_detector import TransitionLearner
+                _nilm_path = self.project_root / "data" / "runtime" / "nilm_clusters.json"
+                self._nilm_learner = TransitionLearner(
+                    min_step_w=50.0,
+                    max_clusters=20,
+                    persist_path=_nilm_path,
+                )
+                self._nilm_last_cluster_ts = 0.0
+                self._nilm_last_log_ts = 0.0
+                # Log loaded clusters on startup
+                _loaded = self._nilm_learner.get_clusters()
+                if _loaded:
+                    logger.info("NILM ML: loaded %d learned clusters from %s", len(_loaded), _nilm_path)
+            except Exception:
+                self._nilm_learner = None
             # Plots
             self._plots_mode = tk.StringVar(value="days")
             self._plots_start = tk.StringVar(value="")
@@ -2816,6 +2833,11 @@ class CoreMixin:
 
             self.live_status = tk.StringVar(value=self.t('live.off'))
             ttk.Label(top, textvariable=self.live_status).pack(side="left", padx=12)
+
+            # NILM ML learning status
+            self._nilm_status_var = tk.StringVar(value="")
+            self._nilm_status_label = ttk.Label(top, textvariable=self._nilm_status_var, foreground="gray", font=("", 9))
+            self._nilm_status_label.pack(side="left", padx=4)
 
             # QR code (shown when Live Web Dashboard is enabled)
             self._qr_photo = None  # keep reference
