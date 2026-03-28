@@ -2148,6 +2148,30 @@ function renderCo2(data, el) {{
     html += '</table></div>';
   }}
 
+  // ── 24h CO₂ per device (bar charts) ──
+  const devHourly = data.device_hourly_co2 || [];
+  if (devHourly.length > 0) {{
+    devHourly.forEach(function(dev, idx) {{
+      const bars = dev.bars || [];
+      if (bars.length === 0) return;
+      const maxCo2 = Math.max.apply(null, bars.map(function(b) {{ return b.co2_g; }})) || 1;
+      html += '<div class="card" style="margin-top:8px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:baseline">';
+      html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">' + esc(dev.name) + '</div>';
+      html += '<div style="font-size:11px;color:var(--muted)">' + (dev.total_co2_g / 1000).toFixed(2) + ' kg CO\u2082 (24h)</div>';
+      html += '</div>';
+      html += '<div style="display:flex;align-items:flex-end;gap:1px;height:60px;margin-top:6px">';
+      bars.forEach(function(b) {{
+        const pct = maxCo2 > 0 ? (b.co2_g / maxCo2 * 100) : 0;
+        const c = _co2Color(b.intensity, green, dirty);
+        html += '<div style="flex:1;background:' + c + ';min-height:1px;height:' + Math.max(1, pct) + '%;border-radius:2px 2px 0 0;opacity:0.85" title="' + esc(b.hour) + ': ' + b.co2_g.toFixed(0) + ' g CO\u2082 (' + b.kwh.toFixed(3) + ' kWh)"></div>';
+      }});
+      html += '</div>';
+      html += '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px"><span>' + esc(bars[0].hour) + '</span><span>' + esc(bars[bars.length-1].hour) + '</span></div>';
+      html += '</div>';
+    }});
+  }}
+
   el.innerHTML = html;
 
   // ── Draw 24h chart on canvas (deferred to ensure layout) ──
