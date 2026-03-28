@@ -2791,7 +2791,7 @@ async function loadForecast() {{
     const devs = typeof DEVICES !== 'undefined' ? DEVICES : [];
     devs.forEach(function(d) {{
       const o = document.createElement('option');
-      o.value = d[0]; o.textContent = d[1];
+      o.value = d.key || d[0] || ''; o.textContent = d.name || d[1] || '';
       sel.appendChild(o);
     }});
     if (sel.options.length) sel.selectedIndex = 0;

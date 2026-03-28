@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.0.6 - 2026-03-28
+### Fixed
+- **Web forecast: device key not sent** – The forecast device selector accessed `d[0]`/`d[1]` but DEVICES is an array of `{key, name}` objects. Fixed to use `d.key`/`d.name`, so the API now receives a valid device key and returns forecast data.
+
 ## 12.0.5 - 2026-03-28
 ### Fixed
 - **Weather tab: graceful empty state** – When not enough paired weather+energy data exists, the charts now show a helpful message ("Wetter-Daten werden stündlich gesammelt...") and the energy-only chart of the last 48h instead of empty axes. Cards and correlation values use proper LabelFrame + grid layout matching other tabs.
