@@ -6396,8 +6396,23 @@ class CoreMixin:
             tn_box = ttk.LabelFrame(tab_main_sf, text=self.t("settings.tenant.title"))
             tn_box.pack(fill="x", pady=(0, 10))
             self._tn_enabled_var = tk.BooleanVar(value=bool(getattr(_tn_cfg, "enabled", False)))
-            ttk.Checkbutton(tn_box, text=self.t("settings.tenant.enabled"), variable=self._tn_enabled_var).grid(row=0, column=0, columnspan=2, padx=8, pady=6, sticky="w")
-            ttk.Label(tn_box, text="Mieter werden über config.json konfiguriert.", foreground="gray").grid(row=1, column=0, columnspan=4, padx=8, pady=(0, 8), sticky="w")
+            ttk.Checkbutton(tn_box, text=self.t("settings.tenant.enabled"), variable=self._tn_enabled_var).grid(row=0, column=0, columnspan=4, padx=8, pady=6, sticky="w")
+
+            # Tenant list
+            self._tn_list_frame = ttk.Frame(tn_box)
+            self._tn_list_frame.grid(row=1, column=0, columnspan=4, padx=8, pady=4, sticky="nsew")
+            self._tn_entries = []  # list of dicts with StringVars
+
+            # Load existing tenants
+            for t in (getattr(_tn_cfg, "tenants", []) or []):
+                self._tn_add_tenant_row(t.name, t.unit, str(t.persons), ",".join(t.device_keys))
+
+            ttk.Button(tn_box, text=self.t("settings.tenant.add"), command=lambda: self._tn_add_tenant_row("", "", "1", "")).grid(row=2, column=0, padx=8, pady=(4, 8), sticky="w")
+
+            # Common area devices
+            ttk.Label(tn_box, text=self.t("settings.tenant.common")).grid(row=3, column=0, padx=8, pady=4, sticky="w")
+            self._tn_common_var = tk.StringVar(value=",".join(getattr(_tn_cfg, "common_device_keys", []) or []))
+            ttk.Entry(tn_box, textvariable=self._tn_common_var, width=50).grid(row=3, column=1, columnspan=3, padx=8, pady=(4, 8), sticky="w")
 
             live_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.live.title'))
             live_box.pack(fill="x", pady=(0, 10))
@@ -7054,6 +7069,36 @@ class CoreMixin:
                 pass
             self._safe_reload_after_config_save()
 
+    def _tn_add_tenant_row(self, name: str = "", unit: str = "", persons: str = "1", devices: str = "") -> None:
+        """Add a tenant row to the settings UI."""
+        row_idx = len(self._tn_entries)
+        row_frame = ttk.Frame(self._tn_list_frame)
+        row_frame.pack(fill="x", pady=2)
+
+        name_var = tk.StringVar(value=name)
+        unit_var = tk.StringVar(value=unit)
+        persons_var = tk.StringVar(value=persons)
+        devices_var = tk.StringVar(value=devices)
+
+        ttk.Label(row_frame, text=self.t("settings.tenant.name"), font=("", 8)).pack(side="left")
+        ttk.Entry(row_frame, textvariable=name_var, width=15).pack(side="left", padx=2)
+        ttk.Label(row_frame, text=self.t("settings.tenant.unit"), font=("", 8)).pack(side="left")
+        ttk.Entry(row_frame, textvariable=unit_var, width=10).pack(side="left", padx=2)
+        ttk.Label(row_frame, text=self.t("settings.tenant.persons"), font=("", 8)).pack(side="left")
+        ttk.Entry(row_frame, textvariable=persons_var, width=4).pack(side="left", padx=2)
+        ttk.Label(row_frame, text=self.t("settings.tenant.devices"), font=("", 8)).pack(side="left")
+        ttk.Entry(row_frame, textvariable=devices_var, width=25).pack(side="left", padx=2)
+
+        entry = {"name": name_var, "unit": unit_var, "persons": persons_var, "devices": devices_var, "frame": row_frame}
+        self._tn_entries.append(entry)
+
+        def _remove():
+            row_frame.destroy()
+            if entry in self._tn_entries:
+                self._tn_entries.remove(entry)
+
+        ttk.Button(row_frame, text="✕", width=3, command=_remove).pack(side="left", padx=4)
+
     def _save_settings(self) -> None:
             old_lang = str(getattr(self, 'lang', 'de'))
             # Track devices removed from config so we can archive their data folders.
@@ -7541,14 +7586,28 @@ class CoreMixin:
             except Exception:
                 mqtt_cfg = getattr(self.cfg, "mqtt", MqttConfig())
 
-            # Tenant config (preserved from config.json)
+            # Tenant config (from UI entries)
             try:
-                from shelly_analyzer.io.config import TenantConfig
+                from shelly_analyzer.io.config import TenantConfig, TenantDef as _TenantDef
+                _tn_list = []
+                for i, entry in enumerate(getattr(self, "_tn_entries", [])):
+                    _tn_name = str(entry["name"].get()).strip()
+                    if not _tn_name:
+                        continue
+                    _tn_devs = [k.strip() for k in str(entry["devices"].get()).split(",") if k.strip()]
+                    _tn_list.append(_TenantDef(
+                        tenant_id=f"tenant_{i+1}",
+                        name=_tn_name,
+                        device_keys=_tn_devs,
+                        unit=str(entry["unit"].get()).strip(),
+                        persons=max(1, int(entry["persons"].get() or "1")),
+                    ))
+                _tn_common = [k.strip() for k in str(getattr(self, "_tn_common_var", tk.StringVar()).get()).split(",") if k.strip()]
                 tenant = TenantConfig(
                     enabled=bool(getattr(self, "_tn_enabled_var", tk.BooleanVar(value=False)).get()),
-                    tenants=list(getattr(self.cfg.tenant, "tenants", []) or []),
-                    common_device_keys=list(getattr(self.cfg.tenant, "common_device_keys", []) or []),
-                    billing_period_months=int(getattr(self.cfg.tenant, "billing_period_months", 12)),
+                    tenants=_tn_list,
+                    common_device_keys=_tn_common,
+                    billing_period_months=12,
                 )
             except Exception:
                 tenant = getattr(self.cfg, "tenant", TenantConfig())
