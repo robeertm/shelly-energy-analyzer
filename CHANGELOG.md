@@ -1,5 +1,14 @@
 # Changelog
 
+## 12.2.0 - 2026-03-28
+### Added
+- **ML NILM fully integrated** – The TransitionLearner is now instantiated on app startup and fed with every live power reading. It detects step changes (>50W) in power consumption, clusters them via k-means, and matches recurring patterns against the built-in appliance database. Learned clusters are persisted to `data/runtime/nilm_clusters.json` and survive app restarts.
+- **NILM learning status in desktop Live tab** – Shows a status indicator ("NILM: X Muster / Y Transitionen") in the Live tab header that updates every 5 minutes as new patterns are discovered.
+- **NILM learning status in web Live tab** – A badge at the bottom of the Live pane shows cluster count and top-3 learned patterns (e.g. "NILM ML: 5 patterns learned | 100W x12  2200W x8  40W x15"). Updates every 30 seconds via `/api/nilm_status` endpoint.
+- **NILM progress in Sync log** – Every 30 minutes, the current learning progress is logged in the Sync tab (transition count, cluster count, top patterns).
+- **ML-boosted appliance confidence** – When a static appliance match (identify_appliance) is also confirmed by an ML-learned cluster with 5+ observations, confidence is boosted by +15%. This makes frequently-seen appliances rank higher and appear with green dots more often.
+- **New API endpoint `/api/nilm_status`** – Returns the current NILM ML cluster count and top clusters for the web dashboard.
+
 ## 12.1.2 - 2026-03-28
 ### Fixed
 - **Web heatmap: yearly calendar readable on mobile** – Calendar cells now have a minimum size of 10px (was 4px) so they remain visible and tappable. Month labels always use 3-character format (Jan, Feb, ...) instead of single letters. Container scrolls horizontally on narrow screens with smooth touch scrolling instead of squeezing cells to illegible sizes.

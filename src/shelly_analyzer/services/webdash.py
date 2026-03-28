@@ -188,10 +188,18 @@ class LiveStateStore:
             ]
         # Appliance hints for the latest reading per device
         appliances: Dict[str, List[Dict[str, Any]]] = {}
+        _ml_clusters = getattr(self, "_nilm_clusters", [])
         for k, arr in snap.items():
             if arr:
                 try:
-                    matches = _identify_appliance(arr[-1].power_total_w)[:3]
+                    matches = list(_identify_appliance(arr[-1].power_total_w)[:3])
+                    # Boost confidence with ML-learned clusters
+                    if _ml_clusters and matches:
+                        for i, (sig, conf) in enumerate(matches):
+                            for cl in _ml_clusters:
+                                if cl.get("matched_appliance") == sig.id and cl.get("count", 0) >= 5:
+                                    matches[i] = (sig, min(1.0, conf + 0.15))
+                                    break
                     appliances[k] = [
                         {"icon": sig.icon, "id": sig.id, "conf": conf}
                         for sig, conf in matches
@@ -745,6 +753,9 @@ _HTML_TEMPLATE = """<!doctype html>
     <div id="pane-live" class="pane active">
       <div id="live-timescale" style="display:flex;gap:6px;flex-wrap:wrap;padding:0 0 8px 0"></div>
       <div id="live-grid" class="card-grid"></div>
+      <div id="nilm-status" style="padding:8px 12px;font-size:11px;color:var(--muted);display:none">
+        <span id="nilm-badge" style="background:var(--chipbg);border-radius:8px;padding:3px 8px;font-size:10px"></span>
+      </div>
     </div>
 
     <!-- Costs -->
@@ -1186,6 +1197,26 @@ function startLive() {{
   loadHistory();
   liveTimer = setInterval(function() {{ if (!frozen) tick(false); }}, REFRESH_MS);
   document.getElementById('btn-freeze').addEventListener('click', toggleFreeze);
+  // NILM learning status (update every 30s)
+  _updateNilmStatus();
+  if (!window._nilmTimer) window._nilmTimer = setInterval(_updateNilmStatus, 30000);
+}}
+function _updateNilmStatus() {{
+  fetch('/api/nilm_status').then(function(r) {{ return r.json(); }}).then(function(d) {{
+    var el = document.getElementById('nilm-status');
+    var badge = document.getElementById('nilm-badge');
+    if (!el || !badge) return;
+    if (d.cluster_count > 0) {{
+      el.style.display = 'block';
+      var top = (d.clusters || []).slice(0, 3).map(function(c) {{
+        return (c.icon || '') + ' ' + Math.round(c.centroid_w || 0) + 'W x' + (c.count || 0);
+      }}).join('  ');
+      badge.textContent = 'NILM ML: ' + d.cluster_count + ' patterns learned  |  ' + top;
+    }} else {{
+      badge.textContent = 'NILM ML: learning...';
+      el.style.display = 'block';
+    }}
+  }}).catch(function() {{}});
 }}
 function stopLive() {{
   if (liveTimer) {{ clearInterval(liveTimer); liveTimer = null; }}
@@ -5148,6 +5179,26 @@ class _Handler(BaseHTTPRequestHandler):
                     payload = self.dashboard.on_action("anomalies", {})
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if path_only.startswith("/api/nilm_status"):
+                try:
+                    store = self.dashboard._state_store
+                    clusters = getattr(store, "_nilm_clusters", [])
+                    payload = {
+                        "ok": True,
+                        "cluster_count": len(clusters),
+                        "clusters": clusters[:10],
+                    }
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e), "cluster_count": 0, "clusters": []}
                 body = json.dumps(payload).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")

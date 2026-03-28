@@ -2100,6 +2100,61 @@ class LiveWebMixin:
                     except Exception:
                         pass
 
+                    # Feed ML NILM transition learner
+                    try:
+                        learner = getattr(self, "_nilm_learner", None)
+                        if learner is not None:
+                            _pw_total = float(s.power_w.get("total", 0.0))
+                            transition = learner.observe(s.device_key, float(s.ts), _pw_total)
+                            # Periodically re-cluster (every 5 minutes)
+                            import time as _time_mod
+                            _now_ts = _time_mod.time()
+                            _last_cluster = getattr(self, "_nilm_last_cluster_ts", 0.0)
+                            if (_now_ts - _last_cluster) > 300:
+                                self._nilm_last_cluster_ts = _now_ts
+                                clusters = learner.cluster()
+                                # Push cluster data to web dashboard store
+                                try:
+                                    store = getattr(self, "_live_state_store", None)
+                                    if store is not None:
+                                        store._nilm_clusters = [
+                                            {"matched_appliance": c.matched_appliance, "count": c.count,
+                                             "centroid_w": c.centroid_w, "icon": c.icon, "label": c.label}
+                                            for c in clusters
+                                        ]
+                                except Exception:
+                                    pass
+                                # Log progress periodically (every 30 min)
+                                _last_log = getattr(self, "_nilm_last_log_ts", 0.0)
+                                if clusters and (_now_ts - _last_log) > 1800:
+                                    self._nilm_last_log_ts = _now_ts
+                                    n_trans = learner.get_transition_count()
+                                    n_clust = len(clusters)
+                                    top3 = ", ".join(
+                                        f"{c.icon} {c.centroid_w:.0f}W x{c.count}"
+                                        for c in clusters[:3]
+                                    )
+                                    try:
+                                        self._log_sync(f"NILM ML: {n_trans} transitions, {n_clust} clusters learned. Top: {top3}")
+                                    except Exception:
+                                        pass
+                                # Update desktop status label
+                                try:
+                                    _nilm_var = getattr(self, "_nilm_status_var", None)
+                                    if _nilm_var is not None:
+                                        n_trans = learner.get_transition_count()
+                                        n_clust = len(clusters) if clusters else 0
+                                        if n_clust > 0:
+                                            _nilm_var.set(f"🧠 NILM: {n_clust} Muster / {n_trans} Transitionen")
+                                        elif n_trans > 0:
+                                            _nilm_var.set(f"🧠 NILM: lerne... ({n_trans} Transitionen)")
+                                        else:
+                                            _nilm_var.set("🧠 NILM: lerne...")
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+
     # Update realtime value cards (only for currently visible devices)
                     # Skip UI updates when frozen (data collection continues).
                     try:
@@ -2247,11 +2302,21 @@ class LiveWebMixin:
                                     vars_['line2'].set(line2)
                                 if 'line3' in vars_:
                                     vars_['line3'].set(line3)
-                                # Appliance detector
+                                # Appliance detector (static + ML boost)
                                 try:
                                     _appl_var = vars_.get('appliance')
                                     if _appl_var is not None:
                                         _matches = _identify_appliance(pw)[:3]
+                                        # Boost confidence with ML clusters
+                                        _learner = getattr(self, "_nilm_learner", None)
+                                        if _learner is not None and _matches:
+                                            _clusters = _learner.get_clusters()
+                                            for _ci, (_sig, _conf) in enumerate(_matches):
+                                                for _cl in _clusters:
+                                                    if _cl.matched_appliance == _sig.id and _cl.count >= 5:
+                                                        # ML confirms this appliance → boost confidence
+                                                        _matches[_ci] = (_sig, min(1.0, _conf + 0.15))
+                                                        break
                                         if _matches:
                                             _title = self.t('live.appliance.title')
                                             _parts = []
