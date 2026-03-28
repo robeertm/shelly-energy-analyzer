@@ -7069,27 +7069,83 @@ class CoreMixin:
                 pass
             self._safe_reload_after_config_save()
 
+    def _tn_get_used_keys(self) -> set:
+        """Return set of device keys already assigned to any tenant."""
+        used = set()
+        for entry in getattr(self, "_tn_entries", []):
+            for key in entry.get("selected_keys", []):
+                if key:
+                    used.add(key)
+        return used
+
+    def _tn_refresh_device_lists(self) -> None:
+        """Update all tenant device listboxes to hide already-assigned devices."""
+        used_by_others = {}
+        entries = getattr(self, "_tn_entries", [])
+        # Collect used keys per entry
+        for i, entry in enumerate(entries):
+            for j, other in enumerate(entries):
+                if i != j:
+                    for k in other.get("selected_keys", []):
+                        used_by_others.setdefault(i, set()).add(k)
+
     def _tn_add_tenant_row(self, name: str = "", unit: str = "", persons: str = "1", devices: str = "") -> None:
-        """Add a tenant row to the settings UI."""
-        row_idx = len(self._tn_entries)
-        row_frame = ttk.Frame(self._tn_list_frame)
-        row_frame.pack(fill="x", pady=2)
+        """Add a tenant row to the settings UI with Shelly device selector."""
+        row_frame = ttk.LabelFrame(self._tn_list_frame, text=f"Mieter {len(self._tn_entries) + 1}")
+        row_frame.pack(fill="x", pady=4, padx=4)
+
+        # Row 1: Name + Unit + Persons
+        r1 = ttk.Frame(row_frame)
+        r1.pack(fill="x", padx=8, pady=(6, 2))
 
         name_var = tk.StringVar(value=name)
         unit_var = tk.StringVar(value=unit)
         persons_var = tk.StringVar(value=persons)
-        devices_var = tk.StringVar(value=devices)
 
-        ttk.Label(row_frame, text=self.t("settings.tenant.name"), font=("", 8)).pack(side="left")
-        ttk.Entry(row_frame, textvariable=name_var, width=15).pack(side="left", padx=2)
-        ttk.Label(row_frame, text=self.t("settings.tenant.unit"), font=("", 8)).pack(side="left")
-        ttk.Entry(row_frame, textvariable=unit_var, width=10).pack(side="left", padx=2)
-        ttk.Label(row_frame, text=self.t("settings.tenant.persons"), font=("", 8)).pack(side="left")
-        ttk.Entry(row_frame, textvariable=persons_var, width=4).pack(side="left", padx=2)
-        ttk.Label(row_frame, text=self.t("settings.tenant.devices"), font=("", 8)).pack(side="left")
-        ttk.Entry(row_frame, textvariable=devices_var, width=25).pack(side="left", padx=2)
+        ttk.Label(r1, text=self.t("settings.tenant.name")).pack(side="left")
+        ttk.Entry(r1, textvariable=name_var, width=18).pack(side="left", padx=(4, 12))
+        ttk.Label(r1, text=self.t("settings.tenant.unit")).pack(side="left")
+        ttk.Entry(r1, textvariable=unit_var, width=12).pack(side="left", padx=(4, 12))
+        ttk.Label(r1, text=self.t("settings.tenant.persons")).pack(side="left")
+        ttk.Entry(r1, textvariable=persons_var, width=4).pack(side="left", padx=4)
 
-        entry = {"name": name_var, "unit": unit_var, "persons": persons_var, "devices": devices_var, "frame": row_frame}
+        # Row 2: Device selector with checkboxes
+        r2 = ttk.Frame(row_frame)
+        r2.pack(fill="x", padx=8, pady=(2, 6))
+        ttk.Label(r2, text=self.t("settings.tenant.devices")).pack(side="left")
+
+        # Pre-parse already assigned device keys
+        pre_selected = set(k.strip() for k in devices.split(",") if k.strip()) if devices else set()
+        selected_keys = list(pre_selected)
+
+        dev_frame = ttk.Frame(r2)
+        dev_frame.pack(side="left", fill="x", expand=True, padx=(4, 0))
+
+        check_vars = {}
+        used = self._tn_get_used_keys()
+        for d in self.cfg.devices:
+            already_used = d.key in used and d.key not in pre_selected
+            var = tk.BooleanVar(value=d.key in pre_selected)
+            check_vars[d.key] = var
+
+            def _toggle(dk=d.key, v=var, sk=selected_keys):
+                if v.get():
+                    if dk not in sk:
+                        sk.append(dk)
+                else:
+                    if dk in sk:
+                        sk.remove(dk)
+
+            cb = ttk.Checkbutton(dev_frame, text=d.name, variable=var, command=_toggle)
+            cb.pack(side="left", padx=3)
+            if already_used:
+                cb.configure(state="disabled")
+                var.set(False)
+
+        entry = {
+            "name": name_var, "unit": unit_var, "persons": persons_var,
+            "selected_keys": selected_keys, "frame": row_frame, "check_vars": check_vars,
+        }
         self._tn_entries.append(entry)
 
         def _remove():
@@ -7097,7 +7153,7 @@ class CoreMixin:
             if entry in self._tn_entries:
                 self._tn_entries.remove(entry)
 
-        ttk.Button(row_frame, text="✕", width=3, command=_remove).pack(side="left", padx=4)
+        ttk.Button(r1, text=self.t("settings.tenant.remove"), command=_remove).pack(side="right")
 
     def _save_settings(self) -> None:
             old_lang = str(getattr(self, 'lang', 'de'))
@@ -7594,7 +7650,7 @@ class CoreMixin:
                     _tn_name = str(entry["name"].get()).strip()
                     if not _tn_name:
                         continue
-                    _tn_devs = [k.strip() for k in str(entry["devices"].get()).split(",") if k.strip()]
+                    _tn_devs = list(entry.get("selected_keys", []))
                     _tn_list.append(_TenantDef(
                         tenant_id=f"tenant_{i+1}",
                         name=_tn_name,

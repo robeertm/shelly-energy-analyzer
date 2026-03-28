@@ -321,31 +321,35 @@ _HTML_TEMPLATE = """<!doctype html>
     #bottom-nav {{
       position: fixed;
       bottom: 0; left: 0; right: 0;
-      display: grid;
-      grid-template-columns: repeat(8,1fr);
+      display: flex;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
       background: var(--card);
       border-top: 1px solid var(--border);
       padding-bottom: env(safe-area-inset-bottom, 0);
       z-index: 100;
     }}
+    #bottom-nav::-webkit-scrollbar {{ display: none; }}
     .nav-btn {{
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       min-height: 48px;
+      min-width: 56px;
+      flex: 0 0 auto;
       background: none;
       border: none;
       color: var(--muted);
       font-size: 9px;
       cursor: pointer;
-      padding: 4px 1px;
+      padding: 4px 6px;
       gap: 1px;
       transition: color 0.15s;
-      overflow: hidden;
     }}
     .nav-btn .nav-icon {{ font-size: 18px; line-height: 1; }}
-    .nav-btn .nav-label {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }}
+    .nav-btn .nav-label {{ white-space: nowrap; font-size: 9px; }}
     .nav-btn.active {{ color: var(--accent); }}
     /* ── Icon buttons ── */
     .icon-btn {{
@@ -2784,92 +2788,114 @@ function renderAnomalies(data, el) {{
 async function loadForecast() {{
   const sel = document.getElementById('forecast-device');
   if (!sel.options.length) {{
-    (typeof DEVICES!=='undefined'?DEVICES:[]).forEach(d => {{
+    (typeof DEVICES!=='undefined'?DEVICES:[]).forEach(function(d) {{
       const o = document.createElement('option');
       o.value = d[0]; o.textContent = d[1];
       sel.appendChild(o);
     }});
   }}
   const dk = sel.value;
+  const cont = document.getElementById('forecast-cards');
+  cont.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
   try {{
     const r = await fetch('/api/forecast?device_key=' + encodeURIComponent(dk));
     if (!r.ok) throw new Error(r.status);
-    const data = await r.json();
-    renderForecast(data);
+    const d = await r.json();
+    if (d.no_data) {{ cont.innerHTML = '<p class="info-msg">Not enough data for forecast (min. 3 days).</p>'; return; }}
+    renderForecast(d);
   }} catch(e) {{
-    document.getElementById('forecast-cards').innerHTML = '<p class="error-msg">' + e.message + '</p>';
+    cont.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
   }}
 }}
 function renderForecast(d) {{
-  const cards = document.getElementById('forecast-cards');
-  cards.innerHTML =
-    kpiCard('📊', t('forecast.avg_daily','Avg daily'), (d.avg_daily_kwh||0).toFixed(1) + ' kWh') +
-    kpiCard('📈', t('forecast.trend','Trend'), d.trend_pct_per_month > 0.5 ? '↗ +' + d.trend_pct_per_month.toFixed(1) + '%' : d.trend_pct_per_month < -0.5 ? '↘ ' + d.trend_pct_per_month.toFixed(1) + '%' : '→ stable') +
-    kpiCard('📅', t('forecast.next_month','Next month'), (d.forecast_next_month_kwh||0).toFixed(0) + ' kWh / ' + (d.forecast_next_month_cost||0).toFixed(0) + ' €') +
-    kpiCard('🗓️', t('forecast.next_year','Next year'), (d.forecast_year_kwh||0).toFixed(0) + ' kWh');
+  const trendStr = d.trend_pct_per_month > 0.5 ? '\u2197 +' + d.trend_pct_per_month.toFixed(1) + '%/M' : d.trend_pct_per_month < -0.5 ? '\u2198 ' + d.trend_pct_per_month.toFixed(1) + '%/M' : '\u2192 stable';
+  let html = '<div class="card" style="margin-bottom:10px"><div class="card-title">' + esc(d.device_name || '') + '</div><div class="metric-grid">' +
+    metricCardHtml('\u2300 Daily', (d.avg_daily_kwh||0).toFixed(1) + ' kWh', '') +
+    metricCardHtml('Trend', trendStr, '') +
+    metricCardHtml('Next Month', (d.forecast_next_month_kwh||0).toFixed(0) + ' kWh', fmt(d.forecast_next_month_cost||0, 2, '\u20ac')) +
+    metricCardHtml('Next Year', (d.forecast_year_kwh||0).toFixed(0) + ' kWh', fmt(d.forecast_year_cost||0, 0, '\u20ac')) +
+    '</div></div>';
+  document.getElementById('forecast-cards').innerHTML = html;
   // Main chart
   const chEl = document.getElementById('forecast-chart');
   const traces = [];
-  if (d.history_dates) traces.push({{ x: d.history_dates, y: d.history_kwh, type: 'bar', name: 'History', marker: {{ color: '#3498db' }} }});
+  const _lo = {{ margin: {{ t: 20, b: 40, l: 50, r: 20 }}, barmode: 'group', yaxis: {{ title: 'kWh', gridcolor: 'rgba(128,128,128,0.15)' }}, xaxis: {{ gridcolor: 'rgba(128,128,128,0.15)' }}, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: getComputedStyle(document.documentElement).getPropertyValue('--fg').trim() || '#333', size: 11 }}, legend: {{ orientation: 'h', y: 1.12 }} }};
+  if (d.history_dates) traces.push({{ x: d.history_dates, y: d.history_kwh, type: 'bar', name: 'History', marker: {{ color: '#3498db', line: {{ width: 0 }} }} }});
   if (d.forecast_dates) {{
-    traces.push({{ x: d.forecast_dates, y: d.forecast_kwh, type: 'bar', name: 'Forecast', marker: {{ color: '#e74c3c' }} }});
+    traces.push({{ x: d.forecast_dates, y: d.forecast_kwh, type: 'bar', name: 'Forecast', marker: {{ color: '#e74c3c', opacity: 0.7, line: {{ width: 0 }} }} }});
     traces.push({{ x: d.forecast_dates, y: d.forecast_upper, type: 'scatter', mode: 'lines', line: {{ dash: 'dot', color: '#e74c3c', width: 1 }}, showlegend: false }});
-    traces.push({{ x: d.forecast_dates, y: d.forecast_lower, type: 'scatter', mode: 'lines', line: {{ dash: 'dot', color: '#e74c3c', width: 1 }}, fill: 'tonexty', fillcolor: 'rgba(231,76,60,0.1)', showlegend: false }});
+    traces.push({{ x: d.forecast_dates, y: d.forecast_lower, type: 'scatter', mode: 'lines', line: {{ dash: 'dot', color: '#e74c3c', width: 1 }}, fill: 'tonexty', fillcolor: 'rgba(231,76,60,0.08)', showlegend: false }});
   }}
-  if (typeof Plotly !== 'undefined') Plotly.newPlot(chEl, traces, {{ margin: {{ t: 30, b: 40, l: 50, r: 20 }}, barmode: 'group', yaxis: {{ title: 'kWh' }}, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: 'var(--text)' }} }}, {{ responsive: true }});
-  // Weekday profile
-  if (d.weekday_profile) {{
+  if (typeof Plotly !== 'undefined') Plotly.newPlot(chEl, traces, _lo, {{ responsive: true }});
+  // Weekday + Hourly profiles
+  const _plo = {{ paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: getComputedStyle(document.documentElement).getPropertyValue('--fg').trim() || '#333', size: 10 }}, margin: {{ t: 30, b: 30, l: 40, r: 10 }}, yaxis: {{ gridcolor: 'rgba(128,128,128,0.15)' }} }};
+  if (d.weekday_profile && typeof Plotly !== 'undefined') {{
     const days = ['Mo','Tu','We','Th','Fr','Sa','Su'];
-    const vals = days.map((_,i) => d.weekday_profile[i] || 1.0);
-    const colors = vals.map(v => v > 1.1 ? '#e74c3c' : v < 0.9 ? '#27ae60' : '#3498db');
-    if (typeof Plotly !== 'undefined') Plotly.newPlot('forecast-weekday-chart', [{{ x: days, y: vals, type: 'bar', marker: {{ color: colors }} }}], {{ margin: {{ t: 30, b: 30, l: 40, r: 10 }}, title: 'Weekday Profile', shapes: [{{ type: 'line', y0: 1, y1: 1, x0: -0.5, x1: 6.5, line: {{ dash: 'dash', color: 'gray' }} }}], paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: 'var(--text)' }} }}, {{ responsive: true }});
+    const vals = days.map(function(_,i) {{ return d.weekday_profile[i] || 1.0; }});
+    const colors = vals.map(function(v) {{ return v > 1.1 ? '#e74c3c' : v < 0.9 ? '#27ae60' : '#3498db'; }});
+    Plotly.newPlot('forecast-weekday-chart', [{{ x: days, y: vals, type: 'bar', marker: {{ color: colors, line: {{ width: 0 }} }}, showlegend: false }}], Object.assign({{}}, _plo, {{ title: {{ text: 'Weekday', font: {{ size: 12 }} }}, shapes: [{{ type: 'line', y0: 1, y1: 1, x0: -0.5, x1: 6.5, line: {{ dash: 'dash', color: 'rgba(128,128,128,0.4)' }} }}] }}), {{ responsive: true }});
   }}
-  // Hourly profile
-  if (d.hourly_profile) {{
-    const hrs = Array.from({{ length: 24 }}, (_, i) => i);
-    const vals = hrs.map(h => d.hourly_profile[h] || 1.0);
-    const colors = vals.map(v => v > 1.3 ? '#e74c3c' : v > 1.1 ? '#f39c12' : v < 0.7 ? '#27ae60' : '#3498db');
-    if (typeof Plotly !== 'undefined') Plotly.newPlot('forecast-hourly-chart', [{{ x: hrs, y: vals, type: 'bar', marker: {{ color: colors }} }}], {{ margin: {{ t: 30, b: 30, l: 40, r: 10 }}, title: 'Hourly Profile', xaxis: {{ title: 'h' }}, shapes: [{{ type: 'line', y0: 1, y1: 1, x0: -0.5, x1: 23.5, line: {{ dash: 'dash', color: 'gray' }} }}], paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: 'var(--text)' }} }}, {{ responsive: true }});
+  if (d.hourly_profile && typeof Plotly !== 'undefined') {{
+    const hrs = Array.from({{ length: 24 }}, function(_, i) {{ return i; }});
+    const vals = hrs.map(function(h) {{ return d.hourly_profile[h] || 1.0; }});
+    const colors = vals.map(function(v) {{ return v > 1.3 ? '#e74c3c' : v > 1.1 ? '#f39c12' : v < 0.7 ? '#27ae60' : '#3498db'; }});
+    Plotly.newPlot('forecast-hourly-chart', [{{ x: hrs, y: vals, type: 'bar', marker: {{ color: colors, line: {{ width: 0 }} }}, showlegend: false }}], Object.assign({{}}, _plo, {{ title: {{ text: '24h Profile', font: {{ size: 12 }} }}, xaxis: {{ title: 'h', gridcolor: 'rgba(128,128,128,0.15)' }}, shapes: [{{ type: 'line', y0: 1, y1: 1, x0: -0.5, x1: 23.5, line: {{ dash: 'dash', color: 'rgba(128,128,128,0.4)' }} }}] }}), {{ responsive: true }});
   }}
-}}
-function kpiCard(icon, label, value) {{
-  return '<div class="kpi-card"><div class="kpi-icon">' + icon + '</div><div class="kpi-label">' + esc(label) + '</div><div class="kpi-value">' + esc(value) + '</div></div>';
 }}
 
 /* ──────────────────────────────────────────────
    STANDBY TAB
 ────────────────────────────────────────────── */
 async function loadStandby() {{
+  const cont = document.getElementById('standby-cards');
+  cont.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
   try {{
     const r = await fetch('/api/standby');
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     renderStandby(data);
   }} catch(e) {{
-    document.getElementById('standby-cards').innerHTML = '<p class="error-msg">' + e.message + '</p>';
+    cont.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
   }}
 }}
 function renderStandby(d) {{
-  const cards = document.getElementById('standby-cards');
-  cards.innerHTML =
-    kpiCard('💰', t('standby.total_annual','Annual standby cost'), (d.total_annual_standby_cost||0).toFixed(0) + ' €') +
-    kpiCard('⚡', t('standby.total_kwh','Annual standby kWh'), (d.total_annual_standby_kwh||0).toFixed(0) + ' kWh');
-  // Table
+  let html = '<div class="card" style="margin-bottom:10px"><div class="card-title">Standby Summary</div><div class="metric-grid">' +
+    metricCardHtml('Annual Cost', (d.total_annual_standby_cost||0).toFixed(0) + ' \u20ac', 'Standby total') +
+    metricCardHtml('Annual kWh', (d.total_annual_standby_kwh||0).toFixed(0) + ' kWh', 'Standby total') +
+    '</div></div>';
+  document.getElementById('standby-cards').innerHTML = html;
   const wrap = document.getElementById('standby-table-wrap');
-  if (!d.devices || !d.devices.length) {{ wrap.innerHTML = '<p class="info-msg">No data</p>'; return; }}
-  let html = '<table class="data-table"><thead><tr><th>Device</th><th>Base load</th><th>kWh/yr</th><th>€/yr</th><th>Share</th><th>Risk</th></tr></thead><tbody>';
-  d.devices.forEach(dev => {{
-    const riskColor = dev.risk === 'high' ? '#e74c3c' : dev.risk === 'medium' ? '#f39c12' : '#27ae60';
-    html += '<tr><td>' + esc(dev.device_name) + '</td><td>' + dev.base_load_w + ' W</td><td>' + dev.annual_standby_kwh + '</td><td>' + dev.annual_standby_cost + '</td><td>' + dev.standby_share_pct + '%</td><td style="color:' + riskColor + ';font-weight:bold">' + dev.risk.toUpperCase() + '</td></tr>';
+  if (!d.devices || !d.devices.length) {{ wrap.innerHTML = '<div class="card"><p class="info-msg">No standby data available.</p></div>'; return; }}
+  // Device cards with risk badges
+  let cards = '<div class="card-grid">';
+  d.devices.forEach(function(dev) {{
+    const riskColor = dev.risk === 'high' ? '#dc2626' : dev.risk === 'medium' ? '#d97706' : '#16a34a';
+    const riskLabel = dev.risk === 'high' ? '\ud83d\udfe2 High' : dev.risk === 'medium' ? '\ud83d\udfe1 Medium' : '\ud83d\udfe2 Low';
+    cards += '<div class="card">' +
+      '<div class="card-title">' + esc(dev.device_name) + ' <span style="color:' + riskColor + ';font-size:11px">\u2022 ' + dev.risk.toUpperCase() + '</span></div>' +
+      '<div class="metric-grid">' +
+      metricCardHtml('Base load', dev.base_load_w + ' W', '') +
+      metricCardHtml('kWh/year', dev.annual_standby_kwh + '', '') +
+      metricCardHtml('\u20ac/year', dev.annual_standby_cost + ' \u20ac', '') +
+      metricCardHtml('Share', dev.standby_share_pct + '%', '') +
+      '</div></div>';
   }});
-  html += '</tbody></table>';
-  wrap.innerHTML = html;
+  cards += '</div>';
+  wrap.innerHTML = cards;
   // Bar chart
+  const chEl = document.getElementById('standby-bar-chart');
   if (typeof Plotly !== 'undefined' && d.devices.length) {{
-    const names = d.devices.map(x => x.device_name);
-    const costs = d.devices.map(x => x.annual_standby_cost);
-    const colors = d.devices.map(x => x.risk === 'high' ? '#e74c3c' : x.risk === 'medium' ? '#f39c12' : '#27ae60');
-    Plotly.newPlot('standby-bar-chart', [{{ y: names, x: costs, type: 'bar', orientation: 'h', marker: {{ color: colors }} }}], {{ margin: {{ t: 30, b: 40, l: 120, r: 20 }}, xaxis: {{ title: '€/year' }}, title: 'Standby Cost by Device', paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: 'var(--text)' }} }}, {{ responsive: true }});
+    const names = d.devices.map(function(x) {{ return x.device_name; }});
+    const costs = d.devices.map(function(x) {{ return x.annual_standby_cost; }});
+    const colors = d.devices.map(function(x) {{ return x.risk === 'high' ? '#dc2626' : x.risk === 'medium' ? '#d97706' : '#16a34a'; }});
+    Plotly.newPlot(chEl, [{{ y: names, x: costs, type: 'bar', orientation: 'h', marker: {{ color: colors, line: {{ width: 0 }} }}, text: costs.map(function(c) {{ return c + ' \u20ac'; }}), textposition: 'outside' }}], {{ margin: {{ t: 10, b: 40, l: 120, r: 50 }}, xaxis: {{ title: '\u20ac/year', gridcolor: 'rgba(128,128,128,0.15)' }}, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: getComputedStyle(document.documentElement).getPropertyValue('--fg').trim() || '#333', size: 11 }} }}, {{ responsive: true }});
+  }}
+  // 24h profile for first device
+  if (d.devices.length && d.devices[0].hourly_profile) {{
+    const hp = d.devices[0].hourly_profile;
+    const hrs = Array.from({{ length: 24 }}, function(_, i) {{ return i; }});
+    const colors = hrs.map(function(h) {{ return h <= 5 || h >= 22 ? '#34495e' : '#3498db'; }});
+    if (typeof Plotly !== 'undefined') Plotly.newPlot('standby-profile-chart', [{{ x: hrs, y: hp, type: 'bar', marker: {{ color: colors, line: {{ width: 0 }} }}, showlegend: false }}], {{ margin: {{ t: 30, b: 40, l: 50, r: 20 }}, title: {{ text: '24h Profile: ' + d.devices[0].device_name, font: {{ size: 12 }} }}, xaxis: {{ title: 'h', gridcolor: 'rgba(128,128,128,0.15)' }}, yaxis: {{ title: 'W', gridcolor: 'rgba(128,128,128,0.15)' }}, shapes: [{{ type: 'line', y0: d.devices[0].base_load_w, y1: d.devices[0].base_load_w, x0: -0.5, x1: 23.5, line: {{ dash: 'dash', color: '#dc2626', width: 2 }} }}], paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: getComputedStyle(document.documentElement).getPropertyValue('--fg').trim() || '#333', size: 10 }} }}, {{ responsive: true }});
   }}
 }}
 
@@ -2880,46 +2906,57 @@ let _sankeyPeriod = 'today';
 function initSankeyPeriods() {{
   const el = document.getElementById('sankey-periods');
   if (el.children.length) return;
-  ['today','week','month','year'].forEach(p => {{
+  const labels = {{ today: 'Today', week: 'Week', month: 'Month', year: 'Year' }};
+  ['today','week','month','year'].forEach(function(p) {{
     const btn = document.createElement('button');
-    btn.className = 'period-btn' + (p === _sankeyPeriod ? ' active' : '');
-    btn.textContent = p.charAt(0).toUpperCase() + p.slice(1);
-    btn.onclick = () => {{ _sankeyPeriod = p; document.querySelectorAll('#sankey-periods .period-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); loadSankey(); }};
+    btn.className = 'btn btn-outline btn-sm' + (p === _sankeyPeriod ? ' btn-accent' : '');
+    btn.textContent = labels[p] || p;
+    btn.addEventListener('click', function() {{
+      _sankeyPeriod = p;
+      el.querySelectorAll('.btn').forEach(function(b) {{ b.classList.remove('btn-accent'); }});
+      btn.classList.add('btn-accent');
+      loadSankey();
+    }});
     el.appendChild(btn);
   }});
 }}
 async function loadSankey() {{
   initSankeyPeriods();
+  const cont = document.getElementById('sankey-cards');
+  cont.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
   try {{
     const r = await fetch('/api/sankey?period=' + _sankeyPeriod);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     renderSankey(data);
   }} catch(e) {{
-    document.getElementById('sankey-cards').innerHTML = '<p class="error-msg">' + e.message + '</p>';
+    cont.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
   }}
 }}
 function renderSankey(d) {{
-  const cards = document.getElementById('sankey-cards');
-  cards.innerHTML =
-    kpiCard('🔴', t('sankey.grid_import','Grid'), (d.grid_import_kwh||0).toFixed(2) + ' kWh') +
-    kpiCard('🏠', t('sankey.total','Total'), (d.total_consumption_kwh||0).toFixed(2) + ' kWh') +
-    kpiCard('☀️', 'PV', (d.pv_production_kwh||0).toFixed(2) + ' kWh') +
-    kpiCard('📤', t('sankey.feed_in','Feed-in'), (d.feed_in_kwh||0).toFixed(2) + ' kWh');
-  // Sankey diagram
+  let html = '<div class="card" style="margin-bottom:10px"><div class="card-title">Energy Flow</div><div class="metric-grid">' +
+    metricCardHtml('Grid Import', (d.grid_import_kwh||0).toFixed(2) + ' kWh', '') +
+    metricCardHtml('Total', (d.total_consumption_kwh||0).toFixed(2) + ' kWh', '') +
+    metricCardHtml('PV', (d.pv_production_kwh||0).toFixed(2) + ' kWh', '') +
+    metricCardHtml('Feed-in', (d.feed_in_kwh||0).toFixed(2) + ' kWh', '') +
+    '</div></div>';
+  document.getElementById('sankey-cards').innerHTML = html;
   const chEl = document.getElementById('sankey-chart');
-  if (!d.sankey || !d.sankey.node) {{ chEl.innerHTML = '<p class="info-msg">No flow data</p>'; return; }}
+  if (!d.sankey || !d.sankey.node || !d.sankey.link || !d.sankey.link.value || d.sankey.link.value.length === 0) {{
+    chEl.innerHTML = '<div class="card"><p class="info-msg">No energy flow data for this period.</p></div>';
+    return;
+  }}
   if (typeof Plotly !== 'undefined') {{
     Plotly.newPlot(chEl, [{{
       type: 'sankey',
       orientation: 'h',
-      node: d.sankey.node,
+      node: {{ label: d.sankey.node.label, color: d.sankey.node.color, pad: 20, thickness: 25, line: {{ width: 0 }} }},
       link: d.sankey.link,
     }}], {{
-      title: 'Energy Flow (kWh)',
-      font: {{ size: 12, color: 'var(--text)' }},
+      font: {{ size: 12, color: getComputedStyle(document.documentElement).getPropertyValue('--fg').trim() || '#333' }},
       paper_bgcolor: 'rgba(0,0,0,0)',
-      margin: {{ t: 40, b: 20, l: 20, r: 20 }},
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      margin: {{ t: 20, b: 20, l: 20, r: 20 }},
     }}, {{ responsive: true }});
   }}
 }}
