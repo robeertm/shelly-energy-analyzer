@@ -2870,7 +2870,7 @@ function renderStandby(d) {{
   let cards = '<div class="card-grid">';
   d.devices.forEach(function(dev) {{
     const riskColor = dev.risk === 'high' ? '#dc2626' : dev.risk === 'medium' ? '#d97706' : '#16a34a';
-    const riskLabel = dev.risk === 'high' ? '\ud83d\udfe2 High' : dev.risk === 'medium' ? '\ud83d\udfe1 Medium' : '\ud83d\udfe2 Low';
+    const riskLabel = dev.risk;
     cards += '<div class="card">' +
       '<div class="card-title">' + esc(dev.device_name) + ' <span style="color:' + riskColor + ';font-size:11px">\u2022 ' + dev.risk.toUpperCase() + '</span></div>' +
       '<div class="metric-grid">' +
