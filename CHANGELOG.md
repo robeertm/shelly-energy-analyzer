@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.20.4 - 2026-03-28
+### Fixed
+- **Fuel mix recovery: rate limit + wider window** – The fuel mix recovery fetch was failing silently due to ENTSO-E rate limiting (62s between API calls). Now waits 65s before the recovery request. Also, initial backfill now always covers at least 2 days to ensure yesterday's data (which is reliably available) is included even when today's hasn't been published yet.
+
 ## 11.20.3 - 2026-03-28
 ### Fixed
 - **Fuel mix recovery on empty DB** – When no fuel mix data exists in the database (e.g. after upgrade to v11.20.2), the service now automatically fetches generation data from the previous 48 hours to populate the mix. This covers the case where ENTSO-E has no data for the current hour yet but does have recent historical data. The recovered data is stored in the DB for future use.

@@ -992,7 +992,8 @@ class Co2FetchService:
         self._force_backfill = False
         latest_ts = self._db.latest_co2_ts(zone)
         if force or latest_ts is None:
-            start_ts = now_ts - backfill_days * 86400
+            # Use at least 2 days to ensure we get data when today's isn't available yet
+            start_ts = now_ts - max(backfill_days, 2) * 86400
         else:
             # Check for gaps with estimated data that should be replaced
             oldest_ts = self._db.oldest_co2_ts(zone) or (now_ts - backfill_days * 86400)
@@ -1179,10 +1180,16 @@ class Co2FetchService:
         # ── Fuel mix recovery ────────────────────────────────────────────
         # If we still have no fuel mix (e.g. first run after upgrade, or
         # today's data not yet available), try fetching generation data
-        # for the previous 24–48h where data is more likely available.
+        # for yesterday where data is reliably available.
         if not self._latest_mix and not self._stop_event.is_set():
             try:
                 self._svc_log("Kraftwerksmix: Lade letzte verfügbare Daten...")
+                # Wait for ENTSO-E rate limit (62s between requests)
+                self._svc_log("  Warte 65s (ENTSO-E Rate-Limit)...")
+                self._stop_event.wait(65)
+                if self._stop_event.is_set():
+                    return
+                # Fetch yesterday's full day – data is always available
                 recovery_end = ((now_ts // 3600)) * 3600
                 recovery_start = recovery_end - 48 * 3600
                 recovery_rows = client.fetch_intensity(recovery_start, recovery_end)
