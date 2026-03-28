@@ -4,6 +4,10 @@ Fetches actual generation per production type (DocumentType=A75) for a given
 bidding zone and calculates the grid CO₂ intensity in g/kWh using standard
 emission factors.
 
+Optionally fetches cross-border physical flows (DocumentType=A11) and total
+load (DocumentType=A65) to adjust the CO₂ intensity for electricity
+imports/exports between bidding zones.
+
 Rate limiting: ENTSO-E enforces 400 requests/min per token.  We are
 conservative and cap at 1 request/min by default.
 
@@ -143,8 +147,96 @@ _CO2_FACTORS: Dict[str, float] = {
     "other":            400.0,   # Other (B20) – conservative estimate
 }
 
-# XML namespace used in ENTSO-E responses
+# Neighboring bidding zones for cross-border flow adjustment.
+# Each entry maps a zone to its list of physical interconnection partners.
+_ZONE_NEIGHBORS: Dict[str, List[str]] = {
+    "DE_LU":    ["AT", "BE", "CH", "CZ", "DK_1", "DK_2", "FR", "NL", "NO_2", "PL", "SE_4"],
+    "AT":       ["CH", "CZ", "DE_LU", "HU", "IT_NORD", "SI", "SK"],
+    "BE":       ["DE_LU", "FR", "GB", "NL"],
+    "BG":       ["GR", "RO", "RS"],
+    "CH":       ["AT", "DE_LU", "FR", "IT_NORD"],
+    "CZ":       ["AT", "DE_LU", "PL", "SK"],
+    "DK_1":     ["DE_LU", "DK_2", "NL", "NO_2", "SE_3"],
+    "DK_2":     ["DE_LU", "DK_1", "SE_4"],
+    "EE":       ["FI", "LT", "LV"],
+    "ES":       ["FR", "PT"],
+    "FI":       ["EE", "NO_4", "SE_1", "SE_3"],
+    "FR":       ["BE", "CH", "DE_LU", "ES", "GB", "IT_NORD"],
+    "GB":       ["BE", "FR", "IE_SEM", "NL", "NO_2"],
+    "GR":       ["BG", "IT_NORD"],
+    "HR":       ["HU", "RS", "SI"],
+    "HU":       ["AT", "HR", "RO", "RS", "SK"],
+    "IE_SEM":   ["GB"],
+    "IT_NORD":  ["AT", "CH", "FR", "GR", "SI"],
+    "LT":       ["EE", "LV", "PL", "SE_4"],
+    "LV":       ["EE", "LT"],
+    "NL":       ["BE", "DE_LU", "DK_1", "GB", "NO_2"],
+    "NO_1":     ["NO_2", "NO_3", "NO_5", "SE_3"],
+    "NO_2":     ["DE_LU", "DK_1", "GB", "NL", "NO_1", "NO_5"],
+    "NO_3":     ["NO_1", "NO_4", "NO_5", "SE_2"],
+    "NO_4":     ["FI", "NO_3", "SE_1", "SE_2"],
+    "NO_5":     ["NO_1", "NO_2", "NO_3"],
+    "PL":       ["CZ", "DE_LU", "LT", "SE_4", "SK"],
+    "PT":       ["ES"],
+    "RO":       ["BG", "HU", "RS"],
+    "RS":       ["BG", "HR", "HU", "RO"],
+    "SE_1":     ["FI", "NO_4", "SE_2"],
+    "SE_2":     ["NO_3", "NO_4", "SE_1", "SE_3"],
+    "SE_3":     ["DK_1", "FI", "NO_1", "SE_2", "SE_4"],
+    "SE_4":     ["DE_LU", "DK_2", "LT", "PL", "SE_3"],
+    "SI":       ["AT", "HR", "IT_NORD"],
+    "SK":       ["CZ", "HU", "PL"],
+}
+
+# Static annual average CO₂ intensity per zone (g/kWh).
+# Used as fallback for neighbor zones instead of fetching their full generation
+# mix.  Based on EEA / ENTSO-E historical data (2022-2024 averages).
+_STATIC_ZONE_INTENSITY: Dict[str, float] = {
+    "AT":       130.0,   # High hydro share
+    "BE":       170.0,   # Nuclear + gas
+    "BG":       450.0,   # Lignite heavy
+    "CH":        30.0,   # Hydro + nuclear dominated
+    "CZ":       450.0,   # Lignite + nuclear
+    "DE_LU":    380.0,   # Mixed: coal, gas, renewables
+    "DE_AT_LU": 380.0,   # Same as DE_LU
+    "DK_1":     150.0,   # High wind share
+    "DK_2":     180.0,   # Wind + imports
+    "EE":       600.0,   # Oil shale
+    "ES":       170.0,   # Solar + wind + nuclear
+    "FI":       100.0,   # Nuclear + hydro + biomass
+    "FR":        60.0,   # Nuclear dominated
+    "GB":       200.0,   # Gas + wind + nuclear
+    "GR":       350.0,   # Lignite + gas + renewables
+    "HR":       200.0,   # Hydro + gas
+    "HU":       250.0,   # Nuclear + gas
+    "IE_SEM":   300.0,   # Gas heavy + wind
+    "IT_NORD":  330.0,   # Gas + hydro
+    "LT":       200.0,   # Varies, imports
+    "LU":       300.0,   # Mostly imports
+    "LV":       150.0,   # Hydro + gas
+    "NL":       350.0,   # Gas heavy
+    "NO_1":      15.0,   # Hydro
+    "NO_2":      15.0,   # Hydro
+    "NO_3":      15.0,   # Hydro
+    "NO_4":      15.0,   # Hydro
+    "NO_5":      15.0,   # Hydro
+    "PL":       700.0,   # Coal dominated
+    "PT":       200.0,   # Renewables + gas
+    "RO":       300.0,   # Hydro + nuclear + coal
+    "RS":       700.0,   # Lignite heavy
+    "SE_1":      25.0,   # Hydro
+    "SE_2":      25.0,   # Hydro + wind
+    "SE_3":      25.0,   # Nuclear + hydro + wind
+    "SE_4":      25.0,   # Nuclear + wind
+    "SI":       250.0,   # Nuclear + hydro + coal
+    "SK":       150.0,   # Nuclear + hydro
+}
+
+# XML namespace used in ENTSO-E responses (A75 generation, A65 load)
 _NS = "urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0"
+
+# XML namespace for A11 cross-border transmission documents
+_NS_TRANSMISSION = "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"
 
 
 def _ts_to_entsoe_fmt(ts: int) -> str:
@@ -219,6 +311,132 @@ def _parse_generation_xml(xml_text: str) -> Dict[str, Dict[int, float]]:
     return results
 
 
+def _parse_crossborder_xml(xml_text: str) -> Dict[int, float]:
+    """Parse ENTSO-E A11 cross-border physical flow XML.
+
+    Returns {hour_ts: MW} where positive values indicate flow in the
+    direction specified by in_Domain ← out_Domain (i.e. imports into
+    in_Domain).
+
+    The A11 document may use different XML namespaces depending on ENTSO-E
+    version; we try multiple known namespaces.
+    """
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as exc:
+        logger.error("Cross-border XML parse error: %s", exc)
+        return {}
+
+    # Detect namespace from root tag
+    ns = ""
+    root_tag = root.tag
+    if root_tag.startswith("{"):
+        ns = root_tag[1:root_tag.index("}")]
+
+    result: Dict[int, float] = {}
+
+    for ts in root.iter(f"{{{ns}}}TimeSeries" if ns else "TimeSeries"):
+        for period in ts.iter(f"{{{ns}}}Period" if ns else "Period"):
+            start_el = period.find(
+                f"{{{ns}}}timeInterval/{{{ns}}}start" if ns else "timeInterval/start"
+            )
+            res_el = period.find(f"{{{ns}}}resolution" if ns else "resolution")
+            if start_el is None or res_el is None:
+                continue
+
+            try:
+                start_text = start_el.text.strip()
+                # Handle both Z and +00:00 suffixes
+                start_text = start_text.replace("+00:00", "Z")
+                if start_text.endswith("Z"):
+                    start_text = start_text[:-1]
+                start_dt = datetime.strptime(start_text, "%Y-%m-%dT%H:%M").replace(
+                    tzinfo=timezone.utc
+                )
+            except ValueError:
+                continue
+
+            resolution_text = (res_el.text or "PT60M").strip()
+            if resolution_text == "PT15M":
+                step_minutes = 15
+            elif resolution_text == "PT30M":
+                step_minutes = 30
+            else:
+                step_minutes = 60
+
+            for point in period.iter(f"{{{ns}}}Point" if ns else "Point"):
+                pos_el = point.find(f"{{{ns}}}position" if ns else "position")
+                qty_el = point.find(f"{{{ns}}}quantity" if ns else "quantity")
+                if pos_el is None or qty_el is None:
+                    continue
+                try:
+                    pos = int(pos_el.text.strip()) - 1
+                    qty = float(qty_el.text.strip())
+                except (ValueError, TypeError):
+                    continue
+
+                pt_dt = start_dt + timedelta(minutes=pos * step_minutes)
+                hour_dt = pt_dt.replace(minute=0, second=0, microsecond=0)
+                hour_ts = int(hour_dt.timestamp())
+                result[hour_ts] = result.get(hour_ts, 0.0) + qty
+
+    return result
+
+
+def _parse_load_xml(xml_text: str) -> Dict[int, float]:
+    """Parse ENTSO-E A65 system total load XML.
+
+    Returns {hour_ts: MW}.  Uses the same GL_MarketDocument namespace as A75.
+    """
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as exc:
+        logger.error("Load XML parse error: %s", exc)
+        return {}
+
+    result: Dict[int, float] = {}
+
+    for ts in root.iter(f"{{{_NS}}}TimeSeries"):
+        for period in ts.iter(f"{{{_NS}}}Period"):
+            start_el = period.find(f"{{{_NS}}}timeInterval/{{{_NS}}}start")
+            res_el = period.find(f"{{{_NS}}}resolution")
+            if start_el is None or res_el is None:
+                continue
+
+            try:
+                start_dt = datetime.strptime(
+                    start_el.text.strip(), "%Y-%m-%dT%H:%MZ"
+                ).replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+
+            resolution_text = (res_el.text or "PT60M").strip()
+            if resolution_text == "PT15M":
+                step_minutes = 15
+            elif resolution_text == "PT30M":
+                step_minutes = 30
+            else:
+                step_minutes = 60
+
+            for point in period.iter(f"{{{_NS}}}Point"):
+                pos_el = point.find(f"{{{_NS}}}position")
+                qty_el = point.find(f"{{{_NS}}}quantity")
+                if pos_el is None or qty_el is None:
+                    continue
+                try:
+                    pos = int(pos_el.text.strip()) - 1
+                    qty = float(qty_el.text.strip())
+                except (ValueError, TypeError):
+                    continue
+
+                pt_dt = start_dt + timedelta(minutes=pos * step_minutes)
+                hour_dt = pt_dt.replace(minute=0, second=0, microsecond=0)
+                hour_ts = int(hour_dt.timestamp())
+                result[hour_ts] = result.get(hour_ts, 0.0) + qty
+
+    return result
+
+
 def calculate_intensity(generation_mix: Dict[str, Dict[int, float]]) -> Dict[int, float]:
     """Compute weighted-average CO₂ intensity per hour from a generation mix.
 
@@ -243,6 +461,78 @@ def calculate_intensity(generation_mix: Dict[str, Dict[int, float]]) -> Dict[int
             result[hour_ts] = weighted_co2 / total_mw
         else:
             result[hour_ts] = 0.0
+    return result
+
+
+def calculate_intensity_with_flows(
+    generation_mix: Dict[str, Dict[int, float]],
+    local_intensity: Dict[int, float],
+    load_mw: Dict[int, float],
+    import_flows: Dict[str, Dict[int, float]],
+    neighbor_intensities: Optional[Dict[str, float]] = None,
+) -> Dict[int, float]:
+    """Compute flow-adjusted CO₂ intensity per hour.
+
+    Formula per hour:
+        local_gen_co2 = local_gen_MW × local_intensity
+        import_co2    = Σ(import_MW_from_zone_i × zone_i_intensity)
+        total_supply  = total_load_MW  (from A65)
+        export_MW     = local_gen_MW + total_imports - total_load
+        export_co2    = export_MW × local_intensity  (assumes local mix)
+        adjusted      = (local_gen_co2 + import_co2 - export_co2) / total_load
+
+    Falls back to local-only intensity when load data is missing.
+    """
+    if neighbor_intensities is None:
+        neighbor_intensities = {}
+
+    all_hours = set(local_intensity.keys())
+    result: Dict[int, float] = {}
+
+    for hour_ts in sorted(all_hours):
+        li = local_intensity.get(hour_ts)
+        if li is None:
+            continue
+
+        # Total local generation for this hour
+        local_gen_mw = sum(
+            fh.get(hour_ts, 0.0)
+            for fh in generation_mix.values()
+            if fh.get(hour_ts, 0.0) > 0
+        )
+
+        total_load = load_mw.get(hour_ts, 0.0)
+
+        # If no load data, fall back to local-only intensity
+        if total_load <= 0:
+            result[hour_ts] = li
+            continue
+
+        # Sum all imports and their CO₂ contribution
+        total_import_mw = 0.0
+        import_co2 = 0.0
+        for zone, flows in import_flows.items():
+            mw = flows.get(hour_ts, 0.0)
+            if mw > 0:
+                total_import_mw += mw
+                zone_intensity = neighbor_intensities.get(
+                    zone, _STATIC_ZONE_INTENSITY.get(zone, 400.0)
+                )
+                import_co2 += mw * zone_intensity
+
+        # Exports = local generation + imports - load (energy balance)
+        export_mw = max(0.0, local_gen_mw + total_import_mw - total_load)
+        export_co2 = export_mw * li
+
+        # Adjusted intensity
+        local_gen_co2 = local_gen_mw * li
+        numerator = local_gen_co2 + import_co2 - export_co2
+        if numerator < 0:
+            numerator = 0.0
+
+        adjusted = numerator / total_load
+        result[hour_ts] = adjusted
+
     return result
 
 
@@ -324,6 +614,114 @@ class EntsoeClient:
         )
         return rows
 
+    def fetch_intensity_with_flows(
+        self,
+        start_ts: int,
+        end_ts: int,
+        progress_cb=None,
+    ) -> List[Tuple[int, str, float, str, int]]:
+        """Fetch CO₂ intensity with cross-border flow adjustment.
+
+        1. Fetches local generation (A75) and computes base intensity
+        2. Fetches total load (A65) for the zone
+        3. Fetches import flows (A11) from each neighbor zone
+        4. Adjusts intensity using flow-weighted neighbor CO₂ values
+
+        Returns rows ready for EnergyDB.upsert_co2_intensity().
+        The progress_cb(step_description: str) is called for each API request.
+        """
+        if not self.api_token:
+            raise RuntimeError("No ENTSO-E API token configured.")
+
+        neighbors = _ZONE_NEIGHBORS.get(self.bidding_zone, [])
+        if not neighbors:
+            logger.warning(
+                "EntsoeClient: no neighbor mapping for zone %s, "
+                "falling back to local-only intensity",
+                self.bidding_zone,
+            )
+            return self.fetch_intensity(start_ts, end_ts)
+
+        # Step 1: Local generation (A75) – reuse existing method
+        if progress_cb:
+            progress_cb(f"Erzeugungsmix {self.bidding_zone} (A75)")
+        xml_text = self._fetch_generation_xml(start_ts, end_ts)
+        if not xml_text or not xml_text.strip():
+            raise RuntimeError("ENTSO-E API returned empty A75 response.")
+        mix = _parse_generation_xml(xml_text)
+        self.last_mix = mix
+        local_intensity = calculate_intensity(mix)
+
+        if not local_intensity:
+            logger.warning("EntsoeClient: no generation data, cannot adjust")
+            return []
+
+        # Step 2: Total load (A65)
+        if progress_cb:
+            progress_cb(f"Gesamtlast {self.bidding_zone} (A65)")
+        try:
+            load_xml = self._fetch_load_xml(start_ts, end_ts)
+            load_mw = _parse_load_xml(load_xml) if load_xml else {}
+        except Exception as exc:
+            logger.warning("EntsoeClient: A65 load fetch failed: %s", exc)
+            load_mw = {}
+
+        # Step 3: Cross-border import flows (A11) per neighbor
+        import_flows: Dict[str, Dict[int, float]] = {}
+        for neighbor in neighbors:
+            if progress_cb:
+                progress_cb(f"Import {neighbor} → {self.bidding_zone} (A11)")
+            try:
+                flow_xml = self._fetch_crossborder_xml(
+                    from_zone=neighbor, to_zone=self.bidding_zone,
+                    start_ts=start_ts, end_ts=end_ts,
+                )
+                flows = _parse_crossborder_xml(flow_xml) if flow_xml else {}
+                if flows:
+                    import_flows[neighbor] = flows
+                    logger.info(
+                        "EntsoeClient: %s → %s: %d flow points",
+                        neighbor, self.bidding_zone, len(flows),
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "EntsoeClient: A11 %s→%s failed: %s",
+                    neighbor, self.bidding_zone, exc,
+                )
+
+        # Step 4: Calculate adjusted intensity
+        if import_flows and load_mw:
+            adjusted = calculate_intensity_with_flows(
+                generation_mix=mix,
+                local_intensity=local_intensity,
+                load_mw=load_mw,
+                import_flows=import_flows,
+            )
+            source = "entsoe_cbf"
+            logger.info(
+                "EntsoeClient: cross-border adjusted %d hours using %d/%d neighbors",
+                len(adjusted), len(import_flows), len(neighbors),
+            )
+        else:
+            adjusted = local_intensity
+            source = "entsoe"
+            if not load_mw:
+                logger.warning("EntsoeClient: no load data, using local-only intensity")
+            if not import_flows:
+                logger.warning("EntsoeClient: no import flows, using local-only intensity")
+
+        now_ts = int(time.time())
+        rows = [
+            (hour_ts, self.bidding_zone, g_per_kwh, source, now_ts)
+            for hour_ts, g_per_kwh in sorted(adjusted.items())
+            if start_ts <= hour_ts < end_ts
+        ]
+        logger.info(
+            "EntsoeClient: %d intensity points (source=%s) for zone %s",
+            len(rows), source, self.bidding_zone,
+        )
+        return rows
+
     # ── Internal ─────────────────────────────────────────────────────────────
 
     def _wait_rate_limit(self) -> None:
@@ -367,6 +765,86 @@ class EntsoeClient:
             ) from exc
         except Exception as exc:
             raise RuntimeError(f"ENTSO-E API request failed: {exc}") from exc
+
+    def _fetch_load_xml(self, start_ts: int, end_ts: int) -> str:
+        """Fetch A65 (system total load) XML for the configured zone."""
+        import urllib.request
+        import urllib.parse
+        import urllib.error
+
+        self._wait_rate_limit()
+
+        eic = _EIC_CODES.get(self.bidding_zone, self.bidding_zone)
+        params = {
+            "securityToken": self.api_token,
+            "documentType": "A65",
+            "processType": "A16",
+            "outBiddingZone_Domain": eic,
+            "periodStart": _ts_to_entsoe_fmt(start_ts),
+            "periodEnd": _ts_to_entsoe_fmt(end_ts),
+        }
+        url = _API_BASE + "?" + urllib.parse.urlencode(params)
+        logger.debug("EntsoeClient: GET A65 %s", url[:120])
+
+        try:
+            req = urllib.request.Request(url)
+            req.add_header("Accept", "application/xml")
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                raw = resp.read()
+                return raw.decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as exc:
+            raise RuntimeError(
+                f"ENTSO-E A65 HTTP {exc.code}: {exc.reason}"
+            ) from exc
+        except Exception as exc:
+            raise RuntimeError(f"ENTSO-E A65 request failed: {exc}") from exc
+
+    def _fetch_crossborder_xml(
+        self, from_zone: str, to_zone: str,
+        start_ts: int, end_ts: int,
+    ) -> str:
+        """Fetch A11 (physical cross-border flow) XML.
+
+        Returns flow data for electricity flowing from from_zone into to_zone.
+        """
+        import urllib.request
+        import urllib.parse
+        import urllib.error
+
+        self._wait_rate_limit()
+
+        out_eic = _EIC_CODES.get(from_zone, from_zone)
+        in_eic = _EIC_CODES.get(to_zone, to_zone)
+        params = {
+            "securityToken": self.api_token,
+            "documentType": "A11",
+            "in_Domain": in_eic,
+            "out_Domain": out_eic,
+            "periodStart": _ts_to_entsoe_fmt(start_ts),
+            "periodEnd": _ts_to_entsoe_fmt(end_ts),
+        }
+        url = _API_BASE + "?" + urllib.parse.urlencode(params)
+        logger.debug("EntsoeClient: GET A11 %s→%s %s", from_zone, to_zone, url[:120])
+
+        try:
+            req = urllib.request.Request(url)
+            req.add_header("Accept", "application/xml")
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                raw = resp.read()
+                return raw.decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as exc:
+            if exc.code == 400:
+                # No data for this border pair – not an error
+                logger.debug(
+                    "EntsoeClient: A11 %s→%s returned 400 (no data)",
+                    from_zone, to_zone,
+                )
+                return ""
+            raise RuntimeError(
+                f"ENTSO-E A11 HTTP {exc.code}: {exc.reason}"
+            ) from exc
+        except Exception as exc:
+            raise RuntimeError(f"ENTSO-E A11 request failed: {exc}") from exc
 
 
 class Co2FetchService:
@@ -495,6 +973,7 @@ class Co2FetchService:
 
         zone = getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU"
         backfill_days = getattr(co2_cfg, "backfill_days", 7) or 7
+        cross_border = getattr(co2_cfg, "cross_border_flows", False)
 
         now_ts = int(time.time())
         # Determine fetch start: force-backfill resets to backfill_days ago;
@@ -557,7 +1036,13 @@ class Co2FetchService:
                 if self._stop_event.is_set():
                     break
                 try:
-                    rows = client.fetch_intensity(cursor, chunk_end)
+                    if cross_border:
+                        rows = client.fetch_intensity_with_flows(
+                            cursor, chunk_end,
+                            progress_cb=lambda msg: self._svc_log(f"    {msg}"),
+                        )
+                    else:
+                        rows = client.fetch_intensity(cursor, chunk_end)
                     all_rows.extend(rows)
                     self._last_error = None
                     self._svc_log(f"    Empfangen: {len(rows)} Datenpunkte")

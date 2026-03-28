@@ -335,6 +335,8 @@ class Co2Config:
     green_threshold_g_per_kwh: float = 150.0
     # g CO₂/kWh threshold for "dirty" grid hours
     dirty_threshold_g_per_kwh: float = 400.0
+    # Enable cross-border flow adjustment (uses A11 physical flows + A65 load)
+    cross_border_flows: bool = False
 
 
 @dataclass(frozen=True)
@@ -715,6 +717,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         show_green_dirty_hours=bool(co2_raw.get("show_green_dirty_hours", Co2Config.show_green_dirty_hours)),
         green_threshold_g_per_kwh=_coerce_float(co2_raw.get("green_threshold_g_per_kwh", Co2Config.green_threshold_g_per_kwh), Co2Config.green_threshold_g_per_kwh),
         dirty_threshold_g_per_kwh=_coerce_float(co2_raw.get("dirty_threshold_g_per_kwh", Co2Config.dirty_threshold_g_per_kwh), Co2Config.dirty_threshold_g_per_kwh),
+        cross_border_flows=bool(co2_raw.get("cross_border_flows", Co2Config.cross_border_flows)),
     )
 
     groups: List[DeviceGroup] = []
@@ -1023,6 +1026,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "show_green_dirty_hours": bool(getattr(cfg.co2, "show_green_dirty_hours", True)),
             "green_threshold_g_per_kwh": float(getattr(cfg.co2, "green_threshold_g_per_kwh", 150.0)),
             "dirty_threshold_g_per_kwh": float(getattr(cfg.co2, "dirty_threshold_g_per_kwh", 400.0)),
+            "cross_border_flows": bool(getattr(cfg.co2, "cross_border_flows", False)),
         },
     }
     path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
