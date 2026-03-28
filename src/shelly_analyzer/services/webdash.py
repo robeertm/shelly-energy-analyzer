@@ -2833,13 +2833,13 @@ function renderForecast(d) {{
   const _plo = {{ paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: getComputedStyle(document.documentElement).getPropertyValue('--fg').trim() || '#333', size: 10 }}, margin: {{ t: 30, b: 30, l: 40, r: 10 }}, yaxis: {{ gridcolor: 'rgba(128,128,128,0.15)' }} }};
   if (d.weekday_profile && typeof Plotly !== 'undefined') {{
     const days = ['Mo','Tu','We','Th','Fr','Sa','Su'];
-    const vals = days.map(function(_,i) {{ return d.weekday_profile[i] || 1.0; }});
+    const vals = days.map(function(_,i) {{ return d.weekday_profile[String(i)] || d.weekday_profile[i] || 1.0; }});
     const colors = vals.map(function(v) {{ return v > 1.1 ? '#e74c3c' : v < 0.9 ? '#27ae60' : '#3498db'; }});
     Plotly.newPlot('forecast-weekday-chart', [{{ x: days, y: vals, type: 'bar', marker: {{ color: colors, line: {{ width: 0 }} }}, showlegend: false }}], Object.assign({{}}, _plo, {{ title: {{ text: 'Weekday', font: {{ size: 12 }} }}, shapes: [{{ type: 'line', y0: 1, y1: 1, x0: -0.5, x1: 6.5, line: {{ dash: 'dash', color: 'rgba(128,128,128,0.4)' }} }}] }}), {{ responsive: true }});
   }}
   if (d.hourly_profile && typeof Plotly !== 'undefined') {{
     const hrs = Array.from({{ length: 24 }}, function(_, i) {{ return i; }});
-    const vals = hrs.map(function(h) {{ return d.hourly_profile[h] || 1.0; }});
+    const vals = hrs.map(function(h) {{ return d.hourly_profile[String(h)] || d.hourly_profile[h] || 1.0; }});
     const colors = vals.map(function(v) {{ return v > 1.3 ? '#e74c3c' : v > 1.1 ? '#f39c12' : v < 0.7 ? '#27ae60' : '#3498db'; }});
     Plotly.newPlot('forecast-hourly-chart', [{{ x: hrs, y: vals, type: 'bar', marker: {{ color: colors, line: {{ width: 0 }} }}, showlegend: false }}], Object.assign({{}}, _plo, {{ title: {{ text: '24h Profile', font: {{ size: 12 }} }}, xaxis: {{ title: 'h', gridcolor: 'rgba(128,128,128,0.15)' }}, shapes: [{{ type: 'line', y0: 1, y1: 1, x0: -0.5, x1: 23.5, line: {{ dash: 'dash', color: 'rgba(128,128,128,0.4)' }} }}] }}), {{ responsive: true }});
   }}
