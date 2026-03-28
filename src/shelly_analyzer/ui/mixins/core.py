@@ -6104,6 +6104,13 @@ class CoreMixin:
             self._co2_dirty_thr_var = tk.DoubleVar(value=float(getattr(_co2_cfg, "dirty_threshold_g_per_kwh", 400.0)))
             ttk.Entry(co2_box, textvariable=self._co2_dirty_thr_var, width=8).grid(row=4, column=3, padx=8, pady=4, sticky="w")
 
+            self._co2_crossborder_var = tk.BooleanVar(value=bool(getattr(_co2_cfg, "cross_border_flows", False)))
+            ttk.Checkbutton(
+                co2_box,
+                text=self.t("co2.settings.cross_border"),
+                variable=self._co2_crossborder_var,
+            ).grid(row=5, column=0, columnspan=4, padx=8, pady=(6, 2), sticky="w")
+
             def _co2_backfill_now():
                 token = getattr(self, "_co2_token_var", tk.StringVar()).get().strip()
                 zone = (getattr(self, "_co2_zone_var", tk.StringVar(value="DE_LU")).get() or "DE_LU").strip()
@@ -7366,6 +7373,7 @@ class CoreMixin:
                     show_green_dirty_hours=True,
                     green_threshold_g_per_kwh=float(getattr(self, "_co2_green_thr_var", tk.DoubleVar(value=150.0)).get() or 150.0),
                     dirty_threshold_g_per_kwh=float(getattr(self, "_co2_dirty_thr_var", tk.DoubleVar(value=400.0)).get() or 400.0),
+                    cross_border_flows=bool(getattr(self, "_co2_crossborder_var", tk.BooleanVar(value=False)).get()),
                 )
             except Exception:
                 co2 = getattr(self.cfg, "co2", Co2Config())
