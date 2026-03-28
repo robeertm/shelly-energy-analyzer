@@ -1,5 +1,13 @@
 # Changelog
 
+## 11.18.0 - 2026-03-28
+### Added
+- **Cross-border flow CO₂ adjustment** – CO₂ intensity calculation now optionally accounts for physical electricity imports/exports between bidding zones using ENTSO-E A11 (cross-border flows) and A65 (system total load) data. Imported electricity is weighted with the source zone's CO₂ intensity, exports are subtracted from local generation. Enable with `co2.cross_border_flows: true` in config — no additional API token required.
+- **36 European neighbor zone mappings** – Full interconnection topology for all supported ENTSO-E bidding zones (DE_LU, AT, FR, PL, etc.)
+- **Static fallback intensities** – Annual average CO₂ intensities for 38 zones (based on EEA/ENTSO-E 2022-2024 data) used as neighbor zone defaults to minimize API calls
+- **New config option** `co2.cross_border_flows` (default: `false`) – When enabled, fetches A65 total load + A11 import flows for each neighbor zone per chunk (e.g. 13 API calls for DE_LU with 11 neighbors, ~13 min per 7-day chunk at 62s rate limit)
+- **Graceful degradation** – Falls back to local-only intensity if A65 or A11 requests fail; partial neighbor data is used when available
+
 ## 11.17.3 - 2026-03-27
 ### Fixed
 - **Setup wizard: missing tabs after first-run** – The wizard finish handler did not enable or build the Solar, Anomaly, Schedule, and CO₂ tabs. Users completing the first-run wizard saw these 4 tabs remain disabled/empty until restarting the app. Now all tabs are correctly activated and built on wizard completion.

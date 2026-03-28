@@ -154,7 +154,8 @@
     "backfill_days": 7,
     "show_green_dirty_hours": true,
     "green_threshold_g_per_kwh": 150.0,
-    "dirty_threshold_g_per_kwh": 400.0
+    "dirty_threshold_g_per_kwh": 400.0,
+    "cross_border_flows": false
   },
   "anomaly": {
     "enabled": false,
