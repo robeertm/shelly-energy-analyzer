@@ -1,5 +1,13 @@
 # Changelog
 
+## 11.20.0 - 2026-03-28
+### Fixed
+- **Anomaly timestamps** – Anomaly events now show the actual time of the anomalous activity instead of always 00:00. Unusual daily consumption shows the hour of peak usage, night consumption shows the peak night hour, and power peak time shows the actual peak moment.
+
+### Added
+- **Automatic anomaly detection** – New periodic auto-detection timer runs anomaly checks every N minutes (default 15 min, configurable in settings). When anomalies are found, notifications are sent immediately via configured channels (Telegram, Webhook, Email) without manual intervention.
+- **Auto-check interval setting** – New "Auto-Prüfung alle: N min" field in the anomaly settings panel. Timer restarts automatically when settings change.
+
 ## 11.19.7 - 2026-03-28
 ### Removed
 - **Heatmap: € filter removed** – Removed the Euro/cost filter option from the heatmap in both the desktop app and the web live dashboard. Only kWh and g CO₂ filters remain.

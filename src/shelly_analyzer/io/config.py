@@ -314,6 +314,8 @@ class AnomalyConfig:
     action_telegram: bool = False
     action_webhook: bool = False
     action_email: bool = False
+    # Automatic detection interval in minutes (0 = disabled)
+    auto_interval_minutes: int = 15
     # Maximum entries kept in the in-memory + persisted history
     max_history: int = 200
 
@@ -704,6 +706,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         action_telegram=bool(anomaly_raw.get("action_telegram", AnomalyConfig.action_telegram)),
         action_webhook=bool(anomaly_raw.get("action_webhook", AnomalyConfig.action_webhook)),
         action_email=bool(anomaly_raw.get("action_email", AnomalyConfig.action_email)),
+        auto_interval_minutes=_coerce_int(anomaly_raw.get("auto_interval_minutes", AnomalyConfig.auto_interval_minutes), AnomalyConfig.auto_interval_minutes),
         max_history=_coerce_int(anomaly_raw.get("max_history", AnomalyConfig.max_history), AnomalyConfig.max_history),
     )
 
@@ -1015,6 +1018,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "action_telegram": bool(getattr(cfg.anomaly, "action_telegram", False)),
             "action_webhook": bool(getattr(cfg.anomaly, "action_webhook", False)),
             "action_email": bool(getattr(cfg.anomaly, "action_email", False)),
+            "auto_interval_minutes": int(getattr(cfg.anomaly, "auto_interval_minutes", 15)),
             "max_history": int(getattr(cfg.anomaly, "max_history", 200)),
         },
         "co2": {
