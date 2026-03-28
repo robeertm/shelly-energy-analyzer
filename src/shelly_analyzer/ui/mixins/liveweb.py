@@ -1457,7 +1457,7 @@ class LiveWebMixin:
             if action == "forecast":
                 try:
                     from shelly_analyzer.services.forecast import compute_forecast
-                    dk = params.get("device_key", [""])[0] if isinstance(params.get("device_key"), list) else params.get("device_key", "")
+                    dk = str(params.get("device_key", "") or "")
                     if not dk and self.cfg.devices:
                         dk = self.cfg.devices[0].key
                     dev_name = dk
@@ -1527,7 +1527,7 @@ class LiveWebMixin:
             if action == "sankey":
                 try:
                     from shelly_analyzer.services.sankey import compute_sankey, sankey_to_plotly_dict
-                    period = params.get("period", ["today"])[0] if isinstance(params.get("period"), list) else params.get("period", "today")
+                    period = str(params.get("period", "today") or "today")
                     data = compute_sankey(self.storage.db, self.cfg.devices, self.cfg.solar, period)
                     plotly_data = sankey_to_plotly_dict(data)
                     return {

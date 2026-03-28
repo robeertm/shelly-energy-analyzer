@@ -1,5 +1,14 @@
 # Changelog
 
+## 12.0.2 - 2026-03-28
+### Fixed
+- **Web Forecast tab** – Fixed broken API endpoint (undefined `qs_params` variable) and device selector (referenced `_devices` instead of `DEVICES`). Forecast tab now loads and renders correctly in the web dashboard.
+- **Web Sankey tab** – Fixed broken API endpoint (same `qs_params` issue). Energy flow diagram now renders via Plotly.js.
+- **Standby tab redesign** – Completely redesigned to match Solar/CO₂ tab patterns: scrollable content area, consistent padding (14px), proper LabelFrame sections, grid-aligned cards, cleaner bar chart with grid lines and value labels, improved 24h profile with night shading.
+- **Forecast tab redesign** – Redesigned with scrollable layout, LabelFrame chart containers, consistent card grid, and polished chart styling (grid lines, edge colors, axis formatting).
+- **Sankey tab redesign** – Replaced broken matplotlib Sankey with clean energy flow visualization: source bars (left) → house node (center) → consumer bars (right) with flow arrows and percentage labels.
+- **Tenant settings UI** – Tenants can now be fully configured in the Settings tab (no config.json editing needed). Add/remove tenants with name, unit, person count, and device keys. Common area meters configurable via UI.
+
 ## 12.0.1 - 2026-03-28
 ### Fixed
 - **Weather: auto-geocode city** – The weather tab now automatically resolves the city name to lat/lon coordinates via the OpenWeatherMap Geocoding API. Previously lat/lon stayed at 0 after entering a city, causing "no data". Geocoding also runs when settings are saved.

@@ -2784,7 +2784,7 @@ function renderAnomalies(data, el) {{
 async function loadForecast() {{
   const sel = document.getElementById('forecast-device');
   if (!sel.options.length) {{
-    _devices.forEach(d => {{
+    (typeof DEVICES!=='undefined'?DEVICES:[]).forEach(d => {{
       const o = document.createElement('option');
       o.value = d[0]; o.textContent = d[1];
       sel.appendChild(o);
@@ -5050,7 +5050,10 @@ class _Handler(BaseHTTPRequestHandler):
 
             if path_only.startswith("/api/forecast"):
                 try:
-                    payload = self.dashboard.on_action("forecast", dict(qs_params))
+                    _fp = urlparse(self.path)
+                    _fqs = parse_qs(_fp.query or "")
+                    _fparams = {k: (v[0] if isinstance(v, list) and v else v) for k, v in _fqs.items()}
+                    payload = self.dashboard.on_action("forecast", _fparams)
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
                 body = json.dumps(payload).encode("utf-8")
@@ -5078,7 +5081,10 @@ class _Handler(BaseHTTPRequestHandler):
 
             if path_only.startswith("/api/sankey"):
                 try:
-                    payload = self.dashboard.on_action("sankey", dict(qs_params))
+                    _sp = urlparse(self.path)
+                    _sqs = parse_qs(_sp.query or "")
+                    _sparams = {k: (v[0] if isinstance(v, list) and v else v) for k, v in _sqs.items()}
+                    payload = self.dashboard.on_action("sankey", _sparams)
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
                 body = json.dumps(payload).encode("utf-8")

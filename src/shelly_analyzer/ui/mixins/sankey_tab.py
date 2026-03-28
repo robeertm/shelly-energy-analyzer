@@ -14,15 +14,15 @@ class SankeyMixin:
     def _build_sankey_tab(self) -> None:
         frm = self.tab_sankey
 
-        # Top bar
+        # ── Top bar ──────────────────────────────────────────────────────
         top = ttk.Frame(frm)
-        top.pack(fill="x", padx=10, pady=(10, 5))
+        top.pack(fill="x", padx=14, pady=(12, 4))
         ttk.Label(top, text=self.t("sankey.title"), font=("", 14, "bold")).pack(side="left")
 
-        # Period selector
-        period_frm = ttk.Frame(frm)
-        period_frm.pack(fill="x", padx=10, pady=5)
-        ttk.Label(period_frm, text=self.t("sankey.period")).pack(side="left")
+        # ── Period selector ──────────────────────────────────────────────
+        ctrl = ttk.Frame(frm)
+        ctrl.pack(fill="x", padx=14, pady=(0, 6))
+        ttk.Label(ctrl, text=self.t("sankey.period")).pack(side="left", padx=(0, 6))
         self._sankey_period_var = tk.StringVar(value="today")
         for val, label_key in [
             ("today", "sankey.period.today"),
@@ -30,35 +30,48 @@ class SankeyMixin:
             ("month", "sankey.period.month"),
             ("year", "sankey.period.year"),
         ]:
-            ttk.Radiobutton(period_frm, text=self.t(label_key), variable=self._sankey_period_var,
-                          value=val, command=self._refresh_sankey_tab).pack(side="left", padx=5)
+            ttk.Radiobutton(ctrl, text=self.t(label_key), variable=self._sankey_period_var,
+                          value=val, command=self._refresh_sankey_tab).pack(side="left", padx=4)
 
-        # Summary cards
-        cards = ttk.Frame(frm)
-        cards.pack(fill="x", padx=10, pady=5)
+        # ── Scrollable content ───────────────────────────────────────────
+        outer = ttk.Frame(frm)
+        outer.pack(fill="both", expand=True)
+        canvas = tk.Canvas(outer, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        self._sankey_scroll = ttk.Frame(canvas)
+        self._sankey_scroll.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        _sw = canvas.create_window((0, 0), window=self._sankey_scroll, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(_sw, width=e.width))
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # ── Summary cards ────────────────────────────────────────────────
+        cards = ttk.Frame(self._sankey_scroll)
+        cards.pack(fill="x", padx=14, pady=(8, 4))
+        cards.columnconfigure((0, 1, 2, 3, 4), weight=1)
+
         self._sankey_vars = {}
-        card_defs = [
+        for col, (key, label_key, icon) in enumerate([
             ("grid_import", "sankey.grid_import", "🔴"),
             ("total", "sankey.total", "🏠"),
             ("pv_production", "sankey.pv_production", "☀️"),
             ("self_consumption", "sankey.self_consumption", "♻️"),
             ("feed_in", "sankey.feed_in", "📤"),
-        ]
-        for i, (key, label_key, icon) in enumerate(card_defs):
+        ]):
             card = ttk.LabelFrame(cards, text=f"{icon} {self.t(label_key)}")
-            card.grid(row=0, column=i, padx=4, pady=4, sticky="nsew")
-            cards.columnconfigure(i, weight=1)
-            var = tk.StringVar(value="–")
-            self._sankey_vars[key] = var
-            ttk.Label(card, textvariable=var, font=("", 12, "bold")).pack(padx=8, pady=6)
+            card.grid(row=0, column=col, sticky="nsew", padx=3, pady=3)
+            v = tk.StringVar(value="–")
+            self._sankey_vars[key] = v
+            ttk.Label(card, textvariable=v, font=("", 13, "bold")).pack(anchor="center", padx=8, pady=8)
 
-        # Sankey chart area (using matplotlib)
-        chart_frame = ttk.Frame(frm)
-        chart_frame.pack(fill="both", expand=True, padx=10, pady=(5, 10))
+        # ── Sankey chart ─────────────────────────────────────────────────
+        chart_lf = ttk.LabelFrame(self._sankey_scroll, text=self.t("sankey.title"))
+        chart_lf.pack(fill="both", expand=True, padx=14, pady=(4, 12))
 
         self._sankey_fig = Figure(figsize=(10, 5), dpi=96)
         self._sankey_ax = self._sankey_fig.add_subplot(111)
-        self._sankey_canvas = FigureCanvasTkAgg(self._sankey_fig, master=chart_frame)
+        self._sankey_canvas = FigureCanvasTkAgg(self._sankey_fig, master=chart_lf)
         self._sankey_canvas.get_tk_widget().pack(fill="both", expand=True)
 
         self.after(600, self._refresh_sankey_tab)
@@ -69,151 +82,103 @@ class SankeyMixin:
         period = self._sankey_period_var.get()
         data = compute_sankey(self.storage.db, self.cfg.devices, self.cfg.solar, period)
 
-        # Update cards
         self._sankey_vars["grid_import"].set(f"{data.grid_import_kwh:.2f} kWh")
         self._sankey_vars["total"].set(f"{data.total_consumption_kwh:.2f} kWh")
         self._sankey_vars["pv_production"].set(f"{data.pv_production_kwh:.2f} kWh")
         self._sankey_vars["self_consumption"].set(f"{data.self_consumption_kwh:.2f} kWh")
         self._sankey_vars["feed_in"].set(f"{data.feed_in_kwh:.2f} kWh")
 
-        # Draw Sankey-like flow diagram using matplotlib
         ax = self._sankey_ax
         ax.clear()
 
         if not data.flows:
-            ax.text(0.5, 0.5, self.t("sankey.no_data"), ha="center", va="center", fontsize=14, color="#888")
+            ax.text(0.5, 0.5, self.t("sankey.no_data"), ha="center", va="center",
+                   fontsize=14, color="gray")
             ax.axis("off")
             self._sankey_canvas.draw_idle()
             return
 
-        # Use alluvial/flow visualization with rectangles and bezier curves
-        self._draw_sankey_matplotlib(ax, data)
+        # Draw horizontal stacked bar chart as a simpler, cleaner energy flow visualization
+        self._draw_energy_flow(ax, data)
         self._sankey_fig.tight_layout()
         self._sankey_canvas.draw_idle()
 
-    def _draw_sankey_matplotlib(self, ax, data) -> None:
-        """Draw a Sankey-like diagram using matplotlib patches."""
-        import matplotlib.patches as mpatches
-        from matplotlib.path import Path as MPath
+    def _draw_energy_flow(self, ax, data) -> None:
+        """Draw a clean energy flow visualization using horizontal stacked bars."""
         import numpy as np
 
         ax.axis("off")
-
         if not data.flows or not data.nodes:
             return
 
-        # Categorize nodes by column
-        sources = set()
-        targets = set()
+        # Categorize flows
+        sources = {}  # source → total kWh
+        targets = {}  # target → total kWh
         for f in data.flows:
-            sources.add(f.source)
-            targets.add(f.target)
+            sources[f.source] = sources.get(f.source, 0) + f.value_kwh
+            targets[f.target] = targets.get(f.target, 0) + f.value_kwh
 
-        # Column assignment: pure sources (col 0), intermediate (col 1), pure targets (col 2)
-        col0 = [n for n in data.nodes if n in sources and n not in targets]
-        col2 = [n for n in data.nodes if n in targets and n not in sources]
-        col1 = [n for n in data.nodes if n not in col0 and n not in col2]
+        # Left side: energy sources (Grid, PV)
+        # Right side: energy consumers (devices)
+        left_items = [(n, v) for n, v in sources.items() if n != "House"]
+        right_items = [(n, v) for n, v in targets.items() if n != "House" and n != "Feed-in"]
+        special = [(n, v) for n, v in targets.items() if n == "Feed-in"]
 
-        if not col1:
-            col1 = ["House"]
+        left_items.sort(key=lambda x: x[1], reverse=True)
+        right_items.sort(key=lambda x: x[1], reverse=True)
 
-        columns = [col0, col1, col2]
-        x_positions = [0.1, 0.45, 0.8]
+        color_map = dict(zip(data.nodes, data.node_colors))
+        total = max(data.total_consumption_kwh, 0.01)
 
-        # Calculate y positions for each node
-        node_positions = {}
-        node_heights = {}
+        # --- Draw source bars (left) ---
+        y = 0.85
+        ax.text(0.12, 0.95, "Quellen", ha="center", va="top", fontsize=11, fontweight="bold", color="#555")
+        for name, val in left_items:
+            color = color_map.get(name, "#3498db")
+            w = max(val / total * 0.2, 0.01)
+            ax.barh(y, w, height=0.06, left=0.02, color=color, alpha=0.9, edgecolor="white")
+            ax.text(0.02 + w + 0.01, y, f"{name}  {val:.1f} kWh", va="center", fontsize=9, fontweight="bold")
+            y -= 0.10
 
-        total_flow = sum(f.value_kwh for f in data.flows)
-        if total_flow <= 0:
-            total_flow = 1.0
+        # --- Central "House" node ---
+        house_y = 0.5
+        ax.add_patch(
+            __import__("matplotlib.patches", fromlist=["FancyBboxPatch"]).FancyBboxPatch(
+                (0.38, house_y - 0.08), 0.24, 0.16,
+                boxstyle="round,pad=0.02", facecolor="#3498db", alpha=0.15, edgecolor="#3498db", linewidth=2
+            )
+        )
+        ax.text(0.5, house_y, f"🏠 {data.total_consumption_kwh:.1f} kWh",
+               ha="center", va="center", fontsize=12, fontweight="bold", color="#2c3e50")
 
-        for col_idx, col_nodes in enumerate(columns):
-            if not col_nodes:
-                continue
-            # Get total value for nodes in this column
-            node_vals = {}
-            for n in col_nodes:
-                val = sum(f.value_kwh for f in data.flows if f.source == n or f.target == n)
-                node_vals[n] = max(val, 0.01)
+        # --- Draw consumer bars (right) ---
+        y = 0.85
+        ax.text(0.82, 0.95, "Verbraucher", ha="center", va="top", fontsize=11, fontweight="bold", color="#555")
+        dev_colors = ["#3498db", "#9b59b6", "#1abc9c", "#e67e22", "#2ecc71",
+                     "#e91e63", "#00bcd4", "#ff9800", "#795548", "#607d8b"]
+        for i, (name, val) in enumerate(right_items[:8]):
+            color = dev_colors[i % len(dev_colors)]
+            w = max(val / total * 0.2, 0.01)
+            ax.barh(y, w, height=0.06, left=0.68, color=color, alpha=0.9, edgecolor="white")
+            pct = val / total * 100
+            ax.text(0.68 + w + 0.01, y, f"{name}  {val:.1f} kWh ({pct:.0f}%)", va="center", fontsize=9)
+            y -= 0.10
 
-            total_col = sum(node_vals.values())
-            y_start = 0.1
-            available = 0.8
-            gap = 0.02 * len(col_nodes)
+        # Feed-in (if any)
+        for name, val in special:
+            ax.text(0.5, 0.12, f"📤 {self.t('sankey.feed_in')}: {val:.2f} kWh",
+                   ha="center", va="center", fontsize=10, color="#27ae60", fontweight="bold")
 
-            for n in col_nodes:
-                height = (node_vals[n] / total_col) * (available - gap)
-                node_positions[n] = (x_positions[col_idx], y_start)
-                node_heights[n] = height
-                y_start += height + 0.02
+        # Draw flow arrows
+        for name, val in left_items:
+            color = color_map.get(name, "#3498db")
+            ax.annotate("", xy=(0.38, house_y), xytext=(0.22, 0.85 - left_items.index((name, val)) * 0.10),
+                       arrowprops=dict(arrowstyle="->", color=color, lw=max(1, val / total * 5), alpha=0.4))
 
-        # Draw nodes
-        node_color_map = dict(zip(data.nodes, data.node_colors))
-        for name, (x, y) in node_positions.items():
-            h = node_heights.get(name, 0.05)
-            color = node_color_map.get(name, "#3498db")
-            rect = mpatches.FancyBboxPatch((x - 0.03, y), 0.06, h,
-                                           boxstyle="round,pad=0.005",
-                                           facecolor=color, edgecolor="white", linewidth=1.5, alpha=0.9)
-            ax.add_patch(rect)
-            # Label
-            ax.text(x, y + h / 2, name, ha="center", va="center", fontsize=8,
-                   fontweight="bold", color="white", zorder=10)
-
-        # Draw flows as curved paths
-        source_y_offset = {n: 0.0 for n in data.nodes}
-        target_y_offset = {n: 0.0 for n in data.nodes}
-
-        for flow in sorted(data.flows, key=lambda f: f.value_kwh, reverse=True):
-            if flow.source not in node_positions or flow.target not in node_positions:
-                continue
-
-            sx, sy = node_positions[flow.source]
-            sh = node_heights.get(flow.source, 0.05)
-            tx, ty = node_positions[flow.target]
-            th = node_heights.get(flow.target, 0.05)
-
-            # Flow height proportional to value
-            total_s = sum(f.value_kwh for f in data.flows if f.source == flow.source)
-            total_t = sum(f.value_kwh for f in data.flows if f.target == flow.target)
-            flow_h_s = (flow.value_kwh / max(total_s, 0.01)) * sh
-            flow_h_t = (flow.value_kwh / max(total_t, 0.01)) * th
-
-            y1 = sy + source_y_offset[flow.source]
-            y2 = ty + target_y_offset[flow.target]
-
-            source_y_offset[flow.source] += flow_h_s
-            target_y_offset[flow.target] += flow_h_t
-
-            # Bezier curve
-            mid_x = (sx + tx) / 2
-            verts = [
-                (sx + 0.03, y1),
-                (mid_x, y1),
-                (mid_x, y2),
-                (tx - 0.03, y2),
-                (tx - 0.03, y2 + flow_h_t),
-                (mid_x, y2 + flow_h_t),
-                (mid_x, y1 + flow_h_s),
-                (sx + 0.03, y1 + flow_h_s),
-                (sx + 0.03, y1),
-            ]
-            codes = [MPath.MOVETO, MPath.CURVE4, MPath.CURVE4, MPath.CURVE4,
-                    MPath.LINETO, MPath.CURVE4, MPath.CURVE4, MPath.CURVE4,
-                    MPath.CLOSEPOLY]
-            path = MPath(verts, codes)
-            color = flow.color if flow.color else "#cccccc"
-            patch = mpatches.PathPatch(path, facecolor=color, alpha=0.35, edgecolor="none")
-            ax.add_patch(patch)
-
-            # Flow label
-            label_x = mid_x
-            label_y = (y1 + y2 + flow_h_s) / 2
-            if flow.value_kwh >= 0.1:
-                ax.text(label_x, label_y, f"{flow.value_kwh:.1f}", ha="center", va="center",
-                       fontsize=7, color="#333", alpha=0.8)
+        for i, (name, val) in enumerate(right_items[:8]):
+            color = dev_colors[i % len(dev_colors)]
+            ax.annotate("", xy=(0.68, 0.85 - i * 0.10), xytext=(0.62, house_y),
+                       arrowprops=dict(arrowstyle="->", color=color, lw=max(1, val / total * 5), alpha=0.4))
 
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
-        ax.set_title(self.t("sankey.title"), fontsize=11)
