@@ -550,10 +550,21 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.tab.costs": "Kosten",
         "web.tab.heatmap": "Heatmap",
         "web.tab.solar": "Solar",
+        "web.tab.co2": "CO₂",
         "web.tab.compare": "Vergleich",
         "web.tab.anomalies": "Anomalien",
         "web.tab.export": "Export",
         "web.no_data": "Keine Daten",
+
+        # Web: CO₂ tab
+        "web.co2.not_enabled": "CO₂-Tracking ist nicht aktiviert. Aktiviere es unter Einstellungen → ENTSO-E.",
+        "web.co2.current": "Aktuelle Netz-CO₂-Intensität",
+        "web.co2.chart_title": "CO₂-Intensität 24h",
+        "web.co2.device_rates": "CO₂ pro Gerät (live)",
+        "web.co2.fuel_mix": "Erzeugungsmix",
+        "web.co2.fuel": "Brennstoff",
+        "web.co2.trees": "Bäume (Äquiv.)",
+        "web.co2.car": "Auto-km vermieden",
 
         # Web: Dashboard UI (mobile/web app texts)
         "web.dash.device_order": "Geräteanordnung &amp; Sichtbarkeit",
@@ -1306,6 +1317,7 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.tab.costs": "Costs",
         "web.tab.heatmap": "Heatmap",
         "web.tab.solar": "Solar",
+        "web.tab.co2": "CO₂",
         "web.tab.compare": "Compare",
         "web.tab.anomalies": "Anomalies",
         "web.tab.export": "Export",

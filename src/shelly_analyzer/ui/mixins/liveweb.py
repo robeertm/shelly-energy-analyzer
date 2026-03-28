@@ -1405,6 +1405,151 @@ class LiveWebMixin:
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
 
+            if action == "co2":
+                try:
+                    from datetime import datetime as _dtc, timedelta as _tdc
+                    from zoneinfo import ZoneInfo as _ZIc
+
+                    co2_cfg = getattr(self.cfg, "co2", None)
+                    enabled = bool(getattr(co2_cfg, "enabled", False)) if co2_cfg else False
+                    if not enabled:
+                        return {"ok": True, "enabled": False}
+
+                    zone = str(getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU")
+                    green_thr = float(getattr(co2_cfg, "green_threshold_g_per_kwh", 150.0))
+                    dirty_thr = float(getattr(co2_cfg, "dirty_threshold_g_per_kwh", 400.0))
+                    cross_border = bool(getattr(co2_cfg, "cross_border_flows", False))
+
+                    _tzc = _ZIc("Europe/Berlin")
+                    _nowc = _dtc.now(_tzc)
+                    _todayc = _nowc.replace(hour=0, minute=0, second=0, microsecond=0)
+                    _week_start = _todayc - _tdc(days=_nowc.weekday())
+                    _month_start = _todayc.replace(day=1)
+
+                    today_start_ts = int(_todayc.timestamp())
+                    week_start_ts = int(_week_start.timestamp())
+                    month_start_ts = int(_month_start.timestamp())
+                    now_ts = int(_nowc.timestamp())
+
+                    # 24h intensity data for chart
+                    h24_start = now_ts - 24 * 3600
+                    h24_start = (h24_start // 3600) * 3600
+                    df_24h = self.storage.db.query_co2_intensity(zone, h24_start, now_ts + 3600)
+
+                    hourly_data = []
+                    current_intensity = 0.0
+                    current_source = "unknown"
+                    if df_24h is not None and not df_24h.empty:
+                        for _, row in df_24h.iterrows():
+                            ts = int(row.get("hour_ts", 0))
+                            intensity = float(row.get("intensity_g_per_kwh", 0))
+                            source = str(row.get("source", ""))
+                            hour_str = _dtc.fromtimestamp(ts, tz=_tzc).strftime("%H:%M")
+                            hourly_data.append({
+                                "hour": hour_str,
+                                "ts": ts,
+                                "intensity": round(intensity, 1),
+                                "source": source,
+                            })
+                        # Current = most recent hour
+                        last_row = df_24h.iloc[-1]
+                        current_intensity = float(last_row.get("intensity_g_per_kwh", 0))
+                        current_source = str(last_row.get("source", ""))
+
+                    # CO₂ per device for today/week/month
+                    def _device_co2(start_ts_d, end_ts_d):
+                        """Calculate total CO₂ kg for all devices in [start, end)."""
+                        total_kwh = 0.0
+                        df_co2 = self.storage.db.query_co2_intensity(zone, start_ts_d, end_ts_d + 3600)
+                        if df_co2 is None or df_co2.empty:
+                            return 0.0
+                        avg_int = float(pd.to_numeric(df_co2["intensity_g_per_kwh"], errors="coerce").mean())
+                        if avg_int <= 0:
+                            return 0.0
+                        for d in self.cfg.devices:
+                            try:
+                                df_h = self.storage.db.query_hourly(d.key, start_ts=start_ts_d, end_ts=end_ts_d)
+                                if df_h is not None and not df_h.empty and "kwh" in df_h.columns:
+                                    total_kwh += float(pd.to_numeric(df_h["kwh"], errors="coerce").fillna(0.0).clip(lower=0).sum())
+                            except Exception:
+                                pass
+                        return total_kwh * avg_int / 1000.0
+
+                    co2_today = _device_co2(today_start_ts, now_ts)
+                    co2_week = _device_co2(week_start_ts, now_ts)
+                    co2_month = _device_co2(month_start_ts, now_ts)
+
+                    # Per-device live CO₂ rate (g/h) based on current intensity
+                    device_rates = []
+                    if current_intensity > 0:
+                        for d in self.cfg.devices:
+                            try:
+                                df_last = self.storage.db.query_hourly(d.key, start_ts=now_ts - 3600, end_ts=now_ts + 3600)
+                                avg_w = 0.0
+                                if df_last is not None and not df_last.empty and "kwh" in df_last.columns:
+                                    kwh_sum = float(pd.to_numeric(df_last["kwh"], errors="coerce").fillna(0.0).clip(lower=0).sum())
+                                    hours = max(1, len(df_last))
+                                    avg_w = kwh_sum / hours * 1000.0
+                                co2_g_h = avg_w * current_intensity / 1000.0
+                                if co2_g_h > 0:
+                                    device_rates.append({
+                                        "key": d.key,
+                                        "name": d.name,
+                                        "watts": round(avg_w, 0),
+                                        "co2_g_h": round(co2_g_h, 1),
+                                    })
+                            except Exception:
+                                pass
+                        device_rates.sort(key=lambda x: x["co2_g_h"], reverse=True)
+
+                    # Fuel mix from Co2FetchService
+                    fuel_mix = {}
+                    fuel_mix_hour = None
+                    try:
+                        svc = getattr(self, "_co2_fetch_svc", None)
+                        if svc is not None:
+                            mix_hour, mix_data = svc.get_latest_mix()
+                            if mix_hour and mix_data:
+                                fuel_mix_hour = _dtc.fromtimestamp(mix_hour, tz=_tzc).strftime("%H:%M")
+                                from shelly_analyzer.services.entsoe import _CO2_FACTORS, FUEL_DISPLAY_NAMES
+                                total_mw = sum(mix_data.values())
+                                for fuel, mw in sorted(mix_data.items(), key=lambda x: -x[1]):
+                                    if mw > 0:
+                                        fuel_mix[fuel] = {
+                                            "name": FUEL_DISPLAY_NAMES.get(fuel, fuel),
+                                            "mw": round(mw, 0),
+                                            "share_pct": round(mw / total_mw * 100, 1) if total_mw > 0 else 0,
+                                            "factor": _CO2_FACTORS.get(fuel, 400.0),
+                                        }
+                    except Exception:
+                        pass
+
+                    # Equivalents
+                    tree_days = co2_month / 22.0 * 365 if co2_month > 0 else 0
+                    car_km = co2_month / 0.170 if co2_month > 0 else 0
+
+                    return {
+                        "ok": True,
+                        "enabled": True,
+                        "zone": zone,
+                        "cross_border": cross_border,
+                        "green_threshold": green_thr,
+                        "dirty_threshold": dirty_thr,
+                        "current_intensity": round(current_intensity, 1),
+                        "current_source": current_source,
+                        "co2_today_kg": round(co2_today, 3),
+                        "co2_week_kg": round(co2_week, 3),
+                        "co2_month_kg": round(co2_month, 3),
+                        "tree_days": round(tree_days, 0),
+                        "car_km": round(car_km, 0),
+                        "hourly": hourly_data,
+                        "device_rates": device_rates,
+                        "fuel_mix": fuel_mix,
+                        "fuel_mix_hour": fuel_mix_hour,
+                    }
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
             raise ValueError(f"Unknown action: {action}")
 
     def _web_plots_data(self, params: Dict[str, Any]) -> Dict[str, Any]:
