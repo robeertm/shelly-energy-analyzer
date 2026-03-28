@@ -286,23 +286,33 @@ class CoreMixin:
             # Live Web Dashboard
             self._live_state_store: LiveStateStore = LiveStateStore(max_points=1200)
             self._live_web: Optional[LiveWebDashboard] = None
-            # ML NILM transition learner
+            # ML NILM transition learners — one per 3-phase EM device
+            self._nilm_learners: Dict[str, Any] = {}  # device_key → TransitionLearner
+            self._nilm_last_cluster_ts = 0.0
+            self._nilm_last_log_ts = 0.0
             try:
                 from shelly_analyzer.services.appliance_detector import TransitionLearner
-                _nilm_path = self.project_root / "data" / "runtime" / "nilm_clusters.json"
-                self._nilm_learner = TransitionLearner(
-                    min_step_w=50.0,
-                    max_clusters=20,
-                    persist_path=_nilm_path,
-                )
-                self._nilm_last_cluster_ts = 0.0
-                self._nilm_last_log_ts = 0.0
-                # Log loaded clusters on startup
-                _loaded = self._nilm_learner.get_clusters()
-                if _loaded:
-                    logger.info("NILM ML: loaded %d learned clusters from %s", len(_loaded), _nilm_path)
+                _runtime_dir = self.project_root / "data" / "runtime"
+                _runtime_dir.mkdir(parents=True, exist_ok=True)
+                for _dev in self.cfg.devices:
+                    # Only 3-phase EM devices (the ones that measure whole-house or circuit load)
+                    if getattr(_dev, "kind", "em") != "em" or getattr(_dev, "phases", 3) < 3:
+                        continue
+                    _nilm_path = _runtime_dir / f"nilm_clusters_{_dev.key}.json"
+                    _lrn = TransitionLearner(
+                        min_step_w=50.0,
+                        max_clusters=20,
+                        persist_path=_nilm_path,
+                    )
+                    self._nilm_learners[_dev.key] = _lrn
+                    _loaded = _lrn.get_clusters()
+                    if _loaded:
+                        logger.info("NILM ML [%s]: loaded %d learned clusters", _dev.key, len(_loaded))
+                if self._nilm_learners:
+                    logger.info("NILM ML: initialized learners for %d 3-phase devices: %s",
+                               len(self._nilm_learners), ", ".join(self._nilm_learners.keys()))
             except Exception:
-                self._nilm_learner = None
+                logger.debug("NILM ML init failed", exc_info=True)
             # Plots
             self._plots_mode = tk.StringVar(value="days")
             self._plots_start = tk.StringVar(value="")

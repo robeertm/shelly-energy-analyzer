@@ -2100,56 +2100,67 @@ class LiveWebMixin:
                     except Exception:
                         pass
 
-                    # Feed ML NILM transition learner
+                    # Feed ML NILM transition learner (per 3-phase device)
                     try:
-                        learner = getattr(self, "_nilm_learner", None)
-                        if learner is not None:
+                        _learners = getattr(self, "_nilm_learners", {})
+                        _dev_learner = _learners.get(s.device_key)
+                        if _dev_learner is not None:
                             _pw_total = float(s.power_w.get("total", 0.0))
-                            transition = learner.observe(s.device_key, float(s.ts), _pw_total)
-                            # Periodically re-cluster (every 5 minutes)
+                            _dev_learner.observe(s.device_key, float(s.ts), _pw_total)
+                            # Periodically re-cluster all learners (every 5 minutes)
                             import time as _time_mod
                             _now_ts = _time_mod.time()
                             _last_cluster = getattr(self, "_nilm_last_cluster_ts", 0.0)
                             if (_now_ts - _last_cluster) > 300:
                                 self._nilm_last_cluster_ts = _now_ts
-                                clusters = learner.cluster()
-                                # Push cluster data to web dashboard store
+                                _all_clusters = []
+                                _total_trans = 0
+                                _per_device_info = []
+                                for _dk, _lrn in _learners.items():
+                                    _cls = _lrn.cluster()
+                                    _nt = _lrn.get_transition_count()
+                                    _total_trans += _nt
+                                    _all_clusters.extend(_cls)
+                                    if _cls:
+                                        _dev_name = _dk
+                                        for _d in self.cfg.devices:
+                                            if _d.key == _dk:
+                                                _dev_name = _d.name
+                                                break
+                                        _per_device_info.append(f"{_dev_name}: {len(_cls)} Muster/{_nt} Trans.")
+                                # Push merged cluster data to web dashboard store
                                 try:
                                     store = getattr(self, "_live_state_store", None)
                                     if store is not None:
                                         store._nilm_clusters = [
                                             {"matched_appliance": c.matched_appliance, "count": c.count,
-                                             "centroid_w": c.centroid_w, "icon": c.icon, "label": c.label}
-                                            for c in clusters
+                                             "centroid_w": c.centroid_w, "icon": c.icon, "label": c.label,
+                                             "device_key": getattr(c, "device_key", "")}
+                                            for c in _all_clusters
                                         ]
                                 except Exception:
                                     pass
                                 # Log progress periodically (every 30 min)
                                 _last_log = getattr(self, "_nilm_last_log_ts", 0.0)
-                                if clusters and (_now_ts - _last_log) > 1800:
+                                if _all_clusters and (_now_ts - _last_log) > 1800:
                                     self._nilm_last_log_ts = _now_ts
-                                    n_trans = learner.get_transition_count()
-                                    n_clust = len(clusters)
-                                    top3 = ", ".join(
-                                        f"{c.icon} {c.centroid_w:.0f}W x{c.count}"
-                                        for c in clusters[:3]
-                                    )
-                                    try:
-                                        self._log_sync(f"NILM ML: {n_trans} transitions, {n_clust} clusters learned. Top: {top3}")
-                                    except Exception:
-                                        pass
+                                    for _info in _per_device_info:
+                                        try:
+                                            self._log_sync(f"NILM ML [{_info}]")
+                                        except Exception:
+                                            pass
                                 # Update desktop status label
                                 try:
                                     _nilm_var = getattr(self, "_nilm_status_var", None)
                                     if _nilm_var is not None:
-                                        n_trans = learner.get_transition_count()
-                                        n_clust = len(clusters) if clusters else 0
-                                        if n_clust > 0:
-                                            _nilm_var.set(f"🧠 NILM: {n_clust} Muster / {n_trans} Transitionen")
-                                        elif n_trans > 0:
-                                            _nilm_var.set(f"🧠 NILM: lerne... ({n_trans} Transitionen)")
+                                        _n_clust = len(_all_clusters)
+                                        _n_devs = len(_learners)
+                                        if _n_clust > 0:
+                                            _nilm_var.set(f"NILM: {_n_clust} Muster / {_total_trans} Trans. ({_n_devs} Geraete)")
+                                        elif _total_trans > 0:
+                                            _nilm_var.set(f"NILM: lerne... ({_total_trans} Trans. / {_n_devs} Geraete)")
                                         else:
-                                            _nilm_var.set("🧠 NILM: lerne...")
+                                            _nilm_var.set(f"NILM: lerne... ({_n_devs} Geraete)")
                                 except Exception:
                                     pass
                     except Exception:
@@ -2307,10 +2318,10 @@ class LiveWebMixin:
                                     _appl_var = vars_.get('appliance')
                                     if _appl_var is not None:
                                         _matches = _identify_appliance(pw)[:3]
-                                        # Boost confidence with ML clusters
-                                        _learner = getattr(self, "_nilm_learner", None)
-                                        if _learner is not None and _matches:
-                                            _clusters = _learner.get_clusters()
+                                        # Boost confidence with ML clusters (per device)
+                                        _dev_lrn = getattr(self, "_nilm_learners", {}).get(s.device_key)
+                                        if _dev_lrn is not None and _matches:
+                                            _clusters = _dev_lrn.get_clusters()
                                             for _ci, (_sig, _conf) in enumerate(_matches):
                                                 for _cl in _clusters:
                                                     if _cl.matched_appliance == _sig.id and _cl.count >= 5:
