@@ -294,6 +294,12 @@ class SolarConfig:
     battery_kwh: float = 0.0
     # Embodied CO₂ of PV production in kg per kWp (lifecycle, default ~1000 kg/kWp for typical Si panels)
     co2_production_kg_per_kwp: float = 1000.0
+    # PV amortization: total investment cost in EUR
+    investment_eur: float = 0.0
+    # Year of PV installation (for amortization timeline)
+    installation_year: int = 0
+    # Annual degradation rate in % (typical: 0.5%)
+    degradation_pct: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -342,6 +348,61 @@ class Co2Config:
 
 
 @dataclass(frozen=True)
+class ForecastConfig:
+    """Consumption forecasting settings."""
+    enabled: bool = False
+    horizon_days: int = 30
+    history_days: int = 90
+
+
+@dataclass(frozen=True)
+class WeatherConfig:
+    """OpenWeatherMap integration for weather–energy correlation."""
+    enabled: bool = False
+    api_key: str = ""
+    city: str = ""
+    lat: float = 0.0
+    lon: float = 0.0
+    fetch_interval_minutes: int = 30
+
+
+@dataclass(frozen=True)
+class MqttConfig:
+    """MQTT publisher for Home Assistant integration."""
+    enabled: bool = False
+    broker: str = "localhost"
+    port: int = 1883
+    username: str = ""
+    password: str = ""
+    topic_prefix: str = "shelly_analyzer"
+    ha_discovery: bool = True
+    ha_discovery_prefix: str = "homeassistant"
+    publish_interval_seconds: float = 10.0
+    use_tls: bool = False
+
+
+@dataclass(frozen=True)
+class TenantDef:
+    """A single tenant definition for utility billing."""
+    tenant_id: str = ""
+    name: str = ""
+    device_keys: List[str] = field(default_factory=list)
+    unit: str = ""
+    persons: int = 1
+    move_in: str = ""
+    move_out: str = ""
+
+
+@dataclass(frozen=True)
+class TenantConfig:
+    """Tenant utility billing (Nebenkostenabrechnung) settings."""
+    enabled: bool = False
+    tenants: List[TenantDef] = field(default_factory=list)
+    common_device_keys: List[str] = field(default_factory=list)
+    billing_period_months: int = 12
+
+
+@dataclass(frozen=True)
 class DeviceGroup:
     """A logical group of devices (e.g. 'Apartment 1', 'Workshop')."""
     name: str
@@ -386,6 +447,10 @@ class AppConfig:
     tou: TouConfig = field(default_factory=TouConfig)
     anomaly: AnomalyConfig = field(default_factory=AnomalyConfig)
     co2: Co2Config = field(default_factory=Co2Config)
+    forecast: ForecastConfig = field(default_factory=ForecastConfig)
+    weather: WeatherConfig = field(default_factory=WeatherConfig)
+    mqtt: MqttConfig = field(default_factory=MqttConfig)
+    tenant: TenantConfig = field(default_factory=TenantConfig)
     schedules: List[DeviceSchedule] = field(default_factory=list)
 
 
@@ -668,6 +733,9 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
             solar_raw.get("co2_production_kg_per_kwp", SolarConfig.co2_production_kg_per_kwp),
             SolarConfig.co2_production_kg_per_kwp,
         ),
+        investment_eur=_coerce_float(solar_raw.get("investment_eur", SolarConfig.investment_eur), SolarConfig.investment_eur),
+        installation_year=_coerce_int(solar_raw.get("installation_year", SolarConfig.installation_year), SolarConfig.installation_year),
+        degradation_pct=_coerce_float(solar_raw.get("degradation_pct", SolarConfig.degradation_pct), SolarConfig.degradation_pct),
     )
 
     tou_raw = raw.get("tou", {}) if isinstance(raw.get("tou"), dict) else {}
@@ -721,6 +789,64 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         green_threshold_g_per_kwh=_coerce_float(co2_raw.get("green_threshold_g_per_kwh", Co2Config.green_threshold_g_per_kwh), Co2Config.green_threshold_g_per_kwh),
         dirty_threshold_g_per_kwh=_coerce_float(co2_raw.get("dirty_threshold_g_per_kwh", Co2Config.dirty_threshold_g_per_kwh), Co2Config.dirty_threshold_g_per_kwh),
         cross_border_flows=bool(co2_raw.get("cross_border_flows", Co2Config.cross_border_flows)),
+    )
+
+    forecast_raw = raw.get("forecast", {}) if isinstance(raw.get("forecast"), dict) else {}
+    forecast = ForecastConfig(
+        enabled=bool(forecast_raw.get("enabled", ForecastConfig.enabled)),
+        horizon_days=_coerce_int(forecast_raw.get("horizon_days", ForecastConfig.horizon_days), ForecastConfig.horizon_days),
+        history_days=_coerce_int(forecast_raw.get("history_days", ForecastConfig.history_days), ForecastConfig.history_days),
+    )
+
+    weather_raw = raw.get("weather", {}) if isinstance(raw.get("weather"), dict) else {}
+    weather = WeatherConfig(
+        enabled=bool(weather_raw.get("enabled", WeatherConfig.enabled)),
+        api_key=str(weather_raw.get("api_key", WeatherConfig.api_key) or ""),
+        city=str(weather_raw.get("city", WeatherConfig.city) or ""),
+        lat=_coerce_float(weather_raw.get("lat", WeatherConfig.lat), WeatherConfig.lat),
+        lon=_coerce_float(weather_raw.get("lon", WeatherConfig.lon), WeatherConfig.lon),
+        fetch_interval_minutes=_coerce_int(weather_raw.get("fetch_interval_minutes", WeatherConfig.fetch_interval_minutes), WeatherConfig.fetch_interval_minutes),
+    )
+
+    mqtt_raw = raw.get("mqtt", {}) if isinstance(raw.get("mqtt"), dict) else {}
+    mqtt_cfg = MqttConfig(
+        enabled=bool(mqtt_raw.get("enabled", MqttConfig.enabled)),
+        broker=str(mqtt_raw.get("broker", MqttConfig.broker) or "localhost"),
+        port=_coerce_int(mqtt_raw.get("port", MqttConfig.port), MqttConfig.port),
+        username=str(mqtt_raw.get("username", MqttConfig.username) or ""),
+        password=str(mqtt_raw.get("password", MqttConfig.password) or ""),
+        topic_prefix=str(mqtt_raw.get("topic_prefix", MqttConfig.topic_prefix) or "shelly_analyzer"),
+        ha_discovery=bool(mqtt_raw.get("ha_discovery", MqttConfig.ha_discovery)),
+        ha_discovery_prefix=str(mqtt_raw.get("ha_discovery_prefix", MqttConfig.ha_discovery_prefix) or "homeassistant"),
+        publish_interval_seconds=_coerce_float(mqtt_raw.get("publish_interval_seconds", MqttConfig.publish_interval_seconds), MqttConfig.publish_interval_seconds),
+        use_tls=bool(mqtt_raw.get("use_tls", MqttConfig.use_tls)),
+    )
+
+    tenant_raw = raw.get("tenant", {}) if isinstance(raw.get("tenant"), dict) else {}
+    tenant_tenants: List[TenantDef] = []
+    for t in (tenant_raw.get("tenants", []) if isinstance(tenant_raw.get("tenants"), list) else []):
+        if not isinstance(t, dict):
+            continue
+        dkeys = t.get("device_keys", [])
+        if not isinstance(dkeys, list):
+            dkeys = []
+        tenant_tenants.append(TenantDef(
+            tenant_id=str(t.get("tenant_id", "") or ""),
+            name=str(t.get("name", "") or ""),
+            device_keys=[str(k) for k in dkeys],
+            unit=str(t.get("unit", "") or ""),
+            persons=_coerce_int(t.get("persons", 1), 1),
+            move_in=str(t.get("move_in", "") or ""),
+            move_out=str(t.get("move_out", "") or ""),
+        ))
+    common_keys = tenant_raw.get("common_device_keys", [])
+    if not isinstance(common_keys, list):
+        common_keys = []
+    tenant = TenantConfig(
+        enabled=bool(tenant_raw.get("enabled", TenantConfig.enabled)),
+        tenants=tenant_tenants,
+        common_device_keys=[str(k) for k in common_keys],
+        billing_period_months=_coerce_int(tenant_raw.get("billing_period_months", TenantConfig.billing_period_months), TenantConfig.billing_period_months),
     )
 
     groups: List[DeviceGroup] = []
@@ -780,6 +906,10 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         tou=tou,
         anomaly=anomaly,
         co2=co2,
+        forecast=forecast,
+        weather=weather,
+        mqtt=mqtt_cfg,
+        tenant=tenant,
         groups=groups,
         schedules=schedules,
     )
@@ -939,6 +1069,9 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "kw_peak": float(getattr(cfg.solar, "kw_peak", 0.0)),
             "battery_kwh": float(getattr(cfg.solar, "battery_kwh", 0.0)),
             "co2_production_kg_per_kwp": float(getattr(cfg.solar, "co2_production_kg_per_kwp", 1000.0)),
+            "investment_eur": float(getattr(cfg.solar, "investment_eur", 0.0)),
+            "installation_year": int(getattr(cfg.solar, "installation_year", 0)),
+            "degradation_pct": float(getattr(cfg.solar, "degradation_pct", 0.5)),
         },
         "pricing": {
             "electricity_price_eur_per_kwh": cfg.pricing.electricity_price_eur_per_kwh,
@@ -1031,6 +1164,48 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "green_threshold_g_per_kwh": float(getattr(cfg.co2, "green_threshold_g_per_kwh", 150.0)),
             "dirty_threshold_g_per_kwh": float(getattr(cfg.co2, "dirty_threshold_g_per_kwh", 400.0)),
             "cross_border_flows": bool(getattr(cfg.co2, "cross_border_flows", False)),
+        },
+        "forecast": {
+            "enabled": bool(getattr(cfg.forecast, "enabled", False)),
+            "horizon_days": int(getattr(cfg.forecast, "horizon_days", 30)),
+            "history_days": int(getattr(cfg.forecast, "history_days", 90)),
+        },
+        "weather": {
+            "enabled": bool(getattr(cfg.weather, "enabled", False)),
+            "api_key": str(getattr(cfg.weather, "api_key", "") or ""),
+            "city": str(getattr(cfg.weather, "city", "") or ""),
+            "lat": float(getattr(cfg.weather, "lat", 0.0)),
+            "lon": float(getattr(cfg.weather, "lon", 0.0)),
+            "fetch_interval_minutes": int(getattr(cfg.weather, "fetch_interval_minutes", 30)),
+        },
+        "mqtt": {
+            "enabled": bool(getattr(cfg.mqtt, "enabled", False)),
+            "broker": str(getattr(cfg.mqtt, "broker", "localhost") or "localhost"),
+            "port": int(getattr(cfg.mqtt, "port", 1883)),
+            "username": str(getattr(cfg.mqtt, "username", "") or ""),
+            "password": str(getattr(cfg.mqtt, "password", "") or ""),
+            "topic_prefix": str(getattr(cfg.mqtt, "topic_prefix", "shelly_analyzer") or "shelly_analyzer"),
+            "ha_discovery": bool(getattr(cfg.mqtt, "ha_discovery", True)),
+            "ha_discovery_prefix": str(getattr(cfg.mqtt, "ha_discovery_prefix", "homeassistant") or "homeassistant"),
+            "publish_interval_seconds": float(getattr(cfg.mqtt, "publish_interval_seconds", 10.0)),
+            "use_tls": bool(getattr(cfg.mqtt, "use_tls", False)),
+        },
+        "tenant": {
+            "enabled": bool(getattr(cfg.tenant, "enabled", False)),
+            "tenants": [
+                {
+                    "tenant_id": t.tenant_id,
+                    "name": t.name,
+                    "device_keys": list(t.device_keys),
+                    "unit": t.unit,
+                    "persons": t.persons,
+                    "move_in": t.move_in,
+                    "move_out": t.move_out,
+                }
+                for t in (getattr(cfg.tenant, "tenants", []) or [])
+            ],
+            "common_device_keys": list(getattr(cfg.tenant, "common_device_keys", []) or []),
+            "billing_period_months": int(getattr(cfg.tenant, "billing_period_months", 12)),
         },
     }
     path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

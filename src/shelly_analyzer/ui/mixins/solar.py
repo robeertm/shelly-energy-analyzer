@@ -173,6 +173,34 @@ class SolarMixin:
         self._solar_canvas_widget = FigureCanvasTkAgg(self._solar_fig, master=chart_frame)
         self._solar_canvas_widget.get_tk_widget().pack(fill="both", expand=True)
 
+        # ── PV Amortization section ─────────────────────────────────────────
+        amort_frame = ttk.LabelFrame(
+            self._solar_scroll_frame, text=self.t("solar.amort.title")
+        )
+        amort_frame.pack(fill="both", expand=True, padx=14, pady=(4, 12))
+
+        amort_cards = ttk.Frame(amort_frame)
+        amort_cards.pack(fill="x", padx=10, pady=6)
+        self._solar_amort_vars = {}
+        for i, (key, label_key, icon) in enumerate([
+            ("investment", "solar.amort.investment", "💰"),
+            ("annual_savings", "solar.amort.annual_savings", "📈"),
+            ("payback", "solar.amort.payback_years", "⏱️"),
+            ("roi", "solar.amort.roi", "📊"),
+            ("co2_saved", "solar.amort.co2_saved_total", "🌱"),
+        ]):
+            card = ttk.LabelFrame(amort_cards, text=f"{icon} {self.t(label_key)}")
+            card.grid(row=0, column=i, padx=4, pady=4, sticky="nsew")
+            amort_cards.columnconfigure(i, weight=1)
+            var = tk.StringVar(value="–")
+            self._solar_amort_vars[key] = var
+            ttk.Label(card, textvariable=var, font=("", 11, "bold")).pack(padx=8, pady=6)
+
+        self._solar_amort_fig = Figure(figsize=(10, 2.5), dpi=96)
+        self._solar_amort_ax = self._solar_amort_fig.add_subplot(111)
+        self._solar_amort_canvas = FigureCanvasTkAgg(self._solar_amort_fig, master=amort_frame)
+        self._solar_amort_canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+
         # Initial refresh after short delay
         self.after(600, self._refresh_solar_tab)
 
@@ -526,8 +554,113 @@ class SolarMixin:
             # Update chart
             self._refresh_solar_chart(start, end)
 
+            # Update PV amortization
+            self._refresh_solar_amortization()
+
         except Exception as exc:
             logger.warning("Solar tab refresh error: %s", exc)
+
+    def _refresh_solar_amortization(self) -> None:
+        """Refresh PV amortization section."""
+        try:
+            solar_cfg = getattr(self.cfg, "solar", None)
+            investment = getattr(solar_cfg, "investment_eur", 0.0) if solar_cfg else 0.0
+            install_year = getattr(solar_cfg, "installation_year", 0) if solar_cfg else 0
+            kw_peak = getattr(solar_cfg, "kw_peak", 0.0) if solar_cfg else 0.0
+            degradation = getattr(solar_cfg, "degradation_pct", 0.5) if solar_cfg else 0.5
+            feed_in_tariff = getattr(solar_cfg, "feed_in_tariff_eur_per_kwh", 0.082) if solar_cfg else 0.082
+            co2_factor = getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380.0)
+
+            if investment <= 0 or install_year <= 0 or kw_peak <= 0:
+                for k in self._solar_amort_vars:
+                    self._solar_amort_vars[k].set("–")
+                self._solar_amort_ax.clear()
+                self._solar_amort_ax.text(0.5, 0.5, self.t("solar.amort.not_configured"),
+                                         ha="center", va="center", fontsize=10, color="#888")
+                self._solar_amort_ax.axis("off")
+                self._solar_amort_canvas.draw_idle()
+                return
+
+            # Estimate annual yield (kWh/kWp for central Europe ~900-1100)
+            # Use actual data if available, otherwise estimate
+            current_year = datetime.now().year
+            years_since = max(1, current_year - install_year)
+
+            # Try to get actual annual production from data
+            annual_kwh = kw_peak * 1000  # Default estimate: 1000 kWh/kWp
+
+            unit_price = self.cfg.pricing.unit_price_gross()
+
+            # Annual savings = self-consumption savings + feed-in revenue
+            # Simplified: assume 70% self-consumption, 30% feed-in
+            annual_self = annual_kwh * 0.7 * unit_price
+            annual_feed = annual_kwh * 0.3 * feed_in_tariff
+            annual_savings = annual_self + annual_feed
+
+            # Payback period
+            payback_years = investment / annual_savings if annual_savings > 0 else 99
+            payback_months = int((payback_years % 1) * 12)
+
+            # ROI after 20 years
+            total_savings_20y = 0.0
+            for y in range(20):
+                factor = (1 - degradation / 100) ** y
+                total_savings_20y += annual_savings * factor
+            roi_20y = ((total_savings_20y - investment) / investment * 100) if investment > 0 else 0
+
+            # CO2 saved
+            co2_saved_total = annual_kwh * years_since * co2_factor / 1000  # kg
+
+            # Update cards
+            self._solar_amort_vars["investment"].set(f"{investment:,.0f} €")
+            self._solar_amort_vars["annual_savings"].set(f"{annual_savings:,.0f} €/a")
+            if payback_years < 99:
+                self._solar_amort_vars["payback"].set(
+                    self.t("solar.amort.years", n=f"{int(payback_years)}") +
+                    f" {payback_months} M."
+                )
+            else:
+                self._solar_amort_vars["payback"].set("–")
+            self._solar_amort_vars["roi"].set(f"{roi_20y:+.0f}%")
+            self._solar_amort_vars["co2_saved"].set(f"{co2_saved_total / 1000:.1f} t CO₂")
+
+            # Draw amortization chart
+            ax = self._solar_amort_ax
+            ax.clear()
+
+            years = list(range(26))
+            cumulative = []
+            running = 0.0
+            for y in years:
+                factor = (1 - degradation / 100) ** y
+                running += annual_savings * factor
+                cumulative.append(running)
+
+            ax.fill_between(years, cumulative, alpha=0.3, color="#27ae60")
+            ax.plot(years, cumulative, color="#27ae60", linewidth=2,
+                   label=self.t("solar.amort.chart.cumulative_savings"))
+            ax.axhline(y=investment, color="#e74c3c", linestyle="--", linewidth=2,
+                      label=self.t("solar.amort.chart.investment"))
+
+            # Mark payback point
+            if payback_years < 25:
+                ax.axvline(x=payback_years, color="#f39c12", linestyle=":", alpha=0.7)
+                ax.scatter([payback_years], [investment], color="#f39c12", s=80, zorder=5)
+                ax.annotate(f"{payback_years:.1f}a", (payback_years, investment),
+                          textcoords="offset points", xytext=(10, 10), fontsize=9,
+                          color="#f39c12", fontweight="bold")
+
+            ax.set_xlabel("Jahre")
+            ax.set_ylabel("€")
+            ax.set_title(self.t("solar.amort.chart.title"), fontsize=10)
+            ax.legend(fontsize=8)
+            ax.grid(True, alpha=0.3)
+
+            self._solar_amort_fig.tight_layout()
+            self._solar_amort_canvas.draw_idle()
+
+        except Exception:
+            logger.debug("Solar amortization refresh failed", exc_info=True)
 
     def _refresh_solar_chart(self, start: datetime, end: datetime) -> None:
         """Redraw the daily bar chart."""
