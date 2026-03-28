@@ -1,5 +1,10 @@
 # Changelog
 
+## 11.19.6 - 2026-03-28
+### Added
+- **Web CO₂: yearly summary card** – The web CO₂ tab now shows a "Year" summary card alongside today/week/month, displaying total CO₂ in kg since January 1st with tree-days and car-km equivalents.
+- **Live CO₂ device rates auto-refresh** – Per-device CO₂ rates in the web CO₂ tab now update every 1 second via a lightweight `/api/co2_live` polling endpoint using LiveStateStore snapshots.
+
 ## 11.19.5 - 2026-03-28
 ### Added
 - **Web CO₂: per-device 24h bar charts** – Each 3-phase Shelly EM device gets its own 24h rolling CO₂ bar chart in the web CO₂ tab. Bars are color-coded by grid intensity (green/yellow/red), with tooltips showing g CO₂ and kWh per hour. Shows total 24h CO₂ in kg per device. Single-phase devices and switches are excluded.

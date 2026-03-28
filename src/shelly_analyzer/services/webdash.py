@@ -2121,6 +2121,7 @@ function renderCo2(data, el) {{
   html += metricCardHtml(t('web.costs.today', 'Today'), fmt(data.co2_today_kg, 2, 'kg'), 'CO\u2082');
   html += metricCardHtml(t('web.costs.week', 'Week'), fmt(data.co2_week_kg, 2, 'kg'), 'CO\u2082');
   html += metricCardHtml(t('web.costs.month', 'Month'), fmt(data.co2_month_kg, 2, 'kg'), 'CO\u2082');
+  html += metricCardHtml(t('web.costs.year', 'Year'), fmt(data.co2_year_kg, 2, 'kg'), 'CO\u2082');
   html += metricCardHtml(t('web.co2.trees', 'Trees (eq.)'), (data.tree_days||0).toFixed(0) + ' ' + t('web.dash.tree_days', 'tree-days'), '🌳');
   html += metricCardHtml(t('web.co2.car', 'Car km avoided'), (data.car_km||0).toFixed(0) + ' km', '🚗');
   html += '</div></div>';
