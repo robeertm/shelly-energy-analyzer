@@ -720,6 +720,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }}
     .summary-chip b {{ color: var(--accent); }}
   </style>
+  <script defer src="/static/plotly.min.js"></script>
 </head>
 <body>
 <script>
