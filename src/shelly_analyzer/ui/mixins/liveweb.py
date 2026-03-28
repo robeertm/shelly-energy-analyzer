@@ -1479,28 +1479,28 @@ class LiveWebMixin:
                     co2_week = _device_co2(week_start_ts, now_ts)
                     co2_month = _device_co2(month_start_ts, now_ts)
 
-                    # Per-device live CO₂ rate (g/h) based on current intensity
+                    # Per-device live CO₂ rate (g/h) from live poller data
                     device_rates = []
                     if current_intensity > 0:
+                        live_snap = {}
+                        try:
+                            store = getattr(self, "_live_state_store", None)
+                            if store is not None:
+                                snap = store.snapshot()
+                                for dk, points in snap.items():
+                                    if points:
+                                        live_snap[dk] = points[-1].get("power_total_w", 0.0)
+                        except Exception:
+                            pass
                         for d in self.cfg.devices:
-                            try:
-                                df_last = self.storage.db.query_hourly(d.key, start_ts=now_ts - 3600, end_ts=now_ts + 3600)
-                                avg_w = 0.0
-                                if df_last is not None and not df_last.empty and "kwh" in df_last.columns:
-                                    kwh_sum = float(pd.to_numeric(df_last["kwh"], errors="coerce").fillna(0.0).clip(lower=0).sum())
-                                    hours = max(1, len(df_last))
-                                    avg_w = kwh_sum / hours * 1000.0
-                                co2_g_h = avg_w * current_intensity / 1000.0
-                                if co2_g_h > 0:
-                                    device_rates.append({
-                                        "key": d.key,
-                                        "name": d.name,
-                                        "watts": round(avg_w, 0),
-                                        "co2_g_h": round(co2_g_h, 1),
-                                    })
-                            except Exception:
-                                pass
-                        device_rates.sort(key=lambda x: x["co2_g_h"], reverse=True)
+                            watts = abs(live_snap.get(d.key, 0.0))
+                            co2_g_h = watts * current_intensity / 1000.0
+                            device_rates.append({
+                                "key": d.key,
+                                "name": d.name,
+                                "watts": round(watts, 0),
+                                "co2_g_h": round(co2_g_h, 1),
+                            })
 
                     # Fuel mix from Co2FetchService
                     fuel_mix = {}
