@@ -103,6 +103,17 @@ CREATE TABLE IF NOT EXISTS co2_fuel_mix (
     mw      REAL    NOT NULL,
     PRIMARY KEY (hour_ts, zone, fuel)
 );
+
+CREATE TABLE IF NOT EXISTS weather_data (
+    hour_ts     INTEGER PRIMARY KEY,
+    temp_c      REAL,
+    humidity_pct REAL,
+    wind_speed_ms REAL,
+    clouds_pct  REAL,
+    pressure_hpa REAL,
+    description TEXT,
+    fetched_at  INTEGER
+);
 """
 
 # Additional columns added in v6.0.0.2 for full Shelly EMData CSV support.
@@ -1100,6 +1111,35 @@ class EnergyDB:
         if gap_start is not None:
             gaps.append((gap_start, end_ts))
         return gaps
+
+    # ── Weather data helpers ────────────────────────────────────────────
+
+    def upsert_weather(self, rows: List[Tuple[int, float, float, float, float, float, str, int]]) -> int:
+        """Insert or replace weather data rows.
+
+        Each row: (hour_ts, temp_c, humidity_pct, wind_speed_ms, clouds_pct, pressure_hpa, description, fetched_at).
+        """
+        if not rows:
+            return 0
+        conn = self._conn()
+        with self._write_lock:
+            with conn:
+                conn.executemany(
+                    "INSERT OR REPLACE INTO weather_data "
+                    "(hour_ts, temp_c, humidity_pct, wind_speed_ms, clouds_pct, pressure_hpa, description, fetched_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    rows,
+                )
+        return len(rows)
+
+    def query_weather(self, start_ts: int, end_ts: int) -> pd.DataFrame:
+        """Return weather data in [start_ts, end_ts)."""
+        conn = self._conn()
+        return pd.read_sql_query(
+            "SELECT * FROM weather_data WHERE hour_ts >= ? AND hour_ts < ? ORDER BY hour_ts",
+            conn,
+            params=(start_ts, end_ts),
+        )
 
     def delete_all_co2_data(self) -> int:
         """Delete all rows from the co2_intensity table. Returns rows deleted."""

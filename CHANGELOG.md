@@ -1,5 +1,19 @@
 # Changelog
 
+## 12.0.0 - 2026-03-28
+### Added
+- **Consumption Forecast** – New 📈 Forecast tab with linear regression + weekday/hourly seasonality. Shows daily consumption prediction with confidence bands, trend analysis (rising/falling/stable), and projected costs for next month and year. Includes weekday and hourly profile charts with color-coded patterns. Available in both desktop app and web dashboard.
+- **Standby Killer Report** – New 🔌 Standby tab that identifies devices with constant base load. Shows annual standby cost and kWh per device, risk classification (high/medium/low), and 24h load profiles. Highlights saving potential with cost breakdown bar chart. Available in desktop and web dashboard.
+- **Weather Correlation** – New 🌡️ Weather tab integrating OpenWeatherMap API. Shows current weather conditions, Pearson correlation (r) between temperature and consumption, heating/cooling degree days (HDD/CDD), and scatter plot with trend line. Helps identify heating/cooling-related consumption patterns.
+- **Energy Flow Diagram (Sankey)** – New ⚡ Energy Flow tab with interactive Sankey diagram. Visualizes energy flows: Grid → House → Devices and PV → Self-consumption / Feed-in. Period selector (today/week/month/year). Uses Plotly.js in web dashboard for interactive Sankey rendering.
+- **ML-enhanced NILM** – Appliance detector now includes a learning engine with k-means clustering on power transitions. Automatically discovers recurring appliance patterns from step changes in power consumption. Clusters are persisted and matched against the built-in appliance database.
+- **Home Assistant MQTT Integration** – New MQTT publisher that sends device metrics to any MQTT broker. Supports Home Assistant auto-discovery (creates sensor entities automatically). Publishes power, voltage, current, energy, frequency, power factor, and CO₂ rate per device. Configurable broker, authentication, TLS, and publish interval.
+- **PV Amortization Calculator** – New section in the ☀️ Solar tab showing investment payback analysis. Displays investment amount, annual savings, payback period, ROI after 20 years, and total CO₂ saved. Includes amortization timeline chart with cumulative savings vs. investment crossover point. Accounts for panel degradation.
+- **Tenant Utility Billing** – New 🏠 Tenants tab for multi-tenant utility billing (Nebenkostenabrechnung). Supports per-tenant device assignment, common area electricity split by person count, pro-rated base fees, move-in/move-out handling, and PDF invoice export. Includes cost comparison bar chart and kWh share pie chart.
+- **New config sections** – Added `forecast`, `weather`, `mqtt`, and `tenant` configuration blocks in config.json with full settings UI in the desktop app.
+- **Weather data storage** – New `weather_data` table in the SQLite database for persisting hourly weather observations.
+- **3 new web dashboard tabs** – Forecast, Standby, and Sankey/Energy Flow tabs with interactive Plotly.js charts and KPI cards.
+
 ## 11.20.4 - 2026-03-28
 ### Fixed
 - **Fuel mix recovery: rate limit + wider window** – The fuel mix recovery fetch was failing silently due to ENTSO-E rate limiting (62s between API calls). Now waits 65s before the recovery request. Also, initial backfill now always covers at least 2 days to ensure yesterday's data (which is reliably available) is included even when today's hasn't been published yet.
