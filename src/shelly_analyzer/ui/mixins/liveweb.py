@@ -1473,10 +1473,12 @@ class LiveWebMixin:
                     _todayc = _nowc.replace(hour=0, minute=0, second=0, microsecond=0)
                     _week_start = _todayc - _tdc(days=_nowc.weekday())
                     _month_start = _todayc.replace(day=1)
+                    _year_start = _todayc.replace(month=1, day=1)
 
                     today_start_ts = int(_todayc.timestamp())
                     week_start_ts = int(_week_start.timestamp())
                     month_start_ts = int(_month_start.timestamp())
+                    year_start_ts = int(_year_start.timestamp())
                     now_ts = int(_nowc.timestamp())
 
                     # 24h intensity data for chart
@@ -1526,6 +1528,7 @@ class LiveWebMixin:
                     co2_today = _device_co2(today_start_ts, now_ts)
                     co2_week = _device_co2(week_start_ts, now_ts)
                     co2_month = _device_co2(month_start_ts, now_ts)
+                    co2_year = _device_co2(year_start_ts, now_ts)
 
                     # Per-device live CO₂ rate (g/h) from live poller data
                     device_rates = []
@@ -1631,6 +1634,7 @@ class LiveWebMixin:
                         "co2_today_kg": round(co2_today, 3),
                         "co2_week_kg": round(co2_week, 3),
                         "co2_month_kg": round(co2_month, 3),
+                        "co2_year_kg": round(co2_year, 3),
                         "tree_days": round(tree_days, 0),
                         "car_km": round(car_km, 0),
                         "hourly": hourly_data,
