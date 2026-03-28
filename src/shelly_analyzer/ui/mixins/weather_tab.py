@@ -30,22 +30,17 @@ class WeatherMixin:
             cb.current(0)
         cb.bind("<<ComboboxSelected>>", lambda e: self._refresh_weather_tab())
 
-        # ── Scrollable content ───────────────────────────────────────────
-        outer = ttk.Frame(frm)
-        outer.pack(fill="both", expand=True)
-        canvas = tk.Canvas(outer, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
-        self._weather_scroll = ttk.Frame(canvas)
-        self._weather_scroll.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        _ww = canvas.create_window((0, 0), window=self._weather_scroll, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(_ww, width=e.width))
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        # ── Content area (fills both directions) ─────────────────────────
+        content = ttk.Frame(frm)
+        content.pack(fill="both", expand=True)
+        content.rowconfigure(0, weight=0)  # weather cards
+        content.rowconfigure(1, weight=0)  # correlation cards
+        content.rowconfigure(2, weight=1)  # charts
+        content.columnconfigure(0, weight=1)
 
         # ── Current weather card ─────────────────────────────────────────
-        weather_cards = ttk.Frame(self._weather_scroll)
-        weather_cards.pack(fill="x", padx=14, pady=(8, 4))
+        weather_cards = ttk.Frame(content)
+        weather_cards.grid(row=0, column=0, sticky="ew", padx=14, pady=(4, 4))
         weather_cards.columnconfigure((0, 1, 2, 3), weight=1)
 
         self._weather_vars = {}
@@ -62,8 +57,8 @@ class WeatherMixin:
             ttk.Label(card, textvariable=v, font=("", 13, "bold")).pack(anchor="center", padx=8, pady=8)
 
         # ── Correlation summary ──────────────────────────────────────────
-        corr_cards = ttk.Frame(self._weather_scroll)
-        corr_cards.pack(fill="x", padx=14, pady=(4, 4))
+        corr_cards = ttk.Frame(content)
+        corr_cards.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 4))
         corr_cards.columnconfigure((0, 1, 2, 3, 4), weight=1)
 
         self._weather_corr_vars = {}
@@ -82,12 +77,19 @@ class WeatherMixin:
 
         # Interpretation
         self._weather_interp_var = tk.StringVar(value="")
-        ttk.Label(self._weather_scroll, textvariable=self._weather_interp_var,
-                  wraplength=900, foreground="gray").pack(anchor="w", padx=14, pady=(2, 4))
+        interp_lbl = ttk.Label(content, textvariable=self._weather_interp_var,
+                  wraplength=900, foreground="gray")
+        interp_lbl.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 0))
+        # Re-grid corr_cards to row 1, interp to after
+        corr_cards.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 0))
+        interp_lbl.grid_forget()
+        # Put interp inside corr_cards
+        ttk.Label(corr_cards, textvariable=self._weather_interp_var,
+                  wraplength=900, foreground="gray").grid(row=1, column=0, columnspan=5, sticky="w", pady=(2, 4))
 
-        # ── Charts ───────────────────────────────────────────────────────
-        chart_lf = ttk.LabelFrame(self._weather_scroll, text=self.t("weather.chart.title"))
-        chart_lf.pack(fill="both", expand=True, padx=14, pady=(4, 12))
+        # ── Charts (fill remaining space) ────────────────────────────────
+        chart_lf = ttk.LabelFrame(content, text=self.t("weather.chart.title"))
+        chart_lf.grid(row=2, column=0, sticky="nsew", padx=14, pady=(4, 12))
 
         self._weather_fig = Figure(figsize=(10, 4), dpi=96)
         self._weather_scatter_ax = self._weather_fig.add_subplot(121)
