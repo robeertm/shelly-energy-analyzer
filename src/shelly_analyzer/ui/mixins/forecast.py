@@ -18,7 +18,6 @@ class ForecastMixin:
         top = ttk.Frame(frm)
         top.pack(fill="x", padx=10, pady=(10, 5))
         ttk.Label(top, text=self.t("forecast.title"), font=("", 14, "bold")).pack(side="left")
-        ttk.Button(top, text=self.t("forecast.refresh"), command=self._refresh_forecast_tab).pack(side="right")
 
         # Summary cards
         cards = ttk.Frame(frm)

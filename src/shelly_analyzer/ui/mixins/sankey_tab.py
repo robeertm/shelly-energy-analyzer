@@ -18,7 +18,6 @@ class SankeyMixin:
         top = ttk.Frame(frm)
         top.pack(fill="x", padx=10, pady=(10, 5))
         ttk.Label(top, text=self.t("sankey.title"), font=("", 14, "bold")).pack(side="left")
-        ttk.Button(top, text=self.t("sankey.refresh"), command=self._refresh_sankey_tab).pack(side="right")
 
         # Period selector
         period_frm = ttk.Frame(frm)

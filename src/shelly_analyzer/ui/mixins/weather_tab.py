@@ -18,7 +18,6 @@ class WeatherMixin:
         top = ttk.Frame(frm)
         top.pack(fill="x", padx=10, pady=(10, 5))
         ttk.Label(top, text=self.t("weather.title"), font=("", 14, "bold")).pack(side="left")
-        ttk.Button(top, text=self.t("weather.refresh"), command=self._refresh_weather_tab).pack(side="right")
 
         # Current weather card
         curr = ttk.LabelFrame(frm, text=f"☀️ {self.t('weather.current')}")
@@ -98,8 +97,30 @@ class WeatherMixin:
         api_key = getattr(weather_cfg, "api_key", "") if weather_cfg else ""
         lat = getattr(weather_cfg, "lat", 0.0) if weather_cfg else 0.0
         lon = getattr(weather_cfg, "lon", 0.0) if weather_cfg else 0.0
+        city = getattr(weather_cfg, "city", "") if weather_cfg else ""
 
-        if not api_key or (lat == 0 and lon == 0):
+        if not api_key:
+            for k in self._weather_vars:
+                self._weather_vars[k].set(self.t("weather.no_data"))
+            return
+
+        # Auto-geocode if lat/lon missing but city is set
+        if (lat == 0 and lon == 0) and city:
+            try:
+                from shelly_analyzer.services.weather import geocode_city
+                result = geocode_city(api_key, city)
+                if result:
+                    lat, lon, _ = result
+                    # Persist the geocoded coordinates
+                    from shelly_analyzer.io.config import WeatherConfig, save_config
+                    import dataclasses
+                    new_weather = dataclasses.replace(weather_cfg, lat=lat, lon=lon)
+                    self.cfg = dataclasses.replace(self.cfg, weather=new_weather)
+                    save_config(self.cfg, self.cfg_path)
+            except Exception:
+                pass
+
+        if lat == 0 and lon == 0:
             for k in self._weather_vars:
                 self._weather_vars[k].set(self.t("weather.no_data"))
             return

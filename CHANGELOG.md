@@ -1,5 +1,13 @@
 # Changelog
 
+## 12.0.1 - 2026-03-28
+### Fixed
+- **Weather: auto-geocode city** – The weather tab now automatically resolves the city name to lat/lon coordinates via the OpenWeatherMap Geocoding API. Previously lat/lon stayed at 0 after entering a city, causing "no data". Geocoding also runs when settings are saved.
+- **Standby: reduced minimum data requirement** – The standby analysis now works with as few as 6 hours of data (previously required 48h). Falls back to raw sample data when hourly aggregation is not yet available.
+- **Forecast: reduced minimum data requirement** – Forecast now works with 3+ days of data (previously 7). Falls back to raw samples when hourly data is missing.
+- **All new tabs: removed Refresh buttons** – Removed manual "Aktualisieren" buttons from Forecast, Standby, Weather, Sankey, and Tenant tabs. Tabs now refresh automatically when selected via tab switch.
+- **Auto-refresh on tab switch** – All new tabs (Forecast, Standby, Weather, Sankey, Tenant) now refresh their content automatically when the user switches to them.
+
 ## 12.0.0 - 2026-03-28
 ### Added
 - **Consumption Forecast** – New 📈 Forecast tab with linear regression + weekday/hourly seasonality. Shows daily consumption prediction with confidence bands, trend analysis (rising/falling/stable), and projected costs for next month and year. Includes weekday and hourly profile charts with color-coded patterns. Available in both desktop app and web dashboard.
