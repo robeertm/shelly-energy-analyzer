@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.0.4 - 2026-03-28
+### Fixed
+- **Web dashboard crash: UTF-8 surrogate encoding error** – Removed UTF-16 surrogate escape sequences (`\ud83d\udfe2`) from the standby tab JavaScript that caused a `'utf-8' codec can't encode characters: surrogates not allowed` error during HTML template gzip compression. The web dashboard now starts correctly.
+
 ## 12.0.3 - 2026-03-28
 ### Fixed
 - **Web nav bar: single row with horizontal scroll** – Bottom navigation now uses flexbox instead of CSS grid, enabling horizontal scrolling when all tabs don't fit on screen. No more two-row wrapping on mobile.
