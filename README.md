@@ -10,8 +10,23 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 
 ## Screenshots
 
-### Desktop App (Live Tab with 3-Phase Details)
-![Desktop Live](docs/screenshots/01_live_desktop.png)
+### Desktop App
+
+| Live (3-Phase) | Costs | Heatmap (kWh) |
+|----------------|-------|---------------|
+| ![Live](docs/screenshots/desktop_10_live.png) | ![Costs](docs/screenshots/desktop_11_costs.png) | ![Heatmap](docs/screenshots/desktop_12_heatmap_kwh.png) |
+
+| Forecast | CO2 Intensity | Energy Flow |
+|----------|--------------|-------------|
+| ![Forecast](docs/screenshots/desktop_19_forecast.png) | ![CO2](docs/screenshots/desktop_17_co2_top.png) | ![Energy Flow](docs/screenshots/desktop_22_energy_flow.png) |
+
+| Compare | Plots (Voltage) | Plots (CO2) |
+|---------|-----------------|-------------|
+| ![Compare](docs/screenshots/desktop_14_compare.png) | ![Voltage](docs/screenshots/desktop_03_plots_voltage.png) | ![CO2 Plot](docs/screenshots/desktop_09_plots_co2.png) |
+
+| Heatmap (CO2) | Weather | Anomalies |
+|---------------|---------|-----------|
+| ![Heatmap CO2](docs/screenshots/desktop_13_heatmap_co2.png) | ![Weather](docs/screenshots/desktop_21_weather.png) | ![Anomalies](docs/screenshots/desktop_15_anomalies.png) |
 
 ### Web Dashboard (Mobile)
 
@@ -26,10 +41,6 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 | Energy Flow | Standby | Export |
 |-------------|---------|--------|
 | ![Energy Flow](docs/screenshots/10_energy_flow.png) | ![Standby](docs/screenshots/09_standby.png) | ![Export](docs/screenshots/11_export.png) |
-
-| Solar | Compare | Anomalies |
-|-------|---------|-----------|
-| ![Solar](docs/screenshots/04_solar.png) | ![Compare](docs/screenshots/05_compare.png) | ![Anomalies](docs/screenshots/07_anomalies.png) |
 
 ---
 
