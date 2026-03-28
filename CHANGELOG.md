@@ -1,6 +1,6 @@
 # Changelog
 
-## 11.19.1 - 2026-03-28
+## 11.19.2 - 2026-03-28
 ### Added
 - **Web CO₂ tab** – New dedicated CO₂ tab in the web live dashboard with:
   - Live grid CO₂ intensity hero card with color-coded value (green/yellow/red)
