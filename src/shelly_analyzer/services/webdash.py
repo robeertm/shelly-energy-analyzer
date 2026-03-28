@@ -775,6 +775,11 @@ _HTML_TEMPLATE = """<!doctype html>
       <div id="cmp-result"></div>
     </div>
 
+    <!-- CO₂ -->
+    <div id="pane-co2" class="pane">
+      <div id="co2-content"><p class="loading-msg">{web_loading}</p></div>
+    </div>
+
     <!-- Anomalies -->
     <div id="pane-anomalies" class="pane">
       <div id="anom-content"><p class="loading-msg">{web_loading}</p></div>
@@ -864,6 +869,10 @@ _HTML_TEMPLATE = """<!doctype html>
     <button class="nav-btn" onclick="switchPane('compare',this)">
       <span class="nav-icon">🔀</span>
       <span class="nav-label">{web_tab_compare}</span>
+    </button>
+    <button class="nav-btn" onclick="switchPane('co2',this)">
+      <span class="nav-icon">🌍</span>
+      <span class="nav-label">{web_tab_co2}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('anomalies',this)">
       <span class="nav-icon">🔍</span>
@@ -955,6 +964,7 @@ function onPaneActivated(name) {{
     if (name === 'costs') loadCosts();
     else if (name === 'heatmap') initHeatmap();
     else if (name === 'solar') initSolar();
+    else if (name === 'co2') loadCo2();
     else if (name === 'compare') initCompare();
     else if (name === 'anomalies') loadAnomalies();
     else if (name === 'export') initExport();
@@ -2019,6 +2029,210 @@ function showHmTooltip(e, text) {{
 }}
 function hideHmTooltip() {{
   document.getElementById('hm-tooltip').style.display = 'none';
+}}
+
+/* ──────────────────────────────────────────────
+   CO₂ TAB
+────────────────────────────────────────────── */
+async function loadCo2() {{
+  const el = document.getElementById('co2-content');
+  el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  try {{
+    const r = await fetch('/api/co2');
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    renderCo2(data, el);
+  }} catch(e) {{
+    el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+  }}
+}}
+
+function _co2Color(val, green, dirty) {{
+  if (val <= green) return '#4caf50';
+  if (val >= dirty) return '#e53935';
+  const ratio = (val - green) / (dirty - green);
+  if (ratio < 0.5) {{
+    const r = Math.round(255 * ratio * 2);
+    return 'rgb(' + r + ',175,80)';
+  }}
+  const g = Math.round(175 * (1 - (ratio - 0.5) * 2));
+  return 'rgb(229,' + g + ',53)';
+}}
+
+function renderCo2(data, el) {{
+  if (!data || !data.enabled) {{
+    el.innerHTML = '<p class="info-msg">' + t('web.co2.not_enabled', 'CO\u2082 tracking is not enabled. Enable it in Settings \u2192 ENTSO-E.') + '</p>';
+    return;
+  }}
+  const green = data.green_threshold || 150;
+  const dirty = data.dirty_threshold || 400;
+  const ci = data.current_intensity || 0;
+  const ciColor = _co2Color(ci, green, dirty);
+  const srcLabel = data.current_source === 'entsoe_cbf' ? 'ENTSO-E + Cross-Border' : (data.current_source === 'entsoe' ? 'ENTSO-E' : data.current_source);
+
+  // ── Live intensity hero card ──
+  let html = '<div class="card" style="text-align:center;padding:16px">';
+  html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">' + t('web.co2.current', 'Current Grid CO\u2082') + '</div>';
+  html += '<div style="font-size:42px;font-weight:700;color:' + ciColor + '">' + ci.toFixed(0) + ' <span style="font-size:16px">g/kWh</span></div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(data.zone || '') + ' \xb7 ' + esc(srcLabel) + '</div>';
+  html += '</div>';
+
+  // ── Summary cards ──
+  html += '<div class="card" style="margin-top:8px"><div class="metric-grid">';
+  html += metricCardHtml(t('web.costs.today', 'Today'), fmt(data.co2_today_kg, 2, 'kg'), 'CO\u2082');
+  html += metricCardHtml(t('web.costs.week', 'Week'), fmt(data.co2_week_kg, 2, 'kg'), 'CO\u2082');
+  html += metricCardHtml(t('web.costs.month', 'Month'), fmt(data.co2_month_kg, 2, 'kg'), 'CO\u2082');
+  html += metricCardHtml(t('web.co2.trees', 'Trees (eq.)'), (data.tree_days||0).toFixed(0) + ' ' + t('web.dash.tree_days', 'tree-days'), '\ud83c\udf33');
+  html += metricCardHtml(t('web.co2.car', 'Car km avoided'), (data.car_km||0).toFixed(0) + ' km', '\ud83d\ude97');
+  html += '</div></div>';
+
+  // ── 24h intensity chart (canvas) ──
+  const hourly = data.hourly || [];
+  if (hourly.length > 0) {{
+    html += '<div class="card" style="margin-top:8px">';
+    html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">' + t('web.co2.chart_title', '24h CO\u2082 Intensity') + '</div>';
+    html += '<canvas id="co2-chart" height="160" style="width:100%"></canvas>';
+
+    // ── Heatmap strip ──
+    html += '<div style="display:flex;gap:1px;margin-top:8px;border-radius:6px;overflow:hidden;height:24px" id="co2-heatmap">';
+    hourly.forEach(function(h) {{
+      const c = _co2Color(h.intensity, green, dirty);
+      html += '<div style="flex:1;background:' + c + '" title="' + esc(h.hour) + ': ' + h.intensity.toFixed(0) + ' g/kWh"></div>';
+    }});
+    html += '</div>';
+    html += '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px"><span>' + esc(hourly[0].hour) + '</span><span>' + esc(hourly[hourly.length-1].hour) + '</span></div>';
+    html += '</div>';
+  }}
+
+  // ── Device CO₂ rates ──
+  const rates = data.device_rates || [];
+  if (rates.length > 0) {{
+    html += '<div class="card" style="margin-top:8px">';
+    html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">' + t('web.co2.device_rates', 'CO\u2082 per Device (live)') + '</div>';
+    html += '<table style="width:100%;font-size:13px;border-collapse:collapse">';
+    html += '<tr style="border-bottom:1px solid var(--border)"><th style="text-align:left;padding:4px">' + t('web.dash.device', 'Device') + '</th><th style="text-align:right;padding:4px">W</th><th style="text-align:right;padding:4px">g CO\u2082/h</th></tr>';
+    rates.forEach(function(r) {{
+      html += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px">' + esc(r.name) + '</td><td style="text-align:right;padding:4px">' + r.watts.toFixed(0) + '</td><td style="text-align:right;padding:4px;font-weight:600">' + r.co2_g_h.toFixed(1) + '</td></tr>';
+    }});
+    html += '</table></div>';
+  }}
+
+  // ── Fuel mix ──
+  const mix = data.fuel_mix || {{}};
+  const mixKeys = Object.keys(mix);
+  if (mixKeys.length > 0) {{
+    html += '<div class="card" style="margin-top:8px">';
+    html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">' + t('web.co2.fuel_mix', 'Generation Mix') + (data.fuel_mix_hour ? ' (' + esc(data.fuel_mix_hour) + ')' : '') + '</div>';
+
+    // Stacked bar
+    html += '<div style="display:flex;border-radius:6px;overflow:hidden;height:20px;margin-bottom:8px">';
+    const fuelColors = {{biomass:'#8bc34a',lignite:'#795548',coal_gas:'#9e9e9e',gas:'#ff9800',hard_coal:'#616161',oil:'#212121',oil_shale:'#424242',peat:'#a1887f',geothermal:'#ff5722',hydro_pumped:'#29b6f6',hydro_run:'#0288d1',hydro_reservoir:'#01579b',marine:'#00bcd4',nuclear:'#7c4dff',other_renewable:'#66bb6a',solar:'#fdd835',waste:'#bdbdbd',wind_offshore:'#26c6da',wind_onshore:'#4dd0e1',other:'#e0e0e0'}};
+    mixKeys.forEach(function(k) {{
+      const m = mix[k];
+      if (m.share_pct > 0.5) {{
+        const bgc = fuelColors[k] || '#999';
+        html += '<div style="flex:' + m.share_pct + ';background:' + bgc + '" title="' + esc(m.name) + ': ' + m.share_pct.toFixed(1) + '%"></div>';
+      }}
+    }});
+    html += '</div>';
+
+    // Table
+    html += '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+    html += '<tr style="border-bottom:1px solid var(--border)"><th style="text-align:left;padding:3px">' + t('web.co2.fuel', 'Fuel') + '</th><th style="text-align:right;padding:3px">MW</th><th style="text-align:right;padding:3px">%</th><th style="text-align:right;padding:3px">g/kWh</th></tr>';
+    mixKeys.forEach(function(k) {{
+      const m = mix[k];
+      html += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px;font-size:11px">' + esc(m.name) + '</td><td style="text-align:right;padding:3px">' + m.mw.toFixed(0) + '</td><td style="text-align:right;padding:3px">' + m.share_pct.toFixed(1) + '</td><td style="text-align:right;padding:3px">' + m.factor.toFixed(0) + '</td></tr>';
+    }});
+    html += '</table></div>';
+  }}
+
+  el.innerHTML = html;
+
+  // ── Draw 24h chart on canvas ──
+  if (hourly.length > 1) {{
+    const canvas = document.getElementById('co2-chart');
+    if (canvas) {{
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+      const W = rect.width, H = rect.height;
+      const pad = {{top: 10, right: 10, bottom: 24, left: 44}};
+      const cW = W - pad.left - pad.right;
+      const cH = H - pad.top - pad.bottom;
+
+      const vals = hourly.map(function(h) {{ return h.intensity; }});
+      const maxV = Math.max(dirty * 1.1, Math.max.apply(null, vals) * 1.1);
+      const minV = 0;
+
+      // Grid lines
+      ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--border') || '#e0e0e0';
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i <= 4; i++) {{
+        const y = pad.top + cH - (cH * i / 4);
+        ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cW, y); ctx.stroke();
+        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText((minV + (maxV - minV) * i / 4).toFixed(0), pad.left - 4, y + 3);
+      }}
+
+      // Threshold lines
+      function drawThreshold(val, color) {{
+        const y = pad.top + cH - (cH * (val - minV) / (maxV - minV));
+        if (y >= pad.top && y <= pad.top + cH) {{
+          ctx.setLineDash([4, 3]);
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cW, y); ctx.stroke();
+          ctx.setLineDash([]);
+        }}
+      }}
+      drawThreshold(green, '#4caf50');
+      drawThreshold(dirty, '#e53935');
+
+      // Area fill + line
+      ctx.beginPath();
+      hourly.forEach(function(h, i) {{
+        const x = pad.left + (cW * i / (hourly.length - 1));
+        const y = pad.top + cH - (cH * (h.intensity - minV) / (maxV - minV));
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }});
+      // Close area
+      const lastX = pad.left + cW;
+      ctx.lineTo(lastX, pad.top + cH);
+      ctx.lineTo(pad.left, pad.top + cH);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(76,175,80,0.12)';
+      ctx.fill();
+
+      // Line with gradient color
+      hourly.forEach(function(h, i) {{
+        if (i === 0) return;
+        const x0 = pad.left + (cW * (i-1) / (hourly.length - 1));
+        const y0 = pad.top + cH - (cH * (hourly[i-1].intensity - minV) / (maxV - minV));
+        const x1 = pad.left + (cW * i / (hourly.length - 1));
+        const y1 = pad.top + cH - (cH * (h.intensity - minV) / (maxV - minV));
+        ctx.strokeStyle = _co2Color((hourly[i-1].intensity + h.intensity) / 2, green, dirty);
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      }});
+
+      // X-axis labels
+      ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      const step = Math.max(1, Math.floor(hourly.length / 6));
+      hourly.forEach(function(h, i) {{
+        if (i % step === 0 || i === hourly.length - 1) {{
+          const x = pad.left + (cW * i / (hourly.length - 1));
+          ctx.fillText(h.hour, x, pad.top + cH + 14);
+        }}
+      }});
+    }}
+  }}
 }}
 
 /* ──────────────────────────────────────────────
@@ -4515,6 +4729,20 @@ class _Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
 
+            if path_only.startswith("/api/co2"):
+                try:
+                    payload = self.dashboard.on_action("co2", {})
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
             if path_only.startswith("/api/compare"):
                 try:
                     parsed = urlparse(self.path)
@@ -4912,6 +5140,7 @@ class LiveWebDashboard:
                 "web_tab_heatmap": _t(self.lang, "web.tab.heatmap"),
                 "web_tab_solar": _t(self.lang, "web.tab.solar"),
                 "web_tab_compare": _t(self.lang, "web.tab.compare"),
+                "web_tab_co2": _t(self.lang, "web.tab.co2"),
                 "web_tab_anomalies": _t(self.lang, "web.tab.anomalies"),
                 "web_tab_export": _t(self.lang, "web.tab.export"),
                 # Export pane

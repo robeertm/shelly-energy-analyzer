@@ -1,5 +1,17 @@
 # Changelog
 
+## 11.19.0 - 2026-03-28
+### Added
+- **Web CO₂ tab** – New dedicated CO₂ tab in the web live dashboard with:
+  - Live grid CO₂ intensity hero card with color-coded value (green/yellow/red)
+  - Summary cards: today, week, month CO₂ in kg + tree-days and car-km equivalents
+  - 24h intensity line chart (canvas) with color-gradient line and threshold markers
+  - 24h heatmap strip with green→red color coding per hour
+  - Per-device live CO₂ rate table (g CO₂/h based on current watts × intensity)
+  - Generation mix stacked bar + detail table with fuel type, MW, share %, and emission factor
+  - Cross-border flow source indicator (ENTSO-E vs ENTSO-E + Cross-Border)
+- **New API endpoint** `/api/co2` – Returns current intensity, 24h hourly data, device rates, fuel mix, and period summaries
+
 ## 11.18.2 - 2026-03-28
 ### Added
 - **Cross-border flow CO₂ adjustment** – CO₂ intensity calculation now optionally accounts for physical electricity imports/exports between bidding zones using ENTSO-E A11 (cross-border flows) and A65 (system total load) data. Imported electricity is weighted with the source zone's CO₂ intensity, exports are subtracted from local generation. No additional API token required.
