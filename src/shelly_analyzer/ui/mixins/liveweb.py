@@ -1454,6 +1454,94 @@ class LiveWebMixin:
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
 
+            if action == "forecast":
+                try:
+                    from shelly_analyzer.services.forecast import compute_forecast
+                    dk = params.get("device_key", [""])[0] if isinstance(params.get("device_key"), list) else params.get("device_key", "")
+                    if not dk and self.cfg.devices:
+                        dk = self.cfg.devices[0].key
+                    dev_name = dk
+                    for d in self.cfg.devices:
+                        if d.key == dk:
+                            dev_name = d.name
+                            break
+                    fc_cfg = getattr(self.cfg, "forecast", None)
+                    price = self.cfg.pricing.unit_price_gross()
+                    r = compute_forecast(
+                        self.storage.db, dk, dev_name,
+                        horizon_days=int(getattr(fc_cfg, "horizon_days", 30)) if fc_cfg else 30,
+                        price_eur_per_kwh=price,
+                        history_days=int(getattr(fc_cfg, "history_days", 90)) if fc_cfg else 90,
+                    )
+                    if r is None:
+                        return {"ok": True, "no_data": True}
+                    return {
+                        "ok": True,
+                        "device_key": r.device_key,
+                        "device_name": r.device_name,
+                        "avg_daily_kwh": r.avg_daily_kwh,
+                        "trend_pct_per_month": r.trend_pct_per_month,
+                        "forecast_next_month_kwh": r.forecast_next_month_kwh,
+                        "forecast_next_month_cost": r.forecast_next_month_cost,
+                        "forecast_year_kwh": r.forecast_year_kwh,
+                        "forecast_year_cost": r.forecast_year_cost,
+                        "history_dates": [str(d) for d in r.history_dates],
+                        "history_kwh": r.history_kwh,
+                        "forecast_dates": [str(d) for d in r.forecast_dates],
+                        "forecast_kwh": r.forecast_kwh,
+                        "forecast_upper": r.forecast_upper,
+                        "forecast_lower": r.forecast_lower,
+                        "weekday_profile": r.weekday_profile,
+                        "hourly_profile": r.hourly_profile,
+                    }
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
+            if action == "standby":
+                try:
+                    from shelly_analyzer.services.standby import generate_standby_report
+                    price = self.cfg.pricing.unit_price_gross()
+                    report = generate_standby_report(self.storage.db, self.cfg.devices, price)
+                    return {
+                        "ok": True,
+                        "total_annual_standby_kwh": report.total_annual_standby_kwh,
+                        "total_annual_standby_cost": report.total_annual_standby_cost,
+                        "analysis_days": report.analysis_days,
+                        "devices": [
+                            {
+                                "device_key": d.device_key,
+                                "device_name": d.device_name,
+                                "base_load_w": d.base_load_w,
+                                "annual_standby_kwh": d.annual_standby_kwh,
+                                "annual_standby_cost": d.annual_standby_cost,
+                                "standby_share_pct": d.standby_share_pct,
+                                "risk": d.risk,
+                                "hourly_profile": d.hourly_profile,
+                            }
+                            for d in report.devices
+                        ],
+                    }
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
+            if action == "sankey":
+                try:
+                    from shelly_analyzer.services.sankey import compute_sankey, sankey_to_plotly_dict
+                    period = params.get("period", ["today"])[0] if isinstance(params.get("period"), list) else params.get("period", "today")
+                    data = compute_sankey(self.storage.db, self.cfg.devices, self.cfg.solar, period)
+                    plotly_data = sankey_to_plotly_dict(data)
+                    return {
+                        "ok": True,
+                        "grid_import_kwh": data.grid_import_kwh,
+                        "pv_production_kwh": data.pv_production_kwh,
+                        "self_consumption_kwh": data.self_consumption_kwh,
+                        "feed_in_kwh": data.feed_in_kwh,
+                        "total_consumption_kwh": data.total_consumption_kwh,
+                        "sankey": plotly_data,
+                    }
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
             if action == "co2":
                 try:
                     from datetime import datetime as _dtc, timedelta as _tdc

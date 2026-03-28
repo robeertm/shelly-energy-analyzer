@@ -14,8 +14,13 @@ from .mixins.compare import CompareMixin
 from .mixins.anomaly import AnomalyMixin
 from .mixins.schedule import ScheduleMixin
 from .mixins.co2 import Co2Mixin
+from .mixins.forecast import ForecastMixin
+from .mixins.standby_tab import StandbyMixin
+from .mixins.weather_tab import WeatherMixin
+from .mixins.sankey_tab import SankeyMixin
+from .mixins.tenant_tab import TenantMixin
 
 
-class App(CoreMixin, tk.Tk, ScalingMixin, PlotsMixin, LiveWebMixin, UpdatesMixin, HeatmapMixin, SolarMixin, CompareMixin, AnomalyMixin, ScheduleMixin, Co2Mixin):
+class App(CoreMixin, tk.Tk, ScalingMixin, PlotsMixin, LiveWebMixin, UpdatesMixin, HeatmapMixin, SolarMixin, CompareMixin, AnomalyMixin, ScheduleMixin, Co2Mixin, ForecastMixin, StandbyMixin, WeatherMixin, SankeyMixin, TenantMixin):
     """Main GUI application class (composed from mixins)."""
     pass

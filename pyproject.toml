@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shelly-energy-analyzer"
-version = "11.20.4"
+version = "12.0.0"
 description = "Shelly EM/3EM Energy Analyzer (GUI + Export)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,6 +23,7 @@ dependencies = [
   "plotly>=5.18",
   "pywebview>=5.0",
   "zeroconf>=0.131",
+  "paho-mqtt>=1.6",
 ]
 
 [project.scripts]

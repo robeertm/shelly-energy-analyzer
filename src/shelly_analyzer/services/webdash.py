@@ -786,6 +786,36 @@ _HTML_TEMPLATE = """<!doctype html>
       <div id="anom-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
 
+    <!-- Forecast -->
+    <div id="pane-forecast" class="pane">
+      <div class="controls-row" id="forecast-controls">
+        <select id="forecast-device" onchange="loadForecast()"></select>
+      </div>
+      <div id="forecast-cards" class="kpi-row"></div>
+      <div id="forecast-chart" style="min-height:300px"></div>
+      <div id="forecast-profiles" style="display:flex;gap:12px;flex-wrap:wrap;padding:8px 12px">
+        <div id="forecast-weekday-chart" style="flex:1;min-width:280px;min-height:200px"></div>
+        <div id="forecast-hourly-chart" style="flex:1;min-width:280px;min-height:200px"></div>
+      </div>
+    </div>
+
+    <!-- Standby -->
+    <div id="pane-standby" class="pane">
+      <div id="standby-cards" class="kpi-row"></div>
+      <div id="standby-table-wrap" style="padding:0 12px;overflow-x:auto"></div>
+      <div id="standby-charts" style="display:flex;gap:12px;flex-wrap:wrap;padding:8px 12px">
+        <div id="standby-bar-chart" style="flex:1;min-width:300px;min-height:250px"></div>
+        <div id="standby-profile-chart" style="flex:1;min-width:300px;min-height:250px"></div>
+      </div>
+    </div>
+
+    <!-- Sankey / Energy Flow -->
+    <div id="pane-sankey" class="pane">
+      <div class="controls-row" id="sankey-periods"></div>
+      <div id="sankey-cards" class="kpi-row"></div>
+      <div id="sankey-chart" style="min-height:400px;padding:8px"></div>
+    </div>
+
     <!-- Export -->
     <div id="pane-export" class="pane">
       <div class="exp-sections">
@@ -879,6 +909,18 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">🔍</span>
       <span class="nav-label">{web_tab_anomalies}</span>
     </button>
+    <button class="nav-btn" onclick="switchPane('forecast',this)">
+      <span class="nav-icon">📈</span>
+      <span class="nav-label">{web_tab_forecast}</span>
+    </button>
+    <button class="nav-btn" onclick="switchPane('standby',this)">
+      <span class="nav-icon">🔌</span>
+      <span class="nav-label">{web_tab_standby}</span>
+    </button>
+    <button class="nav-btn" onclick="switchPane('sankey',this)">
+      <span class="nav-icon">⚡</span>
+      <span class="nav-label">{web_tab_sankey}</span>
+    </button>
     <button class="nav-btn" onclick="switchPane('export',this)">
       <span class="nav-icon">📥</span>
       <span class="nav-label">{web_tab_export}</span>
@@ -969,6 +1011,9 @@ function onPaneActivated(name) {{
     else if (name === 'co2') loadCo2();
     else if (name === 'compare') initCompare();
     else if (name === 'anomalies') loadAnomalies();
+    else if (name === 'forecast') loadForecast();
+    else if (name === 'standby') loadStandby();
+    else if (name === 'sankey') loadSankey();
     else if (name === 'export') initExport();
   }}
 }}
@@ -2731,6 +2776,152 @@ function renderAnomalies(data, el) {{
       '</div></div>';
   }});
   el.innerHTML = html;
+}}
+
+/* ──────────────────────────────────────────────
+   FORECAST TAB
+────────────────────────────────────────────── */
+async function loadForecast() {{
+  const sel = document.getElementById('forecast-device');
+  if (!sel.options.length) {{
+    _devices.forEach(d => {{
+      const o = document.createElement('option');
+      o.value = d[0]; o.textContent = d[1];
+      sel.appendChild(o);
+    }});
+  }}
+  const dk = sel.value;
+  try {{
+    const r = await fetch('/api/forecast?device_key=' + encodeURIComponent(dk));
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    renderForecast(data);
+  }} catch(e) {{
+    document.getElementById('forecast-cards').innerHTML = '<p class="error-msg">' + e.message + '</p>';
+  }}
+}}
+function renderForecast(d) {{
+  const cards = document.getElementById('forecast-cards');
+  cards.innerHTML =
+    kpiCard('📊', t('forecast.avg_daily','Avg daily'), (d.avg_daily_kwh||0).toFixed(1) + ' kWh') +
+    kpiCard('📈', t('forecast.trend','Trend'), d.trend_pct_per_month > 0.5 ? '↗ +' + d.trend_pct_per_month.toFixed(1) + '%' : d.trend_pct_per_month < -0.5 ? '↘ ' + d.trend_pct_per_month.toFixed(1) + '%' : '→ stable') +
+    kpiCard('📅', t('forecast.next_month','Next month'), (d.forecast_next_month_kwh||0).toFixed(0) + ' kWh / ' + (d.forecast_next_month_cost||0).toFixed(0) + ' €') +
+    kpiCard('🗓️', t('forecast.next_year','Next year'), (d.forecast_year_kwh||0).toFixed(0) + ' kWh');
+  // Main chart
+  const chEl = document.getElementById('forecast-chart');
+  const traces = [];
+  if (d.history_dates) traces.push({{ x: d.history_dates, y: d.history_kwh, type: 'bar', name: 'History', marker: {{ color: '#3498db' }} }});
+  if (d.forecast_dates) {{
+    traces.push({{ x: d.forecast_dates, y: d.forecast_kwh, type: 'bar', name: 'Forecast', marker: {{ color: '#e74c3c' }} }});
+    traces.push({{ x: d.forecast_dates, y: d.forecast_upper, type: 'scatter', mode: 'lines', line: {{ dash: 'dot', color: '#e74c3c', width: 1 }}, showlegend: false }});
+    traces.push({{ x: d.forecast_dates, y: d.forecast_lower, type: 'scatter', mode: 'lines', line: {{ dash: 'dot', color: '#e74c3c', width: 1 }}, fill: 'tonexty', fillcolor: 'rgba(231,76,60,0.1)', showlegend: false }});
+  }}
+  if (typeof Plotly !== 'undefined') Plotly.newPlot(chEl, traces, {{ margin: {{ t: 30, b: 40, l: 50, r: 20 }}, barmode: 'group', yaxis: {{ title: 'kWh' }}, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: 'var(--text)' }} }}, {{ responsive: true }});
+  // Weekday profile
+  if (d.weekday_profile) {{
+    const days = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+    const vals = days.map((_,i) => d.weekday_profile[i] || 1.0);
+    const colors = vals.map(v => v > 1.1 ? '#e74c3c' : v < 0.9 ? '#27ae60' : '#3498db');
+    if (typeof Plotly !== 'undefined') Plotly.newPlot('forecast-weekday-chart', [{{ x: days, y: vals, type: 'bar', marker: {{ color: colors }} }}], {{ margin: {{ t: 30, b: 30, l: 40, r: 10 }}, title: 'Weekday Profile', shapes: [{{ type: 'line', y0: 1, y1: 1, x0: -0.5, x1: 6.5, line: {{ dash: 'dash', color: 'gray' }} }}], paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: 'var(--text)' }} }}, {{ responsive: true }});
+  }}
+  // Hourly profile
+  if (d.hourly_profile) {{
+    const hrs = Array.from({{ length: 24 }}, (_, i) => i);
+    const vals = hrs.map(h => d.hourly_profile[h] || 1.0);
+    const colors = vals.map(v => v > 1.3 ? '#e74c3c' : v > 1.1 ? '#f39c12' : v < 0.7 ? '#27ae60' : '#3498db');
+    if (typeof Plotly !== 'undefined') Plotly.newPlot('forecast-hourly-chart', [{{ x: hrs, y: vals, type: 'bar', marker: {{ color: colors }} }}], {{ margin: {{ t: 30, b: 30, l: 40, r: 10 }}, title: 'Hourly Profile', xaxis: {{ title: 'h' }}, shapes: [{{ type: 'line', y0: 1, y1: 1, x0: -0.5, x1: 23.5, line: {{ dash: 'dash', color: 'gray' }} }}], paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: 'var(--text)' }} }}, {{ responsive: true }});
+  }}
+}}
+function kpiCard(icon, label, value) {{
+  return '<div class="kpi-card"><div class="kpi-icon">' + icon + '</div><div class="kpi-label">' + esc(label) + '</div><div class="kpi-value">' + esc(value) + '</div></div>';
+}}
+
+/* ──────────────────────────────────────────────
+   STANDBY TAB
+────────────────────────────────────────────── */
+async function loadStandby() {{
+  try {{
+    const r = await fetch('/api/standby');
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    renderStandby(data);
+  }} catch(e) {{
+    document.getElementById('standby-cards').innerHTML = '<p class="error-msg">' + e.message + '</p>';
+  }}
+}}
+function renderStandby(d) {{
+  const cards = document.getElementById('standby-cards');
+  cards.innerHTML =
+    kpiCard('💰', t('standby.total_annual','Annual standby cost'), (d.total_annual_standby_cost||0).toFixed(0) + ' €') +
+    kpiCard('⚡', t('standby.total_kwh','Annual standby kWh'), (d.total_annual_standby_kwh||0).toFixed(0) + ' kWh');
+  // Table
+  const wrap = document.getElementById('standby-table-wrap');
+  if (!d.devices || !d.devices.length) {{ wrap.innerHTML = '<p class="info-msg">No data</p>'; return; }}
+  let html = '<table class="data-table"><thead><tr><th>Device</th><th>Base load</th><th>kWh/yr</th><th>€/yr</th><th>Share</th><th>Risk</th></tr></thead><tbody>';
+  d.devices.forEach(dev => {{
+    const riskColor = dev.risk === 'high' ? '#e74c3c' : dev.risk === 'medium' ? '#f39c12' : '#27ae60';
+    html += '<tr><td>' + esc(dev.device_name) + '</td><td>' + dev.base_load_w + ' W</td><td>' + dev.annual_standby_kwh + '</td><td>' + dev.annual_standby_cost + '</td><td>' + dev.standby_share_pct + '%</td><td style="color:' + riskColor + ';font-weight:bold">' + dev.risk.toUpperCase() + '</td></tr>';
+  }});
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+  // Bar chart
+  if (typeof Plotly !== 'undefined' && d.devices.length) {{
+    const names = d.devices.map(x => x.device_name);
+    const costs = d.devices.map(x => x.annual_standby_cost);
+    const colors = d.devices.map(x => x.risk === 'high' ? '#e74c3c' : x.risk === 'medium' ? '#f39c12' : '#27ae60');
+    Plotly.newPlot('standby-bar-chart', [{{ y: names, x: costs, type: 'bar', orientation: 'h', marker: {{ color: colors }} }}], {{ margin: {{ t: 30, b: 40, l: 120, r: 20 }}, xaxis: {{ title: '€/year' }}, title: 'Standby Cost by Device', paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: 'var(--text)' }} }}, {{ responsive: true }});
+  }}
+}}
+
+/* ──────────────────────────────────────────────
+   SANKEY / ENERGY FLOW TAB
+────────────────────────────────────────────── */
+let _sankeyPeriod = 'today';
+function initSankeyPeriods() {{
+  const el = document.getElementById('sankey-periods');
+  if (el.children.length) return;
+  ['today','week','month','year'].forEach(p => {{
+    const btn = document.createElement('button');
+    btn.className = 'period-btn' + (p === _sankeyPeriod ? ' active' : '');
+    btn.textContent = p.charAt(0).toUpperCase() + p.slice(1);
+    btn.onclick = () => {{ _sankeyPeriod = p; document.querySelectorAll('#sankey-periods .period-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); loadSankey(); }};
+    el.appendChild(btn);
+  }});
+}}
+async function loadSankey() {{
+  initSankeyPeriods();
+  try {{
+    const r = await fetch('/api/sankey?period=' + _sankeyPeriod);
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    renderSankey(data);
+  }} catch(e) {{
+    document.getElementById('sankey-cards').innerHTML = '<p class="error-msg">' + e.message + '</p>';
+  }}
+}}
+function renderSankey(d) {{
+  const cards = document.getElementById('sankey-cards');
+  cards.innerHTML =
+    kpiCard('🔴', t('sankey.grid_import','Grid'), (d.grid_import_kwh||0).toFixed(2) + ' kWh') +
+    kpiCard('🏠', t('sankey.total','Total'), (d.total_consumption_kwh||0).toFixed(2) + ' kWh') +
+    kpiCard('☀️', 'PV', (d.pv_production_kwh||0).toFixed(2) + ' kWh') +
+    kpiCard('📤', t('sankey.feed_in','Feed-in'), (d.feed_in_kwh||0).toFixed(2) + ' kWh');
+  // Sankey diagram
+  const chEl = document.getElementById('sankey-chart');
+  if (!d.sankey || !d.sankey.node) {{ chEl.innerHTML = '<p class="info-msg">No flow data</p>'; return; }}
+  if (typeof Plotly !== 'undefined') {{
+    Plotly.newPlot(chEl, [{{
+      type: 'sankey',
+      orientation: 'h',
+      node: d.sankey.node,
+      link: d.sankey.link,
+    }}], {{
+      title: 'Energy Flow (kWh)',
+      font: {{ size: 12, color: 'var(--text)' }},
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      margin: {{ t: 40, b: 20, l: 20, r: 20 }},
+    }}, {{ responsive: true }});
+  }}
 }}
 
 /* ──────────────────────────────────────────────
@@ -4857,6 +5048,48 @@ class _Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
 
+            if path_only.startswith("/api/forecast"):
+                try:
+                    payload = self.dashboard.on_action("forecast", dict(qs_params))
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if path_only.startswith("/api/standby"):
+                try:
+                    payload = self.dashboard.on_action("standby", {})
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if path_only.startswith("/api/sankey"):
+                try:
+                    payload = self.dashboard.on_action("sankey", dict(qs_params))
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
             if path_only == "/plots" or path_only.startswith("/plots/"):
                 _ae = self.headers.get("Accept-Encoding", "")
                 _gz = self.dashboard.plots_html_bytes_gz
@@ -5225,6 +5458,9 @@ class LiveWebDashboard:
                 "web_tab_compare": _t(self.lang, "web.tab.compare"),
                 "web_tab_co2": _t(self.lang, "web.tab.co2"),
                 "web_tab_anomalies": _t(self.lang, "web.tab.anomalies"),
+                "web_tab_forecast": _t(self.lang, "tabs.forecast"),
+                "web_tab_standby": _t(self.lang, "tabs.standby"),
+                "web_tab_sankey": _t(self.lang, "tabs.sankey"),
                 "web_tab_export": _t(self.lang, "web.tab.export"),
                 # Export pane
                 "exp_daterange": _t(self.lang, "web.control.export.daterange"),

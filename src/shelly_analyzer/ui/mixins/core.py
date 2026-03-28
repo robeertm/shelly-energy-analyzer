@@ -48,12 +48,16 @@ from shelly_analyzer.io.config import (
     CsvPackConfig,
     DeviceConfig,
     DownloadConfig,
+    ForecastConfig,
+    MqttConfig,
     PricingConfig,
     SolarConfig,
+    TenantConfig,
     TouConfig,
     TouRate,
     UiConfig,
     UpdatesConfig,
+    WeatherConfig,
     AlertRule,
     load_config,
     save_config,
@@ -720,6 +724,11 @@ class CoreMixin:
             self.tab_anomaly = ttk.Frame(self.notebook)
             self.tab_schedule = ttk.Frame(self.notebook)
             self.tab_co2 = ttk.Frame(self.notebook)
+            self.tab_forecast = ttk.Frame(self.notebook)
+            self.tab_standby = ttk.Frame(self.notebook)
+            self.tab_weather = ttk.Frame(self.notebook)
+            self.tab_sankey = ttk.Frame(self.notebook)
+            self.tab_tenant = ttk.Frame(self.notebook)
             self.tab_export = ttk.Frame(self.notebook)
             self.tab_settings = ttk.Frame(self.notebook)
             # Notebook tab labels are translated based on the selected UI language.
@@ -733,6 +742,11 @@ class CoreMixin:
             self.notebook.add(self.tab_anomaly, text=self.t("tabs.anomaly"))
             self.notebook.add(self.tab_schedule, text=self.t("tabs.schedule"))
             self.notebook.add(self.tab_co2, text=self.t("tabs.co2"))
+            self.notebook.add(self.tab_forecast, text=self.t("tabs.forecast"))
+            self.notebook.add(self.tab_standby, text=self.t("tabs.standby"))
+            self.notebook.add(self.tab_weather, text=self.t("tabs.weather"))
+            self.notebook.add(self.tab_sankey, text=self.t("tabs.sankey"))
+            self.notebook.add(self.tab_tenant, text=self.t("tabs.tenant"))
             self.notebook.add(self.tab_export, text=self.t("tabs.export"))
             self.notebook.add(self.tab_settings, text=self.t("tabs.settings"))
 
@@ -743,7 +757,7 @@ class CoreMixin:
                 self.notebook.insert(0, self.tab_setup, text=self.t("tabs.setup"))
 
                 # Put placeholders into disabled tabs (avoid CSV warnings on first run)
-                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_compare, self.tab_anomaly, self.tab_schedule, self.tab_co2, self.tab_export):
+                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_compare, self.tab_anomaly, self.tab_schedule, self.tab_co2, self.tab_forecast, self.tab_standby, self.tab_weather, self.tab_sankey, self.tab_tenant, self.tab_export):
                     try:
                         ttk.Label(
                             tab,
@@ -777,6 +791,11 @@ class CoreMixin:
                 self._build_anomaly_tab()
                 self._build_schedule_tab()
                 self._build_co2_tab()
+                self._build_forecast_tab()
+                self._build_standby_tab()
+                self._build_weather_tab()
+                self._build_sankey_tab()
+                self._build_tenant_tab()
                 self._build_export_tab()
                 self._build_settings_tab()
                 self._schedule_init()
@@ -6294,6 +6313,82 @@ class CoreMixin:
                 command=_co2_test_connection,
             ).grid(row=6, column=2, columnspan=2, padx=8, pady=(4, 8), sticky="w")
 
+            # ── Solar amortization settings ────────────────────────────────────
+            ttk.Label(solar_box, text=self.t('settings.solar.investment')).grid(row=6, column=0, padx=8, pady=4, sticky="w")
+            self._solar_invest_var = tk.StringVar(value=str(getattr(_solar_cfg, "investment_eur", 0.0)))
+            ttk.Entry(solar_box, textvariable=self._solar_invest_var, width=10).grid(row=6, column=1, padx=8, pady=4, sticky="w")
+
+            ttk.Label(solar_box, text=self.t('settings.solar.install_year')).grid(row=7, column=0, padx=8, pady=4, sticky="w")
+            self._solar_install_year_var = tk.StringVar(value=str(getattr(_solar_cfg, "installation_year", 0)))
+            ttk.Entry(solar_box, textvariable=self._solar_install_year_var, width=10).grid(row=7, column=1, padx=8, pady=4, sticky="w")
+
+            ttk.Label(solar_box, text=self.t('settings.solar.degradation')).grid(row=8, column=0, padx=8, pady=(4, 8), sticky="w")
+            self._solar_degrad_var = tk.StringVar(value=str(getattr(_solar_cfg, "degradation_pct", 0.5)))
+            ttk.Entry(solar_box, textvariable=self._solar_degrad_var, width=10).grid(row=8, column=1, padx=8, pady=(4, 8), sticky="w")
+
+            # ── Forecast settings ─────────────────────────────────────────────
+            _fc_cfg = getattr(self.cfg, "forecast", None)
+            fc_box = ttk.LabelFrame(tab_main_sf, text=self.t("settings.forecast.title"))
+            fc_box.pack(fill="x", pady=(0, 10))
+            self._fc_enabled_var = tk.BooleanVar(value=bool(getattr(_fc_cfg, "enabled", False)))
+            ttk.Checkbutton(fc_box, text=self.t("settings.forecast.enabled"), variable=self._fc_enabled_var).grid(row=0, column=0, columnspan=2, padx=8, pady=6, sticky="w")
+            ttk.Label(fc_box, text=self.t("settings.forecast.horizon")).grid(row=1, column=0, padx=8, pady=4, sticky="w")
+            self._fc_horizon_var = tk.IntVar(value=int(getattr(_fc_cfg, "horizon_days", 30)))
+            ttk.Entry(fc_box, textvariable=self._fc_horizon_var, width=8).grid(row=1, column=1, padx=8, pady=4, sticky="w")
+            ttk.Label(fc_box, text=self.t("settings.forecast.history")).grid(row=2, column=0, padx=8, pady=(4, 8), sticky="w")
+            self._fc_history_var = tk.IntVar(value=int(getattr(_fc_cfg, "history_days", 90)))
+            ttk.Entry(fc_box, textvariable=self._fc_history_var, width=8).grid(row=2, column=1, padx=8, pady=(4, 8), sticky="w")
+
+            # ── Weather settings ──────────────────────────────────────────────
+            _wt_cfg = getattr(self.cfg, "weather", None)
+            wt_box = ttk.LabelFrame(tab_main_sf, text=self.t("settings.weather.title"))
+            wt_box.pack(fill="x", pady=(0, 10))
+            self._wt_enabled_var = tk.BooleanVar(value=bool(getattr(_wt_cfg, "enabled", False)))
+            ttk.Checkbutton(wt_box, text=self.t("settings.weather.enabled"), variable=self._wt_enabled_var).grid(row=0, column=0, columnspan=2, padx=8, pady=6, sticky="w")
+            ttk.Label(wt_box, text=self.t("settings.weather.api_key")).grid(row=1, column=0, padx=8, pady=4, sticky="w")
+            self._wt_api_key_var = tk.StringVar(value=str(getattr(_wt_cfg, "api_key", "") or ""))
+            ttk.Entry(wt_box, textvariable=self._wt_api_key_var, width=40, show="*").grid(row=1, column=1, padx=8, pady=4, sticky="w")
+            ttk.Label(wt_box, text=self.t("settings.weather.city")).grid(row=2, column=0, padx=8, pady=4, sticky="w")
+            self._wt_city_var = tk.StringVar(value=str(getattr(_wt_cfg, "city", "") or ""))
+            ttk.Entry(wt_box, textvariable=self._wt_city_var, width=30).grid(row=2, column=1, padx=8, pady=4, sticky="w")
+            ttk.Label(wt_box, text=self.t("settings.weather.interval")).grid(row=3, column=0, padx=8, pady=(4, 8), sticky="w")
+            self._wt_interval_var = tk.IntVar(value=int(getattr(_wt_cfg, "fetch_interval_minutes", 30)))
+            ttk.Entry(wt_box, textvariable=self._wt_interval_var, width=8).grid(row=3, column=1, padx=8, pady=(4, 8), sticky="w")
+
+            # ── MQTT settings ─────────────────────────────────────────────────
+            _mqtt_cfg = getattr(self.cfg, "mqtt", None)
+            mqtt_box = ttk.LabelFrame(tab_main_sf, text=self.t("settings.mqtt.title"))
+            mqtt_box.pack(fill="x", pady=(0, 10))
+            self._mqtt_enabled_var = tk.BooleanVar(value=bool(getattr(_mqtt_cfg, "enabled", False)))
+            ttk.Checkbutton(mqtt_box, text=self.t("settings.mqtt.enabled"), variable=self._mqtt_enabled_var).grid(row=0, column=0, columnspan=2, padx=8, pady=6, sticky="w")
+            ttk.Label(mqtt_box, text=self.t("settings.mqtt.broker")).grid(row=1, column=0, padx=8, pady=4, sticky="w")
+            self._mqtt_broker_var = tk.StringVar(value=str(getattr(_mqtt_cfg, "broker", "localhost") or "localhost"))
+            ttk.Entry(mqtt_box, textvariable=self._mqtt_broker_var, width=30).grid(row=1, column=1, padx=8, pady=4, sticky="w")
+            ttk.Label(mqtt_box, text=self.t("settings.mqtt.port")).grid(row=1, column=2, padx=8, pady=4, sticky="w")
+            self._mqtt_port_var = tk.IntVar(value=int(getattr(_mqtt_cfg, "port", 1883)))
+            ttk.Entry(mqtt_box, textvariable=self._mqtt_port_var, width=8).grid(row=1, column=3, padx=8, pady=4, sticky="w")
+            ttk.Label(mqtt_box, text=self.t("settings.mqtt.username")).grid(row=2, column=0, padx=8, pady=4, sticky="w")
+            self._mqtt_user_var = tk.StringVar(value=str(getattr(_mqtt_cfg, "username", "") or ""))
+            ttk.Entry(mqtt_box, textvariable=self._mqtt_user_var, width=20).grid(row=2, column=1, padx=8, pady=4, sticky="w")
+            ttk.Label(mqtt_box, text=self.t("settings.mqtt.password")).grid(row=2, column=2, padx=8, pady=4, sticky="w")
+            self._mqtt_pass_var = tk.StringVar(value=str(getattr(_mqtt_cfg, "password", "") or ""))
+            ttk.Entry(mqtt_box, textvariable=self._mqtt_pass_var, width=20, show="*").grid(row=2, column=3, padx=8, pady=4, sticky="w")
+            ttk.Label(mqtt_box, text=self.t("settings.mqtt.topic")).grid(row=3, column=0, padx=8, pady=4, sticky="w")
+            self._mqtt_topic_var = tk.StringVar(value=str(getattr(_mqtt_cfg, "topic_prefix", "shelly_analyzer") or "shelly_analyzer"))
+            ttk.Entry(mqtt_box, textvariable=self._mqtt_topic_var, width=30).grid(row=3, column=1, padx=8, pady=4, sticky="w")
+            self._mqtt_ha_var = tk.BooleanVar(value=bool(getattr(_mqtt_cfg, "ha_discovery", True)))
+            ttk.Checkbutton(mqtt_box, text=self.t("settings.mqtt.ha_discovery"), variable=self._mqtt_ha_var).grid(row=4, column=0, columnspan=2, padx=8, pady=4, sticky="w")
+            self._mqtt_tls_var = tk.BooleanVar(value=bool(getattr(_mqtt_cfg, "use_tls", False)))
+            ttk.Checkbutton(mqtt_box, text=self.t("settings.mqtt.tls"), variable=self._mqtt_tls_var).grid(row=4, column=2, columnspan=2, padx=8, pady=(4, 8), sticky="w")
+
+            # ── Tenant settings ───────────────────────────────────────────────
+            _tn_cfg = getattr(self.cfg, "tenant", None)
+            tn_box = ttk.LabelFrame(tab_main_sf, text=self.t("settings.tenant.title"))
+            tn_box.pack(fill="x", pady=(0, 10))
+            self._tn_enabled_var = tk.BooleanVar(value=bool(getattr(_tn_cfg, "enabled", False)))
+            ttk.Checkbutton(tn_box, text=self.t("settings.tenant.enabled"), variable=self._tn_enabled_var).grid(row=0, column=0, columnspan=2, padx=8, pady=6, sticky="w")
+            ttk.Label(tn_box, text="Mieter werden über config.json konfiguriert.", foreground="gray").grid(row=1, column=0, columnspan=4, padx=8, pady=(0, 8), sticky="w")
+
             live_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.live.title'))
             live_box.pack(fill="x", pady=(0, 10))
             self.set_live_poll_var = tk.DoubleVar(value=float(self.cfg.ui.live_poll_seconds))
@@ -7349,6 +7444,9 @@ class CoreMixin:
                     kw_peak=_parse_solar_float("_solar_kwp_var", 0.0),
                     battery_kwh=_parse_solar_float("_solar_battery_var", 0.0),
                     co2_production_kg_per_kwp=_parse_solar_float("_solar_co2_prod_var", 1000.0),
+                    investment_eur=_parse_solar_float("_solar_invest_var", 0.0),
+                    installation_year=int(_parse_solar_float("_solar_install_year_var", 0)),
+                    degradation_pct=_parse_solar_float("_solar_degrad_var", 0.5),
                 )
             except Exception:
                 solar = getattr(self.cfg, "solar", SolarConfig())
@@ -7378,6 +7476,59 @@ class CoreMixin:
             except Exception:
                 co2 = getattr(self.cfg, "co2", Co2Config())
 
+            # Forecast config
+            try:
+                from shelly_analyzer.io.config import ForecastConfig
+                forecast = ForecastConfig(
+                    enabled=bool(getattr(self, "_fc_enabled_var", tk.BooleanVar(value=False)).get()),
+                    horizon_days=int(getattr(self, "_fc_horizon_var", tk.IntVar(value=30)).get() or 30),
+                    history_days=int(getattr(self, "_fc_history_var", tk.IntVar(value=90)).get() or 90),
+                )
+            except Exception:
+                forecast = getattr(self.cfg, "forecast", ForecastConfig())
+
+            # Weather config
+            try:
+                from shelly_analyzer.io.config import WeatherConfig
+                weather = WeatherConfig(
+                    enabled=bool(getattr(self, "_wt_enabled_var", tk.BooleanVar(value=False)).get()),
+                    api_key=str(getattr(self, "_wt_api_key_var", tk.StringVar()).get() or ""),
+                    city=str(getattr(self, "_wt_city_var", tk.StringVar()).get() or ""),
+                    lat=getattr(self.cfg.weather, "lat", 0.0) if hasattr(self.cfg, "weather") else 0.0,
+                    lon=getattr(self.cfg.weather, "lon", 0.0) if hasattr(self.cfg, "weather") else 0.0,
+                    fetch_interval_minutes=int(getattr(self, "_wt_interval_var", tk.IntVar(value=30)).get() or 30),
+                )
+            except Exception:
+                weather = getattr(self.cfg, "weather", WeatherConfig())
+
+            # MQTT config
+            try:
+                from shelly_analyzer.io.config import MqttConfig
+                mqtt_cfg = MqttConfig(
+                    enabled=bool(getattr(self, "_mqtt_enabled_var", tk.BooleanVar(value=False)).get()),
+                    broker=str(getattr(self, "_mqtt_broker_var", tk.StringVar(value="localhost")).get() or "localhost"),
+                    port=int(getattr(self, "_mqtt_port_var", tk.IntVar(value=1883)).get() or 1883),
+                    username=str(getattr(self, "_mqtt_user_var", tk.StringVar()).get() or ""),
+                    password=str(getattr(self, "_mqtt_pass_var", tk.StringVar()).get() or ""),
+                    topic_prefix=str(getattr(self, "_mqtt_topic_var", tk.StringVar(value="shelly_analyzer")).get() or "shelly_analyzer"),
+                    ha_discovery=bool(getattr(self, "_mqtt_ha_var", tk.BooleanVar(value=True)).get()),
+                    use_tls=bool(getattr(self, "_mqtt_tls_var", tk.BooleanVar(value=False)).get()),
+                )
+            except Exception:
+                mqtt_cfg = getattr(self.cfg, "mqtt", MqttConfig())
+
+            # Tenant config (preserved from config.json)
+            try:
+                from shelly_analyzer.io.config import TenantConfig
+                tenant = TenantConfig(
+                    enabled=bool(getattr(self, "_tn_enabled_var", tk.BooleanVar(value=False)).get()),
+                    tenants=list(getattr(self.cfg.tenant, "tenants", []) or []),
+                    common_device_keys=list(getattr(self.cfg.tenant, "common_device_keys", []) or []),
+                    billing_period_months=int(getattr(self.cfg.tenant, "billing_period_months", 12)),
+                )
+            except Exception:
+                tenant = getattr(self.cfg, "tenant", TenantConfig())
+
             self.cfg = AppConfig(
                 version=__version__,
                 devices=devs,
@@ -7391,6 +7542,10 @@ class CoreMixin:
                 solar=solar,
                 tou=tou,
                 co2=co2,
+                forecast=forecast,
+                weather=weather,
+                mqtt=mqtt_cfg,
+                tenant=tenant,
             )
             save_config(self.cfg, self.cfg_path)
 
@@ -12688,7 +12843,7 @@ class CoreMixin:
 
             # Enable tabs
             try:
-                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_compare, self.tab_anomaly, self.tab_schedule, self.tab_co2, self.tab_export):
+                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_compare, self.tab_anomaly, self.tab_schedule, self.tab_co2, self.tab_forecast, self.tab_standby, self.tab_weather, self.tab_sankey, self.tab_tenant, self.tab_export):
                     try:
                         self.notebook.tab(tab, state="normal")
                     except Exception:
