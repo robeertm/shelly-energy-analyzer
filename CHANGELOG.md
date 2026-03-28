@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.0.8 - 2026-03-28
+### Fixed
+- **Web dashboard: Plotly.js now loaded on main page** – Plotly.js was only included on the `/plots` sub-page but not on the main dashboard HTML. All chart tabs (Forecast, Standby, Sankey) showed no plots because `typeof Plotly === 'undefined'`. Added `<script defer src="/static/plotly.min.js">` to the main HTML template.
+
 ## 12.0.7 - 2026-03-28
 ### Fixed
 - **Web forecast: weekday + hourly profile charts now render** – The profile data had integer keys in Python (`{0: 1.05}`) which became string keys in JSON (`{"0": 1.05}`). JS now accesses both `String(i)` and `i` to handle both formats. API also explicitly converts keys to strings for consistency.
