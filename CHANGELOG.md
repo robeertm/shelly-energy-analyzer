@@ -1,5 +1,14 @@
 # Changelog
 
+## 12.0.3 - 2026-03-28
+### Fixed
+- **Web nav bar: single row with horizontal scroll** – Bottom navigation now uses flexbox instead of CSS grid, enabling horizontal scrolling when all tabs don't fit on screen. No more two-row wrapping on mobile.
+- **Web Forecast/Standby/Sankey: proper card design** – All new web tabs now use the same `metricCardHtml()` + `.card` + `.metric-grid` CSS patterns as Costs and Solar tabs. Cards have proper borders, rounded corners, accent colors, and responsive grid layout.
+- **Web Forecast: Plotly charts** – Forecast tab now renders proper Plotly bar charts for history + prediction with confidence bands, plus weekday and hourly profile charts with color-coded bars.
+- **Web Standby: device cards + charts** – Standby tab now shows per-device cards with risk badges, horizontal bar chart, and 24h load profile with base-load line.
+- **Web Sankey: Plotly Sankey diagram** – Energy flow tab now renders an interactive Plotly Sankey diagram instead of broken plain text. Period buttons use proper `btn btn-outline btn-sm` styling.
+- **Tenant settings: Shelly device checkboxes** – Tenants can now be assigned devices via checkboxes showing all configured Shelly devices by name. Devices already assigned to another tenant are disabled/grayed out. Each tenant row is a labeled frame with name, unit, person count, and device assignment. Add/remove tenants via buttons.
+
 ## 12.0.2 - 2026-03-28
 ### Fixed
 - **Web Forecast tab** – Fixed broken API endpoint (undefined `qs_params` variable) and device selector (referenced `_devices` instead of `DEVICES`). Forecast tab now loads and renders correctly in the web dashboard.
