@@ -1405,6 +1405,54 @@ class LiveWebMixin:
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
 
+            if action == "co2_live":
+                try:
+                    co2_cfg = getattr(self.cfg, "co2", None)
+                    if not co2_cfg or not getattr(co2_cfg, "enabled", False):
+                        return {"ok": True, "enabled": False}
+                    zone = str(getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU")
+                    green_thr = float(getattr(co2_cfg, "green_threshold_g_per_kwh", 150.0))
+                    dirty_thr = float(getattr(co2_cfg, "dirty_threshold_g_per_kwh", 400.0))
+
+                    now_ts = int(time.time())
+                    hour_ts = (now_ts // 3600) * 3600
+                    df_now = self.storage.db.query_co2_intensity(zone, hour_ts, hour_ts + 3600)
+                    ci = 0.0
+                    if df_now is not None and not df_now.empty:
+                        ci = float(df_now.iloc[-1].get("intensity_g_per_kwh", 0))
+
+                    device_rates = []
+                    if ci > 0:
+                        live_snap = {}
+                        try:
+                            store = getattr(self, "_live_state_store", None)
+                            if store is not None:
+                                snap = store.snapshot()
+                                for dk, points in snap.items():
+                                    if points:
+                                        live_snap[dk] = points[-1].get("power_total_w", 0.0)
+                        except Exception:
+                            pass
+                        for d in self.cfg.devices:
+                            watts = abs(live_snap.get(d.key, 0.0))
+                            co2_g_h = watts * ci / 1000.0
+                            device_rates.append({
+                                "key": d.key,
+                                "name": d.name,
+                                "watts": round(watts, 0),
+                                "co2_g_h": round(co2_g_h, 1),
+                            })
+
+                    return {
+                        "ok": True,
+                        "current_intensity": round(ci, 1),
+                        "green_threshold": green_thr,
+                        "dirty_threshold": dirty_thr,
+                        "device_rates": device_rates,
+                    }
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
             if action == "co2":
                 try:
                     from datetime import datetime as _dtc, timedelta as _tdc
