@@ -1175,3 +1175,39 @@ class Co2FetchService:
         else:
             self._svc_log("CO₂ Backfill abgeschlossen")
         self._last_fetch_ts = time.time()
+
+        # ── Fuel mix recovery ────────────────────────────────────────────
+        # If we still have no fuel mix (e.g. first run after upgrade, or
+        # today's data not yet available), try fetching generation data
+        # for the previous 24–48h where data is more likely available.
+        if not self._latest_mix and not self._stop_event.is_set():
+            try:
+                self._svc_log("Kraftwerksmix: Lade letzte verfügbare Daten...")
+                recovery_end = ((now_ts // 3600)) * 3600
+                recovery_start = recovery_end - 48 * 3600
+                recovery_rows = client.fetch_intensity(recovery_start, recovery_end)
+                raw_mix = client.last_mix
+                if raw_mix:
+                    all_hours = {h for fh in raw_mix.values() for h in fh}
+                    if all_hours:
+                        latest_h = max(all_hours)
+                        hour_mix = {
+                            fuel: fh[latest_h]
+                            for fuel, fh in raw_mix.items()
+                            if fh.get(latest_h, 0.0) > 0
+                        }
+                        if hour_mix:
+                            self._latest_mix_hour = latest_h
+                            self._latest_mix = hour_mix
+                            self._db.upsert_fuel_mix(latest_h, zone, hour_mix)
+                            total_mw = sum(hour_mix.values())
+                            lh_str = datetime.fromtimestamp(latest_h, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                            self._svc_log(f"Kraftwerksmix geladen: {lh_str}, {total_mw:.0f} MW")
+                            # Also store the intensity data we got
+                            if recovery_rows:
+                                self._db.upsert_co2_intensity(recovery_rows)
+                if not self._latest_mix:
+                    self._svc_log("Kraftwerksmix: Keine Daten verfügbar")
+            except Exception as exc:
+                self._svc_log(f"Kraftwerksmix Recovery fehlgeschlagen: {exc}")
+                logger.warning("Fuel mix recovery failed: %s", exc)
