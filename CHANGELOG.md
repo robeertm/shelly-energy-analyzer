@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.19.7 - 2026-03-28
+### Removed
+- **Heatmap: € filter removed** – Removed the Euro/cost filter option from the heatmap in both the desktop app and the web live dashboard. Only kWh and g CO₂ filters remain.
+
 ## 11.19.6 - 2026-03-28
 ### Added
 - **Web CO₂: yearly summary card** – The web CO₂ tab now shows a "Year" summary card alongside today/week/month, displaying total CO₂ in kg since January 1st with tree-days and car-km equivalents.

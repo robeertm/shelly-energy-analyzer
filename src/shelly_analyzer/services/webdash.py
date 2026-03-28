@@ -754,7 +754,6 @@ _HTML_TEMPLATE = """<!doctype html>
         <select id="hm-device"></select>
         <select id="hm-unit">
           <option value="kWh">kWh</option>
-          <option value="eur">€</option>
           <option value="co2">g CO₂</option>
         </select>
         <select id="hm-year"></select>
