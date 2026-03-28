@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.1.1 - 2026-03-28
+### Fixed
+- **Desktop plots scale to monitor size** – All new tabs (Forecast, Standby, Weather, Sankey, Tenant) now use `grid` layout with `sticky="nsew"` and `weight=1` instead of scrollable frames. Charts fill the available space vertically and horizontally, matching the Heatmap tab behavior. Resizing the window or using a larger monitor scales all plots proportionally.
+
 ## 12.1.0 - 2026-03-28
 ### Changed
 - **Web charts: Canvas instead of Plotly** – Replaced all Plotly.js charts in Forecast, Standby, and Sankey tabs with lightweight HTML5 Canvas bar charts matching the CO₂ tab style. No more heavy Plotly library loading, no zoom/pan overhead. Charts render instantly with theme-aware colors, grid lines, value labels, and threshold markers. Removed Plotly.js script tag from main dashboard page.

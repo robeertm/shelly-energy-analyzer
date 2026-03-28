@@ -20,22 +20,17 @@ class TenantMixin:
         ttk.Label(top, text=self.t("tenant.title"), font=("", 14, "bold")).pack(side="left")
         ttk.Button(top, text=self.t("tenant.export_pdf"), command=self._tenant_export_pdf).pack(side="right", padx=5)
 
-        # ── Scrollable content ───────────────────────────────────────────
-        outer = ttk.Frame(frm)
-        outer.pack(fill="both", expand=True)
-        canvas = tk.Canvas(outer, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
-        self._tenant_scroll = ttk.Frame(canvas)
-        self._tenant_scroll.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        _tw = canvas.create_window((0, 0), window=self._tenant_scroll, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(_tw, width=e.width))
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        # ── Content area (fills both directions) ─────────────────────────
+        content = ttk.Frame(frm)
+        content.pack(fill="both", expand=True)
+        content.rowconfigure(0, weight=0)  # cards
+        content.rowconfigure(1, weight=0)  # table
+        content.rowconfigure(2, weight=1)  # charts
+        content.columnconfigure(0, weight=1)
 
         # ── Summary cards ────────────────────────────────────────────────
-        cards = ttk.Frame(self._tenant_scroll)
-        cards.pack(fill="x", padx=14, pady=(8, 4))
+        cards = ttk.Frame(content)
+        cards.grid(row=0, column=0, sticky="ew", padx=14, pady=(4, 4))
         cards.columnconfigure((0, 1, 2), weight=1)
 
         self._tenant_total_kwh_var = tk.StringVar(value="–")
@@ -52,8 +47,8 @@ class TenantMixin:
             ttk.Label(card, textvariable=var, font=("", 13, "bold")).pack(anchor="center", padx=8, pady=8)
 
         # ── Table ────────────────────────────────────────────────────────
-        table_lf = ttk.LabelFrame(self._tenant_scroll, text=self.t("tenant.col.tenant"))
-        table_lf.pack(fill="x", padx=14, pady=(4, 4))
+        table_lf = ttk.LabelFrame(content, text=self.t("tenant.col.tenant"))
+        table_lf.grid(row=1, column=0, sticky="ew", padx=14, pady=(4, 4))
 
         cols = ("tenant", "unit", "kwh", "cost_net", "vat", "cost_gross", "persons")
         self._tenant_tree = ttk.Treeview(table_lf, columns=cols, show="headings", height=6)
@@ -74,9 +69,9 @@ class TenantMixin:
         self._tenant_tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
-        # ── Charts ───────────────────────────────────────────────────────
-        chart_lf = ttk.LabelFrame(self._tenant_scroll, text=self.t("tenant.total_cost"))
-        chart_lf.pack(fill="both", expand=True, padx=14, pady=(4, 12))
+        # ── Charts (fill remaining space) ────────────────────────────────
+        chart_lf = ttk.LabelFrame(content, text=self.t("tenant.total_cost"))
+        chart_lf.grid(row=2, column=0, sticky="nsew", padx=14, pady=(4, 12))
 
         self._tenant_fig = Figure(figsize=(10, 3.5), dpi=96)
         self._tenant_bar_ax = self._tenant_fig.add_subplot(121)
