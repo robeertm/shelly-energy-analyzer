@@ -1,5 +1,14 @@
 # Changelog
 
+## 12.1.0 - 2026-03-28
+### Changed
+- **Web charts: Canvas instead of Plotly** – Replaced all Plotly.js charts in Forecast, Standby, and Sankey tabs with lightweight HTML5 Canvas bar charts matching the CO₂ tab style. No more heavy Plotly library loading, no zoom/pan overhead. Charts render instantly with theme-aware colors, grid lines, value labels, and threshold markers. Removed Plotly.js script tag from main dashboard page.
+
+### Fixed
+- **Forecast chart** – Now shows history (blue) + forecast (red) bars with date labels, plus weekday and hourly profile bar charts with color-coding (red=high, green=low, blue=normal).
+- **Standby chart** – Cost-per-device bar chart with risk colors + 24h load profile with standby threshold line. Charts render inside `.card` containers matching dashboard design.
+- **Sankey/Energy Flow** – Replaced Plotly Sankey with simple device consumption bar chart. Shows per-device kWh breakdown with colors matching the flow diagram.
+
 ## 12.0.8 - 2026-03-28
 ### Fixed
 - **Web dashboard: Plotly.js now loaded on main page** – Plotly.js was only included on the `/plots` sub-page but not on the main dashboard HTML. All chart tabs (Forecast, Standby, Sankey) showed no plots because `typeof Plotly === 'undefined'`. Added `<script defer src="/static/plotly.min.js">` to the main HTML template.
