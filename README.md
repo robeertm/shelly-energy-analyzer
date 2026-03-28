@@ -8,6 +8,22 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 
 ---
 
+## Screenshots (Web Dashboard)
+
+| Live | Costs | Heatmap |
+|------|-------|---------|
+| ![Live](docs/screenshots/01_live.png) | ![Costs](docs/screenshots/02_costs.png) | ![Heatmap](docs/screenshots/03_heatmap.png) |
+
+| CO2 | Forecast | Energy Flow |
+|-----|----------|-------------|
+| ![CO2](docs/screenshots/06_co2.png) | ![Forecast](docs/screenshots/08_forecast.png) | ![Energy Flow](docs/screenshots/10_energy_flow.png) |
+
+| Solar | Compare | Export |
+|-------|---------|--------|
+| ![Solar](docs/screenshots/04_solar.png) | ![Compare](docs/screenshots/05_compare.png) | ![Export](docs/screenshots/11_export.png) |
+
+---
+
 ## Key Features
 
 ### 📊 Live Monitoring
