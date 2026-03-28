@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.2.1 - 2026-03-28
+### Fixed
+- **NILM ML: per-device learners for 3-phase EMs only** – Each 3-phase Shelly EM device now gets its own independent TransitionLearner with its own cluster file (`nilm_clusters_{device_key}.json`). Single-phase devices and switches are excluded. Previously all devices shared one global learner which mixed transitions from different circuits, making clustering meaningless. Status display now shows per-device breakdown ("Haus: 5 Muster/47 Trans., Server: 3 Muster/22 Trans.").
+
 ## 12.2.0 - 2026-03-28
 ### Added
 - **ML NILM fully integrated** – The TransitionLearner is now instantiated on app startup and fed with every live power reading. It detects step changes (>50W) in power consumption, clusters them via k-means, and matches recurring patterns against the built-in appliance database. Learned clusters are persisted to `data/runtime/nilm_clusters.json` and survive app restarts.
