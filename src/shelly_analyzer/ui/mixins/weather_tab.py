@@ -14,84 +14,94 @@ class WeatherMixin:
     def _build_weather_tab(self) -> None:
         frm = self.tab_weather
 
-        # Top bar
+        # ── Top bar ──────────────────────────────────────────────────────
         top = ttk.Frame(frm)
-        top.pack(fill="x", padx=10, pady=(10, 5))
+        top.pack(fill="x", padx=14, pady=(12, 4))
         ttk.Label(top, text=self.t("weather.title"), font=("", 14, "bold")).pack(side="left")
 
-        # Current weather card
-        curr = ttk.LabelFrame(frm, text=f"☀️ {self.t('weather.current')}")
-        curr.pack(fill="x", padx=10, pady=5)
+        # ── Device selector ──────────────────────────────────────────────
+        ctrl = ttk.Frame(frm)
+        ctrl.pack(fill="x", padx=14, pady=(0, 6))
+        self._weather_dev_var = tk.StringVar()
+        dev_names = [d.name for d in self.cfg.devices]
+        cb = ttk.Combobox(ctrl, textvariable=self._weather_dev_var, values=dev_names, state="readonly", width=30)
+        cb.pack(side="left", padx=(0, 6))
+        if dev_names:
+            cb.current(0)
+        cb.bind("<<ComboboxSelected>>", lambda e: self._refresh_weather_tab())
 
-        weather_grid = ttk.Frame(curr)
-        weather_grid.pack(fill="x", padx=10, pady=8)
+        # ── Scrollable content ───────────────────────────────────────────
+        outer = ttk.Frame(frm)
+        outer.pack(fill="both", expand=True)
+        canvas = tk.Canvas(outer, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        self._weather_scroll = ttk.Frame(canvas)
+        self._weather_scroll.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        _ww = canvas.create_window((0, 0), window=self._weather_scroll, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(_ww, width=e.width))
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # ── Current weather card ─────────────────────────────────────────
+        weather_cards = ttk.Frame(self._weather_scroll)
+        weather_cards.pack(fill="x", padx=14, pady=(8, 4))
+        weather_cards.columnconfigure((0, 1, 2, 3), weight=1)
 
         self._weather_vars = {}
-        for i, (key, label_key, icon) in enumerate([
+        for col, (key, label_key, icon) in enumerate([
             ("temp", "weather.temp", "🌡️"),
             ("humidity", "weather.humidity", "💧"),
             ("wind", "weather.wind", "💨"),
             ("clouds", "weather.clouds", "☁️"),
         ]):
-            ttk.Label(weather_grid, text=f"{icon} {self.t(label_key)}:", font=("", 10)).grid(row=0, column=i*2, padx=5, sticky="e")
-            var = tk.StringVar(value="–")
-            self._weather_vars[key] = var
-            ttk.Label(weather_grid, textvariable=var, font=("", 11, "bold")).grid(row=0, column=i*2+1, padx=5, sticky="w")
-            weather_grid.columnconfigure(i*2, weight=0)
-            weather_grid.columnconfigure(i*2+1, weight=1)
+            card = ttk.LabelFrame(weather_cards, text=f"{icon} {self.t(label_key)}")
+            card.grid(row=0, column=col, sticky="nsew", padx=3, pady=3)
+            v = tk.StringVar(value="–")
+            self._weather_vars[key] = v
+            ttk.Label(card, textvariable=v, font=("", 13, "bold")).pack(anchor="center", padx=8, pady=8)
 
-        # Correlation summary
-        corr_frame = ttk.LabelFrame(frm, text=f"📊 {self.t('weather.correlation')}")
-        corr_frame.pack(fill="x", padx=10, pady=5)
-
-        corr_grid = ttk.Frame(corr_frame)
-        corr_grid.pack(fill="x", padx=10, pady=8)
+        # ── Correlation summary ──────────────────────────────────────────
+        corr_cards = ttk.Frame(self._weather_scroll)
+        corr_cards.pack(fill="x", padx=14, pady=(4, 4))
+        corr_cards.columnconfigure((0, 1, 2, 3, 4), weight=1)
 
         self._weather_corr_vars = {}
-        for i, (key, label_key) in enumerate([
+        for col, (key, label_key) in enumerate([
             ("r_value", "weather.r_value"),
             ("hdd", "weather.hdd"),
             ("cdd", "weather.cdd"),
             ("kwh_hdd", "weather.kwh_per_hdd"),
             ("kwh_cdd", "weather.kwh_per_cdd"),
         ]):
-            ttk.Label(corr_grid, text=f"{self.t(label_key)}:").grid(row=0, column=i*2, padx=5, sticky="e")
-            var = tk.StringVar(value="–")
-            self._weather_corr_vars[key] = var
-            ttk.Label(corr_grid, textvariable=var, font=("", 10, "bold")).grid(row=0, column=i*2+1, padx=5, sticky="w")
+            card = ttk.LabelFrame(corr_cards, text=self.t(label_key))
+            card.grid(row=0, column=col, sticky="nsew", padx=3, pady=3)
+            v = tk.StringVar(value="–")
+            self._weather_corr_vars[key] = v
+            ttk.Label(card, textvariable=v, font=("", 12, "bold")).pack(anchor="center", padx=6, pady=6)
 
         # Interpretation
         self._weather_interp_var = tk.StringVar(value="")
-        ttk.Label(corr_frame, textvariable=self._weather_interp_var, wraplength=800, foreground="#555").pack(padx=10, pady=(0, 8))
+        ttk.Label(self._weather_scroll, textvariable=self._weather_interp_var,
+                  wraplength=900, foreground="gray").pack(anchor="w", padx=14, pady=(2, 4))
 
-        # Charts: scatter plot + time series
-        chart_frame = ttk.Frame(frm)
-        chart_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        # ── Charts ───────────────────────────────────────────────────────
+        chart_lf = ttk.LabelFrame(self._weather_scroll, text=self.t("weather.chart.title"))
+        chart_lf.pack(fill="both", expand=True, padx=14, pady=(4, 12))
 
         self._weather_fig = Figure(figsize=(10, 4), dpi=96)
         self._weather_scatter_ax = self._weather_fig.add_subplot(121)
         self._weather_ts_ax = self._weather_fig.add_subplot(122)
-        self._weather_canvas = FigureCanvasTkAgg(self._weather_fig, master=chart_frame)
+        self._weather_canvas = FigureCanvasTkAgg(self._weather_fig, master=chart_lf)
         self._weather_canvas.get_tk_widget().pack(fill="both", expand=True)
-
-        # Device selector
-        bottom = ttk.Frame(frm)
-        bottom.pack(fill="x", padx=10, pady=(0, 10))
-        ttk.Label(bottom, text="Gerät:").pack(side="left")
-        self._weather_dev_var = tk.StringVar()
-        dev_names = [d.name for d in self.cfg.devices]
-        self._weather_dev_combo = ttk.Combobox(bottom, textvariable=self._weather_dev_var, values=dev_names, state="readonly", width=30)
-        self._weather_dev_combo.pack(side="left", padx=5)
-        if dev_names:
-            self._weather_dev_combo.current(0)
-        self._weather_dev_combo.bind("<<ComboboxSelected>>", lambda e: self._refresh_weather_tab())
 
         self.after(800, self._refresh_weather_tab)
 
     def _refresh_weather_tab(self) -> None:
         import datetime
         import time
-        from shelly_analyzer.services.weather import fetch_current_weather, correlate_weather_energy
+        import numpy as np
+        from shelly_analyzer.services.weather import fetch_current_weather
 
         weather_cfg = getattr(self.cfg, "weather", None)
         api_key = getattr(weather_cfg, "api_key", "") if weather_cfg else ""
@@ -102,27 +112,28 @@ class WeatherMixin:
         if not api_key:
             for k in self._weather_vars:
                 self._weather_vars[k].set(self.t("weather.no_data"))
+            self._draw_empty_weather_charts("API-Key fehlt")
             return
 
-        # Auto-geocode if lat/lon missing but city is set
+        # Auto-geocode
         if (lat == 0 and lon == 0) and city:
             try:
                 from shelly_analyzer.services.weather import geocode_city
                 result = geocode_city(api_key, city)
                 if result:
                     lat, lon, _ = result
-                    # Persist the geocoded coordinates
-                    from shelly_analyzer.io.config import WeatherConfig, save_config
                     import dataclasses
-                    new_weather = dataclasses.replace(weather_cfg, lat=lat, lon=lon)
-                    self.cfg = dataclasses.replace(self.cfg, weather=new_weather)
+                    from shelly_analyzer.io.config import save_config
+                    new_w = dataclasses.replace(weather_cfg, lat=lat, lon=lon)
+                    self.cfg = dataclasses.replace(self.cfg, weather=new_w)
                     save_config(self.cfg, self.cfg_path)
             except Exception:
                 pass
 
         if lat == 0 and lon == 0:
             for k in self._weather_vars:
-                self._weather_vars[k].set(self.t("weather.no_data"))
+                self._weather_vars[k].set("–")
+            self._draw_empty_weather_charts("Stadt nicht gefunden")
             return
 
         # Fetch current weather
@@ -133,7 +144,6 @@ class WeatherMixin:
             self._weather_vars["wind"].set(f"{snapshot.wind_speed_ms:.1f} m/s")
             self._weather_vars["clouds"].set(f"{snapshot.clouds_pct:.0f}%")
 
-            # Store weather data in DB
             hour_ts = (int(snapshot.timestamp) // 3600) * 3600
             self.storage.db.upsert_weather([(
                 hour_ts, snapshot.temp_c, snapshot.humidity_pct,
@@ -142,7 +152,7 @@ class WeatherMixin:
                 int(time.time()),
             )])
 
-        # Correlation analysis
+        # Get device
         sel_name = self._weather_dev_var.get()
         dev = None
         for d in self.cfg.devices:
@@ -151,77 +161,133 @@ class WeatherMixin:
                 break
         if dev is None and self.cfg.devices:
             dev = self.cfg.devices[0]
-
         if dev is None:
+            self._draw_empty_weather_charts("Kein Gerät")
             return
 
-        # Get weather data from DB
+        # Get weather + energy data
         now = datetime.datetime.now(datetime.timezone.utc)
         start_ts = int((now - datetime.timedelta(days=30)).timestamp())
         end_ts = int(now.timestamp())
+
         weather_df = self.storage.db.query_weather(start_ts, end_ts)
+        hourly = self.storage.db.query_hourly(dev.key, start_ts=start_ts, end_ts=end_ts)
 
-        if weather_df.empty:
-            self._weather_interp_var.set(self.t("weather.no_data"))
+        # Build paired data directly (more robust than correlate_weather_energy)
+        if weather_df.empty or hourly.empty:
+            self._weather_interp_var.set("Noch zu wenig Daten. Wetterdaten werden stündlich gesammelt.")
+            # Show energy data alone if available
+            if not hourly.empty:
+                self._draw_energy_only_chart(hourly, dev.name)
+            else:
+                self._draw_empty_weather_charts("Daten werden gesammelt...")
             return
 
-        weather_rows = [
-            {"timestamp": int(row["hour_ts"]), "temp_c": float(row["temp_c"])}
-            for _, row in weather_df.iterrows()
-            if row["temp_c"] is not None
-        ]
+        # Match weather + energy by hour
+        w_by_hour = {}
+        for _, row in weather_df.iterrows():
+            h = int(row["hour_ts"])
+            w_by_hour[h] = float(row["temp_c"]) if row["temp_c"] is not None else None
 
-        corr = correlate_weather_energy(self.storage.db, dev.key, dev.name, weather_rows, days=30)
-        if corr is None:
-            self._weather_interp_var.set(self.t("weather.no_data"))
+        matched_temps = []
+        matched_kwh = []
+        matched_hours = []
+
+        for _, row in hourly.iterrows():
+            h = int(row["hour_ts"])
+            if h in w_by_hour and w_by_hour[h] is not None:
+                matched_temps.append(w_by_hour[h])
+                matched_kwh.append(float(row["kwh"]))
+                matched_hours.append(datetime.datetime.fromtimestamp(h, tz=datetime.timezone.utc))
+
+        if len(matched_temps) < 3:
+            self._weather_interp_var.set(f"Erst {len(matched_temps)} gepaarte Datenpunkte. Mehr Daten werden stündlich gesammelt.")
+            if not hourly.empty:
+                self._draw_energy_only_chart(hourly, dev.name)
+            else:
+                self._draw_empty_weather_charts("Daten werden gesammelt...")
             return
 
-        # Update correlation cards
-        self._weather_corr_vars["r_value"].set(f"{corr.r_temp_kwh:.3f}")
-        self._weather_corr_vars["hdd"].set(f"{corr.hdd_total:.1f}")
-        self._weather_corr_vars["cdd"].set(f"{corr.cdd_total:.1f}")
-        self._weather_corr_vars["kwh_hdd"].set(f"{corr.kwh_per_hdd:.2f}")
-        self._weather_corr_vars["kwh_cdd"].set(f"{corr.kwh_per_cdd:.2f}")
+        temps = np.array(matched_temps)
+        kwh = np.array(matched_kwh)
 
-        # Interpretation
-        r = corr.r_temp_kwh
-        if r < -0.4:
-            self._weather_interp_var.set(self.t("weather.interpretation.heating", r=f"{r:.2f}"))
-        elif r > 0.4:
-            self._weather_interp_var.set(self.t("weather.interpretation.cooling", r=f"{r:.2f}"))
+        # Correlation
+        r_val = float(np.corrcoef(temps, kwh)[0, 1]) if np.std(temps) > 0 and np.std(kwh) > 0 else 0.0
+
+        # Degree days
+        hdd = sum(max(0, 18.0 - t) / 24.0 for t in matched_temps)
+        cdd = sum(max(0, t - 22.0) / 24.0 for t in matched_temps)
+        total_kwh = float(kwh.sum())
+
+        self._weather_corr_vars["r_value"].set(f"{r_val:.3f}")
+        self._weather_corr_vars["hdd"].set(f"{hdd:.1f}")
+        self._weather_corr_vars["cdd"].set(f"{cdd:.1f}")
+        self._weather_corr_vars["kwh_hdd"].set(f"{total_kwh / hdd:.2f}" if hdd > 1 else "–")
+        self._weather_corr_vars["kwh_cdd"].set(f"{total_kwh / cdd:.2f}" if cdd > 1 else "–")
+
+        if r_val < -0.4:
+            self._weather_interp_var.set(self.t("weather.interpretation.heating", r=f"{r_val:.2f}"))
+        elif r_val > 0.4:
+            self._weather_interp_var.set(self.t("weather.interpretation.cooling", r=f"{r_val:.2f}"))
         else:
-            self._weather_interp_var.set(self.t("weather.interpretation.none", r=f"{r:.2f}"))
+            self._weather_interp_var.set(self.t("weather.interpretation.none", r=f"{r_val:.2f}"))
 
         # Draw scatter plot
         ax1 = self._weather_scatter_ax
         ax1.clear()
-        if corr.temps and corr.kwh_vals:
-            # Color by temperature
-            import numpy as np
-            temps = np.array(corr.temps)
-            kwh = np.array(corr.kwh_vals)
-            scatter = ax1.scatter(temps, kwh, c=temps, cmap="RdYlBu_r", alpha=0.6, s=15, edgecolors="none")
-            # Trend line
-            if len(temps) > 2:
-                z = np.polyfit(temps, kwh, 1)
-                p = np.poly1d(z)
-                t_range = np.linspace(temps.min(), temps.max(), 50)
-                ax1.plot(t_range, p(t_range), "r--", alpha=0.7, linewidth=2)
-            ax1.set_xlabel("°C")
-            ax1.set_ylabel("kWh")
-            ax1.set_title(self.t("weather.chart.scatter"), fontsize=9)
+        scatter = ax1.scatter(temps, kwh, c=temps, cmap="RdYlBu_r", alpha=0.6, s=20, edgecolors="none")
+        if len(temps) > 2:
+            z = np.polyfit(temps, kwh, 1)
+            p = np.poly1d(z)
+            t_range = np.linspace(temps.min(), temps.max(), 50)
+            ax1.plot(t_range, p(t_range), "r--", alpha=0.7, linewidth=2)
+        ax1.set_xlabel("°C", fontsize=9)
+        ax1.set_ylabel("kWh", fontsize=9)
+        ax1.set_title(self.t("weather.chart.scatter"), fontsize=10)
+        ax1.grid(alpha=0.3)
+        ax1.set_axisbelow(True)
 
-        # Draw time series
+        # Time series
         ax2 = self._weather_ts_ax
         ax2.clear()
-        if corr.hours and corr.temps and corr.kwh_vals:
-            ax2_twin = ax2.twinx()
-            ax2.plot(corr.hours, corr.kwh_vals, color="#3498db", alpha=0.7, linewidth=1, label="kWh")
-            ax2_twin.plot(corr.hours, corr.temps, color="#e74c3c", alpha=0.7, linewidth=1, label="°C")
-            ax2.set_ylabel("kWh", color="#3498db")
-            ax2_twin.set_ylabel("°C", color="#e74c3c")
-            ax2.set_title(self.t("weather.chart.title"), fontsize=9)
-            ax2.tick_params(axis="x", rotation=45)
+        ax2_twin = ax2.twinx()
+        ax2.bar(range(len(matched_kwh)), matched_kwh, color="#3498db", alpha=0.6, width=0.8)
+        ax2_twin.plot(range(len(matched_temps)), matched_temps, color="#e74c3c", linewidth=1.5, alpha=0.8)
+        ax2.set_ylabel("kWh", color="#3498db", fontsize=9)
+        ax2_twin.set_ylabel("°C", color="#e74c3c", fontsize=9)
+        ax2.set_title(self.t("weather.chart.title"), fontsize=10)
+        ax2.set_xlabel("h", fontsize=9)
+        ax2.grid(axis="y", alpha=0.3)
+        ax2.set_axisbelow(True)
+
+        self._weather_fig.tight_layout()
+        self._weather_canvas.draw_idle()
+
+    def _draw_empty_weather_charts(self, msg: str) -> None:
+        for ax in (self._weather_scatter_ax, self._weather_ts_ax):
+            ax.clear()
+            ax.text(0.5, 0.5, msg, ha="center", va="center", fontsize=11, color="gray")
+            ax.axis("off")
+        self._weather_fig.tight_layout()
+        self._weather_canvas.draw_idle()
+
+    def _draw_energy_only_chart(self, hourly, dev_name: str) -> None:
+        """Show energy data when no weather pairing available yet."""
+        import pandas as pd
+        self._weather_scatter_ax.clear()
+        self._weather_scatter_ax.text(0.5, 0.5, "Wetter-Daten werden\nstündlich gesammelt...",
+                                      ha="center", va="center", fontsize=10, color="gray")
+        self._weather_scatter_ax.axis("off")
+
+        ax2 = self._weather_ts_ax
+        ax2.clear()
+        kwh = hourly["kwh"].values[-48:] if len(hourly) > 48 else hourly["kwh"].values
+        ax2.bar(range(len(kwh)), kwh, color="#3498db", alpha=0.7, edgecolor="white", linewidth=0.3)
+        ax2.set_title(f"Verbrauch: {dev_name} (letzte {len(kwh)}h)", fontsize=10)
+        ax2.set_xlabel("h", fontsize=9)
+        ax2.set_ylabel("kWh", fontsize=9)
+        ax2.grid(axis="y", alpha=0.3)
+        ax2.set_axisbelow(True)
 
         self._weather_fig.tight_layout()
         self._weather_canvas.draw_idle()
