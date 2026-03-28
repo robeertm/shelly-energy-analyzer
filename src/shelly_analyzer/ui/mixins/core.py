@@ -6405,7 +6405,7 @@ class CoreMixin:
 
             # Load existing tenants
             for t in (getattr(_tn_cfg, "tenants", []) or []):
-                self._tn_add_tenant_row(t.name, t.unit, str(t.persons), ",".join(t.device_keys))
+                self._tn_add_tenant_row(t.name, t.unit, str(t.persons), ",".join(t.device_keys), getattr(t, "move_in", ""))
 
             ttk.Button(tn_box, text=self.t("settings.tenant.add"), command=lambda: self._tn_add_tenant_row("", "", "1", "")).grid(row=2, column=0, padx=8, pady=(4, 8), sticky="w")
 
@@ -7089,7 +7089,7 @@ class CoreMixin:
                     for k in other.get("selected_keys", []):
                         used_by_others.setdefault(i, set()).add(k)
 
-    def _tn_add_tenant_row(self, name: str = "", unit: str = "", persons: str = "1", devices: str = "") -> None:
+    def _tn_add_tenant_row(self, name: str = "", unit: str = "", persons: str = "1", devices: str = "", move_in: str = "") -> None:
         """Add a tenant row to the settings UI with Shelly device selector."""
         row_frame = ttk.LabelFrame(self._tn_list_frame, text=f"Mieter {len(self._tn_entries) + 1}")
         row_frame.pack(fill="x", pady=4, padx=4)
@@ -7109,7 +7109,17 @@ class CoreMixin:
         ttk.Label(r1, text=self.t("settings.tenant.persons")).pack(side="left")
         ttk.Entry(r1, textvariable=persons_var, width=4).pack(side="left", padx=4)
 
-        # Row 2: Device selector with checkboxes
+        # Move-in date
+        move_in_var = tk.StringVar(value=move_in)
+
+        # Row 2: Move-in date
+        r1b = ttk.Frame(row_frame)
+        r1b.pack(fill="x", padx=8, pady=(0, 2))
+        ttk.Label(r1b, text="Einzugsdatum (YYYY-MM-DD):").pack(side="left")
+        ttk.Entry(r1b, textvariable=move_in_var, width=14).pack(side="left", padx=4)
+        ttk.Label(r1b, text="Ab diesem Datum wird die Jahresabrechnung berechnet.", foreground="gray", font=("", 8)).pack(side="left", padx=4)
+
+        # Row 3: Device selector with checkboxes
         r2 = ttk.Frame(row_frame)
         r2.pack(fill="x", padx=8, pady=(2, 6))
         ttk.Label(r2, text=self.t("settings.tenant.devices")).pack(side="left")
@@ -7144,6 +7154,7 @@ class CoreMixin:
 
         entry = {
             "name": name_var, "unit": unit_var, "persons": persons_var,
+            "move_in": move_in_var,
             "selected_keys": selected_keys, "frame": row_frame, "check_vars": check_vars,
         }
         self._tn_entries.append(entry)
@@ -7651,12 +7662,14 @@ class CoreMixin:
                     if not _tn_name:
                         continue
                     _tn_devs = list(entry.get("selected_keys", []))
+                    _tn_move_in = str(entry.get("move_in", tk.StringVar()).get() or "").strip()
                     _tn_list.append(_TenantDef(
                         tenant_id=f"tenant_{i+1}",
                         name=_tn_name,
                         device_keys=_tn_devs,
                         unit=str(entry["unit"].get()).strip(),
                         persons=max(1, int(entry["persons"].get() or "1")),
+                        move_in=_tn_move_in,
                     ))
                 _tn_common = [k.strip() for k in str(getattr(self, "_tn_common_var", tk.StringVar()).get()).split(",") if k.strip()]
                 tenant = TenantConfig(
