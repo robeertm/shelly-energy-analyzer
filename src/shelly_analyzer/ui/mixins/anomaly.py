@@ -72,6 +72,13 @@ class AnomalyMixin:
         win_entry.pack(side="left")
         win_entry.bind("<FocusOut>", lambda _e: self._anomaly_save_cfg())
 
+        ttk.Label(r1, text=self.t("settings.anomaly.interval")).pack(side="left", padx=(16, 4))
+        self._anom_interval_var = tk.StringVar(value=str(getattr(self.cfg.anomaly, "auto_interval_minutes", 15)))
+        interval_entry = ttk.Entry(r1, textvariable=self._anom_interval_var, width=5)
+        interval_entry.pack(side="left")
+        interval_entry.bind("<FocusOut>", lambda _e: self._anomaly_save_cfg())
+        ttk.Label(r1, text="min", foreground="gray").pack(side="left", padx=(2, 0))
+
         # Row 2: check toggles
         r2 = ttk.Frame(cfg_frame)
         r2.pack(fill="x", padx=8, pady=(2, 2))
@@ -165,9 +172,42 @@ class AnomalyMixin:
         # Populate from existing in-memory log
         self._anomaly_refresh_tree()
 
-        # Auto-start detection if it was active when the app was last closed
+        # Start the auto-detection timer
+        self._anomaly_auto_id: Optional[str] = None
         if bool(getattr(self.cfg.anomaly, "enabled", False)):
             self.after(500, self._run_anomaly_detection)
+            self._anomaly_schedule_auto()
+
+    # ── Auto-detection timer ─────────────────────────────────────────────────
+
+    def _anomaly_schedule_auto(self) -> None:
+        """Schedule the next automatic detection run."""
+        self._anomaly_cancel_auto()
+        if not bool(getattr(self.cfg.anomaly, "enabled", False)):
+            return
+        interval = int(getattr(self.cfg.anomaly, "auto_interval_minutes", 15))
+        if interval < 1:
+            return
+        ms = interval * 60 * 1000
+        self._anomaly_auto_id = self.after(ms, self._anomaly_auto_tick)
+
+    def _anomaly_cancel_auto(self) -> None:
+        """Cancel a pending auto-detection timer."""
+        aid = getattr(self, "_anomaly_auto_id", None)
+        if aid is not None:
+            try:
+                self.after_cancel(aid)
+            except Exception:
+                pass
+            self._anomaly_auto_id = None
+
+    def _anomaly_auto_tick(self) -> None:
+        """Periodic auto-detection callback."""
+        self._anomaly_auto_id = None
+        if bool(getattr(self.cfg.anomaly, "enabled", False)):
+            self._run_anomaly_detection()
+        # Re-schedule for next interval
+        self._anomaly_schedule_auto()
 
     # ── Detection runner ──────────────────────────────────────────────────────
 
@@ -313,6 +353,10 @@ class AnomalyMixin:
             window = int(self._anom_window_var.get())
         except ValueError:
             window = 30
+        try:
+            interval = int(self._anom_interval_var.get())
+        except ValueError:
+            interval = 15
 
         new_anm = replace(
             self.cfg.anomaly,
@@ -326,12 +370,16 @@ class AnomalyMixin:
             action_telegram=bool(self._anom_notify_tg_var.get()),
             action_webhook=bool(self._anom_notify_wh_var.get()),
             action_email=bool(self._anom_notify_email_var.get()),
+            auto_interval_minutes=max(1, interval),
         )
         self.cfg = replace(self.cfg, anomaly=new_anm)
         try:
             save_config(self.cfg, self.cfg_path)
         except Exception:
             logger.exception("Failed to save anomaly config")
+
+        # Restart auto-detection timer with new settings
+        self._anomaly_schedule_auto()
 
     # ── Notification dispatch ─────────────────────────────────────────────────
 
