@@ -33,22 +33,16 @@ class SankeyMixin:
             ttk.Radiobutton(ctrl, text=self.t(label_key), variable=self._sankey_period_var,
                           value=val, command=self._refresh_sankey_tab).pack(side="left", padx=4)
 
-        # ── Scrollable content ───────────────────────────────────────────
-        outer = ttk.Frame(frm)
-        outer.pack(fill="both", expand=True)
-        canvas = tk.Canvas(outer, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
-        self._sankey_scroll = ttk.Frame(canvas)
-        self._sankey_scroll.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        _sw = canvas.create_window((0, 0), window=self._sankey_scroll, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(_sw, width=e.width))
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        # ── Content area (fills both directions) ─────────────────────────
+        content = ttk.Frame(frm)
+        content.pack(fill="both", expand=True)
+        content.rowconfigure(0, weight=0)  # cards
+        content.rowconfigure(1, weight=1)  # chart
+        content.columnconfigure(0, weight=1)
 
         # ── Summary cards ────────────────────────────────────────────────
-        cards = ttk.Frame(self._sankey_scroll)
-        cards.pack(fill="x", padx=14, pady=(8, 4))
+        cards = ttk.Frame(content)
+        cards.grid(row=0, column=0, sticky="ew", padx=14, pady=(4, 4))
         cards.columnconfigure((0, 1, 2, 3, 4), weight=1)
 
         self._sankey_vars = {}
@@ -65,9 +59,9 @@ class SankeyMixin:
             self._sankey_vars[key] = v
             ttk.Label(card, textvariable=v, font=("", 13, "bold")).pack(anchor="center", padx=8, pady=8)
 
-        # ── Sankey chart ─────────────────────────────────────────────────
-        chart_lf = ttk.LabelFrame(self._sankey_scroll, text=self.t("sankey.title"))
-        chart_lf.pack(fill="both", expand=True, padx=14, pady=(4, 12))
+        # ── Sankey chart (fills remaining space) ──────────────────────────
+        chart_lf = ttk.LabelFrame(content, text=self.t("sankey.title"))
+        chart_lf.grid(row=1, column=0, sticky="nsew", padx=14, pady=(4, 12))
 
         self._sankey_fig = Figure(figsize=(10, 5), dpi=96)
         self._sankey_ax = self._sankey_fig.add_subplot(111)
