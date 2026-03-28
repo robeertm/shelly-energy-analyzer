@@ -720,7 +720,6 @@ _HTML_TEMPLATE = """<!doctype html>
     }}
     .summary-chip b {{ color: var(--accent); }}
   </style>
-  <script defer src="/static/plotly.min.js"></script>
 </head>
 <body>
 <script>
@@ -793,32 +792,22 @@ _HTML_TEMPLATE = """<!doctype html>
 
     <!-- Forecast -->
     <div id="pane-forecast" class="pane">
-      <div class="controls-row" id="forecast-controls">
-        <select id="forecast-device" onchange="loadForecast()"></select>
+      <div class="controls-row">
+        <select id="forecast-device" onchange="loadForecast()" style="padding:8px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--fg);font-size:13px;min-height:36px"></select>
       </div>
-      <div id="forecast-cards" class="kpi-row"></div>
-      <div id="forecast-chart" style="min-height:300px"></div>
-      <div id="forecast-profiles" style="display:flex;gap:12px;flex-wrap:wrap;padding:8px 12px">
-        <div id="forecast-weekday-chart" style="flex:1;min-width:280px;min-height:200px"></div>
-        <div id="forecast-hourly-chart" style="flex:1;min-width:280px;min-height:200px"></div>
-      </div>
+      <div id="forecast-cards"></div>
     </div>
 
     <!-- Standby -->
     <div id="pane-standby" class="pane">
-      <div id="standby-cards" class="kpi-row"></div>
-      <div id="standby-table-wrap" style="padding:0 12px;overflow-x:auto"></div>
-      <div id="standby-charts" style="display:flex;gap:12px;flex-wrap:wrap;padding:8px 12px">
-        <div id="standby-bar-chart" style="flex:1;min-width:300px;min-height:250px"></div>
-        <div id="standby-profile-chart" style="flex:1;min-width:300px;min-height:250px"></div>
-      </div>
+      <div id="standby-cards"></div>
+      <div id="standby-table-wrap"></div>
     </div>
 
     <!-- Sankey / Energy Flow -->
     <div id="pane-sankey" class="pane">
       <div class="controls-row" id="sankey-periods"></div>
-      <div id="sankey-cards" class="kpi-row"></div>
-      <div id="sankey-chart" style="min-height:400px;padding:8px"></div>
+      <div id="sankey-cards"></div>
     </div>
 
     <!-- Export -->
@@ -2784,6 +2773,68 @@ function renderAnomalies(data, el) {{
 }}
 
 /* ──────────────────────────────────────────────
+   SIMPLE CANVAS BAR CHART (like CO₂ tab)
+────────────────────────────────────────────── */
+function _drawBarChart(canvasId, labels, values, options) {{
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  const pad = options.pad || {{top: 14, right: 14, bottom: 28, left: 44}};
+  const cW = W - pad.left - pad.right;
+  const cH = H - pad.top - pad.bottom;
+  if (cW <= 0 || cH <= 0) return;
+  const maxV = Math.max.apply(null, values.concat([0.01])) * 1.15;
+  const colors = options.colors || values.map(function() {{ return '#3498db'; }});
+  const barW = Math.max(1, (cW / values.length) - 2);
+  const fg = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
+  const border = getComputedStyle(document.body).getPropertyValue('--border') || '#e0e0e0';
+  // Grid
+  ctx.strokeStyle = border; ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {{
+    const y = pad.top + cH - (cH * i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cW, y); ctx.stroke();
+    ctx.fillStyle = fg; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText((maxV * i / 4).toFixed(options.decimals !== undefined ? options.decimals : 1), pad.left - 4, y + 3);
+  }}
+  // Bars
+  values.forEach(function(v, i) {{
+    const x = pad.left + (cW * i / values.length) + 1;
+    const h = (v / maxV) * cH;
+    ctx.fillStyle = colors[i] || '#3498db';
+    ctx.fillRect(x, pad.top + cH - h, barW, h);
+  }});
+  // X labels
+  ctx.fillStyle = fg; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+  const step = Math.max(1, Math.floor(labels.length / Math.min(labels.length, 12)));
+  labels.forEach(function(lbl, i) {{
+    if (i % step === 0 || i === labels.length - 1) {{
+      const x = pad.left + (cW * i / values.length) + barW / 2;
+      ctx.fillText(lbl, x, pad.top + cH + 14);
+    }}
+  }});
+  // Threshold line
+  if (options.threshold !== undefined) {{
+    const y = pad.top + cH - (cH * options.threshold / maxV);
+    ctx.setLineDash([4, 3]); ctx.strokeStyle = options.thresholdColor || '#e53935'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cW, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = options.thresholdColor || '#e53935'; ctx.font = '9px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(options.thresholdLabel || '', pad.left + cW + 2, y + 3);
+  }}
+  // Title
+  if (options.title) {{
+    ctx.fillStyle = fg; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(options.title, pad.left, pad.top - 2);
+  }}
+}}
+
+/* ──────────────────────────────────────────────
    FORECAST TAB
 ────────────────────────────────────────────── */
 async function loadForecast() {{
@@ -2818,32 +2869,37 @@ function renderForecast(d) {{
     metricCardHtml('Next Month', (d.forecast_next_month_kwh||0).toFixed(0) + ' kWh', fmt(d.forecast_next_month_cost||0, 2, '\u20ac')) +
     metricCardHtml('Next Year', (d.forecast_year_kwh||0).toFixed(0) + ' kWh', fmt(d.forecast_year_cost||0, 0, '\u20ac')) +
     '</div></div>';
+  // Main chart canvas
+  html += '<div class="card"><canvas id="fc-main-chart" height="180" style="width:100%"></canvas></div>';
+  // Profile charts
+  html += '<div class="card-grid">' +
+    '<div class="card"><canvas id="fc-weekday-chart" height="140" style="width:100%"></canvas></div>' +
+    '<div class="card"><canvas id="fc-hourly-chart" height="140" style="width:100%"></canvas></div>' +
+    '</div>';
   document.getElementById('forecast-cards').innerHTML = html;
-  // Main chart
-  const chEl = document.getElementById('forecast-chart');
-  const traces = [];
-  const _lo = {{ margin: {{ t: 20, b: 40, l: 50, r: 20 }}, barmode: 'group', yaxis: {{ title: 'kWh', gridcolor: 'rgba(128,128,128,0.15)' }}, xaxis: {{ gridcolor: 'rgba(128,128,128,0.15)' }}, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: getComputedStyle(document.documentElement).getPropertyValue('--fg').trim() || '#333', size: 11 }}, legend: {{ orientation: 'h', y: 1.12 }} }};
-  if (d.history_dates) traces.push({{ x: d.history_dates, y: d.history_kwh, type: 'bar', name: 'History', marker: {{ color: '#3498db', line: {{ width: 0 }} }} }});
-  if (d.forecast_dates) {{
-    traces.push({{ x: d.forecast_dates, y: d.forecast_kwh, type: 'bar', name: 'Forecast', marker: {{ color: '#e74c3c', opacity: 0.7, line: {{ width: 0 }} }} }});
-    traces.push({{ x: d.forecast_dates, y: d.forecast_upper, type: 'scatter', mode: 'lines', line: {{ dash: 'dot', color: '#e74c3c', width: 1 }}, showlegend: false }});
-    traces.push({{ x: d.forecast_dates, y: d.forecast_lower, type: 'scatter', mode: 'lines', line: {{ dash: 'dot', color: '#e74c3c', width: 1 }}, fill: 'tonexty', fillcolor: 'rgba(231,76,60,0.08)', showlegend: false }});
-  }}
-  if (typeof Plotly !== 'undefined') Plotly.newPlot(chEl, traces, _lo, {{ responsive: true }});
-  // Weekday + Hourly profiles
-  const _plo = {{ paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: getComputedStyle(document.documentElement).getPropertyValue('--fg').trim() || '#333', size: 10 }}, margin: {{ t: 30, b: 30, l: 40, r: 10 }}, yaxis: {{ gridcolor: 'rgba(128,128,128,0.15)' }} }};
-  if (d.weekday_profile && typeof Plotly !== 'undefined') {{
-    const days = ['Mo','Tu','We','Th','Fr','Sa','Su'];
-    const vals = days.map(function(_,i) {{ return d.weekday_profile[String(i)] || d.weekday_profile[i] || 1.0; }});
-    const colors = vals.map(function(v) {{ return v > 1.1 ? '#e74c3c' : v < 0.9 ? '#27ae60' : '#3498db'; }});
-    Plotly.newPlot('forecast-weekday-chart', [{{ x: days, y: vals, type: 'bar', marker: {{ color: colors, line: {{ width: 0 }} }}, showlegend: false }}], Object.assign({{}}, _plo, {{ title: {{ text: 'Weekday', font: {{ size: 12 }} }}, shapes: [{{ type: 'line', y0: 1, y1: 1, x0: -0.5, x1: 6.5, line: {{ dash: 'dash', color: 'rgba(128,128,128,0.4)' }} }}] }}), {{ responsive: true }});
-  }}
-  if (d.hourly_profile && typeof Plotly !== 'undefined') {{
-    const hrs = Array.from({{ length: 24 }}, function(_, i) {{ return i; }});
-    const vals = hrs.map(function(h) {{ return d.hourly_profile[String(h)] || d.hourly_profile[h] || 1.0; }});
-    const colors = vals.map(function(v) {{ return v > 1.3 ? '#e74c3c' : v > 1.1 ? '#f39c12' : v < 0.7 ? '#27ae60' : '#3498db'; }});
-    Plotly.newPlot('forecast-hourly-chart', [{{ x: hrs, y: vals, type: 'bar', marker: {{ color: colors, line: {{ width: 0 }} }}, showlegend: false }}], Object.assign({{}}, _plo, {{ title: {{ text: '24h Profile', font: {{ size: 12 }} }}, xaxis: {{ title: 'h', gridcolor: 'rgba(128,128,128,0.15)' }}, shapes: [{{ type: 'line', y0: 1, y1: 1, x0: -0.5, x1: 23.5, line: {{ dash: 'dash', color: 'rgba(128,128,128,0.4)' }} }}] }}), {{ responsive: true }});
-  }}
+  // Draw main chart (history + forecast bars)
+  requestAnimationFrame(function() {{
+    const allDates = (d.history_dates || []).concat(d.forecast_dates || []);
+    const allVals = (d.history_kwh || []).concat(d.forecast_kwh || []);
+    const hLen = (d.history_dates || []).length;
+    const colors = allVals.map(function(_, i) {{ return i < hLen ? '#3498db' : 'rgba(231,76,60,0.7)'; }});
+    const labels = allDates.map(function(dt) {{ return dt.substring(5); }});
+    _drawBarChart('fc-main-chart', labels, allVals, {{ colors: colors, title: 'kWh/day \u2013 History + Forecast', decimals: 1 }});
+    // Weekday profile
+    if (d.weekday_profile) {{
+      const days = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+      const vals = days.map(function(_, i) {{ return d.weekday_profile[String(i)] || d.weekday_profile[i] || 1.0; }});
+      const wdColors = vals.map(function(v) {{ return v > 1.1 ? '#e74c3c' : v < 0.9 ? '#27ae60' : '#3498db'; }});
+      _drawBarChart('fc-weekday-chart', days, vals, {{ colors: wdColors, title: 'Weekday Profile', threshold: 1.0, thresholdColor: 'rgba(128,128,128,0.4)', thresholdLabel: '1.0', decimals: 2 }});
+    }}
+    // Hourly profile
+    if (d.hourly_profile) {{
+      const hrs = Array.from({{ length: 24 }}, function(_, i) {{ return String(i); }});
+      const vals = hrs.map(function(h) {{ return d.hourly_profile[h] || d.hourly_profile[parseInt(h)] || 1.0; }});
+      const hColors = vals.map(function(v) {{ return v > 1.3 ? '#e74c3c' : v > 1.1 ? '#f39c12' : v < 0.7 ? '#27ae60' : '#3498db'; }});
+      _drawBarChart('fc-hourly-chart', hrs, vals, {{ colors: hColors, title: '24h Profile', threshold: 1.0, thresholdColor: 'rgba(128,128,128,0.4)', thresholdLabel: '1.0', decimals: 2 }});
+    }}
+  }});
 }}
 
 /* ──────────────────────────────────────────────
@@ -2869,13 +2925,12 @@ function renderStandby(d) {{
   document.getElementById('standby-cards').innerHTML = html;
   const wrap = document.getElementById('standby-table-wrap');
   if (!d.devices || !d.devices.length) {{ wrap.innerHTML = '<div class="card"><p class="info-msg">No standby data available.</p></div>'; return; }}
-  // Device cards with risk badges
+  // Device cards
   let cards = '<div class="card-grid">';
   d.devices.forEach(function(dev) {{
     const riskColor = dev.risk === 'high' ? '#dc2626' : dev.risk === 'medium' ? '#d97706' : '#16a34a';
-    const riskLabel = dev.risk;
     cards += '<div class="card">' +
-      '<div class="card-title">' + esc(dev.device_name) + ' <span style="color:' + riskColor + ';font-size:11px">\u2022 ' + dev.risk.toUpperCase() + '</span></div>' +
+      '<div class="card-title">' + esc(dev.device_name) + ' <span style="color:' + riskColor + '">\u25cf ' + dev.risk.toUpperCase() + '</span></div>' +
       '<div class="metric-grid">' +
       metricCardHtml('Base load', dev.base_load_w + ' W', '') +
       metricCardHtml('kWh/year', dev.annual_standby_kwh + '', '') +
@@ -2884,22 +2939,26 @@ function renderStandby(d) {{
       '</div></div>';
   }});
   cards += '</div>';
+  // Charts
+  cards += '<div class="card-grid">' +
+    '<div class="card"><canvas id="standby-cost-chart" height="160" style="width:100%"></canvas></div>' +
+    '<div class="card"><canvas id="standby-24h-chart" height="160" style="width:100%"></canvas></div>' +
+    '</div>';
   wrap.innerHTML = cards;
-  // Bar chart
-  const chEl = document.getElementById('standby-bar-chart');
-  if (typeof Plotly !== 'undefined' && d.devices.length) {{
-    const names = d.devices.map(function(x) {{ return x.device_name; }});
+  requestAnimationFrame(function() {{
+    // Cost bar chart
+    const names = d.devices.map(function(x) {{ return x.device_name.substring(0, 12); }});
     const costs = d.devices.map(function(x) {{ return x.annual_standby_cost; }});
-    const colors = d.devices.map(function(x) {{ return x.risk === 'high' ? '#dc2626' : x.risk === 'medium' ? '#d97706' : '#16a34a'; }});
-    Plotly.newPlot(chEl, [{{ y: names, x: costs, type: 'bar', orientation: 'h', marker: {{ color: colors, line: {{ width: 0 }} }}, text: costs.map(function(c) {{ return c + ' \u20ac'; }}), textposition: 'outside' }}], {{ margin: {{ t: 10, b: 40, l: 120, r: 50 }}, xaxis: {{ title: '\u20ac/year', gridcolor: 'rgba(128,128,128,0.15)' }}, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: getComputedStyle(document.documentElement).getPropertyValue('--fg').trim() || '#333', size: 11 }} }}, {{ responsive: true }});
-  }}
-  // 24h profile for first device
-  if (d.devices.length && d.devices[0].hourly_profile) {{
-    const hp = d.devices[0].hourly_profile;
-    const hrs = Array.from({{ length: 24 }}, function(_, i) {{ return i; }});
-    const colors = hrs.map(function(h) {{ return h <= 5 || h >= 22 ? '#34495e' : '#3498db'; }});
-    if (typeof Plotly !== 'undefined') Plotly.newPlot('standby-profile-chart', [{{ x: hrs, y: hp, type: 'bar', marker: {{ color: colors, line: {{ width: 0 }} }}, showlegend: false }}], {{ margin: {{ t: 30, b: 40, l: 50, r: 20 }}, title: {{ text: '24h Profile: ' + d.devices[0].device_name, font: {{ size: 12 }} }}, xaxis: {{ title: 'h', gridcolor: 'rgba(128,128,128,0.15)' }}, yaxis: {{ title: 'W', gridcolor: 'rgba(128,128,128,0.15)' }}, shapes: [{{ type: 'line', y0: d.devices[0].base_load_w, y1: d.devices[0].base_load_w, x0: -0.5, x1: 23.5, line: {{ dash: 'dash', color: '#dc2626', width: 2 }} }}], paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: {{ color: getComputedStyle(document.documentElement).getPropertyValue('--fg').trim() || '#333', size: 10 }} }}, {{ responsive: true }});
-  }}
+    const cColors = d.devices.map(function(x) {{ return x.risk === 'high' ? '#dc2626' : x.risk === 'medium' ? '#d97706' : '#16a34a'; }});
+    _drawBarChart('standby-cost-chart', names, costs, {{ colors: cColors, title: 'Standby \u20ac/year', decimals: 0 }});
+    // 24h profile first device
+    if (d.devices.length && d.devices[0].hourly_profile) {{
+      const hp = d.devices[0].hourly_profile;
+      const hrs = Array.from({{ length: 24 }}, function(_, i) {{ return String(i); }});
+      const hColors = hrs.map(function(h) {{ return parseInt(h) <= 5 || parseInt(h) >= 22 ? '#34495e' : '#3498db'; }});
+      _drawBarChart('standby-24h-chart', hrs, hp, {{ colors: hColors, title: '24h: ' + d.devices[0].device_name, threshold: d.devices[0].base_load_w, thresholdColor: '#dc2626', thresholdLabel: 'Standby', decimals: 0 }});
+    }}
+  }});
 }}
 
 /* ──────────────────────────────────────────────
@@ -2938,29 +2997,44 @@ async function loadSankey() {{
 }}
 function renderSankey(d) {{
   let html = '<div class="card" style="margin-bottom:10px"><div class="card-title">Energy Flow</div><div class="metric-grid">' +
-    metricCardHtml('Grid Import', (d.grid_import_kwh||0).toFixed(2) + ' kWh', '') +
+    metricCardHtml('Grid', (d.grid_import_kwh||0).toFixed(2) + ' kWh', '') +
     metricCardHtml('Total', (d.total_consumption_kwh||0).toFixed(2) + ' kWh', '') +
     metricCardHtml('PV', (d.pv_production_kwh||0).toFixed(2) + ' kWh', '') +
     metricCardHtml('Feed-in', (d.feed_in_kwh||0).toFixed(2) + ' kWh', '') +
     '</div></div>';
-  document.getElementById('sankey-cards').innerHTML = html;
+  // Flow visualization as stacked bars
   const chEl = document.getElementById('sankey-chart');
   if (!d.sankey || !d.sankey.node || !d.sankey.link || !d.sankey.link.value || d.sankey.link.value.length === 0) {{
-    chEl.innerHTML = '<div class="card"><p class="info-msg">No energy flow data for this period.</p></div>';
+    html += '<div class="card"><p class="info-msg">No energy flow data for this period.</p></div>';
+    document.getElementById('sankey-cards').innerHTML = html;
     return;
   }}
-  if (typeof Plotly !== 'undefined') {{
-    Plotly.newPlot(chEl, [{{
-      type: 'sankey',
-      orientation: 'h',
-      node: {{ label: d.sankey.node.label, color: d.sankey.node.color, pad: 20, thickness: 25, line: {{ width: 0 }} }},
-      link: d.sankey.link,
-    }}], {{
-      font: {{ size: 12, color: getComputedStyle(document.documentElement).getPropertyValue('--fg').trim() || '#333' }},
-      paper_bgcolor: 'rgba(0,0,0,0)',
-      plot_bgcolor: 'rgba(0,0,0,0)',
-      margin: {{ t: 20, b: 20, l: 20, r: 20 }},
-    }}, {{ responsive: true }});
+  // Build per-device breakdown chart
+  const nodeLabels = d.sankey.node.label || [];
+  const nodeColors = d.sankey.node.color || [];
+  const linkSrc = d.sankey.link.source || [];
+  const linkTgt = d.sankey.link.target || [];
+  const linkVal = d.sankey.link.value || [];
+  // Find consumer nodes (targets of "House" node)
+  const houseIdx = nodeLabels.indexOf('House');
+  const consumers = [];
+  linkSrc.forEach(function(s, i) {{
+    if (s === houseIdx && linkVal[i] > 0.001) {{
+      consumers.push({{ name: nodeLabels[linkTgt[i]], kwh: linkVal[i], color: nodeColors[linkTgt[i]] || '#3498db' }});
+    }}
+  }});
+  consumers.sort(function(a, b) {{ return b.kwh - a.kwh; }});
+  if (consumers.length) {{
+    html += '<div class="card"><canvas id="sankey-flow-chart" height="160" style="width:100%"></canvas></div>';
+  }}
+  document.getElementById('sankey-cards').innerHTML = html;
+  if (consumers.length) {{
+    requestAnimationFrame(function() {{
+      const names = consumers.map(function(c) {{ return c.name.substring(0, 14); }});
+      const vals = consumers.map(function(c) {{ return c.kwh; }});
+      const colors = consumers.map(function(c) {{ return c.color; }});
+      _drawBarChart('sankey-flow-chart', names, vals, {{ colors: colors, title: 'Consumption by Device (kWh)', decimals: 2 }});
+    }});
   }}
 }}
 
