@@ -52,7 +52,7 @@ class HeatmapMixin:
         self._heatmap_unit_var = tk.StringVar(value="kWh")
         unit_cb = ttk.Combobox(
             ctrl, textvariable=self._heatmap_unit_var,
-            values=["kWh", "€", "g CO₂"], width=7, state="readonly",
+            values=["kWh", "g CO₂"], width=7, state="readonly",
         )
         unit_cb.current(0)
         unit_cb.pack(side="left", padx=(0, 14))
