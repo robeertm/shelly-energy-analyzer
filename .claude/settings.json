@@ -11,7 +11,11 @@
       "Bash(python -c \"import py_compile; py_compile.compile\\(''src/shelly_analyzer/ui/mixins/core.py'', doraise=True\\); print\\(''core OK''\\)\")",
       "Read(//Users/robertmanuwald/Projects/shelly-energy-analyzer/**)",
       "Read(//Users/robertmanuwald/Projects/shelly-energy-analyzer/src/shelly_analyzer/services/**)",
-      "Read(//Users/robertmanuwald/Projects/shelly-energy-analyzer/src/shelly_analyzer/io/**)"
+      "Read(//Users/robertmanuwald/Projects/shelly-energy-analyzer/src/shelly_analyzer/io/**)",
+      "Bash(screencapture -x -l 5867 /tmp/full_window.png)",
+      "Bash(sips -c 120 3024 /tmp/full_window.png --out /tmp/tabbar.png)",
+      "Read(//tmp/**)",
+      "Read(//private/tmp/**)"
     ]
   }
 }
