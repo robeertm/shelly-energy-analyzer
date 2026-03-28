@@ -144,7 +144,13 @@ def _check_unusual_daily(
             continue
 
         direction = "high" if val > mean else "low"
-        ts = pd.Timestamp(day).to_pydatetime()
+        # Find the hour of peak consumption for a meaningful timestamp
+        day_data = df[df.index.date == (day.date() if hasattr(day, 'date') else day)]
+        if len(day_data) and "energy_kwh" in day_data.columns:
+            peak_idx = day_data["energy_kwh"].idxmax()
+            ts = peak_idx.to_pydatetime() if hasattr(peak_idx, 'to_pydatetime') else pd.Timestamp(day).to_pydatetime()
+        else:
+            ts = pd.Timestamp(day).to_pydatetime()
         events.append(
             AnomalyEvent(
                 event_id=_new_id(),
@@ -214,7 +220,13 @@ def _check_night_consumption(
         if sig < sigma or night_kwh < 0.05:
             continue
 
-        ts = pd.Timestamp(day).to_pydatetime()
+        # Find the hour of peak night consumption for a meaningful timestamp
+        day_night = df[(df.index.date == (day.date() if hasattr(day, 'date') else day)) & night_mask]
+        if len(day_night) and "energy_kwh" in day_night.columns:
+            peak_idx = day_night["energy_kwh"].idxmax()
+            ts = peak_idx.to_pydatetime() if hasattr(peak_idx, 'to_pydatetime') else pd.Timestamp(day).to_pydatetime()
+        else:
+            ts = pd.Timestamp(day).to_pydatetime()
         total = float(total_daily.at[day]) if day in total_daily.index else 0.0
         events.append(
             AnomalyEvent(
@@ -290,15 +302,19 @@ def _check_power_peak_time(
         if sig < sigma:
             continue
 
-        # Peak power value for that day
-        day_ts = pd.Timestamp(day)
+        # Peak power value for that day — use actual peak timestamp
         day_data = df[df.index.date == day]
         peak_val = float(day_data["total_power"].max()) if len(day_data) else 0.0
+        if len(day_data):
+            peak_idx = day_data["total_power"].idxmax()
+            ts = peak_idx.to_pydatetime() if hasattr(peak_idx, 'to_pydatetime') else pd.Timestamp(day).to_pydatetime()
+        else:
+            ts = pd.Timestamp(day).to_pydatetime()
 
         events.append(
             AnomalyEvent(
                 event_id=_new_id(),
-                timestamp=day_ts.to_pydatetime(),
+                timestamp=ts,
                 device_key=device_key,
                 device_name=device_name,
                 anomaly_type="power_peak_time",

@@ -168,6 +168,7 @@
     "action_telegram": false,
     "action_webhook": false,
     "action_email": false,
+    "auto_interval_minutes": 15,
     "max_history": 200
   },
   "groups": [
