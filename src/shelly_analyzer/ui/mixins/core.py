@@ -537,6 +537,16 @@ class CoreMixin:
                     self.after(50, self._refresh_compare)
                 elif sel == str(getattr(self, 'tab_co2', None)):
                     self.after(50, self._refresh_co2_tab)
+                elif sel == str(getattr(self, 'tab_forecast', None)):
+                    self.after(50, self._refresh_forecast_tab)
+                elif sel == str(getattr(self, 'tab_standby', None)):
+                    self.after(50, self._refresh_standby_tab)
+                elif sel == str(getattr(self, 'tab_weather', None)):
+                    self.after(50, self._refresh_weather_tab)
+                elif sel == str(getattr(self, 'tab_sankey', None)):
+                    self.after(50, self._refresh_sankey_tab)
+                elif sel == str(getattr(self, 'tab_tenant', None)):
+                    self.after(50, self._refresh_tenant_tab)
             except Exception:
                 pass
 
@@ -7487,15 +7497,29 @@ class CoreMixin:
             except Exception:
                 forecast = getattr(self.cfg, "forecast", ForecastConfig())
 
-            # Weather config
+            # Weather config (geocode city → lat/lon)
             try:
                 from shelly_analyzer.io.config import WeatherConfig
+                _wt_api = str(getattr(self, "_wt_api_key_var", tk.StringVar()).get() or "")
+                _wt_city = str(getattr(self, "_wt_city_var", tk.StringVar()).get() or "")
+                _wt_lat = getattr(self.cfg.weather, "lat", 0.0) if hasattr(self.cfg, "weather") else 0.0
+                _wt_lon = getattr(self.cfg.weather, "lon", 0.0) if hasattr(self.cfg, "weather") else 0.0
+                _old_city = getattr(self.cfg.weather, "city", "") if hasattr(self.cfg, "weather") else ""
+                # Geocode if city changed or lat/lon are 0
+                if _wt_api and _wt_city and (_wt_city != _old_city or (_wt_lat == 0 and _wt_lon == 0)):
+                    try:
+                        from shelly_analyzer.services.weather import geocode_city
+                        result = geocode_city(_wt_api, _wt_city)
+                        if result:
+                            _wt_lat, _wt_lon, _ = result
+                    except Exception:
+                        pass
                 weather = WeatherConfig(
                     enabled=bool(getattr(self, "_wt_enabled_var", tk.BooleanVar(value=False)).get()),
-                    api_key=str(getattr(self, "_wt_api_key_var", tk.StringVar()).get() or ""),
-                    city=str(getattr(self, "_wt_city_var", tk.StringVar()).get() or ""),
-                    lat=getattr(self.cfg.weather, "lat", 0.0) if hasattr(self.cfg, "weather") else 0.0,
-                    lon=getattr(self.cfg.weather, "lon", 0.0) if hasattr(self.cfg, "weather") else 0.0,
+                    api_key=_wt_api,
+                    city=_wt_city,
+                    lat=_wt_lat,
+                    lon=_wt_lon,
                     fetch_interval_minutes=int(getattr(self, "_wt_interval_var", tk.IntVar(value=30)).get() or 30),
                 )
             except Exception:

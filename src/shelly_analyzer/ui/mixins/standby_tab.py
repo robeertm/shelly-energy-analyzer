@@ -18,7 +18,6 @@ class StandbyMixin:
         top = ttk.Frame(frm)
         top.pack(fill="x", padx=10, pady=(10, 5))
         ttk.Label(top, text=self.t("standby.title"), font=("", 14, "bold")).pack(side="left")
-        ttk.Button(top, text=self.t("standby.refresh"), command=self._refresh_standby_tab).pack(side="right")
 
         # Summary cards
         summary = ttk.Frame(frm)
