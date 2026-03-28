@@ -959,6 +959,7 @@ function switchPane(name, btn) {{
 function onPaneActivated(name) {{
   // Stop polling when leaving export tab
   if (name !== 'export' && typeof _expStopJobsPolling === 'function') _expStopJobsPolling();
+  if (name !== 'co2' && typeof _stopCo2LiveRates === 'function') _stopCo2LiveRates();
   if (name === 'live') {{
     startLive();
   }} else {{
@@ -2036,6 +2037,8 @@ function hideHmTooltip() {{
 /* ──────────────────────────────────────────────
    CO₂ TAB
 ────────────────────────────────────────────── */
+let _co2LiveTimer = null;
+
 async function loadCo2() {{
   const el = document.getElementById('co2-content');
   el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
@@ -2044,9 +2047,43 @@ async function loadCo2() {{
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     renderCo2(data, el);
+    _startCo2LiveRates();
   }} catch(e) {{
     el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
   }}
+}}
+
+function _startCo2LiveRates() {{
+  _stopCo2LiveRates();
+  _co2LiveTimer = setInterval(_refreshCo2LiveRates, 1000);
+}}
+function _stopCo2LiveRates() {{
+  if (_co2LiveTimer) {{ clearInterval(_co2LiveTimer); _co2LiveTimer = null; }}
+}}
+
+async function _refreshCo2LiveRates() {{
+  if (currentPane !== 'co2') {{ _stopCo2LiveRates(); return; }}
+  try {{
+    const r = await fetch('/api/co2_live');
+    if (!r.ok) return;
+    const data = await r.json();
+    if (!data || !data.ok) return;
+    // Update hero intensity
+    const hero = document.getElementById('co2-hero-value');
+    if (hero && data.current_intensity !== undefined) {{
+      hero.innerHTML = data.current_intensity.toFixed(0) + ' <span style="font-size:16px">g/kWh</span>';
+      hero.style.color = _co2Color(data.current_intensity, data.green_threshold || 150, data.dirty_threshold || 400);
+    }}
+    // Update device rates table
+    const tbody = document.getElementById('co2-rates-tbody');
+    if (tbody && data.device_rates) {{
+      let rows = '';
+      data.device_rates.forEach(function(r) {{
+        rows += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px">' + esc(r.name) + '</td><td style="text-align:right;padding:4px">' + r.watts.toFixed(0) + '</td><td style="text-align:right;padding:4px;font-weight:600">' + r.co2_g_h.toFixed(1) + '</td></tr>';
+      }});
+      tbody.innerHTML = rows;
+    }}
+  }} catch(e) {{}}
 }}
 
 function _co2Color(val, green, dirty) {{
@@ -2075,7 +2112,7 @@ function renderCo2(data, el) {{
   // ── Live intensity hero card ──
   let html = '<div class="card" style="text-align:center;padding:16px">';
   html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">' + t('web.co2.current', 'Current Grid CO\u2082') + '</div>';
-  html += '<div style="font-size:42px;font-weight:700;color:' + ciColor + '">' + ci.toFixed(0) + ' <span style="font-size:16px">g/kWh</span></div>';
+  html += '<div id="co2-hero-value" style="font-size:42px;font-weight:700;color:' + ciColor + '">' + ci.toFixed(0) + ' <span style="font-size:16px">g/kWh</span></div>';
   html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(data.zone || '') + ' \xb7 ' + esc(srcLabel) + '</div>';
   html += '</div>';
 
@@ -2113,9 +2150,11 @@ function renderCo2(data, el) {{
     html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">' + t('web.co2.device_rates', 'CO\u2082 per Device (live)') + '</div>';
     html += '<table style="width:100%;font-size:13px;border-collapse:collapse">';
     html += '<tr style="border-bottom:1px solid var(--border)"><th style="text-align:left;padding:4px">' + t('web.dash.device', 'Device') + '</th><th style="text-align:right;padding:4px">W</th><th style="text-align:right;padding:4px">g CO\u2082/h</th></tr>';
+    html += '<tbody id="co2-rates-tbody">';
     rates.forEach(function(r) {{
       html += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px">' + esc(r.name) + '</td><td style="text-align:right;padding:4px">' + r.watts.toFixed(0) + '</td><td style="text-align:right;padding:4px;font-weight:600">' + r.co2_g_h.toFixed(1) + '</td></tr>';
     }});
+    html += '</tbody>';
     html += '</table></div>';
   }}
 
@@ -4748,6 +4787,20 @@ class _Handler(BaseHTTPRequestHandler):
                     qs = parse_qs(parsed.query or "")
                     params_sol: Dict[str, Any] = {k: (v[0] if isinstance(v, list) and v else v) for k, v in qs.items()}
                     payload = self.dashboard.on_action("solar", params_sol)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if path_only == "/api/co2_live":
+                try:
+                    payload = self.dashboard.on_action("co2_live", {})
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
                 body = json.dumps(payload).encode("utf-8")
