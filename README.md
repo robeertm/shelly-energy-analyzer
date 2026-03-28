@@ -8,19 +8,28 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 
 ---
 
-## Screenshots (Web Dashboard)
+## Screenshots
 
-| Live | Costs | Heatmap |
-|------|-------|---------|
-| ![Live](docs/screenshots/01_live.png) | ![Costs](docs/screenshots/02_costs.png) | ![Heatmap](docs/screenshots/03_heatmap.png) |
+### Desktop App (Live Tab with 3-Phase Details)
+![Desktop Live](docs/screenshots/01_live_desktop.png)
 
-| CO2 | Forecast | Energy Flow |
-|-----|----------|-------------|
-| ![CO2](docs/screenshots/06_co2.png) | ![Forecast](docs/screenshots/08_forecast.png) | ![Energy Flow](docs/screenshots/10_energy_flow.png) |
+### Web Dashboard (Mobile)
 
-| Solar | Compare | Export |
-|-------|---------|--------|
-| ![Solar](docs/screenshots/04_solar.png) | ![Compare](docs/screenshots/05_compare.png) | ![Export](docs/screenshots/11_export.png) |
+| Live | Live (expanded) | Costs |
+|------|----------------|-------|
+| ![Live](docs/screenshots/01_live.png) | ![Detail](docs/screenshots/01_live_detail.png) | ![Costs](docs/screenshots/02_costs.png) |
+
+| Heatmap | CO2 | Forecast |
+|---------|-----|----------|
+| ![Heatmap](docs/screenshots/03_heatmap.png) | ![CO2](docs/screenshots/06_co2.png) | ![Forecast](docs/screenshots/08_forecast.png) |
+
+| Energy Flow | Standby | Export |
+|-------------|---------|--------|
+| ![Energy Flow](docs/screenshots/10_energy_flow.png) | ![Standby](docs/screenshots/09_standby.png) | ![Export](docs/screenshots/11_export.png) |
+
+| Solar | Compare | Anomalies |
+|-------|---------|-----------|
+| ![Solar](docs/screenshots/04_solar.png) | ![Compare](docs/screenshots/05_compare.png) | ![Anomalies](docs/screenshots/07_anomalies.png) |
 
 ---
 
