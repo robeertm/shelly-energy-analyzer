@@ -307,12 +307,12 @@ class CoreMixin:
                     self._nilm_learners[_dev.key] = _lrn
                     _loaded = _lrn.get_clusters()
                     if _loaded:
-                        logger.info("NILM ML [%s]: loaded %d learned clusters", _dev.key, len(_loaded))
+                        logging.getLogger(__name__).info("NILM ML [%s]: loaded %d learned clusters", _dev.key, len(_loaded))
                 if self._nilm_learners:
-                    logger.info("NILM ML: initialized learners for %d 3-phase devices: %s",
+                    logging.getLogger(__name__).info("NILM ML: initialized learners for %d 3-phase devices: %s",
                                len(self._nilm_learners), ", ".join(self._nilm_learners.keys()))
             except Exception:
-                logger.debug("NILM ML init failed", exc_info=True)
+                logging.getLogger(__name__).debug("NILM ML init failed", exc_info=True)
             # Plots
             self._plots_mode = tk.StringVar(value="days")
             self._plots_start = tk.StringVar(value="")
