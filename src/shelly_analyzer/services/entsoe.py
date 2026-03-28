@@ -871,8 +871,18 @@ class Co2FetchService:
         self._progress_callback = None  # callable(day_fetched: int, total_days: int) | None
         self._log_callback = None       # callable(msg: str) | None – for Sync tab
         # Latest fuel mix for UI display: {fuel: mw_for_most_recent_hour}
+        # Try loading persisted mix from DB on init
         self._latest_mix_hour: Optional[int] = None
         self._latest_mix: Dict[str, float] = {}
+        try:
+            cfg = self._get_config()
+            zone = str(getattr(cfg, "bidding_zone", "DE_LU") or "DE_LU")
+            h, m = self._db.query_latest_fuel_mix(zone)
+            if h is not None and m:
+                self._latest_mix_hour = h
+                self._latest_mix = m
+        except Exception:
+            pass
 
     def set_progress_callback(self, cb) -> None:
         """Set a callback invoked during chunk fetching: cb(day_fetched, total_days).
@@ -1060,6 +1070,12 @@ class Co2FetchService:
                             if latest_h >= (self._latest_mix_hour or 0):
                                 self._latest_mix_hour = latest_h
                                 self._latest_mix = hour_mix
+                                try:
+                                    cfg = self._get_config()
+                                    zone = str(getattr(cfg, "bidding_zone", "DE_LU") or "DE_LU")
+                                    self._db.upsert_fuel_mix(latest_h, zone, hour_mix)
+                                except Exception:
+                                    pass
                             # Log fuel breakdown
                             total_mw = sum(hour_mix.values())
                             lh_str = datetime.fromtimestamp(latest_h, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")

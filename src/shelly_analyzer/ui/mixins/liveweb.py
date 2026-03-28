@@ -1554,25 +1554,28 @@ class LiveWebMixin:
                                 "co2_g_h": round(co2_g_h, 1),
                             })
 
-                    # Fuel mix from Co2FetchService
+                    # Fuel mix from Co2FetchService (in-memory) or DB fallback
                     fuel_mix = {}
                     fuel_mix_hour = None
                     try:
+                        mix_hour, mix_data = None, {}
                         svc = getattr(self, "_co2_fetch_svc", None)
                         if svc is not None:
                             mix_hour, mix_data = svc.get_latest_mix()
-                            if mix_hour and mix_data:
-                                fuel_mix_hour = _dtc.fromtimestamp(mix_hour, tz=_tzc).strftime("%H:%M")
-                                from shelly_analyzer.services.entsoe import _CO2_FACTORS, FUEL_DISPLAY_NAMES
-                                total_mw = sum(mix_data.values())
-                                for fuel, mw in sorted(mix_data.items(), key=lambda x: -x[1]):
-                                    if mw > 0:
-                                        fuel_mix[fuel] = {
-                                            "name": FUEL_DISPLAY_NAMES.get(fuel, fuel),
-                                            "mw": round(mw, 0),
-                                            "share_pct": round(mw / total_mw * 100, 1) if total_mw > 0 else 0,
-                                            "factor": _CO2_FACTORS.get(fuel, 400.0),
-                                        }
+                        if not mix_data:
+                            mix_hour, mix_data = self.storage.db.query_latest_fuel_mix(zone)
+                        if mix_hour and mix_data:
+                            fuel_mix_hour = _dtc.fromtimestamp(mix_hour, tz=_tzc).strftime("%H:%M")
+                            from shelly_analyzer.services.entsoe import _CO2_FACTORS, FUEL_DISPLAY_NAMES
+                            total_mw = sum(mix_data.values())
+                            for fuel, mw in sorted(mix_data.items(), key=lambda x: -x[1]):
+                                if mw > 0:
+                                    fuel_mix[fuel] = {
+                                        "name": FUEL_DISPLAY_NAMES.get(fuel, fuel),
+                                        "mw": round(mw, 0),
+                                        "share_pct": round(mw / total_mw * 100, 1) if total_mw > 0 else 0,
+                                        "factor": _CO2_FACTORS.get(fuel, 400.0),
+                                    }
                     except Exception:
                         pass
 

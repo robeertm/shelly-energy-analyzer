@@ -797,10 +797,16 @@ class Co2Mixin:
             return
         try:
             from shelly_analyzer.services.entsoe import FUEL_DISPLAY_NAMES, _CO2_FACTORS
+            hour_ts, mix = None, {}
             svc = getattr(self, "_co2_fetch_svc", None)
-            if svc is None:
-                return
-            hour_ts, mix = svc.get_latest_mix()
+            if svc is not None:
+                hour_ts, mix = svc.get_latest_mix()
+            if not mix:
+                try:
+                    zone = str(getattr(self.cfg.co2, "bidding_zone", "DE_LU") or "DE_LU")
+                    hour_ts, mix = self.storage.db.query_latest_fuel_mix(zone)
+                except Exception:
+                    pass
             tree.delete(*tree.get_children())
             if not mix or hour_ts is None:
                 self._co2_mix_ts_var.set(self.t("co2.mix.no_data"))

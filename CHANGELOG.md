@@ -1,5 +1,9 @@
 # Changelog
 
+## 11.20.2 - 2026-03-28
+### Fixed
+- **Fuel mix always visible** – The generation/fuel mix (Kraftwerksmix) is now persisted to the database. Previously it was only held in memory and disappeared on app restart or when no ENTSO-E fetch had completed yet. Both the desktop app and web dashboard now fall back to the last stored mix from the DB, so the mix is always shown as long as data has been fetched at least once.
+
 ## 11.20.1 - 2026-03-28
 ### Fixed
 - **Web CO₂: live intensity dropping to 0** – The `/api/co2_live` endpoint queried only the exact current hour slot from the database. When ENTSO-E data for the current hour hadn't been fetched yet (fetch lag), the intensity returned 0 g/kWh, overwriting the correct value from the initial load. Now queries the last 3 hours and uses the most recent available entry, matching the behavior of the full `/api/co2` endpoint.
