@@ -322,7 +322,7 @@ _HTML_TEMPLATE = """<!doctype html>
       position: fixed;
       bottom: 0; left: 0; right: 0;
       display: grid;
-      grid-template-columns: repeat(7,1fr);
+      grid-template-columns: repeat(8,1fr);
       background: var(--card);
       border-top: 1px solid var(--border);
       padding-bottom: env(safe-area-inset-bottom, 0);
@@ -333,17 +333,19 @@ _HTML_TEMPLATE = """<!doctype html>
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 56px;
+      min-height: 48px;
       background: none;
       border: none;
       color: var(--muted);
-      font-size: 10px;
+      font-size: 9px;
       cursor: pointer;
-      padding: 6px 2px;
-      gap: 2px;
+      padding: 4px 1px;
+      gap: 1px;
       transition: color 0.15s;
+      overflow: hidden;
     }}
-    .nav-btn .nav-icon {{ font-size: 20px; line-height: 1; }}
+    .nav-btn .nav-icon {{ font-size: 18px; line-height: 1; }}
+    .nav-btn .nav-label {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }}
     .nav-btn.active {{ color: var(--accent); }}
     /* ── Icon buttons ── */
     .icon-btn {{
@@ -2148,8 +2150,13 @@ function renderCo2(data, el) {{
 
   el.innerHTML = html;
 
-  // ── Draw 24h chart on canvas ──
+  // ── Draw 24h chart on canvas (deferred to ensure layout) ──
   if (hourly.length > 1) {{
+    requestAnimationFrame(function() {{ _drawCo2Chart(hourly, green, dirty); }});
+  }}
+}}
+
+function _drawCo2Chart(hourly, green, dirty) {{
     const canvas = document.getElementById('co2-chart');
     if (canvas) {{
       const ctx = canvas.getContext('2d');
@@ -2232,7 +2239,6 @@ function renderCo2(data, el) {{
         }}
       }});
     }}
-  }}
 }}
 
 /* ──────────────────────────────────────────────
