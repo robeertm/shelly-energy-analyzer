@@ -1,6 +1,6 @@
 # Changelog
 
-## 11.18.1 - 2026-03-28
+## 11.18.2 - 2026-03-28
 ### Added
 - **Cross-border flow CO₂ adjustment** – CO₂ intensity calculation now optionally accounts for physical electricity imports/exports between bidding zones using ENTSO-E A11 (cross-border flows) and A65 (system total load) data. Imported electricity is weighted with the source zone's CO₂ intensity, exports are subtracted from local generation. No additional API token required.
 - **36 European neighbor zone mappings** – Full interconnection topology for all supported ENTSO-E bidding zones (DE_LU, AT, FR, PL, etc.)
