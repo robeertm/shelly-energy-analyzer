@@ -1524,6 +1524,49 @@ class LiveWebMixin:
                     except Exception:
                         pass
 
+                    # 24h rolling CO₂ per 3-phase device (hourly bars)
+                    device_hourly_co2 = []
+                    df_co2_24h = self.storage.db.query_co2_intensity(zone, h24_start, now_ts + 3600)
+                    co2_by_hour = {}
+                    if df_co2_24h is not None and not df_co2_24h.empty:
+                        for _, row in df_co2_24h.iterrows():
+                            co2_by_hour[int(row["hour_ts"])] = float(row["intensity_g_per_kwh"])
+                    for d in self.cfg.devices:
+                        if int(getattr(d, "phases", 3) or 3) < 3:
+                            continue
+                        if str(getattr(d, "kind", "em")) == "switch":
+                            continue
+                        try:
+                            df_h = self.storage.db.query_hourly(d.key, start_ts=h24_start, end_ts=now_ts + 3600)
+                            if df_h is None or df_h.empty or "kwh" not in df_h.columns:
+                                continue
+                            bars = []
+                            for _, hrow in df_h.iterrows():
+                                hts = int(hrow.get("hour_ts", 0))
+                                kwh = float(pd.to_numeric(hrow.get("kwh", 0), errors="coerce") or 0)
+                                if kwh < 0:
+                                    kwh = 0.0
+                                ci_h = co2_by_hour.get(hts, current_intensity)
+                                co2_g = kwh * ci_h
+                                hour_str = _dtc.fromtimestamp(hts, tz=_tzc).strftime("%H:%M")
+                                bars.append({
+                                    "hour": hour_str,
+                                    "ts": hts,
+                                    "kwh": round(kwh, 4),
+                                    "co2_g": round(co2_g, 1),
+                                    "intensity": round(ci_h, 1),
+                                })
+                            if bars:
+                                total_co2_g = sum(b["co2_g"] for b in bars)
+                                device_hourly_co2.append({
+                                    "key": d.key,
+                                    "name": d.name,
+                                    "total_co2_g": round(total_co2_g, 1),
+                                    "bars": bars,
+                                })
+                        except Exception:
+                            continue
+
                     # Equivalents
                     tree_days = co2_month / 22.0 * 365 if co2_month > 0 else 0
                     car_km = co2_month / 0.170 if co2_month > 0 else 0
@@ -1546,6 +1589,7 @@ class LiveWebMixin:
                         "device_rates": device_rates,
                         "fuel_mix": fuel_mix,
                         "fuel_mix_hour": fuel_mix_hour,
+                        "device_hourly_co2": device_hourly_co2,
                     }
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
