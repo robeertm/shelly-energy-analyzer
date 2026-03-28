@@ -1415,8 +1415,9 @@ class LiveWebMixin:
                     dirty_thr = float(getattr(co2_cfg, "dirty_threshold_g_per_kwh", 400.0))
 
                     now_ts = int(time.time())
-                    hour_ts = (now_ts // 3600) * 3600
-                    df_now = self.storage.db.query_co2_intensity(zone, hour_ts, hour_ts + 3600)
+                    # Query last 3 hours to handle ENTSO-E fetch lag
+                    range_start = ((now_ts // 3600) - 2) * 3600
+                    df_now = self.storage.db.query_co2_intensity(zone, range_start, now_ts + 3600)
                     ci = 0.0
                     if df_now is not None and not df_now.empty:
                         ci = float(df_now.iloc[-1].get("intensity_g_per_kwh", 0))
