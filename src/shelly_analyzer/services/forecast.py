@@ -58,7 +58,19 @@ def compute_forecast(
 
     # Query hourly data (much faster than raw samples)
     df = db.query_hourly(device_key, start_ts=start_ts, end_ts=end_ts)
-    if df.empty or len(df) < 48:  # Need at least 2 days
+
+    # Fallback to samples if hourly is empty
+    if df.empty or len(df) < 6:
+        try:
+            samples = db.query_samples(device_key, start_ts=start_ts, end_ts=end_ts)
+            if samples is not None and not samples.empty and "energy_kwh" in samples.columns:
+                samples["hour_ts"] = (pd.to_datetime(samples["timestamp"]).astype(int) // 10**9 // 3600) * 3600
+                df = samples.groupby("hour_ts").agg(kwh=("energy_kwh", "sum")).reset_index()
+                df["kwh"] = df["kwh"].fillna(0)
+        except Exception:
+            pass
+
+    if df.empty or len(df) < 6:
         return None
 
     # Convert hour_ts → datetime and aggregate to daily
@@ -67,7 +79,7 @@ def compute_forecast(
     daily = df.groupby("date").agg(kwh=("kwh", "sum")).reset_index()
     daily = daily.sort_values("date").reset_index(drop=True)
 
-    if len(daily) < 7:
+    if len(daily) < 3:
         return None
 
     # Remove partial first/last day

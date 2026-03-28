@@ -18,7 +18,6 @@ class TenantMixin:
         top = ttk.Frame(frm)
         top.pack(fill="x", padx=10, pady=(10, 5))
         ttk.Label(top, text=self.t("tenant.title"), font=("", 14, "bold")).pack(side="left")
-        ttk.Button(top, text=self.t("tenant.refresh"), command=self._refresh_tenant_tab).pack(side="right", padx=5)
         ttk.Button(top, text=self.t("tenant.export_pdf"), command=self._tenant_export_pdf).pack(side="right", padx=5)
 
         # Summary cards

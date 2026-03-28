@@ -63,17 +63,38 @@ def analyze_standby(
     end_ts = int(now.timestamp())
 
     hourly = db.query_hourly(device_key, start_ts=start_ts, end_ts=end_ts)
-    if hourly.empty or len(hourly) < 48:
+
+    # Fallback: if no hourly data, try to compute from raw samples
+    if hourly.empty or len(hourly) < 6:
+        try:
+            samples = db.query_samples(device_key, start_ts=start_ts, end_ts=end_ts)
+            if samples is not None and not samples.empty and "total_power" in samples.columns:
+                # Synthesize hourly from samples
+                samples["hour_ts"] = (pd.to_datetime(samples["timestamp"]).astype(int) // 10**9 // 3600) * 3600
+                hourly = samples.groupby("hour_ts").agg(
+                    kwh=("energy_kwh", "sum"),
+                    avg_power_w=("total_power", "mean"),
+                ).reset_index()
+                hourly["kwh"] = hourly["kwh"].fillna(0)
+                hourly["avg_power_w"] = hourly["avg_power_w"].fillna(0)
+        except Exception:
+            pass
+
+    if hourly.empty or len(hourly) < 6:
         return None
 
     # Convert to arrays
     kwh_arr = hourly["kwh"].values.astype(float)
     avg_power = hourly["avg_power_w"].values.astype(float)
-    hours = pd.to_datetime(hourly["hour_ts"], unit="s", utc=True)
+
+    if "hour_ts" in hourly.columns:
+        hours = pd.to_datetime(hourly["hour_ts"], unit="s", utc=True)
+    else:
+        hours = pd.Series(pd.date_range(start="2020-01-01", periods=len(hourly), freq="h", tz="UTC"))
 
     # Remove NaN
     valid = ~np.isnan(avg_power)
-    if valid.sum() < 24:
+    if valid.sum() < 6:
         return None
     avg_power = avg_power[valid]
     kwh_arr = kwh_arr[valid]
