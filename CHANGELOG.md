@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.1.2 - 2026-03-28
+### Fixed
+- **Web heatmap: yearly calendar readable on mobile** – Calendar cells now have a minimum size of 10px (was 4px) so they remain visible and tappable. Month labels always use 3-character format (Jan, Feb, ...) instead of single letters. Container scrolls horizontally on narrow screens with smooth touch scrolling instead of squeezing cells to illegible sizes.
+
 ## 12.1.1 - 2026-03-28
 ### Fixed
 - **Desktop plots scale to monitor size** – All new tabs (Forecast, Standby, Weather, Sankey, Tenant) now use `grid` layout with `sticky="nsew"` and `weight=1` instead of scrollable frames. Charts fill the available space vertically and horizontally, matching the Heatmap tab behavior. Resizing the window or using a larger monitor scales all plots proportionally.

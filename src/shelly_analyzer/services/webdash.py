@@ -528,7 +528,7 @@ _HTML_TEMPLATE = """<!doctype html>
     .sparkline-wrap[data-metric] {{ cursor: pointer; transition: opacity .15s; }}
     .sparkline-wrap[data-metric]:hover {{ opacity: .7; }}
     /* ── Heatmap ── */
-    .hm-calendar {{ overflow-x: auto; padding-bottom: 4px; }}
+    .hm-calendar {{ overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }}
     .hm-grid {{ display: flex; gap: 2px; }}
     .hm-week {{ display: flex; flex-direction: column; gap: 2px; }}
     .hm-day {{
@@ -1941,24 +1941,19 @@ function renderHeatmapCalendar(data, el, unit) {{
     weeks.push(week);
   }}
 
-  // Dynamic cell size: fit within available width AND height (important for iPhone)
+  // Dynamic cell size: prefer readable size, allow horizontal scroll on narrow screens
   const pane = el.closest('.pane') || document.body;
   const availW = pane.clientWidth - 32;
   const numWeeks = weeks.length;
   const calCellFromW = Math.floor((availW - (numWeeks - 1) * 2) / numWeeks);
-  // Reserve ~290px for header, nav, controls, paddings, card titles, month labels,
-  // and the hourly heatmap below (7 rows). Split remaining height evenly for 7 cal rows.
-  const availH = window.innerHeight - 290;
-  const calCellFromH = Math.floor((availH - 15) / 7 - 2); // 15=month-labels, 2=gap
-  const calCellSize = Math.max(4, Math.min(calCellFromW, calCellFromH));
+  // Minimum 10px for readability; container scrolls horizontally if needed
+  const calCellSize = Math.max(10, Math.min(calCellFromW, 18));
   const cellGap = 2;
 
-  // Month labels — narrow (1 char) on portrait/small screens, short (3 chars) on landscape/wide
-  const _isNarrow = availW < 500;
-  const _monthFmt = _isNarrow ? 'narrow' : 'short';
-  const _dtfMonth = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{month: _monthFmt}});
+  // Month labels — always short (3 chars) for readability
+  const _dtfMonth = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{month: 'short'}});
   const monthNames = Array.from({{length: 12}}, function(_, i) {{ return _dtfMonth.format(new Date(2000, i, 1)); }});
-  const _lblFontSize = _isNarrow ? '8px' : '9px';
+  const _lblFontSize = '9px';
   let monthLabelHtml = '<div class="hm-month-labels" style="font-size:' + _lblFontSize + '">';
   let lastMonth = -1;
   weeks.forEach(function(week) {{
