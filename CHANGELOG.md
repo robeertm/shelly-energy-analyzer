@@ -1,5 +1,15 @@
 # Changelog
 
+## 12.5.0 - 2026-03-29
+### Added
+- **Kraftwerksmix Zeitnavigation** – Der Kraftwerksmix im CO₂-Tab hat jetzt Navigationsbuttons zum Durchblättern der historischen Daten:
+  - **◀ Tag / Tag ▶** — springt 24 Stunden vor/zurück
+  - **◀ h / h ▶** — springt eine Stunde vor/zurück
+  - **Jetzt** — springt zur aktuellsten verfügbaren Stunde
+  - Zeitstempel zeigt Wochentag + Datum + Uhrzeit (z.B. "Samstag, 29.03.2026  14:00")
+  - Rechts daneben: Quellenhinweis **✅ ENTSO-E** (echte Daten) oder **⚠️ Geschätzt** (Lückenfüllung)
+  - Findet automatisch die nächste verfügbare Stunde wenn für die gewählte Stunde keine Daten vorliegen
+
 ## 12.4.1 - 2026-03-29
 ### Fixed
 - **Solar now appears in ENTSO-E Kraftwerksmix** – ENTSO-E often delivers solar generation data (B16) with 1-2 day delay, causing it to be missing from the fuel mix display. When solar data is absent, the app now estimates solar generation based on installed capacity per country (82 GW for DE_LU, etc.) and a typical capacity factor profile by hour-of-day and month. Estimated solar is included in both the CO₂ intensity calculation and the Kraftwerksmix table. This affects all three places where the fuel mix is stored: initial fetch, periodic updates, and recovery fetch.
