@@ -1955,18 +1955,18 @@ function renderHeatmapCalendar(data, el, unit) {{
   const start = new Date(year, 0, 1);
   // Align to Monday
   while (start.getDay() !== 1) start.setDate(start.getDate() - 1);
-  const end = new Date(year, 11, 31);
-  while (end.getDay() !== 0) end.setDate(end.getDate() + 1);
-
   const vals = Object.values(daily).filter(function(v) {{ return v > 0; }});
   const maxVal = vals.length ? Math.max(...vals) : 1;
 
+  // Generate weeks: always produce full weeks (Mon-Sun) until Dec 31 is covered
   const weeks = [];
   let cur = new Date(start);
-  while (cur <= end) {{
+  let coveredDec31 = false;
+  while (!coveredDec31) {{
     const week = [];
     for (let d = 0; d < 7; d++) {{
       week.push(new Date(cur));
+      if (cur.getFullYear() === year && cur.getMonth() === 11 && cur.getDate() === 31) coveredDec31 = true;
       cur.setDate(cur.getDate() + 1);
     }}
     weeks.push(week);
