@@ -1,8 +1,8 @@
 # Changelog
 
-## 12.9.3 - 2026-03-29
+## 12.9.4 - 2026-03-29
 ### Fixed
-- **Web dashboard blank page on mobile Safari** – The `/api/state` endpoint serialized emoji appliance icons (📺, 🧊, etc.) as raw UTF-16 surrogate pairs (`\ud83d\udcfa`), which is invalid JSON per RFC 7159. Mobile Safari's JSON parser rejected the response, causing a blank Live page. Fixed by using `ensure_ascii=False` on all JSON API responses so emojis are output as proper UTF-8 characters.
+- **Web dashboard blank page on mobile Safari** – Emoji characters in JSON responses (appliance icons AND i18n tab labels with emojis like 🔄 Sync, 📊 Plots) were serialized as UTF-16 surrogate pairs, which is invalid JSON. Mobile Safari rejected these responses, causing a completely blank page. Fixed `ensure_ascii=False` on ALL `json.dumps` calls including the i18n and devices JSON embedded in the HTML template.
 
 ## 12.9.2 - 2026-03-29
 ### Fixed
