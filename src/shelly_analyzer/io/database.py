@@ -1031,6 +1031,18 @@ class EnergyDB:
                     rows,
                 )
 
+    def fuel_mix_coverage(self, zone: str, start_ts: int, end_ts: int) -> Tuple[int, int]:
+        """Return (hours_with_mix, total_hours) in the given range."""
+        conn = self._conn()
+        total = max(1, (end_ts - start_ts) // 3600)
+        row = conn.execute(
+            "SELECT COUNT(DISTINCT hour_ts) FROM co2_fuel_mix "
+            "WHERE zone = ? AND hour_ts >= ? AND hour_ts < ?",
+            (zone, start_ts, end_ts),
+        ).fetchone()
+        covered = int(row[0]) if row and row[0] else 0
+        return covered, total
+
     def query_latest_fuel_mix(self, zone: str) -> Tuple[Optional[int], Dict[str, float]]:
         """Return the most recent fuel mix for a zone.
 
