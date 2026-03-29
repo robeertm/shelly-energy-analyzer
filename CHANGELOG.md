@@ -1,5 +1,11 @@
 # Changelog
 
+## 12.8.2 - 2026-03-29
+### Added
+- **Auto-sync on app startup** – The app now automatically starts an incremental data sync from all configured Shelly devices 2 seconds after launch. No more manual "Sync" click needed to see current data.
+- **ENTSO-E check triggered on startup** – The CO₂ fetch service is immediately triggered when the app opens, so it checks for missing historical data right away instead of waiting for the first scheduled interval.
+- **CO₂ service responds faster to triggers** – The initial 5-second startup delay can now be interrupted by `trigger_now()`, so the ENTSO-E completeness check starts as soon as the app requests it.
+
 ## 12.8.1 - 2026-03-29
 ### Fixed
 - **ENTSO-E always checks full history for completeness** – Every fetch cycle now scans the entire range from the oldest energy measurement to now for missing CO₂ hours. Only the actual gaps are fetched from the API (aligned to day boundaries and merged into efficient ranges), instead of re-fetching the entire timeline. This ensures historical data is always backfilled automatically, even after app restarts or partial imports.
