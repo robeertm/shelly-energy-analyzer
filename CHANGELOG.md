@@ -1,5 +1,10 @@
 # Changelog
 
+## 12.7.3 - 2026-03-29
+### Fixed
+- **Consistent nav icons in web dashboard** – Forecast, Standby, and Energy Flow tabs were missing dedicated `nav-icon` spans, causing their emoji icons to render at label size (9px) instead of the standard icon size (18px). All 11 web nav tabs now use the same icon+label structure for uniform appearance.
+- **Added emoji icons to all desktop tabs** – Sync (🔄), Charts (📊), Live (📡), Costs (💰), Heatmap (🔥), Export (📤), and Settings (⚙️) tabs now have icons matching the other tabs. Updated across all 9 languages.
+
 ## 12.7.2 - 2026-03-29
 ### Fixed
 - **Removed misleading "Jetzt rückfüllen" hint** – The CO₂ mix table showed "Keine Daten – bitte 'Jetzt rückfüllen' ausführen" even though the backfill button was removed in v12.7.0. Updated all 9 languages to show "No data – loading automatically …" instead.
