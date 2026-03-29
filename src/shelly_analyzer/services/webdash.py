@@ -1990,10 +1990,10 @@ function renderHeatmapCalendar(data, el, unit) {{
   weeks.forEach(function(week) {{
     const m = week[0].getMonth();
     if (m !== lastMonth && week[0].getFullYear() === year) {{
-      monthLabelHtml += '<span style="width:' + (calCellSize + cellGap) + 'px">' + monthNames[m] + '</span>';
+      monthLabelHtml += '<span style="width:' + calCellSize + 'px">' + monthNames[m] + '</span>';
       lastMonth = m;
     }} else {{
-      monthLabelHtml += '<span style="width:' + (calCellSize + cellGap) + 'px"></span>';
+      monthLabelHtml += '<span style="width:' + calCellSize + 'px"></span>';
     }}
   }});
   monthLabelHtml += '</div>';
