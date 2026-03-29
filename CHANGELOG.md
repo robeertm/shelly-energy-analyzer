@@ -1,8 +1,9 @@
 # Changelog
 
-## 12.9.5 - 2026-03-29
+## 12.9.6 - 2026-03-29
 ### Fixed
-- **Web dashboard blank page on mobile Safari** – Emoji characters in JSON responses (appliance icons AND i18n tab labels with emojis like 🔄 Sync, 📊 Plots) were serialized as UTF-16 surrogate pairs, which is invalid JSON. Mobile Safari rejected these responses, causing a completely blank page. Fixed `ensure_ascii=False` on ALL `json.dumps` calls including the i18n and devices JSON embedded in the HTML template.
+- **Web dashboard completely blank (all browsers)** – The CO₂ range selector buttons generated `loadCo2(\' + r + \')` in the JS template. The `_render_template` function converts `{{`→`{` and `}}`→`}`, but also leaves `\'` as a bare `'`, producing `loadCo2('' + r + '')` — a **JS SyntaxError**. Since all JS is in one `<script>` block, the entire page's JavaScript failed to parse and nothing rendered. Fixed by using `\\u0027` (JS unicode escape for single quote) instead of `\'`.
+- **UTF-16 surrogate cleanup** – Added `ensure_ascii=False` to all `json.dumps` calls (API responses and HTML-embedded JSON) to prevent emoji characters from being serialized as invalid UTF-16 surrogate pairs.
 
 ## 12.9.2 - 2026-03-29
 ### Fixed

@@ -2202,7 +2202,7 @@ function renderCo2(data, el) {{
     html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">' + t('web.co2.chart_title', 'CO\u2082 Intensity') + '</div>';
     ['24h','7d','30d','all'].forEach(function(r) {{
       const active = r === curRange ? 'background:var(--accent);color:#fff;' : 'background:var(--chipbg);color:var(--fg);';
-      html += '<button onclick="loadCo2(\'' + r + '\')" style="border:none;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;' + active + '">' + r + '</button>';
+      html += '<button onclick="loadCo2(\\u0027' + r + '\\u0027)" style="border:none;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;' + active + '">' + r + '</button>';
     }});
     html += '</div>';
     html += '<canvas id="co2-chart" height="160" style="width:100%"></canvas>';
