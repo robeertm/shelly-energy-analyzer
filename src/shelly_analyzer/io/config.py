@@ -335,7 +335,8 @@ class Co2Config:
     bidding_zone: str = "DE_LU"
     # How often to fetch new data from the ENTSO-E API (hours)
     fetch_interval_hours: int = 1
-    # How many days of historical data to backfill on first run
+    # Deprecated: kept for backward compat with existing config.json files.
+    # The service now auto-detects the range from oldest measurement data.
     backfill_days: int = 7
     # Whether to highlight green / dirty hours in the 24h heatmap
     show_green_dirty_hours: bool = True

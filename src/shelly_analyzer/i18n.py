@@ -5540,11 +5540,11 @@ _I18N.setdefault("de", {}).update({
     "co2.settings.token": "API-Token",
     "co2.settings.zone": "Gebotszone",
     "co2.settings.interval": "Abrufintervall (h)",
-    "co2.settings.backfill": "Rückfüllung (Tage)",
+    # co2.settings.backfill removed (auto-backfill)
     "co2.settings.green_threshold": "Grün-Schwelle (g/kWh)",
     "co2.settings.dirty_threshold": "Schmutzig-Schwelle (g/kWh)",
     "co2.settings.cross_border": "Cross-Border-Flows einbeziehen (Import/Export zwischen Gebotszonen)",
-    "co2.settings.backfill_btn": "Jetzt rückfüllen",
+    # co2.settings.backfill_btn removed (auto-backfill)
     "co2.error.no_token": "Kein API-Token konfiguriert.",
     "co2.error.no_data": "Keine CO₂-Daten vorhanden.",
     "co2.error.fetch_failed": "Abruf fehlgeschlagen: {err}",
@@ -5583,11 +5583,11 @@ _I18N.setdefault("en", {}).update({
     "co2.settings.token": "API Token",
     "co2.settings.zone": "Bidding Zone",
     "co2.settings.interval": "Fetch interval (h)",
-    "co2.settings.backfill": "Backfill (days)",
+    # co2.settings.backfill removed (auto-backfill)
     "co2.settings.green_threshold": "Green threshold (g/kWh)",
     "co2.settings.dirty_threshold": "Dirty threshold (g/kWh)",
     "co2.settings.cross_border": "Include cross-border flows (import/export between bidding zones)",
-    "co2.settings.backfill_btn": "Backfill now",
+    # co2.settings.backfill_btn removed (auto-backfill)
     "co2.error.no_token": "No API token configured.",
     "co2.error.no_data": "No CO₂ data available.",
     "co2.error.fetch_failed": "Fetch failed: {err}",
@@ -5626,10 +5626,10 @@ _I18N.setdefault("es", {}).update({
     "co2.settings.token": "Token API",
     "co2.settings.zone": "Zona de oferta",
     "co2.settings.interval": "Intervalo de consulta (h)",
-    "co2.settings.backfill": "Relleno histórico (días)",
+    # co2.settings.backfill removed (auto-backfill)
     "co2.settings.green_threshold": "Umbral verde (g/kWh)",
     "co2.settings.dirty_threshold": "Umbral sucio (g/kWh)",
-    "co2.settings.backfill_btn": "Rellenar ahora",
+    # co2.settings.backfill_btn removed (auto-backfill)
     "co2.error.no_token": "No hay token API configurado.",
     "co2.error.no_data": "No hay datos de CO₂ disponibles.",
     "co2.error.fetch_failed": "Error al obtener datos: {err}",
@@ -5665,10 +5665,10 @@ _I18N.setdefault("fr", {}).update({
     "co2.settings.token": "Jeton API",
     "co2.settings.zone": "Zone d'enchères",
     "co2.settings.interval": "Intervalle de récupération (h)",
-    "co2.settings.backfill": "Historique (jours)",
+    # co2.settings.backfill removed (auto-backfill)
     "co2.settings.green_threshold": "Seuil vert (g/kWh)",
     "co2.settings.dirty_threshold": "Seuil sale (g/kWh)",
-    "co2.settings.backfill_btn": "Remplir maintenant",
+    # co2.settings.backfill_btn removed (auto-backfill)
     "co2.error.no_token": "Aucun jeton API configuré.",
     "co2.error.no_data": "Aucune donnée CO₂ disponible.",
     "co2.error.fetch_failed": "Échec de récupération : {err}",
@@ -5704,10 +5704,10 @@ _I18N.setdefault("pt", {}).update({
     "co2.settings.token": "Token da API",
     "co2.settings.zone": "Zona de lances",
     "co2.settings.interval": "Intervalo de busca (h)",
-    "co2.settings.backfill": "Preenchimento histórico (dias)",
+    # co2.settings.backfill removed (auto-backfill)
     "co2.settings.green_threshold": "Limite verde (g/kWh)",
     "co2.settings.dirty_threshold": "Limite sujo (g/kWh)",
-    "co2.settings.backfill_btn": "Preencher agora",
+    # co2.settings.backfill_btn removed (auto-backfill)
     "co2.error.no_token": "Nenhum token de API configurado.",
     "co2.error.no_data": "Nenhum dado de CO₂ disponível.",
     "co2.error.fetch_failed": "Falha na busca: {err}",
@@ -5743,10 +5743,10 @@ _I18N.setdefault("it", {}).update({
     "co2.settings.token": "Token API",
     "co2.settings.zone": "Zona d'offerta",
     "co2.settings.interval": "Intervallo recupero (h)",
-    "co2.settings.backfill": "Storico (giorni)",
+    # co2.settings.backfill removed (auto-backfill)
     "co2.settings.green_threshold": "Soglia verde (g/kWh)",
     "co2.settings.dirty_threshold": "Soglia sporca (g/kWh)",
-    "co2.settings.backfill_btn": "Carica adesso",
+    # co2.settings.backfill_btn removed (auto-backfill)
     "co2.error.no_token": "Nessun token API configurato.",
     "co2.error.no_data": "Nessun dato CO₂ disponibile.",
     "co2.error.fetch_failed": "Recupero fallito: {err}",
@@ -5782,10 +5782,10 @@ _I18N.setdefault("pl", {}).update({
     "co2.settings.token": "Token API",
     "co2.settings.zone": "Strefa przetargowa",
     "co2.settings.interval": "Interwał pobierania (h)",
-    "co2.settings.backfill": "Uzupełnienie historii (dni)",
+    # co2.settings.backfill removed (auto-backfill)
     "co2.settings.green_threshold": "Próg zielony (g/kWh)",
     "co2.settings.dirty_threshold": "Próg brudny (g/kWh)",
-    "co2.settings.backfill_btn": "Uzupełnij teraz",
+    # co2.settings.backfill_btn removed (auto-backfill)
     "co2.error.no_token": "Brak skonfigurowanego tokenu API.",
     "co2.error.no_data": "Brak danych CO₂.",
     "co2.error.fetch_failed": "Pobieranie nie powiodło się: {err}",
@@ -5821,10 +5821,10 @@ _I18N.setdefault("cs", {}).update({
     "co2.settings.token": "API token",
     "co2.settings.zone": "Nabídková zóna",
     "co2.settings.interval": "Interval načítání (h)",
-    "co2.settings.backfill": "Doplnění historie (dny)",
+    # co2.settings.backfill removed (auto-backfill)
     "co2.settings.green_threshold": "Zelený práh (g/kWh)",
     "co2.settings.dirty_threshold": "Špinavý práh (g/kWh)",
-    "co2.settings.backfill_btn": "Doplnit nyní",
+    # co2.settings.backfill_btn removed (auto-backfill)
     "co2.error.no_token": "Není nakonfigurován token API.",
     "co2.error.no_data": "Žádná data CO₂ nejsou k dispozici.",
     "co2.error.fetch_failed": "Načítání selhalo: {err}",
@@ -5860,10 +5860,10 @@ _I18N.setdefault("ru", {}).update({
     "co2.settings.token": "Токен API",
     "co2.settings.zone": "Зона торгов",
     "co2.settings.interval": "Интервал запроса (ч)",
-    "co2.settings.backfill": "Заполнение истории (дней)",
+    # co2.settings.backfill removed (auto-backfill)
     "co2.settings.green_threshold": "Зелёный порог (г/кВтч)",
     "co2.settings.dirty_threshold": "Грязный порог (г/кВтч)",
-    "co2.settings.backfill_btn": "Заполнить сейчас",
+    # co2.settings.backfill_btn removed (auto-backfill)
     "co2.error.no_token": "Токен API не настроен.",
     "co2.error.no_data": "Нет данных CO₂.",
     "co2.error.fetch_failed": "Ошибка запроса: {err}",
@@ -6035,7 +6035,7 @@ _I18N.setdefault("ru", {}).update({
 # -------- CO₂ fuel-mix table (v11.3.0) --------
 _I18N.setdefault("de", {}).update({
     "co2.mix.title":      "Kraftwerksmix – neueste abgerufene Stunde",
-    "co2.mix.no_data":    "Keine Daten – bitte 'Jetzt rückfüllen' ausführen.",
+    "co2.mix.no_data":    "Keine Daten – werden automatisch geladen …",
     "co2.mix.ts_label":   "Stunde: {ts}",
     "co2.mix.col_fuel":   "Energieträger",
     "co2.mix.col_mw":     "MW",
@@ -6046,7 +6046,7 @@ _I18N.setdefault("de", {}).update({
 })
 _I18N.setdefault("en", {}).update({
     "co2.mix.title":      "Generation Mix – most recently fetched hour",
-    "co2.mix.no_data":    "No data – please run 'Backfill now'.",
+    "co2.mix.no_data":    "No data – loading automatically …",
     "co2.mix.ts_label":   "Hour: {ts}",
     "co2.mix.col_fuel":   "Fuel type",
     "co2.mix.col_mw":     "MW",
@@ -6057,7 +6057,7 @@ _I18N.setdefault("en", {}).update({
 })
 _I18N.setdefault("es", {}).update({
     "co2.mix.title":      "Mix de generación – última hora obtenida",
-    "co2.mix.no_data":    "Sin datos – ejecute 'Rellenar ahora'.",
+    "co2.mix.no_data":    "Sin datos – cargando automáticamente …",
     "co2.mix.ts_label":   "Hora: {ts}",
     "co2.mix.col_fuel":   "Fuente de energía",
     "co2.mix.col_mw":     "MW",
@@ -6068,7 +6068,7 @@ _I18N.setdefault("es", {}).update({
 })
 _I18N.setdefault("fr", {}).update({
     "co2.mix.title":      "Mix de production – dernière heure récupérée",
-    "co2.mix.no_data":    "Aucune donnée – lancez 'Remplir maintenant'.",
+    "co2.mix.no_data":    "Aucune donnée – chargement automatique …",
     "co2.mix.ts_label":   "Heure : {ts}",
     "co2.mix.col_fuel":   "Source d'énergie",
     "co2.mix.col_mw":     "MW",
@@ -6079,7 +6079,7 @@ _I18N.setdefault("fr", {}).update({
 })
 _I18N.setdefault("pt", {}).update({
     "co2.mix.title":      "Mix de geração – última hora obtida",
-    "co2.mix.no_data":    "Sem dados – execute 'Preencher agora'.",
+    "co2.mix.no_data":    "Sem dados – carregando automaticamente …",
     "co2.mix.ts_label":   "Hora: {ts}",
     "co2.mix.col_fuel":   "Fonte de energia",
     "co2.mix.col_mw":     "MW",
@@ -6090,7 +6090,7 @@ _I18N.setdefault("pt", {}).update({
 })
 _I18N.setdefault("it", {}).update({
     "co2.mix.title":      "Mix di generazione – ultima ora recuperata",
-    "co2.mix.no_data":    "Nessun dato – eseguire 'Riempi ora'.",
+    "co2.mix.no_data":    "Nessun dato – caricamento automatico …",
     "co2.mix.ts_label":   "Ora: {ts}",
     "co2.mix.col_fuel":   "Fonte energetica",
     "co2.mix.col_mw":     "MW",
@@ -6101,7 +6101,7 @@ _I18N.setdefault("it", {}).update({
 })
 _I18N.setdefault("pl", {}).update({
     "co2.mix.title":      "Miks energetyczny – ostatnia pobrana godzina",
-    "co2.mix.no_data":    "Brak danych – uruchom 'Uzupełnij teraz'.",
+    "co2.mix.no_data":    "Brak danych – ładowanie automatyczne …",
     "co2.mix.ts_label":   "Godzina: {ts}",
     "co2.mix.col_fuel":   "Nośnik energii",
     "co2.mix.col_mw":     "MW",
@@ -6112,7 +6112,7 @@ _I18N.setdefault("pl", {}).update({
 })
 _I18N.setdefault("cs", {}).update({
     "co2.mix.title":      "Energetický mix – naposledy načtená hodina",
-    "co2.mix.no_data":    "Žádná data – spusťte 'Doplnit nyní'.",
+    "co2.mix.no_data":    "Žádná data – automatické načítání …",
     "co2.mix.ts_label":   "Hodina: {ts}",
     "co2.mix.col_fuel":   "Zdroj energie",
     "co2.mix.col_mw":     "MW",
@@ -6123,7 +6123,7 @@ _I18N.setdefault("cs", {}).update({
 })
 _I18N.setdefault("ru", {}).update({
     "co2.mix.title":      "Структура генерации – последний загруженный час",
-    "co2.mix.no_data":    "Нет данных – запустите «Заполнить сейчас».",
+    "co2.mix.no_data":    "Нет данных – автоматическая загрузка …",
     "co2.mix.ts_label":   "Час: {ts}",
     "co2.mix.col_fuel":   "Источник энергии",
     "co2.mix.col_mw":     "МВт",

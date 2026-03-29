@@ -1009,7 +1009,7 @@ class Co2FetchService:
         """Force an immediate fetch.
 
         force=True re-fetches from backfill_days ago, ignoring any already-stored
-        data (useful for the "Backfill now" button).
+        data.
         """
         self._last_fetch_ts = 0.0
         if force:
@@ -1091,7 +1091,7 @@ class Co2FetchService:
         d_from = datetime.fromtimestamp(start_ts, tz=timezone.utc).strftime("%Y-%m-%d")
         d_to = datetime.fromtimestamp(end_ts, tz=timezone.utc).strftime("%Y-%m-%d")
         self._svc_log(
-            f"CO₂ Backfill gestartet: {total_days} Tage, Zone {zone} ({d_from} → {d_to})"
+            f"CO₂ Import gestartet: {total_days} Tage, Zone {zone} ({d_from} → {d_to})"
         )
 
         # Split into chunks of at most 7 days to stay within API limits
@@ -1202,7 +1202,7 @@ class Co2FetchService:
         # Store successfully fetched rows immediately
         if all_rows:
             written = self._db.upsert_co2_intensity(all_rows)
-            self._svc_log(f"CO₂ Backfill: {written} Werte gespeichert")
+            self._svc_log(f"CO₂ Import: {written} Werte gespeichert")
             logger.info("Co2FetchService: stored %d intensity points", written)
 
         # ── Gap detection & estimated-value fill ──────────────────────────
@@ -1250,13 +1250,13 @@ class Co2FetchService:
         if failed_ranges:
             n = len(failed_ranges)
             self._svc_log(
-                f"CO₂ Backfill abgeschlossen mit {n} fehlgeschlagenen Chunk(s) – "
+                f"CO₂ Import abgeschlossen mit {n} fehlgeschlagenen Chunk(s) – "
                 f"Lücken wurden mit Schätzwerten aufgefüllt"
             )
         elif not all_rows and not failed_ranges:
-            self._svc_log("CO₂ Backfill abgeschlossen: 0 Werte – keine Daten empfangen")
+            self._svc_log("CO₂ Import abgeschlossen: 0 Werte – keine Daten empfangen")
         else:
-            self._svc_log("CO₂ Backfill abgeschlossen")
+            self._svc_log("CO₂ Import abgeschlossen")
         self._last_fetch_ts = time.time()
 
         # ── Fuel mix recovery ────────────────────────────────────────────
