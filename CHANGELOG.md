@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.8.1 - 2026-03-29
+### Fixed
+- **ENTSO-E always checks full history for completeness** – Every fetch cycle now scans the entire range from the oldest energy measurement to now for missing CO₂ hours. Only the actual gaps are fetched from the API (aligned to day boundaries and merged into efficient ranges), instead of re-fetching the entire timeline. This ensures historical data is always backfilled automatically, even after app restarts or partial imports.
+
 ## 12.8.0 - 2026-03-29
 ### Changed
 - **ENTSO-E CO₂ data now persisted per chunk** – Previously all fetched CO₂ intensity rows were accumulated in memory and only written to the database after ALL chunks completed. If the app was restarted mid-fetch, all data was lost. Now each 7-day chunk is written to the database immediately after download, making the import crash-safe and allowing data to appear in the UI while the import is still running.
