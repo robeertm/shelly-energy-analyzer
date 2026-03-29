@@ -1018,8 +1018,10 @@ class Co2FetchService:
 
     def _run(self) -> None:
         # Small initial delay, but wake early if trigger_now() is called
-        self._trigger_event.wait(5.0)
+        logger.info("Co2FetchService: waiting for initial trigger or 5s delay...")
+        triggered = self._trigger_event.wait(5.0)
         self._trigger_event.clear()
+        logger.info("Co2FetchService: running first tick (triggered=%s)", triggered)
         while not self._stop_event.is_set():
             try:
                 self._tick()
@@ -1042,10 +1044,12 @@ class Co2FetchService:
 
         co2_cfg = getattr(cfg, "co2", None)
         if co2_cfg is None or not getattr(co2_cfg, "enabled", False):
+            logger.info("Co2FetchService: CO₂ not enabled in settings")
             self._svc_log("CO₂ Import: CO₂ ist in den Einstellungen nicht aktiviert")
             return
         token = getattr(co2_cfg, "entso_e_api_token", "") or ""
         if not token:
+            logger.info("Co2FetchService: no ENTSO-E API token configured")
             self._svc_log("CO₂ Import: Kein ENTSO-E API-Token konfiguriert")
             return
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.8.5 - 2026-03-29
+### Fixed
+- **ENTSO-E diagnostic logging to file** – All CO₂ service status messages now also go to the app log file (not just the Sync tab UI). This reveals the exact reason when ENTSO-E data isn't loading: "CO₂ not enabled", "no API token", thread timing, etc.
+
 ## 12.8.4 - 2026-03-29
 ### Fixed
 - **ENTSO-E startup trigger now logs status** – Added diagnostic log messages so the Sync tab shows why ENTSO-E data isn't loading (service not available, CO₂ not enabled, no API token). Previously all errors were silently swallowed.
