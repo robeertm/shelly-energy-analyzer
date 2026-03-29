@@ -1047,23 +1047,31 @@ class Co2FetchService:
             return
 
         zone = getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU"
-        backfill_days = getattr(co2_cfg, "backfill_days", 7) or 7
         cross_border = getattr(co2_cfg, "cross_border_flows", False)
 
         now_ts = int(time.time())
-        # Determine fetch start: force-backfill resets to backfill_days ago;
-        # otherwise start from the oldest gap or next hour after latest stored.
+        # Determine fetch start: automatically cover the full range of
+        # available energy measurements in the DB (no manual backfill needed).
         force = self._force_backfill
         self._force_backfill = False
         latest_ts = self._db.latest_co2_ts(zone)
+
+        # Find oldest energy measurement to know how far back CO₂ data is needed
+        oldest_measurement = self._db.oldest_measurement_ts()
+        if oldest_measurement is None:
+            # No measurements yet – just fetch the last 2 days
+            oldest_measurement = now_ts - 2 * 86400
+
         if force or latest_ts is None:
-            # Use at least 2 days to ensure we get data when today's isn't available yet
-            start_ts = now_ts - max(backfill_days, 2) * 86400
+            # First fetch or forced: go back to oldest measurement
+            start_ts = oldest_measurement
         else:
             # Check for gaps with estimated data that should be replaced
-            oldest_ts = self._db.oldest_co2_ts(zone) or (now_ts - backfill_days * 86400)
+            oldest_co2 = self._db.oldest_co2_ts(zone) or oldest_measurement
+            # Ensure we cover from oldest measurement (in case new old data was synced)
+            check_from = min(oldest_co2, oldest_measurement)
             end_check = ((now_ts // 3600) + 1) * 3600
-            gaps = self._db.find_co2_gaps(zone, oldest_ts, end_check, include_estimated=True)
+            gaps = self._db.find_co2_gaps(zone, check_from, end_check, include_estimated=True)
             if gaps:
                 # Start from the earliest gap to try re-fetching real data
                 start_ts = gaps[0][0]
@@ -1122,14 +1130,26 @@ class Co2FetchService:
                     all_rows.extend(rows)
                     self._last_error = None
                     self._svc_log(f"    Empfangen: {len(rows)} Datenpunkte")
-                    # Cache the most recent hour's fuel mix for UI display
+                    # Store ALL hours' fuel mix for historical navigation
                     raw_mix = client.last_mix
                     if raw_mix:
-                        all_hours = {h for fh in raw_mix.values() for h in fh}
+                        all_hours = sorted({h for fh in raw_mix.values() for h in fh})
                         if all_hours:
-                            latest_h = max(all_hours)
                             # Include solar estimate if missing
                             _enriched = _estimate_solar_if_missing(raw_mix, self.bidding_zone) if "solar" not in raw_mix else raw_mix
+                            for h_ts in all_hours:
+                                h_mix = {
+                                    fuel: fh[h_ts]
+                                    for fuel, fh in _enriched.items()
+                                    if fh.get(h_ts, 0.0) > 0
+                                }
+                                if h_mix:
+                                    try:
+                                        self._db.upsert_fuel_mix(h_ts, zone, h_mix)
+                                    except Exception:
+                                        pass
+                            # Cache latest hour for UI
+                            latest_h = max(all_hours)
                             hour_mix = {
                                 fuel: fh[latest_h]
                                 for fuel, fh in _enriched.items()
@@ -1138,16 +1158,11 @@ class Co2FetchService:
                             if latest_h >= (self._latest_mix_hour or 0):
                                 self._latest_mix_hour = latest_h
                                 self._latest_mix = hour_mix
-                                try:
-                                    cfg = self._get_config()
-                                    zone = str(getattr(cfg, "bidding_zone", "DE_LU") or "DE_LU")
-                                    self._db.upsert_fuel_mix(latest_h, zone, hour_mix)
-                                except Exception:
-                                    pass
-                            # Log fuel breakdown
+                            self._svc_log(f"    Kraftwerksmix: {len(all_hours)} Stunden gespeichert")
+                            # Log latest hour breakdown
                             total_mw = sum(hour_mix.values())
                             lh_str = datetime.fromtimestamp(latest_h, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-                            self._svc_log(f"    Kraftwerksmix ({lh_str}, {total_mw:.0f} MW gesamt):")
+                            self._svc_log(f"    Aktuellste Stunde ({lh_str}, {total_mw:.0f} MW gesamt):")
                             for fuel, mw in sorted(hour_mix.items(), key=lambda x: -x[1]):
                                 share = mw / total_mw * 100 if total_mw else 0
                                 factor = _CO2_FACTORS.get(fuel, 400.0)
@@ -1262,10 +1277,18 @@ class Co2FetchService:
                 recovery_rows = client.fetch_intensity(recovery_start, recovery_end)
                 raw_mix = client.last_mix
                 if raw_mix:
-                    # Include solar estimate if missing
                     _enriched2 = _estimate_solar_if_missing(raw_mix, self.bidding_zone) if "solar" not in raw_mix else raw_mix
-                    all_hours = {h for fh in _enriched2.values() for h in fh}
+                    all_hours = sorted({h for fh in _enriched2.values() for h in fh})
                     if all_hours:
+                        # Store all hours' mix
+                        for h_ts in all_hours:
+                            h_mix = {
+                                fuel: fh[h_ts]
+                                for fuel, fh in _enriched2.items()
+                                if fh.get(h_ts, 0.0) > 0
+                            }
+                            if h_mix:
+                                self._db.upsert_fuel_mix(h_ts, zone, h_mix)
                         latest_h = max(all_hours)
                         hour_mix = {
                             fuel: fh[latest_h]
@@ -1275,11 +1298,9 @@ class Co2FetchService:
                         if hour_mix:
                             self._latest_mix_hour = latest_h
                             self._latest_mix = hour_mix
-                            self._db.upsert_fuel_mix(latest_h, zone, hour_mix)
                             total_mw = sum(hour_mix.values())
                             lh_str = datetime.fromtimestamp(latest_h, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-                            self._svc_log(f"Kraftwerksmix geladen: {lh_str}, {total_mw:.0f} MW")
-                            # Also store the intensity data we got
+                            self._svc_log(f"Kraftwerksmix geladen: {len(all_hours)} Stunden, aktuellste: {lh_str}, {total_mw:.0f} MW")
                             if recovery_rows:
                                 self._db.upsert_co2_intensity(recovery_rows)
                 if not self._latest_mix:
