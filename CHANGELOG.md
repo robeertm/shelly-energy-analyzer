@@ -1,5 +1,10 @@
 # Changelog
 
+## 12.9.2 - 2026-03-29
+### Fixed
+- **Web CO₂ range parameter now passed to API** – The `/api/co2?range=7d` query parameter was not forwarded to the handler, so the web dashboard always showed 24h regardless of button selection.
+- **Fixed CO₂ range parameter type** – The range parameter was incorrectly treated as a list instead of a string, causing a potential crash in the web CO₂ handler.
+
 ## 12.9.1 - 2026-03-29
 ### Fixed
 - **Fuel mix backfill for full history** – The generation mix (Kraftwerksmix) was only available for hours fetched in the current session. Historical hours imported by older versions had CO₂ intensity but no fuel mix data. The service now checks fuel mix coverage for the entire measurement range and backfills missing chunks from ENTSO-E automatically. Navigating backwards through the fuel mix display now shows real generation data for all historical hours.
