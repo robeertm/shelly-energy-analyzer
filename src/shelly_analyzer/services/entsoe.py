@@ -1037,19 +1037,24 @@ class Co2FetchService:
             self._trigger_event.clear()
 
     def _tick(self) -> None:
+        logger.info("Co2FetchService: tick started")
         try:
             cfg = self._get_config()
-        except Exception:
+        except Exception as e:
+            logger.warning("Co2FetchService: _get_config() failed: %s", e)
             return
 
         co2_cfg = getattr(cfg, "co2", None)
-        if co2_cfg is None or not getattr(co2_cfg, "enabled", False):
-            logger.info("Co2FetchService: CO₂ not enabled in settings")
+        co2_enabled = getattr(co2_cfg, "enabled", False) if co2_cfg else False
+        token = (getattr(co2_cfg, "entso_e_api_token", "") or "") if co2_cfg else ""
+        logger.info(
+            "Co2FetchService: co2_cfg=%s, enabled=%s, token=%s",
+            type(co2_cfg).__name__, co2_enabled, "set" if token else "MISSING",
+        )
+        if not co2_enabled:
             self._svc_log("CO₂ Import: CO₂ ist in den Einstellungen nicht aktiviert")
             return
-        token = getattr(co2_cfg, "entso_e_api_token", "") or ""
         if not token:
-            logger.info("Co2FetchService: no ENTSO-E API token configured")
             self._svc_log("CO₂ Import: Kein ENTSO-E API-Token konfiguriert")
             return
 
