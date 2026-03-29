@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.8.7 - 2026-03-29
+### Fixed
+- **Full ENTSO-E tick diagnostics** – Every step of the CO₂ fetch cycle now logs to the app log file: date range being checked, number of estimated values deleted, gap count, and whether data is considered complete. This reveals exactly why historical data isn't being fetched.
+
 ## 12.8.6 - 2026-03-29
 ### Fixed
 - **Extended ENTSO-E debug logging** – Logs now show exact config state (co2_cfg type, enabled flag, token presence) and catch _get_config() failures. This reveals the root cause of the silent ENTSO-E service.

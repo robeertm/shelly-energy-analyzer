@@ -1074,26 +1074,38 @@ class Co2FetchService:
         # Always check the FULL range from oldest measurement to now for gaps
         range_start = (oldest_measurement // 3600) * 3600
         range_end = ((now_ts // 3600) + 1) * 3600  # next full hour
+        total_range_hours = (range_end - range_start) // 3600
 
         if range_start >= range_end:
+            logger.info("Co2FetchService: range_start >= range_end, nothing to do")
             return
+
+        d_oldest = datetime.fromtimestamp(range_start, tz=timezone.utc).strftime("%Y-%m-%d")
+        logger.info(
+            "Co2FetchService: checking range %s to now (%d hours, zone=%s, force=%s)",
+            d_oldest, total_range_hours, zone, force,
+        )
 
         # Remove old estimated placeholder values (older than 48h) so they
         # show up as real gaps and get replaced with actual ENTSO-E data.
         recent_cutoff = now_ts - 48 * 3600
         try:
             deleted = self._db.delete_estimated_co2(zone, recent_cutoff)
+            logger.info("Co2FetchService: deleted %d old estimated values", deleted)
             if deleted:
                 self._svc_log(f"CO₂ Bereinigung: {deleted} alte Schätzwerte entfernt")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Co2FetchService: delete_estimated_co2 failed: %s", e)
 
         # Find hours that need fetching: truly missing hours (estimated values
         # older than 48h were just removed, so they appear as gaps now).
         gaps = self._db.find_co2_gaps(zone, range_start, range_end, include_estimated=False)
+        gap_hours = sum((e - s) // 3600 for s, e in gaps) if gaps else 0
+        logger.info("Co2FetchService: found %d gap ranges (%d missing hours)", len(gaps), gap_hours)
 
         if not gaps and not force:
-            logger.debug("Co2FetchService: data is complete for zone %s", zone)
+            logger.info("Co2FetchService: data is complete for zone %s – nothing to fetch", zone)
+            self._svc_log("CO₂ Daten vollständig – kein Nachladen nötig")
             return
 
         if force:
