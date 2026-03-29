@@ -4951,7 +4951,7 @@ class _Handler(BaseHTTPRequestHandler):
 
             if path_only.startswith("/api/jobs"):
                 payload = self.dashboard.get_jobs()
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -4969,7 +4969,7 @@ class _Handler(BaseHTTPRequestHandler):
                 except Exception:
                     jid = -1
                 payload = self.dashboard.get_job(jid)
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5049,7 +5049,7 @@ class _Handler(BaseHTTPRequestHandler):
                         "q_total_var": float(latest.get("q_total_var") or 0),
                     })
                 payload = {"devices": devices_list}
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5112,7 +5112,7 @@ class _Handler(BaseHTTPRequestHandler):
                             "q_phases": h_q_phases,
                         })
                     hist[dkey] = pts_out
-                body = json.dumps({"history": hist}).encode("utf-8")
+                body = json.dumps({"history": hist}, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5126,7 +5126,7 @@ class _Handler(BaseHTTPRequestHandler):
                     payload = self.dashboard.on_action("costs", {})
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5137,7 +5137,7 @@ class _Handler(BaseHTTPRequestHandler):
 
             if path_only.startswith("/api/config"):
                 payload = self.dashboard.get_config()
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5155,7 +5155,7 @@ class _Handler(BaseHTTPRequestHandler):
                     payload = self.dashboard.on_action("plots_data", params)
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5173,7 +5173,7 @@ class _Handler(BaseHTTPRequestHandler):
                     payload = self.dashboard.on_action("heatmap", params_hm)
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5190,7 +5190,7 @@ class _Handler(BaseHTTPRequestHandler):
                     payload = self.dashboard.on_action("solar", params_sol)
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5204,7 +5204,7 @@ class _Handler(BaseHTTPRequestHandler):
                     payload = self.dashboard.on_action("co2_live", {})
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5220,7 +5220,7 @@ class _Handler(BaseHTTPRequestHandler):
                     payload = self.dashboard.on_action("co2", _co2_params)
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5237,7 +5237,7 @@ class _Handler(BaseHTTPRequestHandler):
                     payload = self.dashboard.on_action("compare", params_cmp)
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5251,7 +5251,7 @@ class _Handler(BaseHTTPRequestHandler):
                     payload = self.dashboard.on_action("anomalies", {})
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5271,7 +5271,7 @@ class _Handler(BaseHTTPRequestHandler):
                     }
                 except Exception as e:
                     payload = {"ok": False, "error": str(e), "cluster_count": 0, "clusters": []}
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5288,7 +5288,7 @@ class _Handler(BaseHTTPRequestHandler):
                     payload = self.dashboard.on_action("forecast", _fparams)
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5302,7 +5302,7 @@ class _Handler(BaseHTTPRequestHandler):
                     payload = self.dashboard.on_action("standby", {})
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5319,7 +5319,7 @@ class _Handler(BaseHTTPRequestHandler):
                     payload = self.dashboard.on_action("sankey", _sparams)
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5334,7 +5334,7 @@ class _Handler(BaseHTTPRequestHandler):
                     payload = TrafficMonitor.get().snapshot()
                 except Exception as e:
                     payload = {"error": str(e)}
-                body = json.dumps(payload).encode("utf-8")
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
@@ -5474,7 +5474,7 @@ class _Handler(BaseHTTPRequestHandler):
                             payload = self.dashboard.on_action(action, params)  # type: ignore[misc]
                     else:
                         payload = self.dashboard.submit_action(action, params)
-                    body = json.dumps(payload).encode("utf-8")
+                    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
                     self.send_header("Cache-Control", "no-store")
@@ -5524,7 +5524,7 @@ class _Handler(BaseHTTPRequestHandler):
                 try:
                     minutes = self.dashboard.set_window_minutes(minutes)
                     payload = {"ok": True, "window_minutes": minutes}
-                    body = json.dumps(payload).encode("utf-8")
+                    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
                     self.send_header("Cache-Control", "no-store")
