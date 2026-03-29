@@ -1,5 +1,10 @@
 # Changelog
 
+## 12.3.1 - 2026-03-29
+### Fixed
+- **Anomaly spam eliminated** – Event IDs are now deterministic (based on device + type + date instead of random UUID). The same anomaly on the same day always produces the same ID, so it's only notified once. A separate `_anomaly_notified_ids` set tracks which events have already been sent — even across detection cycles.
+- **Web anomalies now show data** – The web `/api/anomalies` endpoint now reads from the desktop app's `_anomaly_log` (shared state) instead of re-running detection independently. This means anomalies appear in the web dashboard as soon as they're detected by the auto-timer. Falls back to a one-time detection if the log is empty.
+
 ## 12.3.0 - 2026-03-29
 ### Added
 - **NILM mode toggle (click to switch)** – Click on the "Mögliche Geräte" area in the desktop Live tab to cycle between three detection modes:

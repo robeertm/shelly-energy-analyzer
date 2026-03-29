@@ -1357,45 +1357,64 @@ class LiveWebMixin:
             # --- Anomaly data for web dashboard ---
             if action == "anomalies":
                 try:
-                    from shelly_analyzer.services.anomaly import detect_anomalies as _detect
                     anom_cfg = getattr(self.cfg, "anomaly", None)
                     enabled = bool(getattr(anom_cfg, "enabled", False)) if anom_cfg else False
-                    sigma = float(getattr(anom_cfg, "sigma_threshold", 2.0)) if anom_cfg else 2.0
-                    min_dev = float(getattr(anom_cfg, "min_deviation_kwh", 0.1)) if anom_cfg else 0.1
-                    window_days = int(getattr(anom_cfg, "window_days", 30)) if anom_cfg else 30
-                    check_daily = bool(getattr(anom_cfg, "check_unusual_daily", True)) if anom_cfg else True
-                    check_night = bool(getattr(anom_cfg, "check_night_consumption", True)) if anom_cfg else True
-                    check_peak = bool(getattr(anom_cfg, "check_power_peak_time", True)) if anom_cfg else True
 
-                    all_events: List[Dict[str, Any]] = []
-                    if enabled:
-                        for d in self.cfg.devices:
-                            try:
-                                cd = load_device(self.storage, d)
-                                if cd is None or cd.df is None or cd.df.empty:
+                    # Use the desktop app's anomaly log (shared state)
+                    log = getattr(self, "_anomaly_log", [])
+                    all_events = []
+                    for ev in log:
+                        ts_str = ""
+                        try:
+                            ts_str = ev.timestamp.isoformat() if hasattr(ev.timestamp, "isoformat") else str(ev.timestamp)
+                        except Exception:
+                            ts_str = str(getattr(ev, "timestamp", ""))
+                        all_events.append({
+                            "event_id": ev.event_id,
+                            "timestamp": ts_str,
+                            "device_key": ev.device_key,
+                            "device_name": ev.device_name,
+                            "anomaly_type": ev.anomaly_type,
+                            "type": ev.anomaly_type,
+                            "value": round(ev.value, 3),
+                            "sigma_count": round(ev.sigma_count, 2),
+                            "sigma": round(ev.sigma_count, 2),
+                            "description": ev.description,
+                        })
+
+                    # If log is empty but detection is enabled, run once
+                    if not all_events and enabled:
+                        try:
+                            from shelly_analyzer.services.anomaly import detect_anomalies as _detect
+                            for d in self.cfg.devices:
+                                try:
+                                    cd = load_device(self.storage, d)
+                                    if cd is None or cd.df is None or cd.df.empty:
+                                        continue
+                                    events = _detect(
+                                        cd.df, d.key, d.name,
+                                        sigma=float(getattr(anom_cfg, "sigma_threshold", 2.0)),
+                                        min_deviation_kwh=float(getattr(anom_cfg, "min_deviation_kwh", 0.1)),
+                                        window_days=int(getattr(anom_cfg, "window_days", 30)),
+                                    )
+                                    for ev in events:
+                                        all_events.append({
+                                            "event_id": ev.event_id,
+                                            "timestamp": ev.timestamp.isoformat() if hasattr(ev.timestamp, "isoformat") else str(ev.timestamp),
+                                            "device_key": ev.device_key,
+                                            "device_name": ev.device_name,
+                                            "anomaly_type": ev.anomaly_type,
+                                            "type": ev.anomaly_type,
+                                            "value": round(ev.value, 3),
+                                            "sigma_count": round(ev.sigma_count, 2),
+                                            "sigma": round(ev.sigma_count, 2),
+                                            "description": ev.description,
+                                        })
+                                except Exception:
                                     continue
-                                events = _detect(
-                                    cd.df, d.key, d.name,
-                                    sigma=sigma, min_deviation_kwh=min_dev,
-                                    window_days=window_days,
-                                    check_unusual_daily=check_daily,
-                                    check_night_consumption=check_night,
-                                    check_power_peak_time=check_peak,
-                                )
-                                for ev in events:
-                                    all_events.append({
-                                        "event_id": ev.event_id,
-                                        "timestamp": ev.timestamp.isoformat(),
-                                        "device_key": ev.device_key,
-                                        "device_name": ev.device_name,
-                                        "anomaly_type": ev.anomaly_type,
-                                        "value": round(ev.value, 3),
-                                        "sigma_count": round(ev.sigma_count, 2),
-                                        "description": ev.description,
-                                    })
-                            except Exception:
-                                continue
-                    # Sort newest first
+                        except Exception:
+                            pass
+
                     all_events.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
                     return {
                         "ok": True,

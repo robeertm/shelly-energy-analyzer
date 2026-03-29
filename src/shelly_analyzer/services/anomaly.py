@@ -39,6 +39,22 @@ def _new_id() -> str:
     return uuid.uuid4().hex[:12]
 
 
+def _deterministic_id(device_key: str, anomaly_type: str, ts) -> str:
+    """Generate a deterministic event ID based on device, type, and date.
+
+    Same anomaly on the same device+day always gets the same ID,
+    preventing duplicate notifications.
+    """
+    import hashlib
+    date_str = ""
+    if hasattr(ts, "strftime"):
+        date_str = ts.strftime("%Y-%m-%d")
+    else:
+        date_str = str(ts)[:10]
+    raw = f"{device_key}:{anomaly_type}:{date_str}"
+    return hashlib.md5(raw.encode()).hexdigest()[:12]
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -153,7 +169,7 @@ def _check_unusual_daily(
             ts = pd.Timestamp(day).to_pydatetime()
         events.append(
             AnomalyEvent(
-                event_id=_new_id(),
+                event_id=_deterministic_id(device_key, "unusual_daily", ts),
                 timestamp=ts,
                 device_key=device_key,
                 device_name=device_name,
@@ -230,7 +246,7 @@ def _check_night_consumption(
         total = float(total_daily.at[day]) if day in total_daily.index else 0.0
         events.append(
             AnomalyEvent(
-                event_id=_new_id(),
+                event_id=_deterministic_id(device_key, "night_consumption", ts),
                 timestamp=ts,
                 device_key=device_key,
                 device_name=device_name,
@@ -313,7 +329,7 @@ def _check_power_peak_time(
 
         events.append(
             AnomalyEvent(
-                event_id=_new_id(),
+                event_id=_deterministic_id(device_key, "power_peak_time", ts),
                 timestamp=ts,
                 device_key=device_key,
                 device_name=device_name,
