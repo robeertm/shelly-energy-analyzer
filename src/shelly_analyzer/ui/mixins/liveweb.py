@@ -2313,21 +2313,59 @@ class LiveWebMixin:
                                     vars_['line2'].set(line2)
                                 if 'line3' in vars_:
                                     vars_['line3'].set(line3)
-                                # Appliance detector (static + ML boost)
+                                # Appliance detector (mode: combined / static / ml)
                                 try:
                                     _appl_var = vars_.get('appliance')
                                     if _appl_var is not None:
-                                        _matches = _identify_appliance(pw)[:3]
-                                        # Boost confidence with ML clusters (per device)
+                                        _nilm_mode = getattr(self, "_nilm_mode", {}).get(s.device_key, "combined")
                                         _dev_lrn = getattr(self, "_nilm_learners", {}).get(s.device_key)
-                                        if _dev_lrn is not None and _matches:
-                                            _clusters = _dev_lrn.get_clusters()
-                                            for _ci, (_sig, _conf) in enumerate(_matches):
-                                                for _cl in _clusters:
-                                                    if _cl.matched_appliance == _sig.id and _cl.count >= 5:
-                                                        # ML confirms this appliance → boost confidence
-                                                        _matches[_ci] = (_sig, min(1.0, _conf + 0.15))
-                                                        break
+                                        _ml_clusters = _dev_lrn.get_clusters() if _dev_lrn else []
+
+                                        if _nilm_mode == "static":
+                                            # Pure static matching
+                                            _matches = _identify_appliance(pw)[:3]
+                                            _mode_label = "Statisch"
+                                        elif _nilm_mode == "ml":
+                                            # ML-only: show learned clusters that match current power
+                                            _matches = []
+                                            if _ml_clusters:
+                                                for _cl in sorted(_ml_clusters, key=lambda c: c.count, reverse=True):
+                                                    if _cl.centroid_w > 0 and abs(pw - _cl.centroid_w) < _cl.centroid_w * 0.3 + _cl.std_w * 1.5:
+                                                        # Cluster matches current power range
+                                                        _dist = abs(pw - _cl.centroid_w)
+                                                        _range = _cl.centroid_w * 0.3 + _cl.std_w * 1.5
+                                                        _conf = max(0.2, 1.0 - _dist / _range) if _range > 0 else 0.5
+                                                        # Try to find a matching built-in appliance for icon/name
+                                                        _built_in = _identify_appliance(_cl.centroid_w)[:1]
+                                                        if _built_in and _cl.matched_appliance:
+                                                            _matches.append((_built_in[0][0], round(_conf, 3)))
+                                                        else:
+                                                            # Unknown learned pattern
+                                                            from shelly_analyzer.services.appliance_detector import ApplianceSignature
+                                                            _fake_sig = ApplianceSignature(
+                                                                id=f"learned_{_cl.cluster_id}",
+                                                                category="learned",
+                                                                icon=_cl.icon or "🔌",
+                                                                power_min=_cl.centroid_w - _cl.std_w,
+                                                                power_max=_cl.centroid_w + _cl.std_w,
+                                                                pattern_type="learned",
+                                                                typical_duration_min=0,
+                                                            )
+                                                            _matches.append((_fake_sig, round(_conf, 3)))
+                                                        if len(_matches) >= 3:
+                                                            break
+                                            _mode_label = "ML"
+                                        else:
+                                            # Combined: static + ML boost
+                                            _matches = _identify_appliance(pw)[:3]
+                                            if _ml_clusters and _matches:
+                                                for _ci, (_sig, _conf) in enumerate(_matches):
+                                                    for _cl in _ml_clusters:
+                                                        if _cl.matched_appliance == _sig.id and _cl.count >= 5:
+                                                            _matches[_ci] = (_sig, min(1.0, _conf + 0.15))
+                                                            break
+                                            _mode_label = "Kombiniert"
+
                                         if _matches:
                                             _title = self.t('live.appliance.title')
                                             _parts = []
@@ -2335,10 +2373,18 @@ class LiveWebMixin:
                                                 _pct = int(_conf * 100)
                                                 _dot = "🟢" if _pct >= 70 else ("🟡" if _pct >= 40 else "🔴")
                                                 _name = self.t(f'appliance.{_sig.id}.name')
+                                                if _name == f'appliance.{_sig.id}.name':
+                                                    _name = f"{_sig.icon} {_sig.power_min:.0f}-{_sig.power_max:.0f}W"
                                                 _parts.append(f"{_sig.icon} {_name} {_dot} {_pct}%")
-                                            _appl_var.set(f"{_title}: " + "  ·  ".join(_parts))
+                                            _n_ml = len(_ml_clusters)
+                                            _ml_info = f" [{_mode_label} | {_n_ml} ML-Muster]" if _n_ml > 0 else f" [{_mode_label}]"
+                                            _appl_var.set(f"{_title}: " + "  ·  ".join(_parts) + _ml_info)
                                         else:
-                                            _appl_var.set("")
+                                            _n_ml = len(_ml_clusters)
+                                            if _n_ml > 0:
+                                                _appl_var.set(f"[{_mode_label} | {_n_ml} ML-Muster gelernt]")
+                                            else:
+                                                _appl_var.set("")
                                 except Exception:
                                     pass
                             except Exception:

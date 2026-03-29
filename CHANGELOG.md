@@ -1,5 +1,14 @@
 # Changelog
 
+## 12.3.0 - 2026-03-29
+### Added
+- **NILM mode toggle (click to switch)** – Click on the "Mögliche Geräte" area in the desktop Live tab to cycle between three detection modes:
+  - **Kombiniert** (default) – Static signature matching with ML confidence boost (+15% for confirmed patterns)
+  - **Statisch** – Pure built-in signature matching only (25 appliance profiles)
+  - **ML only** – Shows only ML-learned patterns that match current power reading. Includes unknown patterns (not in built-in database) with power range display. Great for discovering devices the static database doesn't cover.
+- Mode indicator shows current mode + number of ML patterns learned per device, e.g. "[Kombiniert | 5 ML-Muster]"
+- Hint text below appliance display shows "Klick: Modus wechseln"
+
 ## 12.2.1 - 2026-03-28
 ### Fixed
 - **NILM ML: per-device learners for 3-phase EMs only** – Each 3-phase Shelly EM device now gets its own independent TransitionLearner with its own cluster file (`nilm_clusters_{device_key}.json`). Single-phase devices and switches are excluded. Previously all devices shared one global learner which mixed transitions from different circuits, making clustering meaningless. Status display now shows per-device breakdown ("Haus: 5 Muster/47 Trans., Server: 3 Muster/22 Trans.").
