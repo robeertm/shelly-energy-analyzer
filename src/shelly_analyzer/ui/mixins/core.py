@@ -408,6 +408,11 @@ class CoreMixin:
                 self.after(600, self._reload_data)
             except Exception:
                 pass
+            # Auto-sync on startup: fetch latest data from devices immediately
+            try:
+                self.after(2000, self._auto_sync_on_startup)
+            except Exception:
+                pass
             self._drain_queues_loop()
 
     def _probe_devices_on_startup(self) -> None:
@@ -1174,6 +1179,24 @@ class CoreMixin:
             if end_ts <= start_ts:
                 end_ts = start_ts + 1
             self._start_sync("custom", range_override=(start_ts, end_ts), label=f"ab {s}")
+
+    def _auto_sync_on_startup(self) -> None:
+            """Automatically sync data and trigger ENTSO-E check on app startup."""
+            # Only sync if devices are configured
+            if not list(getattr(self.cfg, 'devices', []) or []):
+                return
+            # Start an incremental sync to fetch latest device data
+            if not (self._sync_thread and self._sync_thread.is_alive()):
+                self._log_sync("Auto-Sync beim Start …")
+                try:
+                    self._start_sync("incremental")
+                except Exception:
+                    pass
+            # Trigger ENTSO-E CO₂ check immediately
+            try:
+                self._co2_fetch_svc.trigger_now()
+            except Exception:
+                pass
 
     def _start_sync(self, mode: str, range_override: Optional[Tuple[int, int]] = None, label: Optional[str] = None) -> None:
             if self._sync_thread and self._sync_thread.is_alive():
