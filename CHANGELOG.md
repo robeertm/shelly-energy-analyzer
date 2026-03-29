@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.9.7 - 2026-03-29
+### Fixed
+- **Heatmap calendar wrapping in portrait mode** – The yearly overview heatmap grid lacked `flex-wrap: nowrap`, causing week columns to wrap onto new lines on narrow screens. This made it appear as if data extended into July when only March had data. The grid and month labels now stay in a single row and scroll horizontally instead.
+
 ## 12.9.6 - 2026-03-29
 ### Fixed
 - **Web dashboard completely blank (all browsers)** – The CO₂ range selector buttons generated `loadCo2(\' + r + \')` in the JS template. The `_render_template` function converts `{{`→`{` and `}}`→`}`, but also leaves `\'` as a bare `'`, producing `loadCo2('' + r + '')` — a **JS SyntaxError**. Since all JS is in one `<script>` block, the entire page's JavaScript failed to parse and nothing rendered. Fixed by using `\\u0027` (JS unicode escape for single quote) instead of `\'`.
