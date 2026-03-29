@@ -1,5 +1,10 @@
 # Changelog
 
+## 12.8.0 - 2026-03-29
+### Changed
+- **ENTSO-E CO₂ data now persisted per chunk** – Previously all fetched CO₂ intensity rows were accumulated in memory and only written to the database after ALL chunks completed. If the app was restarted mid-fetch, all data was lost. Now each 7-day chunk is written to the database immediately after download, making the import crash-safe and allowing data to appear in the UI while the import is still running.
+- **Gap detection no longer re-fetches estimated values every cycle** – The gap detection was using `include_estimated=True`, which treated all estimated-fill hours as gaps and re-fetched the entire history on every tick. Now only truly missing hours trigger re-fetching, so the service efficiently catches up on new hours without redundant API calls.
+
 ## 12.7.3 - 2026-03-29
 ### Fixed
 - **Consistent nav icons in web dashboard** – Forecast, Standby, and Energy Flow tabs were missing dedicated `nav-icon` spans, causing their emoji icons to render at label size (9px) instead of the standard icon size (18px). All 11 web nav tabs now use the same icon+label structure for uniform appearance.
