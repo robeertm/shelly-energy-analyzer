@@ -1018,10 +1018,8 @@ class Co2FetchService:
 
     def _run(self) -> None:
         # Small initial delay, but wake early if trigger_now() is called
-        logger.info("Co2FetchService: waiting for initial trigger or 5s delay...")
-        triggered = self._trigger_event.wait(5.0)
+        self._trigger_event.wait(5.0)
         self._trigger_event.clear()
-        logger.info("Co2FetchService: running first tick (triggered=%s)", triggered)
         while not self._stop_event.is_set():
             try:
                 self._tick()
@@ -1037,25 +1035,16 @@ class Co2FetchService:
             self._trigger_event.clear()
 
     def _tick(self) -> None:
-        logger.info("Co2FetchService: tick started")
         try:
             cfg = self._get_config()
-        except Exception as e:
-            logger.warning("Co2FetchService: _get_config() failed: %s", e)
+        except Exception:
             return
 
         co2_cfg = getattr(cfg, "co2", None)
-        co2_enabled = getattr(co2_cfg, "enabled", False) if co2_cfg else False
-        token = (getattr(co2_cfg, "entso_e_api_token", "") or "") if co2_cfg else ""
-        logger.info(
-            "Co2FetchService: co2_cfg=%s, enabled=%s, token=%s",
-            type(co2_cfg).__name__, co2_enabled, "set" if token else "MISSING",
-        )
-        if not co2_enabled:
-            self._svc_log("CO₂ Import: CO₂ ist in den Einstellungen nicht aktiviert")
+        if co2_cfg is None or not getattr(co2_cfg, "enabled", False):
             return
+        token = getattr(co2_cfg, "entso_e_api_token", "") or ""
         if not token:
-            self._svc_log("CO₂ Import: Kein ENTSO-E API-Token konfiguriert")
             return
 
         zone = getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU"
@@ -1074,38 +1063,24 @@ class Co2FetchService:
         # Always check the FULL range from oldest measurement to now for gaps
         range_start = (oldest_measurement // 3600) * 3600
         range_end = ((now_ts // 3600) + 1) * 3600  # next full hour
-        total_range_hours = (range_end - range_start) // 3600
-
         if range_start >= range_end:
-            logger.info("Co2FetchService: range_start >= range_end, nothing to do")
             return
-
-        d_oldest = datetime.fromtimestamp(range_start, tz=timezone.utc).strftime("%Y-%m-%d")
-        logger.info(
-            "Co2FetchService: checking range %s to now (%d hours, zone=%s, force=%s)",
-            d_oldest, total_range_hours, zone, force,
-        )
 
         # Remove old estimated placeholder values (older than 48h) so they
         # show up as real gaps and get replaced with actual ENTSO-E data.
         recent_cutoff = now_ts - 48 * 3600
         try:
             deleted = self._db.delete_estimated_co2(zone, recent_cutoff)
-            logger.info("Co2FetchService: deleted %d old estimated values", deleted)
             if deleted:
                 self._svc_log(f"CO₂ Bereinigung: {deleted} alte Schätzwerte entfernt")
-        except Exception as e:
-            logger.warning("Co2FetchService: delete_estimated_co2 failed: %s", e)
+        except Exception:
+            pass
 
         # Find hours that need fetching: truly missing hours (estimated values
         # older than 48h were just removed, so they appear as gaps now).
         gaps = self._db.find_co2_gaps(zone, range_start, range_end, include_estimated=False)
-        gap_hours = sum((e - s) // 3600 for s, e in gaps) if gaps else 0
-        logger.info("Co2FetchService: found %d gap ranges (%d missing hours)", len(gaps), gap_hours)
 
         if not gaps and not force:
-            logger.info("Co2FetchService: data is complete for zone %s – nothing to fetch", zone)
-            self._svc_log("CO₂ Daten vollständig – kein Nachladen nötig")
             return
 
         if force:

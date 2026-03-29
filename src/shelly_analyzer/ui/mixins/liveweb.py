@@ -1589,8 +1589,17 @@ class LiveWebMixin:
                     year_start_ts = int(_year_start.timestamp())
                     now_ts = int(_nowc.timestamp())
 
-                    # 24h intensity data for chart
-                    h24_start = now_ts - 24 * 3600
+                    # Intensity data for chart (range selectable via query param)
+                    co2_range = params.get("range", ["24h"])[0] if params else "24h"
+                    if co2_range == "7d":
+                        h24_start = now_ts - 7 * 86400
+                    elif co2_range == "30d":
+                        h24_start = now_ts - 30 * 86400
+                    elif co2_range == "all":
+                        oldest = self.storage.db.oldest_co2_ts(zone)
+                        h24_start = oldest if oldest else now_ts - 24 * 3600
+                    else:
+                        h24_start = now_ts - 24 * 3600
                     h24_start = (h24_start // 3600) * 3600
                     df_24h = self.storage.db.query_co2_intensity(zone, h24_start, now_ts + 3600)
 
@@ -1602,7 +1611,10 @@ class LiveWebMixin:
                             ts = int(row.get("hour_ts", 0))
                             intensity = float(row.get("intensity_g_per_kwh", 0))
                             source = str(row.get("source", ""))
-                            hour_str = _dtc.fromtimestamp(ts, tz=_tzc).strftime("%H:%M")
+                            if co2_range in ("7d", "30d", "all"):
+                                hour_str = _dtc.fromtimestamp(ts, tz=_tzc).strftime("%d.%m %H:%M")
+                            else:
+                                hour_str = _dtc.fromtimestamp(ts, tz=_tzc).strftime("%H:%M")
                             hourly_data.append({
                                 "hour": hour_str,
                                 "ts": ts,

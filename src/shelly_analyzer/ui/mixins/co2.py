@@ -265,9 +265,18 @@ class Co2Mixin:
         mix_tbl_sb.pack(side="right", fill="y")
         self._co2_mix_tbl.pack(side="left", fill="x", expand=True, padx=(4, 0), pady=(2, 4))
 
-        # ── 24 h intensity chart ──────────────────────────────────────────────
+        # ── Intensity chart with range selector ────────────────────────────
         chart_frame = ttk.LabelFrame(sf, text=self.t("co2.chart.title"))
         chart_frame.pack(fill="both", padx=14, pady=(4, 4))
+
+        range_bar = ttk.Frame(chart_frame)
+        range_bar.pack(fill="x", padx=4, pady=(4, 0))
+        self._co2_chart_range_var = tk.StringVar(value="24h")
+        for val, label in [("24h", "24h"), ("7d", "7 Tage"), ("30d", "30 Tage"), ("all", "Alles")]:
+            ttk.Radiobutton(
+                range_bar, text=label, variable=self._co2_chart_range_var,
+                value=val, command=self._refresh_co2_tab,
+            ).pack(side="left", padx=4)
 
         self._co2_fig = Figure(figsize=(10, 3.0), dpi=96)
         self._co2_ax = self._co2_fig.add_subplot(111)
@@ -382,8 +391,20 @@ class Co2Mixin:
 
             db = self.storage.db
             now_ts = int(time.time())
-            start_24h = now_ts - 86400
-            df = db.query_co2_intensity(zone, start_24h, now_ts + 3600)
+            # Determine chart range from selector
+            chart_range = getattr(self, '_co2_chart_range_var', None)
+            range_key = chart_range.get() if chart_range else "24h"
+            if range_key == "7d":
+                chart_start = now_ts - 7 * 86400
+            elif range_key == "30d":
+                chart_start = now_ts - 30 * 86400
+            elif range_key == "all":
+                oldest = db.oldest_co2_ts(zone)
+                chart_start = oldest if oldest else now_ts - 86400
+            else:
+                chart_start = now_ts - 86400
+            start_24h = chart_start
+            df = db.query_co2_intensity(zone, chart_start, now_ts + 3600)
 
             # If saved-config zone returned nothing, try the zone shown in the UI
             # (happens when the user changed the zone and ran a backfill without

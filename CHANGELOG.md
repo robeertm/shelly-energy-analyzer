@@ -1,43 +1,15 @@
 # Changelog
 
-## 12.8.7 - 2026-03-29
-### Fixed
-- **Full ENTSO-E tick diagnostics** – Every step of the CO₂ fetch cycle now logs to the app log file: date range being checked, number of estimated values deleted, gap count, and whether data is considered complete. This reveals exactly why historical data isn't being fetched.
-
-## 12.8.6 - 2026-03-29
-### Fixed
-- **Extended ENTSO-E debug logging** – Logs now show exact config state (co2_cfg type, enabled flag, token presence) and catch _get_config() failures. This reveals the root cause of the silent ENTSO-E service.
-
-## 12.8.5 - 2026-03-29
-### Fixed
-- **ENTSO-E diagnostic logging to file** – All CO₂ service status messages now also go to the app log file (not just the Sync tab UI). This reveals the exact reason when ENTSO-E data isn't loading: "CO₂ not enabled", "no API token", thread timing, etc.
-
-## 12.8.4 - 2026-03-29
-### Fixed
-- **ENTSO-E startup trigger now logs status** – Added diagnostic log messages so the Sync tab shows why ENTSO-E data isn't loading (service not available, CO₂ not enabled, no API token). Previously all errors were silently swallowed.
-
-## 12.8.3 - 2026-03-29
-### Fixed
-- **ENTSO-E now actually backfills all historical data** – Previous versions filled all missing hours with estimated placeholder values across the entire history. This made subsequent runs think data was complete (no gaps found). Now:
-  - Old estimated values (>48h) are **deleted** at the start of each fetch cycle so they appear as real gaps
-  - Only the **last 48 hours** get estimated placeholders (where the API may not yet have real data)
-  - Historical gaps are re-fetched from ENTSO-E until real data is obtained
-  - On first run after this update, ~180 days of estimated data will be purged and replaced with real ENTSO-E generation data
-
-## 12.8.2 - 2026-03-29
+## 12.9.0 - 2026-03-29
 ### Added
-- **Auto-sync on app startup** – The app now automatically starts an incremental data sync from all configured Shelly devices 2 seconds after launch. No more manual "Sync" click needed to see current data.
-- **ENTSO-E check triggered on startup** – The CO₂ fetch service is immediately triggered when the app opens, so it checks for missing historical data right away instead of waiting for the first scheduled interval.
-- **CO₂ service responds faster to triggers** – The initial 5-second startup delay can now be interrupted by `trigger_now()`, so the ENTSO-E completeness check starts as soon as the app requests it.
+- **CO₂ chart range selector** – Both the desktop CO₂ tab and web dashboard now have range buttons (24h, 7 Days, 30 Days, All) to view historical CO₂ intensity data. Previously only the last 24 hours were shown despite having months of data in the database.
+- **Auto-sync on app startup** – The app automatically starts an incremental data sync from all configured Shelly devices 2 seconds after launch. No more manual "Sync" click needed.
+- **ENTSO-E check triggered on startup** – The CO₂ fetch service runs immediately when the app opens, checking for missing historical data right away.
 
-## 12.8.1 - 2026-03-29
-### Fixed
-- **ENTSO-E always checks full history for completeness** – Every fetch cycle now scans the entire range from the oldest energy measurement to now for missing CO₂ hours. Only the actual gaps are fetched from the API (aligned to day boundaries and merged into efficient ranges), instead of re-fetching the entire timeline. This ensures historical data is always backfilled automatically, even after app restarts or partial imports.
-
-## 12.8.0 - 2026-03-29
 ### Changed
-- **ENTSO-E CO₂ data now persisted per chunk** – Previously all fetched CO₂ intensity rows were accumulated in memory and only written to the database after ALL chunks completed. If the app was restarted mid-fetch, all data was lost. Now each 7-day chunk is written to the database immediately after download, making the import crash-safe and allowing data to appear in the UI while the import is still running.
-- **Gap detection no longer re-fetches estimated values every cycle** – The gap detection was using `include_estimated=True`, which treated all estimated-fill hours as gaps and re-fetched the entire history on every tick. Now only truly missing hours trigger re-fetching, so the service efficiently catches up on new hours without redundant API calls.
+- **ENTSO-E CO₂ data persisted per chunk** – Each 7-day chunk is written to the database immediately after download (crash-safe), instead of buffering all data in memory until the end.
+- **ENTSO-E gap detection scans full history** – Every fetch cycle checks the entire range from oldest measurement to now. Only actual gaps are fetched from the API, aligned to day boundaries and merged into efficient ranges.
+- **Estimated placeholders limited to last 48h** – Old estimated values are purged each cycle so historical gaps get real ENTSO-E data. Only the last 48 hours get estimated placeholders where the API may not yet have data.
 
 ## 12.7.3 - 2026-03-29
 ### Fixed
