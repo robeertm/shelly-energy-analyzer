@@ -1277,52 +1277,60 @@ class Co2FetchService:
             self._svc_log("CO₂ Import abgeschlossen")
         self._last_fetch_ts = time.time()
 
-        # ── Fuel mix recovery ────────────────────────────────────────────
-        # If we still have no fuel mix (e.g. first run after upgrade, or
-        # today's data not yet available), try fetching generation data
-        # for yesterday where data is reliably available.
-        if not self._latest_mix and not self._stop_event.is_set():
+        # ── Fuel mix backfill ─────────────────────────────────────────────
+        # Check if fuel mix data is complete for the full range. The mix
+        # may be missing if CO₂ intensity was imported by an older version
+        # that didn't store fuel mix data.
+        if not self._stop_event.is_set():
             try:
-                self._svc_log("Kraftwerksmix: Lade letzte verfügbare Daten...")
-                # Wait for ENTSO-E rate limit (62s between requests)
-                self._svc_log("  Warte 65s (ENTSO-E Rate-Limit)...")
-                self._stop_event.wait(65)
-                if self._stop_event.is_set():
-                    return
-                # Fetch yesterday's full day – data is always available
-                recovery_end = ((now_ts // 3600)) * 3600
-                recovery_start = recovery_end - 48 * 3600
-                recovery_rows = client.fetch_intensity(recovery_start, recovery_end)
-                raw_mix = client.last_mix
-                if raw_mix:
-                    _enriched2 = _estimate_solar_if_missing(raw_mix, self.bidding_zone) if "solar" not in raw_mix else raw_mix
-                    all_hours = sorted({h for fh in _enriched2.values() for h in fh})
-                    if all_hours:
-                        # Store all hours' mix
-                        for h_ts in all_hours:
-                            h_mix = {
-                                fuel: fh[h_ts]
-                                for fuel, fh in _enriched2.items()
-                                if fh.get(h_ts, 0.0) > 0
-                            }
-                            if h_mix:
-                                self._db.upsert_fuel_mix(h_ts, zone, h_mix)
-                        latest_h = max(all_hours)
-                        hour_mix = {
-                            fuel: fh[latest_h]
-                            for fuel, fh in _enriched2.items()
-                            if fh.get(latest_h, 0.0) > 0
-                        }
-                        if hour_mix:
-                            self._latest_mix_hour = latest_h
-                            self._latest_mix = hour_mix
-                            total_mw = sum(hour_mix.values())
-                            lh_str = datetime.fromtimestamp(latest_h, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-                            self._svc_log(f"Kraftwerksmix geladen: {len(all_hours)} Stunden, aktuellste: {lh_str}, {total_mw:.0f} MW")
-                            if recovery_rows:
-                                self._db.upsert_co2_intensity(recovery_rows)
-                if not self._latest_mix:
-                    self._svc_log("Kraftwerksmix: Keine Daten verfügbar")
+                covered, total = self._db.fuel_mix_coverage(zone, range_start, range_end)
+                missing_pct = 100 * (1 - covered / total) if total else 0
+                if missing_pct > 5:  # More than 5% missing
+                    self._svc_log(
+                        f"Kraftwerksmix: {covered}/{total} Stunden vorhanden "
+                        f"({missing_pct:.0f}% fehlen) – lade nach..."
+                    )
+                    mix_chunk_s = 7 * 86400
+                    mix_cursor = range_start
+                    mix_written = 0
+                    while mix_cursor < range_end and not self._stop_event.is_set():
+                        mix_chunk_end = min(mix_cursor + mix_chunk_s, range_end)
+                        # Check if this chunk already has mix data
+                        ch_cov, ch_tot = self._db.fuel_mix_coverage(zone, mix_cursor, mix_chunk_end)
+                        if ch_cov < ch_tot * 0.5:  # Less than 50% covered
+                            c_from = datetime.fromtimestamp(mix_cursor, tz=timezone.utc).strftime("%Y-%m-%d")
+                            c_to = datetime.fromtimestamp(mix_chunk_end, tz=timezone.utc).strftime("%Y-%m-%d")
+                            self._svc_log(f"  Kraftwerksmix Abfrage: {c_from} bis {c_to}...")
+                            try:
+                                client.fetch_intensity(mix_cursor, mix_chunk_end)
+                                raw_mix = client.last_mix
+                                if raw_mix:
+                                    _enriched2 = _estimate_solar_if_missing(raw_mix, self.bidding_zone) if "solar" not in raw_mix else raw_mix
+                                    all_hours = sorted({h for fh in _enriched2.values() for h in fh})
+                                    for h_ts in all_hours:
+                                        h_mix = {
+                                            fuel: fh[h_ts]
+                                            for fuel, fh in _enriched2.items()
+                                            if fh.get(h_ts, 0.0) > 0
+                                        }
+                                        if h_mix:
+                                            self._db.upsert_fuel_mix(h_ts, zone, h_mix)
+                                            mix_written += 1
+                                    if all_hours:
+                                        latest_h = max(all_hours)
+                                        hour_mix = {
+                                            fuel: fh[latest_h]
+                                            for fuel, fh in _enriched2.items()
+                                            if fh.get(latest_h, 0.0) > 0
+                                        }
+                                        if latest_h >= (self._latest_mix_hour or 0):
+                                            self._latest_mix_hour = latest_h
+                                            self._latest_mix = hour_mix
+                            except Exception as exc:
+                                self._svc_log(f"    Fehler: {exc}")
+                        mix_cursor = mix_chunk_end
+                    if mix_written:
+                        self._svc_log(f"Kraftwerksmix: {mix_written} Stunden nachgeladen")
             except Exception as exc:
-                self._svc_log(f"Kraftwerksmix Recovery fehlgeschlagen: {exc}")
-                logger.warning("Fuel mix recovery failed: %s", exc)
+                self._svc_log(f"Kraftwerksmix Backfill fehlgeschlagen: {exc}")
+                logger.warning("Fuel mix backfill failed: %s", exc)

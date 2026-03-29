@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.9.1 - 2026-03-29
+### Fixed
+- **Fuel mix backfill for full history** – The generation mix (Kraftwerksmix) was only available for hours fetched in the current session. Historical hours imported by older versions had CO₂ intensity but no fuel mix data. The service now checks fuel mix coverage for the entire measurement range and backfills missing chunks from ENTSO-E automatically. Navigating backwards through the fuel mix display now shows real generation data for all historical hours.
+
 ## 12.9.0 - 2026-03-29
 ### Added
 - **CO₂ chart range selector** – Both the desktop CO₂ tab and web dashboard now have range buttons (24h, 7 Days, 30 Days, All) to view historical CO₂ intensity data. Previously only the last 24 hours were shown despite having months of data in the database.
