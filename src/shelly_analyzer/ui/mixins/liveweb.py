@@ -1615,9 +1615,15 @@ class LiveWebMixin:
                         current_source = str(last_row.get("source", ""))
 
                     # CO₂ per device for today/week/month
+                    # Solar config for CO₂ offset
+                    _solar_cfg = getattr(self.cfg, "solar", None)
+                    _pv_key = getattr(_solar_cfg, "pv_meter_device_key", "") if _solar_cfg else ""
+                    _pv_on = bool(getattr(_solar_cfg, "enabled", False)) if _solar_cfg else False
+
                     def _device_co2(start_ts_d, end_ts_d):
-                        """Calculate total CO₂ kg for all devices in [start, end)."""
-                        total_kwh = 0.0
+                        """Calculate net CO₂ kg (grid only, PV offset subtracted)."""
+                        grid_kwh = 0.0
+                        pv_saved_kwh = 0.0
                         df_co2 = self.storage.db.query_co2_intensity(zone, start_ts_d, end_ts_d + 3600)
                         if df_co2 is None or df_co2.empty:
                             return 0.0
@@ -1627,11 +1633,19 @@ class LiveWebMixin:
                         for d in self.cfg.devices:
                             try:
                                 df_h = self.storage.db.query_hourly(d.key, start_ts=start_ts_d, end_ts=end_ts_d)
-                                if df_h is not None and not df_h.empty and "kwh" in df_h.columns:
-                                    total_kwh += float(pd.to_numeric(df_h["kwh"], errors="coerce").fillna(0.0).clip(lower=0).sum())
+                                if df_h is None or df_h.empty or "kwh" not in df_h.columns:
+                                    continue
+                                if _pv_on and d.key == _pv_key:
+                                    # PV meter: positive=grid import, negative=feed-in
+                                    kwh_vals = pd.to_numeric(df_h["kwh"], errors="coerce").fillna(0.0)
+                                    grid_kwh += float(kwh_vals.clip(lower=0).sum())
+                                    pv_saved_kwh += float(kwh_vals.clip(upper=0).abs().sum())
+                                else:
+                                    grid_kwh += float(pd.to_numeric(df_h["kwh"], errors="coerce").fillna(0.0).clip(lower=0).sum())
                             except Exception:
                                 pass
-                        return total_kwh * avg_int / 1000.0
+                        net_kg = max(0.0, (grid_kwh - pv_saved_kwh) * avg_int / 1000.0)
+                        return net_kg
 
                     co2_today = _device_co2(today_start_ts, now_ts)
                     co2_week = _device_co2(week_start_ts, now_ts)

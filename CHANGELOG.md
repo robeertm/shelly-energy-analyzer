@@ -1,5 +1,14 @@
 # Changelog
 
+## 12.4.0 - 2026-03-29
+### Fixed
+- **CO₂ calculation now includes solar offset** – Previously all device consumption was multiplied by grid CO₂ intensity, ignoring PV self-consumption entirely. Now the CO₂ tab correctly separates grid import from PV self-consumption:
+  - **Grid import** (positive kWh from PV meter) → multiplied by ENTSO-E CO₂ intensity
+  - **PV self-consumption** → CO₂-free (not counted)
+  - **Feed-in** (negative kWh) → subtracted as CO₂ credit (avoided grid emissions)
+  - Summary cards show net CO₂ with solar savings indicator (☀️ -X.XX kg)
+- Applies to both **desktop CO₂ tab** and **web CO₂ tab** (`/api/co2` endpoint)
+
 ## 12.3.1 - 2026-03-29
 ### Fixed
 - **Anomaly spam eliminated** – Event IDs are now deterministic (based on device + type + date instead of random UUID). The same anomaly on the same day always produces the same ID, so it's only notified once. A separate `_anomaly_notified_ids` set tracks which events have already been sent — even across detection cycles.
