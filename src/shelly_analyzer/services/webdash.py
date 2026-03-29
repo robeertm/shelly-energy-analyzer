@@ -2103,13 +2103,16 @@ function hideHmTooltip() {{
 ────────────────────────────────────────────── */
 let _co2LiveTimer = null;
 
-async function loadCo2() {{
+let _co2Range = '24h';
+async function loadCo2(range) {{
+  if (range) _co2Range = range;
   const el = document.getElementById('co2-content');
   el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   try {{
-    const r = await fetch('/api/co2');
+    const r = await fetch('/api/co2?range=' + _co2Range);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
+    data._range = _co2Range;
     renderCo2(data, el);
     _startCo2LiveRates();
   }} catch(e) {{
@@ -2190,11 +2193,18 @@ function renderCo2(data, el) {{
   html += metricCardHtml(t('web.co2.car', 'Car km avoided'), (data.car_km||0).toFixed(0) + ' km', '🚗');
   html += '</div></div>';
 
-  // ── 24h intensity chart (canvas) ──
+  // ── Intensity chart with range selector ──
   const hourly = data.hourly || [];
   if (hourly.length > 0) {{
     html += '<div class="card" style="margin-top:8px">';
-    html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">' + t('web.co2.chart_title', '24h CO\u2082 Intensity') + '</div>';
+    const curRange = data._range || '24h';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+    html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">' + t('web.co2.chart_title', 'CO\u2082 Intensity') + '</div>';
+    ['24h','7d','30d','all'].forEach(function(r) {{
+      const active = r === curRange ? 'background:var(--accent);color:#fff;' : 'background:var(--chipbg);color:var(--fg);';
+      html += '<button onclick="loadCo2(\'' + r + '\')" style="border:none;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;' + active + '">' + r + '</button>';
+    }});
+    html += '</div>';
     html += '<canvas id="co2-chart" height="160" style="width:100%"></canvas>';
 
     // ── Heatmap strip ──
