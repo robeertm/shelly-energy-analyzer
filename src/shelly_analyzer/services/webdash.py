@@ -538,7 +538,7 @@ _HTML_TEMPLATE = """<!doctype html>
     /* ── Heatmap ── */
     .hm-calendar {{ overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }}
     .hm-grid {{ display: flex; flex-wrap: nowrap; gap: 2px; }}
-    .hm-week {{ display: flex; flex-direction: column; gap: 2px; }}
+    .hm-week {{ display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }}
     .hm-day {{
       border-radius: 2px;
       background: var(--chipbg);
@@ -546,7 +546,7 @@ _HTML_TEMPLATE = """<!doctype html>
       flex-shrink: 0;
     }}
     .hm-month-labels {{ display: flex; flex-wrap: nowrap; gap: 2px; font-size: 9px; color: var(--muted); margin-bottom: 3px; }}
-    .hm-month-labels span {{ overflow: visible; white-space: nowrap; }}
+    .hm-month-labels span {{ overflow: visible; white-space: nowrap; flex-shrink: 0; }}
     /* Hourly heatmap table */
     .hm-table-wrap {{ overflow-x: auto; width: 100%; }}
     .hm-table {{ border-collapse: separate; border-spacing: 2px; font-size: 9px; }}

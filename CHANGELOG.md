@@ -1,8 +1,8 @@
 # Changelog
 
-## 12.9.7 - 2026-03-29
+## 12.9.8 - 2026-03-29
 ### Fixed
-- **Heatmap calendar wrapping in portrait mode** – The yearly overview heatmap grid lacked `flex-wrap: nowrap`, causing week columns to wrap onto new lines on narrow screens. This made it appear as if data extended into July when only March had data. The grid and month labels now stay in a single row and scroll horizontally instead.
+- **Heatmap month labels misaligned in portrait mode** – On narrow screens the week columns (`.hm-week`) were allowed to shrink by CSS flex, compressing the grid cells below their intended size. Meanwhile the month labels kept their calculated width, causing a mismatch: "Mar" appeared where "Jun/Jul" should be, making it look like data extended into summer. Added `flex-shrink: 0` to week columns and label spans so the grid scrolls horizontally instead of compressing.
 
 ## 12.9.6 - 2026-03-29
 ### Fixed
