@@ -1066,17 +1066,17 @@ class Co2FetchService:
             # First fetch or forced: go back to oldest measurement
             start_ts = oldest_measurement
         else:
-            # Check for gaps with estimated data that should be replaced
             oldest_co2 = self._db.oldest_co2_ts(zone) or oldest_measurement
             # Ensure we cover from oldest measurement (in case new old data was synced)
             check_from = min(oldest_co2, oldest_measurement)
             end_check = ((now_ts // 3600) + 1) * 3600
-            gaps = self._db.find_co2_gaps(zone, check_from, end_check, include_estimated=True)
+            # Check for real gaps (missing hours, not estimated) first
+            gaps = self._db.find_co2_gaps(zone, check_from, end_check, include_estimated=False)
             if gaps:
-                # Start from the earliest gap to try re-fetching real data
+                # Start from the earliest missing hour
                 start_ts = gaps[0][0]
             else:
-                # No gaps – start from the next hour after the latest stored hour
+                # No missing hours – continue from latest stored hour
                 start_ts = latest_ts + 3600
 
         # Snap to hour boundary
@@ -1097,7 +1097,7 @@ class Co2FetchService:
         # Split into chunks of at most 7 days to stay within API limits
         client = EntsoeClient(api_token=token, bidding_zone=zone)
         chunk_s = 7 * 86400
-        all_rows: list = []
+        total_written = 0
         failed_ranges: list = []  # (start, end) ranges that failed all retries
         cursor = start_ts
         days_fetched = 0
@@ -1127,7 +1127,10 @@ class Co2FetchService:
                         )
                     else:
                         rows = client.fetch_intensity(cursor, chunk_end)
-                    all_rows.extend(rows)
+                    # Write intensity data immediately per chunk (crash-safe)
+                    if rows:
+                        written = self._db.upsert_co2_intensity(rows)
+                        total_written += written
                     self._last_error = None
                     self._svc_log(f"    Empfangen: {len(rows)} Datenpunkte")
                     # Store ALL hours' fuel mix for historical navigation
@@ -1199,11 +1202,9 @@ class Co2FetchService:
             days_fetched += max(1, round((chunk_end - cursor) / 86400))
             cursor = chunk_end
 
-        # Store successfully fetched rows immediately
-        if all_rows:
-            written = self._db.upsert_co2_intensity(all_rows)
-            self._svc_log(f"CO₂ Import: {written} Werte gespeichert")
-            logger.info("Co2FetchService: stored %d intensity points", written)
+        if total_written:
+            self._svc_log(f"CO₂ Import: {total_written} Werte gespeichert")
+            logger.info("Co2FetchService: stored %d intensity points", total_written)
 
         # ── Gap detection & estimated-value fill ──────────────────────────
         # Find hours in [start_ts, end_ts) that are still missing after fetch
