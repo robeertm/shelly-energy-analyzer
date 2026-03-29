@@ -537,7 +537,7 @@ _HTML_TEMPLATE = """<!doctype html>
     .sparkline-wrap[data-metric]:hover {{ opacity: .7; }}
     /* ── Heatmap ── */
     .hm-calendar {{ overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }}
-    .hm-grid {{ display: flex; gap: 2px; }}
+    .hm-grid {{ display: flex; flex-wrap: nowrap; gap: 2px; }}
     .hm-week {{ display: flex; flex-direction: column; gap: 2px; }}
     .hm-day {{
       border-radius: 2px;
@@ -545,7 +545,7 @@ _HTML_TEMPLATE = """<!doctype html>
       position: relative;
       flex-shrink: 0;
     }}
-    .hm-month-labels {{ display: flex; gap: 2px; font-size: 9px; color: var(--muted); margin-bottom: 3px; }}
+    .hm-month-labels {{ display: flex; flex-wrap: nowrap; gap: 2px; font-size: 9px; color: var(--muted); margin-bottom: 3px; }}
     .hm-month-labels span {{ overflow: visible; white-space: nowrap; }}
     /* Hourly heatmap table */
     .hm-table-wrap {{ overflow-x: auto; width: 100%; }}
