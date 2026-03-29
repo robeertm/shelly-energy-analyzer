@@ -5756,11 +5756,12 @@ class LiveWebDashboard:
                 "web_dash_done": _t(self.lang, "web.dash.done"),
                 "refresh_ms": str(int(max(250, self.refresh_seconds * 1000))),
                 "window_min": str(int(max(1, self.window_minutes))),
-                "window_options_json": json.dumps(self.available_windows),
+                "window_options_json": json.dumps(self.available_windows, ensure_ascii=False),
                 "devices_json": json.dumps(
-                    (self.devices_meta or [{"key": k, "name": n} for (k, n) in (self.devices or [])])
+                    (self.devices_meta or [{"key": k, "name": n} for (k, n) in (self.devices or [])]),
+                    ensure_ascii=False,
                 ),
-                "i18n_json": json.dumps(web_i18n),
+                "i18n_json": json.dumps(web_i18n, ensure_ascii=False),
             },
         )
         self._html_bytes = html.encode("utf-8")
@@ -5858,9 +5859,10 @@ class LiveWebDashboard:
                 "hint_max2": _t(self.lang, "web.plots.max2"),
                 "btn_apply": _t(self.lang, "btn.apply"),
                 "devices_html": devices_html,
-                "i18n_json": json.dumps(web_i18n),
+                "i18n_json": json.dumps(web_i18n, ensure_ascii=False),
                 "devices_json": json.dumps(
-                    (self.devices_meta or [{"key": k, "name": n} for (k, n) in (self.devices or [])])
+                    (self.devices_meta or [{"key": k, "name": n} for (k, n) in (self.devices or [])]),
+                    ensure_ascii=False,
                 ),
             },
         ).encode("utf-8")
