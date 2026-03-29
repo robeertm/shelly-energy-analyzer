@@ -81,6 +81,7 @@ from shelly_analyzer.services.webdash import LivePoint, LiveStateStore, LiveWebD
 from shelly_analyzer.services.discovery import probe_device
 from shelly_analyzer.services.demo import default_demo_devices, ensure_demo_csv
 from shelly_analyzer.services.mdns import discover_shelly_mdns
+from shelly_analyzer.services.traffic import TrafficMonitor, fmt_bytes, fmt_rate, _CAT_LABELS, _CAT_ICONS
 
 
 from .._shared import _fmt_eur, _fmt_kwh, _parse_date_flexible, _period_bounds, PLOTS_MODES, AUTOSYNC_INTERVAL_OPTIONS, AUTOSYNC_MODE_OPTIONS, INVOICE_PERIOD_OPTIONS
@@ -276,6 +277,9 @@ class CoreMixin:
             self._anomaly_log: List[Any] = []
             # Log file path (set by run_gui via logging_setup)
             self._log_path: Optional[Path] = get_log_path()
+            # Network traffic monitor
+            self._traffic_monitor = TrafficMonitor.get()
+            self._traffic_monitor.install()
             # device_key -> metric -> ringbuffer of (ts,val)
             self._live_series: Dict[str, Dict[str, Any]] = {}
             # Today kWh (base from imported CSVs + live delta)
@@ -1070,6 +1074,29 @@ class CoreMixin:
             self.autosync_mode_cmb.pack(side="left")
             self.autosync_status = tk.StringVar(value="Autosync: aus")
             ttk.Label(auto, textvariable=self.autosync_status).pack(side="left", padx=12)
+            # Network traffic section
+            traffic_lf = ttk.LabelFrame(frm, text=self.t("traffic.title"))
+            traffic_lf.pack(fill="x", padx=12, pady=(0, 10))
+            # Rate + totals row
+            rate_frm = ttk.Frame(traffic_lf)
+            rate_frm.pack(fill="x", padx=8, pady=(6, 2))
+            self._traffic_rate_var = tk.StringVar(value="↓ 0 B/s  ↑ 0 B/s")
+            ttk.Label(rate_frm, textvariable=self._traffic_rate_var, font=("TkDefaultFont", 11, "bold")).pack(side="left")
+            self._traffic_total_var = tk.StringVar(value="")
+            ttk.Label(rate_frm, textvariable=self._traffic_total_var).pack(side="right")
+            # Category breakdown (Treeview table)
+            cols = ("cat", "requests", "received", "sent")
+            self._traffic_tree = ttk.Treeview(traffic_lf, columns=cols, show="headings", height=5)
+            self._traffic_tree.heading("cat", text=self.t("traffic.category"))
+            self._traffic_tree.heading("requests", text=self.t("traffic.requests"))
+            self._traffic_tree.heading("received", text="↓ " + self.t("traffic.received"))
+            self._traffic_tree.heading("sent", text="↑ " + self.t("traffic.sent"))
+            self._traffic_tree.column("cat", width=160, anchor="w")
+            self._traffic_tree.column("requests", width=80, anchor="center")
+            self._traffic_tree.column("received", width=100, anchor="e")
+            self._traffic_tree.column("sent", width=100, anchor="e")
+            self._traffic_tree.pack(fill="x", padx=8, pady=(2, 6))
+
             # Progress bar (shown during active sync)
             prog_frm = ttk.Frame(frm)
             prog_frm.pack(fill="x", padx=12, pady=(0, 4))
@@ -8020,7 +8047,48 @@ class CoreMixin:
             except Exception:
                 pass
 
+            # Network traffic UI update (every 2 seconds)
+            try:
+                self._traffic_ui_update()
+            except Exception:
+                pass
+
             self.after(500, self._drain_queues_loop)
+
+    def _traffic_ui_update(self) -> None:
+            # Throttle to every 2 seconds
+            now = time.time()
+            if now - getattr(self, "_traffic_last_update", 0) < 2.0:
+                return
+            self._traffic_last_update = now
+            tree = getattr(self, "_traffic_tree", None)
+            if tree is None:
+                return
+            snap = self._traffic_monitor.snapshot()
+            # Update rate + totals
+            rv = getattr(self, "_traffic_rate_var", None)
+            if rv:
+                rv.set(f"↓ {fmt_rate(snap['rate_recv_bps'])}  ↑ {fmt_rate(snap['rate_sent_bps'])}")
+            tv = getattr(self, "_traffic_total_var", None)
+            if tv:
+                hrs = snap["uptime_s"] // 3600
+                mins = (snap["uptime_s"] % 3600) // 60
+                uptime = f"{hrs}h {mins}m" if hrs else f"{mins}m"
+                tv.set(f"{self.t('traffic.total')}: ↓ {fmt_bytes(snap['total_received'])}  ↑ {fmt_bytes(snap['total_sent'])}  |  {snap['total_requests']} Requests  |  {uptime}")
+            # Update category table
+            for iid in tree.get_children():
+                tree.delete(iid)
+            # Sort by received bytes (descending)
+            cats = sorted(snap["categories"].items(), key=lambda x: x[1]["received"], reverse=True)
+            for cat, data in cats:
+                icon = _CAT_ICONS.get(cat, "📡")
+                label = _CAT_LABELS.get(cat, cat)
+                tree.insert("", "end", values=(
+                    f"{icon} {label}",
+                    str(data["requests"]),
+                    fmt_bytes(data["received"]),
+                    fmt_bytes(data["sent"]),
+                ))
 
     def _mdns_refresh_tree(self) -> None:
             try:

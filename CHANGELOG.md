@@ -1,5 +1,15 @@
 # Changelog
 
+## 12.6.0 - 2026-03-29
+### Added
+- **Network traffic monitor** – New "Network Traffic" section in the Sync tab showing real-time bandwidth usage and cumulative data transferred by the app. Displays:
+  - **Live rate** – current download/upload speed (↓/↑ B/s, KB/s, MB/s)
+  - **Cumulative totals** – total bytes received/sent, request count, and app uptime
+  - **Per-category breakdown table** – traffic split by source: Shelly Devices, ENTSO-E API, OpenWeather, Telegram, GitHub, and Other. Sorted by received bytes, updated every 2 seconds.
+  - Intercepts all HTTP traffic (both `requests` library and `urllib`) via monkey-patching at startup – zero changes needed in individual services.
+- **Web /control page: traffic card** – The web control page shows the same traffic stats with a live-updating table (polled every 3 seconds via `/api/traffic` endpoint).
+- **New API endpoint `/api/traffic`** – Returns current traffic snapshot with per-category breakdown, rates, and totals.
+
 ## 12.5.2 - 2026-03-29
 ### Fixed
 - **Web nav: duplicate icons on Forecast, Standby, Energy Flow** – The nav buttons had a hardcoded emoji in `<span class="nav-icon">` AND the i18n tab label already contained the same emoji. Removed the redundant `nav-icon` spans so each icon appears only once.
