@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.8.6 - 2026-03-29
+### Fixed
+- **Extended ENTSO-E debug logging** – Logs now show exact config state (co2_cfg type, enabled flag, token presence) and catch _get_config() failures. This reveals the root cause of the silent ENTSO-E service.
+
 ## 12.8.5 - 2026-03-29
 ### Fixed
 - **ENTSO-E diagnostic logging to file** – All CO₂ service status messages now also go to the app log file (not just the Sync tab UI). This reveals the exact reason when ENTSO-E data isn't loading: "CO₂ not enabled", "no API token", thread timing, etc.
