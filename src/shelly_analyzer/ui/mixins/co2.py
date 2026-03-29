@@ -591,26 +591,60 @@ class Co2Mixin:
                     self._co2_summary_vars[f"{key}_tree"].set("")
                     continue
 
-                # Total energy consumption in kWh across all devices
-                total_kwh = 0.0
+                # Total energy: only grid consumption (exclude PV self-consumption)
+                solar_cfg = getattr(self.cfg, "solar", None)
+                pv_key = getattr(solar_cfg, "pv_meter_device_key", "") if solar_cfg else ""
+                pv_enabled = bool(getattr(solar_cfg, "enabled", False)) if solar_cfg else False
+
+                grid_kwh = 0.0     # kWh from grid (what we pay CO₂ for)
+                pv_saved_kwh = 0.0 # kWh from PV (CO₂-free)
+
                 for dev in devices:
                     try:
                         df_h = db.query_hourly(dev.key, start_ts, now_ts + 3600)
-                        if df_h is not None and not df_h.empty:
-                            total_kwh += float(df_h["kwh"].sum())
+                        if df_h is None or df_h.empty:
+                            continue
+                        dev_kwh = float(df_h["kwh"].sum())
+
+                        if pv_enabled and dev.key == pv_key:
+                            # PV meter: positive = grid import, negative = feed-in
+                            # Per-hour analysis for accurate split
+                            for _, row in df_h.iterrows():
+                                h_kwh = float(row["kwh"])
+                                if h_kwh >= 0:
+                                    grid_kwh += h_kwh  # Grid import
+                                else:
+                                    pv_saved_kwh += abs(h_kwh)  # Feed-in (CO₂ credit)
+                        else:
+                            grid_kwh += max(0.0, dev_kwh)
                     except Exception:
                         pass
 
+                # Subtract PV self-consumption from grid total
+                # Self-consumption = total household consumption - grid import
+                # (already handled: non-PV devices add their full kWh as grid,
+                #  PV meter only adds positive hours as grid import)
+
                 avg_intensity = float(df_co2["intensity_g_per_kwh"].mean())
-                total_kg = total_kwh * avg_intensity / 1000.0
+                total_kg = grid_kwh * avg_intensity / 1000.0
+                # CO₂ credit from feed-in (avoided grid emissions)
+                saved_kg = pv_saved_kwh * avg_intensity / 1000.0
+                net_kg = max(0.0, total_kg - saved_kg)
 
-                car_km = total_kg * 1000.0 / _CAR_G_PER_KM
-                trees = total_kg / _TREE_KG_PER_YEAR
+                car_km = net_kg * 1000.0 / _CAR_G_PER_KM
+                trees = net_kg / _TREE_KG_PER_YEAR
 
-                self._co2_summary_vars[f"{key}_kg"].set(f"{total_kg:.2f}")
-                self._co2_summary_vars[f"{key}_car"].set(
-                    f"🚗 {car_km:.0f} {self.t('co2.summary.car_km')}"
-                )
+                # Show net CO₂ with solar offset info
+                if pv_enabled and saved_kg > 0.01:
+                    self._co2_summary_vars[f"{key}_kg"].set(f"{net_kg:.2f}")
+                    self._co2_summary_vars[f"{key}_car"].set(
+                        f"☀️ -{saved_kg:.2f} kg  🚗 {car_km:.0f} {self.t('co2.summary.car_km')}"
+                    )
+                else:
+                    self._co2_summary_vars[f"{key}_kg"].set(f"{net_kg:.2f}")
+                    self._co2_summary_vars[f"{key}_car"].set(
+                        f"🚗 {car_km:.0f} {self.t('co2.summary.car_km')}"
+                    )
                 self._co2_summary_vars[f"{key}_tree"].set(
                     f"🌳 {trees:.1f} {self.t('co2.summary.trees')}"
                 )
