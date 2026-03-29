@@ -1067,6 +1067,21 @@ class EnergyDB:
                 pass
         return min(candidates) if candidates else None
 
+    def delete_estimated_co2(self, zone: str, before_ts: int) -> int:
+        """Delete estimated-only CO₂ rows older than *before_ts*.
+
+        Returns the number of rows deleted.
+        """
+        conn = self._conn()
+        with self._write_lock:
+            with conn:
+                cur = conn.execute(
+                    "DELETE FROM co2_intensity "
+                    "WHERE zone = ? AND source = 'estimated' AND hour_ts < ?",
+                    (zone, before_ts),
+                )
+                return cur.rowcount
+
     def oldest_co2_ts(self, zone: str) -> Optional[int]:
         """Return the oldest hour_ts for a zone, or None."""
         conn = self._conn()
