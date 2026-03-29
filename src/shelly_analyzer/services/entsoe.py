@@ -311,6 +311,66 @@ def _parse_generation_xml(xml_text: str) -> Dict[str, Dict[int, float]]:
     return results
 
 
+# Installed solar capacity (MW) per zone (approximate, 2024 data)
+_SOLAR_CAPACITY_MW: Dict[str, float] = {
+    "DE_LU": 82000, "ES": 27000, "IT_NORD": 14000, "IT_CSUD": 10000,
+    "IT_SUD": 8000, "FR": 20000, "NL": 22000, "BE": 8000, "AT": 5000,
+    "PL": 17000, "CZ": 2500, "GR": 6000, "PT": 3000, "HU": 5000,
+    "RO": 2000, "BG": 2500, "SK": 600, "DK_1": 2500, "DK_2": 1500,
+    "SE_3": 3000, "SE_4": 2000, "FI": 700, "CH": 6000, "GB": 16000,
+}
+
+# Typical solar capacity factor by hour (0-23) and month (1-12) for Central Europe
+# Values are fraction of installed capacity (0.0-0.7)
+_SOLAR_PROFILE_HOUR = [
+    0, 0, 0, 0, 0, 0.02, 0.08, 0.18, 0.30, 0.42, 0.52, 0.58,
+    0.60, 0.58, 0.52, 0.42, 0.30, 0.18, 0.08, 0.02, 0, 0, 0, 0,
+]
+_SOLAR_PROFILE_MONTH = [
+    0.3, 0.4, 0.55, 0.65, 0.75, 0.80,  # Jan-Jun
+    0.80, 0.75, 0.65, 0.50, 0.35, 0.25, # Jul-Dec
+]
+
+
+def _estimate_solar_if_missing(
+    mix: Dict[str, Dict[int, float]],
+    zone: str,
+) -> Dict[str, Dict[int, float]]:
+    """Add estimated solar generation if 'solar' key is missing from the mix.
+
+    Uses installed capacity × typical capacity factor for hour/month.
+    This is a rough estimate since ENTSO-E often delays solar data by 1-2 days.
+    """
+    capacity = _SOLAR_CAPACITY_MW.get(zone, 0)
+    if capacity <= 0:
+        return mix
+
+    # Get all hour timestamps from any existing fuel
+    all_hours: set = set()
+    for fuel_hours in mix.values():
+        all_hours.update(fuel_hours.keys())
+    if not all_hours:
+        return mix
+
+    solar_data: Dict[int, float] = {}
+    for h_ts in all_hours:
+        dt = datetime.fromtimestamp(h_ts, tz=timezone.utc)
+        hour = dt.hour
+        month = dt.month
+        cf_hour = _SOLAR_PROFILE_HOUR[hour] if 0 <= hour < 24 else 0
+        cf_month = _SOLAR_PROFILE_MONTH[month - 1] if 1 <= month <= 12 else 0.5
+        estimated_mw = capacity * cf_hour * cf_month
+        if estimated_mw > 0:
+            solar_data[h_ts] = estimated_mw
+
+    if solar_data:
+        mix = dict(mix)
+        mix["solar"] = solar_data
+        logger.info("Solar estimated for %s: added %d hours (capacity %.0f MW)", zone, len(solar_data), capacity)
+
+    return mix
+
+
 def _parse_crossborder_xml(xml_text: str) -> Dict[int, float]:
     """Parse ENTSO-E A11 cross-border physical flow XML.
 
@@ -599,6 +659,11 @@ class EntsoeClient:
                 xml_text[:200],
             )
         self.last_mix = mix  # cache for caller inspection
+
+        # Estimate solar if missing from ENTSO-E data (common for DE_LU real-time)
+        if "solar" not in mix and mix:
+            mix = _estimate_solar_if_missing(mix, self.bidding_zone)
+
         intensity = calculate_intensity(mix)
 
         now_ts = int(time.time())
@@ -1063,9 +1128,11 @@ class Co2FetchService:
                         all_hours = {h for fh in raw_mix.values() for h in fh}
                         if all_hours:
                             latest_h = max(all_hours)
+                            # Include solar estimate if missing
+                            _enriched = _estimate_solar_if_missing(raw_mix, self.bidding_zone) if "solar" not in raw_mix else raw_mix
                             hour_mix = {
                                 fuel: fh[latest_h]
-                                for fuel, fh in raw_mix.items()
+                                for fuel, fh in _enriched.items()
                                 if fh.get(latest_h, 0.0) > 0
                             }
                             if latest_h >= (self._latest_mix_hour or 0):
@@ -1195,12 +1262,14 @@ class Co2FetchService:
                 recovery_rows = client.fetch_intensity(recovery_start, recovery_end)
                 raw_mix = client.last_mix
                 if raw_mix:
-                    all_hours = {h for fh in raw_mix.values() for h in fh}
+                    # Include solar estimate if missing
+                    _enriched2 = _estimate_solar_if_missing(raw_mix, self.bidding_zone) if "solar" not in raw_mix else raw_mix
+                    all_hours = {h for fh in _enriched2.values() for h in fh}
                     if all_hours:
                         latest_h = max(all_hours)
                         hour_mix = {
                             fuel: fh[latest_h]
-                            for fuel, fh in raw_mix.items()
+                            for fuel, fh in _enriched2.items()
                             if fh.get(latest_h, 0.0) > 0
                         }
                         if hour_mix:
