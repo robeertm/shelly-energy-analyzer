@@ -1017,8 +1017,9 @@ class Co2FetchService:
         self._trigger_event.set()
 
     def _run(self) -> None:
-        # Small initial delay so the app has time to fully initialize
-        self._stop_event.wait(5.0)
+        # Small initial delay, but wake early if trigger_now() is called
+        self._trigger_event.wait(5.0)
+        self._trigger_event.clear()
         while not self._stop_event.is_set():
             try:
                 self._tick()
