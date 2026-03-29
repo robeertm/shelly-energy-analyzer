@@ -152,6 +152,13 @@ _I18N: Dict[str, Dict[str, str]] = {
         "setup.finish.need_device": "Bitte zuerst mindestens ein Gerät hinzufügen (Schritt 1).",
         "tabs.billing": "Rechnung",
 
+        # Network traffic
+        "traffic.title": "Netzwerk-Traffic",
+        "traffic.category": "Kategorie",
+        "traffic.requests": "Anfragen",
+        "traffic.received": "Empfangen",
+        "traffic.sent": "Gesendet",
+        "traffic.total": "Gesamt",
         # Sync tab
         "sync.header": "Sync (inkrementell oder fester Zeitraum)",
         "sync.btn.incremental": "Inkrementell",
@@ -914,6 +921,13 @@ _I18N: Dict[str, Dict[str, str]] = {
         "tabs.billing": "Invoice",
 
         # Sync tab
+        # Network traffic
+        "traffic.title": "Network Traffic",
+        "traffic.category": "Category",
+        "traffic.requests": "Requests",
+        "traffic.received": "Received",
+        "traffic.sent": "Sent",
+        "traffic.total": "Total",
         "sync.header": "Sync (incremental or fixed range)",
         "sync.btn.incremental": "Incremental",
         "sync.btn.day": "Day",
