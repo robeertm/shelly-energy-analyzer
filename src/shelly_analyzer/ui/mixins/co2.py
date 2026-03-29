@@ -219,17 +219,29 @@ class Co2Mixin:
             self._co2_summary_vars[f"{key}_car"] = v_car
             self._co2_summary_vars[f"{key}_tree"] = v_tree
 
-        # ── Fuel mix details ──────────────────────────────────────────────────
+        # ── Fuel mix details with time slider ────────────────────────────────
         mix_frame = ttk.LabelFrame(sf, text=self.t("co2.mix.title"))
         mix_frame.pack(fill="x", padx=14, pady=(4, 4))
 
+        # Time navigation controls
+        mix_nav = ttk.Frame(mix_frame)
+        mix_nav.pack(fill="x", padx=8, pady=(6, 2))
+
+        ttk.Button(mix_nav, text="◀ Tag", width=6, command=lambda: self._co2_mix_navigate(-24)).pack(side="left", padx=2)
+        ttk.Button(mix_nav, text="◀ h", width=4, command=lambda: self._co2_mix_navigate(-1)).pack(side="left", padx=2)
+
         self._co2_mix_ts_var = tk.StringVar(value="")
-        ttk.Label(
-            mix_frame,
-            textvariable=self._co2_mix_ts_var,
-            foreground="gray",
-            font=("", 8),
-        ).pack(anchor="w", padx=8, pady=(4, 0))
+        ttk.Label(mix_nav, textvariable=self._co2_mix_ts_var, font=("", 10, "bold")).pack(side="left", padx=10)
+
+        ttk.Button(mix_nav, text="h ▶", width=4, command=lambda: self._co2_mix_navigate(1)).pack(side="left", padx=2)
+        ttk.Button(mix_nav, text="Tag ▶", width=6, command=lambda: self._co2_mix_navigate(24)).pack(side="left", padx=2)
+        ttk.Button(mix_nav, text="Jetzt", width=6, command=lambda: self._co2_mix_navigate(0)).pack(side="left", padx=8)
+
+        self._co2_mix_source_var = tk.StringVar(value="")
+        ttk.Label(mix_nav, textvariable=self._co2_mix_source_var, foreground="gray", font=("", 9)).pack(side="right")
+
+        # Current mix hour offset (0 = latest)
+        self._co2_mix_hour_offset = 0
 
         mix_tbl_cols = ("col_fuel", "col_mw", "col_share", "col_factor", "col_contrib")
         self._co2_mix_tbl = ttk.Treeview(
@@ -823,56 +835,137 @@ class Co2Mixin:
         except Exception:
             logger.debug("Co2Mixin: device table update error", exc_info=True)
 
-    def _co2_update_mix_table(self) -> None:
-        """Populate the fuel-mix Treeview from the service's cached latest mix."""
-        try:
-            tree = self._co2_mix_tbl
-        except AttributeError:
-            return
+    def _co2_mix_navigate(self, delta_hours: int) -> None:
+        """Navigate the fuel mix display by delta_hours (0 = jump to latest)."""
+        if delta_hours == 0:
+            self._co2_mix_hour_offset = 0
+        else:
+            self._co2_mix_hour_offset = getattr(self, "_co2_mix_hour_offset", 0) + delta_hours
+            # Don't go into the future
+            if self._co2_mix_hour_offset > 0:
+                self._co2_mix_hour_offset = 0
+        self._co2_load_mix_for_offset()
+
+    def _co2_load_mix_for_offset(self) -> None:
+        """Load fuel mix data for the current hour offset and display it."""
         try:
             from shelly_analyzer.services.entsoe import FUEL_DISPLAY_NAMES, _CO2_FACTORS
-            hour_ts, mix = None, {}
-            svc = getattr(self, "_co2_fetch_svc", None)
-            if svc is not None:
-                hour_ts, mix = svc.get_latest_mix()
-            if not mix:
+            tree = self._co2_mix_tbl
+            zone = str(getattr(self.cfg.co2, "bidding_zone", "DE_LU") or "DE_LU")
+            db = self.storage.db
+
+            offset = getattr(self, "_co2_mix_hour_offset", 0)
+
+            if offset == 0:
+                # Latest: try service cache first, then DB
+                hour_ts, mix = None, {}
+                svc = getattr(self, "_co2_fetch_svc", None)
+                if svc is not None:
+                    hour_ts, mix = svc.get_latest_mix()
+                if not mix:
+                    hour_ts, mix = db.query_latest_fuel_mix(zone)
+            else:
+                # Specific hour from DB
+                target_ts = int(time.time()) + offset * 3600
+                target_ts = (target_ts // 3600) * 3600
+                # Query fuel mix for this specific hour
+                import sqlite3
+                conn = db._conn()
+                rows = conn.execute(
+                    "SELECT fuel, mw FROM co2_fuel_mix WHERE hour_ts = ? AND zone = ?",
+                    (target_ts, zone),
+                ).fetchall()
+                if rows:
+                    hour_ts = target_ts
+                    mix = {r[0]: float(r[1]) for r in rows}
+                else:
+                    # Find nearest available hour
+                    nearest = conn.execute(
+                        "SELECT DISTINCT hour_ts FROM co2_fuel_mix WHERE zone = ? AND hour_ts <= ? ORDER BY hour_ts DESC LIMIT 1",
+                        (zone, target_ts),
+                    ).fetchone()
+                    if nearest:
+                        hour_ts = int(nearest[0])
+                        rows = conn.execute(
+                            "SELECT fuel, mw FROM co2_fuel_mix WHERE hour_ts = ? AND zone = ?",
+                            (hour_ts, zone),
+                        ).fetchall()
+                        mix = {r[0]: float(r[1]) for r in rows}
+                    else:
+                        hour_ts, mix = None, {}
+
+            # Also get CO₂ intensity for this hour + source
+            source_text = ""
+            if hour_ts:
                 try:
-                    zone = str(getattr(self.cfg.co2, "bidding_zone", "DE_LU") or "DE_LU")
-                    hour_ts, mix = self.storage.db.query_latest_fuel_mix(zone)
+                    row = db._conn().execute(
+                        "SELECT intensity_g_per_kwh, source FROM co2_intensity WHERE hour_ts = ?",
+                        (hour_ts,),
+                    ).fetchone()
+                    if row:
+                        _int = float(row[0])
+                        _src = str(row[1] or "")
+                        if _src == "estimated":
+                            source_text = f"⚠️ Geschätzt ({_int:.0f} g/kWh)"
+                        elif _src == "entsoe":
+                            source_text = f"✅ ENTSO-E ({_int:.0f} g/kWh)"
+                        else:
+                            source_text = f"({_src}, {_int:.0f} g/kWh)"
                 except Exception:
                     pass
-            tree.delete(*tree.get_children())
-            if not mix or hour_ts is None:
-                self._co2_mix_ts_var.set(self.t("co2.mix.no_data"))
-                return
 
-            ts_str = datetime.fromtimestamp(hour_ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-            self._co2_mix_ts_var.set(self.t("co2.mix.ts_label", ts=ts_str))
+            self._co2_mix_source_var.set(source_text)
+            self._co2_render_mix_table(tree, hour_ts, mix)
 
-            total_mw = sum(mix.values())
-            # Compute weighted CO₂ intensity for this hour
-            weighted = sum(mw * _CO2_FACTORS.get(fuel, 400.0) for fuel, mw in mix.items())
-            intensity_check = weighted / total_mw if total_mw else 0.0
-
-            for fuel, mw in sorted(mix.items(), key=lambda x: -x[1]):
-                share = mw / total_mw * 100 if total_mw else 0.0
-                factor = _CO2_FACTORS.get(fuel, 400.0)
-                contrib_pct = mw * factor / weighted * 100 if weighted else 0.0
-                name = FUEL_DISPLAY_NAMES.get(fuel, fuel)
-                tree.insert("", "end", values=(
-                    name,
-                    f"{mw:.0f}",
-                    f"{share:.1f}%",
-                    f"{factor:.0f}",
-                    f"{contrib_pct:.1f}%",
-                ))
-            # Footer row showing totals
-            tree.insert("", "end", values=(
-                f"∑ {self.t('co2.mix.total')}",
-                f"{total_mw:.0f}",
-                "100.0%",
-                f"→ {intensity_check:.1f}",
-                "100.0%",
-            ))
         except Exception:
-            logger.debug("Co2Mixin: mix table update error", exc_info=True)
+            logger.debug("Co2Mixin: mix navigation error", exc_info=True)
+
+    def _co2_update_mix_table(self) -> None:
+        """Populate the fuel-mix Treeview from the service's cached latest mix."""
+        # Reset to latest when auto-refreshing
+        self._co2_mix_hour_offset = 0
+        self._co2_load_mix_for_offset()
+
+    def _co2_render_mix_table(self, tree, hour_ts, mix) -> None:
+        """Render the fuel mix table for a given hour."""
+        try:
+            from shelly_analyzer.services.entsoe import FUEL_DISPLAY_NAMES, _CO2_FACTORS
+        except ImportError:
+            return
+        tree.delete(*tree.get_children())
+        if not mix or hour_ts is None:
+            self._co2_mix_ts_var.set(self.t("co2.mix.no_data"))
+            return
+
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo("Europe/Berlin")
+        except Exception:
+            tz = timezone.utc
+        dt = datetime.fromtimestamp(hour_ts, tz=tz)
+        ts_str = dt.strftime("%A, %d.%m.%Y  %H:%M")
+        self._co2_mix_ts_var.set(ts_str)
+
+        total_mw = sum(mix.values())
+        weighted = sum(mw * _CO2_FACTORS.get(fuel, 400.0) for fuel, mw in mix.items())
+        intensity_check = weighted / total_mw if total_mw else 0.0
+
+        for fuel, mw in sorted(mix.items(), key=lambda x: -x[1]):
+            share = mw / total_mw * 100 if total_mw else 0.0
+            factor = _CO2_FACTORS.get(fuel, 400.0)
+            contrib_pct = mw * factor / weighted * 100 if weighted else 0.0
+            name = FUEL_DISPLAY_NAMES.get(fuel, fuel)
+            tree.insert("", "end", values=(
+                name,
+                f"{mw:.0f}",
+                f"{share:.1f}%",
+                f"{factor:.0f}",
+                f"{contrib_pct:.1f}%",
+            ))
+        tree.insert("", "end", values=(
+            f"∑ {self.t('co2.mix.total')}",
+            f"{total_mw:.0f}",
+            "100.0%",
+            f"→ {intensity_check:.1f}",
+            "100.0%",
+        ))
