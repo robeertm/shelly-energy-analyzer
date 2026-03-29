@@ -1194,9 +1194,14 @@ class CoreMixin:
                     pass
             # Trigger ENTSO-E CO₂ check immediately
             try:
-                self._co2_fetch_svc.trigger_now()
-            except Exception:
-                pass
+                svc = getattr(self, '_co2_fetch_svc', None)
+                if svc is not None:
+                    self._log_sync("ENTSO-E CO₂ Check wird gestartet …")
+                    svc.trigger_now()
+                else:
+                    self._log_sync("ENTSO-E CO₂ Service nicht verfügbar")
+            except Exception as e:
+                self._log_sync(f"ENTSO-E CO₂ Trigger Fehler: {e}")
 
     def _start_sync(self, mode: str, range_override: Optional[Tuple[int, int]] = None, label: Optional[str] = None) -> None:
             if self._sync_thread and self._sync_thread.is_alive():

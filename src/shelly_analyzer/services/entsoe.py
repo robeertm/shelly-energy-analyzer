@@ -1042,9 +1042,11 @@ class Co2FetchService:
 
         co2_cfg = getattr(cfg, "co2", None)
         if co2_cfg is None or not getattr(co2_cfg, "enabled", False):
+            self._svc_log("CO₂ Import: CO₂ ist in den Einstellungen nicht aktiviert")
             return
         token = getattr(co2_cfg, "entso_e_api_token", "") or ""
         if not token:
+            self._svc_log("CO₂ Import: Kein ENTSO-E API-Token konfiguriert")
             return
 
         zone = getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU"

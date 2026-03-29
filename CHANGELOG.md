@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.8.4 - 2026-03-29
+### Fixed
+- **ENTSO-E startup trigger now logs status** – Added diagnostic log messages so the Sync tab shows why ENTSO-E data isn't loading (service not available, CO₂ not enabled, no API token). Previously all errors were silently swallowed.
+
 ## 12.8.3 - 2026-03-29
 ### Fixed
 - **ENTSO-E now actually backfills all historical data** – Previous versions filled all missing hours with estimated placeholder values across the entire history. This made subsequent runs think data was complete (no gaps found). Now:
