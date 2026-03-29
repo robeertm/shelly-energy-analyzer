@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.5.2 - 2026-03-29
+### Fixed
+- **Web nav: duplicate icons on Forecast, Standby, Energy Flow** – The nav buttons had a hardcoded emoji in `<span class="nav-icon">` AND the i18n tab label already contained the same emoji. Removed the redundant `nav-icon` spans so each icon appears only once.
+
 ## 12.5.1 - 2026-03-29
 ### Fixed
 - **CHANGELOG in English** – Translated the v12.5.0 changelog entry from German to English. All changelog entries are now consistently in English.
