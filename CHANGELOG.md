@@ -1,5 +1,11 @@
 # Changelog
 
+## 12.7.2 - 2026-03-29
+### Fixed
+- **Removed misleading "Jetzt rückfüllen" hint** – The CO₂ mix table showed "Keine Daten – bitte 'Jetzt rückfüllen' ausführen" even though the backfill button was removed in v12.7.0. Updated all 9 languages to show "No data – loading automatically …" instead.
+- **Removed obsolete backfill i18n keys** – Cleaned up `co2.settings.backfill` and `co2.settings.backfill_btn` translation keys in all 9 languages (no longer used since auto-backfill).
+- **Log messages say "Import" instead of "Backfill"** – All ENTSO-E sync log messages now use "CO₂ Import" wording since the process is fully automatic.
+
 ## 12.7.1 - 2026-03-29
 ### Fixed
 - **Web dashboard crash: UTF-16 surrogates in traffic JS** – The network traffic category icons used `\ud83d\udd0c` style escape sequences which cause a `surrogates not allowed` error during gzip compression. Replaced with direct Unicode emoji characters.
