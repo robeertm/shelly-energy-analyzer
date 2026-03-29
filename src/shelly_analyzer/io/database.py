@@ -1050,6 +1050,23 @@ class EnergyDB:
         ).fetchall()
         return hour_ts, {r[0]: float(r[1]) for r in rows}
 
+    def oldest_measurement_ts(self) -> Optional[int]:
+        """Return the oldest timestamp across all energy measurement tables."""
+        conn = self._conn()
+        candidates: list = []
+        for sql in (
+            "SELECT MIN(timestamp) FROM samples",
+            "SELECT MIN(hour_ts) FROM hourly_energy",
+            "SELECT MIN(month_ts) FROM monthly_energy",
+        ):
+            try:
+                row = conn.execute(sql).fetchone()
+                if row and row[0] is not None:
+                    candidates.append(int(row[0]))
+            except Exception:
+                pass
+        return min(candidates) if candidates else None
+
     def oldest_co2_ts(self, zone: str) -> Optional[int]:
         """Return the oldest hour_ts for a zone, or None."""
         conn = self._conn()
