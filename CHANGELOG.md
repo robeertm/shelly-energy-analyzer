@@ -1,8 +1,9 @@
 # Changelog
 
-## 12.9.8 - 2026-03-29
+## 12.9.9 - 2026-03-29
 ### Fixed
-- **Heatmap month labels misaligned in portrait mode** – On narrow screens the week columns (`.hm-week`) were allowed to shrink by CSS flex, compressing the grid cells below their intended size. Meanwhile the month labels kept their calculated width, causing a mismatch: "Mar" appeared where "Jun/Jul" should be, making it look like data extended into summer. Added `flex-shrink: 0` to week columns and label spans so the grid scrolls horizontally instead of compressing.
+- **Heatmap calendar not filling to end of December** – The week generation loop used a date comparison (`cur <= end`) that could stop one week short depending on how Dec 31 falls. Replaced with an explicit check that guarantees the week containing Dec 31 is always included, so gray placeholder tiles now fill the full year grid.
+- **Heatmap month labels misaligned in portrait mode** – On narrow screens the week columns were allowed to shrink by CSS flex, compressing the grid cells below their intended size. Meanwhile the month labels kept their calculated width, causing a mismatch. Added `flex-shrink: 0` to week columns and label spans so the grid scrolls horizontally instead of compressing.
 
 ## 12.9.6 - 2026-03-29
 ### Fixed
