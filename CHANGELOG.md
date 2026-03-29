@@ -1,5 +1,14 @@
 # Changelog
 
+## 12.7.0 - 2026-03-29
+### Changed
+- **ENTSO-E auto-backfill replaces manual backfill** – The CO₂ fetch service now automatically determines how far back to fetch by looking at the oldest energy measurement in the database. No more manual "Rückfüllen" button or "backfill_days" setting needed. When CO₂ is enabled with a valid token, the service fetches intensity data for the entire period covered by your Shelly measurements.
+- **Removed from settings:** "Rückfülltage" field and "Jetzt rückfüllen" button. The service handles everything automatically in the background.
+
+### Fixed
+- **Kraftwerksmix navigation no longer jumps to "Now"** – The 60-second auto-refresh was resetting the fuel mix navigation offset to 0, causing the display to jump back to the current hour while browsing historical data. The offset is now preserved during auto-refresh.
+- **Historical fuel mix data now stored for all hours** – Previously only the latest hour's fuel mix was saved to the database during each fetch chunk. Now all hours' mix data from each ENTSO-E response is stored, so navigating through past hours with ◀/▶ buttons shows actual generation mix data instead of "no data".
+
 ## 12.6.0 - 2026-03-29
 ### Added
 - **Network traffic monitor** – New "Network Traffic" section in the Sync tab showing real-time bandwidth usage and cumulative data transferred by the app. Displays:

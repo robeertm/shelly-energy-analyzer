@@ -921,10 +921,14 @@ class Co2Mixin:
             logger.debug("Co2Mixin: mix navigation error", exc_info=True)
 
     def _co2_update_mix_table(self) -> None:
-        """Populate the fuel-mix Treeview from the service's cached latest mix."""
-        # Reset to latest when auto-refreshing
-        self._co2_mix_hour_offset = 0
-        self._co2_load_mix_for_offset()
+        """Populate the fuel-mix Treeview from the service's cached latest mix.
+
+        Preserves the current navigation offset so the display does not
+        jump back to 'Now' during auto-refresh.
+        """
+        # Only reset to latest if the user has NOT navigated away
+        if getattr(self, "_co2_mix_hour_offset", 0) == 0:
+            self._co2_load_mix_for_offset()
 
     def _co2_render_mix_table(self, tree, hour_ts, mix) -> None:
         """Render the fuel mix table for a given hour."""
