@@ -1,6 +1,6 @@
 # Changelog
 
-## 12.9.4 - 2026-03-29
+## 12.9.5 - 2026-03-29
 ### Fixed
 - **Web dashboard blank page on mobile Safari** – Emoji characters in JSON responses (appliance icons AND i18n tab labels with emojis like 🔄 Sync, 📊 Plots) were serialized as UTF-16 surrogate pairs, which is invalid JSON. Mobile Safari rejected these responses, causing a completely blank page. Fixed `ensure_ascii=False` on ALL `json.dumps` calls including the i18n and devices JSON embedded in the HTML template.
 
