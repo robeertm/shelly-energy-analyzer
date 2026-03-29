@@ -4630,7 +4630,7 @@ document.getElementById("btn_sync").addEventListener("click", async ()=>{
 });
 
 // --- Network Traffic ---
-const _trafficCatIcons = {shelly:'\ud83d\udd0c',entsoe:'\ud83c\udf3f',weather:'\ud83c\udf21',telegram:'\ud83d\udcac',github:'\ud83d\udd04',local:'\ud83c\udfe0',other:'\ud83d\udce1'};
+const _trafficCatIcons = {shelly:'🔌',entsoe:'🌿',weather:'🌡️',telegram:'💬',github:'🔄',local:'🏠',other:'📡'};
 const _trafficCatLabels = {shelly:'Shelly Devices',entsoe:'ENTSO-E API',weather:'OpenWeather',telegram:'Telegram',github:'GitHub',local:'Local/Web',other:'Other'};
 function _fmtBytes(n) {{
   if (n < 1024) return n + ' B';
@@ -4659,7 +4659,7 @@ async function _refreshTraffic() {{
     tbody.innerHTML = '';
     const cats = Object.entries(d.categories||{{}}).sort((a,b) => (b[1].received||0)-(a[1].received||0));
     for (const [cat, data] of cats) {{
-      const icon = _trafficCatIcons[cat] || '\ud83d\udce1';
+      const icon = _trafficCatIcons[cat] || '📡';
       const label = _trafficCatLabels[cat] || cat;
       const tr = document.createElement('tr');
       tr.style.borderBottom = '1px solid var(--border)';

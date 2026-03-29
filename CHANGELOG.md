@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.7.1 - 2026-03-29
+### Fixed
+- **Web dashboard crash: UTF-16 surrogates in traffic JS** – The network traffic category icons used `\ud83d\udd0c` style escape sequences which cause a `surrogates not allowed` error during gzip compression. Replaced with direct Unicode emoji characters.
+
 ## 12.7.0 - 2026-03-29
 ### Changed
 - **ENTSO-E auto-backfill replaces manual backfill** – The CO₂ fetch service now automatically determines how far back to fetch by looking at the oldest energy measurement in the database. No more manual "Rückfüllen" button or "backfill_days" setting needed. When CO₂ is enabled with a valid token, the service fetches intensity data for the entire period covered by your Shelly measurements.
