@@ -4379,6 +4379,21 @@ _CONTROL_TEMPLATE = """<!doctype html>
       </div>
 
       <div class="card">
+        <h2>📊 Network Traffic</h2>
+        <div id="traffic-rate" style="font-size:16px;font-weight:bold;margin-bottom:8px">↓ 0 B/s  ↑ 0 B/s</div>
+        <div id="traffic-total" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
+        <table style="width:100%;font-size:13px;border-collapse:collapse" id="traffic-table">
+          <thead><tr style="border-bottom:1px solid var(--border);text-align:left">
+            <th style="padding:4px 8px">Category</th>
+            <th style="padding:4px 8px;text-align:center">Requests</th>
+            <th style="padding:4px 8px;text-align:right">↓ Received</th>
+            <th style="padding:4px 8px;text-align:right">↑ Sent</th>
+          </tr></thead>
+          <tbody id="traffic-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="card">
         <h2>{web_control_plots}</h2>
         <div class="row" style="margin-bottom:8px">
           <a class="navlink" id="open_plotly" href="/plots">{web_control_open_plotly}</a>
@@ -4613,6 +4628,51 @@ document.getElementById("btn_sync").addEventListener("click", async ()=>{
     document.getElementById("sync_log").textContent = "Fehler: " + (e && e.message ? e.message : String(e));
   }
 });
+
+// --- Network Traffic ---
+const _trafficCatIcons = {shelly:'\ud83d\udd0c',entsoe:'\ud83c\udf3f',weather:'\ud83c\udf21',telegram:'\ud83d\udcac',github:'\ud83d\udd04',local:'\ud83c\udfe0',other:'\ud83d\udce1'};
+const _trafficCatLabels = {shelly:'Shelly Devices',entsoe:'ENTSO-E API',weather:'OpenWeather',telegram:'Telegram',github:'GitHub',local:'Local/Web',other:'Other'};
+function _fmtBytes(n) {{
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n/1024).toFixed(1) + ' KB';
+  if (n < 1073741824) return (n/1048576).toFixed(1) + ' MB';
+  return (n/1073741824).toFixed(2) + ' GB';
+}}
+function _fmtRate(bps) {{
+  if (bps < 1024) return bps.toFixed(0) + ' B/s';
+  if (bps < 1048576) return (bps/1024).toFixed(1) + ' KB/s';
+  return (bps/1048576).toFixed(1) + ' MB/s';
+}}
+async function _refreshTraffic() {{
+  try {{
+    const r = await fetch('/api/traffic');
+    const d = await r.json();
+    const rateEl = document.getElementById('traffic-rate');
+    const totalEl = document.getElementById('traffic-total');
+    const tbody = document.getElementById('traffic-tbody');
+    if (!rateEl) return;
+    rateEl.textContent = '\u2193 ' + _fmtRate(d.rate_recv_bps||0) + '  \u2191 ' + _fmtRate(d.rate_sent_bps||0);
+    const hrs = Math.floor((d.uptime_s||0)/3600);
+    const mins = Math.floor(((d.uptime_s||0)%3600)/60);
+    const uptime = hrs ? hrs+'h '+mins+'m' : mins+'m';
+    totalEl.textContent = 'Total: \u2193 ' + _fmtBytes(d.total_received||0) + '  \u2191 ' + _fmtBytes(d.total_sent||0) + '  |  ' + (d.total_requests||0) + ' Requests  |  ' + uptime;
+    tbody.innerHTML = '';
+    const cats = Object.entries(d.categories||{{}}).sort((a,b) => (b[1].received||0)-(a[1].received||0));
+    for (const [cat, data] of cats) {{
+      const icon = _trafficCatIcons[cat] || '\ud83d\udce1';
+      const label = _trafficCatLabels[cat] || cat;
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid var(--border)';
+      tr.innerHTML = '<td style="padding:4px 8px">' + icon + ' ' + label + '</td>'
+        + '<td style="padding:4px 8px;text-align:center">' + (data.requests||0) + '</td>'
+        + '<td style="padding:4px 8px;text-align:right">' + _fmtBytes(data.received||0) + '</td>'
+        + '<td style="padding:4px 8px;text-align:right">' + _fmtBytes(data.sent||0) + '</td>';
+      tbody.appendChild(tr);
+    }}
+  }} catch(e) {{}}
+}}
+setInterval(_refreshTraffic, 3000);
+_refreshTraffic();
 
 document.getElementById("btn_plots").addEventListener("click", async ()=>{
   const mode = document.getElementById("plot_mode").value;
@@ -5244,6 +5304,21 @@ class _Handler(BaseHTTPRequestHandler):
                     payload = self.dashboard.on_action("sankey", _sparams)
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if path_only.startswith("/api/traffic"):
+                try:
+                    from shelly_analyzer.services.traffic import TrafficMonitor
+                    payload = TrafficMonitor.get().snapshot()
+                except Exception as e:
+                    payload = {"error": str(e)}
                 body = json.dumps(payload).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
