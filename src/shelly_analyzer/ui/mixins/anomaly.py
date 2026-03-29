@@ -270,17 +270,25 @@ class AnomalyMixin:
         if not hasattr(self, "_anomaly_log"):
             self._anomaly_log: List[AnomalyEvent] = []
 
-        # Deduplicate by event_id
+        # Deduplicate by event_id (deterministic IDs prevent duplicates across runs)
         existing_ids = {e.event_id for e in self._anomaly_log}
+        if not hasattr(self, "_anomaly_notified_ids"):
+            self._anomaly_notified_ids: set = set()
         fresh = [e for e in new_events if e.event_id not in existing_ids]
         self._anomaly_log = (fresh + self._anomaly_log)[: int(getattr(self.cfg.anomaly, "max_history", 200))]
 
-        # Send notifications for fresh events
+        # Send notifications only for truly new events (never notified before)
         for evt in fresh:
+            if evt.event_id in self._anomaly_notified_ids:
+                continue  # Already notified in a previous run
             try:
                 self._anomaly_notify(evt)
+                self._anomaly_notified_ids.add(evt.event_id)
             except Exception:
                 logger.exception("Anomaly notification failed for %s", evt.event_id)
+        # Cap notified IDs set to prevent unbounded growth
+        if len(self._anomaly_notified_ids) > 1000:
+            self._anomaly_notified_ids = set(list(self._anomaly_notified_ids)[-500:])
 
         try:
             self._anomaly_status_var.set(self.t("anomaly.done").format(n=len(new_events)))
