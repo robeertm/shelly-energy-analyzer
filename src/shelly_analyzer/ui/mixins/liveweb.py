@@ -1590,7 +1590,7 @@ class LiveWebMixin:
                     now_ts = int(_nowc.timestamp())
 
                     # Intensity data for chart (range selectable via query param)
-                    co2_range = params.get("range", ["24h"])[0] if params else "24h"
+                    co2_range = str(params.get("range", "24h")) if params else "24h"
                     if co2_range == "7d":
                         h24_start = now_ts - 7 * 86400
                     elif co2_range == "30d":
