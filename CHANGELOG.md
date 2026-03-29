@@ -1,14 +1,18 @@
 # Changelog
 
+## 12.5.1 - 2026-03-29
+### Fixed
+- **CHANGELOG in English** – Translated the v12.5.0 changelog entry from German to English. All changelog entries are now consistently in English.
+
 ## 12.5.0 - 2026-03-29
 ### Added
-- **Kraftwerksmix Zeitnavigation** – Der Kraftwerksmix im CO₂-Tab hat jetzt Navigationsbuttons zum Durchblättern der historischen Daten:
-  - **◀ Tag / Tag ▶** — springt 24 Stunden vor/zurück
-  - **◀ h / h ▶** — springt eine Stunde vor/zurück
-  - **Jetzt** — springt zur aktuellsten verfügbaren Stunde
-  - Zeitstempel zeigt Wochentag + Datum + Uhrzeit (z.B. "Samstag, 29.03.2026  14:00")
-  - Rechts daneben: Quellenhinweis **✅ ENTSO-E** (echte Daten) oder **⚠️ Geschätzt** (Lückenfüllung)
-  - Findet automatisch die nächste verfügbare Stunde wenn für die gewählte Stunde keine Daten vorliegen
+- **Generation mix time navigation** – The generation mix (Kraftwerksmix) in the CO₂ tab now has navigation buttons to browse historical fuel mix data:
+  - **◀ Day / Day ▶** — jump 24 hours backward/forward
+  - **◀ h / h ▶** — jump one hour backward/forward
+  - **Now** — jump to the most recent available hour
+  - Timestamp shows weekday + date + time (e.g. "Saturday, 29.03.2026  14:00")
+  - Source indicator next to timestamp: **✅ ENTSO-E** (real data) or **⚠️ Estimated** (gap-filled)
+  - Automatically finds the nearest available hour when no data exists for the selected hour
 
 ## 12.4.1 - 2026-03-29
 ### Fixed
