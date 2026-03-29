@@ -915,15 +915,12 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-label">{web_tab_anomalies}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('forecast',this)">
-      <span class="nav-icon">📈</span>
       <span class="nav-label">{web_tab_forecast}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('standby',this)">
-      <span class="nav-icon">🔌</span>
       <span class="nav-label">{web_tab_standby}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('sankey',this)">
-      <span class="nav-icon">⚡</span>
       <span class="nav-label">{web_tab_sankey}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('export',this)">
