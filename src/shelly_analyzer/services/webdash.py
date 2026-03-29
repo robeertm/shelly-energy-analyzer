@@ -5215,7 +5215,9 @@ class _Handler(BaseHTTPRequestHandler):
 
             if path_only.startswith("/api/co2"):
                 try:
-                    payload = self.dashboard.on_action("co2", {})
+                    _co2_qs = parse_qs(urlparse(self.path).query or "")
+                    _co2_params = {k: (v[0] if isinstance(v, list) and v else v) for k, v in _co2_qs.items()}
+                    payload = self.dashboard.on_action("co2", _co2_params)
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
                 body = json.dumps(payload).encode("utf-8")
