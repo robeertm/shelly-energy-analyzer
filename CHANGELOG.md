@@ -1,5 +1,13 @@
 # Changelog
 
+## 12.8.3 - 2026-03-29
+### Fixed
+- **ENTSO-E now actually backfills all historical data** – Previous versions filled all missing hours with estimated placeholder values across the entire history. This made subsequent runs think data was complete (no gaps found). Now:
+  - Old estimated values (>48h) are **deleted** at the start of each fetch cycle so they appear as real gaps
+  - Only the **last 48 hours** get estimated placeholders (where the API may not yet have real data)
+  - Historical gaps are re-fetched from ENTSO-E until real data is obtained
+  - On first run after this update, ~180 days of estimated data will be purged and replaced with real ENTSO-E generation data
+
 ## 12.8.2 - 2026-03-29
 ### Added
 - **Auto-sync on app startup** – The app now automatically starts an incremental data sync from all configured Shelly devices 2 seconds after launch. No more manual "Sync" click needed to see current data.

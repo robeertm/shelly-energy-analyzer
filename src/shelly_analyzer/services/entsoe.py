@@ -1067,7 +1067,18 @@ class Co2FetchService:
         if range_start >= range_end:
             return
 
-        # Find all missing hours (real gaps, no data at all)
+        # Remove old estimated placeholder values (older than 48h) so they
+        # show up as real gaps and get replaced with actual ENTSO-E data.
+        recent_cutoff = now_ts - 48 * 3600
+        try:
+            deleted = self._db.delete_estimated_co2(zone, recent_cutoff)
+            if deleted:
+                self._svc_log(f"CO₂ Bereinigung: {deleted} alte Schätzwerte entfernt")
+        except Exception:
+            pass
+
+        # Find hours that need fetching: truly missing hours (estimated values
+        # older than 48h were just removed, so they appear as gaps now).
         gaps = self._db.find_co2_gaps(zone, range_start, range_end, include_estimated=False)
 
         if not gaps and not force:
@@ -1215,23 +1226,22 @@ class Co2FetchService:
             self._svc_log(f"CO₂ Import: {total_written} Werte gespeichert")
             logger.info("Co2FetchService: stored %d intensity points", total_written)
 
-        # ── Gap detection & estimated-value fill ──────────────────────────
-        # Find hours in the full range that are still missing after fetch
-        # and fill them with estimated values so every hour is covered.
+        # ── Estimated-value fill for RECENT gaps only ────────────────────
+        # Only fill the last 48 hours with estimated values (the API may not
+        # have real data for very recent hours yet). Historical gaps are left
+        # empty so the next tick will try to fetch real data for them.
         if not self._stop_event.is_set():
-            remaining_gaps = self._db.find_co2_gaps(zone, range_start, range_end)
+            recent_start = max(range_start, now_ts - 48 * 3600)
+            recent_start = (recent_start // 3600) * 3600
+            remaining_gaps = self._db.find_co2_gaps(zone, recent_start, range_end)
             if remaining_gaps:
                 total_missing = sum((e - s) // 3600 for s, e in remaining_gaps)
-                self._svc_log(
-                    f"CO₂ Lückenerkennung: {total_missing} fehlende Stunden gefunden"
-                )
 
                 # Try to compute a fallback intensity from the data we do have
                 df = self._db.query_co2_intensity(zone, range_start, range_end)
                 if not df.empty:
                     avg_intensity = float(df["intensity_g_per_kwh"].mean())
                 else:
-                    # No data at all – use a conservative default for DE grid
                     avg_intensity = 400.0
 
                 now_ts_fill = int(time.time())
@@ -1248,7 +1258,7 @@ class Co2FetchService:
                     est_written = self._db.upsert_co2_intensity(estimated_rows)
                     self._svc_log(
                         f"CO₂ Lücken gefüllt: {est_written} geschätzte Werte "
-                        f"({avg_intensity:.0f} g/kWh Durchschnitt) eingefügt"
+                        f"(letzte 48h, {avg_intensity:.0f} g/kWh Durchschnitt)"
                     )
 
         if cb is not None:
