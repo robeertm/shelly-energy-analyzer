@@ -1,9 +1,10 @@
 # Changelog
 
-## 12.9.9 - 2026-03-29
+## 12.9.10 - 2026-03-29
 ### Fixed
-- **Heatmap calendar not filling to end of December** – The week generation loop used a date comparison (`cur <= end`) that could stop one week short depending on how Dec 31 falls. Replaced with an explicit check that guarantees the week containing Dec 31 is always included, so gray placeholder tiles now fill the full year grid.
-- **Heatmap month labels misaligned in portrait mode** – On narrow screens the week columns were allowed to shrink by CSS flex, compressing the grid cells below their intended size. Meanwhile the month labels kept their calculated width, causing a mismatch. Added `flex-shrink: 0` to week columns and label spans so the grid scrolls horizontally instead of compressing.
+- **Heatmap month labels drifting right of grid** – Each month label span was sized at `calCellSize + gap` while the parent flex container also applied `gap: 2px`, double-counting the spacing. Over 53 weeks this caused ~106px of cumulative drift, pushing "Dez" past the actual grid tiles. Fixed by setting label span width to `calCellSize` only, matching the grid column width exactly.
+- **Heatmap calendar not filling to end of December** – The week generation loop could stop one week short. Replaced with an explicit Dec 31 coverage check.
+- **Heatmap columns compressed in portrait mode** – Week columns and label spans now have `flex-shrink: 0` so the grid scrolls horizontally instead of compressing.
 
 ## 12.9.6 - 2026-03-29
 ### Fixed
