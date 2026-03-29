@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.9.3 - 2026-03-29
+### Fixed
+- **Web dashboard blank page on mobile Safari** – The `/api/state` endpoint serialized emoji appliance icons (📺, 🧊, etc.) as raw UTF-16 surrogate pairs (`\ud83d\udcfa`), which is invalid JSON per RFC 7159. Mobile Safari's JSON parser rejected the response, causing a blank Live page. Fixed by using `ensure_ascii=False` on all JSON API responses so emojis are output as proper UTF-8 characters.
+
 ## 12.9.2 - 2026-03-29
 ### Fixed
 - **Web CO₂ range parameter now passed to API** – The `/api/co2?range=7d` query parameter was not forwarded to the handler, so the web dashboard always showed 24h regardless of button selection.
