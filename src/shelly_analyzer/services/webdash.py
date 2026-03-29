@@ -915,12 +915,15 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-label">{web_tab_anomalies}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('forecast',this)">
+      <span class="nav-icon">📈</span>
       <span class="nav-label">{web_tab_forecast}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('standby',this)">
+      <span class="nav-icon">🔌</span>
       <span class="nav-label">{web_tab_standby}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('sankey',this)">
+      <span class="nav-icon">⚡</span>
       <span class="nav-label">{web_tab_sankey}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('export',this)">
@@ -5696,9 +5699,9 @@ class LiveWebDashboard:
                 "web_tab_compare": _t(self.lang, "web.tab.compare"),
                 "web_tab_co2": _t(self.lang, "web.tab.co2"),
                 "web_tab_anomalies": _t(self.lang, "web.tab.anomalies"),
-                "web_tab_forecast": _t(self.lang, "tabs.forecast"),
-                "web_tab_standby": _t(self.lang, "tabs.standby"),
-                "web_tab_sankey": _t(self.lang, "tabs.sankey"),
+                "web_tab_forecast": _t(self.lang, "web.tab.forecast"),
+                "web_tab_standby": _t(self.lang, "web.tab.standby"),
+                "web_tab_sankey": _t(self.lang, "web.tab.sankey"),
                 "web_tab_export": _t(self.lang, "web.tab.export"),
                 # Export pane
                 "exp_daterange": _t(self.lang, "web.control.export.daterange"),
