@@ -2940,11 +2940,31 @@ class CoreMixin:
                 appl_fr = ttk.Frame(status_fr)
                 appl_fr.grid(row=5, column=0, sticky="ew", pady=(6, 0))
                 appl_fr.columnconfigure(0, weight=1)
-                ttk.Label(appl_fr, textvariable=v_appl, style="LiveInfo.TLabel").pack(anchor="w")
+                _appl_lbl = ttk.Label(appl_fr, textvariable=v_appl, style="LiveInfo.TLabel", cursor="hand2")
+                _appl_lbl.pack(anchor="w")
+                # Click cycles NILM mode: combined → static → ML only → combined
+                if not hasattr(self, "_nilm_mode"):
+                    self._nilm_mode = {}  # device_key → "combined"|"static"|"ml"
+                self._nilm_mode[d.key] = "combined"
+                def _cycle_nilm_mode(_dk=d.key, _lbl=_appl_lbl):
+                    modes = ["combined", "static", "ml"]
+                    labels = {"combined": "Kombiniert", "static": "Statisch", "ml": "ML only"}
+                    cur = self._nilm_mode.get(_dk, "combined")
+                    nxt = modes[(modes.index(cur) + 1) % len(modes)]
+                    self._nilm_mode[_dk] = nxt
+                    try:
+                        # Flash mode change on hint label
+                        _h = getattr(self, f"_nilm_hint_{_dk}", None)
+                        if _h:
+                            _h.configure(text=f"Modus: {labels[nxt]}")
+                    except Exception:
+                        pass
+                _appl_lbl.bind("<Button-1>", lambda e, fn=_cycle_nilm_mode: fn())
                 try:
-                    _hint_lbl = ttk.Label(appl_fr, text=self.t('live.appliance.hint'), style="LiveInfo.TLabel")
+                    _hint_lbl = ttk.Label(appl_fr, text="Klick: Modus wechseln (Kombiniert/Statisch/ML)", style="LiveInfo.TLabel")
                     _hint_lbl.pack(anchor="w")
                     _hint_lbl.configure(foreground="#888888")
+                    setattr(self, f"_nilm_hint_{d.key}", _hint_lbl)
                 except Exception:
                     pass
 
