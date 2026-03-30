@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.9.18 - 2026-03-30
+### Fixed
+- **Anomaly Telegram/notification spam on app restart** – The set of already-notified anomaly event IDs (`_anomaly_notified_ids`) was only kept in memory. After every app restart it was empty, so all anomalies from the last 7 days were re-detected and re-notified. The notified IDs are now persisted to `data/runtime/anomaly_notified_ids.json` and loaded on startup, preventing duplicate notifications across restarts and updates.
+
 ## 12.9.17 - 2026-03-30
 ### Fixed
 - **Switch status wrong on first web Live load** – The `LivePoint` dataclass lacked a `raw` field, so the Shelly device's raw status data (containing `output`/`ison` for switch state) was never passed through to the web API snapshot. Switch devices always showed "Aus" on first load until a toggle was performed. Now `LivePoint` carries the `raw` dict and the switch state is correctly extracted from live polling data from the first sample onward.

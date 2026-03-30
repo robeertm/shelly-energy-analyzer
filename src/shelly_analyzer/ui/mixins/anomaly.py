@@ -8,11 +8,13 @@ Provides the Anomalies tab with:
 """
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from dataclasses import replace
 from datetime import datetime
-from typing import List, Optional
+from pathlib import Path
+from typing import List, Optional, Set
 
 import tkinter as tk
 from tkinter import ttk
@@ -265,6 +267,31 @@ class AnomalyMixin:
 
         threading.Thread(target=_worker, daemon=True).start()
 
+    def _anomaly_notified_path(self) -> Path:
+        """Path to the file that persists notified anomaly IDs across restarts."""
+        return getattr(self, "project_root", Path(".")) / "data" / "runtime" / "anomaly_notified_ids.json"
+
+    def _anomaly_load_notified_ids(self) -> Set[str]:
+        """Load previously notified anomaly event IDs from disk."""
+        p = self._anomaly_notified_path()
+        try:
+            if p.exists():
+                data = json.loads(p.read_text(encoding="utf-8"))
+                return set(data.get("ids", []))
+        except Exception:
+            logger.debug("Failed to load anomaly notified IDs", exc_info=True)
+        return set()
+
+    def _anomaly_save_notified_ids(self) -> None:
+        """Persist notified anomaly event IDs to disk."""
+        try:
+            p = self._anomaly_notified_path()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            ids = list(self._anomaly_notified_ids)[-1000:]
+            p.write_text(json.dumps({"ids": ids}), encoding="utf-8")
+        except Exception:
+            logger.debug("Failed to save anomaly notified IDs", exc_info=True)
+
     def _anomaly_on_results(self, new_events: List[AnomalyEvent]) -> None:
         """Called on the main thread after detection finishes."""
         if not hasattr(self, "_anomaly_log"):
@@ -273,22 +300,27 @@ class AnomalyMixin:
         # Deduplicate by event_id (deterministic IDs prevent duplicates across runs)
         existing_ids = {e.event_id for e in self._anomaly_log}
         if not hasattr(self, "_anomaly_notified_ids"):
-            self._anomaly_notified_ids: set = set()
+            self._anomaly_notified_ids: set = self._anomaly_load_notified_ids()
         fresh = [e for e in new_events if e.event_id not in existing_ids]
         self._anomaly_log = (fresh + self._anomaly_log)[: int(getattr(self.cfg.anomaly, "max_history", 200))]
 
         # Send notifications only for truly new events (never notified before)
+        changed = False
         for evt in fresh:
             if evt.event_id in self._anomaly_notified_ids:
-                continue  # Already notified in a previous run
+                continue  # Already notified in a previous run or session
             try:
                 self._anomaly_notify(evt)
                 self._anomaly_notified_ids.add(evt.event_id)
+                changed = True
             except Exception:
                 logger.exception("Anomaly notification failed for %s", evt.event_id)
         # Cap notified IDs set to prevent unbounded growth
         if len(self._anomaly_notified_ids) > 1000:
             self._anomaly_notified_ids = set(list(self._anomaly_notified_ids)[-500:])
+            changed = True
+        if changed:
+            self._anomaly_save_notified_ids()
 
         try:
             self._anomaly_status_var.set(self.t("anomaly.done").format(n=len(new_events)))
