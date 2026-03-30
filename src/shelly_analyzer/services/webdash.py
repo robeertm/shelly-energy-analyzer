@@ -12,7 +12,7 @@ import pkgutil
 import threading
 import sys
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
@@ -117,6 +117,7 @@ class LivePoint:
     cost_today: float = 0.0
     freq_hz: float = 50.0
     i_n: float = 0.0
+    raw: Dict[str, Any] = field(default_factory=dict)
 
 
 def _safe_f(v: float) -> float:
