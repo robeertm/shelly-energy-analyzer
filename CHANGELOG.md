@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.0.1 - 2026-03-30
+### Added
+- **City search for EV Charger tab** – Since GPS requires HTTPS and doesn't work on LAN, the EV tab now has a text input field for entering a city name. Uses Nominatim (OpenStreetMap) for free geocoding. Priority: city input → GPS → cached position. Also added 10km radius option.
+
 ## 13.0.0 - 2026-03-30
 ### Added
 - **EV Charger tab in web dashboard** – New "Ladesäulen" tab shows nearby EV charging stations as colored brick tiles using the smartphone's GPS position. Powered by OpenChargeMap (free, no API key required).
