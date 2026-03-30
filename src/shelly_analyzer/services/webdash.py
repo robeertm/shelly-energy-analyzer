@@ -582,8 +582,8 @@ _HTML_TEMPLATE = """<!doctype html>
     .ev-brick.ev-red {{ background: #dc2626; }}
     .ev-brick.ev-gray {{ background: #6b7280; }}
     .ev-brick-name {{ font-weight: 700; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }}
-    .ev-brick-dist {{ font-size: 10px; opacity: 0.85; margin-top: 2px; }}
-    .ev-brick-info {{ font-size: 10px; margin-top: 2px; }}
+    .ev-brick-dist {{ font-size: 14px; font-weight: 700; opacity: 0.95; margin-top: 3px; }}
+    .ev-brick-info {{ font-size: 14px; font-weight: 700; margin-top: 2px; }}
     .ev-conn-grid {{ display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }}
     .ev-conn-brick {{
       padding: 8px 12px;
