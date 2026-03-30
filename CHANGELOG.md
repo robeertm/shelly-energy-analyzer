@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.0.5 - 2026-03-30
+### Changed
+- **EV Charger: larger text on brick tiles** – Distance and availability count (e.g. "2/4 frei", "350 m") now display at 14px bold instead of 10px, making them much easier to read on mobile.
+
 ## 13.0.4 - 2026-03-30
 ### Fixed
 - **EV Charger: complete rewrite of status detection** – Switched OCM from compact to full mode for richer status data. Improved StatusTypeID mapping: "Operational" (ID 50) now shows as green/free instead of gray/unknown, "Partly Operational" (ID 75) as yellow. Handles both compact (flat `StatusTypeID`) and full (`StatusType.ID`) response formats. Fills missing connectors from `NumberOfPoints`. Added Bundesnetzagentur (ladestationen.api.bund.dev) as fallback data source for German stations when OCM fails or returns empty.
