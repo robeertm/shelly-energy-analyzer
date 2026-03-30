@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.9.17 - 2026-03-30
+### Fixed
+- **Switch status wrong on first web Live load** – The `LivePoint` dataclass lacked a `raw` field, so the Shelly device's raw status data (containing `output`/`ison` for switch state) was never passed through to the web API snapshot. Switch devices always showed "Aus" on first load until a toggle was performed. Now `LivePoint` carries the `raw` dict and the switch state is correctly extracted from live polling data from the first sample onward.
+
 ## 12.9.16 - 2026-03-30
 ### Fixed
 - **NILM ML transitions now persist across app restarts** – Previously only the computed clusters were saved to disk, but the raw transition data (power step changes) was lost on restart. After collecting 10+ new transitions, the old clusters were overwritten with only the new data, losing all prior learning. Now both clusters AND transitions are saved/loaded from the JSON file, so the ML model continuously improves over time instead of starting from scratch after each restart or update.
