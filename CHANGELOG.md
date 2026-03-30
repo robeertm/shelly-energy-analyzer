@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.9.16 - 2026-03-30
+### Fixed
+- **NILM ML transitions now persist across app restarts** – Previously only the computed clusters were saved to disk, but the raw transition data (power step changes) was lost on restart. After collecting 10+ new transitions, the old clusters were overwritten with only the new data, losing all prior learning. Now both clusters AND transitions are saved/loaded from the JSON file, so the ML model continuously improves over time instead of starting from scratch after each restart or update.
+
 ## 12.9.15 - 2026-03-30
 ### Added
 - **Switch control in web Live tab** – Switchable Shelly devices (kind=switch) now show their current on/off status with a colored badge and a Toggle button directly on the device card. Tapping Toggle sends a `toggle_switch` API call and immediately updates the status. The switch state is extracted from the live polling data and updates in real-time alongside power readings.
