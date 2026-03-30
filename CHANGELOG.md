@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.9.14 - 2026-03-30
+### Fixed
+- **Scroll areas inconsistent in web dashboard** – Several scrollable containers (`#panes`, `.hm-table-wrap`, `.modal-panel`, `.joblog`) were missing `-webkit-overflow-scrolling: touch`, causing trackpad/touch scrolling to only work when directly on the scrollbar (especially on Safari/iOS). All scroll containers now have consistent momentum scrolling enabled.
+
 ## 12.9.13 - 2026-03-30
 ### Fixed
 - **CO₂ fetch crash: `Co2FetchService has no attribute bidding_zone`** – The fuel mix solar estimation called `self.bidding_zone` on the `Co2FetchService` object, but that attribute only exists on `EntsoeClient`. Changed both occurrences (lines 1160/1308) to use the local `zone` variable instead. This caused intermittent chunk failures during CO₂ data import.
