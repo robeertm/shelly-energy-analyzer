@@ -317,6 +317,7 @@ _HTML_TEMPLATE = """<!doctype html>
     #panes {{
       flex: 1;
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
       overflow-x: hidden;
       padding: 10px;
       padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
@@ -548,7 +549,7 @@ _HTML_TEMPLATE = """<!doctype html>
     .hm-month-labels {{ display: flex; flex-wrap: nowrap; gap: 2px; font-size: 9px; color: var(--muted); margin-bottom: 3px; }}
     .hm-month-labels span {{ overflow: visible; white-space: nowrap; flex-shrink: 0; }}
     /* Hourly heatmap table */
-    .hm-table-wrap {{ overflow-x: auto; width: 100%; }}
+    .hm-table-wrap {{ overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; }}
     .hm-table {{ border-collapse: separate; border-spacing: 2px; font-size: 9px; }}
     .hm-cell {{
       border-radius: 2px;
@@ -630,6 +631,7 @@ _HTML_TEMPLATE = """<!doctype html>
       width: min(92vw, 380px);
       max-height: 80vh;
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }}
     .modal-header {{
       display: flex;
@@ -4342,6 +4344,7 @@ _CONTROL_TEMPLATE = """<!doctype html>
       white-space: pre-wrap;
       max-height: 240px;
       overflow:auto;
+      -webkit-overflow-scrolling: touch;
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 8px;
