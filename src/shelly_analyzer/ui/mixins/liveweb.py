@@ -2512,6 +2512,7 @@ class LiveWebMixin:
                                 kwh_today=float(total_kwh),
                                 cost_today=float(total_kwh) * float(getattr(getattr(self.cfg, 'pricing', None), 'unit_price_gross', lambda: 0.0)()) if total_kwh else 0.0,
                                 i_n=_i_n,
+                                raw=s.raw if hasattr(s, "raw") and isinstance(s.raw, dict) else {},
                             ),
                         )
                     except Exception:
