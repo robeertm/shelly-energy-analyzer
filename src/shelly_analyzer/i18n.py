@@ -582,6 +582,8 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.ev.apikey_hint": "OpenChargeMap API-Key (gratis: openchargemap.org/site/develop/api)",
         "web.ev.save": "Speichern",
         "web.ev.need_key": "API-Key erforderlich. Gratis-Key holen: openchargemap.org/site/develop/api",
+        "web.ev.all_power": "Alle kW",
+        "web.ev.all_plugs": "Alle Stecker",
         "web.no_data": "Keine Daten",
 
         # Web: CO₂ tab
@@ -1377,6 +1379,8 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.ev.apikey_hint": "OpenChargeMap API key (free: openchargemap.org/site/develop/api)",
         "web.ev.save": "Save",
         "web.ev.need_key": "API key required. Get a free key at openchargemap.org/site/develop/api",
+        "web.ev.all_power": "All kW",
+        "web.ev.all_plugs": "All plugs",
         "web.no_data": "No data",
 
         # Web: Dashboard UI (mobile/web app texts)

@@ -1,5 +1,14 @@
 # Changelog
 
+## 13.2.0 - 2026-03-30
+### Added
+- **EnBW/SMATRICS as 4th EV data source with REAL-TIME status** – Reverse-engineered the SMATRICS POI bounding-box API used by the EnBW mobility+ map. Returns per-connector real-time status (AVAILABLE/OCCUPIED/OUT_OF_SERVICE) with `last_updated` timestamps. This is the first source with actual live occupancy data.
+- **Smart deduplication by detail score** – When multiple sources report the same station, the one with richer data wins (real-time status > static data, more connectors > fewer). EnBW data with live status always takes priority over OCM/BNA/OSM static entries.
+- **Power filter** – Filter by minimum charging power (≥11 kW, ≥22 kW, ≥50 kW, ≥150 kW)
+- **Plug type filter** – Filter by connector type (Typ 2, CCS, CHAdeMO, Schuko)
+- **EnBW stations marked with ⚡** on brick tiles to indicate real-time data availability
+- **German connector type names** – OCPI connector codes (IEC_62196_T2, etc.) mapped to readable names (Typ 2, CCS, CHAdeMO)
+
 ## 13.1.1 - 2026-03-30
 ### Added
 - **EV Charger: multi-source parallel fetch** – All three data sources are now queried simultaneously and results merged with proximity-based deduplication (50m threshold):

@@ -958,13 +958,26 @@ _HTML_TEMPLATE = """<!doctype html>
     <div id="pane-ev" class="pane">
       <div class="controls-row" style="flex-wrap:wrap;gap:6px">
         <input id="ev-city" type="text" placeholder="{web_ev_city_placeholder}" style="flex:1;min-width:120px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--fg);font-size:13px" onkeydown="if(event.key==='Enter')loadEv()">
-        <span style="font-size:13px;color:var(--muted)">{web_ev_radius}:</span>
-        <select id="ev-radius" onchange="loadEv()">
+        <select id="ev-radius" onchange="loadEv()" style="font-size:12px">
           <option value="500" selected>500 m</option>
           <option value="1000">1 km</option>
           <option value="2000">2 km</option>
           <option value="5000">5 km</option>
           <option value="10000">10 km</option>
+        </select>
+        <select id="ev-minkw" onchange="loadEv()" style="font-size:12px">
+          <option value="0">{web_ev_all_power}</option>
+          <option value="11">\u226511 kW</option>
+          <option value="22">\u226522 kW</option>
+          <option value="50">\u226550 kW</option>
+          <option value="150">\u2265150 kW</option>
+        </select>
+        <select id="ev-plug" onchange="loadEv()" style="font-size:12px">
+          <option value="">{web_ev_all_plugs}</option>
+          <option value="typ 2">Typ 2</option>
+          <option value="ccs">CCS</option>
+          <option value="chademo">CHAdeMO</option>
+          <option value="schuko">Schuko</option>
         </select>
         <button class="btn btn-outline" onclick="loadEv()">\u21bb</button>
       </div>
@@ -3397,8 +3410,12 @@ async function loadEv() {{
   }}
 
   const radius = document.getElementById('ev-radius').value || '500';
+  const minKw = document.getElementById('ev-minkw').value || '0';
+  const plugFilter = document.getElementById('ev-plug').value || '';
   let url = '/api/ev_chargers?lat=' + _evLastCoords.lat + '&lon=' + _evLastCoords.lon + '&radius=' + radius;
   if (_evApiKey) url += '&key=' + encodeURIComponent(_evApiKey);
+  if (minKw !== '0') url += '&min_kw=' + minKw;
+  if (plugFilter) url += '&plug=' + encodeURIComponent(plugFilter);
   try {{
     const r = await fetch(url);
     if (!r.ok) throw new Error(r.status);
@@ -3441,10 +3458,11 @@ function _evRenderGrid(stations, sources) {{
     else if (s.status === 'occupied') statusLabel = '0/' + s.total_connectors + ' ' + t('web.ev.free', 'free');
     else if (s.status === 'unavailable') statusLabel = t('web.ev.unavailable', 'unavailable');
     else statusLabel = s.total_connectors + ' ' + t('web.ev.connectors', 'Connectors');
+    var srcBadge = s.source === 'enbw' ? ' \u26a1' : '';
     html += '<div class="ev-brick ' + cls + '" onclick="_evShowDetail(' + s.id + ')">' +
       '<div class="ev-brick-name">' + esc(s.name || '?') + '</div>' +
       '<div class="ev-brick-dist">' + distLabel + '</div>' +
-      '<div class="ev-brick-info">' + statusLabel + '</div>' +
+      '<div class="ev-brick-info">' + statusLabel + srcBadge + '</div>' +
       '</div>';
   }});
   html += '</div>';
@@ -5737,8 +5755,10 @@ class _Handler(BaseHTTPRequestHandler):
                     lon = float(_eparams.get("lon", 0))
                     radius = max(100, min(10000, int(_eparams.get("radius", 500))))
                     api_key = str(_eparams.get("key", "") or "")
+                    min_kw = float(_eparams.get("min_kw", 0) or 0)
+                    plug = str(_eparams.get("plug", "") or "")
                     from shelly_analyzer.services.ev_charger import fetch_ev_chargers
-                    payload = fetch_ev_chargers(lat, lon, radius_m=radius, api_key=api_key)
+                    payload = fetch_ev_chargers(lat, lon, radius_m=radius, api_key=api_key, min_kw=min_kw, plug_filter=plug)
                 except Exception as e:
                     payload = {"ok": False, "error": str(e), "stations": []}
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -6141,6 +6161,8 @@ class LiveWebDashboard:
                 "web_tab_ev": _t(self.lang, "web.tab.ev"),
                 "web_ev_radius": _t(self.lang, "web.ev.radius"),
                 "web_ev_city_placeholder": _t(self.lang, "web.ev.city_placeholder"),
+                "web_ev_all_power": _t(self.lang, "web.ev.all_power"),
+                "web_ev_all_plugs": _t(self.lang, "web.ev.all_plugs"),
                 "web_ev_apikey_hint": _t(self.lang, "web.ev.apikey_hint"),
                 "web_ev_save": _t(self.lang, "web.ev.save"),
                 "web_tab_export": _t(self.lang, "web.tab.export"),
