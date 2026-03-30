@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import logging
 import html
 import inspect
 import time
@@ -62,6 +63,42 @@ def _load_devices_meta_file(p: Path) -> List[Dict[str, Any]]:
             phases = 3
         meta.append({"key": k, "name": n, "kind": kind, "phases": phases})
     return meta
+
+
+def _ensure_ssl_cert(cert_dir: Path) -> Tuple[Path, Path]:
+    """Generate a self-signed TLS certificate if none exists.
+
+    Returns (cert_path, key_path).  Uses ``openssl`` CLI which is available
+    on macOS, Linux, and most Raspberry Pi installations.
+    """
+    cert_dir.mkdir(parents=True, exist_ok=True)
+    cert_path = cert_dir / "server.crt"
+    key_path = cert_dir / "server.key"
+    if cert_path.exists() and key_path.exists():
+        return cert_path, key_path
+
+    import subprocess
+    logger = logging.getLogger(__name__)
+    logger.info("Generating self-signed TLS certificate for HTTPS …")
+    try:
+        subprocess.run(
+            [
+                "openssl", "req", "-x509", "-newkey", "rsa:2048",
+                "-keyout", str(key_path),
+                "-out", str(cert_path),
+                "-days", "3650",
+                "-nodes",
+                "-subj", "/CN=Shelly Energy Analyzer",
+            ],
+            check=True,
+            capture_output=True,
+            timeout=30,
+        )
+        logger.info("TLS certificate created: %s", cert_path)
+    except Exception as e:
+        logger.warning("Failed to generate TLS certificate: %s", e)
+        raise
+    return cert_path, key_path
 
 
 class QuietHTTPServer(HTTPServer):
@@ -6427,6 +6464,22 @@ class LiveWebDashboard:
         if self._httpd is None:
             raise last_err or OSError("could not bind web dashboard")
 
+        # Wrap with SSL so browsers allow Geolocation API (requires secure context)
+        self._is_https = False
+        try:
+            import ssl as _ssl
+            _cert_dir = (self.out_dir or Path(".")) / "data" / "runtime" / "ssl"
+            _cert, _key = _ensure_ssl_cert(_cert_dir)
+            ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
+            ctx.load_cert_chain(str(_cert), str(_key))
+            self._httpd.socket = ctx.wrap_socket(self._httpd.socket, server_side=True)
+            self._is_https = True
+            logging.getLogger(__name__).info("Web dashboard HTTPS enabled (self-signed cert)")
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                "HTTPS not available (GPS may not work): %s – falling back to HTTP", e
+            )
+
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
         self._thread.start()
 
@@ -6441,7 +6494,8 @@ class LiveWebDashboard:
 
     def url(self) -> str:
         ip = _local_ip_guess()
-        return f"http://{ip}:{self.port}/"
+        scheme = "https" if self._is_https else "http"
+        return f"{scheme}://{ip}:{self.port}/"
 
     def _check_token(self, handler: BaseHTTPRequestHandler) -> bool:
         """Authorization disabled (LAN-only)."""

@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.1.0 - 2026-03-30
+### Added
+- **Auto-HTTPS for web dashboard** – The web server now automatically generates a self-signed TLS certificate on first start (via `openssl` CLI, available on macOS/Linux/Raspberry Pi) and serves over HTTPS. This enables the browser Geolocation API for the EV Charger tab on smartphones over LAN. The certificate is stored in `data/runtime/ssl/` and valid for 10 years. Falls back to HTTP gracefully if `openssl` is not available. Users see a one-time browser warning to accept the self-signed certificate, after which GPS works seamlessly.
+
 ## 13.0.5 - 2026-03-30
 ### Changed
 - **EV Charger: larger text on brick tiles** – Distance and availability count (e.g. "2/4 frei", "350 m") now display at 14px bold instead of 10px, making them much easier to read on mobile.
