@@ -2141,6 +2141,13 @@ async function _refreshCo2LiveRates() {{
       hero.innerHTML = data.current_intensity.toFixed(0) + ' <span style="font-size:16px">g/kWh</span>';
       hero.style.color = _co2Color(data.current_intensity, data.green_threshold || 150, data.dirty_threshold || 400);
     }}
+    // Update timestamp
+    const heroTs = document.getElementById('co2-hero-ts');
+    if (heroTs && data.intensity_hour_ts) {{
+      const _d = new Date(data.intensity_hour_ts * 1000);
+      const _tsStr = _d.toLocaleDateString('de-DE', {{day:'2-digit',month:'2-digit',year:'numeric'}}) + ' ' + _d.toLocaleTimeString('de-DE', {{hour:'2-digit',minute:'2-digit'}});
+      heroTs.textContent = heroTs.textContent.replace(/\xb7[^\xb7]*$/, '\xb7 ' + _tsStr);
+    }}
     // Update device rates table
     const tbody = document.getElementById('co2-rates-tbody');
     if (tbody && data.device_rates) {{
@@ -2180,7 +2187,9 @@ function renderCo2(data, el) {{
   let html = '<div class="card" style="text-align:center;padding:16px">';
   html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">' + t('web.co2.current', 'Current Grid CO\u2082') + '</div>';
   html += '<div id="co2-hero-value" style="font-size:42px;font-weight:700;color:' + ciColor + '">' + ci.toFixed(0) + ' <span style="font-size:16px">g/kWh</span></div>';
-  html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(data.zone || '') + ' \xb7 ' + esc(srcLabel) + '</div>';
+  var _heroTs = data.intensity_hour_ts ? new Date(data.intensity_hour_ts * 1000) : null;
+  var _heroTsStr = _heroTs ? _heroTs.toLocaleDateString('de-DE', {{day:'2-digit',month:'2-digit',year:'numeric'}}) + ' ' + _heroTs.toLocaleTimeString('de-DE', {{hour:'2-digit',minute:'2-digit'}}) : '';
+  html += '<div id="co2-hero-ts" style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(data.zone || '') + ' \xb7 ' + esc(srcLabel) + (_heroTsStr ? ' \xb7 ' + _heroTsStr : '') + '</div>';
   html += '</div>';
 
   // ── Summary cards ──

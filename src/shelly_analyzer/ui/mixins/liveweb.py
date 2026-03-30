@@ -1438,8 +1438,10 @@ class LiveWebMixin:
                     range_start = ((now_ts // 3600) - 2) * 3600
                     df_now = self.storage.db.query_co2_intensity(zone, range_start, now_ts + 3600)
                     ci = 0.0
+                    ci_hour_ts = 0
                     if df_now is not None and not df_now.empty:
                         ci = float(df_now.iloc[-1].get("intensity_g_per_kwh", 0))
+                        ci_hour_ts = int(df_now.iloc[-1].get("hour_ts", 0))
 
                     device_rates = []
                     if ci > 0:
@@ -1466,6 +1468,7 @@ class LiveWebMixin:
                     return {
                         "ok": True,
                         "current_intensity": round(ci, 1),
+                        "intensity_hour_ts": ci_hour_ts,
                         "green_threshold": green_thr,
                         "dirty_threshold": dirty_thr,
                         "device_rates": device_rates,
@@ -1606,6 +1609,7 @@ class LiveWebMixin:
                     hourly_data = []
                     current_intensity = 0.0
                     current_source = "unknown"
+                    current_hour_ts = 0
                     if df_24h is not None and not df_24h.empty:
                         for _, row in df_24h.iterrows():
                             ts = int(row.get("hour_ts", 0))
@@ -1625,6 +1629,7 @@ class LiveWebMixin:
                         last_row = df_24h.iloc[-1]
                         current_intensity = float(last_row.get("intensity_g_per_kwh", 0))
                         current_source = str(last_row.get("source", ""))
+                        current_hour_ts = int(last_row.get("hour_ts", 0))
 
                     # CO₂ per device for today/week/month
                     # Solar config for CO₂ offset
@@ -1767,6 +1772,7 @@ class LiveWebMixin:
                         "green_threshold": green_thr,
                         "dirty_threshold": dirty_thr,
                         "current_intensity": round(current_intensity, 1),
+                        "intensity_hour_ts": current_hour_ts,
                         "current_source": current_source,
                         "co2_today_kg": round(co2_today, 3),
                         "co2_week_kg": round(co2_week, 3),
