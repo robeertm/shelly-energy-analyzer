@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.0.4 - 2026-03-30
+### Fixed
+- **EV Charger: complete rewrite of status detection** – Switched OCM from compact to full mode for richer status data. Improved StatusTypeID mapping: "Operational" (ID 50) now shows as green/free instead of gray/unknown, "Partly Operational" (ID 75) as yellow. Handles both compact (flat `StatusTypeID`) and full (`StatusType.ID`) response formats. Fills missing connectors from `NumberOfPoints`. Added Bundesnetzagentur (ladestationen.api.bund.dev) as fallback data source for German stations when OCM fails or returns empty.
+
 ## 13.0.3 - 2026-03-30
 ### Fixed
 - **EV Charger: connector status now inherits from station** – OpenChargeMap often provides status only at the station level, not per connector. Connectors with "unknown" status now inherit the station's status. The station's `DateLastStatusUpdate` is shown as "since" timestamp on each connector brick. Station bricks with unknown status now show connector count instead of "unknown". Occupied stations show "0/N frei" format.
