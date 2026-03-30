@@ -191,6 +191,9 @@ class TransitionLearner:
                 self._transitions.append(transition)
                 if len(self._transitions) > self._max_transitions:
                     self._transitions = self._transitions[-self._max_transitions:]
+                # Auto-save every 10 new transitions to avoid data loss
+                if self.persist_path and len(self._transitions) % 10 == 0:
+                    self._save(self.persist_path)
                 hist.clear()
                 hist.append((timestamp, power_w))
                 return transition
@@ -301,6 +304,12 @@ class TransitionLearner:
     def get_transition_count(self) -> int:
         with self._lock:
             return len(self._transitions)
+
+    def flush(self) -> None:
+        """Persist current state (clusters + transitions) to disk immediately."""
+        if self.persist_path:
+            with self._lock:
+                self._save(self.persist_path)
 
     def _save(self, path: Path) -> None:
         try:
