@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.9.13 - 2026-03-30
+### Fixed
+- **CO₂ fetch crash: `Co2FetchService has no attribute bidding_zone`** – The fuel mix solar estimation called `self.bidding_zone` on the `Co2FetchService` object, but that attribute only exists on `EntsoeClient`. Changed both occurrences (lines 1160/1308) to use the local `zone` variable instead. This caused intermittent chunk failures during CO₂ data import.
+
 ## 12.9.12 - 2026-03-30
 ### Fixed
 - **Anomaly type not translated in web dashboard** – Raw keys like "unusual_daily" were shown instead of translated labels (e.g. "Ungewöhnl. Tagesverbrauch" in German). Now uses the i18n `t()` function with `anomaly.type.*` keys.
