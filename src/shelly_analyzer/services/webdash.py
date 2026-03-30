@@ -208,6 +208,23 @@ class LiveStateStore:
                     appliances[k] = []
         if appliances:
             out["_appliances"] = appliances
+        # Extract switch state from latest raw sample per device
+        switch_states: Dict[str, Optional[bool]] = {}
+        for k, arr in snap.items():
+            if arr and hasattr(arr[-1], "raw") and isinstance(arr[-1].raw, dict):
+                raw = arr[-1].raw
+                sw = None
+                for _sk in ("output", "ison", "on", "is_on"):
+                    if _sk in raw:
+                        sw = bool(raw[_sk])
+                        break
+                if sw is None and "relays" in raw:
+                    rl = raw["relays"]
+                    if isinstance(rl, list) and rl:
+                        sw = any(bool(r.get("ison") or r.get("on")) for r in rl if isinstance(r, dict))
+                switch_states[k] = sw
+        if switch_states:
+            out["_switch_states"] = switch_states
         return out
 
 
@@ -478,6 +495,40 @@ _HTML_TEMPLATE = """<!doctype html>
     .dev-kv {{ display: grid; grid-template-columns: minmax(100px, auto) 1fr; gap: 4px 12px; font-size: 12px; }}
     .dev-kv dt {{ color: var(--muted); min-width: 100px; }}
     .dev-kv dd {{ margin: 0; font-weight: 600; }}
+    /* Switch toggle row */
+    .switch-row {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 6px 10px;
+      background: var(--chipbg);
+      border-radius: 10px;
+      font-size: 13px;
+    }}
+    .switch-label {{ color: var(--muted); font-weight: 600; }}
+    .switch-state {{
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+    }}
+    .switch-state.on {{ color: #16a34a; background: rgba(22,163,74,0.12); }}
+    .switch-state.off {{ color: #dc2626; background: rgba(220,38,38,0.12); }}
+    .switch-btn {{
+      margin-left: auto;
+      padding: 4px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--fg);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }}
+    .switch-btn:hover {{ background: var(--chipbg); }}
+    .switch-btn:disabled {{ opacity: 0.5; cursor: wait; }}
     /* NILM chips */
     .appl-list {{ display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }}
     .appl-chip {{
@@ -1296,6 +1347,30 @@ function buildDeviceCard(d) {{
     const exp = div.querySelector('.dev-expand');
     exp.classList.toggle('open');
   }});
+  var swBtn = div.querySelector('.switch-btn');
+  if (swBtn) {{
+    swBtn.addEventListener('click', function(e) {{
+      e.stopPropagation();
+      var dk = swBtn.dataset.devkey;
+      swBtn.disabled = true;
+      fetch('/api/run', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{action:'toggle_switch',params:{{device_key:dk}}}}) }})
+        .then(function(r) {{ return r.json(); }})
+        .then(function(d) {{
+          if (d.ok) {{
+            var row = document.getElementById('sw-' + dk);
+            if (row) {{
+              var st = row.querySelector('.switch-state');
+              if (st) {{
+                st.className = 'switch-state ' + (d.on ? 'on' : 'off');
+                st.textContent = d.on ? t('live.switch.on', 'On') : t('live.switch.off', 'Off');
+              }}
+            }}
+          }}
+        }})
+        .catch(function() {{}})
+        .finally(function() {{ swBtn.disabled = false; }});
+    }});
+  }}
   div.querySelectorAll('.sparkline-wrap[data-metric]').forEach(function(wrap) {{
     wrap.addEventListener('click', function(e) {{
       e.stopPropagation();
@@ -1348,6 +1423,7 @@ function devCardHTML(d) {{
       '</div>' +
       '<div class="dev-power ' + pc + '">' + fmt(d.power_w, 0) + ' W</div>' +
     '</div>' +
+    (d.kind === 'switch' ? '<div class="switch-row" id="sw-' + d.key + '"><span class="switch-label">' + t('live.cards.switch', 'Switch') + ':</span> <span class="switch-state ' + (d.switch_on ? 'on' : 'off') + '">' + (d.switch_on ? t('live.switch.on', 'On') : t('live.switch.off', 'Off')) + '</span> <button class="switch-btn" data-devkey="' + d.key + '">' + t('live.switch.toggle', 'Toggle') + '</button></div>' : '') +
     '<div class="sparkline-wrap" data-metric="w" data-devkey="' + d.key + '"><canvas class="sparkline" id="sp-' + d.key + '"></canvas></div>' +
     '<div class="dev-expand">' +
       '<dl class="dev-kv">' +
@@ -1459,6 +1535,17 @@ function updateDeviceCard(card, d) {{
           const pct = Math.round(Math.abs(ph.power_w || 0) / totalP * 100);
           return 'L' + (i+1) + '&nbsp;' + pct + '%';
         }}).join(' \xb7 ');
+      }}
+    }}
+  }}
+  // Update switch state
+  if (d.kind === 'switch' && d.switch_on !== undefined && d.switch_on !== null) {{
+    var swRow = document.getElementById('sw-' + d.key);
+    if (swRow) {{
+      var st = swRow.querySelector('.switch-state');
+      if (st) {{
+        st.className = 'switch-state ' + (d.switch_on ? 'on' : 'off');
+        st.textContent = d.switch_on ? t('live.switch.on', 'On') : t('live.switch.off', 'Off');
       }}
     }}
   }}
@@ -5016,6 +5103,7 @@ class _Handler(BaseHTTPRequestHandler):
                 # Build devices array expected by the v9 JS frontend.
                 # raw_snap format: {"device_key": [...points], "_appliances": {key: [...]}}
                 appliances_map: Dict[str, List[Any]] = raw_snap.get("_appliances", {})  # type: ignore[assignment]
+                switch_states_map: Dict[str, Any] = raw_snap.get("_switch_states", {})  # type: ignore[assignment]
                 dev_meta_by_key: Dict[str, Dict[str, Any]] = {
                     d.get("key", ""): d
                     for d in (self.dashboard.devices_meta or [])
@@ -5065,9 +5153,13 @@ class _Handler(BaseHTTPRequestHandler):
                             q_phases.append({"var": qb_val})
                         if vc > 0:
                             q_phases.append({"var": qc_val})
+                    dev_kind = str(meta.get("kind") or "em")
+                    switch_on = switch_states_map.get(dkey) if dev_kind == "switch" else None
+
                     devices_list.append({
                         "key": dkey,
                         "name": name,
+                        "kind": dev_kind,
                         "power_w": float(latest.get("power_total_w") or 0),
                         "today_kwh": float(latest.get("kwh_today") or 0),
                         "cost_today": float(latest.get("cost_today") or 0),
@@ -5080,6 +5172,7 @@ class _Handler(BaseHTTPRequestHandler):
                         "appliances": appl_objs,
                         "i_n": float(latest.get("i_n") or 0),
                         "q_total_var": float(latest.get("q_total_var") or 0),
+                        "switch_on": switch_on,
                     })
                 payload = {"devices": devices_list}
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
