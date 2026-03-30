@@ -89,24 +89,34 @@ def fetch_ev_chargers(
         poi_lon = float(addr_info.get("Longitude") or 0)
         dist = round(_haversine_m(lat, lon, poi_lat, poi_lon))
 
+        # Station-level status (fallback for connectors without own status)
+        poi_status = _status_from_ocm(poi)
+        poi_date_last_status = poi.get("DateLastStatusUpdate") or None
+
         connections = poi.get("Connections") or []
         connectors: List[Dict[str, Any]] = []
         free_count = 0
         unavail_count = 0
+        unknown_count = 0
         for c in connections:
             ct = c.get("ConnectionType") or {}
             level = c.get("Level") or {}
             status = _status_from_ocm(c)
+            # If connector has no own status, inherit from station
+            if status == "unknown" and poi_status != "unknown":
+                status = poi_status
             if status == "free":
                 free_count += 1
-            if status == "unavailable":
+            elif status == "unavailable":
                 unavail_count += 1
+            elif status == "unknown":
+                unknown_count += 1
             connectors.append({
                 "id": c.get("ID", 0),
                 "type": ct.get("Title", "Unknown"),
                 "kw": c.get("PowerKW") or (level.get("PowerKW") if level else None) or 0,
                 "status": status,
-                "status_since": None,
+                "status_since": poi_date_last_status,
             })
 
         total = len(connectors)
@@ -114,8 +124,10 @@ def fetch_ev_chargers(
             station_status = "unavailable"
         elif free_count > 0:
             station_status = "available"
+        elif unknown_count == total:
+            # All unknown — use station-level status or mark unknown
+            station_status = poi_status if poi_status != "unknown" else "unknown"
         else:
-            # Some occupied, some unknown — treat as occupied (yellow)
             station_status = "occupied"
 
         stations.append({
