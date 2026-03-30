@@ -579,6 +579,9 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.ev.city_placeholder": "Stadt eingeben\u2026",
         "web.ev.city_not_found": "Stadt nicht gefunden.",
         "web.ev.enter_city": "Stadt eingeben oder GPS-Zugriff erlauben.",
+        "web.ev.apikey_hint": "OpenChargeMap API-Key (gratis: openchargemap.org/site/develop/api)",
+        "web.ev.save": "Speichern",
+        "web.ev.need_key": "API-Key erforderlich. Gratis-Key holen: openchargemap.org/site/develop/api",
         "web.no_data": "Keine Daten",
 
         # Web: CO₂ tab
@@ -1371,6 +1374,9 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.ev.city_placeholder": "Enter city\u2026",
         "web.ev.city_not_found": "City not found.",
         "web.ev.enter_city": "Enter a city name or allow GPS access.",
+        "web.ev.apikey_hint": "OpenChargeMap API key (free: openchargemap.org/site/develop/api)",
+        "web.ev.save": "Save",
+        "web.ev.need_key": "API key required. Get a free key at openchargemap.org/site/develop/api",
         "web.no_data": "No data",
 
         # Web: Dashboard UI (mobile/web app texts)
