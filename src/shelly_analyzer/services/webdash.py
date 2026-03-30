@@ -3411,7 +3411,7 @@ async function loadEv() {{
       }}
       throw new Error(data.error || 'unknown');
     }}
-    _evRenderGrid(data.stations || []);
+    _evRenderGrid(data.stations || [], data.sources || []);
   }} catch(e) {{
     if (e.message === '403') {{
       _evShowKeyRow();
@@ -3422,14 +3422,17 @@ async function loadEv() {{
   }}
 }}
 
-function _evRenderGrid(stations) {{
+function _evRenderGrid(stations, sources) {{
   const wrap = document.getElementById('ev-grid-wrap');
   if (!stations.length) {{
     wrap.innerHTML = '<p class="info-msg">' + t('web.ev.no_results', 'No chargers found') + '</p>';
     return;
   }}
   wrap._evStations = stations;
-  let html = '<div class="ev-grid">';
+  const srcMap = {{ocm:'OpenChargeMap', bna:'Bundesnetzagentur', osm:'OpenStreetMap'}};
+  const srcLabel = (sources || []).map(function(s) {{ return srcMap[s] || s; }}).join(' + ');
+  let html = '<div style="font-size:10px;color:var(--muted);margin-bottom:4px">' + stations.length + ' Stationen' + (srcLabel ? ' \xb7 ' + srcLabel : '') + '</div>';
+  html += '<div class="ev-grid">';
   stations.forEach(function(s) {{
     const cls = s.status === 'available' ? 'ev-green' : s.status === 'occupied' ? 'ev-yellow' : s.status === 'unavailable' ? 'ev-red' : 'ev-gray';
     const distLabel = s.distance_m < 1000 ? s.distance_m + ' m' : (s.distance_m / 1000).toFixed(1) + ' km';

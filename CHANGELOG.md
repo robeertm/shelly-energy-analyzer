@@ -1,5 +1,16 @@
 # Changelog
 
+## 13.1.1 - 2026-03-30
+### Added
+- **EV Charger: multi-source parallel fetch** – All three data sources are now queried simultaneously and results merged with proximity-based deduplication (50m threshold):
+  - **OpenChargeMap** – international, with status data (API key)
+  - **Bundesnetzagentur** – official German registry, 184k+ stations
+  - **OpenStreetMap/Overpass** – community data, good coverage, no key needed
+  - Sources queried in parallel (ThreadPoolExecutor) for fast response
+  - Deduplication keeps the entry with richer data (OCM > BNA > OSM)
+  - Station count and active sources shown above the grid ("42 Stationen · OpenChargeMap + Bundesnetzagentur + OpenStreetMap")
+  - max_results increased to 100
+
 ## 13.1.0 - 2026-03-30
 ### Added
 - **Auto-HTTPS for web dashboard** – The web server now automatically generates a self-signed TLS certificate on first start (via `openssl` CLI, available on macOS/Linux/Raspberry Pi) and serves over HTTPS. This enables the browser Geolocation API for the EV Charger tab on smartphones over LAN. The certificate is stored in `data/runtime/ssl/` and valid for 10 years. Falls back to HTTP gracefully if `openssl` is not available. Users see a one-time browser warning to accept the self-signed certificate, after which GPS works seamlessly.
