@@ -319,6 +319,16 @@ class TransitionLearner:
                     }
                     for c in self._clusters
                 ],
+                "transitions": [
+                    {
+                        "timestamp": t.timestamp,
+                        "device_key": t.device_key,
+                        "delta_w": t.delta_w,
+                        "power_before": t.power_before,
+                        "power_after": t.power_after,
+                    }
+                    for t in self._transitions
+                ],
             }
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -340,6 +350,15 @@ class TransitionLearner:
                     label=str(c.get("label", "")),
                     icon=str(c.get("icon", "🔌")),
                     matched_appliance=str(c.get("matched_appliance", "")),
+                ))
+            self._transitions = []
+            for t in data.get("transitions", []):
+                self._transitions.append(PowerTransition(
+                    timestamp=float(t.get("timestamp", 0)),
+                    device_key=str(t.get("device_key", "")),
+                    delta_w=float(t.get("delta_w", 0)),
+                    power_before=float(t.get("power_before", 0)),
+                    power_after=float(t.get("power_after", 0)),
                 ))
         except Exception:
             logger.debug("Failed to load NILM clusters", exc_info=True)
