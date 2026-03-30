@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.9.11 - 2026-03-30
+### Added
+- **CO₂ intensity timestamp in web dashboard** – The live CO₂ hero card now shows the date and time of the displayed intensity value (e.g. "DE_LU · ENTSO-E · 30.03.2026 14:00"), making it easy to verify how fresh the data is.
+
 ## 12.9.10 - 2026-03-29
 ### Fixed
 - **Heatmap month labels drifting right of grid** – Each month label span was sized at `calCellSize + gap` while the parent flex container also applied `gap: 2px`, double-counting the spacing. Over 53 weeks this caused ~106px of cumulative drift, pushing "Dez" past the actual grid tiles. Fixed by setting label span width to `calCellSize` only, matching the grid column width exactly.
