@@ -82,9 +82,19 @@ class Co2Mixin:
             self._co2_status_var.set(str(exc)[:80])
 
     def _co2_on_close(self) -> None:
-        """Stop the fetch service on window close."""
+        """Stop services and flush NILM data on window close."""
         try:
             self._co2_fetch_svc.stop()
+        except Exception:
+            pass
+        # Flush NILM learner data to disk before exiting
+        try:
+            learners = getattr(self, "_nilm_learners", {})
+            for _dk, _lrn in learners.items():
+                try:
+                    _lrn.flush()
+                except Exception:
+                    pass
         except Exception:
             pass
         try:

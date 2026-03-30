@@ -1,5 +1,10 @@
 # Changelog
 
+## 13.2.1 - 2026-03-30
+### Fixed
+- **NILM ML now truly persists across restarts** – Three issues fixed: (1) Added `flush()` method that saves immediately regardless of transition count. (2) Auto-save every 10 new transitions to avoid data loss between 5-minute cluster cycles. (3) App close handler (`WM_DELETE_WINDOW`) now flushes all NILM learners to disk before exiting. Previously, transitions collected between the last `cluster()` call and app exit were lost.
+- **Mousewheel/trackpad scrolling works everywhere in desktop app** – Added global `<MouseWheel>` event binding that routes scroll events to the scrollable widget under the cursor (TreeView, Listbox, Text, Canvas). Previously, TreeView and Listbox widgets only responded when clicking directly on the scrollbar. Works on macOS, Windows, and Linux.
+
 ## 13.2.0 - 2026-03-30
 ### Added
 - **EnBW/SMATRICS as 4th EV data source with REAL-TIME status** – Reverse-engineered the SMATRICS POI bounding-box API used by the EnBW mobility+ map. Returns per-connector real-time status (AVAILABLE/OCCUPIED/OUT_OF_SERVICE) with `last_updated` timestamps. This is the first source with actual live occupancy data.

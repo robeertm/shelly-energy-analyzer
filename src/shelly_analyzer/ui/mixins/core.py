@@ -365,6 +365,8 @@ class CoreMixin:
             self._live_axes: Dict[str, Dict[str, any]] = {}
             self._live_canvases: Dict[str, Dict[str, FigureCanvasTkAgg]] = {}
             self._build_ui()
+            # Global mousewheel scrolling for ALL scrollable widgets
+            self._bind_global_mousewheel()
             # Check for updates on startup (non-blocking)
             self.after(500, self._updates_check_on_startup)
             # On first run (no config yet), start in Settings → Devices.
@@ -711,6 +713,55 @@ class CoreMixin:
                 w = 800
             # ~90px per label works well with rotated HH:MM ticks
             return max(5, min(18, int(w / 90)))
+
+    def _bind_global_mousewheel(self) -> None:
+            """Bind mousewheel scrolling globally so it works on any scrollable widget.
+
+            Tkinter's TreeView, Listbox, and Text widgets don't respond to
+            trackpad/mousewheel by default — they need explicit event bindings.
+            This handler routes mousewheel events to the scrollable widget
+            under the cursor.
+            """
+            import platform
+            def _on_mousewheel(event: tk.Event) -> None:
+                # Find the widget under the cursor
+                try:
+                    w = event.widget.winfo_containing(event.x_root, event.y_root)
+                except Exception:
+                    return
+                if w is None:
+                    return
+                # Walk up parents to find a scrollable widget
+                target = w
+                for _ in range(20):
+                    if target is None:
+                        break
+                    wclass = target.winfo_class()
+                    if wclass in ("Treeview", "Listbox", "Text", "Canvas"):
+                        try:
+                            if platform.system() == "Darwin":
+                                target.yview_scroll(int(-event.delta), "units")
+                            else:
+                                target.yview_scroll(int(-event.delta / 120), "units")
+                        except Exception:
+                            pass
+                        return
+                    try:
+                        target = target.master
+                    except Exception:
+                        break
+
+            self.bind_all("<MouseWheel>", _on_mousewheel, add=True)
+            # Linux uses Button-4/5 for scroll
+            if platform.system() == "Linux":
+                def _on_scroll_up(event: tk.Event) -> None:
+                    event.delta = 1
+                    _on_mousewheel(event)
+                def _on_scroll_down(event: tk.Event) -> None:
+                    event.delta = -1
+                    _on_mousewheel(event)
+                self.bind_all("<Button-4>", _on_scroll_up, add=True)
+                self.bind_all("<Button-5>", _on_scroll_down, add=True)
 
     def _build_ui(self) -> None:
             # Top bar: choose which two devices are shown in the UI.
