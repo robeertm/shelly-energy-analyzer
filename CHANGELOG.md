@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.0.2 - 2026-03-30
+### Fixed
+- **EV Charger: 403 Forbidden from OpenChargeMap** – OpenChargeMap now requires a free API key. Added an API key input field that appears automatically when a 403 error occurs. The key is stored in localStorage so it only needs to be entered once. Users can get a free key at openchargemap.org/site/develop/api.
+
 ## 13.0.1 - 2026-03-30
 ### Added
 - **City search for EV Charger tab** – Since GPS requires HTTPS and doesn't work on LAN, the EV tab now has a text input field for entering a city name. Uses Nominatim (OpenStreetMap) for free geocoding. Priority: city input → GPS → cached position. Also added 10km radius option.

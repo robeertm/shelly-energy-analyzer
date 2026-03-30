@@ -931,6 +931,13 @@ _HTML_TEMPLATE = """<!doctype html>
         </select>
         <button class="btn btn-outline" onclick="loadEv()">\u21bb</button>
       </div>
+      <div id="ev-apikey-row" style="display:none;padding:6px 0">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">{web_ev_apikey_hint}</div>
+        <div style="display:flex;gap:6px">
+          <input id="ev-apikey" type="text" placeholder="API Key" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--fg);font-size:12px">
+          <button class="btn btn-outline" onclick="_evSaveKey()" style="font-size:12px">{web_ev_save}</button>
+        </div>
+      </div>
       <div id="ev-grid-wrap"></div>
     </div>
 
@@ -1146,7 +1153,7 @@ function onPaneActivated(name) {{
     else if (name === 'forecast') loadForecast();
     else if (name === 'standby') loadStandby();
     else if (name === 'sankey') loadSankey();
-    else if (name === 'ev') loadEv();
+    else if (name === 'ev') {{ _evInitKeyRow(); loadEv(); }}
     else if (name === 'export') initExport();
   }}
 }}
@@ -3284,6 +3291,27 @@ function esc(s) {{
    EV CHARGER TAB
 ────────────────────────────────────────────── */
 let _evLastCoords = null;
+let _evApiKey = localStorage.getItem('sea_ocm_key') || '';
+
+function _evInitKeyRow() {{
+  const row = document.getElementById('ev-apikey-row');
+  const inp = document.getElementById('ev-apikey');
+  if (!row || !inp) return;
+  if (!_evApiKey) {{ row.style.display = 'block'; }}
+  inp.value = _evApiKey;
+}}
+function _evSaveKey() {{
+  const inp = document.getElementById('ev-apikey');
+  if (!inp) return;
+  _evApiKey = inp.value.trim();
+  localStorage.setItem('sea_ocm_key', _evApiKey);
+  document.getElementById('ev-apikey-row').style.display = 'none';
+  loadEv();
+}}
+function _evShowKeyRow() {{
+  const row = document.getElementById('ev-apikey-row');
+  if (row) row.style.display = 'block';
+}}
 
 async function _evGeocode(city) {{
   // Use Nominatim (OpenStreetMap) for free geocoding
@@ -3332,14 +3360,28 @@ async function loadEv() {{
   }}
 
   const radius = document.getElementById('ev-radius').value || '500';
+  let url = '/api/ev_chargers?lat=' + _evLastCoords.lat + '&lon=' + _evLastCoords.lon + '&radius=' + radius;
+  if (_evApiKey) url += '&key=' + encodeURIComponent(_evApiKey);
   try {{
-    const r = await fetch('/api/ev_chargers?lat=' + _evLastCoords.lat + '&lon=' + _evLastCoords.lon + '&radius=' + radius);
+    const r = await fetch(url);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
-    if (!data.ok) throw new Error(data.error || 'unknown');
+    if (!data.ok) {{
+      if ((data.error || '').indexOf('403') !== -1 || (data.error || '').indexOf('Forbidden') !== -1) {{
+        _evShowKeyRow();
+        wrap.innerHTML = '<p class="error-msg">' + t('web.ev.need_key', 'API key required. Get a free key at openchargemap.org/site/develop/api') + '</p>';
+        return;
+      }}
+      throw new Error(data.error || 'unknown');
+    }}
     _evRenderGrid(data.stations || []);
   }} catch(e) {{
-    wrap.innerHTML = '<p class="error-msg">Error: ' + esc(e.message) + '</p>';
+    if (e.message === '403') {{
+      _evShowKeyRow();
+      wrap.innerHTML = '<p class="error-msg">' + t('web.ev.need_key', 'API key required. Get a free key at openchargemap.org/site/develop/api') + '</p>';
+    }} else {{
+      wrap.innerHTML = '<p class="error-msg">Error: ' + esc(e.message) + '</p>';
+    }}
   }}
 }}
 
@@ -5649,9 +5691,10 @@ class _Handler(BaseHTTPRequestHandler):
                     _eparams = {k: (v[0] if isinstance(v, list) and v else v) for k, v in _eqs.items()}
                     lat = float(_eparams.get("lat", 0))
                     lon = float(_eparams.get("lon", 0))
-                    radius = max(100, min(5000, int(_eparams.get("radius", 500))))
+                    radius = max(100, min(10000, int(_eparams.get("radius", 500))))
+                    api_key = str(_eparams.get("key", "") or "")
                     from shelly_analyzer.services.ev_charger import fetch_ev_chargers
-                    payload = fetch_ev_chargers(lat, lon, radius_m=radius)
+                    payload = fetch_ev_chargers(lat, lon, radius_m=radius, api_key=api_key)
                 except Exception as e:
                     payload = {"ok": False, "error": str(e), "stations": []}
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -6054,6 +6097,8 @@ class LiveWebDashboard:
                 "web_tab_ev": _t(self.lang, "web.tab.ev"),
                 "web_ev_radius": _t(self.lang, "web.ev.radius"),
                 "web_ev_city_placeholder": _t(self.lang, "web.ev.city_placeholder"),
+                "web_ev_apikey_hint": _t(self.lang, "web.ev.apikey_hint"),
+                "web_ev_save": _t(self.lang, "web.ev.save"),
                 "web_tab_export": _t(self.lang, "web.tab.export"),
                 # Export pane
                 "exp_daterange": _t(self.lang, "web.control.export.daterange"),
