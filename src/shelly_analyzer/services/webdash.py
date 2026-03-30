@@ -3398,9 +3398,9 @@ function _evRenderGrid(stations) {{
     const distLabel = s.distance_m < 1000 ? s.distance_m + ' m' : (s.distance_m / 1000).toFixed(1) + ' km';
     let statusLabel;
     if (s.status === 'available') statusLabel = s.free_connectors + '/' + s.total_connectors + ' ' + t('web.ev.free', 'free');
-    else if (s.status === 'occupied') statusLabel = s.total_connectors + 'x ' + t('web.ev.occupied', 'occupied');
+    else if (s.status === 'occupied') statusLabel = '0/' + s.total_connectors + ' ' + t('web.ev.free', 'free');
     else if (s.status === 'unavailable') statusLabel = t('web.ev.unavailable', 'unavailable');
-    else statusLabel = t('web.ev.unknown', 'unknown');
+    else statusLabel = s.total_connectors + ' ' + t('web.ev.connectors', 'Connectors');
     html += '<div class="ev-brick ' + cls + '" onclick="_evShowDetail(' + s.id + ')">' +
       '<div class="ev-brick-name">' + esc(s.name || '?') + '</div>' +
       '<div class="ev-brick-dist">' + distLabel + '</div>' +
@@ -3426,8 +3426,12 @@ function _evShowDetail(stationId) {{
   (s.connectors || []).forEach(function(c) {{
     const cls = c.status === 'free' ? 'ev-green' : c.status === 'occupied' ? 'ev-yellow' : c.status === 'unavailable' ? 'ev-red' : 'ev-gray';
     const statusTxt = c.status === 'free' ? t('web.ev.free', 'free') : c.status === 'occupied' ? t('web.ev.occupied', 'occupied') : c.status === 'unavailable' ? t('web.ev.unavailable', 'unavailable') : t('web.ev.unknown', 'unknown');
-    const since = c.status_since ? '<br>' + t('web.ev.since', 'since') + ' ' + new Date(c.status_since).toLocaleTimeString() : '';
-    body += '<div class="ev-conn-brick ' + cls + '"><b>' + esc(c.type || '?') + '</b><br>' + (c.kw ? c.kw + ' kW' : '') + '<br>' + statusTxt + since + '</div>';
+    let since = '';
+    if (c.status_since) {{
+      const d = new Date(c.status_since);
+      if (!isNaN(d.getTime())) since = '<br><span style="font-size:10px;opacity:0.85">' + t('web.ev.since', 'since') + ' ' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {{hour:'2-digit',minute:'2-digit'}}) + '</span>';
+    }}
+    body += '<div class="ev-conn-brick ' + cls + '"><b>' + esc(c.type || '?') + '</b>' + (c.kw ? '<br>' + c.kw + ' kW' : '') + '<br>' + statusTxt + since + '</div>';
   }});
   body += '</div>';
 

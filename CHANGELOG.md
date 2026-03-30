@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.0.3 - 2026-03-30
+### Fixed
+- **EV Charger: connector status now inherits from station** – OpenChargeMap often provides status only at the station level, not per connector. Connectors with "unknown" status now inherit the station's status. The station's `DateLastStatusUpdate` is shown as "since" timestamp on each connector brick. Station bricks with unknown status now show connector count instead of "unknown". Occupied stations show "0/N frei" format.
+
 ## 13.0.2 - 2026-03-30
 ### Fixed
 - **EV Charger: 403 Forbidden from OpenChargeMap** – OpenChargeMap now requires a free API key. Added an API key input field that appears automatically when a 403 error occurs. The key is stored in localStorage so it only needs to be entered once. Users can get a free key at openchargemap.org/site/develop/api.
