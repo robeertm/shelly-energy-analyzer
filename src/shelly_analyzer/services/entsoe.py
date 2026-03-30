@@ -1157,7 +1157,7 @@ class Co2FetchService:
                             all_hours = sorted({h for fh in raw_mix.values() for h in fh})
                             if all_hours:
                                 # Include solar estimate if missing
-                                _enriched = _estimate_solar_if_missing(raw_mix, self.bidding_zone) if "solar" not in raw_mix else raw_mix
+                                _enriched = _estimate_solar_if_missing(raw_mix, zone) if "solar" not in raw_mix else raw_mix
                                 for h_ts in all_hours:
                                     h_mix = {
                                         fuel: fh[h_ts]
@@ -1305,7 +1305,7 @@ class Co2FetchService:
                                 client.fetch_intensity(mix_cursor, mix_chunk_end)
                                 raw_mix = client.last_mix
                                 if raw_mix:
-                                    _enriched2 = _estimate_solar_if_missing(raw_mix, self.bidding_zone) if "solar" not in raw_mix else raw_mix
+                                    _enriched2 = _estimate_solar_if_missing(raw_mix, zone) if "solar" not in raw_mix else raw_mix
                                     all_hours = sorted({h for fh in _enriched2.values() for h in fh})
                                     for h_ts in all_hours:
                                         h_mix = {
