@@ -556,6 +556,48 @@ _HTML_TEMPLATE = """<!doctype html>
       border-radius: 6px;
       background: var(--chipbg);
     }}
+    /* ── EV Charger Grid ── */
+    .ev-grid {{ display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0; }}
+    .ev-brick {{
+      width: calc(33.333% - 4px);
+      min-width: 90px;
+      max-width: 140px;
+      aspect-ratio: 1;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 11px;
+      color: #fff;
+      text-align: center;
+      padding: 6px;
+      transition: transform .1s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+    }}
+    .ev-brick:active {{ transform: scale(0.95); }}
+    .ev-brick.ev-green {{ background: #16a34a; }}
+    .ev-brick.ev-yellow {{ background: #d97706; }}
+    .ev-brick.ev-red {{ background: #dc2626; }}
+    .ev-brick.ev-gray {{ background: #6b7280; }}
+    .ev-brick-name {{ font-weight: 700; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }}
+    .ev-brick-dist {{ font-size: 10px; opacity: 0.85; margin-top: 2px; }}
+    .ev-brick-info {{ font-size: 10px; margin-top: 2px; }}
+    .ev-conn-grid {{ display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }}
+    .ev-conn-brick {{
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      color: #fff;
+      text-align: center;
+      min-width: 70px;
+      flex: 1;
+    }}
+    .ev-conn-brick.ev-green {{ background: #16a34a; }}
+    .ev-conn-brick.ev-yellow {{ background: #d97706; }}
+    .ev-conn-brick.ev-red {{ background: #dc2626; }}
+    .ev-conn-brick.ev-gray {{ background: #6b7280; }}
     /* ── Chart detail modal ── */
     .chart-detail-panel {{
       background: var(--card);
@@ -875,6 +917,22 @@ _HTML_TEMPLATE = """<!doctype html>
       <div id="sankey-cards"></div>
     </div>
 
+    <!-- EV Chargers -->
+    <div id="pane-ev" class="pane">
+      <div class="controls-row">
+        <span style="font-size:13px;color:var(--muted)">{web_ev_radius}:</span>
+        <select id="ev-radius" onchange="loadEv()">
+          <option value="100">100 m</option>
+          <option value="500" selected>500 m</option>
+          <option value="1000">1 km</option>
+          <option value="2000">2 km</option>
+          <option value="5000">5 km</option>
+        </select>
+        <button class="btn btn-outline" onclick="loadEv()">\u21bb</button>
+      </div>
+      <div id="ev-grid-wrap"></div>
+    </div>
+
     <!-- Export -->
     <div id="pane-export" class="pane">
       <div class="exp-sections">
@@ -980,6 +1038,10 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">⚡</span>
       <span class="nav-label">{web_tab_sankey}</span>
     </button>
+    <button class="nav-btn" onclick="switchPane('ev',this)">
+      <span class="nav-icon">🔌</span>
+      <span class="nav-label">{web_tab_ev}</span>
+    </button>
     <button class="nav-btn" onclick="switchPane('export',this)">
       <span class="nav-icon">📥</span>
       <span class="nav-label">{web_tab_export}</span>
@@ -988,6 +1050,16 @@ _HTML_TEMPLATE = """<!doctype html>
 </div>
 
 <div id="hm-tooltip"></div>
+
+<div id="ev-detail-modal" class="modal-overlay" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal-panel" style="width:min(94vw,420px);-webkit-overflow-scrolling:touch">
+    <div class="modal-header">
+      <span id="ev-detail-title" style="font-weight:700"></span>
+      <button class="modal-close" onclick="document.getElementById('ev-detail-modal').classList.remove('open')">&times;</button>
+    </div>
+    <div id="ev-detail-body"></div>
+  </div>
+</div>
 
 <div id="live-settings-modal" class="modal-overlay">
   <div class="modal-panel">
@@ -1073,6 +1145,7 @@ function onPaneActivated(name) {{
     else if (name === 'forecast') loadForecast();
     else if (name === 'standby') loadStandby();
     else if (name === 'sankey') loadSankey();
+    else if (name === 'ev') loadEv();
     else if (name === 'export') initExport();
   }}
 }}
@@ -3204,6 +3277,97 @@ function esc(s) {{
     .replace(/</g,'&lt;')
     .replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;');
+}}
+
+/* ──────────────────────────────────────────────
+   EV CHARGER TAB
+────────────────────────────────────────────── */
+let _evLastCoords = null;
+
+async function loadEv() {{
+  const wrap = document.getElementById('ev-grid-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<p class="loading-msg">' + t('web.ev.loading', 'Loading chargers\u2026') + '</p>';
+
+  if (!navigator.geolocation) {{
+    wrap.innerHTML = '<p class="error-msg">' + t('web.ev.no_gps', 'GPS not available. Allow location access.') + '</p>';
+    return;
+  }}
+
+  try {{
+    const pos = await new Promise(function(resolve, reject) {{
+      navigator.geolocation.getCurrentPosition(resolve, reject, {{
+        enableHighAccuracy: true, timeout: 10000, maximumAge: 60000
+      }});
+    }});
+    _evLastCoords = {{ lat: pos.coords.latitude, lon: pos.coords.longitude }};
+  }} catch(e) {{
+    if (!_evLastCoords) {{
+      wrap.innerHTML = '<p class="error-msg">' + t('web.ev.no_gps', 'GPS not available. Allow location access.') + '</p>';
+      return;
+    }}
+  }}
+
+  const radius = document.getElementById('ev-radius').value || '500';
+  try {{
+    const r = await fetch('/api/ev_chargers?lat=' + _evLastCoords.lat + '&lon=' + _evLastCoords.lon + '&radius=' + radius);
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error || 'unknown');
+    _evRenderGrid(data.stations || []);
+  }} catch(e) {{
+    wrap.innerHTML = '<p class="error-msg">Error: ' + esc(e.message) + '</p>';
+  }}
+}}
+
+function _evRenderGrid(stations) {{
+  const wrap = document.getElementById('ev-grid-wrap');
+  if (!stations.length) {{
+    wrap.innerHTML = '<p class="info-msg">' + t('web.ev.no_results', 'No chargers found') + '</p>';
+    return;
+  }}
+  wrap._evStations = stations;
+  let html = '<div class="ev-grid">';
+  stations.forEach(function(s) {{
+    const cls = s.status === 'available' ? 'ev-green' : s.status === 'occupied' ? 'ev-yellow' : s.status === 'unavailable' ? 'ev-red' : 'ev-gray';
+    const distLabel = s.distance_m < 1000 ? s.distance_m + ' m' : (s.distance_m / 1000).toFixed(1) + ' km';
+    let statusLabel;
+    if (s.status === 'available') statusLabel = s.free_connectors + '/' + s.total_connectors + ' ' + t('web.ev.free', 'free');
+    else if (s.status === 'occupied') statusLabel = s.total_connectors + 'x ' + t('web.ev.occupied', 'occupied');
+    else if (s.status === 'unavailable') statusLabel = t('web.ev.unavailable', 'unavailable');
+    else statusLabel = t('web.ev.unknown', 'unknown');
+    html += '<div class="ev-brick ' + cls + '" onclick="_evShowDetail(' + s.id + ')">' +
+      '<div class="ev-brick-name">' + esc(s.name || '?') + '</div>' +
+      '<div class="ev-brick-dist">' + distLabel + '</div>' +
+      '<div class="ev-brick-info">' + statusLabel + '</div>' +
+      '</div>';
+  }});
+  html += '</div>';
+  wrap.innerHTML = html;
+}}
+
+function _evShowDetail(stationId) {{
+  const wrap = document.getElementById('ev-grid-wrap');
+  const stations = wrap._evStations || [];
+  const s = stations.find(function(x) {{ return x.id === stationId; }});
+  if (!s) return;
+
+  document.getElementById('ev-detail-title').textContent = s.name || 'Station #' + s.id;
+  const distLabel = s.distance_m < 1000 ? s.distance_m + ' m' : (s.distance_m / 1000).toFixed(1) + ' km';
+  let body = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">' + esc(s.address || '') + '</div>';
+  body += '<div style="font-size:12px;margin-bottom:10px">' + t('web.ev.distance', 'Distance') + ': <b>' + distLabel + '</b></div>';
+  body += '<div style="font-weight:700;margin-bottom:6px">' + t('web.ev.connectors', 'Connectors') + ' (' + s.total_connectors + ')</div>';
+  body += '<div class="ev-conn-grid">';
+  (s.connectors || []).forEach(function(c) {{
+    const cls = c.status === 'free' ? 'ev-green' : c.status === 'occupied' ? 'ev-yellow' : c.status === 'unavailable' ? 'ev-red' : 'ev-gray';
+    const statusTxt = c.status === 'free' ? t('web.ev.free', 'free') : c.status === 'occupied' ? t('web.ev.occupied', 'occupied') : c.status === 'unavailable' ? t('web.ev.unavailable', 'unavailable') : t('web.ev.unknown', 'unknown');
+    const since = c.status_since ? '<br>' + t('web.ev.since', 'since') + ' ' + new Date(c.status_since).toLocaleTimeString() : '';
+    body += '<div class="ev-conn-brick ' + cls + '"><b>' + esc(c.type || '?') + '</b><br>' + (c.kw ? c.kw + ' kW' : '') + '<br>' + statusTxt + since + '</div>';
+  }});
+  body += '</div>';
+
+  document.getElementById('ev-detail-body').innerHTML = body;
+  document.getElementById('ev-detail-modal').classList.add('open');
 }}
 
 /* ──────────────────────────────────────────────
@@ -5455,6 +5619,27 @@ class _Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
 
+            if path_only.startswith("/api/ev_chargers"):
+                try:
+                    _ep = urlparse(self.path)
+                    _eqs = parse_qs(_ep.query or "")
+                    _eparams = {k: (v[0] if isinstance(v, list) and v else v) for k, v in _eqs.items()}
+                    lat = float(_eparams.get("lat", 0))
+                    lon = float(_eparams.get("lon", 0))
+                    radius = max(100, min(5000, int(_eparams.get("radius", 500))))
+                    from shelly_analyzer.services.ev_charger import fetch_ev_chargers
+                    payload = fetch_ev_chargers(lat, lon, radius_m=radius)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e), "stations": []}
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
             if path_only.startswith("/api/traffic"):
                 try:
                     from shelly_analyzer.services.traffic import TrafficMonitor
@@ -5843,6 +6028,8 @@ class LiveWebDashboard:
                 "web_tab_forecast": _t(self.lang, "web.tab.forecast"),
                 "web_tab_standby": _t(self.lang, "web.tab.standby"),
                 "web_tab_sankey": _t(self.lang, "web.tab.sankey"),
+                "web_tab_ev": _t(self.lang, "web.tab.ev"),
+                "web_ev_radius": _t(self.lang, "web.ev.radius"),
                 "web_tab_export": _t(self.lang, "web.tab.export"),
                 # Export pane
                 "exp_daterange": _t(self.lang, "web.control.export.daterange"),
