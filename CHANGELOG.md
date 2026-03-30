@@ -1,6 +1,11 @@
 # Changelog
 
-## 12.9.11 - 2026-03-30
+## 12.9.12 - 2026-03-30
+### Fixed
+- **Anomaly type not translated in web dashboard** – Raw keys like "unusual_daily" were shown instead of translated labels (e.g. "Ungewöhnl. Tagesverbrauch" in German). Now uses the i18n `t()` function with `anomaly.type.*` keys.
+- **ML appliance chips hidden in Live tab** – The NILM appliance recognition badges (e.g. "❄️ Fridge", "☕ Kettle") were only visible inside the collapsed detail section. Moved them outside the expandable area so they're always visible on each device card. Chips also update on every live refresh cycle.
+- **Standby detection more robust** – Improved the raw-sample fallback: handles both datetime and integer timestamps, estimates kWh from average power when `energy_kwh` is unavailable, and adds debug logging. When no standby data is found, the web UI now shows per-device diagnostic info (hourly/sample row counts) to help identify why.
+
 ### Added
 - **CO₂ intensity timestamp in web dashboard** – The live CO₂ hero card now shows the date and time of the displayed intensity value (e.g. "DE_LU · ENTSO-E · 30.03.2026 14:00"), making it easy to verify how fresh the data is.
 

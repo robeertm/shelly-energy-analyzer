@@ -1524,6 +1524,22 @@ class LiveWebMixin:
                     from shelly_analyzer.services.standby import generate_standby_report
                     price = self.cfg.pricing.unit_price_gross()
                     report = generate_standby_report(self.storage.db, self.cfg.devices, price)
+
+                    # Diagnostic: count hourly rows per device to help debug empty results
+                    diag = {}
+                    if not report.devices:
+                        import time as _time_sb
+                        now_ts = int(_time_sb.time())
+                        start_ts = now_ts - report.analysis_days * 86400
+                        for dev in self.cfg.devices:
+                            h = self.storage.db.query_hourly(dev.key, start_ts=start_ts, end_ts=now_ts)
+                            s = self.storage.db.query_samples(dev.key, start_ts=start_ts, end_ts=now_ts)
+                            diag[dev.key] = {
+                                "name": dev.name,
+                                "hourly_rows": len(h),
+                                "sample_rows": 0 if s is None else len(s),
+                            }
+
                     return {
                         "ok": True,
                         "total_annual_standby_kwh": report.total_annual_standby_kwh,
@@ -1542,6 +1558,7 @@ class LiveWebMixin:
                             }
                             for d in report.devices
                         ],
+                        "diagnostic": diag if diag else None,
                     }
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
