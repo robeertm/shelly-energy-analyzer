@@ -919,14 +919,15 @@ _HTML_TEMPLATE = """<!doctype html>
 
     <!-- EV Chargers -->
     <div id="pane-ev" class="pane">
-      <div class="controls-row">
+      <div class="controls-row" style="flex-wrap:wrap;gap:6px">
+        <input id="ev-city" type="text" placeholder="{web_ev_city_placeholder}" style="flex:1;min-width:120px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--fg);font-size:13px" onkeydown="if(event.key==='Enter')loadEv()">
         <span style="font-size:13px;color:var(--muted)">{web_ev_radius}:</span>
         <select id="ev-radius" onchange="loadEv()">
-          <option value="100">100 m</option>
           <option value="500" selected>500 m</option>
           <option value="1000">1 km</option>
           <option value="2000">2 km</option>
           <option value="5000">5 km</option>
+          <option value="10000">10 km</option>
         </select>
         <button class="btn btn-outline" onclick="loadEv()">\u21bb</button>
       </div>
@@ -3284,26 +3285,48 @@ function esc(s) {{
 ────────────────────────────────────────────── */
 let _evLastCoords = null;
 
+async function _evGeocode(city) {{
+  // Use Nominatim (OpenStreetMap) for free geocoding
+  const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(city));
+  if (!r.ok) return null;
+  const data = await r.json();
+  if (data && data.length > 0) return {{ lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) }};
+  return null;
+}}
+
 async function loadEv() {{
   const wrap = document.getElementById('ev-grid-wrap');
   if (!wrap) return;
   wrap.innerHTML = '<p class="loading-msg">' + t('web.ev.loading', 'Loading chargers\u2026') + '</p>';
 
-  if (!navigator.geolocation) {{
-    wrap.innerHTML = '<p class="error-msg">' + t('web.ev.no_gps', 'GPS not available. Allow location access.') + '</p>';
-    return;
-  }}
+  const cityInput = document.getElementById('ev-city');
+  const cityVal = (cityInput ? cityInput.value.trim() : '');
 
-  try {{
-    const pos = await new Promise(function(resolve, reject) {{
-      navigator.geolocation.getCurrentPosition(resolve, reject, {{
-        enableHighAccuracy: true, timeout: 10000, maximumAge: 60000
-      }});
-    }});
-    _evLastCoords = {{ lat: pos.coords.latitude, lon: pos.coords.longitude }};
-  }} catch(e) {{
-    if (!_evLastCoords) {{
-      wrap.innerHTML = '<p class="error-msg">' + t('web.ev.no_gps', 'GPS not available. Allow location access.') + '</p>';
+  // Priority: 1) City input, 2) GPS, 3) Cached coords
+  if (cityVal) {{
+    const geo = await _evGeocode(cityVal);
+    if (geo) {{
+      _evLastCoords = geo;
+    }} else {{
+      wrap.innerHTML = '<p class="error-msg">' + t('web.ev.city_not_found', 'City not found.') + '</p>';
+      return;
+    }}
+  }} else if (!_evLastCoords) {{
+    // Try GPS
+    if (navigator.geolocation) {{
+      try {{
+        const pos = await new Promise(function(resolve, reject) {{
+          navigator.geolocation.getCurrentPosition(resolve, reject, {{
+            enableHighAccuracy: true, timeout: 10000, maximumAge: 60000
+          }});
+        }});
+        _evLastCoords = {{ lat: pos.coords.latitude, lon: pos.coords.longitude }};
+      }} catch(e) {{
+        wrap.innerHTML = '<p class="info-msg">' + t('web.ev.enter_city', 'Enter a city name or allow GPS access.') + '</p>';
+        return;
+      }}
+    }} else {{
+      wrap.innerHTML = '<p class="info-msg">' + t('web.ev.enter_city', 'Enter a city name or allow GPS access.') + '</p>';
       return;
     }}
   }}
@@ -6030,6 +6053,7 @@ class LiveWebDashboard:
                 "web_tab_sankey": _t(self.lang, "web.tab.sankey"),
                 "web_tab_ev": _t(self.lang, "web.tab.ev"),
                 "web_ev_radius": _t(self.lang, "web.ev.radius"),
+                "web_ev_city_placeholder": _t(self.lang, "web.ev.city_placeholder"),
                 "web_tab_export": _t(self.lang, "web.tab.export"),
                 # Export pane
                 "exp_daterange": _t(self.lang, "web.control.export.daterange"),

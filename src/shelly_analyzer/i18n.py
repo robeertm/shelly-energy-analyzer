@@ -576,6 +576,9 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.ev.connectors": "Ladepunkte",
         "web.ev.distance": "Entfernung",
         "web.ev.since": "seit",
+        "web.ev.city_placeholder": "Stadt eingeben\u2026",
+        "web.ev.city_not_found": "Stadt nicht gefunden.",
+        "web.ev.enter_city": "Stadt eingeben oder GPS-Zugriff erlauben.",
         "web.no_data": "Keine Daten",
 
         # Web: CO₂ tab
@@ -1365,6 +1368,9 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.ev.connectors": "Connectors",
         "web.ev.distance": "Distance",
         "web.ev.since": "since",
+        "web.ev.city_placeholder": "Enter city\u2026",
+        "web.ev.city_not_found": "City not found.",
+        "web.ev.enter_city": "Enter a city name or allow GPS access.",
         "web.no_data": "No data",
 
         # Web: Dashboard UI (mobile/web app texts)
