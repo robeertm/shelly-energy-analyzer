@@ -1,5 +1,15 @@
 # Changelog
 
+## 13.0.0 - 2026-03-30
+### Added
+- **EV Charger tab in web dashboard** – New "Ladesäulen" tab shows nearby EV charging stations as colored brick tiles using the smartphone's GPS position. Powered by OpenChargeMap (free, no API key required).
+  - **Colored bricks**: Green (≥1 connector free), Yellow (all occupied), Red (defective/unavailable), Gray (status unknown)
+  - **Sorted by distance**: Top-left = nearest, bottom-right = furthest
+  - **Configurable radius**: 100m, 500m, 1km, 2km, 5km via dropdown
+  - **Detail modal**: Tap a brick to see station address, distance, and individual connector bricks with type (CCS, Type 2, etc.), power (kW), and status
+  - **Server-side proxy**: Backend fetches from OpenChargeMap with 120s cache to avoid rate limits and CORS issues
+  - **i18n**: German and English translations included
+
 ## 12.9.18 - 2026-03-30
 ### Fixed
 - **Anomaly Telegram/notification spam on app restart** – The set of already-notified anomaly event IDs (`_anomaly_notified_ids`) was only kept in memory. After every app restart it was empty, so all anomalies from the last 7 days were re-detected and re-notified. The notified IDs are now persisted to `data/runtime/anomaly_notified_ids.json` and loaded on startup, preventing duplicate notifications across restarts and updates.
