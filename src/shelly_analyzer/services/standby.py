@@ -63,24 +63,36 @@ def analyze_standby(
     end_ts = int(now.timestamp())
 
     hourly = db.query_hourly(device_key, start_ts=start_ts, end_ts=end_ts)
+    logger.debug("Standby %s: query_hourly returned %d rows", device_key, len(hourly))
 
     # Fallback: if no hourly data, try to compute from raw samples
     if hourly.empty or len(hourly) < 6:
         try:
             samples = db.query_samples(device_key, start_ts=start_ts, end_ts=end_ts)
+            logger.debug("Standby %s: fallback query_samples returned %d rows", device_key, 0 if samples is None else len(samples))
             if samples is not None and not samples.empty and "total_power" in samples.columns:
                 # Synthesize hourly from samples
-                samples["hour_ts"] = (pd.to_datetime(samples["timestamp"]).astype(int) // 10**9 // 3600) * 3600
-                hourly = samples.groupby("hour_ts").agg(
-                    kwh=("energy_kwh", "sum"),
-                    avg_power_w=("total_power", "mean"),
-                ).reset_index()
+                ts_col = samples["timestamp"]
+                if hasattr(ts_col.iloc[0], "timestamp"):
+                    # Already datetime — convert to unix seconds
+                    samples["hour_ts"] = (ts_col.astype("int64") // 10**9 // 3600) * 3600
+                else:
+                    samples["hour_ts"] = (ts_col.astype("int64") // 3600) * 3600
+                agg_dict: dict = {"avg_power_w": ("total_power", "mean")}
+                if "energy_kwh" in samples.columns:
+                    agg_dict["kwh"] = ("energy_kwh", "sum")
+                hourly = samples.groupby("hour_ts").agg(**agg_dict).reset_index()
+                if "kwh" not in hourly.columns:
+                    # Estimate kWh from average power if energy_kwh not available
+                    hourly["kwh"] = hourly["avg_power_w"] / 1000.0
                 hourly["kwh"] = hourly["kwh"].fillna(0)
                 hourly["avg_power_w"] = hourly["avg_power_w"].fillna(0)
+                logger.debug("Standby %s: synthesized %d hourly rows from samples", device_key, len(hourly))
         except Exception:
-            pass
+            logger.debug("Standby fallback failed for %s", device_key, exc_info=True)
 
     if hourly.empty or len(hourly) < 6:
+        logger.debug("Standby %s: insufficient data (%d rows, need >=6)", device_key, len(hourly))
         return None
 
     # Convert to arrays

@@ -1362,8 +1362,8 @@ function devCardHTML(d) {{
       '<div class="sparkline-wrap" style="margin-top:6px" data-metric="a" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.i', 'Current') + '</div><canvas class="sparkline-sm" id="sp-a-' + d.key + '"></canvas></div>' +
       '<div class="sparkline-wrap" style="margin-top:6px" data-metric="q" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.var', 'Reactive power') + ' (VAR)</div><canvas class="sparkline-sm" id="sp-q-' + d.key + '"></canvas></div>' +
       (phases ? '<div class="sparkline-wrap" style="margin-top:6px" data-metric="in" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.chart.neutral_current', 'I\u2099 Neutral (A)') + '</div><canvas class="sparkline-sm" id="sp-in-' + d.key + '"></canvas></div>' : '') +
-      nilm +
-    '</div>'
+    '</div>' +
+    nilm
   );
 }}
 
@@ -1459,6 +1459,15 @@ function updateDeviceCard(card, d) {{
         }}).join(' \xb7 ');
       }}
     }}
+  }}
+  // Update appliance chips (outside expand)
+  var applEl = card.querySelector('.appl-list');
+  if (d.appliances && d.appliances.length) {{
+    var newHtml = d.appliances.map(function(a) {{ return '<span class="appl-chip">' + esc(a.icon + ' ' + t('appliance.' + a.id + '.name', a.id)) + '</span>'; }}).join('');
+    if (applEl) {{ applEl.innerHTML = newHtml; }}
+    else {{ card.insertAdjacentHTML('beforeend', '<div class="appl-list">' + newHtml + '</div>'); }}
+  }} else if (applEl) {{
+    applEl.remove();
   }}
 }}
 
@@ -2805,7 +2814,7 @@ function renderAnomalies(data, el) {{
     html += '<div class="event-card">' +
       '<div class="event-dot"></div>' +
       '<div class="event-body">' +
-        '<div class="event-type">' + esc(ev.anomaly_type || ev.type || 'Anomaly') + '</div>' +
+        '<div class="event-type">' + t('anomaly.type.' + (ev.anomaly_type || ev.type || ''), (ev.anomaly_type || ev.type || 'Anomaly')) + '</div>' +
         '<div class="event-meta">' +
           esc(ev.device_name || ev.device || '') +
           (ts ? ' · ' + ts : '') +
@@ -2969,7 +2978,19 @@ function renderStandby(d) {{
     '</div></div>';
   document.getElementById('standby-cards').innerHTML = html;
   const wrap = document.getElementById('standby-table-wrap');
-  if (!d.devices || !d.devices.length) {{ wrap.innerHTML = '<div class="card"><p class="info-msg">No standby data available.</p></div>'; return; }}
+  if (!d.devices || !d.devices.length) {{
+    let diagHtml = '<p class="info-msg">' + t('web.standby.no_data', 'No standby data available. The analysis requires at least 6 hours of data in the last {days} days.').replace('{{days}}', d.analysis_days || 30) + '</p>';
+    if (d.diagnostic) {{
+      diagHtml += '<div style="font-size:11px;color:var(--muted);margin-top:8px">';
+      Object.keys(d.diagnostic).forEach(function(k) {{
+        var di = d.diagnostic[k];
+        diagHtml += '<div>' + esc(di.name) + ': ' + di.hourly_rows + ' hourly / ' + di.sample_rows + ' samples</div>';
+      }});
+      diagHtml += '</div>';
+    }}
+    wrap.innerHTML = '<div class="card">' + diagHtml + '</div>';
+    return;
+  }}
   // Device cards
   let cards = '<div class="card-grid">';
   d.devices.forEach(function(dev) {{
