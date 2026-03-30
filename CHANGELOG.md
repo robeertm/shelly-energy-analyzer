@@ -1,5 +1,9 @@
 # Changelog
 
+## 12.9.15 - 2026-03-30
+### Added
+- **Switch control in web Live tab** – Switchable Shelly devices (kind=switch) now show their current on/off status with a colored badge and a Toggle button directly on the device card. Tapping Toggle sends a `toggle_switch` API call and immediately updates the status. The switch state is extracted from the live polling data and updates in real-time alongside power readings.
+
 ## 12.9.14 - 2026-03-30
 ### Fixed
 - **Scroll areas inconsistent in web dashboard** – Several scrollable containers (`#panes`, `.hm-table-wrap`, `.modal-panel`, `.joblog`) were missing `-webkit-overflow-scrolling: touch`, causing trackpad/touch scrolling to only work when directly on the scrollbar (especially on Safari/iOS). All scroll containers now have consistent momentum scrolling enabled.
