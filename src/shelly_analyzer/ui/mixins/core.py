@@ -5049,6 +5049,12 @@ class CoreMixin:
             nb.add(tab_billing, text=self.t('tabs.billing'))
             nb.add(tab_updates, text=self.t('settings.updates'))
 
+            # Screenshot button at bottom of settings
+            _ss_bar = ttk.Frame(frm)
+            _ss_bar.pack(fill="x", padx=12, pady=(0, 6))
+            ttk.Button(_ss_bar, text=self.t('settings.screenshot.run'),
+                       command=self._screenshot_all_tabs).pack(side="right")
+
         
             # ---------------- Updates ----------------
             up_outer = ttk.Frame(tab_updates)
@@ -8558,6 +8564,90 @@ class CoreMixin:
                                          f"HTTP {resp.status_code}: {resp.text[:200]}")
             except Exception as e:
                 messagebox.showerror(self.t('settings.health.title'), f"OTA Error: {e}")
+
+    def _screenshot_all_tabs(self) -> None:
+            """Take a screenshot of every main tab and every settings sub-tab."""
+            from pathlib import Path
+            from datetime import datetime
+
+            out_dir = self.project_root / "screenshots" / datetime.now().strftime("%Y%m%d_%H%M%S")
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+            try:
+                self._health_status_var.set(self.t('settings.screenshot.running'))
+            except Exception:
+                pass
+
+            def _capture(name: str) -> None:
+                """Capture the current window content to a PNG file."""
+                self.update_idletasks()
+                self.update()
+                # Small delay for rendering
+                import time as _t_mod
+                _t_mod.sleep(0.3)
+                self.update_idletasks()
+                try:
+                    from PIL import ImageGrab
+                    x = self.winfo_rootx()
+                    y = self.winfo_rooty()
+                    w = self.winfo_width()
+                    h = self.winfo_height()
+                    img = ImageGrab.grab(bbox=(x, y, x + w, y + h))
+                    fpath = out_dir / f"{name}.png"
+                    img.save(str(fpath))
+                except Exception as e:
+                    logging.getLogger(__name__).warning("Screenshot failed for %s: %s", name, e)
+
+            # Remember current tab
+            try:
+                orig_tab = self.notebook.select()
+            except Exception:
+                orig_tab = None
+
+            # Screenshot all main tabs
+            count = 0
+            for i, tab_id in enumerate(self.notebook.tabs()):
+                try:
+                    self.notebook.select(tab_id)
+                    tab_text = self.notebook.tab(tab_id, "text")
+                    safe_name = f"{i+1:02d}_{tab_text.replace(' ', '_').replace('/', '_')}"
+                    _capture(safe_name)
+                    count += 1
+                except Exception:
+                    pass
+
+            # Now screenshot settings sub-tabs
+            try:
+                self.notebook.select(str(self.tab_settings))
+                self.update_idletasks()
+                settings_nb = getattr(self, "_settings_nb", None)
+                if settings_nb:
+                    for j, stab_id in enumerate(settings_nb.tabs()):
+                        try:
+                            settings_nb.select(stab_id)
+                            stab_text = settings_nb.tab(stab_id, "text")
+                            safe_name = f"settings_{j+1:02d}_{stab_text.replace(' ', '_').replace('/', '_')}"
+                            _capture(safe_name)
+                            count += 1
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            # Restore original tab
+            if orig_tab:
+                try:
+                    self.notebook.select(orig_tab)
+                except Exception:
+                    pass
+
+            try:
+                messagebox.showinfo(
+                    self.t('settings.screenshot.title'),
+                    self.t('settings.screenshot.done').format(n=count, path=str(out_dir)),
+                )
+            except Exception:
+                pass
 
     def _add_alert_row(self) -> None:
             n = len(getattr(self, "_alert_vars", [])) + 1

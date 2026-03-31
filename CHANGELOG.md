@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.5.3 - 2026-03-31
+### Added
+- **"Screenshots aller Tabs" button in settings** – Takes a screenshot of every main app tab and every settings sub-tab automatically. Saves numbered PNGs to `screenshots/YYYYMMDD_HHMMSS/` in the project directory. Useful for documentation or bug reports.
+
 ## 13.5.2 - 2026-03-31
 ### Improved
 - **CO₂ chart color gradient now includes yellow/orange** – The intensity line chart and heatmap strip now use a 4-stop gradient (green → yellow-green → orange → red) instead of the previous direct green-to-red ramp. Both charts share the same color function for consistency.
