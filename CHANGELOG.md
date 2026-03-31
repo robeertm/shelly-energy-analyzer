@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.4.0 - 2026-03-31
+### Added
+- **Tariff schedule – enter future price changes in advance** – New "Tarifzeitplan" section in desktop settings allows adding future electricity prices and base fees with a start date (e.g., "from 2026-10-01: 0.44 €/kWh"). The correct price is automatically used for cost calculations based on the current date. Tariff schedule is shown in the web dashboard costs tab with active/upcoming indicators. All cost consumers (costs tab, forecast, standby, live cards) now use date-aware pricing.
+
 ## 13.3.5 - 2026-03-31
 ### Fixed
 - **Standby tab now actually shows data** – The standby analysis failed silently when `avg_power_w` was NULL in the database (common for older data or devices that only log kWh). Now falls back to calculating average power from kWh values (1 kWh/h = 1000W). Also improved sample synthesis to work when only `energy_kwh` is available without `total_power`.
