@@ -8604,19 +8604,52 @@ class CoreMixin:
             except Exception:
                 orig_tab = None
 
+            def _safe(text: str) -> str:
+                return text.replace(" ", "_").replace("/", "_").replace("\\", "_")
+
             # Screenshot all main tabs
             count = 0
             for i, tab_id in enumerate(self.notebook.tabs()):
                 try:
                     self.notebook.select(tab_id)
                     tab_text = self.notebook.tab(tab_id, "text")
-                    safe_name = f"{i+1:02d}_{tab_text.replace(' ', '_').replace('/', '_')}"
+                    safe_name = f"{i+1:02d}_{_safe(tab_text)}"
                     _capture(safe_name)
                     count += 1
                 except Exception:
                     pass
 
-            # Now screenshot settings sub-tabs
+            # Plots sub-tabs (metric notebooks: kWh, V, A, W, ...)
+            try:
+                self.notebook.select(str(self.tab_plots))
+                self.update_idletasks()
+                plots_nb = getattr(self, "_plots_metric_nb", None)
+                if plots_nb and plots_nb.winfo_exists():
+                    for j, ptab_id in enumerate(plots_nb.tabs()):
+                        try:
+                            plots_nb.select(ptab_id)
+                            ptab_text = plots_nb.tab(ptab_id, "text")
+                            # Also iterate device sub-tabs within each metric
+                            metric_key = self._plots_metric_key_order[j] if j < len(self._plots_metric_key_order) else ""
+                            dev_nb = self._plots_device_nb.get(metric_key)
+                            if dev_nb and dev_nb.winfo_exists() and dev_nb.tabs():
+                                for k, dtab_id in enumerate(dev_nb.tabs()):
+                                    try:
+                                        dev_nb.select(dtab_id)
+                                        dtab_text = dev_nb.tab(dtab_id, "text")
+                                        _capture(f"plots_{_safe(ptab_text)}_{_safe(dtab_text)}")
+                                        count += 1
+                                    except Exception:
+                                        pass
+                            else:
+                                _capture(f"plots_{_safe(ptab_text)}")
+                                count += 1
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            # Settings sub-tabs
             try:
                 self.notebook.select(str(self.tab_settings))
                 self.update_idletasks()
@@ -8626,7 +8659,7 @@ class CoreMixin:
                         try:
                             settings_nb.select(stab_id)
                             stab_text = settings_nb.tab(stab_id, "text")
-                            safe_name = f"settings_{j+1:02d}_{stab_text.replace(' ', '_').replace('/', '_')}"
+                            safe_name = f"settings_{j+1:02d}_{_safe(stab_text)}"
                             _capture(safe_name)
                             count += 1
                         except Exception:
