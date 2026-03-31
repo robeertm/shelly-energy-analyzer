@@ -5285,8 +5285,10 @@ class CoreMixin:
             hb.pack(fill="x", pady=(6, 4))
             ttk.Button(hb, text=self.t('settings.health.run'), command=self._health_check_async).pack(side="left")
             ttk.Button(hb, text=self.t('settings.health.copy'), command=self._health_copy_to_clipboard).pack(side="left", padx=8)
+            ttk.Button(hb, text=self.t('settings.health.update_selected'), command=self._health_update_selected).pack(side="left", padx=4)
+            ttk.Button(hb, text=self.t('settings.health.update_all'), command=self._health_update_all).pack(side="left", padx=4)
 
-            hcols = ("device", "host", "tcp_ms", "http_ms", "model", "fw", "last_ok", "err_count", "last_err")
+            hcols = ("device", "host", "tcp_ms", "http_ms", "model", "fw", "update", "last_ok", "err_count", "last_err")
             htree = ttk.Treeview(health_wrap, columns=hcols, show="headings", height=6)
             htree.heading("device", text=self.t('settings.health.col_device'))
             htree.heading("host", text=self.t('settings.health.col_host'))
@@ -5294,6 +5296,7 @@ class CoreMixin:
             htree.heading("http_ms", text=self.t('settings.health.col_http'))
             htree.heading("model", text=self.t('settings.health.col_model'))
             htree.heading("fw", text=self.t('settings.health.col_fw'))
+            htree.heading("update", text="Update")
             htree.heading("last_ok", text=self.t('settings.health.col_last_ok'))
             htree.heading("err_count", text=self.t('settings.health.col_err_count'))
             htree.heading("last_err", text=self.t('settings.health.col_last_err'))
@@ -5303,10 +5306,11 @@ class CoreMixin:
             htree.column("tcp_ms", width=70, anchor="e")
             htree.column("http_ms", width=70, anchor="e")
             htree.column("model", width=120, anchor="w")
-            htree.column("fw", width=120, anchor="w")
+            htree.column("fw", width=100, anchor="w")
+            htree.column("update", width=90, anchor="center")
             htree.column("last_ok", width=120, anchor="w")
             htree.column("err_count", width=70, anchor="e")
-            htree.column("last_err", width=260, anchor="w")
+            htree.column("last_err", width=220, anchor="w")
             htree.pack(fill="x", pady=(4, 0))
             self._health_tree = htree
 
@@ -8337,6 +8341,14 @@ class CoreMixin:
                 last_ok = diag.get("last_ok_ts")
                 err_count = diag.get("err_count", 0)
                 last_err = diag.get("last_err")
+                upd_avail = r.get("update_available", False)
+                new_fw = r.get("new_fw", "")
+                if upd_avail and new_fw:
+                    upd_text = f"\u2b06 {new_fw}"
+                elif r.get("ok"):
+                    upd_text = "\u2713"
+                else:
+                    upd_text = "?"
                 rows.append(
                     {
                         "device": f"{name} ({key})" if key and name and name != key else (name or key or host),
@@ -8345,6 +8357,10 @@ class CoreMixin:
                         "http_ms": r.get("http_ms"),
                         "model": r.get("model", ""),
                         "fw": r.get("fw", ""),
+                        "update": upd_text,
+                        "update_available": upd_avail,
+                        "new_fw": new_fw,
+                        "gen": r.get("gen", 0),
                         "last_ok": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(last_ok))) if last_ok else "",
                         "err_count": str(err_count) if err_count is not None else "",
                         "last_err": str(last_err or ""),
@@ -8366,7 +8382,9 @@ class CoreMixin:
                 self._health_running = False
 
     def _health_probe_one(self, host: str) -> Dict[str, Any]:
-            out: Dict[str, Any] = {"tcp_ms": None, "http_ms": None, "model": "", "fw": "", "ok": False, "err": ""}
+            out: Dict[str, Any] = {"tcp_ms": None, "http_ms": None, "model": "", "fw": "",
+                                   "update_available": False, "new_fw": "", "gen": 0,
+                                   "ok": False, "err": ""}
             # TCP connect time (port 80)
             try:
                 t0 = time.perf_counter()
@@ -8378,7 +8396,6 @@ class CoreMixin:
                 return out
 
             # HTTP probe (prefer Gen2/3 RPC, fallback to Gen1)
-            sess = None
             try:
                 t0 = time.perf_counter()
                 resp = requests.get(f"http://{host}/rpc/Shelly.GetDeviceInfo", timeout=2.5)
@@ -8387,20 +8404,37 @@ class CoreMixin:
                     j = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
                     out["model"] = str(j.get("model", "") or j.get("app", "") or "")
                     out["fw"] = str(j.get("fw_id", "") or j.get("ver", "") or j.get("fw", "") or "")
+                    out["gen"] = 2
                     out["ok"] = True
+                    # Check for available updates via Sys.GetStatus
+                    try:
+                        r2 = requests.post(f"http://{host}/rpc/Shelly.CheckForUpdate", json={}, timeout=3.0)
+                        if r2.ok:
+                            u2 = r2.json() if r2.headers.get("content-type", "").startswith("application/json") else {}
+                            stable = u2.get("stable", {}) if isinstance(u2.get("stable"), dict) else {}
+                            if stable.get("version"):
+                                out["update_available"] = True
+                                out["new_fw"] = str(stable["version"])
+                    except Exception:
+                        pass
                     return out
             except Exception:
                 pass
+            # Gen1 fallback
             try:
                 t0 = time.perf_counter()
                 resp = requests.get(f"http://{host}/status", timeout=2.5)
                 out["http_ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
                 if resp.ok:
                     j = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-                    out["model"] = str(j.get("wifi_sta", {}).get("ssid", "") or j.get("device", {}).get("type", "") or "")
+                    out["model"] = str(j.get("device", {}).get("type", "") or j.get("wifi_sta", {}).get("ssid", "") or "")
                     upd = j.get("update", {}) if isinstance(j.get("update"), dict) else {}
                     out["fw"] = str(upd.get("old_version", "") or upd.get("new_version", "") or "")
+                    out["gen"] = 1
                     out["ok"] = True
+                    if upd.get("has_update"):
+                        out["update_available"] = True
+                        out["new_fw"] = str(upd.get("new_version", "") or "")
             except Exception as e:
                 out["err"] = out.get("err") or f"HTTP: {e}"
             return out
@@ -8425,6 +8459,7 @@ class CoreMixin:
                         "" if r.get("http_ms") is None else r.get("http_ms"),
                         r.get("model", ""),
                         r.get("fw", ""),
+                        r.get("update", ""),
                         r.get("last_ok", ""),
                         r.get("err_count", ""),
                         r.get("last_err", ""),
@@ -8464,6 +8499,65 @@ class CoreMixin:
                 messagebox.showinfo(self.t('settings.health.title'), self.t('settings.health.copied'))
             except Exception:
                 pass
+
+    def _health_update_selected(self) -> None:
+            """Trigger OTA update on the selected device."""
+            tree = getattr(self, "_health_tree", None)
+            rows = getattr(self, "_health_rows", []) or []
+            if not tree or not rows:
+                return
+            sel = tree.selection()
+            if not sel:
+                messagebox.showinfo(self.t('settings.health.title'), self.t('settings.health.select_device'))
+                return
+            idx = tree.index(sel[0])
+            if idx < 0 or idx >= len(rows):
+                return
+            row = rows[idx]
+            if not row.get("update_available"):
+                messagebox.showinfo(self.t('settings.health.title'), self.t('settings.health.no_update'))
+                return
+            host = row.get("host", "")
+            dev_name = row.get("device", host)
+            new_fw = row.get("new_fw", "")
+            if not messagebox.askyesno(
+                self.t('settings.health.title'),
+                self.t('settings.health.confirm_update').format(device=dev_name, version=new_fw),
+            ):
+                return
+            self._health_do_ota(host, row.get("gen", 0), dev_name)
+
+    def _health_update_all(self) -> None:
+            """Trigger OTA update on all devices with available updates."""
+            rows = getattr(self, "_health_rows", []) or []
+            updatable = [r for r in rows if r.get("update_available")]
+            if not updatable:
+                messagebox.showinfo(self.t('settings.health.title'), self.t('settings.health.all_current'))
+                return
+            names = ", ".join(r.get("device", r.get("host", "")) for r in updatable)
+            if not messagebox.askyesno(
+                self.t('settings.health.title'),
+                self.t('settings.health.confirm_update_all').format(n=len(updatable), devices=names),
+            ):
+                return
+            for r in updatable:
+                self._health_do_ota(r.get("host", ""), r.get("gen", 0), r.get("device", ""))
+
+    def _health_do_ota(self, host: str, gen: int, dev_name: str) -> None:
+            """Send OTA update command to a Shelly device."""
+            try:
+                if gen >= 2:
+                    resp = requests.post(f"http://{host}/rpc/Shelly.Update", json={"stage": "stable"}, timeout=5.0)
+                else:
+                    resp = requests.get(f"http://{host}/ota?update=true", timeout=5.0)
+                if resp.ok:
+                    messagebox.showinfo(self.t('settings.health.title'),
+                                        self.t('settings.health.update_started').format(device=dev_name))
+                else:
+                    messagebox.showerror(self.t('settings.health.title'),
+                                         f"HTTP {resp.status_code}: {resp.text[:200]}")
+            except Exception as e:
+                messagebox.showerror(self.t('settings.health.title'), f"OTA Error: {e}")
 
     def _add_alert_row(self) -> None:
             n = len(getattr(self, "_alert_vars", [])) + 1
