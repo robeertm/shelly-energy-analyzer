@@ -1,5 +1,12 @@
 # Changelog
 
+## 13.3.0 - 2026-03-31
+### Added
+- **Weather tab on web dashboard** – New "Wetter" / "Weather" tab between Solar and Vergleich in the web dashboard. Shows current weather cards (temperature, humidity, wind, cloud cover), Pearson r / HDD / CDD correlation metrics, an interactive scatter plot (temperature vs. consumption, colored by hour-of-day), and a dual-axis timeline chart (bars = kWh, line = °C). Data served via new `/api/weather_correlation` endpoint.
+
+### Improved
+- **Desktop weather tab charts reworked** – Scatter plot dots now colored by hour-of-day (twilight palette) instead of redundant temperature color. Time series chart now uses proper date labels (dd.mm.) instead of numeric hour indices, and has a clearer title ("Zeitverlauf: Verbrauch & Temperatur").
+
 ## 13.2.3 - 2026-03-31
 ### Fixed
 - **NILM ML web status now actually works** – The `/api/nilm_status` endpoint referenced `dashboard._state_store` but the dashboard stores it as `dashboard.store`. This caused the API to always return `cluster_count=0` and `transition_count=0`, keeping the badge permanently stuck on "warte auf Daten…". Also includes the v13.2.2 startup push fix (loaded clusters are pushed to the web store immediately at startup).
