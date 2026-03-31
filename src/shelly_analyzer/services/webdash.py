@@ -5682,7 +5682,7 @@ class _Handler(BaseHTTPRequestHandler):
 
             if path_only.startswith("/api/nilm_status"):
                 try:
-                    store = self.dashboard._state_store
+                    store = self.dashboard.store
                     clusters = getattr(store, "_nilm_clusters", [])
                     trans_count = getattr(store, "_nilm_transition_count", 0)
                     payload = {
