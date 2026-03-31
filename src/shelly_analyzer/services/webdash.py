@@ -2811,9 +2811,9 @@ function renderWeather(d, el) {{
   // Current weather cards
   if (d.current) {{
     html += '<div class="metric-grid">';
-    html += '<div class="card"><div class="metric-label">\ud83c\udf21\ufe0f ' + t('web.weather.temp', 'Temperature') + '</div><div class="metric-value">' + (d.current.temp_c != null ? d.current.temp_c.toFixed(1) + ' \u00b0C' : '\u2013') + '</div></div>';
-    html += '<div class="card"><div class="metric-label">\ud83d\udca7 ' + t('web.weather.humidity', 'Humidity') + '</div><div class="metric-value">' + (d.current.humidity_pct != null ? Math.round(d.current.humidity_pct) + '%' : '\u2013') + '</div></div>';
-    html += '<div class="card"><div class="metric-label">\ud83d\udca8 ' + t('web.weather.wind', 'Wind') + '</div><div class="metric-value">' + (d.current.wind_speed_ms != null ? d.current.wind_speed_ms.toFixed(1) + ' m/s' : '\u2013') + '</div></div>';
+    html += '<div class="card"><div class="metric-label">\U0001f321\ufe0f ' + t('web.weather.temp', 'Temperature') + '</div><div class="metric-value">' + (d.current.temp_c != null ? d.current.temp_c.toFixed(1) + ' \u00b0C' : '\u2013') + '</div></div>';
+    html += '<div class="card"><div class="metric-label">\U0001f4a7 ' + t('web.weather.humidity', 'Humidity') + '</div><div class="metric-value">' + (d.current.humidity_pct != null ? Math.round(d.current.humidity_pct) + '%' : '\u2013') + '</div></div>';
+    html += '<div class="card"><div class="metric-label">\U0001f4a8 ' + t('web.weather.wind', 'Wind') + '</div><div class="metric-value">' + (d.current.wind_speed_ms != null ? d.current.wind_speed_ms.toFixed(1) + ' m/s' : '\u2013') + '</div></div>';
     html += '<div class="card"><div class="metric-label">\u2601\ufe0f ' + t('web.weather.clouds', 'Cloud cover') + '</div><div class="metric-value">' + (d.current.clouds_pct != null ? Math.round(d.current.clouds_pct) + '%' : '\u2013') + '</div></div>';
     html += '</div>';
   }}
