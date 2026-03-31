@@ -1267,7 +1267,7 @@ class CoreMixin:
             try:
                 svc = getattr(self, '_co2_fetch_svc', None)
                 if svc is not None:
-                    self._log_sync("ENTSO-E CO₂ Check wird gestartet …")
+                    self._log_sync(self.t("sync.log.co2_started"))
                     svc.trigger_now()
                 else:
                     self._log_sync("ENTSO-E CO₂ Service nicht verfügbar")
@@ -1281,7 +1281,7 @@ class CoreMixin:
             if range_override is None:
                 range_override = self._sync_range_override(mode)
             shown = label or mode
-            self._log_sync(f"Sync gestartet ({shown}) …")
+            self._log_sync(self.t("sync.log.started", mode=shown))
             # Reset progress bar
             self._progress_q.put((0, 100, self.t("sync.progress.started")))
             def worker():
@@ -3074,7 +3074,7 @@ class CoreMixin:
                 self._nilm_mode[d.key] = "combined"
                 def _cycle_nilm_mode(_dk=d.key, _lbl=_appl_lbl):
                     modes = ["combined", "static", "ml"]
-                    labels = {"combined": "Kombiniert", "static": "Statisch", "ml": "ML only"}
+                    label_keys = {"combined": "nilm.mode.combined", "static": "nilm.mode.static", "ml": "nilm.mode.ml"}
                     cur = self._nilm_mode.get(_dk, "combined")
                     nxt = modes[(modes.index(cur) + 1) % len(modes)]
                     self._nilm_mode[_dk] = nxt
@@ -3082,12 +3082,12 @@ class CoreMixin:
                         # Flash mode change on hint label
                         _h = getattr(self, f"_nilm_hint_{_dk}", None)
                         if _h:
-                            _h.configure(text=f"Modus: {labels[nxt]}")
+                            _h.configure(text=self.t("nilm.mode", mode=self.t(label_keys[nxt])))
                     except Exception:
                         pass
                 _appl_lbl.bind("<Button-1>", lambda e, fn=_cycle_nilm_mode: fn())
                 try:
-                    _hint_lbl = ttk.Label(appl_fr, text="Klick: Modus wechseln (Kombiniert/Statisch/ML)", style="LiveInfo.TLabel")
+                    _hint_lbl = ttk.Label(appl_fr, text=self.t("nilm.hint"), style="LiveInfo.TLabel")
                     _hint_lbl.pack(anchor="w")
                     _hint_lbl.configure(foreground="#888888")
                     setattr(self, f"_nilm_hint_{d.key}", _hint_lbl)
@@ -3445,7 +3445,7 @@ class CoreMixin:
                     continue
 
             if out_paths:
-                self.export_log.insert("end", f"Live Current View exportiert ({fmt}): {len(out_paths)} Datei(en)\n")
+                self.export_log.insert("end", self.t("live.export.done", fmt=fmt, n=len(out_paths)) + "\n")
                 self.export_log.see("end")
             return out_paths
 
@@ -3560,7 +3560,7 @@ class CoreMixin:
 
             try:
                 if out_paths:
-                    self.live_status.set(f"PNG exportiert: {len(out_paths)} Datei(en)")
+                    self.live_status.set(self.t("live.export.png_done", n=len(out_paths)))
             except Exception:
                 pass
 
@@ -5002,6 +5002,17 @@ class CoreMixin:
             )
     def _build_settings_tab(self) -> None:
             frm = self.tab_settings
+
+            # ── Bottom action bar – packed FIRST so it's always visible ──────
+            bottom = ttk.Frame(frm)
+            bottom.pack(side="bottom", fill="x", padx=12, pady=(0, 12))
+            ttk.Button(bottom, text=self.t('settings.save'), command=self._save_settings).pack(side="left")
+            ttk.Button(bottom, text=self.t('settings.reload'), command=self._reload_settings).pack(side="left", padx=8)
+            self.settings_status = tk.StringVar(value=f"config.json: {self.cfg_path}")
+            ttk.Label(bottom, textvariable=self.settings_status).pack(side="left", padx=12)
+            ttk.Button(bottom, text=self.t('settings.screenshot.run'),
+                       command=self._screenshot_all_tabs).pack(side="right")
+
             # Split settings into subtabs to avoid overly tall pages (esp. on 14" screens).
             nb = ttk.Notebook(frm)
             nb.pack(fill="both", expand=True, padx=12, pady=10)
@@ -5049,11 +5060,7 @@ class CoreMixin:
             nb.add(tab_billing, text=self.t('tabs.billing'))
             nb.add(tab_updates, text=self.t('settings.updates'))
 
-            # Screenshot button at bottom of settings
-            _ss_bar = ttk.Frame(frm)
-            _ss_bar.pack(fill="x", padx=12, pady=(0, 6))
-            ttk.Button(_ss_bar, text=self.t('settings.screenshot.run'),
-                       command=self._screenshot_all_tabs).pack(side="right")
+            # (screenshot + save buttons are in the bottom bar above)
 
         
             # ---------------- Updates ----------------
@@ -5402,12 +5409,12 @@ class CoreMixin:
                     pass
 
                 def _worker():
-                    ok, err = self._telegram_send_sync("✅ Telegram Test")
+                    ok, err = self._telegram_send_sync("\u2705 Telegram Test")
                     def _done():
                         if ok:
-                            messagebox.showinfo("Telegram", "OK (gesendet)")
+                            messagebox.showinfo("Telegram", self.t("msg.sent"))
                         else:
-                            messagebox.showwarning("Telegram", f"Fehler: {err or 'unbekannt'}")
+                            messagebox.showwarning("Telegram", self.t("msg.error_detail", err=err or "?"))
                     try:
                         self.root.after(0, _done)
                     except Exception:
@@ -5417,7 +5424,7 @@ class CoreMixin:
                     threading.Thread(target=_worker, daemon=True).start()
                 except Exception as _e:
                     try:
-                        messagebox.showwarning("Telegram", f"Fehler: {_e}")
+                        messagebox.showwarning("Telegram", self.t("msg.error_detail", err=_e))
                     except Exception:
                         pass
 
@@ -5560,15 +5567,15 @@ class CoreMixin:
                     payload = {
                         "type": "test",
                         "timestamp": datetime.now().isoformat(),
-                        "message": "Shelly Energy Analyzer – Webhook Test",
+                        "message": "Shelly Energy Analyzer \u2013 Webhook Test",
                         "source": "shelly-energy-analyzer",
                     }
                     ok, err = self._webhook_send_sync(payload)
                     def _done():
                         if ok:
-                            messagebox.showinfo("Webhook", "OK (gesendet)")
+                            messagebox.showinfo("Webhook", self.t("msg.sent"))
                         else:
-                            messagebox.showwarning("Webhook", f"Fehler: {err or 'unbekannt'}")
+                            messagebox.showwarning("Webhook", self.t("msg.error_detail", err=err or "?"))
                     try:
                         self.root.after(0, _done)
                     except Exception:
@@ -5576,7 +5583,7 @@ class CoreMixin:
                 try:
                     threading.Thread(target=_worker, daemon=True).start()
                 except Exception as _e:
-                    messagebox.showwarning("Webhook", f"Fehler: {_e}")
+                    messagebox.showwarning("Webhook", self.t("msg.error_detail", err=_e))
 
             ttk.Button(wh_box, text=self.t("settings.webhook.test"), command=_wh_send_test).grid(
                 row=0, column=4, padx=8, pady=6, sticky="e"
@@ -5712,14 +5719,14 @@ class CoreMixin:
                     pass
                 def _worker():
                     ok, err = self._email_send_sync(
-                        subject="Shelly Energy Analyzer – E-Mail Test",
-                        body="Dies ist eine Test-E-Mail vom Shelly Energy Analyzer.\n\nIf you received this, SMTP is configured correctly.",
+                        subject="Shelly Energy Analyzer \u2013 E-Mail Test",
+                        body="Shelly Energy Analyzer \u2013 E-Mail Test OK.\n\nSMTP is configured correctly.",
                     )
                     def _done():
                         if ok:
-                            messagebox.showinfo(self.t("settings.email.title"), "OK – E-Mail gesendet")
+                            messagebox.showinfo(self.t("settings.email.title"), self.t("msg.email_sent"))
                         else:
-                            messagebox.showwarning(self.t("settings.email.title"), f"Fehler: {err or 'unbekannt'}")
+                            messagebox.showwarning(self.t("settings.email.title"), self.t("msg.error_detail", err=err or "?"))
                     try:
                         self.root.after(0, _done)
                     except Exception:
@@ -5727,7 +5734,7 @@ class CoreMixin:
                 try:
                     threading.Thread(target=_worker, daemon=True).start()
                 except Exception as _e:
-                    messagebox.showwarning(self.t("settings.email.title"), f"Fehler: {_e}")
+                    messagebox.showwarning(self.t("settings.email.title"), self.t("msg.error_detail", err=_e))
 
             ttk.Button(em_box, text=self.t("settings.email.test"), command=_em_send_test).grid(
                 row=6, column=0, padx=8, pady=(0, 6), sticky="w"
@@ -6132,7 +6139,7 @@ class CoreMixin:
                         result[0] = TouRate(name=name, price_eur_per_kwh=price, start_hour=s_h, end_hour=e_h, weekdays_only=bool(v_wd.get()))
                         dlg.destroy()
                     except Exception as ex:
-                        messagebox.showerror("Error", str(ex), parent=dlg)
+                        messagebox.showerror(self.t("msg.error"), str(ex), parent=dlg)
 
                 btn_frame = ttk.Frame(dlg)
                 btn_frame.grid(row=5, column=0, columnspan=2, pady=8)
@@ -6250,7 +6257,7 @@ class CoreMixin:
                         dlg.destroy()
                     except Exception as ex:
                         from tkinter import messagebox
-                        messagebox.showerror("Error", str(ex), parent=dlg)
+                        messagebox.showerror(self.t("msg.error"), str(ex), parent=dlg)
 
                 btn_frame = ttk.Frame(dlg)
                 btn_frame.grid(row=3, column=0, columnspan=2, pady=8)
@@ -6496,11 +6503,11 @@ class CoreMixin:
                     except Exception as exc:
                         err_str = str(exc)
                         if "401" in err_str or "nauthorized" in err_str or "ecurity" in err_str:
-                            short = "Token ungültig / Invalid token"
+                            short = self.t("co2.test.token_invalid")
                         elif "503" in err_str or "502" in err_str or "504" in err_str:
-                            short = "ENTSO-E API nicht erreichbar (HTTP 5xx)"
+                            short = self.t("co2.test.api_unavailable")
                         elif "timeout" in err_str.lower() or "onnect" in err_str:
-                            short = "API nicht erreichbar / Unreachable"
+                            short = self.t("co2.test.unreachable")
                         else:
                             short = err_str[:80]
                         msg = self.t("co2.settings.test_fail", err=short)
@@ -6846,13 +6853,7 @@ class CoreMixin:
                     self.bill_logo_path.set(fp)
             ttk.Button(inv_box, text="…", command=_pick_logo, width=3).grid(row=1, column=3, padx=8, pady=6, sticky="w")
 
-            # bottom action bar (always visible)
-            bottom = ttk.Frame(frm)
-            bottom.pack(fill="x", padx=12, pady=(0, 12))
-            ttk.Button(bottom, text=self.t('settings.save'), command=self._save_settings).pack(side="left")
-            ttk.Button(bottom, text=self.t('settings.reload'), command=self._reload_settings).pack(side="left", padx=8)
-            self.settings_status = tk.StringVar(value=f"config.json: {self.cfg_path}")
-            ttk.Label(bottom, textvariable=self.settings_status).pack(side="left", padx=12)
+            # (bottom action bar is packed at the top of _build_settings_tab)
 
     def _build_groups_settings_tab(self, parent: ttk.Frame) -> None:
             """Build the Groups editor subtab in Settings."""
@@ -7316,9 +7317,9 @@ class CoreMixin:
         # Row 2: Move-in date
         r1b = ttk.Frame(row_frame)
         r1b.pack(fill="x", padx=8, pady=(0, 2))
-        ttk.Label(r1b, text="Einzugsdatum (YYYY-MM-DD):").pack(side="left")
+        ttk.Label(r1b, text=self.t("settings.tenant.move_in")).pack(side="left")
         ttk.Entry(r1b, textvariable=move_in_var, width=14).pack(side="left", padx=4)
-        ttk.Label(r1b, text="Ab diesem Datum wird die Jahresabrechnung berechnet.", foreground="gray", font=("", 8)).pack(side="left", padx=4)
+        ttk.Label(r1b, text=self.t("settings.tenant.move_in_hint"), foreground="gray", font=("", 8)).pack(side="left", padx=4)
 
         # Row 3: Device selector with checkboxes
         r2 = ttk.Frame(row_frame)
@@ -9868,7 +9869,7 @@ class CoreMixin:
 
         if any_ok:
             return True, last_err or ""
-        return False, last_err or "Keine Bilder gesendet"
+        return False, last_err or self.t("telegram.no_images")
     def _alerts_send_telegram(self, text: str, image_paths: list["Path"] | None = None) -> None:
         """Send a Telegram message in the background (used by alert rules)."""
 
@@ -11321,9 +11322,9 @@ class CoreMixin:
                     ok, err = False, str(e)
                 def _done():
                     if ok:
-                        messagebox.showinfo(self.t("settings.email.title"), "OK")
+                        messagebox.showinfo(self.t("settings.email.title"), self.t("msg.ok"))
                     else:
-                        messagebox.showwarning(self.t("settings.email.title"), f"Fehler: {err or 'unbekannt'}")
+                        messagebox.showwarning(self.t("settings.email.title"), self.t("msg.error_detail", err=err or "?"))
                 try:
                     self.root.after(0, _done)
                 except Exception:
@@ -11331,7 +11332,7 @@ class CoreMixin:
             try:
                 threading.Thread(target=_worker, daemon=True).start()
             except Exception as e:
-                messagebox.showwarning(self.t("settings.email.title"), f"Fehler: {e}")
+                messagebox.showwarning(self.t("settings.email.title"), self.t("msg.error_detail", err=e))
 
     def _email_send_monthly_now(self) -> None:
             """Send the previous calendar month email report immediately (no auto-mark-as-sent)."""
@@ -11518,9 +11519,9 @@ class CoreMixin:
                     ok, err = False, str(e)
                 def _done():
                     if ok:
-                        messagebox.showinfo(self.t("settings.email.title"), "OK")
+                        messagebox.showinfo(self.t("settings.email.title"), self.t("msg.ok"))
                     else:
-                        messagebox.showwarning(self.t("settings.email.title"), f"Fehler: {err or 'unbekannt'}")
+                        messagebox.showwarning(self.t("settings.email.title"), self.t("msg.error_detail", err=err or "?"))
                 try:
                     self.root.after(0, _done)
                 except Exception:
@@ -11528,7 +11529,7 @@ class CoreMixin:
             try:
                 threading.Thread(target=_worker, daemon=True).start()
             except Exception as e:
-                messagebox.showwarning(self.t("settings.email.title"), f"Fehler: {e}")
+                messagebox.showwarning(self.t("settings.email.title"), self.t("msg.error_detail", err=e))
 
     def _build_report_totals(self, start_dt, end_dt):
             """Build ReportTotals list for PDF export from DB data."""
@@ -12612,12 +12613,12 @@ class CoreMixin:
                 imgs = self._telegram_make_summary_plots("daily", start_dt, end_dt)
                 ok, err = self._telegram_send_with_images(msg, imgs)
                 if ok:
-                    messagebox.showinfo("Telegram", "OK (gesendet)")
+                    messagebox.showinfo("Telegram", self.t("msg.sent"))
                 else:
-                    messagebox.showwarning("Telegram", f"Fehler: {err}")
+                    messagebox.showwarning("Telegram", self.t("msg.error_detail", err=err))
             except Exception as e:
                 try:
-                    messagebox.showwarning("Telegram", f"Fehler: {e}")
+                    messagebox.showwarning("Telegram", self.t("msg.error_detail", err=e))
                 except Exception:
                     pass
 
@@ -12643,12 +12644,12 @@ class CoreMixin:
                 imgs = self._telegram_make_summary_plots("monthly", start_dt, end_dt)
                 ok, err = self._telegram_send_with_images(msg, imgs)
                 if ok:
-                    messagebox.showinfo("Telegram", "OK (gesendet)")
+                    messagebox.showinfo("Telegram", self.t("msg.sent"))
                 else:
-                    messagebox.showwarning("Telegram", f"Fehler: {err}")
+                    messagebox.showwarning("Telegram", self.t("msg.error_detail", err=err))
             except Exception as e:
                 try:
-                    messagebox.showwarning("Telegram", f"Fehler: {e}")
+                    messagebox.showwarning("Telegram", self.t("msg.error_detail", err=e))
                 except Exception:
                     pass
 
@@ -12809,7 +12810,7 @@ class CoreMixin:
 
             # Demo mode (for users without Shellys)
             self._wiz_demo_var = tk.BooleanVar(value=bool(getattr(getattr(self.cfg, 'demo', None), 'enabled', False)))
-            ttk.Checkbutton(dev_top, text='Demo mode (fake but realistic data)', variable=self._wiz_demo_var, command=self._wizard_toggle_demo).pack(anchor='w', pady=(6, 0))
+            ttk.Checkbutton(dev_top, text=self.t('settings.demo_mode'), variable=self._wiz_demo_var, command=self._wizard_toggle_demo).pack(anchor='w', pady=(6, 0))
 
             btn_row = ttk.Frame(step_devices)
             btn_row.pack(fill="x", padx=10, pady=(0, 6))

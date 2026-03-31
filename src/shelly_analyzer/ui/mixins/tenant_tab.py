@@ -244,7 +244,7 @@ class TenantMixin:
 
     def _tenant_export_pdf(self) -> None:
         if not hasattr(self, "_tenant_report") or not self._tenant_report.bills:
-            messagebox.showinfo("Info", self.t("tenant.no_data"))
+            messagebox.showinfo(self.t("msg.info"), self.t("tenant.no_data"))
             return
 
         path = filedialog.asksaveasfilename(
@@ -279,6 +279,6 @@ class TenantMixin:
                     ),
                     lines=lines,
                 )
-            messagebox.showinfo("OK", f"PDF(s) exportiert: {path}")
+            messagebox.showinfo(self.t("msg.ok"), self.t("tenant.pdf_exported", path=path))
         except Exception as e:
-            messagebox.showerror("Fehler", str(e))
+            messagebox.showerror(self.t("msg.error"), str(e))

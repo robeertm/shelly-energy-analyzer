@@ -1,5 +1,10 @@
 # Changelog
 
+## 13.7.1 - 2026-03-31
+### Fixed
+- **Settings "Save Config" button no longer cut off on small monitors** – Bottom action bar (Save, Reload, Screenshot) is now packed before the notebook widget, ensuring it always stays visible regardless of screen size.
+- **Comprehensive i18n audit: ~50 hardcoded strings replaced with translations** – Fixed German-only messagebox titles/messages across Telegram, Webhook, Email, Tenant, CO₂, NILM, and Sync. All user-facing text now uses the translation system (`self.t()`), supporting all 9 configured languages. Web dashboard JS error strings also translated via template placeholders.
+
 ## 13.7.0 - 2026-03-31
 ### Added
 - **Dark mode for Solar, Energy Flow (Sankey), and Tenant tabs** – All three tabs now fully respect the plot theme setting. Amortization chart, energy flow diagram, and tenant pie/bar charts all adapt to dark mode with proper backgrounds, text colors, and themed data series.
