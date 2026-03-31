@@ -85,35 +85,41 @@ class SankeyMixin:
         ax = self._sankey_ax
         ax.clear()
 
+        tc = self._get_theme_colors()
+        self._apply_plot_theme(self._sankey_fig, ax, self._sankey_canvas)
+
         if not data.flows:
             ax.text(0.5, 0.5, self.t("sankey.no_data"), ha="center", va="center",
-                   fontsize=14, color="gray")
+                   fontsize=14, color=tc["muted"])
             ax.axis("off")
             self._sankey_canvas.draw_idle()
             return
 
         # Draw horizontal stacked bar chart as a simpler, cleaner energy flow visualization
-        self._draw_energy_flow(ax, data)
+        self._draw_energy_flow(ax, data, tc)
         self._sankey_fig.tight_layout()
         self._sankey_canvas.draw_idle()
 
-    def _draw_energy_flow(self, ax, data) -> None:
+    def _draw_energy_flow(self, ax, data, tc=None) -> None:
         """Draw a clean energy flow visualization using horizontal stacked bars."""
         import numpy as np
+
+        if tc is None:
+            tc = self._get_theme_colors()
 
         ax.axis("off")
         if not data.flows or not data.nodes:
             return
 
+        fg = tc["fg"]
+
         # Categorize flows
-        sources = {}  # source → total kWh
-        targets = {}  # target → total kWh
+        sources = {}
+        targets = {}
         for f in data.flows:
             sources[f.source] = sources.get(f.source, 0) + f.value_kwh
             targets[f.target] = targets.get(f.target, 0) + f.value_kwh
 
-        # Left side: energy sources (Grid, PV)
-        # Right side: energy consumers (devices)
         left_items = [(n, v) for n, v in sources.items() if n != "House"]
         right_items = [(n, v) for n, v in targets.items() if n != "House" and n != "Feed-in"]
         special = [(n, v) for n, v in targets.items() if n == "Feed-in"]
@@ -126,12 +132,12 @@ class SankeyMixin:
 
         # --- Draw source bars (left) ---
         y = 0.85
-        ax.text(0.12, 0.95, "Quellen", ha="center", va="top", fontsize=11, fontweight="bold", color="#555")
+        ax.text(0.12, 0.95, "Quellen", ha="center", va="top", fontsize=11, fontweight="bold", color=fg)
         for name, val in left_items:
-            color = color_map.get(name, "#3498db")
+            color = color_map.get(name, tc["blue"])
             w = max(val / total * 0.2, 0.01)
-            ax.barh(y, w, height=0.06, left=0.02, color=color, alpha=0.9, edgecolor="white")
-            ax.text(0.02 + w + 0.01, y, f"{name}  {val:.1f} kWh", va="center", fontsize=9, fontweight="bold")
+            ax.barh(y, w, height=0.06, left=0.02, color=color, alpha=0.9)
+            ax.text(0.02 + w + 0.01, y, f"{name}  {val:.1f} kWh", va="center", fontsize=9, fontweight="bold", color=fg)
             y -= 0.10
 
         # --- Central "House" node ---
@@ -139,33 +145,33 @@ class SankeyMixin:
         ax.add_patch(
             __import__("matplotlib.patches", fromlist=["FancyBboxPatch"]).FancyBboxPatch(
                 (0.38, house_y - 0.08), 0.24, 0.16,
-                boxstyle="round,pad=0.02", facecolor="#3498db", alpha=0.15, edgecolor="#3498db", linewidth=2
+                boxstyle="round,pad=0.02", facecolor=tc["blue"], alpha=0.15, edgecolor=tc["blue"], linewidth=2
             )
         )
-        ax.text(0.5, house_y, f"🏠 {data.total_consumption_kwh:.1f} kWh",
-               ha="center", va="center", fontsize=12, fontweight="bold", color="#2c3e50")
+        ax.text(0.5, house_y, f"\U0001f3e0 {data.total_consumption_kwh:.1f} kWh",
+               ha="center", va="center", fontsize=12, fontweight="bold", color=fg)
 
         # --- Draw consumer bars (right) ---
         y = 0.85
-        ax.text(0.82, 0.95, "Verbraucher", ha="center", va="top", fontsize=11, fontweight="bold", color="#555")
-        dev_colors = ["#3498db", "#9b59b6", "#1abc9c", "#e67e22", "#2ecc71",
+        ax.text(0.82, 0.95, "Verbraucher", ha="center", va="top", fontsize=11, fontweight="bold", color=fg)
+        dev_colors = [tc["blue"], tc["purple"], "#1abc9c", tc["orange"], tc["green"],
                      "#e91e63", "#00bcd4", "#ff9800", "#795548", "#607d8b"]
         for i, (name, val) in enumerate(right_items[:8]):
             color = dev_colors[i % len(dev_colors)]
             w = max(val / total * 0.2, 0.01)
-            ax.barh(y, w, height=0.06, left=0.68, color=color, alpha=0.9, edgecolor="white")
+            ax.barh(y, w, height=0.06, left=0.68, color=color, alpha=0.9)
             pct = val / total * 100
-            ax.text(0.68 + w + 0.01, y, f"{name}  {val:.1f} kWh ({pct:.0f}%)", va="center", fontsize=9)
+            ax.text(0.68 + w + 0.01, y, f"{name}  {val:.1f} kWh ({pct:.0f}%)", va="center", fontsize=9, color=fg)
             y -= 0.10
 
         # Feed-in (if any)
         for name, val in special:
-            ax.text(0.5, 0.12, f"📤 {self.t('sankey.feed_in')}: {val:.2f} kWh",
-                   ha="center", va="center", fontsize=10, color="#27ae60", fontweight="bold")
+            ax.text(0.5, 0.12, f"\U0001f4e4 {self.t('sankey.feed_in')}: {val:.2f} kWh",
+                   ha="center", va="center", fontsize=10, color=tc["green"], fontweight="bold")
 
         # Draw flow arrows
         for name, val in left_items:
-            color = color_map.get(name, "#3498db")
+            color = color_map.get(name, tc["blue"])
             ax.annotate("", xy=(0.38, house_y), xytext=(0.22, 0.85 - left_items.index((name, val)) * 0.10),
                        arrowprops=dict(arrowstyle="->", color=color, lw=max(1, val / total * 5), alpha=0.4))
 

@@ -621,22 +621,22 @@ class PlotsMixin:
 
                 # Base bottom margin by canvas height and rotation
                 if h and h < 240:
-                    bottom = 0.44
-                elif h and h < 280:
-                    bottom = 0.40
+                    bottom = 0.38
                 elif h and h < 340:
-                    bottom = 0.36
+                    bottom = 0.28
+                elif h and h < 500:
+                    bottom = 0.22
                 else:
-                    bottom = 0.30
+                    bottom = 0.18
 
                 # Rotation needs extra room
-                bottom += (rot / 90.0) * 0.06
+                bottom += (rot / 90.0) * 0.05
 
                 # Add a little extra room based on font size.
-                bottom = min(0.52, max(0.24, bottom + max(0, base - 6) * 0.010))
+                bottom = min(0.45, max(0.14, bottom + max(0, base - 6) * 0.008))
                 # Keep a little extra room on the right; prevents edge clipping on
                 # some platforms when the canvas is resized rapidly.
-                fig.subplots_adjust(left=0.11, right=0.97, top=0.93, bottom=bottom)
+                fig.subplots_adjust(left=0.09, right=0.97, top=0.94, bottom=bottom)
             except Exception:
                 pass
 
@@ -1008,7 +1008,7 @@ class PlotsMixin:
                     tab = ttk.Frame(dev_nb)
                     dev_nb.add(tab, text=d.name)
 
-                    fig = Figure(figsize=(11, 3.6), dpi=120)
+                    fig = Figure(figsize=(11, 5.0), dpi=96)
                     # Set initial figure background to match theme so no
                     # white flash appears before the first redraw.
                     try:

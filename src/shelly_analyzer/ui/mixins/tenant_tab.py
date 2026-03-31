@@ -226,15 +226,19 @@ class TenantMixin:
 
             ax2.set_title(self.t("tenant.total_kwh"), fontsize=10)
 
+        self._apply_plot_theme(self._tenant_fig, ax1, self._tenant_canvas)
+        self._apply_plot_theme(self._tenant_fig, ax2)
         self._tenant_fig.tight_layout()
         self._tenant_canvas.draw_idle()
 
     def _draw_empty_tenant_charts(self) -> None:
+        tc = self._get_theme_colors()
         for ax in (self._tenant_bar_ax, self._tenant_pie_ax):
             ax.clear()
             ax.text(0.5, 0.5, self.t("tenant.no_data"), ha="center", va="center",
-                   fontsize=11, color="gray")
+                   fontsize=11, color=tc["muted"])
             ax.axis("off")
+            self._apply_plot_theme(self._tenant_fig, ax, self._tenant_canvas)
         self._tenant_fig.tight_layout()
         self._tenant_canvas.draw_idle()
 
