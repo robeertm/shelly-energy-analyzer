@@ -810,6 +810,21 @@ class PlotsMixin:
             except Exception:
                 pass
 
+    def _get_theme_colors(self) -> dict:
+            """Return a dict of theme-appropriate colors for charts."""
+            theme = self._resolve_plot_theme()
+            if theme == "night":
+                return {
+                    "bg": "#111111", "fg": "#E6E6E6", "grid": "#AAAAAA",
+                    "blue": "#5dade2", "red": "#ec7063", "green": "#58d68d",
+                    "orange": "#f0b27a", "purple": "#bb8fce", "muted": "#888888",
+                }
+            return {
+                "bg": "#FFFFFF", "fg": "#000000", "grid": "#BBBBBB",
+                "blue": "#3498db", "red": "#e74c3c", "green": "#27ae60",
+                "orange": "#f39c12", "purple": "#8e44ad", "muted": "#888888",
+            }
+
     def _build_plots_tab(self) -> None:
             frm = self.tab_plots
 

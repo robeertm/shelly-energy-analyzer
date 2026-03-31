@@ -144,22 +144,24 @@ class ForecastMixin:
 
         # Main chart
         import matplotlib.dates as mdates
+        tc = self._get_theme_colors()
         ax = self._forecast_ax
         ax.clear()
         if result.history_dates and result.history_kwh:
-            ax.bar(result.history_dates, result.history_kwh, color="#3498db", alpha=0.75,
-                   label=self.t("forecast.chart.history"), width=0.8, edgecolor="white", linewidth=0.3)
+            ax.bar(result.history_dates, result.history_kwh, color=tc["blue"], alpha=0.75,
+                   label=self.t("forecast.chart.history"), width=0.8)
         if result.forecast_dates and result.forecast_kwh:
-            ax.bar(result.forecast_dates, result.forecast_kwh, color="#e74c3c", alpha=0.6,
-                   label=self.t("forecast.chart.forecast"), width=0.8, edgecolor="white", linewidth=0.3)
+            ax.bar(result.forecast_dates, result.forecast_kwh, color=tc["red"], alpha=0.6,
+                   label=self.t("forecast.chart.forecast"), width=0.8)
             ax.fill_between(result.forecast_dates, result.forecast_lower, result.forecast_upper,
-                          color="#e74c3c", alpha=0.1, label=self.t("forecast.chart.confidence"))
+                          color=tc["red"], alpha=0.1, label=self.t("forecast.chart.confidence"))
         ax.set_ylabel("kWh", fontsize=9)
         ax.legend(fontsize=8, loc="upper left")
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m"))
         ax.tick_params(axis="x", rotation=45)
         ax.grid(axis="y", alpha=0.3)
         ax.set_axisbelow(True)
+        self._apply_plot_theme(self._forecast_fig, ax, self._forecast_canvas)
         self._forecast_fig.tight_layout()
         self._forecast_canvas.draw_idle()
 
@@ -169,12 +171,13 @@ class ForecastMixin:
         if result.weekday_profile:
             days = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
             vals = [result.weekday_profile.get(i, 1.0) for i in range(7)]
-            colors = ["#e74c3c" if v > 1.1 else "#27ae60" if v < 0.9 else "#3498db" for v in vals]
-            wd_ax.bar(days, vals, color=colors, alpha=0.85, edgecolor="white", linewidth=0.5)
-            wd_ax.axhline(y=1.0, color="gray", linestyle="--", alpha=0.5)
+            colors = [tc["red"] if v > 1.1 else tc["green"] if v < 0.9 else tc["blue"] for v in vals]
+            wd_ax.bar(days, vals, color=colors, alpha=0.85)
+            wd_ax.axhline(y=1.0, color=tc["muted"], linestyle="--", alpha=0.5)
             wd_ax.set_ylabel("Faktor", fontsize=9)
             wd_ax.grid(axis="y", alpha=0.3)
             wd_ax.set_axisbelow(True)
+        self._apply_plot_theme(self._forecast_wd_fig, wd_ax, self._forecast_wd_canvas)
         self._forecast_wd_fig.tight_layout()
         self._forecast_wd_canvas.draw_idle()
 
@@ -184,12 +187,13 @@ class ForecastMixin:
         if result.hourly_profile:
             hours = list(range(24))
             vals = [result.hourly_profile.get(h, 1.0) for h in hours]
-            colors = ["#e74c3c" if v > 1.3 else "#f39c12" if v > 1.1 else "#27ae60" if v < 0.7 else "#3498db" for v in vals]
-            hr_ax.bar(hours, vals, color=colors, alpha=0.85, edgecolor="white", linewidth=0.5)
-            hr_ax.axhline(y=1.0, color="gray", linestyle="--", alpha=0.5)
+            colors = [tc["red"] if v > 1.3 else tc["orange"] if v > 1.1 else tc["green"] if v < 0.7 else tc["blue"] for v in vals]
+            hr_ax.bar(hours, vals, color=colors, alpha=0.85)
+            hr_ax.axhline(y=1.0, color=tc["muted"], linestyle="--", alpha=0.5)
             hr_ax.set_xlabel("h", fontsize=9)
             hr_ax.set_xticks([0, 4, 8, 12, 16, 20])
             hr_ax.grid(axis="y", alpha=0.3)
             hr_ax.set_axisbelow(True)
+        self._apply_plot_theme(self._forecast_hr_fig, hr_ax, self._forecast_hr_canvas)
         self._forecast_hr_fig.tight_layout()
         self._forecast_hr_canvas.draw_idle()

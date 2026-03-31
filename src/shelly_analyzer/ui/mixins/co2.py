@@ -755,6 +755,7 @@ class Co2Mixin:
 
             ax.set_ylabel(self.t("co2.chart.intensity"), fontsize=8)
             ax.tick_params(labelsize=7)
+            self._apply_plot_theme(self._co2_fig, ax, self._co2_canvas_widget)
             self._co2_fig.autofmt_xdate(rotation=30, ha="right")
             self._co2_fig.tight_layout(pad=0.5)
             self._co2_canvas_widget.draw_idle()
@@ -803,6 +804,7 @@ class Co2Mixin:
             ax.spines["right"].set_visible(False)
             ax.spines["left"].set_visible(False)
 
+            self._apply_plot_theme(self._co2_heatmap_fig, ax, self._co2_heatmap_canvas)
             self._co2_heatmap_fig.tight_layout(pad=0.2)
             self._co2_heatmap_canvas.draw_idle()
         except Exception:
