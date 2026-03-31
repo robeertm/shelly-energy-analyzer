@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.3.2 - 2026-03-31
+### Fixed
+- **Web dashboard surrogate encoding fix (part 2)** – Three more emoji surrogate pairs in the weather card labels (🌡️💧💨) were still using JS-style `\ud83c\udf21` notation which Python cannot encode as UTF-8. Replaced with proper `\U0001fXXX` codepoints.
+
 ## 13.3.1 - 2026-03-31
 ### Fixed
 - **Web dashboard startup crash fixed** – Unicode surrogate pairs (`\ud83c\udf19`) in the weather scatter legend could not be encoded as UTF-8, preventing the dashboard from starting. Replaced with proper Unicode codepoints.
