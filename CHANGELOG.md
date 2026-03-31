@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.5.5 - 2026-03-31
+### Improved
+- **Screenshots now capture full scrollable content** – For tabs with scrollable areas (e.g., main settings, CO₂ tab), the screenshot function now automatically scrolls through the content and saves multiple parts (`_part1.png`, `_part2.png`, ...) so nothing is missed. Scrollable canvases are auto-detected in the widget tree.
+
 ## 13.5.4 - 2026-03-31
 ### Improved
 - **Screenshots now include plots sub-tabs** – The screenshot function now also iterates through all metric sub-tabs (kWh, V, A, W, VAR, cosφ, Hz, CO₂) and their device sub-tabs within the Plots tab, capturing each combination (e.g. `plots_kWh_Shelly3EM.png`).
