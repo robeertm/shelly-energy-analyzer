@@ -917,6 +917,11 @@ _HTML_TEMPLATE = """<!doctype html>
       <div id="solar-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
 
+    <!-- Weather -->
+    <div id="pane-weather" class="pane">
+      <div id="weather-content"><p class="loading-msg">{web_loading}</p></div>
+    </div>
+
     <!-- Compare -->
     <div id="pane-compare" class="pane">
       <div id="cmp-controls" style="margin-bottom:10px"></div>
@@ -1072,6 +1077,10 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">☀️</span>
       <span class="nav-label">{web_tab_solar}</span>
     </button>
+    <button class="nav-btn" onclick="switchPane('weather',this)">
+      <span class="nav-icon">🌡️</span>
+      <span class="nav-label">{web_tab_weather}</span>
+    </button>
     <button class="nav-btn" onclick="switchPane('compare',this)">
       <span class="nav-icon">🔀</span>
       <span class="nav-label">{web_tab_compare}</span>
@@ -1197,6 +1206,7 @@ function onPaneActivated(name) {{
     if (name === 'costs') loadCosts();
     else if (name === 'heatmap') initHeatmap();
     else if (name === 'solar') initSolar();
+    else if (name === 'weather') initWeather();
     else if (name === 'co2') loadCo2();
     else if (name === 'compare') initCompare();
     else if (name === 'anomalies') loadAnomalies();
@@ -2768,6 +2778,251 @@ function renderSolar(data, el) {{
       const panel = document.getElementById('solar-cfg-toggle');
       if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
     }});
+  }}
+}}
+
+/* ──────────────────────────────────────────────
+   WEATHER TAB
+────────────────────────────────────────────── */
+let weatherLoaded = false;
+function initWeather() {{
+  loadWeather();
+}}
+async function loadWeather() {{
+  const el = document.getElementById('weather-content');
+  el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  try {{
+    const r = await fetch('/api/weather_correlation');
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    renderWeather(d, el);
+  }} catch(e) {{
+    el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+  }}
+}}
+
+function renderWeather(d, el) {{
+  if (!d.ok) {{
+    el.innerHTML = '<p class="info-msg">' + (d.error || t('web.weather.no_data', 'No weather data.')) + '</p>';
+    return;
+  }}
+  var html = '';
+
+  // Current weather cards
+  if (d.current) {{
+    html += '<div class="metric-grid">';
+    html += '<div class="card"><div class="metric-label">\ud83c\udf21\ufe0f ' + t('web.weather.temp', 'Temperature') + '</div><div class="metric-value">' + (d.current.temp_c != null ? d.current.temp_c.toFixed(1) + ' \u00b0C' : '\u2013') + '</div></div>';
+    html += '<div class="card"><div class="metric-label">\ud83d\udca7 ' + t('web.weather.humidity', 'Humidity') + '</div><div class="metric-value">' + (d.current.humidity_pct != null ? Math.round(d.current.humidity_pct) + '%' : '\u2013') + '</div></div>';
+    html += '<div class="card"><div class="metric-label">\ud83d\udca8 ' + t('web.weather.wind', 'Wind') + '</div><div class="metric-value">' + (d.current.wind_speed_ms != null ? d.current.wind_speed_ms.toFixed(1) + ' m/s' : '\u2013') + '</div></div>';
+    html += '<div class="card"><div class="metric-label">\u2601\ufe0f ' + t('web.weather.clouds', 'Cloud cover') + '</div><div class="metric-value">' + (d.current.clouds_pct != null ? Math.round(d.current.clouds_pct) + '%' : '\u2013') + '</div></div>';
+    html += '</div>';
+  }}
+
+  // Correlation metrics
+  if (d.correlation) {{
+    var c = d.correlation;
+    html += '<div class="metric-grid" style="margin-top:10px">';
+    html += '<div class="card"><div class="metric-label">' + t('web.weather.pearson', 'Pearson r') + '</div><div class="metric-value">' + (c.r_value != null ? c.r_value.toFixed(3) : '\u2013') + '</div></div>';
+    html += '<div class="card"><div class="metric-label">' + t('web.weather.hdd', 'HDD') + '</div><div class="metric-value">' + (c.hdd != null ? c.hdd.toFixed(1) : '\u2013') + '</div></div>';
+    html += '<div class="card"><div class="metric-label">' + t('web.weather.cdd', 'CDD') + '</div><div class="metric-value">' + (c.cdd != null ? c.cdd.toFixed(1) : '\u2013') + '</div></div>';
+    html += '<div class="card"><div class="metric-label">' + t('web.weather.kwh_hdd', 'kWh/HDD') + '</div><div class="metric-value">' + (c.kwh_per_hdd != null ? c.kwh_per_hdd.toFixed(2) : '\u2013') + '</div></div>';
+    html += '<div class="card"><div class="metric-label">' + t('web.weather.kwh_cdd', 'kWh/CDD') + '</div><div class="metric-value">' + (c.kwh_per_cdd != null ? c.kwh_per_cdd.toFixed(2) : '\u2013') + '</div></div>';
+    html += '</div>';
+
+    // Interpretation
+    var interp = '';
+    if (c.r_value != null) {{
+      if (c.r_value < -0.4) interp = t('web.weather.heating', 'Strong heating correlation') + ' (r = ' + c.r_value.toFixed(2) + ')';
+      else if (c.r_value > 0.4) interp = t('web.weather.cooling', 'Strong cooling correlation') + ' (r = ' + c.r_value.toFixed(2) + ')';
+      else interp = t('web.weather.none', 'No significant weather dependency') + ' (r = ' + c.r_value.toFixed(2) + ')';
+    }}
+    if (interp) html += '<p style="color:var(--muted);font-size:12px;margin:8px 0 0">' + interp + '</p>';
+  }}
+
+  // Charts
+  if (d.paired && d.paired.length >= 3) {{
+    html += '<div class="card" style="margin-top:10px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">' + t('web.weather.scatter', 'Temperature vs. Consumption') + '</div>';
+    html += '<canvas id="weather-scatter" style="width:100%;height:220px"></canvas></div>';
+
+    html += '<div class="card" style="margin-top:10px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">' + t('web.weather.timeline', 'Timeline') + '</div>';
+    html += '<canvas id="weather-timeline" style="width:100%;height:220px"></canvas></div>';
+
+    // Legend for scatter
+    html += '<div style="display:flex;gap:10px;justify-content:center;margin-top:6px;font-size:10px;color:var(--muted)">';
+    html += '<span>\ud83c\udf19 0\u20136h</span><span>\ud83c\udf05 6\u201312h</span><span>\u2600\ufe0f 12\u201318h</span><span>\ud83c\udf06 18\u201324h</span>';
+    html += '</div>';
+  }} else if (d.paired) {{
+    html += '<p style="color:var(--muted);font-size:12px;margin-top:10px">' + t('web.weather.few_data', 'Only ' + d.paired.length + ' data points.').replace('{{n}}', d.paired.length) + '</p>';
+  }}
+
+  el.innerHTML = html;
+
+  // Draw charts after DOM update
+  if (d.paired && d.paired.length >= 3) {{
+    setTimeout(function() {{ _drawWeatherCharts(d); }}, 50);
+  }}
+}}
+
+function _weatherHourColor(h) {{
+  // twilight-shifted: night=dark blue, morning=warm orange, noon=bright yellow, evening=purple
+  var hue = (240 + h * 15) % 360;
+  var sat = 70;
+  var lgt = (h >= 6 && h <= 20) ? 55 : 35;
+  return 'hsl(' + hue + ',' + sat + '%,' + lgt + '%)';
+}}
+
+function _drawWeatherCharts(d) {{
+  var pts = d.paired;
+  var muted = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
+  var border = getComputedStyle(document.body).getPropertyValue('--border') || '#e0e0e0';
+
+  // --- Scatter plot ---
+  var scatterEl = document.getElementById('weather-scatter');
+  if (scatterEl) {{
+    var dpr = window.devicePixelRatio || 1;
+    var rect = scatterEl.getBoundingClientRect();
+    scatterEl.width = rect.width * dpr;
+    scatterEl.height = rect.height * dpr;
+    var ctx = scatterEl.getContext('2d');
+    ctx.scale(dpr, dpr);
+    var W = rect.width, H = rect.height;
+    var pad = {{top: 12, right: 16, bottom: 28, left: 48}};
+    var cW = W - pad.left - pad.right;
+    var cH = H - pad.top - pad.bottom;
+
+    var temps = pts.map(function(p) {{ return p.temp; }});
+    var kwhs = pts.map(function(p) {{ return p.kwh; }});
+    var minT = Math.min.apply(null, temps) - 1;
+    var maxT = Math.max.apply(null, temps) + 1;
+    var minK = 0;
+    var maxK = Math.max.apply(null, kwhs) * 1.1 || 1;
+
+    // Grid
+    ctx.strokeStyle = border; ctx.lineWidth = 0.5;
+    ctx.fillStyle = muted; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+    for (var i = 0; i <= 4; i++) {{
+      var gy = pad.top + cH - (cH * i / 4);
+      ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cW, gy); ctx.stroke();
+      ctx.fillText((minK + (maxK - minK) * i / 4).toFixed(2), pad.left - 4, gy + 3);
+    }}
+    ctx.textAlign = 'center';
+    for (var j = 0; j <= 4; j++) {{
+      var gx = pad.left + (cW * j / 4);
+      ctx.fillText((minT + (maxT - minT) * j / 4).toFixed(0) + '\u00b0', gx, pad.top + cH + 16);
+    }}
+
+    // Axis labels
+    ctx.fillStyle = muted; ctx.font = '10px sans-serif';
+    ctx.save(); ctx.translate(12, pad.top + cH / 2); ctx.rotate(-Math.PI/2);
+    ctx.textAlign = 'center'; ctx.fillText('kWh', 0, 0); ctx.restore();
+    ctx.textAlign = 'center'; ctx.fillText('\u00b0C', pad.left + cW / 2, H - 2);
+
+    // Points colored by hour
+    pts.forEach(function(p) {{
+      var x = pad.left + cW * (p.temp - minT) / (maxT - minT);
+      var y = pad.top + cH - cH * (p.kwh - minK) / (maxK - minK);
+      ctx.beginPath();
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = _weatherHourColor(p.hour_of_day || 0);
+      ctx.globalAlpha = 0.7;
+      ctx.fill();
+    }});
+    ctx.globalAlpha = 1.0;
+
+    // Regression line
+    if (d.correlation && d.correlation.slope != null) {{
+      var sl = d.correlation.slope, ic = d.correlation.intercept;
+      var x1 = pad.left;
+      var x2 = pad.left + cW;
+      var t1 = minT, t2 = maxT;
+      var y1 = pad.top + cH - cH * ((sl * t1 + ic) - minK) / (maxK - minK);
+      var y2 = pad.top + cH - cH * ((sl * t2 + ic) - minK) / (maxK - minK);
+      ctx.setLineDash([6, 3]);
+      ctx.strokeStyle = '#e74c3c';
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1.0;
+    }}
+  }}
+
+  // --- Timeline chart ---
+  var timeEl = document.getElementById('weather-timeline');
+  if (timeEl) {{
+    var sorted = pts.slice().sort(function(a, b) {{ return a.ts - b.ts; }});
+    if (sorted.length > 72) sorted = sorted.slice(sorted.length - 72);
+
+    var dpr2 = window.devicePixelRatio || 1;
+    var rect2 = timeEl.getBoundingClientRect();
+    timeEl.width = rect2.width * dpr2;
+    timeEl.height = rect2.height * dpr2;
+    var ctx2 = timeEl.getContext('2d');
+    ctx2.scale(dpr2, dpr2);
+    var W2 = rect2.width, H2 = rect2.height;
+    var pad2 = {{top: 12, right: 48, bottom: 28, left: 48}};
+    var cW2 = W2 - pad2.left - pad2.right;
+    var cH2 = H2 - pad2.top - pad2.bottom;
+
+    var kwhs2 = sorted.map(function(p) {{ return p.kwh; }});
+    var temps2 = sorted.map(function(p) {{ return p.temp; }});
+    var maxK2 = Math.max.apply(null, kwhs2) * 1.15 || 1;
+    var minT2 = Math.min.apply(null, temps2) - 1;
+    var maxT2 = Math.max.apply(null, temps2) + 1;
+    var n = sorted.length;
+    var barW = Math.max(1, (cW2 / n) - 1);
+
+    // Grid + Y-axis left (kWh)
+    ctx2.strokeStyle = border; ctx2.lineWidth = 0.5;
+    ctx2.fillStyle = '#3498db'; ctx2.font = '10px sans-serif'; ctx2.textAlign = 'right';
+    for (var gi = 0; gi <= 4; gi++) {{
+      var gy2 = pad2.top + cH2 - (cH2 * gi / 4);
+      ctx2.beginPath(); ctx2.moveTo(pad2.left, gy2); ctx2.lineTo(pad2.left + cW2, gy2); ctx2.stroke();
+      ctx2.fillText((maxK2 * gi / 4).toFixed(2), pad2.left - 4, gy2 + 3);
+    }}
+    // Y-axis right (°C)
+    ctx2.fillStyle = '#e74c3c'; ctx2.textAlign = 'left';
+    for (var gj = 0; gj <= 4; gj++) {{
+      var gy3 = pad2.top + cH2 - (cH2 * gj / 4);
+      ctx2.fillText((minT2 + (maxT2 - minT2) * gj / 4).toFixed(0) + '\u00b0', pad2.left + cW2 + 4, gy3 + 3);
+    }}
+
+    // Bars (kWh)
+    ctx2.fillStyle = 'rgba(52,152,219,0.6)';
+    sorted.forEach(function(p, i) {{
+      var x = pad2.left + (cW2 * i / n) + 1;
+      var bh = cH2 * (p.kwh / maxK2);
+      ctx2.fillRect(x, pad2.top + cH2 - bh, barW, bh);
+    }});
+
+    // Temperature line
+    ctx2.strokeStyle = '#e74c3c'; ctx2.lineWidth = 2; ctx2.globalAlpha = 0.85;
+    ctx2.beginPath();
+    sorted.forEach(function(p, i) {{
+      var x = pad2.left + (cW2 * (i + 0.5) / n);
+      var y = pad2.top + cH2 - cH2 * (p.temp - minT2) / (maxT2 - minT2);
+      if (i === 0) ctx2.moveTo(x, y); else ctx2.lineTo(x, y);
+    }});
+    ctx2.stroke();
+    ctx2.globalAlpha = 1.0;
+
+    // X-axis labels (date+hour)
+    ctx2.fillStyle = muted; ctx2.font = '9px sans-serif'; ctx2.textAlign = 'center';
+    var step = Math.max(1, Math.floor(n / 8));
+    for (var li = 0; li < n; li += step) {{
+      var dt = new Date(sorted[li].ts * 1000);
+      var lbl = ('0'+dt.getDate()).slice(-2) + '.' + ('0'+(dt.getMonth()+1)).slice(-2) + ' ' + ('0'+dt.getHours()).slice(-2) + 'h';
+      var lx = pad2.left + (cW2 * (li + 0.5) / n);
+      ctx2.fillText(lbl, lx, pad2.top + cH2 + 16);
+    }}
+
+    // Axis labels
+    ctx2.fillStyle = '#3498db'; ctx2.font = '10px sans-serif';
+    ctx2.save(); ctx2.translate(12, pad2.top + cH2 / 2); ctx2.rotate(-Math.PI/2);
+    ctx2.textAlign = 'center'; ctx2.fillText('kWh', 0, 0); ctx2.restore();
+    ctx2.fillStyle = '#e74c3c';
+    ctx2.save(); ctx2.translate(W2 - 6, pad2.top + cH2 / 2); ctx2.rotate(Math.PI/2);
+    ctx2.textAlign = 'center'; ctx2.fillText('\u00b0C', 0, 0); ctx2.restore();
   }}
 }}
 
@@ -5619,6 +5874,23 @@ class _Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
 
+            if path_only.startswith("/api/weather_correlation"):
+                try:
+                    parsed = urlparse(self.path)
+                    qs = parse_qs(parsed.query or "")
+                    params_wc: Dict[str, Any] = {k: (v[0] if isinstance(v, list) and v else v) for k, v in qs.items()}
+                    payload = self.dashboard.on_action("weather_correlation", params_wc)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
             if path_only == "/api/co2_live":
                 try:
                     payload = self.dashboard.on_action("co2_live", {})
@@ -6156,6 +6428,7 @@ class LiveWebDashboard:
                 "web_tab_costs": _t(self.lang, "web.tab.costs"),
                 "web_tab_heatmap": _t(self.lang, "web.tab.heatmap"),
                 "web_tab_solar": _t(self.lang, "web.tab.solar"),
+                "web_tab_weather": _t(self.lang, "web.tab.weather"),
                 "web_tab_compare": _t(self.lang, "web.tab.compare"),
                 "web_tab_co2": _t(self.lang, "web.tab.co2"),
                 "web_tab_anomalies": _t(self.lang, "web.tab.anomalies"),

@@ -234,31 +234,42 @@ class WeatherMixin:
         else:
             self._weather_interp_var.set(self.t("weather.interpretation.none", r=f"{r_val:.2f}"))
 
-        # Draw scatter plot
+        # Draw scatter plot – color by hour-of-day (useful extra dimension)
         ax1 = self._weather_scatter_ax
         ax1.clear()
-        scatter = ax1.scatter(temps, kwh, c=temps, cmap="RdYlBu_r", alpha=0.6, s=20, edgecolors="none")
+        hours_of_day = np.array([h.hour + h.minute / 60.0 for h in matched_hours])
+        scatter = ax1.scatter(temps, kwh, c=hours_of_day, cmap="twilight_shifted",
+                              vmin=0, vmax=24, alpha=0.65, s=22, edgecolors="none")
+        cbar = self._weather_fig.colorbar(scatter, ax=ax1, pad=0.02, shrink=0.8)
+        cbar.set_label(self.t("weather.chart.hour"), fontsize=8)
+        cbar.set_ticks([0, 6, 12, 18, 24])
         if len(temps) > 2:
             z = np.polyfit(temps, kwh, 1)
             p = np.poly1d(z)
             t_range = np.linspace(temps.min(), temps.max(), 50)
             ax1.plot(t_range, p(t_range), "r--", alpha=0.7, linewidth=2)
-        ax1.set_xlabel("°C", fontsize=9)
-        ax1.set_ylabel("kWh", fontsize=9)
+        ax1.set_xlabel(self.t("weather.chart.temp_axis"), fontsize=9)
+        ax1.set_ylabel(self.t("weather.chart.kwh_axis"), fontsize=9)
         ax1.set_title(self.t("weather.chart.scatter"), fontsize=10)
         ax1.grid(alpha=0.3)
         ax1.set_axisbelow(True)
 
-        # Time series
+        # Time series – proper date labels
+        import matplotlib.dates as mdates
         ax2 = self._weather_ts_ax
         ax2.clear()
         ax2_twin = ax2.twinx()
-        ax2.bar(range(len(matched_kwh)), matched_kwh, color="#3498db", alpha=0.6, width=0.8)
-        ax2_twin.plot(range(len(matched_temps)), matched_temps, color="#e74c3c", linewidth=1.5, alpha=0.8)
-        ax2.set_ylabel("kWh", color="#3498db", fontsize=9)
-        ax2_twin.set_ylabel("°C", color="#e74c3c", fontsize=9)
-        ax2.set_title(self.t("weather.chart.title"), fontsize=10)
-        ax2.set_xlabel("h", fontsize=9)
+        dates = mdates.date2num(matched_hours)
+        ax2.bar(dates, matched_kwh, color="#3498db", alpha=0.6,
+                width=1.0 / 24.0, align="center")
+        ax2_twin.plot(dates, matched_temps, color="#e74c3c", linewidth=1.5, alpha=0.8)
+        ax2.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(matched_hours) // (24 * 5))))
+        ax2.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m."))
+        ax2.xaxis.set_minor_locator(mdates.HourLocator(interval=6))
+        self._weather_fig.autofmt_xdate(rotation=30, ha="right")
+        ax2.set_ylabel(self.t("weather.chart.kwh_axis"), color="#3498db", fontsize=9)
+        ax2_twin.set_ylabel(self.t("weather.chart.temp_axis"), color="#e74c3c", fontsize=9)
+        ax2.set_title(self.t("weather.chart.timeseries"), fontsize=10)
         ax2.grid(axis="y", alpha=0.3)
         ax2.set_axisbelow(True)
 
