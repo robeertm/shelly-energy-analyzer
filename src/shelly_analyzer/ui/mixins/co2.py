@@ -170,7 +170,10 @@ class Co2Mixin:
                 canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
             except Exception:
                 pass
-        canvas.bind_all("<MouseWheel>", _on_mw)
+        # Only scroll when mouse is over the scroll canvas itself, not over
+        # embedded matplotlib charts (which would scroll the chart away).
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mw))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
         sf = self._co2_scroll_frame
 
@@ -702,11 +705,24 @@ class Co2Mixin:
         if val >= dirty_thr:
             return "#e53935"
         ratio = (val - green_thr) / max(dirty_thr - green_thr, 1)
-        if ratio < 0.5:
-            r = int(0x4c + ratio * 2 * (0xff - 0x4c))
-            return f"#{r:02x}af50"
-        g = int(0xaf * (1 - (ratio - 0.5) * 2))
-        return f"#e5{g:02x}35"
+        if ratio < 0.33:
+            # Green → Yellow-green
+            f = ratio / 0.33
+            r = int(0x4c + f * (0x8b - 0x4c))
+            g = int(0xaf + f * (0xc3 - 0xaf))
+            return f"#{r:02x}{g:02x}4a"
+        if ratio < 0.66:
+            # Yellow-green → Orange
+            f = (ratio - 0.33) / 0.33
+            r = int(0x8b + f * (0xff - 0x8b))
+            g = int(0xc3 + f * (0x98 - 0xc3))
+            b = int(0x4a + f * (0x00 - 0x4a))
+            return f"#{r:02x}{g:02x}{b:02x}"
+        # Orange → Red
+        f = (ratio - 0.66) / 0.34
+        r = int(0xff + f * (0xe5 - 0xff))
+        g = int(0x98 - f * 0x98)
+        return f"#{r:02x}{g:02x}35"
 
     def _co2_draw_intensity_chart(
         self,
@@ -759,18 +775,7 @@ class Co2Mixin:
             intensities = df["intensity_g_per_kwh"].values
             hours = df["hour_ts"].values
 
-            colors = []
-            for v in intensities:
-                if v <= green_thr:
-                    colors.append("#4caf50")
-                elif v >= dirty_thr:
-                    colors.append("#f44336")
-                else:
-                    frac = (v - green_thr) / max(dirty_thr - green_thr, 1)
-                    r = int(0x4c + frac * (0xf4 - 0x4c))
-                    g = int(0xaf + frac * (0x43 - 0xaf))
-                    b = int(0x50 + frac * (0x36 - 0x50))
-                    colors.append(f"#{r:02x}{g:02x}{b:02x}")
+            colors = [self._co2_intensity_color(v, green_thr, dirty_thr) for v in intensities]
 
             ax.barh(
                 [0] * len(intensities),
