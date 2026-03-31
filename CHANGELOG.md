@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.3.1 - 2026-03-31
+### Fixed
+- **Web dashboard startup crash fixed** – Unicode surrogate pairs (`\ud83c\udf19`) in the weather scatter legend could not be encoded as UTF-8, preventing the dashboard from starting. Replaced with proper Unicode codepoints.
+
 ## 13.3.0 - 2026-03-31
 ### Added
 - **Weather tab on web dashboard** – New "Wetter" / "Weather" tab between Solar and Vergleich in the web dashboard. Shows current weather cards (temperature, humidity, wind, cloud cover), Pearson r / HDD / CDD correlation metrics, an interactive scatter plot (temperature vs. consumption, colored by hour-of-day), and a dual-axis timeline chart (bars = kWh, line = °C). Data served via new `/api/weather_correlation` endpoint.
