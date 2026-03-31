@@ -1,8 +1,8 @@
 # Changelog
 
-## 13.2.2 - 2026-03-31
+## 13.2.3 - 2026-03-31
 ### Fixed
-- **NILM ML web dashboard no longer stuck on "learning..."** – Loaded clusters from disk are now pushed to the web store immediately at startup, so the dashboard shows previously learned patterns right away instead of waiting for the next 5-minute cluster cycle. Also added transition count display so users can see progress toward the 10-transition minimum needed for clustering.
+- **NILM ML web status now actually works** – The `/api/nilm_status` endpoint referenced `dashboard._state_store` but the dashboard stores it as `dashboard.store`. This caused the API to always return `cluster_count=0` and `transition_count=0`, keeping the badge permanently stuck on "warte auf Daten…". Also includes the v13.2.2 startup push fix (loaded clusters are pushed to the web store immediately at startup).
 
 ## 13.2.1 - 2026-03-30
 ### Fixed
