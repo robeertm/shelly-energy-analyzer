@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.5.4 - 2026-03-31
+### Improved
+- **Screenshots now include plots sub-tabs** – The screenshot function now also iterates through all metric sub-tabs (kWh, V, A, W, VAR, cosφ, Hz, CO₂) and their device sub-tabs within the Plots tab, capturing each combination (e.g. `plots_kWh_Shelly3EM.png`).
+
 ## 13.5.3 - 2026-03-31
 ### Added
 - **"Screenshots aller Tabs" button in settings** – Takes a screenshot of every main app tab and every settings sub-tab automatically. Saves numbered PNGs to `screenshots/YYYYMMDD_HHMMSS/` in the project directory. Useful for documentation or bug reports.
