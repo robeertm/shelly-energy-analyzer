@@ -2206,6 +2206,7 @@ class LiveWebMixin:
                                              "device_key": getattr(c, "device_key", "")}
                                             for c in _all_clusters
                                         ]
+                                        store._nilm_transition_count = _total_trans
                                 except Exception:
                                     pass
                                 # Log progress periodically (every 30 min)

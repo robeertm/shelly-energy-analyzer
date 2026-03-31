@@ -586,6 +586,12 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.ev.all_plugs": "Alle Stecker",
         "web.no_data": "Keine Daten",
 
+        # Web: NILM ML
+        "web.nilm.patterns": "Muster erkannt",
+        "web.nilm.learning": "lerne\u2026",
+        "web.nilm.transitions": "Transitionen",
+        "web.nilm.waiting": "warte auf Daten\u2026",
+
         # Web: CO₂ tab
         "web.co2.not_enabled": "CO₂-Tracking ist nicht aktiviert. Aktiviere es unter Einstellungen → ENTSO-E.",
         "web.co2.current": "Aktuelle Netz-CO₂-Intensität",
@@ -1382,6 +1388,12 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.ev.all_power": "All kW",
         "web.ev.all_plugs": "All plugs",
         "web.no_data": "No data",
+
+        # Web: NILM ML
+        "web.nilm.patterns": "patterns learned",
+        "web.nilm.learning": "learning\u2026",
+        "web.nilm.transitions": "transitions",
+        "web.nilm.waiting": "waiting for data\u2026",
 
         # Web: Dashboard UI (mobile/web app texts)
         "web.dash.device_order": "Device Order &amp; Visibility",

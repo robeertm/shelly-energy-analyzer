@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.2.2 - 2026-03-31
+### Fixed
+- **NILM ML web dashboard no longer stuck on "learning..."** – Loaded clusters from disk are now pushed to the web store immediately at startup, so the dashboard shows previously learned patterns right away instead of waiting for the next 5-minute cluster cycle. Also added transition count display so users can see progress toward the 10-transition minimum needed for clustering.
+
 ## 13.2.1 - 2026-03-30
 ### Fixed
 - **NILM ML now truly persists across restarts** – Three issues fixed: (1) Added `flush()` method that saves immediately regardless of transition count. (2) Auto-save every 10 new transitions to avoid data loss between 5-minute cluster cycles. (3) App close handler (`WM_DELETE_WINDOW`) now flushes all NILM learners to disk before exiting. Previously, transitions collected between the last `cluster()` call and app exit were lost.
