@@ -90,7 +90,8 @@ class SolarMixin:
             except Exception:
                 pass
 
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
         # ── Metric cards (created once, updated on refresh) ──────────────────
         cards_frame = ttk.Frame(self._solar_scroll_frame)
@@ -575,8 +576,10 @@ class SolarMixin:
                 for k in self._solar_amort_vars:
                     self._solar_amort_vars[k].set("–")
                 self._solar_amort_ax.clear()
+                _tc = self._get_theme_colors()
                 self._solar_amort_ax.text(0.5, 0.5, self.t("solar.amort.not_configured"),
-                                         ha="center", va="center", fontsize=10, color="#888")
+                                         ha="center", va="center", fontsize=10, color=_tc["muted"])
+                self._apply_plot_theme(self._solar_amort_fig, self._solar_amort_ax, self._solar_amort_canvas)
                 self._solar_amort_ax.axis("off")
                 self._solar_amort_canvas.draw_idle()
                 return
@@ -636,25 +639,27 @@ class SolarMixin:
                 running += annual_savings * factor
                 cumulative.append(running)
 
-            ax.fill_between(years, cumulative, alpha=0.3, color="#27ae60")
-            ax.plot(years, cumulative, color="#27ae60", linewidth=2,
+            tc = self._get_theme_colors()
+            ax.fill_between(years, cumulative, alpha=0.3, color=tc["green"])
+            ax.plot(years, cumulative, color=tc["green"], linewidth=2,
                    label=self.t("solar.amort.chart.cumulative_savings"))
-            ax.axhline(y=investment, color="#e74c3c", linestyle="--", linewidth=2,
+            ax.axhline(y=investment, color=tc["red"], linestyle="--", linewidth=2,
                       label=self.t("solar.amort.chart.investment"))
 
             # Mark payback point
             if payback_years < 25:
-                ax.axvline(x=payback_years, color="#f39c12", linestyle=":", alpha=0.7)
-                ax.scatter([payback_years], [investment], color="#f39c12", s=80, zorder=5)
+                ax.axvline(x=payback_years, color=tc["orange"], linestyle=":", alpha=0.7)
+                ax.scatter([payback_years], [investment], color=tc["orange"], s=80, zorder=5)
                 ax.annotate(f"{payback_years:.1f}a", (payback_years, investment),
                           textcoords="offset points", xytext=(10, 10), fontsize=9,
-                          color="#f39c12", fontweight="bold")
+                          color=tc["orange"], fontweight="bold")
 
             ax.set_xlabel("Jahre")
             ax.set_ylabel("€")
             ax.set_title(self.t("solar.amort.chart.title"), fontsize=10)
             ax.legend(fontsize=8)
             ax.grid(True, alpha=0.3)
+            self._apply_plot_theme(self._solar_amort_fig, ax, self._solar_amort_canvas)
 
             self._solar_amort_fig.tight_layout()
             self._solar_amort_canvas.draw_idle()
