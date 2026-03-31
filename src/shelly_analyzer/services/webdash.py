@@ -3814,7 +3814,7 @@ function _expShowJobAccepted(jobId) {{
   const el = document.getElementById('exp-results');
   const ph = document.getElementById('exp-results-ph');
   if (ph) ph.style.display = 'none';
-  el.insertAdjacentHTML('afterbegin', `<div class="exp-info-card">✓ Job #${{jobId}} gestartet – Fortschritt unten bei "Laufende Jobs".</div>`);
+  el.insertAdjacentHTML('afterbegin', `<div class="exp-info-card">{t_job_started}</div>`);
 }}
 
 function _expShowError(msg) {{
@@ -5261,7 +5261,7 @@ function renderJob(j) {
   const st = j.status || "";
   const a = j.action || "";
   const pct = (j.progress_overall !== undefined && j.progress_overall !== null) ? parseInt(j.progress_overall,10) : 0;
-  const err = j.error ? `<div class="jobmeta"><b>Fehler:</b> ${esc(j.error)}</div>` : "";
+  const err = j.error ? `<div class="jobmeta"><b>{t_error_label}:</b> ${{esc(j.error)}}</div>` : "";
   let progLines = "";
   const prog = j.progress || {};
   const keys = Object.keys(prog);
@@ -5319,12 +5319,12 @@ refreshJobs();
 document.getElementById("btn_sync").addEventListener("click", async ()=>{
   const mode = document.getElementById("sync_mode").value;
   const start = document.getElementById("sync_start").value;
-  document.getElementById("sync_log").textContent = "Starte …";
+  document.getElementById("sync_log").textContent = "{t_starting}";
   try {
     const res = await run("sync", {mode, start_date: start});
     document.getElementById("sync_log").textContent = JSON.stringify(res, null, 2);
   } catch (e) {
-    document.getElementById("sync_log").textContent = "Fehler: " + (e && e.message ? e.message : String(e));
+    document.getElementById("sync_log").textContent = "{t_error_label}: " + (e && e.message ? e.message : String(e));
   }
 });
 
@@ -5393,7 +5393,7 @@ document.getElementById("btn_plots").addEventListener("click", async ()=>{
       thumbs.innerHTML = `<div class="jobmeta">${esc(JSON.stringify(res||{}, null, 2))}</div>`;
     }
   } catch (e) {
-    thumbs.innerHTML = `<div class="jobmeta">Fehler: ${esc(e && e.message ? e.message : String(e))}</div>`;
+    thumbs.innerHTML = `<div class="jobmeta">{t_error_label}: ${{esc(e && e.message ? e.message : String(e))}}</div>`;
   }
 });
 
@@ -5469,7 +5469,7 @@ function showError(msg) {
   el.insertAdjacentHTML("afterbegin", `<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--card);margin-bottom:6px">
     <div style="font-size:24px">⚠️</div>
     <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:600;color:#ef4444">Fehler</div>
+      <div style="font-size:13px;font-weight:600;color:#ef4444">{t_error_label}</div>
       <div style="font-size:11px;color:var(--muted)">${esc(msg)}</div>
     </div>
   </div>`);
@@ -6129,7 +6129,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         except Exception as e:
             msg = str(e)
-            body = ("<!doctype html><html><body style='font-family:system-ui;padding:16px'>"                    "<h3>Web-Dashboard Fehler</h3>"                    "<pre style='white-space:pre-wrap'>" + msg + "</pre></body></html>").encode("utf-8")
+            body = ("<!doctype html><html><body style='font-family:system-ui;padding:16px'>"                    "<h3>Web-Dashboard Error</h3>"                    "<pre style='white-space:pre-wrap'>" + msg + "</pre></body></html>").encode("utf-8")
             try:
                 self.send_response(500)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -6283,7 +6283,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.end_headers()
         except Exception as e:
             msg = str(e)
-            body = ("<!doctype html><html><body style='font-family:system-ui;padding:16px'>"                    "<h3>Web-Dashboard Fehler</h3>"                    "<pre style='white-space:pre-wrap'>" + msg + "</pre></body></html>").encode("utf-8")
+            body = ("<!doctype html><html><body style='font-family:system-ui;padding:16px'>"                    "<h3>Web-Dashboard Error</h3>"                    "<pre style='white-space:pre-wrap'>" + msg + "</pre></body></html>").encode("utf-8")
             try:
                 self.send_response(500)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -6503,6 +6503,10 @@ class LiveWebDashboard:
                 # Modal
                 "web_dash_device_order": _t(self.lang, "web.dash.device_order"),
                 "web_dash_done": _t(self.lang, "web.dash.done"),
+                # Generic translated strings for JS
+                "t_error_label": _t(self.lang, "web.error_label"),
+                "t_starting": _t(self.lang, "web.starting"),
+                "t_job_started": _t(self.lang, "web.job_started"),
                 "refresh_ms": str(int(max(250, self.refresh_seconds * 1000))),
                 "window_min": str(int(max(1, self.window_minutes))),
                 "window_options_json": json.dumps(self.available_windows, ensure_ascii=False),
@@ -6557,6 +6561,10 @@ class LiveWebDashboard:
                 "web_control_export_all": _t(self.lang, "web.control.export.all"),
                 "web_control_export_bundle_hours": _t(self.lang, "web.control.export.bundle_hours"),
                 "web_control_jobs_meta": _t(self.lang, "web.control.jobs.meta"),
+                # Generic translated strings for JS
+                "t_error_label": _t(self.lang, "web.error_label"),
+                "t_starting": _t(self.lang, "web.starting"),
+                "t_job_started": _t(self.lang, "web.job_started"),
             },
         ).encode("utf-8")
         self._control_bytes_gz = gzip.compress(self._control_bytes, compresslevel=6)
