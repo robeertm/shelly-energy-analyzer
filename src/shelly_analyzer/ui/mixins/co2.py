@@ -694,6 +694,20 @@ class Co2Mixin:
             except Exception:
                 logger.debug("Co2Mixin: summary error for %s", key, exc_info=True)
 
+    @staticmethod
+    def _co2_intensity_color(val: float, green_thr: float, dirty_thr: float) -> str:
+        """Return hex color for a CO₂ intensity value (green→yellow→red)."""
+        if val <= green_thr:
+            return "#4caf50"
+        if val >= dirty_thr:
+            return "#e53935"
+        ratio = (val - green_thr) / max(dirty_thr - green_thr, 1)
+        if ratio < 0.5:
+            r = int(0x4c + ratio * 2 * (0xff - 0x4c))
+            return f"#{r:02x}af50"
+        g = int(0xaf * (1 - (ratio - 0.5) * 2))
+        return f"#e5{g:02x}35"
+
     def _co2_draw_intensity_chart(
         self,
         df: pd.DataFrame,
@@ -704,15 +718,20 @@ class Co2Mixin:
         ax.cla()
 
         try:
+            import numpy as np
             df = df.copy()
             df["dt"] = pd.to_datetime(df["hour_ts"], unit="s", utc=True)
             df = df.sort_values("dt")
 
             x = df["dt"].values
-            y = df["intensity_g_per_kwh"].values
+            y = df["intensity_g_per_kwh"].values.astype(float)
 
-            ax.fill_between(x, y, alpha=0.18, color="#1976d2")
-            ax.plot(x, y, color="#1976d2", linewidth=1.5, label=self.t("co2.chart.intensity"))
+            # Draw colored segments (matching the web dashboard style)
+            for i in range(len(x) - 1):
+                avg_val = (y[i] + y[i + 1]) / 2.0
+                c = self._co2_intensity_color(avg_val, green_thr, dirty_thr)
+                ax.fill_between(x[i:i + 2], y[i:i + 2], alpha=0.22, color=c)
+                ax.plot(x[i:i + 2], y[i:i + 2], color=c, linewidth=2.0)
 
             # threshold lines
             ax.axhline(green_thr, color="#2e7d32", linewidth=0.8, linestyle="--", alpha=0.6)

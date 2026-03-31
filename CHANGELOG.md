@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.5.1 - 2026-03-31
+### Improved
+- **Desktop CO₂ intensity chart now colorful like the web version** – The 24h CO₂ intensity line chart in the desktop app now uses the same green→yellow→red color gradient as the web dashboard. Each line segment and fill area is colored based on intensity relative to the green/dirty thresholds, replacing the previous flat blue.
+
 ## 13.5.0 - 2026-03-31
 ### Added
 - **Shelly firmware update check & OTA in health check** – The health check now queries each device for available firmware updates. A new "Update" column shows ⬆ with the new version if an update is available, or ✓ if current. Two new buttons: "Update" (selected device) and "Alle updaten" (all devices with pending updates). Supports both Gen2+ (RPC `Shelly.CheckForUpdate` / `Shelly.Update`) and Gen1 (`/ota?update=true`).
