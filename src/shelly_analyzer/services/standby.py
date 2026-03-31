@@ -70,7 +70,7 @@ def analyze_standby(
         try:
             samples = db.query_samples(device_key, start_ts=start_ts, end_ts=end_ts)
             logger.debug("Standby %s: fallback query_samples returned %d rows", device_key, 0 if samples is None else len(samples))
-            if samples is not None and not samples.empty and "total_power" in samples.columns:
+            if samples is not None and not samples.empty and ("total_power" in samples.columns or "energy_kwh" in samples.columns):
                 # Synthesize hourly from samples
                 ts_col = samples["timestamp"]
                 if hasattr(ts_col.iloc[0], "timestamp"):
@@ -78,13 +78,20 @@ def analyze_standby(
                     samples["hour_ts"] = (ts_col.astype("int64") // 10**9 // 3600) * 3600
                 else:
                     samples["hour_ts"] = (ts_col.astype("int64") // 3600) * 3600
-                agg_dict: dict = {"avg_power_w": ("total_power", "mean")}
+                agg_dict: dict = {}
+                if "total_power" in samples.columns:
+                    agg_dict["avg_power_w"] = ("total_power", "mean")
                 if "energy_kwh" in samples.columns:
                     agg_dict["kwh"] = ("energy_kwh", "sum")
+                if not agg_dict:
+                    raise ValueError("no usable columns")
                 hourly = samples.groupby("hour_ts").agg(**agg_dict).reset_index()
-                if "kwh" not in hourly.columns:
-                    # Estimate kWh from average power if energy_kwh not available
+                if "kwh" not in hourly.columns and "avg_power_w" in hourly.columns:
                     hourly["kwh"] = hourly["avg_power_w"] / 1000.0
+                elif "kwh" not in hourly.columns:
+                    hourly["kwh"] = 0.0
+                if "avg_power_w" not in hourly.columns:
+                    hourly["avg_power_w"] = hourly["kwh"] * 1000.0
                 hourly["kwh"] = hourly["kwh"].fillna(0)
                 hourly["avg_power_w"] = hourly["avg_power_w"].fillna(0)
                 logger.debug("Standby %s: synthesized %d hourly rows from samples", device_key, len(hourly))
@@ -97,16 +104,25 @@ def analyze_standby(
 
     # Convert to arrays
     kwh_arr = hourly["kwh"].values.astype(float)
-    avg_power = hourly["avg_power_w"].values.astype(float)
+    if "avg_power_w" in hourly.columns:
+        avg_power = hourly["avg_power_w"].values.astype(float)
+    else:
+        avg_power = np.full(len(kwh_arr), np.nan)
+
+    # Fill missing avg_power_w from kWh (1 kWh/h = 1000 W average)
+    nan_mask = np.isnan(avg_power)
+    if nan_mask.any():
+        avg_power[nan_mask] = kwh_arr[nan_mask] * 1000.0
 
     if "hour_ts" in hourly.columns:
         hours = pd.to_datetime(hourly["hour_ts"], unit="s", utc=True)
     else:
         hours = pd.Series(pd.date_range(start="2020-01-01", periods=len(hourly), freq="h", tz="UTC"))
 
-    # Remove NaN
+    # Remove remaining NaN
     valid = ~np.isnan(avg_power)
     if valid.sum() < 6:
+        logger.debug("Standby %s: too few valid power readings (%d)", device_key, valid.sum())
         return None
     avg_power = avg_power[valid]
     kwh_arr = kwh_arr[valid]

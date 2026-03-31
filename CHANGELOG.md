@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.3.5 - 2026-03-31
+### Fixed
+- **Standby tab now actually shows data** – The standby analysis failed silently when `avg_power_w` was NULL in the database (common for older data or devices that only log kWh). Now falls back to calculating average power from kWh values (1 kWh/h = 1000W). Also improved sample synthesis to work when only `energy_kwh` is available without `total_power`.
+
 ## 13.3.4 - 2026-03-31
 ### Fixed
 - **Desktop weather scatter plot no longer accumulates colorbars** – The hour-of-day colorbar legend was added on every tab refresh without removing the previous one, causing them to stack up. Now properly removed before re-drawing.
