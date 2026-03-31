@@ -1,5 +1,15 @@
 # Changelog
 
+## 13.7.0 - 2026-03-31
+### Added
+- **Dark mode for Solar, Energy Flow (Sankey), and Tenant tabs** – All three tabs now fully respect the plot theme setting. Amortization chart, energy flow diagram, and tenant pie/bar charts all adapt to dark mode with proper backgrounds, text colors, and themed data series.
+
+### Improved
+- **Plots tab: better layout scaling** – Chart figures now use larger height (5.0 vs 3.6) at 96 dpi for better window fill. Bottom margins recalculated to prevent X-axis label clipping on various screen sizes. Less wasted black space below charts.
+
+### Fixed
+- **Solar tab charts no longer scroll out of view** – Mousewheel scrolling restricted to the content area (same fix as CO₂ tab in v13.5.2).
+
 ## 13.6.0 - 2026-03-31
 ### Improved
 - **Dark mode support for all desktop chart tabs** – Weather, CO₂, Standby, and Forecast tabs now fully respect the plot theme setting (auto/day/night). All matplotlib figures get themed backgrounds, axis colors, grid lines, tick labels, and legend frames. Data series use theme-aware colors (brighter in dark mode). New `_get_theme_colors()` helper provides consistent color palettes across all tabs.
