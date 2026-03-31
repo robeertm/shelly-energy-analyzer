@@ -644,7 +644,8 @@ class LiveWebMixin:
                     _last_month_start = (_month_start - _td(days=1)).replace(day=1)
 
                     try:
-                        _unit = float(self.cfg.pricing.unit_price_gross())
+                        from datetime import date as _date_cost
+                        _unit = float(self.cfg.pricing.effective_pricing_for_date(_date_cost.today()).unit_price_gross())
                     except Exception:
                         _unit = float(getattr(getattr(self.cfg, "pricing", None), "electricity_price_eur_per_kwh", 0.30) or 0.30)
                     _co2_g = float(getattr(getattr(self.cfg, "pricing", None), "co2_intensity_g_per_kwh", 380.0) or 0.0)
@@ -768,7 +769,11 @@ class LiveWebMixin:
                     except Exception:
                         pass
 
-                    return {"ok": True, "devices": devices_out, "unit_eur": _unit, "co2_g_per_kwh": _co2_g, "solar_co2_saved_month_kg": round(_solar_co2_saved_month_kg, 3)}
+                    _tariff_sched = [
+                        {"start_date": tp.start_date, "price": tp.electricity_price_eur_per_kwh, "base_fee": tp.base_fee_eur_per_year}
+                        for tp in getattr(self.cfg.pricing, "tariff_schedule", []) or []
+                    ]
+                    return {"ok": True, "devices": devices_out, "unit_eur": _unit, "co2_g_per_kwh": _co2_g, "solar_co2_saved_month_kg": round(_solar_co2_saved_month_kg, 3), "tariff_schedule": _tariff_sched}
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
 

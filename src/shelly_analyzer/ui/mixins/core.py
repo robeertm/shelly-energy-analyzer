@@ -54,6 +54,7 @@ from shelly_analyzer.io.config import (
     SolarConfig,
     TenantConfig,
     TouConfig,
+    TariffPeriod,
     TouRate,
     UiConfig,
     UpdatesConfig,
@@ -4379,9 +4380,9 @@ class CoreMixin:
                 pricing = getattr(self.cfg, "pricing", PricingConfig())
                 tou = getattr(self.cfg, "tou", TouConfig())
 
-                # Unit price (gross) – fallback for non-TOU
+                # Unit price (gross) – use date-aware pricing
                 try:
-                    unit = float(pricing.unit_price_gross())
+                    unit = float(pricing.effective_pricing_for_date(now.date()).unit_price_gross())
                 except Exception:
                     unit = float(getattr(pricing, "electricity_price_eur_per_kwh", 0.30) or 0.30)
 
@@ -6162,6 +6163,128 @@ class CoreMixin:
             ttk.Button(btn_col, text=self.t('settings.tou.edit'), command=_tou_edit, width=10).pack(pady=2)
             ttk.Button(btn_col, text=self.t('settings.tou.remove'), command=_tou_remove, width=10).pack(pady=2)
 
+            # ── Tariff schedule (future price changes) ─────────────────────
+            tariff_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.pricing.tariff_schedule'))
+            tariff_box.pack(fill="x", pady=(0, 10))
+
+            ttk.Label(
+                tariff_box,
+                text=self.t('settings.pricing.tariff_hint'),
+                foreground="gray",
+            ).grid(row=0, column=0, columnspan=4, padx=8, pady=(8, 4), sticky="w")
+
+            ts_frame = ttk.Frame(tariff_box)
+            ts_frame.grid(row=1, column=0, columnspan=3, padx=8, pady=4, sticky="nsew")
+            tariff_box.columnconfigure(0, weight=1)
+            tariff_box.rowconfigure(1, weight=1)
+
+            ts_cols = ("start_date", "price", "base_fee")
+            self._tariff_tree = ttk.Treeview(
+                ts_frame, columns=ts_cols, show="headings", height=3, selectmode="browse",
+            )
+            self._tariff_tree.heading("start_date", text=self.t('settings.pricing.tariff_start_date'))
+            self._tariff_tree.heading("price", text=self.t('settings.pricing.tariff_price'))
+            self._tariff_tree.heading("base_fee", text=self.t('settings.pricing.tariff_base_fee'))
+            self._tariff_tree.column("start_date", width=110, anchor="center")
+            self._tariff_tree.column("price", width=120, anchor="center")
+            self._tariff_tree.column("base_fee", width=130, anchor="center")
+
+            _ts_vsb = ttk.Scrollbar(ts_frame, orient="vertical", command=self._tariff_tree.yview)
+            self._tariff_tree.configure(yscrollcommand=_ts_vsb.set)
+            self._tariff_tree.pack(side="left", fill="both", expand=True)
+            _ts_vsb.pack(side="right", fill="y")
+
+            self._tariff_schedule_list: List[TariffPeriod] = list(getattr(self.cfg.pricing, "tariff_schedule", []) or [])
+
+            def _tariff_refresh_tree():
+                for item in self._tariff_tree.get_children():
+                    self._tariff_tree.delete(item)
+                for tp in sorted(self._tariff_schedule_list, key=lambda p: p.start_date):
+                    self._tariff_tree.insert("", "end", values=(
+                        tp.start_date,
+                        f"{tp.electricity_price_eur_per_kwh:.4f} \u20ac/kWh",
+                        f"{tp.base_fee_eur_per_year:.2f} \u20ac/Jahr",
+                    ))
+            _tariff_refresh_tree()
+
+            def _tariff_open_dialog(tp: Optional[TariffPeriod] = None) -> Optional[TariffPeriod]:
+                is_edit = tp is not None
+                dlg = tk.Toplevel(self)
+                dlg.title(self.t('settings.pricing.tariff_edit') if is_edit else self.t('settings.pricing.tariff_add'))
+                dlg.resizable(False, False)
+                dlg.grab_set()
+                dlg.transient(self)
+
+                v_date = tk.StringVar(value=tp.start_date if tp else "")
+                v_price = tk.StringVar(value=str(tp.electricity_price_eur_per_kwh) if tp else str(self.cfg.pricing.electricity_price_eur_per_kwh))
+                v_fee = tk.StringVar(value=str(tp.base_fee_eur_per_year) if tp else str(self.cfg.pricing.base_fee_eur_per_year))
+
+                pad = {"padx": 8, "pady": 4}
+                ttk.Label(dlg, text=self.t('settings.pricing.tariff_start_date') + " (YYYY-MM-DD):").grid(row=0, column=0, sticky="w", **pad)
+                ttk.Entry(dlg, textvariable=v_date, width=14).grid(row=0, column=1, sticky="w", **pad)
+                ttk.Label(dlg, text=self.t('settings.pricing.tariff_price') + ":").grid(row=1, column=0, sticky="w", **pad)
+                ttk.Entry(dlg, textvariable=v_price, width=14).grid(row=1, column=1, sticky="w", **pad)
+                ttk.Label(dlg, text=self.t('settings.pricing.tariff_base_fee') + ":").grid(row=2, column=0, sticky="w", **pad)
+                ttk.Entry(dlg, textvariable=v_fee, width=14).grid(row=2, column=1, sticky="w", **pad)
+
+                result: List[Optional[TariffPeriod]] = [None]
+
+                def _ok():
+                    try:
+                        from datetime import date as _date
+                        d_str = v_date.get().strip()
+                        _date.fromisoformat(d_str)  # validate
+                        price = float(v_price.get().strip().replace(",", "."))
+                        fee = float(v_fee.get().strip().replace(",", "."))
+                        result[0] = TariffPeriod(start_date=d_str, electricity_price_eur_per_kwh=price, base_fee_eur_per_year=fee)
+                        dlg.destroy()
+                    except Exception as ex:
+                        from tkinter import messagebox
+                        messagebox.showerror("Error", str(ex), parent=dlg)
+
+                btn_frame = ttk.Frame(dlg)
+                btn_frame.grid(row=3, column=0, columnspan=2, pady=8)
+                ttk.Button(btn_frame, text=self.t('btn.apply'), command=_ok).pack(side="left", padx=4)
+                ttk.Button(btn_frame, text=self.t('btn.reset'), command=dlg.destroy).pack(side="left", padx=4)
+                dlg.wait_window()
+                return result[0]
+
+            def _tariff_add():
+                new_tp = _tariff_open_dialog()
+                if new_tp is not None:
+                    self._tariff_schedule_list.append(new_tp)
+                    _tariff_refresh_tree()
+
+            def _tariff_edit():
+                sel = self._tariff_tree.selection()
+                if not sel:
+                    return
+                idx = self._tariff_tree.index(sel[0])
+                sorted_list = sorted(self._tariff_schedule_list, key=lambda p: p.start_date)
+                if 0 <= idx < len(sorted_list):
+                    old = sorted_list[idx]
+                    orig_idx = self._tariff_schedule_list.index(old)
+                    new_tp = _tariff_open_dialog(old)
+                    if new_tp is not None:
+                        self._tariff_schedule_list[orig_idx] = new_tp
+                        _tariff_refresh_tree()
+
+            def _tariff_remove():
+                sel = self._tariff_tree.selection()
+                if not sel:
+                    return
+                idx = self._tariff_tree.index(sel[0])
+                sorted_list = sorted(self._tariff_schedule_list, key=lambda p: p.start_date)
+                if 0 <= idx < len(sorted_list):
+                    self._tariff_schedule_list.remove(sorted_list[idx])
+                    _tariff_refresh_tree()
+
+            ts_btn_col = ttk.Frame(tariff_box)
+            ts_btn_col.grid(row=1, column=3, padx=(4, 8), pady=4, sticky="n")
+            ttk.Button(ts_btn_col, text=self.t('settings.pricing.tariff_add'), command=_tariff_add, width=10).pack(pady=2)
+            ttk.Button(ts_btn_col, text=self.t('settings.pricing.tariff_edit'), command=_tariff_edit, width=10).pack(pady=2)
+            ttk.Button(ts_btn_col, text=self.t('settings.pricing.tariff_remove'), command=_tariff_remove, width=10).pack(pady=2)
+
             autosync_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.autosync.title'))
             autosync_box.pack(fill="x", pady=(0, 10))
             self.set_autosync_enabled_var = tk.BooleanVar(value=bool(self.cfg.ui.autosync_enabled))
@@ -7379,6 +7502,7 @@ class CoreMixin:
                 vat_enabled=bool(self.vat_enabled_var.get()),
                 vat_rate_percent=vat_rate,
                 co2_intensity_g_per_kwh=co2_intensity,
+                tariff_schedule=list(getattr(self, '_tariff_schedule_list', []) or []),
             )
             # UI
             # Language selection

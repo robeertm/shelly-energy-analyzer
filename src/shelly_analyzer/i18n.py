@@ -4258,6 +4258,15 @@ _I18N.setdefault("de", {}).update({
     "settings.tou.hint": "Erster passender Tarif gewinnt. Übernacht-Fenster: End < Start.",
     "costs.tou.breakdown": "TOU-Aufschlüsselung",
     "costs.tou.flat_rate": "Einzelpreis",
+    # Tariff schedule
+    "settings.pricing.tariff_schedule": "Tarifzeitplan",
+    "settings.pricing.tariff_hint": "Zukünftige Preisänderungen vorab eingeben. Ab dem Startdatum gilt der neue Tarif.",
+    "settings.pricing.tariff_add": "Hinzufügen",
+    "settings.pricing.tariff_edit": "Bearbeiten",
+    "settings.pricing.tariff_remove": "Entfernen",
+    "settings.pricing.tariff_start_date": "Startdatum",
+    "settings.pricing.tariff_price": "Preis (\u20ac/kWh)",
+    "settings.pricing.tariff_base_fee": "Grundpreis (\u20ac/Jahr)",
 })
 
 _I18N.setdefault("en", {}).update({
@@ -4282,6 +4291,15 @@ _I18N.setdefault("en", {}).update({
     "settings.tou.hint": "First matching tariff wins. Overnight window: end < start.",
     "costs.tou.breakdown": "TOU breakdown",
     "costs.tou.flat_rate": "Flat rate",
+    # Tariff schedule
+    "settings.pricing.tariff_schedule": "Tariff Schedule",
+    "settings.pricing.tariff_hint": "Enter future price changes in advance. The new tariff applies from its start date.",
+    "settings.pricing.tariff_add": "Add",
+    "settings.pricing.tariff_edit": "Edit",
+    "settings.pricing.tariff_remove": "Remove",
+    "settings.pricing.tariff_start_date": "Start Date",
+    "settings.pricing.tariff_price": "Price (\u20ac/kWh)",
+    "settings.pricing.tariff_base_fee": "Base Fee (\u20ac/year)",
 })
 
 _I18N.setdefault("es", {}).update({
