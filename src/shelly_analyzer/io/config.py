@@ -9,6 +9,18 @@ from shelly_analyzer import __version__
 
 
 @dataclass(frozen=True)
+class TariffPeriod:
+    """A future tariff period with a start date.
+
+    When the current date >= start_date, the prices in this period override
+    the base PricingConfig values.
+    """
+    start_date: str = ""  # ISO "YYYY-MM-DD"
+    electricity_price_eur_per_kwh: float = 0.3265
+    base_fee_eur_per_year: float = 127.51
+
+
+@dataclass(frozen=True)
 class TouRate:
     """A single Time-of-Use tariff window."""
     name: str = "HT"
@@ -217,6 +229,9 @@ class PricingConfig:
     # Country presets: DE ~380, AT ~120, CH ~30, green energy ~0.
     co2_intensity_g_per_kwh: float = 380.0
 
+    # Future tariff periods. Each overrides price/base_fee from its start_date onward.
+    tariff_schedule: List[TariffPeriod] = field(default_factory=list)
+
     def vat_rate(self) -> float:
         if not self.vat_enabled:
             return 0.0
@@ -247,6 +262,50 @@ class PricingConfig:
     def base_fee_day_net(self, days_in_year: float = 365.0) -> float:
         """Net base fee per day (pro-rated from yearly)."""
         return self.base_fee_year_net() / float(days_in_year)
+
+    # ── Tariff schedule helpers ──────────────────────────────────────────
+
+    def effective_price_for_date(self, dt) -> float:
+        """Return electricity_price_eur_per_kwh effective on *dt* (date or datetime)."""
+        from datetime import date as _date, datetime as _dt
+        d = dt.date() if isinstance(dt, _dt) else dt
+        for period in sorted(self.tariff_schedule, key=lambda p: p.start_date, reverse=True):
+            if period.start_date:
+                try:
+                    if d >= _date.fromisoformat(period.start_date):
+                        return period.electricity_price_eur_per_kwh
+                except ValueError:
+                    continue
+        return self.electricity_price_eur_per_kwh
+
+    def effective_base_fee_for_date(self, dt) -> float:
+        """Return base_fee_eur_per_year effective on *dt*."""
+        from datetime import date as _date, datetime as _dt
+        d = dt.date() if isinstance(dt, _dt) else dt
+        for period in sorted(self.tariff_schedule, key=lambda p: p.start_date, reverse=True):
+            if period.start_date:
+                try:
+                    if d >= _date.fromisoformat(period.start_date):
+                        return period.base_fee_eur_per_year
+                except ValueError:
+                    continue
+        return self.base_fee_eur_per_year
+
+    def effective_pricing_for_date(self, dt) -> "PricingConfig":
+        """Return a PricingConfig with price/base_fee overridden for the given date.
+
+        VAT settings and CO₂ intensity are inherited. Consumers can call
+        .unit_price_gross() etc. on the result without API changes.
+        """
+        return PricingConfig(
+            electricity_price_eur_per_kwh=self.effective_price_for_date(dt),
+            base_fee_eur_per_year=self.effective_base_fee_for_date(dt),
+            base_fee_includes_vat=self.base_fee_includes_vat,
+            price_includes_vat=self.price_includes_vat,
+            vat_enabled=self.vat_enabled,
+            vat_rate_percent=self.vat_rate_percent,
+            co2_intensity_g_per_kwh=self.co2_intensity_g_per_kwh,
+        )
 
 
 
@@ -661,6 +720,19 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         vat_enabled=bool(pricing_raw.get("vat_enabled", PricingConfig.vat_enabled)),
         vat_rate_percent=_coerce_float(pricing_raw.get("vat_rate_percent", PricingConfig.vat_rate_percent), PricingConfig.vat_rate_percent),
         co2_intensity_g_per_kwh=_coerce_float(pricing_raw.get("co2_intensity_g_per_kwh", PricingConfig.co2_intensity_g_per_kwh), PricingConfig.co2_intensity_g_per_kwh),
+        tariff_schedule=[
+            TariffPeriod(
+                start_date=str(tp.get("start_date", "") or ""),
+                electricity_price_eur_per_kwh=_coerce_float(
+                    tp.get("electricity_price_eur_per_kwh", PricingConfig.electricity_price_eur_per_kwh),
+                    PricingConfig.electricity_price_eur_per_kwh),
+                base_fee_eur_per_year=_coerce_float(
+                    tp.get("base_fee_eur_per_year", PricingConfig.base_fee_eur_per_year),
+                    PricingConfig.base_fee_eur_per_year),
+            )
+            for tp in (pricing_raw.get("tariff_schedule") or [])
+            if isinstance(tp, dict)
+        ],
     )
 
     def _party_from_raw(obj: Any, defaults: BillingParty) -> BillingParty:
@@ -1082,6 +1154,14 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "vat_enabled": cfg.pricing.vat_enabled,
             "vat_rate_percent": cfg.pricing.vat_rate_percent,
             "co2_intensity_g_per_kwh": getattr(cfg.pricing, "co2_intensity_g_per_kwh", 380.0),
+            "tariff_schedule": [
+                {
+                    "start_date": tp.start_date,
+                    "electricity_price_eur_per_kwh": tp.electricity_price_eur_per_kwh,
+                    "base_fee_eur_per_year": tp.base_fee_eur_per_year,
+                }
+                for tp in (cfg.pricing.tariff_schedule or [])
+            ],
         },
         "tou": {
             "enabled": bool(getattr(cfg.tou, "enabled", False)),

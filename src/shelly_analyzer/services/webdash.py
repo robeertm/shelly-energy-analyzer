@@ -2079,6 +2079,21 @@ function renderCosts(data, el) {{
       '</div>';
   }});
   html += '</div>';
+
+  // Show upcoming tariff changes if any
+  if (data.tariff_schedule && data.tariff_schedule.length > 0) {{
+    html += '<div class="card" style="margin-top:10px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">' + t('settings.pricing.tariff_schedule', 'Tariff Schedule') + '</div>';
+    html += '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+    html += '<tr style="border-bottom:1px solid var(--border)"><th style="text-align:left;padding:4px">' + t('settings.pricing.tariff_start_date', 'Start Date') + '</th><th style="text-align:right;padding:4px">' + t('settings.pricing.tariff_price', 'Price') + '</th><th style="text-align:right;padding:4px">' + t('settings.pricing.tariff_base_fee', 'Base Fee') + '</th></tr>';
+    data.tariff_schedule.sort(function(a,b) {{ return a.start_date < b.start_date ? -1 : 1; }}).forEach(function(tp) {{
+      var today = new Date().toISOString().slice(0,10);
+      var active = tp.start_date <= today;
+      var style = active ? 'font-weight:bold' : 'color:var(--muted)';
+      html += '<tr style="border-bottom:1px solid var(--border);' + style + '"><td style="padding:4px">' + esc(tp.start_date) + (active ? ' \u2713' : '') + '</td><td style="text-align:right;padding:4px">' + tp.price.toFixed(4) + ' \u20ac/kWh</td><td style="text-align:right;padding:4px">' + tp.base_fee.toFixed(2) + ' \u20ac/' + t('web.costs.year', 'year') + '</td></tr>';
+    }});
+    html += '</table></div>';
+  }}
+
   el.innerHTML = html;
 }}
 
