@@ -8578,25 +8578,78 @@ class CoreMixin:
             except Exception:
                 pass
 
-            def _capture(name: str) -> None:
-                """Capture the current window content to a PNG file."""
+            import time as _t_mod
+            from PIL import ImageGrab, Image as _PILImage
+
+            def _grab_window() -> "_PILImage.Image":
                 self.update_idletasks()
                 self.update()
-                # Small delay for rendering
-                import time as _t_mod
-                _t_mod.sleep(0.3)
+                _t_mod.sleep(0.25)
                 self.update_idletasks()
+                x = self.winfo_rootx()
+                y = self.winfo_rooty()
+                w = self.winfo_width()
+                h = self.winfo_height()
+                return ImageGrab.grab(bbox=(x, y, x + w, y + h))
+
+            def _find_scroll_canvas(widget) -> "Optional[tk.Canvas]":
+                """Find a scrollable tk.Canvas inside a widget tree (depth-limited)."""
+                if isinstance(widget, tk.Canvas):
+                    sr = widget.cget("scrollregion")
+                    if sr:
+                        return widget
                 try:
-                    from PIL import ImageGrab
-                    x = self.winfo_rootx()
-                    y = self.winfo_rooty()
-                    w = self.winfo_width()
-                    h = self.winfo_height()
-                    img = ImageGrab.grab(bbox=(x, y, x + w, y + h))
-                    fpath = out_dir / f"{name}.png"
-                    img.save(str(fpath))
+                    for child in widget.winfo_children():
+                        found = _find_scroll_canvas(child)
+                        if found:
+                            return found
+                except Exception:
+                    pass
+                return None
+
+            def _capture(name: str, scroll_canvas: "Optional[tk.Canvas]" = None) -> int:
+                """Capture the current window. If scroll_canvas is given, scroll
+                through it and capture multiple parts. Returns number of screenshots."""
+                try:
+                    if scroll_canvas is None:
+                        img = _grab_window()
+                        img.save(str(out_dir / f"{name}.png"))
+                        return 1
+
+                    # Scroll through the canvas and capture each page
+                    sr = scroll_canvas.cget("scrollregion")
+                    if not sr:
+                        img = _grab_window()
+                        img.save(str(out_dir / f"{name}.png"))
+                        return 1
+
+                    parts = sr.split()
+                    total_h = int(float(parts[3])) if len(parts) >= 4 else 0
+                    visible_h = scroll_canvas.winfo_height()
+                    if total_h <= visible_h or visible_h <= 0:
+                        img = _grab_window()
+                        img.save(str(out_dir / f"{name}.png"))
+                        return 1
+
+                    n_pages = max(1, (total_h + visible_h - 1) // visible_h)
+                    shots = 0
+                    for page in range(n_pages):
+                        frac = page / max(1, n_pages - 1) if n_pages > 1 else 0.0
+                        scroll_canvas.yview_moveto(frac)
+                        self.update_idletasks()
+                        self.update()
+                        _t_mod.sleep(0.25)
+                        self.update_idletasks()
+                        img = _grab_window()
+                        suffix = f"_part{page+1}" if n_pages > 1 else ""
+                        img.save(str(out_dir / f"{name}{suffix}.png"))
+                        shots += 1
+                    # Scroll back to top
+                    scroll_canvas.yview_moveto(0.0)
+                    return shots
                 except Exception as e:
                     logging.getLogger(__name__).warning("Screenshot failed for %s: %s", name, e)
+                    return 0
 
             # Remember current tab
             try:
@@ -8607,15 +8660,18 @@ class CoreMixin:
             def _safe(text: str) -> str:
                 return text.replace(" ", "_").replace("/", "_").replace("\\", "_")
 
-            # Screenshot all main tabs
+            # Screenshot all main tabs (auto-detect scrollable content)
             count = 0
             for i, tab_id in enumerate(self.notebook.tabs()):
                 try:
                     self.notebook.select(tab_id)
+                    self.update_idletasks()
                     tab_text = self.notebook.tab(tab_id, "text")
                     safe_name = f"{i+1:02d}_{_safe(tab_text)}"
-                    _capture(safe_name)
-                    count += 1
+                    # Find scrollable canvas in this tab's widget tree
+                    tab_widget = self.nametowidget(tab_id)
+                    sc = _find_scroll_canvas(tab_widget)
+                    count += _capture(safe_name, scroll_canvas=sc)
                 except Exception:
                     pass
 
@@ -8637,19 +8693,17 @@ class CoreMixin:
                                     try:
                                         dev_nb.select(dtab_id)
                                         dtab_text = dev_nb.tab(dtab_id, "text")
-                                        _capture(f"plots_{_safe(ptab_text)}_{_safe(dtab_text)}")
-                                        count += 1
+                                        count += _capture(f"plots_{_safe(ptab_text)}_{_safe(dtab_text)}")
                                     except Exception:
                                         pass
                             else:
-                                _capture(f"plots_{_safe(ptab_text)}")
-                                count += 1
+                                count += _capture(f"plots_{_safe(ptab_text)}")
                         except Exception:
                             pass
             except Exception:
                 pass
 
-            # Settings sub-tabs
+            # Settings sub-tabs (with scroll detection)
             try:
                 self.notebook.select(str(self.tab_settings))
                 self.update_idletasks()
@@ -8658,10 +8712,12 @@ class CoreMixin:
                     for j, stab_id in enumerate(settings_nb.tabs()):
                         try:
                             settings_nb.select(stab_id)
+                            self.update_idletasks()
                             stab_text = settings_nb.tab(stab_id, "text")
                             safe_name = f"settings_{j+1:02d}_{_safe(stab_text)}"
-                            _capture(safe_name)
-                            count += 1
+                            stab_widget = self.nametowidget(stab_id)
+                            sc = _find_scroll_canvas(stab_widget)
+                            count += _capture(safe_name, scroll_canvas=sc)
                         except Exception:
                             pass
             except Exception:
