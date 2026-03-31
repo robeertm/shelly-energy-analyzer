@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.3.4 - 2026-03-31
+### Fixed
+- **Desktop weather scatter plot no longer accumulates colorbars** – The hour-of-day colorbar legend was added on every tab refresh without removing the previous one, causing them to stack up. Now properly removed before re-drawing.
+
 ## 13.3.3 - 2026-03-31
 ### Fixed
 - **Weather timeline X-axis labels no longer overlap on mobile** – Reduced max labels from 8 to 4 on narrow screens (<400px) and shortened format to just `dd.mm` (without hour suffix) to prevent text overlap on phone browsers.

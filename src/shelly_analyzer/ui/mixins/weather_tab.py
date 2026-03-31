@@ -237,12 +237,16 @@ class WeatherMixin:
         # Draw scatter plot – color by hour-of-day (useful extra dimension)
         ax1 = self._weather_scatter_ax
         ax1.clear()
+        # Remove previous colorbar if it exists
+        if hasattr(self, "_weather_cbar") and self._weather_cbar is not None:
+            self._weather_cbar.remove()
+            self._weather_cbar = None
         hours_of_day = np.array([h.hour + h.minute / 60.0 for h in matched_hours])
         scatter = ax1.scatter(temps, kwh, c=hours_of_day, cmap="twilight_shifted",
                               vmin=0, vmax=24, alpha=0.65, s=22, edgecolors="none")
-        cbar = self._weather_fig.colorbar(scatter, ax=ax1, pad=0.02, shrink=0.8)
-        cbar.set_label(self.t("weather.chart.hour"), fontsize=8)
-        cbar.set_ticks([0, 6, 12, 18, 24])
+        self._weather_cbar = self._weather_fig.colorbar(scatter, ax=ax1, pad=0.02, shrink=0.8)
+        self._weather_cbar.set_label(self.t("weather.chart.hour"), fontsize=8)
+        self._weather_cbar.set_ticks([0, 6, 12, 18, 24])
         if len(temps) > 2:
             z = np.polyfit(temps, kwh, 1)
             p = np.poly1d(z)
