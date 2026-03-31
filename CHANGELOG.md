@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.5.0 - 2026-03-31
+### Added
+- **Shelly firmware update check & OTA in health check** – The health check now queries each device for available firmware updates. A new "Update" column shows ⬆ with the new version if an update is available, or ✓ if current. Two new buttons: "Update" (selected device) and "Alle updaten" (all devices with pending updates). Supports both Gen2+ (RPC `Shelly.CheckForUpdate` / `Shelly.Update`) and Gen1 (`/ota?update=true`).
+
 ## 13.4.0 - 2026-03-31
 ### Added
 - **Tariff schedule – enter future price changes in advance** – New "Tarifzeitplan" section in desktop settings allows adding future electricity prices and base fees with a start date (e.g., "from 2026-10-01: 0.44 €/kWh"). The correct price is automatically used for cost calculations based on the current date. Tariff schedule is shown in the web dashboard costs tab with active/upcoming indicators. All cost consumers (costs tab, forecast, standby, live cards) now use date-aware pricing.
