@@ -1,5 +1,11 @@
 # Changelog
 
+## 13.5.2 - 2026-03-31
+### Improved
+- **CO₂ chart color gradient now includes yellow/orange** – The intensity line chart and heatmap strip now use a 4-stop gradient (green → yellow-green → orange → red) instead of the previous direct green-to-red ramp. Both charts share the same color function for consistency.
+### Fixed
+- **CO₂ chart no longer scrolls away** – The mousewheel scrolling in the CO₂ tab was globally bound, causing the intensity chart to scroll out of view when using the mouse wheel over it. Now only scrolls when the mouse is over the scrollable content area, not over embedded charts.
+
 ## 13.5.1 - 2026-03-31
 ### Improved
 - **Desktop CO₂ intensity chart now colorful like the web version** – The 24h CO₂ intensity line chart in the desktop app now uses the same green→yellow→red color gradient as the web dashboard. Each line segment and fill area is colored based on intensity relative to the green/dirty thresholds, replacing the previous flat blue.
