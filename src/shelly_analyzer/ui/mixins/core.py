@@ -315,6 +315,25 @@ class CoreMixin:
                 if self._nilm_learners:
                     logging.getLogger(__name__).info("NILM ML: initialized learners for %d 3-phase devices: %s",
                                len(self._nilm_learners), ", ".join(self._nilm_learners.keys()))
+                # Push loaded clusters to web store immediately so dashboard
+                # doesn't show "learning..." while clusters are already known
+                if self._nilm_learners:
+                    _all_loaded = []
+                    for _dk2, _lrn2 in self._nilm_learners.items():
+                        for _c2 in _lrn2.get_clusters():
+                            _all_loaded.append({
+                                "matched_appliance": _c2.matched_appliance,
+                                "count": _c2.count,
+                                "centroid_w": _c2.centroid_w,
+                                "icon": _c2.icon,
+                                "label": _c2.label,
+                                "device_key": getattr(_c2, "device_key", ""),
+                            })
+                    if _all_loaded:
+                        self._live_state_store._nilm_clusters = _all_loaded
+                    # Also store total transition count
+                    _total_t = sum(_l.get_transition_count() for _l in self._nilm_learners.values())
+                    self._live_state_store._nilm_transition_count = _total_t
             except Exception:
                 logging.getLogger(__name__).debug("NILM ML init failed", exc_info=True)
             # Plots
