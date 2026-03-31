@@ -2849,7 +2849,7 @@ function renderWeather(d, el) {{
 
     // Legend for scatter
     html += '<div style="display:flex;gap:10px;justify-content:center;margin-top:6px;font-size:10px;color:var(--muted)">';
-    html += '<span>\ud83c\udf19 0\u20136h</span><span>\ud83c\udf05 6\u201312h</span><span>\u2600\ufe0f 12\u201318h</span><span>\ud83c\udf06 18\u201324h</span>';
+    html += '<span>\U0001f319 0\u20136h</span><span>\U0001f305 6\u201312h</span><span>\u2600\ufe0f 12\u201318h</span><span>\U0001f306 18\u201324h</span>';
     html += '</div>';
   }} else if (d.paired) {{
     html += '<p style="color:var(--muted);font-size:12px;margin-top:10px">' + t('web.weather.few_data', 'Only ' + d.paired.length + ' data points.').replace('{{n}}', d.paired.length) + '</p>';
