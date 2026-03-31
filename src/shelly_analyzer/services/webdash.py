@@ -3006,12 +3006,14 @@ function _drawWeatherCharts(d) {{
     ctx2.stroke();
     ctx2.globalAlpha = 1.0;
 
-    // X-axis labels (date+hour)
+    // X-axis labels (date+hour) – fewer on narrow screens
     ctx2.fillStyle = muted; ctx2.font = '9px sans-serif'; ctx2.textAlign = 'center';
-    var step = Math.max(1, Math.floor(n / 8));
+    var maxLabels = W2 < 400 ? 4 : (W2 < 600 ? 5 : 8);
+    var step = Math.max(1, Math.floor(n / maxLabels));
     for (var li = 0; li < n; li += step) {{
       var dt = new Date(sorted[li].ts * 1000);
-      var lbl = ('0'+dt.getDate()).slice(-2) + '.' + ('0'+(dt.getMonth()+1)).slice(-2) + ' ' + ('0'+dt.getHours()).slice(-2) + 'h';
+      var lbl = ('0'+dt.getDate()).slice(-2) + '.' + ('0'+(dt.getMonth()+1)).slice(-2);
+      if (W2 >= 400) lbl += ' ' + ('0'+dt.getHours()).slice(-2) + 'h';
       var lx = pad2.left + (cW2 * (li + 0.5) / n);
       ctx2.fillText(lbl, lx, pad2.top + cH2 + 16);
     }}

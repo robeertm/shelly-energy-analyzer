@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.3.3 - 2026-03-31
+### Fixed
+- **Weather timeline X-axis labels no longer overlap on mobile** – Reduced max labels from 8 to 4 on narrow screens (<400px) and shortened format to just `dd.mm` (without hour suffix) to prevent text overlap on phone browsers.
+
 ## 13.3.2 - 2026-03-31
 ### Fixed
 - **Web dashboard surrogate encoding fix (part 2)** – Three more emoji surrogate pairs in the weather card labels (🌡️💧💨) were still using JS-style `\ud83c\udf21` notation which Python cannot encode as UTF-8. Replaced with proper `\U0001fXXX` codepoints.
