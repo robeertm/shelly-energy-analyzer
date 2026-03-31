@@ -1099,6 +1099,118 @@ class LiveWebMixin:
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
 
+            # --- Weather correlation for web dashboard ---
+            if action == "weather_correlation":
+                try:
+                    import datetime as _dt_wc
+                    import time as _time_wc
+                    import numpy as _np_wc
+
+                    weather_cfg = getattr(self.cfg, "weather", None)
+                    api_key = getattr(weather_cfg, "api_key", "") if weather_cfg else ""
+                    lat = getattr(weather_cfg, "lat", 0.0) if weather_cfg else 0.0
+                    lon = getattr(weather_cfg, "lon", 0.0) if weather_cfg else 0.0
+
+                    if not api_key or (lat == 0 and lon == 0):
+                        return {"ok": False, "error": _t(self.lang, "web.weather.no_data")}
+
+                    # Current weather
+                    current_data = None
+                    try:
+                        from shelly_analyzer.services.weather import fetch_current_weather
+                        snap = fetch_current_weather(api_key, lat, lon)
+                        if snap:
+                            current_data = {
+                                "temp_c": snap.temp_c,
+                                "humidity_pct": snap.humidity_pct,
+                                "wind_speed_ms": snap.wind_speed_ms,
+                                "clouds_pct": snap.clouds_pct,
+                            }
+                            # Persist to DB
+                            hour_ts = (int(snap.timestamp) // 3600) * 3600
+                            self.storage.db.upsert_weather([(
+                                hour_ts, snap.temp_c, snap.humidity_pct,
+                                snap.wind_speed_ms, snap.clouds_pct,
+                                snap.pressure_hpa, snap.description,
+                                int(_time_wc.time()),
+                            )])
+                    except Exception:
+                        pass
+
+                    # Pick first device (or from params)
+                    dev_key = str(params.get("device_key", "")).strip()
+                    dev = None
+                    if dev_key:
+                        dev = next((d for d in self.cfg.devices if d.key == dev_key), None)
+                    if dev is None and self.cfg.devices:
+                        dev = self.cfg.devices[0]
+                    if dev is None:
+                        return {"ok": True, "current": current_data, "correlation": None, "paired": []}
+
+                    # Query last 30 days
+                    now = _dt_wc.datetime.now(_dt_wc.timezone.utc)
+                    start_ts = int((now - _dt_wc.timedelta(days=30)).timestamp())
+                    end_ts = int(now.timestamp())
+
+                    weather_df = self.storage.db.query_weather(start_ts, end_ts)
+                    hourly = self.storage.db.query_hourly(dev.key, start_ts=start_ts, end_ts=end_ts)
+
+                    if weather_df.empty or hourly.empty:
+                        return {"ok": True, "current": current_data, "correlation": None, "paired": []}
+
+                    # Match by hour
+                    w_by_hour = {}
+                    for _, row in weather_df.iterrows():
+                        h = int(row["hour_ts"])
+                        w_by_hour[h] = float(row["temp_c"]) if row["temp_c"] is not None else None
+
+                    paired = []
+                    temps_list = []
+                    kwh_list = []
+                    for _, row in hourly.iterrows():
+                        h = int(row["hour_ts"])
+                        if h in w_by_hour and w_by_hour[h] is not None:
+                            t_val = w_by_hour[h]
+                            k_val = float(row["kwh"])
+                            dt = _dt_wc.datetime.fromtimestamp(h, tz=_dt_wc.timezone.utc)
+                            paired.append({
+                                "ts": h,
+                                "temp": round(t_val, 2),
+                                "kwh": round(k_val, 4),
+                                "hour_of_day": dt.hour,
+                            })
+                            temps_list.append(t_val)
+                            kwh_list.append(k_val)
+
+                    correlation = None
+                    if len(temps_list) >= 3:
+                        temps_arr = _np_wc.array(temps_list)
+                        kwh_arr = _np_wc.array(kwh_list)
+                        r_val = float(_np_wc.corrcoef(temps_arr, kwh_arr)[0, 1]) if _np_wc.std(temps_arr) > 0 and _np_wc.std(kwh_arr) > 0 else 0.0
+                        hdd = sum(max(0, 18.0 - t) / 24.0 for t in temps_list)
+                        cdd = sum(max(0, t - 22.0) / 24.0 for t in temps_list)
+                        total_kwh = float(kwh_arr.sum())
+                        # Linear regression for slope
+                        slope = None
+                        intercept = None
+                        if len(temps_arr) > 2:
+                            z = _np_wc.polyfit(temps_arr, kwh_arr, 1)
+                            slope = round(float(z[0]), 6)
+                            intercept = round(float(z[1]), 6)
+                        correlation = {
+                            "r_value": round(r_val, 4),
+                            "hdd": round(hdd, 1),
+                            "cdd": round(cdd, 1),
+                            "kwh_per_hdd": round(total_kwh / hdd, 2) if hdd > 1 else None,
+                            "kwh_per_cdd": round(total_kwh / cdd, 2) if cdd > 1 else None,
+                            "slope": slope,
+                            "intercept": intercept,
+                        }
+
+                    return {"ok": True, "current": current_data, "correlation": correlation, "paired": paired}
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
             # --- Solar data for web dashboard ---
             if action == "solar":
                 try:
