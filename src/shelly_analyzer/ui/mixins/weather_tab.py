@@ -234,6 +234,9 @@ class WeatherMixin:
         else:
             self._weather_interp_var.set(self.t("weather.interpretation.none", r=f"{r_val:.2f}"))
 
+        # Theme colors
+        tc = self._get_theme_colors()
+
         # Draw scatter plot – color by hour-of-day (useful extra dimension)
         ax1 = self._weather_scatter_ax
         ax1.clear()
@@ -251,12 +254,13 @@ class WeatherMixin:
             z = np.polyfit(temps, kwh, 1)
             p = np.poly1d(z)
             t_range = np.linspace(temps.min(), temps.max(), 50)
-            ax1.plot(t_range, p(t_range), "r--", alpha=0.7, linewidth=2)
+            ax1.plot(t_range, p(t_range), color=tc["red"], linestyle="--", alpha=0.7, linewidth=2)
         ax1.set_xlabel(self.t("weather.chart.temp_axis"), fontsize=9)
         ax1.set_ylabel(self.t("weather.chart.kwh_axis"), fontsize=9)
         ax1.set_title(self.t("weather.chart.scatter"), fontsize=10)
         ax1.grid(alpha=0.3)
         ax1.set_axisbelow(True)
+        self._apply_plot_theme(self._weather_fig, ax1, self._weather_canvas)
 
         # Time series – proper date labels
         import matplotlib.dates as mdates
@@ -264,47 +268,57 @@ class WeatherMixin:
         ax2.clear()
         ax2_twin = ax2.twinx()
         dates = mdates.date2num(matched_hours)
-        ax2.bar(dates, matched_kwh, color="#3498db", alpha=0.6,
+        ax2.bar(dates, matched_kwh, color=tc["blue"], alpha=0.6,
                 width=1.0 / 24.0, align="center")
-        ax2_twin.plot(dates, matched_temps, color="#e74c3c", linewidth=1.5, alpha=0.8)
+        ax2_twin.plot(dates, matched_temps, color=tc["red"], linewidth=1.5, alpha=0.8)
         ax2.xaxis.set_major_locator(mdates.DayLocator(interval=max(1, len(matched_hours) // (24 * 5))))
         ax2.xaxis.set_major_formatter(mdates.DateFormatter("%d.%m."))
         ax2.xaxis.set_minor_locator(mdates.HourLocator(interval=6))
         self._weather_fig.autofmt_xdate(rotation=30, ha="right")
-        ax2.set_ylabel(self.t("weather.chart.kwh_axis"), color="#3498db", fontsize=9)
-        ax2_twin.set_ylabel(self.t("weather.chart.temp_axis"), color="#e74c3c", fontsize=9)
+        ax2.set_ylabel(self.t("weather.chart.kwh_axis"), color=tc["blue"], fontsize=9)
+        ax2_twin.set_ylabel(self.t("weather.chart.temp_axis"), color=tc["red"], fontsize=9)
         ax2.set_title(self.t("weather.chart.timeseries"), fontsize=10)
         ax2.grid(axis="y", alpha=0.3)
         ax2.set_axisbelow(True)
+        self._apply_plot_theme(self._weather_fig, ax2)
+        # Also theme the twin axis
+        ax2_twin.tick_params(axis="both", colors=tc["fg"])
+        for spine in ax2_twin.spines.values():
+            spine.set_color(tc["fg"])
 
         self._weather_fig.tight_layout()
         self._weather_canvas.draw_idle()
 
     def _draw_empty_weather_charts(self, msg: str) -> None:
+        tc = self._get_theme_colors()
         for ax in (self._weather_scatter_ax, self._weather_ts_ax):
             ax.clear()
-            ax.text(0.5, 0.5, msg, ha="center", va="center", fontsize=11, color="gray")
+            ax.text(0.5, 0.5, msg, ha="center", va="center", fontsize=11, color=tc["muted"])
             ax.axis("off")
+            self._apply_plot_theme(self._weather_fig, ax, self._weather_canvas)
         self._weather_fig.tight_layout()
         self._weather_canvas.draw_idle()
 
     def _draw_energy_only_chart(self, hourly, dev_name: str) -> None:
         """Show energy data when no weather pairing available yet."""
         import pandas as pd
+        tc = self._get_theme_colors()
         self._weather_scatter_ax.clear()
         self._weather_scatter_ax.text(0.5, 0.5, "Wetter-Daten werden\nstündlich gesammelt...",
-                                      ha="center", va="center", fontsize=10, color="gray")
+                                      ha="center", va="center", fontsize=10, color=tc["muted"])
         self._weather_scatter_ax.axis("off")
+        self._apply_plot_theme(self._weather_fig, self._weather_scatter_ax, self._weather_canvas)
 
         ax2 = self._weather_ts_ax
         ax2.clear()
         kwh = hourly["kwh"].values[-48:] if len(hourly) > 48 else hourly["kwh"].values
-        ax2.bar(range(len(kwh)), kwh, color="#3498db", alpha=0.7, edgecolor="white", linewidth=0.3)
+        ax2.bar(range(len(kwh)), kwh, color=tc["blue"], alpha=0.7)
         ax2.set_title(f"Verbrauch: {dev_name} (letzte {len(kwh)}h)", fontsize=10)
         ax2.set_xlabel("h", fontsize=9)
         ax2.set_ylabel("kWh", fontsize=9)
         ax2.grid(axis="y", alpha=0.3)
         ax2.set_axisbelow(True)
+        self._apply_plot_theme(self._weather_fig, ax2)
 
         self._weather_fig.tight_layout()
         self._weather_canvas.draw_idle()

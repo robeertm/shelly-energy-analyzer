@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.6.0 - 2026-03-31
+### Improved
+- **Dark mode support for all desktop chart tabs** – Weather, CO₂, Standby, and Forecast tabs now fully respect the plot theme setting (auto/day/night). All matplotlib figures get themed backgrounds, axis colors, grid lines, tick labels, and legend frames. Data series use theme-aware colors (brighter in dark mode). New `_get_theme_colors()` helper provides consistent color palettes across all tabs.
+
 ## 13.5.5 - 2026-03-31
 ### Improved
 - **Screenshots now capture full scrollable content** – For tabs with scrollable areas (e.g., main settings, CO₂ tab), the screenshot function now automatically scrolls through the content and saves multiple parts (`_part1.png`, `_part2.png`, ...) so nothing is missed. Scrollable canvases are auto-detected in the widget tree.

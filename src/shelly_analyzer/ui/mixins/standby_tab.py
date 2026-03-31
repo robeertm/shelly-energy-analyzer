@@ -109,23 +109,25 @@ class StandbyMixin:
             ))
 
         # Bar chart
+        tc = self._get_theme_colors()
         ax = self._standby_bar_ax
         ax.clear()
         if report.devices:
             names = [d.device_name[:18] for d in report.devices]
             costs = [d.annual_standby_cost for d in report.devices]
-            colors = ["#e74c3c" if d.risk == "high" else "#f39c12" if d.risk == "medium" else "#27ae60" for d in report.devices]
-            bars = ax.barh(names, costs, color=colors, alpha=0.85, edgecolor="white", linewidth=0.5)
+            colors = [tc["red"] if d.risk == "high" else tc["orange"] if d.risk == "medium" else tc["green"] for d in report.devices]
+            bars = ax.barh(names, costs, color=colors, alpha=0.85)
             ax.set_xlabel("€/Jahr", fontsize=9)
             for bar, cost in zip(bars, costs):
                 if cost > 0:
                     ax.text(bar.get_width() + max(costs) * 0.02, bar.get_y() + bar.get_height() / 2,
-                           f"{cost:.0f} €", va="center", fontsize=8, fontweight="bold")
+                           f"{cost:.0f} €", va="center", fontsize=8, fontweight="bold", color=tc["fg"])
             ax.grid(axis="x", alpha=0.3)
             ax.set_axisbelow(True)
         else:
-            ax.text(0.5, 0.5, self.t("standby.no_data"), ha="center", va="center", fontsize=11, color="gray")
+            ax.text(0.5, 0.5, self.t("standby.no_data"), ha="center", va="center", fontsize=11, color=tc["muted"])
             ax.axis("off")
+        self._apply_plot_theme(self._standby_bar_fig, ax, self._standby_bar_canvas)
         self._standby_bar_fig.tight_layout()
         self._standby_bar_canvas.draw_idle()
 
@@ -133,19 +135,23 @@ class StandbyMixin:
         self._standby_profile_ax.clear()
         if report.devices:
             self._draw_standby_profile(report.devices[0])
+        self._apply_plot_theme(self._standby_profile_fig, self._standby_profile_ax, self._standby_profile_canvas)
         self._standby_profile_fig.tight_layout()
         self._standby_profile_canvas.draw_idle()
 
     def _draw_standby_profile(self, dev) -> None:
+        tc = self._get_theme_colors()
         ax = self._standby_profile_ax
         ax.clear()
         if dev.hourly_profile:
             hours = list(range(24))
-            colors = ["#34495e" if 0 <= h <= 5 else "#3498db" if 6 <= h <= 21 else "#34495e" for h in hours]
-            ax.bar(hours, dev.hourly_profile, color=colors, alpha=0.85, edgecolor="white", linewidth=0.5)
-            ax.axhline(y=dev.base_load_w, color="#e74c3c", linestyle="--", alpha=0.8, linewidth=1.5,
+            night_c = tc["purple"] if tc["bg"] == "#111111" else "#34495e"
+            day_c = tc["blue"]
+            colors = [night_c if 0 <= h <= 5 else day_c if 6 <= h <= 21 else night_c for h in hours]
+            ax.bar(hours, dev.hourly_profile, color=colors, alpha=0.85)
+            ax.axhline(y=dev.base_load_w, color=tc["red"], linestyle="--", alpha=0.8, linewidth=1.5,
                       label=f"Standby: {dev.base_load_w:.0f} W")
-            ax.fill_between(hours, 0, dev.base_load_w, color="#e74c3c", alpha=0.08)
+            ax.fill_between(hours, 0, dev.base_load_w, color=tc["red"], alpha=0.08)
             ax.set_title(dev.device_name[:20], fontsize=10)
             ax.set_xlabel("h", fontsize=9)
             ax.set_ylabel("W", fontsize=9)
@@ -153,6 +159,7 @@ class StandbyMixin:
             ax.grid(axis="y", alpha=0.3)
             ax.set_axisbelow(True)
             ax.set_xticks([0, 4, 8, 12, 16, 20])
+            self._apply_plot_theme(self._standby_profile_fig, ax, self._standby_profile_canvas)
 
     def _on_standby_select(self, event) -> None:
         sel = self._standby_tree.selection()
