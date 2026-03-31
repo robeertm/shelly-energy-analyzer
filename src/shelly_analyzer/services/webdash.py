@@ -1391,15 +1391,17 @@ function _updateNilmStatus() {{
     var el = document.getElementById('nilm-status');
     var badge = document.getElementById('nilm-badge');
     if (!el || !badge) return;
+    el.style.display = 'block';
     if (d.cluster_count > 0) {{
-      el.style.display = 'block';
       var top = (d.clusters || []).slice(0, 3).map(function(c) {{
         return (c.icon || '') + ' ' + Math.round(c.centroid_w || 0) + 'W x' + (c.count || 0);
       }}).join('  ');
-      badge.textContent = 'NILM ML: ' + d.cluster_count + ' patterns learned  |  ' + top;
+      badge.textContent = 'NILM ML: ' + d.cluster_count + ' {t_patterns}  |  ' + top;
     }} else {{
-      badge.textContent = 'NILM ML: learning...';
-      el.style.display = 'block';
+      var tc = d.transition_count || 0;
+      badge.textContent = tc > 0
+        ? 'NILM ML: {t_learning} (' + tc + ' {t_transitions}' + (tc < 10 ? ', min. 10' : '') + ')'
+        : 'NILM ML: {t_waiting}';
     }}
   }}).catch(function() {{}});
 }}
@@ -5682,13 +5684,15 @@ class _Handler(BaseHTTPRequestHandler):
                 try:
                     store = self.dashboard._state_store
                     clusters = getattr(store, "_nilm_clusters", [])
+                    trans_count = getattr(store, "_nilm_transition_count", 0)
                     payload = {
                         "ok": True,
                         "cluster_count": len(clusters),
+                        "transition_count": trans_count,
                         "clusters": clusters[:10],
                     }
                 except Exception as e:
-                    payload = {"ok": False, "error": str(e), "cluster_count": 0, "clusters": []}
+                    payload = {"ok": False, "error": str(e), "cluster_count": 0, "transition_count": 0, "clusters": []}
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -6165,6 +6169,10 @@ class LiveWebDashboard:
                 "web_ev_all_plugs": _t(self.lang, "web.ev.all_plugs"),
                 "web_ev_apikey_hint": _t(self.lang, "web.ev.apikey_hint"),
                 "web_ev_save": _t(self.lang, "web.ev.save"),
+                "t_patterns": _t(self.lang, "web.nilm.patterns"),
+                "t_learning": _t(self.lang, "web.nilm.learning"),
+                "t_transitions": _t(self.lang, "web.nilm.transitions"),
+                "t_waiting": _t(self.lang, "web.nilm.waiting"),
                 "web_tab_export": _t(self.lang, "web.tab.export"),
                 # Export pane
                 "exp_daterange": _t(self.lang, "web.control.export.daterange"),
