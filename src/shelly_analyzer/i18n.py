@@ -839,6 +839,57 @@ _I18N: Dict[str, Dict[str, str]] = {
         "appliance.air_conditioner.name": "Klimaanlage",
         "appliance.fan.name": "Ventilator",
 
+        # ── Generic message boxes ─────────────────────────────────────────
+        "msg.ok": "OK",
+        "msg.info": "Info",
+        "msg.error": "Fehler",
+        "msg.warning": "Warnung",
+        "msg.sent": "OK (gesendet)",
+        "msg.error_detail": "Fehler: {err}",
+        "msg.email_sent": "OK – E-Mail gesendet",
+
+        # ── NILM mode hints ──────────────────────────────────────────────
+        "nilm.hint": "Klick: Modus wechseln (Kombiniert/Statisch/ML)",
+        "nilm.mode": "Modus: {mode}",
+        "nilm.mode.combined": "Kombiniert",
+        "nilm.mode.static": "Statisch",
+        "nilm.mode.ml": "ML only",
+
+        # ── CO₂ navigation ───────────────────────────────────────────────
+        "co2.nav.prev_day": "\u25c0 Tag",
+        "co2.nav.prev_hour": "\u25c0 h",
+        "co2.nav.next_hour": "h \u25b6",
+        "co2.nav.next_day": "Tag \u25b6",
+        "co2.nav.now": "Jetzt",
+
+        # ── Tenant export messages ───────────────────────────────────────
+        "tenant.pdf_exported": "PDF(s) exportiert: {path}",
+
+        # ── Settings: move-in date ───────────────────────────────────────
+        "settings.tenant.move_in": "Einzugsdatum (YYYY-MM-DD):",
+        "settings.tenant.move_in_hint": "Ab diesem Datum wird die Jahresabrechnung berechnet.",
+
+        # ── Demo mode ────────────────────────────────────────────────────
+        "settings.demo_mode": "Demo-Modus (gefälschte, aber realistische Daten)",
+
+        # ── ENTSO-E test errors ──────────────────────────────────────────
+        "co2.test.token_invalid": "Token ungültig",
+        "co2.test.api_unavailable": "ENTSO-E API nicht erreichbar (HTTP 5xx)",
+        "co2.test.unreachable": "API nicht erreichbar",
+
+        # ── Web dashboard errors ─────────────────────────────────────────
+        "web.error": "Web-Dashboard Fehler",
+        "web.error_label": "Fehler",
+        "web.starting": "Starte \u2026",
+        "web.job_started": "\u2713 Job gestartet \u2013 Fortschritt unten bei Laufende Jobs.",
+
+        # ── Sync/export status messages ──────────────────────────────────
+        "sync.log.started": "Sync gestartet ({mode}) \u2026",
+        "sync.log.co2_started": "ENTSO-E CO\u2082 Check wird gestartet \u2026",
+        "live.export.done": "Live Current View exportiert ({fmt}): {n} Datei(en)",
+        "live.export.png_done": "PNG exportiert: {n} Datei(en)",
+        "telegram.no_images": "Keine Bilder gesendet",
+
     },
     "en": {
         # App
@@ -1668,6 +1719,57 @@ _I18N: Dict[str, Dict[str, str]] = {
         "appliance.led_light.name": "LED lighting",
         "appliance.air_conditioner.name": "Air conditioner",
         "appliance.fan.name": "Fan",
+
+        # ── Generic message boxes ─────────────────────────────────────────
+        "msg.ok": "OK",
+        "msg.info": "Info",
+        "msg.error": "Error",
+        "msg.warning": "Warning",
+        "msg.sent": "OK (sent)",
+        "msg.error_detail": "Error: {err}",
+        "msg.email_sent": "OK – Email sent",
+
+        # ── NILM mode hints ──────────────────────────────────────────────
+        "nilm.hint": "Click: Switch mode (Combined/Static/ML)",
+        "nilm.mode": "Mode: {mode}",
+        "nilm.mode.combined": "Combined",
+        "nilm.mode.static": "Static",
+        "nilm.mode.ml": "ML only",
+
+        # ── CO₂ navigation ───────────────────────────────────────────────
+        "co2.nav.prev_day": "\u25c0 Day",
+        "co2.nav.prev_hour": "\u25c0 h",
+        "co2.nav.next_hour": "h \u25b6",
+        "co2.nav.next_day": "Day \u25b6",
+        "co2.nav.now": "Now",
+
+        # ── Tenant export messages ───────────────────────────────────────
+        "tenant.pdf_exported": "PDF(s) exported: {path}",
+
+        # ── Settings: move-in date ───────────────────────────────────────
+        "settings.tenant.move_in": "Move-in date (YYYY-MM-DD):",
+        "settings.tenant.move_in_hint": "Annual billing is calculated from this date.",
+
+        # ── Demo mode ────────────────────────────────────────────────────
+        "settings.demo_mode": "Demo mode (fake but realistic data)",
+
+        # ── ENTSO-E test errors ──────────────────────────────────────────
+        "co2.test.token_invalid": "Token invalid",
+        "co2.test.api_unavailable": "ENTSO-E API unavailable (HTTP 5xx)",
+        "co2.test.unreachable": "API unreachable",
+
+        # ── Web dashboard errors ─────────────────────────────────────────
+        "web.error": "Web Dashboard Error",
+        "web.error_label": "Error",
+        "web.starting": "Starting \u2026",
+        "web.job_started": "\u2713 Job started \u2013 see progress below under Running Jobs.",
+
+        # ── Sync/export status messages ──────────────────────────────────
+        "sync.log.started": "Sync started ({mode}) \u2026",
+        "sync.log.co2_started": "ENTSO-E CO\u2082 check starting \u2026",
+        "live.export.done": "Live current view exported ({fmt}): {n} file(s)",
+        "live.export.png_done": "PNG exported: {n} file(s)",
+        "telegram.no_images": "No images sent",
 
     },
     "es": {

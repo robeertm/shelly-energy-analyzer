@@ -240,15 +240,15 @@ class Co2Mixin:
         mix_nav = ttk.Frame(mix_frame)
         mix_nav.pack(fill="x", padx=8, pady=(6, 2))
 
-        ttk.Button(mix_nav, text="◀ Tag", width=6, command=lambda: self._co2_mix_navigate(-24)).pack(side="left", padx=2)
-        ttk.Button(mix_nav, text="◀ h", width=4, command=lambda: self._co2_mix_navigate(-1)).pack(side="left", padx=2)
+        ttk.Button(mix_nav, text=self.t("co2.nav.prev_day"), width=6, command=lambda: self._co2_mix_navigate(-24)).pack(side="left", padx=2)
+        ttk.Button(mix_nav, text=self.t("co2.nav.prev_hour"), width=4, command=lambda: self._co2_mix_navigate(-1)).pack(side="left", padx=2)
 
         self._co2_mix_ts_var = tk.StringVar(value="")
         ttk.Label(mix_nav, textvariable=self._co2_mix_ts_var, font=("", 10, "bold")).pack(side="left", padx=10)
 
-        ttk.Button(mix_nav, text="h ▶", width=4, command=lambda: self._co2_mix_navigate(1)).pack(side="left", padx=2)
-        ttk.Button(mix_nav, text="Tag ▶", width=6, command=lambda: self._co2_mix_navigate(24)).pack(side="left", padx=2)
-        ttk.Button(mix_nav, text="Jetzt", width=6, command=lambda: self._co2_mix_navigate(0)).pack(side="left", padx=8)
+        ttk.Button(mix_nav, text=self.t("co2.nav.next_hour"), width=4, command=lambda: self._co2_mix_navigate(1)).pack(side="left", padx=2)
+        ttk.Button(mix_nav, text=self.t("co2.nav.next_day"), width=6, command=lambda: self._co2_mix_navigate(24)).pack(side="left", padx=2)
+        ttk.Button(mix_nav, text=self.t("co2.nav.now"), width=6, command=lambda: self._co2_mix_navigate(0)).pack(side="left", padx=8)
 
         self._co2_mix_source_var = tk.StringVar(value="")
         ttk.Label(mix_nav, textvariable=self._co2_mix_source_var, foreground="gray", font=("", 9)).pack(side="right")
