@@ -866,7 +866,7 @@ class PlotsMixin:
             # Keep device selection stable when switching between metric tabs.
             # We remember the last selected device-tab index and apply it across all metric tabs
             # to avoid the UI feeling like parameters "jump around".
-            self._plots_metric_key_order = ["kwh", "V", "A", "W", "VAR", "COSPHI", "HZ", "CO2"]
+            self._plots_metric_key_order = ["kwh", "V", "A", "W", "VAR", "COSPHI", "HZ", "CO2", "DYNPRICE"]
             if not hasattr(self, "_plots_last_device_idx"):
                 self._plots_last_device_idx = 0
             self._plots_syncing_tabs = False
@@ -1214,6 +1214,68 @@ class PlotsMixin:
 
             _make_device_notebook(tab_co2, "CO2")
 
+            # --- Dyn. Preis tab ---
+            tab_dynprice = ttk.Frame(nb)
+            nb.add(tab_dynprice, text=self.t("plots.dynprice.tab"))
+            dp_ctl = ttk.Frame(tab_dynprice)
+            dp_ctl.pack(fill="x", pady=(8, 6))
+            ttk.Label(dp_ctl, text=self.t("plots.kwh.granularity")).pack(side="left")
+            dp_btns = ttk.Frame(dp_ctl)
+            dp_btns.pack(side="left", padx=(10, 0))
+            for mode in ("hours", "days", "weeks", "months"):
+                ttk.Button(
+                    dp_btns,
+                    text=self.t(f"plots.mode.{mode}"),
+                    command=lambda m=mode: (self._plots_dynprice_mode.set(m), self._redraw_plots_metric("DYNPRICE")),
+                ).pack(side="left", padx=3)
+
+            dp_last_ctl = ttk.Frame(dp_ctl)
+            dp_last_ctl.pack(side="left", padx=(16, 0))
+            ttk.Label(dp_last_ctl, text=self.t("plots.kwh.last")).pack(side="left")
+            ttk.Spinbox(dp_last_ctl, from_=1, to=9999, width=5, textvariable=self._plots_dynprice_last_n).pack(side="left", padx=(6, 0))
+
+            dp_unit_map = {
+                "hours": self.t("plots.mode.hours"),
+                "days": self.t("plots.mode.days"),
+                "weeks": self.t("plots.mode.weeks"),
+                "months": self.t("plots.mode.months"),
+            }
+            dp_inv_unit_map = {v: k for k, v in dp_unit_map.items()}
+            dp_unit_display = tk.StringVar(
+                value=dp_unit_map.get(str(self._plots_dynprice_last_unit.get() or "days"), dp_unit_map["days"])
+            )
+            dp_cb_unit = ttk.Combobox(
+                dp_last_ctl, width=10, state="readonly",
+                textvariable=dp_unit_display, values=list(dp_unit_map.values()),
+            )
+            dp_cb_unit.pack(side="left", padx=(6, 0))
+
+            def _apply_dynprice_last_mode() -> None:
+                try:
+                    disp = str(dp_unit_display.get() or "").strip()
+                    unit = dp_inv_unit_map.get(disp, str(self._plots_dynprice_last_unit.get() or "days"))
+                except Exception:
+                    unit = str(self._plots_dynprice_last_unit.get() or "days")
+                try:
+                    n = int(self._plots_dynprice_last_n.get() or 0)
+                except Exception:
+                    n = 0
+                n = max(1, min(9999, n))
+                try:
+                    self._plots_dynprice_last_unit.set(unit)
+                except Exception:
+                    pass
+                self._plots_dynprice_mode.set(f"{unit}:{n}")
+                self._redraw_plots_metric("DYNPRICE")
+
+            try:
+                dp_cb_unit.bind("<<ComboboxSelected>>", lambda _e: _apply_dynprice_last_mode())
+            except Exception:
+                pass
+            ttk.Button(dp_last_ctl, text=self.t("btn.apply"), command=_apply_dynprice_last_mode).pack(side="left", padx=(8, 0))
+
+            _make_device_notebook(tab_dynprice, "DYNPRICE")
+
             # Redraw when switching metric tabs
             try:
                 nb.bind("<<NotebookTabChanged>>", lambda _e: self._redraw_plots_active())
@@ -1266,6 +1328,8 @@ class PlotsMixin:
                 self._redraw_plots_kwh2()
             elif metric_key.upper() == "CO2":
                 self._redraw_plots_co2()
+            elif metric_key.upper() == "DYNPRICE":
+                self._redraw_plots_dynprice()
             else:
                 self._redraw_plots_wva2(metric_key.upper())
 
@@ -1626,6 +1690,265 @@ class PlotsMixin:
                 self._apply_axis_layout(fig, ax, w, legend=False)
                 try:
                     self._apply_plot_theme(fig, ax, canvas=canvas)
+                except Exception:
+                    pass
+                canvas.draw_idle()
+
+    def _redraw_plots_dynprice(self) -> None:
+            """Draw grouped bar chart: fixed tariff cost vs dynamic spot cost per period."""
+            if not self._ensure_data_loaded():
+                return
+
+            mode = str(getattr(self, "_plots_dynprice_mode", tk.StringVar(value="days")).get() or "days")
+
+            custom_n: int | None = None
+            base_mode = mode
+            if ":" in mode:
+                parts = mode.split(":", 1)
+                base_mode = parts[0]
+                try:
+                    custom_n = max(1, int(parts[1]))
+                except Exception:
+                    custom_n = None
+
+            pstart = _parse_date_flexible(self._plots_start.get())
+            pend = _parse_date_flexible(self._plots_end.get())
+            if pstart is not None and pend is not None and pend < pstart:
+                pstart, pend = pend, pstart
+
+            now = datetime.now()
+            pend_eff = pend if pend is not None else now
+            if pstart is None:
+                if custom_n is not None:
+                    if base_mode == "hours":
+                        pstart_eff = pend_eff - timedelta(hours=custom_n)
+                    elif base_mode == "days":
+                        pstart_eff = pend_eff - timedelta(days=custom_n)
+                    elif base_mode == "weeks":
+                        pstart_eff = pend_eff - timedelta(weeks=custom_n)
+                    else:
+                        pstart_eff = pend_eff - timedelta(days=custom_n * 30)
+                else:
+                    if base_mode == "hours":
+                        pstart_eff = pend_eff - timedelta(hours=48)
+                    elif base_mode == "days":
+                        pstart_eff = pend_eff - timedelta(days=30)
+                    elif base_mode == "weeks":
+                        pstart_eff = pend_eff - timedelta(weeks=12)
+                    else:
+                        pstart_eff = pend_eff - timedelta(days=365)
+            else:
+                pstart_eff = pstart
+
+            start_ts = int(pstart_eff.timestamp())
+            end_ts = int(pend_eff.timestamp())
+
+            # Spot price config
+            spot_cfg = getattr(self.cfg, "spot_price", None)
+            spot_enabled = getattr(spot_cfg, "enabled", False) if spot_cfg else False
+            zone = getattr(spot_cfg, "bidding_zone", "DE-LU") or "DE-LU" if spot_cfg else "DE-LU"
+            markup = float(getattr(spot_cfg, "markup_ct_per_kwh", 16.0) if spot_cfg else 16.0) / 100.0
+            pricing = getattr(self.cfg, "pricing", None)
+            if spot_cfg and getattr(spot_cfg, "include_vat", True) and pricing:
+                vat_rate = pricing.vat_rate()
+            else:
+                vat_rate = 0.0
+
+            # Fixed tariff price
+            try:
+                fixed_price = float(pricing.unit_price_gross())
+            except Exception:
+                fixed_price = 0.30
+
+            db = self.storage.db
+
+            # Query spot prices for the range
+            df_spot = db.query_spot_prices(zone, start_ts, end_ts + 3600) if spot_enabled else pd.DataFrame()
+
+            dev_key = self._selected_device_key("DYNPRICE")
+            keys = [dev_key] if dev_key else list((self._plots_device_order.get("DYNPRICE") or []))
+
+            for key in keys:
+                if not key:
+                    continue
+                dcfg = next((d for d in self.cfg.devices if d.key == key), None)
+                fig = self._plots_figs2.get("DYNPRICE", {}).get(key)
+                canvas = self._plots_canvases2.get("DYNPRICE", {}).get(key)
+                if dcfg is None or fig is None or canvas is None:
+                    continue
+
+                w = canvas.get_tk_widget()
+                self._resize_figure_to_widget(fig, w, dpi=self._dpi_for_widget(w), min_h_px=320)
+                fig.clear()
+                ax = fig.add_subplot(111)
+
+                if not spot_enabled:
+                    ax.set_title(self.t("plots.dynprice.not_enabled"))
+                    try:
+                        self._apply_plot_theme(fig, ax, canvas=canvas)
+                    except Exception:
+                        pass
+                    canvas.draw_idle()
+                    continue
+
+                # Get hourly energy for device
+                df_h = db.query_hourly(key, start_ts, end_ts + 3600)
+                if df_h is None or df_h.empty:
+                    ax.set_title(f"{dcfg.name} – {self.t('plots.no_data')}")
+                    try:
+                        self._apply_plot_theme(fig, ax, canvas=canvas)
+                    except Exception:
+                        pass
+                    canvas.draw_idle()
+                    continue
+
+                # Build hourly spot prices (average 15-min slots per hour)
+                if not df_spot.empty:
+                    df_sp_h = df_spot.copy()
+                    df_sp_h["hour_ts"] = (df_sp_h["slot_ts"] // 3600) * 3600
+                    df_sp_h = df_sp_h.groupby("hour_ts").agg(price_eur_mwh=("price_eur_mwh", "mean")).reset_index()
+                else:
+                    df_sp_h = pd.DataFrame(columns=["hour_ts", "price_eur_mwh"])
+
+                # Merge energy with spot prices
+                merged = pd.merge(
+                    df_h[["hour_ts", "kwh"]],
+                    df_sp_h[["hour_ts", "price_eur_mwh"]],
+                    on="hour_ts", how="left",
+                )
+                merged["dt"] = pd.to_datetime(merged["hour_ts"], unit="s", utc=True)
+                merged = merged.sort_values("dt")
+
+                # Calculate costs per hour
+                merged["fixed_eur"] = merged["kwh"] * fixed_price
+                merged["spot_eur_kwh"] = merged["price_eur_mwh"].fillna(0) / 1000.0
+                merged["dyn_eur"] = merged["kwh"] * (merged["spot_eur_kwh"] + markup) * (1.0 + vat_rate)
+                # Where no spot data, set dyn_eur to NaN
+                merged.loc[merged["price_eur_mwh"].isna(), "dyn_eur"] = float("nan")
+
+                # Aggregate by mode
+                if base_mode == "hours":
+                    labels = [dt.strftime("%H:%M\n%d.%m") for dt in merged["dt"]]
+                    fixed_vals = merged["fixed_eur"].tolist()
+                    dyn_vals = merged["dyn_eur"].tolist()
+                    kwh_vals = merged["kwh"].tolist()
+                elif base_mode == "days":
+                    merged["bucket"] = merged["dt"].dt.date
+                    grp = merged.groupby("bucket").agg(
+                        fixed_eur=("fixed_eur", "sum"), dyn_eur=("dyn_eur", "sum"),
+                        kwh=("kwh", "sum"),
+                    ).reset_index().sort_values("bucket")
+                    labels = [str(d) for d in grp["bucket"]]
+                    fixed_vals = grp["fixed_eur"].tolist()
+                    dyn_vals = grp["dyn_eur"].tolist()
+                    kwh_vals = grp["kwh"].tolist()
+                elif base_mode == "weeks":
+                    merged["week"] = merged["dt"].dt.isocalendar().week.astype(int)
+                    merged["year"] = merged["dt"].dt.isocalendar().year.astype(int)
+                    grp = merged.groupby(["year", "week"]).agg(
+                        fixed_eur=("fixed_eur", "sum"), dyn_eur=("dyn_eur", "sum"),
+                        kwh=("kwh", "sum"),
+                    ).reset_index().sort_values(["year", "week"])
+                    labels = [f"KW{int(w)}" for w in grp["week"]]
+                    fixed_vals = grp["fixed_eur"].tolist()
+                    dyn_vals = grp["dyn_eur"].tolist()
+                    kwh_vals = grp["kwh"].tolist()
+                else:  # months
+                    merged["bucket"] = merged["dt"].dt.to_period("M")
+                    grp = merged.groupby("bucket").agg(
+                        fixed_eur=("fixed_eur", "sum"), dyn_eur=("dyn_eur", "sum"),
+                        kwh=("kwh", "sum"),
+                    ).reset_index().sort_values("bucket")
+                    labels = [str(p) for p in grp["bucket"]]
+                    fixed_vals = grp["fixed_eur"].tolist()
+                    dyn_vals = grp["dyn_eur"].tolist()
+                    kwh_vals = grp["kwh"].tolist()
+
+                import numpy as _np
+                n = len(labels)
+                if n == 0:
+                    ax.set_title(f"{dcfg.name} – {self.t('plots.no_data')}")
+                    try:
+                        self._apply_plot_theme(fig, ax, canvas=canvas)
+                    except Exception:
+                        pass
+                    canvas.draw_idle()
+                    continue
+
+                x = _np.arange(n)
+                w_bar = 0.35
+
+                # Replace NaN with 0 for display
+                dyn_clean = [v if math.isfinite(v) else 0.0 for v in dyn_vals]
+
+                bars_fixed = ax.bar(x - w_bar / 2, fixed_vals, w_bar,
+                                     label=self.t("plots.dynprice.fixed"), color="#2196F3", alpha=0.85)
+                bars_dyn = ax.bar(x + w_bar / 2, dyn_clean, w_bar,
+                                   label=self.t("plots.dynprice.dynamic"), color="#ff9800", alpha=0.85)
+
+                ax.set_ylabel("\u20ac")
+                base = self._font_base_for_widget(w)
+                self._apply_xticks(ax, labels, base_font=base)
+
+                # Annotations: cost values above bars
+                try:
+                    step = max(1, n // 25)
+                    fontsize = max(4, min(9, int(base) - 1))
+                    for i in range(0, n, step):
+                        fv = fixed_vals[i]
+                        dv = dyn_clean[i]
+                        if fv > 0:
+                            ax.annotate(f"{fv:.2f}", xy=(x[i] - w_bar / 2, fv),
+                                        xytext=(0, 3), textcoords="offset points",
+                                        ha="center", va="bottom", fontsize=fontsize, color="#2196F3")
+                        if dv > 0:
+                            ax.annotate(f"{dv:.2f}", xy=(x[i] + w_bar / 2, dv),
+                                        xytext=(0, 3), textcoords="offset points",
+                                        ha="center", va="bottom", fontsize=fontsize, color="#ff9800")
+                except Exception:
+                    pass
+
+                # Totals
+                total_fixed = sum(fixed_vals)
+                total_dyn = sum(v for v in dyn_vals if math.isfinite(v))
+                total_kwh = sum(kwh_vals)
+                delta = total_dyn - total_fixed
+                arrow = "\u2191" if delta > 0 else "\u2193"
+
+                range_lbl = ""
+                if pstart is not None or pend is not None:
+                    a = pstart_eff.strftime("%Y-%m-%d")
+                    b_str = pend_eff.strftime("%Y-%m-%d")
+                    range_lbl = f" | {a}\u2013{b_str}"
+
+                ax.set_title(
+                    f"{dcfg.name} \u2013 {self.t('plots.dynprice.title')} ({self._pretty_kwh_mode(mode)}){range_lbl}\n"
+                    f"{_fmt_kwh(total_kwh)} | {self.t('plots.dynprice.fixed')}: {total_fixed:.2f} \u20ac | "
+                    f"{self.t('plots.dynprice.dynamic')}: {total_dyn:.2f} \u20ac | "
+                    f"\u0394: {delta:+.2f} \u20ac {arrow}",
+                    fontsize=max(8, int(base) - 1),
+                )
+
+                leg = ax.legend(fontsize=max(7, int(base) - 1))
+                ax.grid(True, axis="y", alpha=0.3)
+                try:
+                    fig.subplots_adjust(left=0.10, right=0.97, top=0.85, bottom=0.32)
+                except Exception:
+                    pass
+                self._apply_axis_layout(fig, ax, w, legend=False)
+                try:
+                    self._apply_plot_theme(fig, ax, canvas=canvas)
+                    # Re-apply legend colors after theme
+                    if leg:
+                        try:
+                            theme = self._resolve_plot_theme()
+                        except Exception:
+                            theme = "day"
+                        fg = "#E6E6E6" if theme == "night" else "#000000"
+                        bg = "#111111" if theme == "night" else "#FFFFFF"
+                        leg.get_frame().set_facecolor(bg)
+                        for txt in leg.get_texts():
+                            txt.set_color(fg)
                 except Exception:
                     pass
                 canvas.draw_idle()

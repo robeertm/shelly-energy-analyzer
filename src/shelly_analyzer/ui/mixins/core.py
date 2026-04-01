@@ -355,6 +355,10 @@ class CoreMixin:
             self._plots_co2_mode = tk.StringVar(value="hours")
             self._plots_co2_last_n = tk.IntVar(value=7)
             self._plots_co2_last_unit = tk.StringVar(value="days")
+            # Dynamic price plots granularity
+            self._plots_dynprice_mode = tk.StringVar(value="days")
+            self._plots_dynprice_last_n = tk.IntVar(value=30)
+            self._plots_dynprice_last_unit = tk.StringVar(value="days")
 
             # Plots debug: show which CSV columns were mapped to phases/total.
             self._plots_debug_mapping_enabled = tk.BooleanVar(value=False)

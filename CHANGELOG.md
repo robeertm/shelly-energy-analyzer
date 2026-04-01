@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.8.2 - 2026-04-01
+### Added
+- **Plots tab: "Dyn. Preis" sub-tab** – New sub-tab after CO₂ showing a grouped bar chart comparing fixed tariff costs (blue) vs dynamic spot market costs (orange) for the selected device and time range. Supports hourly/daily/weekly/monthly granularity with custom range controls. Displays total costs, delta, and per-bar annotations. Full dark mode support and all 9 languages.
+
 ## 13.8.1 - 2026-04-01
 ### Improved
 - **Spot price service: comprehensive sync logging** – Every step of the spot price import is now logged to the Sync tab: config check, oldest measurement detection, existing DB state, gap analysis, per-chunk fetch progress with API source, DB write counts, and error details. The spot price service is also triggered immediately on app startup alongside CO2 data.
