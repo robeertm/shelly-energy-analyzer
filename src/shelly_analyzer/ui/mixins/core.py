@@ -1187,9 +1187,7 @@ class CoreMixin:
             self._traffic_tree.configure(yscrollcommand=tree_sb.set)
             self._traffic_tree.grid(row=0, column=0, sticky="nsew")
             tree_sb.grid(row=0, column=1, sticky="ns")
-            # Compact live traffic sparkline (tkinter Canvas)
-            self._traffic_spark = tk.Canvas(traffic_lf, height=36, bg="#111111", highlightthickness=0)
-            self._traffic_spark.grid(row=2, column=0, sticky="ew", padx=8, pady=(2, 6))
+            # (sparkline removed)
 
             # Progress bar (shown during active sync)
             prog_frm = ttk.Frame(frm)
@@ -8642,54 +8640,6 @@ class CoreMixin:
             for old_iid in existing - seen_iids:
                 tree.delete(old_iid)
             self._traffic_cat_iids = cat_iids
-            # Update compact sparkline bars (fixed bar count, stable rendering)
-            spark = getattr(self, "_traffic_spark", None)
-            hist = snap.get("rate_history")
-            if spark and hist and hist.get("recv"):
-                w = spark.winfo_width() or 400
-                h = spark.winfo_height() or 36
-                bar_w = 3
-                num_bars = max(1, w // bar_w)
-                bar_w_exact = w / num_bars
-                # Aggregate raw samples into 1-second buckets using floor (stable)
-                ts_raw = hist["ts"]
-                recv_raw = hist["recv"]
-                sent_raw = hist["sent"]
-                buckets: dict = {}
-                for i, t in enumerate(ts_raw):
-                    sec = int(t) if t >= 0 else -int(-t) - 1  # floor toward -inf
-                    if sec not in buckets:
-                        buckets[sec] = [0.0, 0.0, 0]
-                    buckets[sec][0] += recv_raw[i]
-                    buckets[sec][1] += sent_raw[i]
-                    buckets[sec][2] += 1
-                # Build fixed-length arrays: last num_bars seconds, right-aligned
-                recv = [0.0] * num_bars
-                sent = [0.0] * num_bars
-                for sec, (r, s, c) in buckets.items():
-                    idx = num_bars - 1 + sec  # sec=0 → last bar
-                    if 0 <= idx < num_bars:
-                        recv[idx] = r / max(1, c)
-                        sent[idx] = s / max(1, c)
-                # Smooth max: decay slowly to avoid vertical jitter
-                cur_max = max(max(recv), max(sent), 1)
-                prev_max = getattr(self, "_traffic_spark_max", cur_max)
-                smooth_max = max(cur_max, prev_max * 0.95)
-                self._traffic_spark_max = smooth_max
-                # Only redraw if values actually changed
-                new_bars = (tuple(recv), tuple(sent), num_bars)
-                if new_bars == getattr(self, "_traffic_spark_prev", None):
-                    return
-                self._traffic_spark_prev = new_bars
-                spark.delete("all")
-                for i in range(num_bars):
-                    x = i * bar_w_exact
-                    rh = max(0, (recv[i] / smooth_max) * (h - 2))
-                    if rh > 0.5:
-                        spark.create_rectangle(x, h - rh, x + bar_w_exact - 0.5, h, fill="#2196F3", outline="", width=0)
-                    sh = max(0, (sent[i] / smooth_max) * (h - 2))
-                    if sh > 0.5:
-                        spark.create_rectangle(x, h - rh - sh, x + bar_w_exact - 0.5, h - rh, fill="#FF9800", outline="", width=0)
 
     def _mdns_refresh_tree(self) -> None:
             try:
