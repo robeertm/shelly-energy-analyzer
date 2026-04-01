@@ -1,5 +1,14 @@
 # Changelog
 
+## 13.8.4 - 2026-04-01
+### Added
+- **Spot price tooltip on hover** – Mouse-over on the 24h spot price chart (desktop + web) shows a detailed tooltip with timestamp, raw spot price (ct/kWh), and total price including surcharges. Web version works with touch as well.
+- **Detailed markup breakdown in settings** – The single "16 ct/kWh" markup field is replaced by 7 individually configurable components: Netzentgelte (8.50), Stromsteuer (2.05), Konzessionsabgabe (1.66), KWK-Aufschlag (0.277), §19 StromNEV (0.643), Offshore-Umlage (0.816), Anbieter-Marge (2.50). Live sum display updates as you type. All values are 2025 defaults for Germany. Legacy single-value configs are auto-migrated.
+- **Spot price traffic category** – Energy-Charts and aWATTar API calls now appear as "⚡ Spot Prices" in the network traffic monitor instead of "Other".
+
+### Improved
+- All spot price calculations now use the sum of breakdown components instead of the legacy single markup value.
+
 ## 13.8.3 - 2026-04-01
 ### Added
 - **Costs tab: 24h spot market price chart** – Rolling bar chart showing spot electricity prices with colour-coded bars (green = cheap, red = expensive relative to fixed tariff). Fixed-price reference line and average price display. Available in both desktop (matplotlib) and web dashboard (Canvas).

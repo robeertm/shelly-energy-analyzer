@@ -19,6 +19,7 @@ import requests.adapters
 _CATEGORY_RULES: List[Tuple[Callable[[str], bool], str]] = [
     (lambda u: "/rpc/" in u or "/emdata/" in u or "/relay/" in u or "/status" in u, "shelly"),
     (lambda u: "entsoe.eu" in u, "entsoe"),
+    (lambda u: "energy-charts.info" in u or "awattar.de" in u or "awattar.at" in u, "spot_price"),
     (lambda u: "openweathermap.org" in u, "weather"),
     (lambda u: "api.telegram.org" in u, "telegram"),
     (lambda u: "api.github.com" in u or "raw.githubusercontent.com" in u, "github"),
@@ -237,6 +238,7 @@ def fmt_rate(bps: float) -> str:
 _CAT_LABELS = {
     "shelly": "Shelly Devices",
     "entsoe": "ENTSO-E API",
+    "spot_price": "Spot Prices",
     "weather": "OpenWeather",
     "telegram": "Telegram",
     "github": "GitHub",
@@ -245,11 +247,12 @@ _CAT_LABELS = {
 }
 
 _CAT_ICONS = {
-    "shelly": "🔌",
-    "entsoe": "🌿",
-    "weather": "🌡️",
-    "telegram": "💬",
-    "github": "🔄",
-    "local": "🏠",
-    "other": "📡",
+    "shelly": "\U0001f50c",
+    "entsoe": "\U0001f33f",
+    "spot_price": "\u26a1",
+    "weather": "\U0001f321\ufe0f",
+    "telegram": "\U0001f4ac",
+    "github": "\U0001f504",
+    "local": "\U0001f3e0",
+    "other": "\U0001f4e1",
 }
