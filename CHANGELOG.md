@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.8.1 - 2026-04-01
+### Improved
+- **Spot price service: comprehensive sync logging** – Every step of the spot price import is now logged to the Sync tab: config check, oldest measurement detection, existing DB state, gap analysis, per-chunk fetch progress with API source, DB write counts, and error details. The spot price service is also triggered immediately on app startup alongside CO2 data.
+
 ## 13.8.0 - 2026-04-01
 ### Added
 - **Dynamic spot market electricity prices** – New feature that imports EPEX Spot day-ahead prices from free public APIs (Energy-Charts with 15-min resolution from Oct 2025, aWATTar hourly fallback). Background service automatically backfills prices from the first measurement timestamp.

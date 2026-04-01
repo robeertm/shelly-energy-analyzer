@@ -1274,6 +1274,16 @@ class CoreMixin:
                     self._log_sync("ENTSO-E CO₂ Service nicht verfügbar")
             except Exception as e:
                 self._log_sync(f"ENTSO-E CO₂ Trigger Fehler: {e}")
+            # Trigger spot price check immediately
+            try:
+                spot_svc = getattr(self, '_spot_price_svc', None)
+                if spot_svc is not None:
+                    self._log_sync("Spot-Preis Import gestartet...")
+                    spot_svc.trigger_now()
+                else:
+                    self._log_sync("Spot-Preis Service nicht verfügbar")
+            except Exception as e:
+                self._log_sync(f"Spot-Preis Trigger Fehler: {e}")
 
     def _start_sync(self, mode: str, range_override: Optional[Tuple[int, int]] = None, label: Optional[str] = None) -> None:
             if self._sync_thread and self._sync_thread.is_alive():
