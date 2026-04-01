@@ -4427,9 +4427,15 @@ class CoreMixin:
             self._cost_spot_ax = self._cost_spot_fig.add_subplot(111)
             self._cost_spot_ax.set_navigate(False)
             self._cost_spot_canvas = FigureCanvasTkAgg(self._cost_spot_fig, master=spot_chart_frame)
-            # Disable matplotlib scroll-zoom so mousewheel scrolls the page, not the plot
+            # Completely disable all matplotlib interactive navigation (pan, zoom, scroll)
             try:
                 for cid in list(self._cost_spot_canvas.callbacks.callbacks.get("scroll_event", {}).keys()):
+                    self._cost_spot_canvas.mpl_disconnect(cid)
+                for cid in list(self._cost_spot_canvas.callbacks.callbacks.get("button_press_event", {}).keys()):
+                    self._cost_spot_canvas.mpl_disconnect(cid)
+                for cid in list(self._cost_spot_canvas.callbacks.callbacks.get("button_release_event", {}).keys()):
+                    self._cost_spot_canvas.mpl_disconnect(cid)
+                for cid in list(self._cost_spot_canvas.callbacks.callbacks.get("key_press_event", {}).keys()):
                     self._cost_spot_canvas.mpl_disconnect(cid)
             except Exception:
                 pass
@@ -4437,6 +4443,8 @@ class CoreMixin:
             _spot_tk_widget.pack(fill="x", expand=False)
             # Forward mousewheel from matplotlib widget to outer scroll canvas
             _spot_tk_widget.bind("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+            _spot_tk_widget.bind("<Button-4>", lambda e: canvas.yview_scroll(-3, "units"))
+            _spot_tk_widget.bind("<Button-5>", lambda e: canvas.yview_scroll(3, "units"))
 
             # Initial refresh
             self.after(500, self._refresh_costs_tab)

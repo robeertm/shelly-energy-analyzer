@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.23 - 2026-04-01
+### Fixed
+- **Costs tab: spot chart fully locked** – Disconnected all matplotlib interactive events (scroll, button press/release, key press) on the spot chart canvas so the plot can no longer be panned, zoomed, or scrolled within its frame. Mousewheel and Linux scroll buttons (Button-4/5) forwarded to the outer scroll canvas.
+
 ## 13.9.22 - 2026-04-01
 ### Fixed
 - **Costs tab: spot chart no longer scrollable** – Disabled matplotlib's built-in scroll-zoom on the spot price chart. Mousewheel now scrolls the page instead of zooming the plot. Chart axis navigation disabled via `set_navigate(False)`.
