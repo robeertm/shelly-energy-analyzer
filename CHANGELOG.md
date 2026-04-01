@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.9 - 2026-04-01
+### Changed
+- **Network traffic chart: 5 min window** – Live rate chart now shows last 5 minutes instead of 1 hour for a more responsive view.
+
 ## 13.9.8 - 2026-04-01
 ### Fixed
 - **Dyn. Preis tab not detected** – `_active_metric_key()` now recognizes the dynamic price tab so the shared controls correctly apply to it.

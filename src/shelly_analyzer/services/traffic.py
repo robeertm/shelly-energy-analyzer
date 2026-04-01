@@ -73,9 +73,9 @@ class TrafficMonitor:
         self._recent: List[Tuple[float, int, int]] = []  # (ts, sent, recv)
         self._start_ts = time.time()
         self._installed = False
-        # Rate history for the last hour (sampled every ~3 seconds)
+        # Rate history for the last 5 minutes (sampled every ~3 seconds)
         self._rate_history: List[Tuple[float, float, float]] = []  # (ts, recv_bps, sent_bps)
-        self._rate_history_max = 1200  # ~1 hour at 3s intervals
+        self._rate_history_max = 100  # ~5 min at 3s intervals
 
     # -- public API ----------------------------------------------------------
 
