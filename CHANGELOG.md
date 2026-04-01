@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.2 - 2026-04-01
+### Improved
+- **Energy flow diagram: complete visual overhaul** – Compact three-column layout (Sources → House → Consumers) with no wasted space. Fixed-height node boxes vertically auto-distributed. Thick semi-transparent flow bands with proportional width. Grid=red, PV=orange, devices=distinct color palette. White text on dark backgrounds for readability. Removed broken emoji rendering. Dark mode aware.
+
 ## 13.9.1 - 2026-04-01
 ### Fixed
 - **Web costs tab: no data displayed** – Fixed `_spot_cfg` referenced before definition in the costs API handler. Variable is now defined at the top of the handler block.
