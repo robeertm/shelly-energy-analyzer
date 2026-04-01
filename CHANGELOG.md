@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.15 - 2026-04-01
+### Fixed
+- **Traffic frame width** – Reduced Treeview column initial widths to minimal values so the tree doesn't force the parent frame wider than the window. Hidden #0 column set to 0 width.
+
 ## 13.9.14 - 2026-04-01
 ### Fixed
 - **Traffic table: columns stretch to fill width** – All Treeview columns now use `stretch=True` with proper `minwidth` values, so they distribute evenly across the available frame width.
