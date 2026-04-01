@@ -3978,6 +3978,22 @@ class CoreMixin:
                 except Exception:
                     pass
 
+            # When plot theme changes, refresh ALL chart tabs so they pick up new colors
+            if changed_dn:
+                for _refresh_name in (
+                    "_refresh_weather_tab", "_refresh_forecast_tab",
+                    "_refresh_co2_tab", "_refresh_standby_tab",
+                    "_refresh_solar_tab", "_refresh_sankey_tab",
+                    "_refresh_tenant_tab", "_redraw_plots_active",
+                    "_refresh_costs_tab",
+                ):
+                    try:
+                        fn = getattr(self, _refresh_name, None)
+                        if fn is not None:
+                            self.after(100, fn)
+                    except Exception:
+                        pass
+
     def _start_live(self) -> None:
 
             # Apply quick controls so Web/Window settings take effect even if
@@ -4383,8 +4399,136 @@ class CoreMixin:
 
                     self._cost_device_vars[d.key] = vars_dev
 
+            # ── Spot price 24h chart ──────────────────────────────────────
+            spot_chart_frame = ttk.LabelFrame(self._cost_scroll_frame, text=self.t("spot.chart.title"))
+            spot_chart_frame.pack(fill="x", padx=14, pady=(8, 12))
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+            self._cost_spot_fig = Figure(figsize=(12, 3.0), dpi=96)
+            self._cost_spot_ax = self._cost_spot_fig.add_subplot(111)
+            self._cost_spot_canvas = FigureCanvasTkAgg(self._cost_spot_fig, master=spot_chart_frame)
+            self._cost_spot_canvas.get_tk_widget().pack(fill="x", expand=False)
+
             # Initial refresh
             self.after(500, self._refresh_costs_tab)
+
+    def _refresh_spot_chart(self) -> None:
+            """Draw 24h rolling spot price chart in the Kosten tab."""
+            import math
+            try:
+                fig = self._cost_spot_fig
+                ax = self._cost_spot_ax
+                canvas = self._cost_spot_canvas
+            except AttributeError:
+                return
+
+            ax.clear()
+
+            spot_cfg = getattr(self.cfg, "spot_price", None)
+            if not spot_cfg or not getattr(spot_cfg, "enabled", False):
+                ax.text(0.5, 0.5, self.t("plots.dynprice.not_enabled"),
+                        ha="center", va="center", fontsize=10, transform=ax.transAxes)
+                ax.set_xticks([]); ax.set_yticks([])
+                try:
+                    self._apply_plot_theme(fig, ax, canvas=canvas)
+                except Exception:
+                    pass
+                canvas.draw_idle()
+                return
+
+            zone = getattr(spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
+            markup_ct = float(getattr(spot_cfg, "markup_ct_per_kwh", 16.0))
+            pricing = getattr(self.cfg, "pricing", None)
+            vat_rate = pricing.vat_rate() if getattr(spot_cfg, "include_vat", True) and pricing else 0.0
+
+            try:
+                fixed_ct = float(pricing.unit_price_gross()) * 100.0
+            except Exception:
+                fixed_ct = 30.0
+
+            import time as _time_m
+            now_ts = int(_time_m.time())
+            start_ts = now_ts - 24 * 3600
+            end_ts = now_ts + 24 * 3600
+
+            db = self.storage.db
+            df = db.query_spot_prices(zone, start_ts, end_ts)
+            if df.empty:
+                ax.text(0.5, 0.5, self.t("plots.no_data"),
+                        ha="center", va="center", fontsize=10, transform=ax.transAxes)
+                ax.set_xticks([]); ax.set_yticks([])
+                try:
+                    self._apply_plot_theme(fig, ax, canvas=canvas)
+                except Exception:
+                    pass
+                canvas.draw_idle()
+                return
+
+            # Average 15-min slots per hour
+            df["hour_ts"] = (df["slot_ts"] // 3600) * 3600
+            hourly = df.groupby("hour_ts").agg(price=("price_eur_mwh", "mean")).reset_index()
+            hourly = hourly.sort_values("hour_ts")
+
+            # Convert to ct/kWh total (spot + markup + VAT)
+            hourly["raw_ct"] = hourly["price"] / 10.0
+            hourly["total_ct"] = (hourly["raw_ct"] + markup_ct) * (1.0 + vat_rate)
+
+            from datetime import datetime, timezone
+            hours_dt = [datetime.fromtimestamp(int(ts), tz=timezone.utc) for ts in hourly["hour_ts"]]
+            values = hourly["total_ct"].tolist()
+
+            # Bar colors: green (cheap) → yellow → orange → red (expensive)
+            bar_colors = []
+            for v in values:
+                ratio = v / fixed_ct if fixed_ct > 0 else 1.0
+                if ratio <= 0.7:
+                    bar_colors.append("#4caf50")
+                elif ratio <= 0.9:
+                    bar_colors.append("#8bc34a")
+                elif ratio <= 1.0:
+                    bar_colors.append("#ffeb3b")
+                elif ratio <= 1.2:
+                    bar_colors.append("#ff9800")
+                else:
+                    bar_colors.append("#e53935")
+
+            # Future bars slightly transparent
+            import matplotlib.dates as mdates
+            x_dates = mdates.date2num(hours_dt)
+            now_num = mdates.date2num(datetime.fromtimestamp(now_ts, tz=timezone.utc))
+            alphas = [0.5 if xd > now_num else 0.85 for xd in x_dates]
+
+            for xd, v, c, a in zip(x_dates, values, bar_colors, alphas):
+                ax.bar(xd, v, width=1.0/24.0, color=c, alpha=a, align="center")
+
+            # Fixed price line
+            ax.axhline(y=fixed_ct, color="#2196F3", linestyle="--", linewidth=1.5, alpha=0.8,
+                        label=f"{self.t('plots.dynprice.fixed')}: {fixed_ct:.1f} ct/kWh")
+
+            ax.set_ylabel("ct/kWh", fontsize=9)
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+            ax.xaxis.set_major_locator(mdates.HourLocator(interval=max(1, len(hours_dt) // 12)))
+            fig.autofmt_xdate(rotation=30, ha="right")
+            ax.grid(axis="y", alpha=0.3)
+            ax.set_axisbelow(True)
+
+            avg_ct = sum(values) / len(values) if values else 0
+            ax.set_title(
+                f"{self.t('spot.chart.title')} ({zone}) | "
+                f"\u00d8 {avg_ct:.1f} ct/kWh | {self.t('plots.dynprice.fixed')}: {fixed_ct:.1f} ct/kWh",
+                fontsize=9,
+            )
+            ax.legend(fontsize=8, loc="upper right")
+
+            try:
+                fig.subplots_adjust(left=0.08, right=0.97, top=0.85, bottom=0.25)
+            except Exception:
+                pass
+            try:
+                self._apply_plot_theme(fig, ax, canvas=canvas)
+            except Exception:
+                pass
+            canvas.draw_idle()
 
     def _refresh_costs_tab(self) -> None:
             """Recalculate and display cost data per 3-phase device and aggregate."""
@@ -4669,6 +4813,12 @@ class CoreMixin:
 
             except Exception as e:
                 _log.warning("Costs tab refresh error: %s", e)
+
+            # Refresh spot price 24h chart
+            try:
+                self._refresh_spot_chart()
+            except Exception:
+                pass
 
     def _build_export_tab(self) -> None:
             frm = self.tab_export

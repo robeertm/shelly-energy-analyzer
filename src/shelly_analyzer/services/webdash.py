@@ -2056,13 +2056,13 @@ function renderCosts(data, el) {{
       metricCardHtml(t('web.costs.year', 'Year'), fmt(s.year_eur,2,'\u20ac'), fmt(s.year_kwh,3,'kWh')) +
       '</div></div>';
   }}
-  function spotLine(key, d) {{
+  function spotSub(key, d) {{
     var v = d[key + '_spot_eur'];
     var f = d[key + '_eur'];
     if (!spotActive || v == null || v <= 0) return '';
     var diff = v - f;
     var arrow = diff > 0 ? '\u2191' : '\u2193';
-    return '<div style="font-size:10px;color:#ff9800;margin-top:2px">\u26a1 ' + t('spot.cost_label', 'Dyn.') + ': ' + v.toFixed(2) + ' \u20ac (' + arrow + ' ' + Math.abs(diff).toFixed(2) + ' \u20ac)</div>';
+    return arrow + ' ' + Math.abs(diff).toFixed(2) + ' \u20ac';
   }}
   html += '<div class="card-grid">';
   data.devices.forEach(function(d) {{
@@ -2080,9 +2080,9 @@ function renderCosts(data, el) {{
       ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">' +
           '<div style="font-size:11px;color:#ff9800;margin-bottom:4px">\u26a1 ' + t('spot.cost_label', 'Dyn. Tarif') + '</div>' +
           '<div class="metric-grid">' +
-          metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_spot_eur,2,'\u20ac'), spotLine('today',d)) +
-          metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_spot_eur,2,'\u20ac'), spotLine('week',d)) +
-          metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_spot_eur,2,'\u20ac'), spotLine('month',d)) +
+          metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_spot_eur,2,'\u20ac'), spotSub('today',d)) +
+          metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_spot_eur,2,'\u20ac'), spotSub('week',d)) +
+          metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_spot_eur,2,'\u20ac'), spotSub('month',d)) +
           metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_spot_eur||0,2,'\u20ac'), '') +
           '</div></div>'
       : '';
@@ -2114,7 +2114,123 @@ function renderCosts(data, el) {{
     html += '</table></div>';
   }}
 
+  // 24h Spot Price Chart
+  if (data.spot_enabled && data.spot_chart && data.spot_chart.length > 0) {{
+    var fixedCt = data.fixed_ct_per_kwh || 0;
+    html += '<div class="card" style="margin-top:10px">' +
+      '<div style="font-size:12px;font-weight:650;color:#ff9800;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">' +
+      '\u26a1 ' + t('spot.chart.title', 'Spot Price 24h') + '</div>' +
+      '<canvas id="spot-24h-chart" style="width:100%;height:160px"></canvas>' +
+      '<div id="spot-chart-labels" style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;padding:0 4px"></div>' +
+      '</div>';
+  }}
+
   el.innerHTML = html;
+
+  // Draw spot chart if present
+  if (data.spot_enabled && data.spot_chart && data.spot_chart.length > 0) {{
+    _drawSpotChart(data.spot_chart, data.fixed_ct_per_kwh || 0);
+  }}
+}}
+
+function _drawSpotChart(hourly, fixedCt) {{
+  var canvas = document.getElementById('spot-24h-chart');
+  if (!canvas) return;
+  var rect = canvas.getBoundingClientRect();
+  var dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  var W = rect.width, H = rect.height;
+  var pad = {{top: 10, right: 10, bottom: 24, left: 44}};
+  var plotW = W - pad.left - pad.right;
+  var plotH = H - pad.top - pad.bottom;
+
+  // Determine value range (ct/kWh)
+  var vals = hourly.map(function(h) {{ return h.total_ct; }});
+  var minV = Math.min.apply(null, vals.concat([fixedCt]));
+  var maxV = Math.max.apply(null, vals.concat([fixedCt]));
+  var range = maxV - minV;
+  if (range < 1) range = 1;
+  minV = Math.max(0, minV - range * 0.1);
+  maxV = maxV + range * 0.15;
+  var vRange = maxV - minV;
+
+  // Background
+  var isDark = document.documentElement.classList.contains('dark');
+  ctx.fillStyle = isDark ? '#111' : '#fff';
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid
+  ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
+  ctx.lineWidth = 0.5;
+  for (var gi = 0; gi <= 4; gi++) {{
+    var gy = pad.top + plotH * (1 - gi / 4);
+    ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(W - pad.right, gy); ctx.stroke();
+    var gv = minV + vRange * gi / 4;
+    ctx.fillStyle = isDark ? '#aaa' : '#666';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(gv.toFixed(1), pad.left - 4, gy + 3);
+  }}
+
+  // Y-axis label
+  ctx.save();
+  ctx.translate(10, pad.top + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillStyle = isDark ? '#aaa' : '#666';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('ct/kWh', 0, 0);
+  ctx.restore();
+
+  // Fixed price line (dashed)
+  var fixedY = pad.top + plotH * (1 - (fixedCt - minV) / vRange);
+  ctx.setLineDash([6, 3]);
+  ctx.strokeStyle = '#2196F3';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(pad.left, fixedY); ctx.lineTo(W - pad.right, fixedY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#2196F3';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(t('plots.dynprice.fixed', 'Fixed') + ' ' + fixedCt.toFixed(1), pad.left + 4, fixedY - 4);
+
+  // Bars
+  var barW = Math.max(1, (plotW / hourly.length) - 1);
+  var now = Date.now() / 1000;
+  for (var i = 0; i < hourly.length; i++) {{
+    var h = hourly[i];
+    var x = pad.left + (i / hourly.length) * plotW;
+    var v = h.total_ct;
+    var barH = Math.max(1, ((v - minV) / vRange) * plotH);
+    var y = pad.top + plotH - barH;
+
+    // Color: green if cheaper than fixed, orange/red if more expensive
+    var ratio = fixedCt > 0 ? v / fixedCt : 1;
+    if (ratio <= 0.7) ctx.fillStyle = '#4caf50';
+    else if (ratio <= 0.9) ctx.fillStyle = '#8bc34a';
+    else if (ratio <= 1.0) ctx.fillStyle = '#ffeb3b';
+    else if (ratio <= 1.2) ctx.fillStyle = '#ff9800';
+    else ctx.fillStyle = '#e53935';
+
+    // Future hours: slightly transparent
+    if (h.ts > now) ctx.globalAlpha = 0.5;
+    else ctx.globalAlpha = 0.85;
+    ctx.fillRect(x, y, barW, barH);
+    ctx.globalAlpha = 1.0;
+  }}
+
+  // X-axis labels
+  var lblEl = document.getElementById('spot-chart-labels');
+  if (lblEl && hourly.length > 0) {{
+    var first = new Date(hourly[0].ts * 1000);
+    var last = new Date(hourly[hourly.length - 1].ts * 1000);
+    var mid = hourly.length > 1 ? new Date(hourly[Math.floor(hourly.length / 2)].ts * 1000) : first;
+    function _fmtH(d) {{ return ('0' + d.getHours()).slice(-2) + ':00 ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2); }}
+    lblEl.innerHTML = '<span>' + _fmtH(first) + '</span><span>' + _fmtH(mid) + '</span><span>' + _fmtH(last) + '</span>';
+  }}
 }}
 
 function metricCardHtml(label, value, sub) {{

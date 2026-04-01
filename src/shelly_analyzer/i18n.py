@@ -4912,6 +4912,7 @@ _I18N.setdefault("de", {}).update({
     "spot.settings.show_comparison": "Als Vergleich anzeigen",
     "spot.settings.interval": "Aktualisierung (Stunden)",
     "spot.cost_label": "Dyn. Tarif",
+    "spot.chart.title": "\u26a1 Spotmarkt-Preise (24h)",
     "compare.vs_dynamic": "\u26a1 vs. Dynamischer Tarif",
 })
 
@@ -4926,6 +4927,7 @@ _I18N.setdefault("en", {}).update({
     "spot.settings.show_comparison": "Show as comparison",
     "spot.settings.interval": "Refresh interval (hours)",
     "spot.cost_label": "Dyn. tariff",
+    "spot.chart.title": "\u26a1 Spot Market Prices (24h)",
     "compare.vs_dynamic": "\u26a1 vs. Dynamic Tariff",
 })
 
@@ -4940,6 +4942,7 @@ _I18N.setdefault("es", {}).update({
     "spot.settings.show_comparison": "Mostrar como comparación",
     "spot.settings.interval": "Intervalo de actualización (horas)",
     "spot.cost_label": "Tarifa dyn.",
+    "spot.chart.title": "\u26a1 Precios del mercado spot (24h)",
     "compare.vs_dynamic": "\u26a1 vs. Tarifa dinámica",
 })
 
@@ -4954,6 +4957,7 @@ _I18N.setdefault("fr", {}).update({
     "spot.settings.show_comparison": "Afficher comme comparaison",
     "spot.settings.interval": "Intervalle de mise à jour (heures)",
     "spot.cost_label": "Tarif dyn.",
+    "spot.chart.title": "\u26a1 Prix du march\u00e9 spot (24h)",
     "compare.vs_dynamic": "\u26a1 vs. Tarif dynamique",
 })
 
@@ -4968,7 +4972,8 @@ _I18N.setdefault("pt", {}).update({
     "spot.settings.show_comparison": "Mostrar como comparação",
     "spot.settings.interval": "Intervalo de atualização (horas)",
     "spot.cost_label": "Tarifa din.",
-    "compare.vs_dynamic": "\u26a1 vs. Tarifa dinâmica",
+    "spot.chart.title": "\u26a1 Pre\u00e7os do mercado spot (24h)",
+    "compare.vs_dynamic": "\u26a1 vs. Tarifa din\u00e2mica",
 })
 
 _I18N.setdefault("it", {}).update({
@@ -4982,6 +4987,7 @@ _I18N.setdefault("it", {}).update({
     "spot.settings.show_comparison": "Mostra come confronto",
     "spot.settings.interval": "Intervallo aggiornamento (ore)",
     "spot.cost_label": "Tariffa din.",
+    "spot.chart.title": "\u26a1 Prezzi mercato spot (24h)",
     "compare.vs_dynamic": "\u26a1 vs. Tariffa dinamica",
 })
 
@@ -4996,6 +5002,7 @@ _I18N.setdefault("pl", {}).update({
     "spot.settings.show_comparison": "Pokaż jako porównanie",
     "spot.settings.interval": "Interwał aktualizacji (godziny)",
     "spot.cost_label": "Taryfa dyn.",
+    "spot.chart.title": "\u26a1 Ceny rynku spot (24h)",
     "compare.vs_dynamic": "\u26a1 vs. Taryfa dynamiczna",
 })
 
@@ -5010,7 +5017,8 @@ _I18N.setdefault("cs", {}).update({
     "spot.settings.show_comparison": "Zobrazit jako srovnání",
     "spot.settings.interval": "Interval aktualizace (hodiny)",
     "spot.cost_label": "Dyn. tarif",
-    "compare.vs_dynamic": "\u26a1 vs. Dynamický tarif",
+    "spot.chart.title": "\u26a1 Ceny spot trhu (24h)",
+    "compare.vs_dynamic": "\u26a1 vs. Dynamick\u00fd tarif",
 })
 
 _I18N.setdefault("ru", {}).update({
@@ -5024,6 +5032,7 @@ _I18N.setdefault("ru", {}).update({
     "spot.settings.show_comparison": "Показать для сравнения",
     "spot.settings.interval": "Интервал обновления (часы)",
     "spot.cost_label": "Дин. тариф",
+    "spot.chart.title": "\u26a1 Цены спот-рынка (24ч)",
     "compare.vs_dynamic": "\u26a1 vs. Динамический тариф",
 })
 

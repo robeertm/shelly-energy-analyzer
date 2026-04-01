@@ -804,7 +804,42 @@ class LiveWebMixin:
                         {"start_date": tp.start_date, "price": tp.electricity_price_eur_per_kwh, "base_fee": tp.base_fee_eur_per_year}
                         for tp in getattr(self.cfg.pricing, "tariff_schedule", []) or []
                     ]
-                    return {"ok": True, "devices": devices_out, "unit_eur": _unit, "co2_g_per_kwh": _co2_g, "solar_co2_saved_month_kg": round(_solar_co2_saved_month_kg, 3), "tariff_schedule": _tariff_sched, "spot_enabled": _spot_enabled}
+
+                    # 24h spot price chart data
+                    _spot_chart = []
+                    if _spot_enabled:
+                        try:
+                            _sp_zone2 = getattr(_spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
+                            _sp_markup2 = float(getattr(_spot_cfg, "markup_ct_per_kwh", 16.0))
+                            _sp_vat2 = (self.cfg.pricing.vat_rate() if getattr(_spot_cfg, "include_vat", True) else 0.0)
+                            _chart_start = int((_now - _td(hours=24)).timestamp())
+                            _chart_end = int((_now + _td(hours=24)).timestamp())
+                            _df_sp = self.storage.db.query_spot_prices(_sp_zone2, _chart_start, _chart_end)
+                            if not _df_sp.empty:
+                                _df_sp_h = _df_sp.copy()
+                                _df_sp_h["hour_ts"] = (_df_sp_h["slot_ts"] // 3600) * 3600
+                                _df_sp_h = _df_sp_h.groupby("hour_ts").agg(price=("price_eur_mwh", "mean")).reset_index()
+                                _df_sp_h = _df_sp_h.sort_values("hour_ts")
+                                for _, _r in _df_sp_h.iterrows():
+                                    _raw_ct = float(_r["price"]) / 10.0  # EUR/MWh → ct/kWh
+                                    _total_ct = (_raw_ct + _sp_markup2) * (1.0 + _sp_vat2)
+                                    _spot_chart.append({
+                                        "ts": int(_r["hour_ts"]),
+                                        "raw_ct": round(_raw_ct, 2),
+                                        "total_ct": round(_total_ct, 2),
+                                    })
+                        except Exception:
+                            pass
+
+                    return {
+                        "ok": True, "devices": devices_out, "unit_eur": _unit,
+                        "co2_g_per_kwh": _co2_g,
+                        "solar_co2_saved_month_kg": round(_solar_co2_saved_month_kg, 3),
+                        "tariff_schedule": _tariff_sched,
+                        "spot_enabled": _spot_enabled,
+                        "spot_chart": _spot_chart,
+                        "fixed_ct_per_kwh": round(_unit * 100, 2),
+                    }
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
 
