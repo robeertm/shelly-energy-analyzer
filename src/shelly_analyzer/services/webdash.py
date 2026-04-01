@@ -5815,7 +5815,7 @@ function _drawTrafficRateChart(hist) {{
   ctx.fillStyle = fg;
   ctx.fillText('\u2191 Up', padL + 86, padT + 1);
 }}
-setInterval(_refreshTraffic, 3000);
+setInterval(_refreshTraffic, 500);
 _refreshTraffic();
 
 document.getElementById("btn_plots").addEventListener("click", async ()=>{
