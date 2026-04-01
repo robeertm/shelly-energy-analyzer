@@ -5795,7 +5795,7 @@ function _drawTrafficRateChart(hist) {{
   // X-axis labels (minutes ago)
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  const steps = [0, -15, -30, -45, -60];
+  const steps = [0, -1, -2, -3, -4, -5];
   for (const m of steps) {{
     const t = m * 60;
     if (t >= minT && t <= maxT) {{
