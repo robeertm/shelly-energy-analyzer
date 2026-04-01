@@ -1182,13 +1182,9 @@ class CoreMixin:
             self._traffic_tree.configure(yscrollcommand=tree_sb.set)
             self._traffic_tree.pack(side="left", fill="x", expand=True)
             tree_sb.pack(side="right", fill="y")
-            # Live traffic rate chart (last hour)
-            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-            from matplotlib.figure import Figure
-            self._traffic_fig = Figure(figsize=(6, 1.4), dpi=96)
-            self._traffic_ax = self._traffic_fig.add_subplot(111)
-            self._traffic_canvas = FigureCanvasTkAgg(self._traffic_fig, master=traffic_lf)
-            self._traffic_canvas.get_tk_widget().pack(fill="x", padx=8, pady=(0, 6))
+            # Compact live traffic sparkline (tkinter Canvas, no matplotlib)
+            self._traffic_spark = tk.Canvas(traffic_lf, height=36, bg="#111111", highlightthickness=0)
+            self._traffic_spark.pack(fill="x", padx=8, pady=(2, 6))
 
             # Progress bar (shown during active sync)
             prog_frm = ttk.Frame(frm)
@@ -8634,34 +8630,28 @@ class CoreMixin:
                     fmt_bytes(data["received"]),
                     fmt_bytes(data["sent"]),
                 ))
-            # Update live traffic rate chart
-            ax = getattr(self, "_traffic_ax", None)
+            # Update compact sparkline bars
+            spark = getattr(self, "_traffic_spark", None)
             hist = snap.get("rate_history")
-            if ax and hist and hist.get("ts"):
-                ax.clear()
-                ts = hist["ts"]  # seconds ago (negative)
+            if spark and hist and hist.get("recv"):
+                spark.delete("all")
+                w = spark.winfo_width() or 400
+                h = spark.winfo_height() or 36
                 recv = hist["recv"]
                 sent = hist["sent"]
-                # Convert to minutes ago for readability
-                ts_min = [t / 60.0 for t in ts]
-                ax.fill_between(ts_min, recv, alpha=0.3, color="#2196F3")
-                ax.plot(ts_min, recv, color="#2196F3", linewidth=1.2, label="↓ Down")
-                ax.fill_between(ts_min, sent, alpha=0.3, color="#FF9800")
-                ax.plot(ts_min, sent, color="#FF9800", linewidth=1.2, label="↑ Up")
-                ax.set_ylabel("B/s", fontsize=7)
-                ax.set_xlabel("min", fontsize=7)
-                ax.tick_params(axis='both', labelsize=7)
-                ax.legend(fontsize=7, loc="upper left", framealpha=0.5)
-                ax.grid(True, alpha=0.2)
-                ax.yaxis.set_major_formatter(
-                    lambda x, _: fmt_rate(x)
-                )
-                fig = getattr(self, "_traffic_fig", None)
-                canvas = getattr(self, "_traffic_canvas", None)
-                if fig and canvas:
-                    self._apply_plot_theme(fig, ax, canvas)
-                    fig.tight_layout()
-                    canvas.draw_idle()
+                n = len(recv)
+                if n > 0:
+                    max_val = max(max(recv), max(sent), 1)
+                    bar_w = max(1, w / n)
+                    for i in range(n):
+                        x = i * bar_w
+                        # Download bar (blue, from bottom)
+                        rh = max(1, (recv[i] / max_val) * (h - 2))
+                        spark.create_rectangle(x, h - rh, x + bar_w - 0.5, h, fill="#2196F3", outline="", width=0)
+                        # Upload bar (orange, from bottom, stacked)
+                        sh = max(0, (sent[i] / max_val) * (h - 2))
+                        if sh > 0.5:
+                            spark.create_rectangle(x, h - rh - sh, x + bar_w - 0.5, h - rh, fill="#FF9800", outline="", width=0)
 
     def _mdns_refresh_tree(self) -> None:
             try:

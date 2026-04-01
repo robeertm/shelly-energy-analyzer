@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.11 - 2026-04-01
+### Improved
+- **Traffic chart: compact sparkline bars** – Replaced tall matplotlib plot with a thin 36px tkinter Canvas sparkline. Blue bars = download, orange stacked = upload. Fits neatly below the traffic table.
+
 ## 13.9.10 - 2026-04-01
 ### Changed
 - **Network traffic: 0.5s sampling** – Rate history sampled every 500ms (was 3s). Desktop UI updates at 0.5s, web polls at 500ms. Buffer holds 600 samples (~5 min).
