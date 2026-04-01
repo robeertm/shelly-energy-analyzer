@@ -113,7 +113,7 @@ class ForecastMixin:
             return
 
         from datetime import date as _fc_date
-        price = self.cfg.pricing.effective_pricing_for_date(_fc_date.today()).unit_price_gross()
+        price = self._get_effective_unit_price()
         result = compute_forecast(
             self.storage.db, dev.key, dev.name,
             horizon_days=getattr(self.cfg.forecast, "horizon_days", 30),

@@ -92,7 +92,7 @@ class StandbyMixin:
     def _refresh_standby_tab(self) -> None:
         from shelly_analyzer.services.standby import generate_standby_report
 
-        price = self.cfg.pricing.unit_price_gross()
+        price = self._get_effective_unit_price()
         report = generate_standby_report(self.storage.db, self.cfg.devices, price)
 
         self._standby_vars["total_cost"].set(f"{report.total_annual_standby_cost:.2f} €/Jahr")

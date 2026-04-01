@@ -697,6 +697,10 @@ class LiveWebMixin:
                                     if int(getattr(d, "phases", 3) or 3) >= 3
                                     and str(getattr(d, "kind", "em")) != "switch"]
 
+                    _use_dynamic_web = (
+                        getattr(_spot_cfg, "enabled", False) if _spot_cfg else False
+                    ) and str(getattr(_spot_cfg, "tariff_type", "fixed") or "fixed") == "dynamic"
+
                     devices_out = []
                     for d in _three_phase:
                         dev_data = {"key": d.key, "name": d.name, "host": d.host}
@@ -720,7 +724,21 @@ class LiveWebMixin:
                             except Exception:
                                 pass
                             dev_data[rng_key + "_kwh"] = round(kwh, 3)
-                            dev_data[rng_key + "_eur"] = round(kwh * _unit, 2)
+                            # Cost: dynamic tariff or fixed
+                            if _use_dynamic_web:
+                                try:
+                                    _sp_zone_d = getattr(_spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
+                                    _sp_mk_d = float(_spot_cfg.total_markup_ct() if hasattr(_spot_cfg, "total_markup_ct") else 16.0) / 100.0
+                                    _sp_vat_d = self.cfg.pricing.vat_rate() if getattr(_spot_cfg, "include_vat", True) else 0.0
+                                    _dyn_c, _, _ = self.storage.db.calc_spot_cost(
+                                        d.key, _sp_zone_d, int(rng_start.timestamp()), int(rng_end.timestamp()),
+                                        _sp_mk_d, _sp_vat_d
+                                    )
+                                    dev_data[rng_key + "_eur"] = round(_dyn_c if _dyn_c > 0 else kwh * _unit, 2)
+                                except Exception:
+                                    dev_data[rng_key + "_eur"] = round(kwh * _unit, 2)
+                            else:
+                                dev_data[rng_key + "_eur"] = round(kwh * _unit, 2)
                             dev_data[rng_key + "_co2_kg"] = round(_calc_co2(d.key, rng_start, rng_end, kwh), 3)
 
                         # Projection
@@ -1681,7 +1699,7 @@ class LiveWebMixin:
                             dev_name = d.name
                             break
                     fc_cfg = getattr(self.cfg, "forecast", None)
-                    price = self.cfg.pricing.unit_price_gross()
+                    price = self._get_effective_unit_price()
                     r = compute_forecast(
                         self.storage.db, dk, dev_name,
                         horizon_days=int(getattr(fc_cfg, "horizon_days", 30)) if fc_cfg else 30,
@@ -1715,7 +1733,7 @@ class LiveWebMixin:
             if action == "standby":
                 try:
                     from shelly_analyzer.services.standby import generate_standby_report
-                    price = self.cfg.pricing.unit_price_gross()
+                    price = self._get_effective_unit_price()
                     report = generate_standby_report(self.storage.db, self.cfg.devices, price)
 
                     # Diagnostic: count hourly rows per device to help debug empty results
@@ -2704,7 +2722,7 @@ class LiveWebMixin:
                                 pfc=float(getattr(s, "cosphi", {}).get("c", 0.0)),
                                 freq_hz=float(getattr(s, "freq_hz", {}).get("total", 0.0)),
                                 kwh_today=float(total_kwh),
-                                cost_today=float(total_kwh) * float(getattr(getattr(self.cfg, 'pricing', None), 'unit_price_gross', lambda: 0.0)()) if total_kwh else 0.0,
+                                cost_today=float(total_kwh) * float(self._get_effective_unit_price()) if total_kwh else 0.0,
                                 i_n=_i_n,
                                 raw=s.raw if hasattr(s, "raw") and isinstance(s.raw, dict) else {},
                             ),

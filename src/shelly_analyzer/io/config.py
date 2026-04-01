@@ -432,6 +432,9 @@ class SpotPriceConfig:
     include_vat: bool = True
     # Show dynamic price comparison even if user has a fixed tariff
     show_as_comparison: bool = True
+    # Tariff type: "fixed" = fixed tariff (dynamic as comparison only),
+    # "dynamic" = dynamic spot tariff is the PRIMARY billing method
+    tariff_type: str = "fixed"
 
     def total_markup_ct(self) -> float:
         """Sum of all surcharge components in ct/kWh (net)."""
@@ -917,6 +920,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         markup_ct_per_kwh=_legacy_markup,
         include_vat=bool(spot_raw.get("include_vat", SpotPriceConfig.include_vat)),
         show_as_comparison=bool(spot_raw.get("show_as_comparison", SpotPriceConfig.show_as_comparison)),
+        tariff_type=str(spot_raw.get("tariff_type", SpotPriceConfig.tariff_type) or "fixed"),
     )
 
     forecast_raw = raw.get("forecast", {}) if isinstance(raw.get("forecast"), dict) else {}
@@ -1316,6 +1320,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "supplier_margin_ct": float(getattr(cfg.spot_price, "supplier_margin_ct", 2.50)),
             "include_vat": bool(getattr(cfg.spot_price, "include_vat", True)),
             "show_as_comparison": bool(getattr(cfg.spot_price, "show_as_comparison", True)),
+            "tariff_type": str(getattr(cfg.spot_price, "tariff_type", "fixed") or "fixed"),
         },
         "forecast": {
             "enabled": bool(getattr(cfg.forecast, "enabled", False)),

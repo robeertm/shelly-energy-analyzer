@@ -491,7 +491,7 @@ class SolarMixin:
 
             # Pricing
             try:
-                unit_price = float(self.cfg.pricing.unit_price_gross())
+                unit_price = float(self._get_effective_unit_price())
             except Exception:
                 unit_price = float(getattr(getattr(self.cfg, "pricing", None), "electricity_price_eur_per_kwh", 0.30) or 0.30)
             try:
@@ -734,7 +734,7 @@ class SolarMixin:
             solar_cfg = getattr(self.cfg, "solar", None)
             tariff = float(getattr(solar_cfg, "feed_in_tariff_eur_per_kwh", 0.082) or 0.082)
             try:
-                unit_price = float(self.cfg.pricing.unit_price_gross())
+                unit_price = float(self._get_effective_unit_price())
             except Exception:
                 unit_price = 0.30
 
