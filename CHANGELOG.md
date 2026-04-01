@@ -1,9 +1,12 @@
 # Changelog
 
-## 13.9.17 - 2026-04-01
+## 13.9.18 - 2026-04-01
+### Removed
+- **Traffic sparkline bar chart** – Removed the jittery live sparkline canvas from the Sync tab. Only the clean category table remains.
+
 ### Fixed
-- **Traffic table: proper column stretch** – Category column now stretches to fill available width; numeric columns (requests, received, sent) stay fixed-width and right-aligned. No more ugly empty space.
-- **Traffic table: no more jitter** – Rows are updated in-place instead of deleted and re-inserted every 2 seconds. Only the values change; row order adjusts via move. Eliminates visual flickering.
+- **Traffic table: proper column stretch** – Category column stretches to fill width; numeric columns fixed-width. No more ugly empty space.
+- **Traffic table: no jitter** – Rows updated in-place instead of deleted/reinserted. Removed unused rate_history from TrafficMonitor.
 
 ## 13.9.15 - 2026-04-01
 ### Fixed
