@@ -920,87 +920,79 @@ class PlotsMixin:
             self._plots_device_nb = {}
             self._plots_device_order = {}
 
-            # Shared W/V/A/W window controls (len + unit)
-            unit_map = {
-                "minutes": self.t("common.minutes"),
-                "hours": self.t("common.hours"),
-                "days": self.t("common.days"),
+            # Shared granularity options for all plot tabs
+            _gran_map = {
+                "all": self.t("plots.mode.all"),
+                "hours": self.t("plots.mode.hours"),
+                "days": self.t("plots.mode.days"),
+                "weeks": self.t("plots.mode.weeks"),
+                "months": self.t("plots.mode.months"),
             }
-            inv_unit_map = {v: k for k, v in unit_map.items()}
+            _gran_inv = {v: k for k, v in _gran_map.items()}
 
-            def _sync_unit_display() -> None:
-                try:
-                    internal = str(self._wva_unit.get() or "hours").strip().lower()
-                except Exception:
-                    internal = "hours"
-                self._wva_unit_display.set(unit_map.get(internal, unit_map.get("hours", "hours")))
-
-            def _set_win(val: float, unit: str) -> None:
-                try:
-                    self._wva_len.set(float(val))
-                    self._wva_unit.set(str(unit))
-                except Exception:
-                    pass
-                _sync_unit_display()
-                self._redraw_plots_active()
-
-            def _make_wva_controls(parent: ttk.Frame, metric_key: str) -> None:
+            def _make_unified_controls(parent: ttk.Frame, metric_key: str,
+                                        mode_var: tk.StringVar,
+                                        last_n_var: tk.StringVar,
+                                        is_wva: bool = False) -> None:
+                """Build unified controls: dropdown (Alle/Stunden/Tage/Wochen/Monate) + Letzte N spinbox."""
                 row = ttk.Frame(parent)
                 row.pack(fill="x", pady=(8, 6))
-                ttk.Label(row, text=self.t("plots.wva.window")).pack(side="left")
-                # Preset dropdown instead of buttons
-                wva_presets = [
-                    ("5m", 5, "minutes"), ("15m", 15, "minutes"),
-                    ("1h", 1, "hours"), ("6h", 6, "hours"), ("24h", 24, "hours"),
-                    ("7d", 7, "days"), ("30d", 30, "days"),
-                ]
-                wva_preset_labels = [p[0] for p in wva_presets]
-                wva_preset_var = tk.StringVar(value="24h")
-                wva_preset_cb = ttk.Combobox(
-                    row, state="readonly", width=6,
-                    textvariable=wva_preset_var, values=wva_preset_labels,
-                )
-                wva_preset_cb.pack(side="left", padx=(10, 0))
+                ttk.Label(row, text=self.t("plots.kwh.granularity")).pack(side="left")
 
-                def _on_wva_preset_sel(_e=None) -> None:
-                    sel = str(wva_preset_var.get() or "").strip()
-                    for lbl, v, u in wva_presets:
-                        if lbl == sel:
-                            _set_win(v, u)
-                            return
-
-                try:
-                    wva_preset_cb.bind("<<ComboboxSelected>>", _on_wva_preset_sel)
-                except Exception:
-                    pass
-                ttk.Label(row, text=self.t("common.custom") + ":").pack(side="left", padx=(10, 4))
-                ttk.Entry(row, width=6, textvariable=self._wva_len).pack(side="left")
-                _sync_unit_display()
-                cb_unit = ttk.Combobox(
-                    row,
-                    state="readonly",
-                    width=10,
-                    textvariable=self._wva_unit_display,
-                    values=[unit_map["minutes"], unit_map["hours"], unit_map["days"]],
-                )
-                cb_unit.pack(side="left", padx=(6, 0))
-
-                def _on_unit_sel(_e=None) -> None:
+                # Determine current selection from mode_var
+                cur_mode = str(mode_var.get() or "all")
+                if ":" in cur_mode:
+                    cur_unit, cur_n = cur_mode.split(":", 1)
                     try:
-                        disp = str(self._wva_unit_display.get() or "").strip()
-                        internal = inv_unit_map.get(disp, "hours")
-                        self._wva_unit.set(internal)
+                        last_n_var.set(str(int(cur_n)))
                     except Exception:
                         pass
+                else:
+                    cur_unit = cur_mode
+
+                gran_display = tk.StringVar(value=_gran_map.get(cur_unit, _gran_map.get("all", "")))
+                gran_cb = ttk.Combobox(
+                    row, state="readonly", width=12,
+                    textvariable=gran_display, values=list(_gran_map.values()),
+                )
+                gran_cb.pack(side="left", padx=(10, 0))
+
+                ttk.Label(row, text=self.t("plots.kwh.last")).pack(side="left", padx=(16, 4))
+                sp_n = ttk.Spinbox(row, from_=1, to=9999, width=5, textvariable=last_n_var)
+                sp_n.pack(side="left")
+
+                def _apply(_e=None) -> None:
+                    disp = str(gran_display.get() or "").strip()
+                    unit = _gran_inv.get(disp, "all")
+                    if unit == "all":
+                        if is_wva:
+                            self._wva_len.set(9999.0)
+                            self._wva_unit.set("days")
+                        else:
+                            mode_var.set("all")
+                    else:
+                        try:
+                            n = int(last_n_var.get() or 7)
+                        except Exception:
+                            n = 7
+                        n = max(1, min(9999, n))
+                        if is_wva:
+                            self._wva_len.set(float(n))
+                            self._wva_unit.set(unit)
+                        else:
+                            mode_var.set(f"{unit}:{n}")
                     self._redraw_plots_metric(metric_key)
 
                 try:
-                    cb_unit.bind("<<ComboboxSelected>>", _on_unit_sel)
+                    gran_cb.bind("<<ComboboxSelected>>", _apply)
                 except Exception:
                     pass
-                ttk.Button(row, text=self.t("btn.apply"), command=lambda mk=metric_key: self._redraw_plots_metric(mk)).pack(
-                    side="left", padx=(10, 0)
-                )
+                try:
+                    sp_n.bind("<Return>", _apply)
+                    sp_n.bind("<<Increment>>", _apply)
+                    sp_n.bind("<<Decrement>>", _apply)
+                except Exception:
+                    pass
 
             def _make_device_notebook(parent: ttk.Frame, metric_key: str, two_axes: bool = False) -> None:
                 dev_nb = ttk.Notebook(parent)
@@ -1065,291 +1057,60 @@ class PlotsMixin:
             # --- kWh tab ---
             tab_kwh = ttk.Frame(nb)
             nb.add(tab_kwh, text="kWh")
-            kwh_ctl = ttk.Frame(tab_kwh)
-            kwh_ctl.pack(fill="x", pady=(8, 6))
-            ttk.Label(kwh_ctl, text=self.t("plots.kwh.granularity")).pack(side="left")
-            kwh_gran_map = {
-                "all": self.t("plots.mode.all"),
-                "hours": self.t("plots.mode.hours"),
-                "days": self.t("plots.mode.days"),
-                "weeks": self.t("plots.mode.weeks"),
-                "months": self.t("plots.mode.months"),
-            }
-            kwh_inv_gran_map = {v: k for k, v in kwh_gran_map.items()}
-            kwh_gran_display = tk.StringVar(
-                value=kwh_gran_map.get(str(self._plots_mode.get() or "all"), kwh_gran_map["all"])
-            )
-            kwh_gran_cb = ttk.Combobox(
-                kwh_ctl, state="readonly", width=12,
-                textvariable=kwh_gran_display, values=list(kwh_gran_map.values()),
-            )
-            kwh_gran_cb.pack(side="left", padx=(10, 0))
-
-            def _on_kwh_gran_sel(_e=None) -> None:
-                disp = str(kwh_gran_display.get() or "").strip()
-                mode = kwh_inv_gran_map.get(disp, "all")
-                self._plots_mode.set(mode)
-                self._redraw_plots_metric("kwh")
-
-            try:
-                kwh_gran_cb.bind("<<ComboboxSelected>>", _on_kwh_gran_sel)
-            except Exception:
-                pass
-
-            # --- Custom range: last N units (hours/days/weeks/months) ---
-            last_ctl = ttk.Frame(kwh_ctl)
-            last_ctl.pack(side="left", padx=(16, 0))
-            ttk.Label(last_ctl, text=self.t("plots.kwh.last")).pack(side="left")
-
-            sp_n = ttk.Spinbox(last_ctl, from_=1, to=9999, width=5, textvariable=self._plots_last_n)
-            sp_n.pack(side="left", padx=(6, 0))
-
-            # NOTE: keep names distinct from the W/V/A window unit_map above (closure)
-            kwh_unit_map = {
-                "hours": self.t("plots.mode.hours"),
-                "days": self.t("plots.mode.days"),
-                "weeks": self.t("plots.mode.weeks"),
-                "months": self.t("plots.mode.months"),
-            }
-            kwh_inv_unit_map = {v: k for k, v in kwh_unit_map.items()}
-            unit_display = tk.StringVar(
-                value=kwh_unit_map.get(str(self._plots_last_unit.get() or "days"), kwh_unit_map["days"])
-            )
-            cb_unit = ttk.Combobox(
-                last_ctl,
-                width=10,
-                state="readonly",
-                textvariable=unit_display,
-                values=list(kwh_unit_map.values()),
-            )
-            cb_unit.pack(side="left", padx=(6, 0))
-
-            def _apply_last_mode() -> None:
-                try:
-                    disp = str(unit_display.get() or "").strip()
-                    unit = kwh_inv_unit_map.get(disp, str(self._plots_last_unit.get() or "days"))
-                except Exception:
-                    unit = str(self._plots_last_unit.get() or "days")
-                try:
-                    n = int(self._plots_last_n.get() or 0)
-                except Exception:
-                    n = 0
-                n = max(1, min(9999, n))
-                try:
-                    self._plots_last_unit.set(unit)
-                except Exception:
-                    pass
-                self._plots_mode.set(f"{unit}:{n}")
-                self._redraw_plots_metric("kwh")
-
-            try:
-                cb_unit.bind("<<ComboboxSelected>>", lambda _e: _apply_last_mode())
-            except Exception:
-                pass
-            ttk.Button(last_ctl, text=self.t("btn.apply"), command=_apply_last_mode).pack(side="left", padx=(8, 0))
-
+            _make_unified_controls(tab_kwh, "kwh", self._plots_mode, self._plots_last_n)
             _make_device_notebook(tab_kwh, "kwh")
+
+            # WVA tabs share _wva_len as last-N variable
+            if not hasattr(self, '_wva_last_n_str'):
+                self._wva_last_n_str = tk.StringVar(value=str(int(self._wva_len.get() or 24)))
+            _wva_mode_var = tk.StringVar(value="hours")
 
             # --- V tab ---
             tab_v = ttk.Frame(nb)
             nb.add(tab_v, text="V")
-            _make_wva_controls(tab_v, "V")
+            _make_unified_controls(tab_v, "V", _wva_mode_var, self._wva_last_n_str, is_wva=True)
             _make_device_notebook(tab_v, "V", two_axes=True)
 
             # --- A tab ---
             tab_a = ttk.Frame(nb)
             nb.add(tab_a, text="A")
-            _make_wva_controls(tab_a, "A")
+            _make_unified_controls(tab_a, "A", _wva_mode_var, self._wva_last_n_str, is_wva=True)
             _make_device_notebook(tab_a, "A", two_axes=True)
 
             # --- W tab ---
             tab_w = ttk.Frame(nb)
             nb.add(tab_w, text="W")
-            _make_wva_controls(tab_w, "W")
+            _make_unified_controls(tab_w, "W", _wva_mode_var, self._wva_last_n_str, is_wva=True)
             _make_device_notebook(tab_w, "W", two_axes=False)
 
             # --- VAR tab ---
             tab_var = ttk.Frame(nb)
             nb.add(tab_var, text="VAR")
-            _make_wva_controls(tab_var, "VAR")
+            _make_unified_controls(tab_var, "VAR", _wva_mode_var, self._wva_last_n_str, is_wva=True)
             _make_device_notebook(tab_var, "VAR", two_axes=True)
 
             # --- cos φ tab ---
             tab_pf = ttk.Frame(nb)
             nb.add(tab_pf, text="cos φ")
-            _make_wva_controls(tab_pf, "COSPHI")
+            _make_unified_controls(tab_pf, "COSPHI", _wva_mode_var, self._wva_last_n_str, is_wva=True)
             _make_device_notebook(tab_pf, "COSPHI", two_axes=True)
 
             # --- Hz tab (grid frequency) ---
             tab_hz = ttk.Frame(nb)
             nb.add(tab_hz, text="Hz")
-            _make_wva_controls(tab_hz, "HZ")
+            _make_unified_controls(tab_hz, "HZ", _wva_mode_var, self._wva_last_n_str, is_wva=True)
             _make_device_notebook(tab_hz, "HZ", two_axes=False)
 
             # --- CO₂ tab ---
             tab_co2 = ttk.Frame(nb)
             nb.add(tab_co2, text="CO₂")
-            co2_ctl = ttk.Frame(tab_co2)
-            co2_ctl.pack(fill="x", pady=(8, 6))
-            ttk.Label(co2_ctl, text=self.t("plots.kwh.granularity")).pack(side="left")
-            co2_gran_map = {
-                "hours": self.t("plots.mode.hours"),
-                "days": self.t("plots.mode.days"),
-                "weeks": self.t("plots.mode.weeks"),
-                "months": self.t("plots.mode.months"),
-            }
-            co2_inv_gran_map = {v: k for k, v in co2_gran_map.items()}
-            co2_gran_display = tk.StringVar(
-                value=co2_gran_map.get(str(self._plots_co2_mode.get() or "hours"), co2_gran_map["hours"])
-            )
-            co2_gran_cb = ttk.Combobox(
-                co2_ctl, state="readonly", width=12,
-                textvariable=co2_gran_display, values=list(co2_gran_map.values()),
-            )
-            co2_gran_cb.pack(side="left", padx=(10, 0))
-
-            def _on_co2_gran_sel(_e=None) -> None:
-                disp = str(co2_gran_display.get() or "").strip()
-                mode = co2_inv_gran_map.get(disp, "hours")
-                self._plots_co2_mode.set(mode)
-                self._redraw_plots_metric("CO2")
-
-            try:
-                co2_gran_cb.bind("<<ComboboxSelected>>", _on_co2_gran_sel)
-            except Exception:
-                pass
-
-            # --- Custom range: last N units (hours/days/weeks/months) for CO₂ ---
-            co2_last_ctl = ttk.Frame(co2_ctl)
-            co2_last_ctl.pack(side="left", padx=(16, 0))
-            ttk.Label(co2_last_ctl, text=self.t("plots.kwh.last")).pack(side="left")
-
-            co2_sp_n = ttk.Spinbox(co2_last_ctl, from_=1, to=9999, width=5, textvariable=self._plots_co2_last_n)
-            co2_sp_n.pack(side="left", padx=(6, 0))
-
-            co2_unit_map = {
-                "hours": self.t("plots.mode.hours"),
-                "days": self.t("plots.mode.days"),
-                "weeks": self.t("plots.mode.weeks"),
-                "months": self.t("plots.mode.months"),
-            }
-            co2_inv_unit_map = {v: k for k, v in co2_unit_map.items()}
-            co2_unit_display = tk.StringVar(
-                value=co2_unit_map.get(str(self._plots_co2_last_unit.get() or "days"), co2_unit_map["days"])
-            )
-            co2_cb_unit = ttk.Combobox(
-                co2_last_ctl,
-                width=10,
-                state="readonly",
-                textvariable=co2_unit_display,
-                values=list(co2_unit_map.values()),
-            )
-            co2_cb_unit.pack(side="left", padx=(6, 0))
-
-            def _apply_co2_last_mode() -> None:
-                try:
-                    disp = str(co2_unit_display.get() or "").strip()
-                    unit = co2_inv_unit_map.get(disp, str(self._plots_co2_last_unit.get() or "days"))
-                except Exception:
-                    unit = str(self._plots_co2_last_unit.get() or "days")
-                try:
-                    n = int(self._plots_co2_last_n.get() or 0)
-                except Exception:
-                    n = 0
-                n = max(1, min(9999, n))
-                try:
-                    self._plots_co2_last_unit.set(unit)
-                except Exception:
-                    pass
-                self._plots_co2_mode.set(f"{unit}:{n}")
-                self._redraw_plots_metric("CO2")
-
-            try:
-                co2_cb_unit.bind("<<ComboboxSelected>>", lambda _e: _apply_co2_last_mode())
-            except Exception:
-                pass
-            ttk.Button(co2_last_ctl, text=self.t("btn.apply"), command=_apply_co2_last_mode).pack(side="left", padx=(8, 0))
-
+            _make_unified_controls(tab_co2, "CO2", self._plots_co2_mode, self._plots_co2_last_n)
             _make_device_notebook(tab_co2, "CO2")
 
             # --- Dyn. Preis tab ---
             tab_dynprice = ttk.Frame(nb)
             nb.add(tab_dynprice, text=self.t("plots.dynprice.tab"))
-            dp_ctl = ttk.Frame(tab_dynprice)
-            dp_ctl.pack(fill="x", pady=(8, 6))
-            ttk.Label(dp_ctl, text=self.t("plots.kwh.granularity")).pack(side="left")
-            dp_gran_map = {
-                "hours": self.t("plots.mode.hours"),
-                "days": self.t("plots.mode.days"),
-                "weeks": self.t("plots.mode.weeks"),
-                "months": self.t("plots.mode.months"),
-            }
-            dp_inv_gran_map = {v: k for k, v in dp_gran_map.items()}
-            dp_gran_display = tk.StringVar(
-                value=dp_gran_map.get(str(self._plots_dynprice_mode.get() or "hours"), dp_gran_map["hours"])
-            )
-            dp_gran_cb = ttk.Combobox(
-                dp_ctl, state="readonly", width=12,
-                textvariable=dp_gran_display, values=list(dp_gran_map.values()),
-            )
-            dp_gran_cb.pack(side="left", padx=(10, 0))
-
-            def _on_dp_gran_sel(_e=None) -> None:
-                disp = str(dp_gran_display.get() or "").strip()
-                mode = dp_inv_gran_map.get(disp, "hours")
-                self._plots_dynprice_mode.set(mode)
-                self._redraw_plots_metric("DYNPRICE")
-
-            try:
-                dp_gran_cb.bind("<<ComboboxSelected>>", _on_dp_gran_sel)
-            except Exception:
-                pass
-
-            dp_last_ctl = ttk.Frame(dp_ctl)
-            dp_last_ctl.pack(side="left", padx=(16, 0))
-            ttk.Label(dp_last_ctl, text=self.t("plots.kwh.last")).pack(side="left")
-            ttk.Spinbox(dp_last_ctl, from_=1, to=9999, width=5, textvariable=self._plots_dynprice_last_n).pack(side="left", padx=(6, 0))
-
-            dp_unit_map = {
-                "hours": self.t("plots.mode.hours"),
-                "days": self.t("plots.mode.days"),
-                "weeks": self.t("plots.mode.weeks"),
-                "months": self.t("plots.mode.months"),
-            }
-            dp_inv_unit_map = {v: k for k, v in dp_unit_map.items()}
-            dp_unit_display = tk.StringVar(
-                value=dp_unit_map.get(str(self._plots_dynprice_last_unit.get() or "days"), dp_unit_map["days"])
-            )
-            dp_cb_unit = ttk.Combobox(
-                dp_last_ctl, width=10, state="readonly",
-                textvariable=dp_unit_display, values=list(dp_unit_map.values()),
-            )
-            dp_cb_unit.pack(side="left", padx=(6, 0))
-
-            def _apply_dynprice_last_mode() -> None:
-                try:
-                    disp = str(dp_unit_display.get() or "").strip()
-                    unit = dp_inv_unit_map.get(disp, str(self._plots_dynprice_last_unit.get() or "days"))
-                except Exception:
-                    unit = str(self._plots_dynprice_last_unit.get() or "days")
-                try:
-                    n = int(self._plots_dynprice_last_n.get() or 0)
-                except Exception:
-                    n = 0
-                n = max(1, min(9999, n))
-                try:
-                    self._plots_dynprice_last_unit.set(unit)
-                except Exception:
-                    pass
-                self._plots_dynprice_mode.set(f"{unit}:{n}")
-                self._redraw_plots_metric("DYNPRICE")
-
-            try:
-                dp_cb_unit.bind("<<ComboboxSelected>>", lambda _e: _apply_dynprice_last_mode())
-            except Exception:
-                pass
-            ttk.Button(dp_last_ctl, text=self.t("btn.apply"), command=_apply_dynprice_last_mode).pack(side="left", padx=(8, 0))
-
+            _make_unified_controls(tab_dynprice, "DYNPRICE", self._plots_dynprice_mode, self._plots_dynprice_last_n)
             _make_device_notebook(tab_dynprice, "DYNPRICE")
 
             # Redraw when switching metric tabs
