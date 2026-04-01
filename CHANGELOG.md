@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.16 - 2026-04-01
+### Fixed
+- **Traffic frame no longer too wide** – Treeview now in its own grid frame with `grid_propagate(False)` and fixed height, preventing it from dictating the parent LabelFrame width. All traffic widgets use grid layout.
+
 ## 13.9.15 - 2026-04-01
 ### Fixed
 - **Traffic frame width** – Reduced Treeview column initial widths to minimal values so the tree doesn't force the parent frame wider than the window. Hidden #0 column set to 0 width.
