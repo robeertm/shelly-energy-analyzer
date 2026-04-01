@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.14 - 2026-04-01
+### Fixed
+- **Traffic table: columns stretch to fill width** – All Treeview columns now use `stretch=True` with proper `minwidth` values, so they distribute evenly across the available frame width.
+
 ## 13.9.13 - 2026-04-01
 ### Fixed
 - **Traffic sparkline: no more jitter** – Fixed bar count derived from window width (3px each). Bars are right-aligned to current second, empty seconds filled with zeros. No more changing bar count or layout shifts.
