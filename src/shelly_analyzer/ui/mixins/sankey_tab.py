@@ -101,8 +101,10 @@ class SankeyMixin:
         self._sankey_canvas.draw_idle()
 
     def _draw_energy_flow(self, ax, data, tc=None) -> None:
-        """Draw a clean energy flow visualization using horizontal stacked bars."""
+        """Draw an enhanced energy flow visualization with gradient flows."""
         import numpy as np
+        from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+        import matplotlib.patheffects as pe
 
         if tc is None:
             tc = self._get_theme_colors()
@@ -112,6 +114,7 @@ class SankeyMixin:
             return
 
         fg = tc["fg"]
+        bg = tc["bg"]
 
         # Categorize flows
         sources = {}
@@ -130,55 +133,92 @@ class SankeyMixin:
         color_map = dict(zip(data.nodes, data.node_colors))
         total = max(data.total_consumption_kwh, 0.01)
 
-        # --- Draw source bars (left) ---
-        y = 0.85
-        ax.text(0.12, 0.95, "Quellen", ha="center", va="top", fontsize=11, fontweight="bold", color=fg)
+        dev_colors = ["#2196F3", "#9C27B0", "#1abc9c", "#FF9800", "#4CAF50",
+                      "#E91E63", "#00BCD4", "#FF5722", "#795548", "#607D8B"]
+
+        # --- Source nodes (left) ---
+        ax.text(0.10, 0.97, self.t("sankey.sources"), ha="center", va="top",
+                fontsize=11, fontweight="bold", color=fg)
+        src_positions = {}
+        y = 0.88
         for name, val in left_items:
             color = color_map.get(name, tc["blue"])
-            w = max(val / total * 0.2, 0.01)
-            ax.barh(y, w, height=0.06, left=0.02, color=color, alpha=0.9)
-            ax.text(0.02 + w + 0.01, y, f"{name}  {val:.1f} kWh", va="center", fontsize=9, fontweight="bold", color=fg)
-            y -= 0.10
+            h = max(0.06, val / total * 0.25)
+            box = FancyBboxPatch((0.01, y - h / 2), 0.18, h,
+                                  boxstyle="round,pad=0.01", facecolor=color, alpha=0.85,
+                                  edgecolor=color, linewidth=1.5)
+            box.set_path_effects([pe.withSimplePatchShadow(offset=(1, -1), shadow_rgbFace=(0, 0, 0), alpha=0.15)])
+            ax.add_patch(box)
+            pct = val / total * 100
+            ax.text(0.10, y, f"{name}\n{val:.1f} kWh ({pct:.0f}%)",
+                    ha="center", va="center", fontsize=8, fontweight="bold", color="white")
+            src_positions[name] = y
+            y -= max(0.12, h + 0.04)
 
         # --- Central "House" node ---
-        house_y = 0.5
-        ax.add_patch(
-            __import__("matplotlib.patches", fromlist=["FancyBboxPatch"]).FancyBboxPatch(
-                (0.38, house_y - 0.08), 0.24, 0.16,
-                boxstyle="round,pad=0.02", facecolor=tc["blue"], alpha=0.15, edgecolor=tc["blue"], linewidth=2
-            )
-        )
-        ax.text(0.5, house_y, f"\U0001f3e0 {data.total_consumption_kwh:.1f} kWh",
-               ha="center", va="center", fontsize=12, fontweight="bold", color=fg)
+        house_y = 0.50
+        house_box = FancyBboxPatch((0.35, house_y - 0.10), 0.30, 0.20,
+                                    boxstyle="round,pad=0.03", facecolor=tc["blue"], alpha=0.12,
+                                    edgecolor=tc["blue"], linewidth=2.5)
+        house_box.set_path_effects([pe.withSimplePatchShadow(offset=(2, -2), shadow_rgbFace=(0, 0, 0), alpha=0.1)])
+        ax.add_patch(house_box)
+        ax.text(0.50, house_y + 0.02, "\U0001f3e0", ha="center", va="center", fontsize=18)
+        ax.text(0.50, house_y - 0.04, f"{data.total_consumption_kwh:.1f} kWh",
+                ha="center", va="center", fontsize=11, fontweight="bold", color=fg)
 
-        # --- Draw consumer bars (right) ---
-        y = 0.85
-        ax.text(0.82, 0.95, "Verbraucher", ha="center", va="top", fontsize=11, fontweight="bold", color=fg)
-        dev_colors = [tc["blue"], tc["purple"], "#1abc9c", tc["orange"], tc["green"],
-                     "#e91e63", "#00bcd4", "#ff9800", "#795548", "#607d8b"]
+        # --- Consumer nodes (right) ---
+        ax.text(0.85, 0.97, self.t("sankey.consumers"), ha="center", va="top",
+                fontsize=11, fontweight="bold", color=fg)
+        tgt_positions = {}
+        y = 0.88
         for i, (name, val) in enumerate(right_items[:8]):
             color = dev_colors[i % len(dev_colors)]
-            w = max(val / total * 0.2, 0.01)
-            ax.barh(y, w, height=0.06, left=0.68, color=color, alpha=0.9)
+            h = max(0.05, val / total * 0.20)
+            box = FancyBboxPatch((0.72, y - h / 2), 0.27, h,
+                                  boxstyle="round,pad=0.01", facecolor=color, alpha=0.8,
+                                  edgecolor=color, linewidth=1)
+            box.set_path_effects([pe.withSimplePatchShadow(offset=(1, -1), shadow_rgbFace=(0, 0, 0), alpha=0.12)])
+            ax.add_patch(box)
             pct = val / total * 100
-            ax.text(0.68 + w + 0.01, y, f"{name}  {val:.1f} kWh ({pct:.0f}%)", va="center", fontsize=9, color=fg)
-            y -= 0.10
+            label = name if len(name) <= 14 else name[:12] + ".."
+            ax.text(0.855, y, f"{label}  {val:.1f} kWh ({pct:.0f}%)",
+                    ha="center", va="center", fontsize=7, fontweight="bold", color="white")
+            tgt_positions[name] = y
+            y -= max(0.09, h + 0.03)
 
         # Feed-in (if any)
         for name, val in special:
-            ax.text(0.5, 0.12, f"\U0001f4e4 {self.t('sankey.feed_in')}: {val:.2f} kWh",
-                   ha="center", va="center", fontsize=10, color=tc["green"], fontweight="bold")
+            ax.text(0.50, 0.08, f"\U0001f4e4 {self.t('sankey.feed_in')}: {val:.2f} kWh",
+                    ha="center", va="center", fontsize=10, color=tc["green"], fontweight="bold",
+                    path_effects=[pe.withStroke(linewidth=2, foreground=bg)])
 
-        # Draw flow arrows
+        # --- Draw flow curves (bezier-like) ---
+        from matplotlib.patches import FancyArrowPatch
+        import matplotlib.path as mpath
+
         for name, val in left_items:
             color = color_map.get(name, tc["blue"])
-            ax.annotate("", xy=(0.38, house_y), xytext=(0.22, 0.85 - left_items.index((name, val)) * 0.10),
-                       arrowprops=dict(arrowstyle="->", color=color, lw=max(1, val / total * 5), alpha=0.4))
+            sy = src_positions.get(name, 0.5)
+            lw = max(1.5, val / total * 8)
+            arrow = FancyArrowPatch(
+                (0.19, sy), (0.35, house_y),
+                connectionstyle="arc3,rad=0.15",
+                arrowstyle="-|>", color=color, linewidth=lw,
+                alpha=0.35, mutation_scale=12,
+            )
+            ax.add_patch(arrow)
 
         for i, (name, val) in enumerate(right_items[:8]):
             color = dev_colors[i % len(dev_colors)]
-            ax.annotate("", xy=(0.68, 0.85 - i * 0.10), xytext=(0.62, house_y),
-                       arrowprops=dict(arrowstyle="->", color=color, lw=max(1, val / total * 5), alpha=0.4))
+            ty = tgt_positions.get(name, 0.5)
+            lw = max(1.0, val / total * 6)
+            arrow = FancyArrowPatch(
+                (0.65, house_y), (0.72, ty),
+                connectionstyle="arc3,rad=-0.12",
+                arrowstyle="-|>", color=color, linewidth=lw,
+                alpha=0.35, mutation_scale=10,
+            )
+            ax.add_patch(arrow)
 
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
+        ax.set_xlim(-0.02, 1.02)
+        ax.set_ylim(0, 1.02)

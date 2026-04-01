@@ -697,6 +697,7 @@ class LiveWebMixin:
                                     if int(getattr(d, "phases", 3) or 3) >= 3
                                     and str(getattr(d, "kind", "em")) != "switch"]
 
+                    _spot_cfg = getattr(self.cfg, "spot_price", None)
                     _use_dynamic_web = (
                         getattr(_spot_cfg, "enabled", False) if _spot_cfg else False
                     ) and str(getattr(_spot_cfg, "tariff_type", "fixed") or "fixed") == "dynamic"
@@ -788,7 +789,6 @@ class LiveWebMixin:
                         pass
 
                     # Spot price comparison
-                    _spot_cfg = getattr(self.cfg, "spot_price", None)
                     _spot_enabled = getattr(_spot_cfg, "enabled", False) if _spot_cfg else False
                     if _spot_enabled:
                         _sp_zone = getattr(_spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"

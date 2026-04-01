@@ -1,5 +1,15 @@
 # Changelog
 
+## 13.9.1 - 2026-04-01
+### Fixed
+- **Web costs tab: no data displayed** – Fixed `_spot_cfg` referenced before definition in the costs API handler. Variable is now defined at the top of the handler block.
+- **Traffic monitor: missing response bytes** – The monkey-patch now force-reads `resp.content` before measuring, so API response sizes are correctly tracked. Spot price API calls now appear as "⚡ Spot Prices" category.
+
+### Improved
+- **Web costs tab: regrouped layout** – Per-device cards now show: spot price 24h chart at top → fixed tariff costs (blue label) → dynamic tariff costs (orange) → CO₂ section. Clearer visual hierarchy.
+- **Energy flow diagram: much prettier** – Desktop Sankey completely redesigned with rounded node boxes, shadow effects, proportional flow widths, bezier curve arrows with arrowheads, and percentage labels. Source/consumer labels with white text on colored backgrounds.
+- **Weather tab: 7-day rolling window** – Time series chart now shows last 7 days instead of 30, making hourly patterns much clearer.
+
 ## 13.9.0 - 2026-04-01
 ### Added
 - **Tariff type selector: Fixed or Dynamic** – New radio button in Settings → Preise & Tarife to choose between fixed price tariff and dynamic spot market tariff as the PRIMARY billing method. When "Dynamic" is selected, ALL cost calculations throughout the entire app use spot market prices (EPEX Spot + surcharges + VAT) instead of the configured fixed price.

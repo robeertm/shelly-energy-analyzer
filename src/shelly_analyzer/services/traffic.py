@@ -158,15 +158,26 @@ class TrafficMonitor:
 
             resp = original_send(adapter_self, request, *args, **kwargs)
 
-            # Estimate bytes received
+            # Estimate bytes received - force content read for accurate size
             recv = 0
             if resp is not None:
-                content = getattr(resp, "_content", None)
-                if content:
-                    recv = len(content)
-                else:
-                    recv = int(resp.headers.get("Content-Length", 0))
-                recv += len(str(resp.headers)) if resp.headers else 0
+                try:
+                    # Force-read content so we can measure it
+                    _ = resp.content
+                    content = getattr(resp, "_content", None)
+                    if content:
+                        recv = len(content)
+                except Exception:
+                    pass
+                if recv == 0:
+                    try:
+                        recv = int(resp.headers.get("Content-Length", 0))
+                    except Exception:
+                        pass
+                try:
+                    recv += len(str(resp.headers)) if resp.headers else 0
+                except Exception:
+                    pass
 
             monitor.record(url, sent, recv)
             return resp
