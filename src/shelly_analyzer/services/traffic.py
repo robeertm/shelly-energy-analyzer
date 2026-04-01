@@ -73,9 +73,6 @@ class TrafficMonitor:
         self._recent: List[Tuple[float, int, int]] = []  # (ts, sent, recv)
         self._start_ts = time.time()
         self._installed = False
-        # Rate history for the last 5 minutes (sampled every ~0.5 seconds)
-        self._rate_history: List[Tuple[float, float, float]] = []  # (ts, recv_bps, sent_bps)
-        self._rate_history_max = 600  # ~5 min at 0.5s intervals
 
     # -- public API ----------------------------------------------------------
 
@@ -136,20 +133,6 @@ class TrafficMonitor:
             rate_sent_ps = rate_sent / 10.0
             rate_recv_ps = rate_recv / 10.0
 
-            # Record rate history point (keep last hour)
-            self._rate_history.append((now, rate_recv_ps, rate_sent_ps))
-            if len(self._rate_history) > self._rate_history_max:
-                self._rate_history = self._rate_history[-self._rate_history_max:]
-
-            # Build compact history arrays for UI (relative timestamps in seconds ago)
-            hist_ts = []
-            hist_recv = []
-            hist_sent = []
-            for ht, hr, hs in self._rate_history:
-                hist_ts.append(round(ht - now, 1))  # negative = seconds ago
-                hist_recv.append(round(hr, 1))
-                hist_sent.append(round(hs, 1))
-
             return {
                 "uptime_s": int(uptime),
                 "total_sent": total_sent,
@@ -158,11 +141,6 @@ class TrafficMonitor:
                 "rate_sent_bps": rate_sent_ps,
                 "rate_recv_bps": rate_recv_ps,
                 "categories": cats,
-                "rate_history": {
-                    "ts": hist_ts,
-                    "recv": hist_recv,
-                    "sent": hist_sent,
-                },
             }
 
     # -- monkey-patching -----------------------------------------------------
