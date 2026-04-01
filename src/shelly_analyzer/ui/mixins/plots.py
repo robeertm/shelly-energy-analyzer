@@ -828,9 +828,38 @@ class PlotsMixin:
     def _build_plots_tab(self) -> None:
             frm = self.tab_plots
 
+            # ── Shared control bar at top, centered ──
+            ctrl_row = ttk.Frame(frm)
+            ctrl_row.pack(fill="x", padx=12, pady=(8, 4))
+            # Center content using inner frame
+            ctrl_inner = ttk.Frame(ctrl_row)
+            ctrl_inner.pack(anchor="center")
+
+            _gran_map = {
+                "all": self.t("plots.mode.all"),
+                "hours": self.t("plots.mode.hours"),
+                "days": self.t("plots.mode.days"),
+                "weeks": self.t("plots.mode.weeks"),
+                "months": self.t("plots.mode.months"),
+            }
+            _gran_inv = {v: k for k, v in _gran_map.items()}
+
+            self._plots_gran_display = tk.StringVar(value=_gran_map.get("days", ""))
+            self._plots_last_n_shared = tk.StringVar(value="7")
+
+            ttk.Label(ctrl_inner, text=self.t("plots.kwh.granularity")).pack(side="left")
+            gran_cb = ttk.Combobox(
+                ctrl_inner, state="readonly", width=12,
+                textvariable=self._plots_gran_display, values=list(_gran_map.values()),
+            )
+            gran_cb.pack(side="left", padx=(10, 0))
+            ttk.Label(ctrl_inner, text=self.t("plots.kwh.last")).pack(side="left", padx=(16, 4))
+            sp_n = ttk.Spinbox(ctrl_inner, from_=1, to=9999, width=5, textvariable=self._plots_last_n_shared)
+            sp_n.pack(side="left")
+
             # Metric tabs
             nb = ttk.Notebook(frm)
-            nb.pack(fill="both", expand=True, padx=12, pady=(6, 0))
+            nb.pack(fill="both", expand=True, padx=12, pady=(4, 8))
             self._plots_metric_nb = nb
 
             # Keep device selection stable when switching between metric tabs.
@@ -882,15 +911,7 @@ class PlotsMixin:
             self._plots_device_nb = {}
             self._plots_device_order = {}
 
-            # Gran map used by the shared control bar (defined before tabs so closures can reference it)
-            _gran_map = {
-                "all": self.t("plots.mode.all"),
-                "hours": self.t("plots.mode.hours"),
-                "days": self.t("plots.mode.days"),
-                "weeks": self.t("plots.mode.weeks"),
-                "months": self.t("plots.mode.months"),
-            }
-            _gran_inv = {v: k for k, v in _gran_map.items()}
+            # (gran_map and gran_inv defined above in control bar)
 
             def _make_device_notebook(parent: ttk.Frame, metric_key: str, two_axes: bool = False) -> None:
                 dev_nb = ttk.Notebook(parent)
@@ -996,22 +1017,6 @@ class PlotsMixin:
             tab_dynprice = ttk.Frame(nb)
             nb.add(tab_dynprice, text=self.t("plots.dynprice.tab"))
             _make_device_notebook(tab_dynprice, "DYNPRICE")
-
-            # ── Shared control bar at the bottom ──
-            ctrl_row = ttk.Frame(frm)
-            ctrl_row.pack(fill="x", padx=12, pady=(4, 8))
-            ttk.Label(ctrl_row, text=self.t("plots.kwh.granularity")).pack(side="left")
-
-            self._plots_gran_display = tk.StringVar(value=_gran_map.get("days", ""))
-            self._plots_last_n_shared = tk.StringVar(value="7")
-            gran_cb = ttk.Combobox(
-                ctrl_row, state="readonly", width=12,
-                textvariable=self._plots_gran_display, values=list(_gran_map.values()),
-            )
-            gran_cb.pack(side="left", padx=(10, 0))
-            ttk.Label(ctrl_row, text=self.t("plots.kwh.last")).pack(side="left", padx=(16, 4))
-            sp_n = ttk.Spinbox(ctrl_row, from_=1, to=9999, width=5, textvariable=self._plots_last_n_shared)
-            sp_n.pack(side="left")
 
             def _apply_shared_controls(_e=None) -> None:
                 """Apply the shared granularity + last-N to the active metric tab."""
