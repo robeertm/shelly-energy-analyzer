@@ -1,5 +1,14 @@
 # Changelog
 
+## 13.9.4 - 2026-04-01
+### Added
+- **Web Sankey: canvas-based energy flow diagram** – The web dashboard now renders a proper Sankey-style energy flow diagram with bezier flow bands matching the desktop version (Sources → House → Consumers columns, proportional band widths, color-coded flows).
+- **Network traffic chart** – Desktop and web both show a small horizontal bar chart visualizing received bytes per category alongside the traffic table.
+
+### Improved
+- **Plots tab: dropdowns replace buttons** – All fixed granularity buttons (all/hours/days/weeks/months) in kWh, CO₂, and Dyn. Preis tabs replaced with dropdown selectors. WVA preset buttons (5m/15m/1h/6h/24h/7d/30d) replaced with dropdown. Cleaner, more consistent UI.
+- **Network traffic: all categories visible** – Treeview height increased to 8 rows with scrollbar. Added missing "⚡ Spot Prices" category to web traffic display.
+
 ## 13.9.3 - 2026-04-01
 ### Improved
 - **Energy flow: proper Sankey bands** – Replaced ugly arrow patches with smooth filled bezier-curve bands (S-shaped ribbons). Each flow is a cubic bezier polygon connecting source to house to consumer with proportional width. Bands stack correctly on the house node edges. No more arrow artifacts.

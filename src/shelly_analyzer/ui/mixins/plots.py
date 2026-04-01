@@ -948,10 +948,31 @@ class PlotsMixin:
                 row = ttk.Frame(parent)
                 row.pack(fill="x", pady=(8, 6))
                 ttk.Label(row, text=self.t("plots.wva.window")).pack(side="left")
-                preset_fr = ttk.Frame(row)
-                preset_fr.pack(side="left", padx=(10, 0))
-                for txt, v, u in (("5m", 5, "minutes"), ("15m", 15, "minutes"), ("1h", 1, "hours"), ("6h", 6, "hours"), ("24h", 24, "hours"), ("7d", 7, "days"), ("30d", 30, "days")):
-                    ttk.Button(preset_fr, text=txt, command=lambda vv=v, uu=u: _set_win(vv, uu)).pack(side="left", padx=2)
+                # Preset dropdown instead of buttons
+                wva_presets = [
+                    ("5m", 5, "minutes"), ("15m", 15, "minutes"),
+                    ("1h", 1, "hours"), ("6h", 6, "hours"), ("24h", 24, "hours"),
+                    ("7d", 7, "days"), ("30d", 30, "days"),
+                ]
+                wva_preset_labels = [p[0] for p in wva_presets]
+                wva_preset_var = tk.StringVar(value="24h")
+                wva_preset_cb = ttk.Combobox(
+                    row, state="readonly", width=6,
+                    textvariable=wva_preset_var, values=wva_preset_labels,
+                )
+                wva_preset_cb.pack(side="left", padx=(10, 0))
+
+                def _on_wva_preset_sel(_e=None) -> None:
+                    sel = str(wva_preset_var.get() or "").strip()
+                    for lbl, v, u in wva_presets:
+                        if lbl == sel:
+                            _set_win(v, u)
+                            return
+
+                try:
+                    wva_preset_cb.bind("<<ComboboxSelected>>", _on_wva_preset_sel)
+                except Exception:
+                    pass
                 ttk.Label(row, text=self.t("common.custom") + ":").pack(side="left", padx=(10, 4))
                 ttk.Entry(row, width=6, textvariable=self._wva_len).pack(side="left")
                 _sync_unit_display()
@@ -1047,14 +1068,33 @@ class PlotsMixin:
             kwh_ctl = ttk.Frame(tab_kwh)
             kwh_ctl.pack(fill="x", pady=(8, 6))
             ttk.Label(kwh_ctl, text=self.t("plots.kwh.granularity")).pack(side="left")
-            kwh_btns = ttk.Frame(kwh_ctl)
-            kwh_btns.pack(side="left", padx=(10, 0))
-            for mode in ("all", "hours", "days", "weeks", "months"):
-                ttk.Button(
-                    kwh_btns,
-                    text=self.t(f"plots.mode.{mode}"),
-                    command=lambda m=mode: (self._plots_mode.set(m), self._redraw_plots_metric("kwh")),
-                ).pack(side="left", padx=3)
+            kwh_gran_map = {
+                "all": self.t("plots.mode.all"),
+                "hours": self.t("plots.mode.hours"),
+                "days": self.t("plots.mode.days"),
+                "weeks": self.t("plots.mode.weeks"),
+                "months": self.t("plots.mode.months"),
+            }
+            kwh_inv_gran_map = {v: k for k, v in kwh_gran_map.items()}
+            kwh_gran_display = tk.StringVar(
+                value=kwh_gran_map.get(str(self._plots_mode.get() or "all"), kwh_gran_map["all"])
+            )
+            kwh_gran_cb = ttk.Combobox(
+                kwh_ctl, state="readonly", width=12,
+                textvariable=kwh_gran_display, values=list(kwh_gran_map.values()),
+            )
+            kwh_gran_cb.pack(side="left", padx=(10, 0))
+
+            def _on_kwh_gran_sel(_e=None) -> None:
+                disp = str(kwh_gran_display.get() or "").strip()
+                mode = kwh_inv_gran_map.get(disp, "all")
+                self._plots_mode.set(mode)
+                self._redraw_plots_metric("kwh")
+
+            try:
+                kwh_gran_cb.bind("<<ComboboxSelected>>", _on_kwh_gran_sel)
+            except Exception:
+                pass
 
             # --- Custom range: last N units (hours/days/weeks/months) ---
             last_ctl = ttk.Frame(kwh_ctl)
@@ -1152,14 +1192,32 @@ class PlotsMixin:
             co2_ctl = ttk.Frame(tab_co2)
             co2_ctl.pack(fill="x", pady=(8, 6))
             ttk.Label(co2_ctl, text=self.t("plots.kwh.granularity")).pack(side="left")
-            co2_btns = ttk.Frame(co2_ctl)
-            co2_btns.pack(side="left", padx=(10, 0))
-            for mode in ("hours", "days", "weeks", "months"):
-                ttk.Button(
-                    co2_btns,
-                    text=self.t(f"plots.mode.{mode}"),
-                    command=lambda m=mode: (self._plots_co2_mode.set(m), self._redraw_plots_metric("CO2")),
-                ).pack(side="left", padx=3)
+            co2_gran_map = {
+                "hours": self.t("plots.mode.hours"),
+                "days": self.t("plots.mode.days"),
+                "weeks": self.t("plots.mode.weeks"),
+                "months": self.t("plots.mode.months"),
+            }
+            co2_inv_gran_map = {v: k for k, v in co2_gran_map.items()}
+            co2_gran_display = tk.StringVar(
+                value=co2_gran_map.get(str(self._plots_co2_mode.get() or "hours"), co2_gran_map["hours"])
+            )
+            co2_gran_cb = ttk.Combobox(
+                co2_ctl, state="readonly", width=12,
+                textvariable=co2_gran_display, values=list(co2_gran_map.values()),
+            )
+            co2_gran_cb.pack(side="left", padx=(10, 0))
+
+            def _on_co2_gran_sel(_e=None) -> None:
+                disp = str(co2_gran_display.get() or "").strip()
+                mode = co2_inv_gran_map.get(disp, "hours")
+                self._plots_co2_mode.set(mode)
+                self._redraw_plots_metric("CO2")
+
+            try:
+                co2_gran_cb.bind("<<ComboboxSelected>>", _on_co2_gran_sel)
+            except Exception:
+                pass
 
             # --- Custom range: last N units (hours/days/weeks/months) for CO₂ ---
             co2_last_ctl = ttk.Frame(co2_ctl)
@@ -1220,14 +1278,32 @@ class PlotsMixin:
             dp_ctl = ttk.Frame(tab_dynprice)
             dp_ctl.pack(fill="x", pady=(8, 6))
             ttk.Label(dp_ctl, text=self.t("plots.kwh.granularity")).pack(side="left")
-            dp_btns = ttk.Frame(dp_ctl)
-            dp_btns.pack(side="left", padx=(10, 0))
-            for mode in ("hours", "days", "weeks", "months"):
-                ttk.Button(
-                    dp_btns,
-                    text=self.t(f"plots.mode.{mode}"),
-                    command=lambda m=mode: (self._plots_dynprice_mode.set(m), self._redraw_plots_metric("DYNPRICE")),
-                ).pack(side="left", padx=3)
+            dp_gran_map = {
+                "hours": self.t("plots.mode.hours"),
+                "days": self.t("plots.mode.days"),
+                "weeks": self.t("plots.mode.weeks"),
+                "months": self.t("plots.mode.months"),
+            }
+            dp_inv_gran_map = {v: k for k, v in dp_gran_map.items()}
+            dp_gran_display = tk.StringVar(
+                value=dp_gran_map.get(str(self._plots_dynprice_mode.get() or "hours"), dp_gran_map["hours"])
+            )
+            dp_gran_cb = ttk.Combobox(
+                dp_ctl, state="readonly", width=12,
+                textvariable=dp_gran_display, values=list(dp_gran_map.values()),
+            )
+            dp_gran_cb.pack(side="left", padx=(10, 0))
+
+            def _on_dp_gran_sel(_e=None) -> None:
+                disp = str(dp_gran_display.get() or "").strip()
+                mode = dp_inv_gran_map.get(disp, "hours")
+                self._plots_dynprice_mode.set(mode)
+                self._redraw_plots_metric("DYNPRICE")
+
+            try:
+                dp_gran_cb.bind("<<ComboboxSelected>>", _on_dp_gran_sel)
+            except Exception:
+                pass
 
             dp_last_ctl = ttk.Frame(dp_ctl)
             dp_last_ctl.pack(side="left", padx=(16, 0))

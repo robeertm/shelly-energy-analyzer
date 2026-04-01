@@ -1165,9 +1165,11 @@ class CoreMixin:
             ttk.Label(rate_frm, textvariable=self._traffic_rate_var, font=("TkDefaultFont", 11, "bold")).pack(side="left")
             self._traffic_total_var = tk.StringVar(value="")
             ttk.Label(rate_frm, textvariable=self._traffic_total_var).pack(side="right")
-            # Category breakdown (Treeview table)
+            # Category breakdown (Treeview table) with scrollbar
+            tree_frm = ttk.Frame(traffic_lf)
+            tree_frm.pack(fill="x", padx=8, pady=(2, 2))
             cols = ("cat", "requests", "received", "sent")
-            self._traffic_tree = ttk.Treeview(traffic_lf, columns=cols, show="headings", height=5)
+            self._traffic_tree = ttk.Treeview(tree_frm, columns=cols, show="headings", height=8)
             self._traffic_tree.heading("cat", text=self.t("traffic.category"))
             self._traffic_tree.heading("requests", text=self.t("traffic.requests"))
             self._traffic_tree.heading("received", text="↓ " + self.t("traffic.received"))
@@ -1176,7 +1178,17 @@ class CoreMixin:
             self._traffic_tree.column("requests", width=80, anchor="center")
             self._traffic_tree.column("received", width=100, anchor="e")
             self._traffic_tree.column("sent", width=100, anchor="e")
-            self._traffic_tree.pack(fill="x", padx=8, pady=(2, 6))
+            tree_sb = ttk.Scrollbar(tree_frm, orient="vertical", command=self._traffic_tree.yview)
+            self._traffic_tree.configure(yscrollcommand=tree_sb.set)
+            self._traffic_tree.pack(side="left", fill="x", expand=True)
+            tree_sb.pack(side="right", fill="y")
+            # Small traffic bar chart
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+            from matplotlib.figure import Figure
+            self._traffic_fig = Figure(figsize=(6, 1.2), dpi=96)
+            self._traffic_ax = self._traffic_fig.add_subplot(111)
+            self._traffic_canvas = FigureCanvasTkAgg(self._traffic_fig, master=traffic_lf)
+            self._traffic_canvas.get_tk_widget().pack(fill="x", padx=8, pady=(0, 6))
 
             # Progress bar (shown during active sync)
             prog_frm = ttk.Frame(frm)
@@ -8614,6 +8626,36 @@ class CoreMixin:
                     fmt_bytes(data["received"]),
                     fmt_bytes(data["sent"]),
                 ))
+            # Update traffic chart
+            ax = getattr(self, "_traffic_ax", None)
+            if ax and cats:
+                ax.clear()
+                tc = self._get_theme_colors()
+                cat_colors = {
+                    "shelly": "#e53935", "entsoe": "#43A047", "spot_price": "#FF9800",
+                    "weather": "#2196F3", "telegram": "#9C27B0", "github": "#607D8B",
+                    "local": "#78909C", "other": "#BDBDBD",
+                }
+                names = [f"{_CAT_ICONS.get(c, '')} {_CAT_LABELS.get(c, c)}" for c, _ in cats]
+                recv = [d["received"] for _, d in cats]
+                colors = [cat_colors.get(c, "#78909C") for c, _ in cats]
+                y_pos = range(len(names))
+                ax.barh(y_pos, recv, color=colors, alpha=0.8, height=0.7)
+                ax.set_yticks(y_pos)
+                ax.set_yticklabels(names, fontsize=7)
+                ax.invert_yaxis()
+                ax.set_xlabel("")
+                ax.tick_params(axis='x', labelsize=7)
+                # Format x-axis as bytes
+                ax.xaxis.set_major_formatter(
+                    lambda x, _: fmt_bytes(int(x))
+                )
+                fig = getattr(self, "_traffic_fig", None)
+                canvas = getattr(self, "_traffic_canvas", None)
+                if fig and canvas:
+                    self._apply_plot_theme(fig, ax, canvas)
+                    fig.tight_layout()
+                    canvas.draw_idle()
 
     def _mdns_refresh_tree(self) -> None:
             try:
