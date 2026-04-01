@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.3 - 2026-04-01
+### Improved
+- **Energy flow: proper Sankey bands** – Replaced ugly arrow patches with smooth filled bezier-curve bands (S-shaped ribbons). Each flow is a cubic bezier polygon connecting source to house to consumer with proportional width. Bands stack correctly on the house node edges. No more arrow artifacts.
+
 ## 13.9.2 - 2026-04-01
 ### Improved
 - **Energy flow diagram: complete visual overhaul** – Compact three-column layout (Sources → House → Consumers) with no wasted space. Fixed-height node boxes vertically auto-distributed. Thick semi-transparent flow bands with proportional width. Grid=red, PV=orange, devices=distinct color palette. White text on dark backgrounds for readability. Removed broken emoji rendering. Dark mode aware.

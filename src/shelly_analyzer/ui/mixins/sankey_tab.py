@@ -100,9 +100,48 @@ class SankeyMixin:
         self._sankey_fig.tight_layout()
         self._sankey_canvas.draw_idle()
 
+    @staticmethod
+    def _sankey_band(ax, x0, y0, h0, x1, y1, h1, color, alpha=0.35):
+        """Draw a smooth S-curve band (filled bezier polygon) between two vertical slots."""
+        import matplotlib.path as mpath
+        import matplotlib.patches as mpatches
+        import numpy as np
+
+        # Control point offset for smooth S-curve (40% of horizontal distance)
+        dx = (x1 - x0) * 0.4
+
+        # Top edge: cubic bezier from (x0, y0+h0/2) to (x1, y1+h1/2)
+        top_l = (x0, y0 + h0 / 2)
+        top_r = (x1, y1 + h1 / 2)
+        # Bottom edge: cubic bezier from (x1, y1-h1/2) back to (x0, y0-h0/2)
+        bot_r = (x1, y1 - h1 / 2)
+        bot_l = (x0, y0 - h0 / 2)
+
+        verts = [
+            top_l,                           # start top-left
+            (x0 + dx, y0 + h0 / 2),         # control 1
+            (x1 - dx, y1 + h1 / 2),         # control 2
+            top_r,                           # end top-right
+            bot_r,                           # start bottom-right
+            (x1 - dx, y1 - h1 / 2),         # control 1
+            (x0 + dx, y0 - h0 / 2),         # control 2
+            bot_l,                           # end bottom-left
+            top_l,                           # close
+        ]
+        codes = [
+            mpath.Path.MOVETO,
+            mpath.Path.CURVE4, mpath.Path.CURVE4, mpath.Path.CURVE4,
+            mpath.Path.LINETO,
+            mpath.Path.CURVE4, mpath.Path.CURVE4, mpath.Path.CURVE4,
+            mpath.Path.CLOSEPOLY,
+        ]
+        path = mpath.Path(verts, codes)
+        patch = mpatches.PathPatch(path, facecolor=color, edgecolor="none", alpha=alpha)
+        ax.add_patch(patch)
+
     def _draw_energy_flow(self, ax, data, tc=None) -> None:
-        """Draw energy flow: sources → house → consumers with thick band flows."""
-        from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+        """Draw Sankey-style energy flow with smooth filled bezier bands."""
+        from matplotlib.patches import FancyBboxPatch
 
         if tc is None:
             tc = self._get_theme_colors()
@@ -130,115 +169,122 @@ class SankeyMixin:
         right_items = right_items[:10]
 
         total = max(data.total_consumption_kwh, 0.01)
+        n_left = max(len(left_items), 1)
         n_right = max(len(right_items), 1)
 
         palette = ["#2196F3", "#9C27B0", "#26A69A", "#FF9800", "#66BB6A",
                     "#EC407A", "#29B6F6", "#FF7043", "#8D6E63", "#78909C"]
-        src_color = "#e74c3c"  # red for grid
-        pv_color = "#f39c12"   # orange for PV
+        src_color = "#e53935"
+        pv_color = "#FF9800"
 
-        # Layout constants
-        SRC_X = 0.02
-        SRC_W = 0.16
-        HOUSE_X = 0.32
-        HOUSE_W = 0.18
-        TGT_X = 0.64
-        TGT_W = 0.35
+        # Layout
+        SRC_X, SRC_W = 0.02, 0.15
+        HOUSE_X, HOUSE_W = 0.30, 0.16
+        TGT_X, TGT_W = 0.60, 0.39
+        GAP = 0.015
+        TOP, BOT = 0.90, 0.12
+        usable = TOP - BOT
 
-        # Vertical centering: fit everything in 0.08..0.95
-        top_y = 0.92
-        bot_y = 0.10
-        usable = top_y - bot_y
+        # Compute node heights proportional to value
+        src_total_h = usable - (n_left - 1) * GAP
+        tgt_total_h = usable - (n_right - 1) * GAP
 
-        # --- Source nodes (left, vertically centered) ---
-        n_src = max(len(left_items), 1)
-        src_h = min(0.12, usable / n_src - 0.02)
-        src_spacing = usable / n_src
-        src_positions = {}
-        for i, (name, val) in enumerate(left_items):
-            cy = top_y - i * src_spacing - src_spacing / 2
+        # --- Source nodes ---
+        src_cy = {}
+        src_hs = {}
+        y_cursor = TOP
+        for name, val in left_items:
+            h = max(0.04, (val / total) * src_total_h)
+            cy = y_cursor - h / 2
+            src_cy[name] = cy
+            src_hs[name] = h
             color = pv_color if "pv" in name.lower() or "solar" in name.lower() else src_color
-            box = FancyBboxPatch((SRC_X, cy - src_h / 2), SRC_W, src_h,
-                                  boxstyle="round,pad=0.01", facecolor=color, alpha=0.9,
-                                  edgecolor="none")
+            box = FancyBboxPatch((SRC_X, cy - h / 2), SRC_W, h,
+                                  boxstyle="round,pad=0.008", facecolor=color, alpha=0.92, edgecolor="none")
             ax.add_patch(box)
             pct = val / total * 100
-            txt_c = "white"
-            ax.text(SRC_X + SRC_W / 2, cy + 0.01, name,
-                    ha="center", va="center", fontsize=8, fontweight="bold", color=txt_c)
-            ax.text(SRC_X + SRC_W / 2, cy - 0.025, f"{val:.1f} kWh ({pct:.0f}%)",
-                    ha="center", va="center", fontsize=7, color=txt_c, alpha=0.9)
-            src_positions[name] = cy
+            if h > 0.05:
+                ax.text(SRC_X + SRC_W / 2, cy + 0.008, name,
+                        ha="center", va="center", fontsize=8, fontweight="bold", color="white")
+                ax.text(SRC_X + SRC_W / 2, cy - 0.018, f"{val:.1f} kWh ({pct:.0f}%)",
+                        ha="center", va="center", fontsize=6.5, color="white", alpha=0.9)
+            else:
+                ax.text(SRC_X + SRC_W / 2, cy, f"{name} {val:.1f}",
+                        ha="center", va="center", fontsize=6, fontweight="bold", color="white")
+            y_cursor -= h + GAP
 
-        # --- House node (center) ---
-        house_cy = (top_y + bot_y) / 2
-        house_h = 0.14
+        # --- House node ---
+        house_cy = (TOP + BOT) / 2
+        house_h = min(0.14, usable * 0.25)
         box = FancyBboxPatch((HOUSE_X, house_cy - house_h / 2), HOUSE_W, house_h,
-                              boxstyle="round,pad=0.02",
-                              facecolor=tc["blue"] if not is_dark else "#1a3a5c",
-                              alpha=0.18, edgecolor=tc["blue"], linewidth=2)
+                              boxstyle="round,pad=0.015",
+                              facecolor="#1565C0" if is_dark else "#E3F2FD",
+                              alpha=0.6 if is_dark else 0.8,
+                              edgecolor="#1976D2", linewidth=1.5)
         ax.add_patch(box)
-        ax.text(HOUSE_X + HOUSE_W / 2, house_cy + 0.015,
-                self.t("sankey.total"), ha="center", va="center", fontsize=8, color=fg)
-        ax.text(HOUSE_X + HOUSE_W / 2, house_cy - 0.025,
+        ax.text(HOUSE_X + HOUSE_W / 2, house_cy + 0.012,
+                self.t("sankey.total"), ha="center", va="center", fontsize=7, color=fg, alpha=0.7)
+        ax.text(HOUSE_X + HOUSE_W / 2, house_cy - 0.018,
                 f"{data.total_consumption_kwh:.1f} kWh",
-                ha="center", va="center", fontsize=11, fontweight="bold", color=fg)
+                ha="center", va="center", fontsize=10, fontweight="bold", color=fg)
 
-        # --- Consumer nodes (right) ---
-        tgt_h = min(0.08, usable / n_right - 0.01)
-        tgt_spacing = usable / n_right
-        tgt_positions = {}
+        # --- Consumer nodes ---
+        tgt_cy = {}
+        tgt_hs = {}
+        y_cursor = TOP
         for i, (name, val) in enumerate(right_items):
-            cy = top_y - i * tgt_spacing - tgt_spacing / 2
+            h = max(0.035, (val / total) * tgt_total_h)
+            cy = y_cursor - h / 2
+            tgt_cy[name] = cy
+            tgt_hs[name] = h
             color = palette[i % len(palette)]
-            box = FancyBboxPatch((TGT_X, cy - tgt_h / 2), TGT_W, tgt_h,
-                                  boxstyle="round,pad=0.01", facecolor=color, alpha=0.85,
-                                  edgecolor="none")
+            box = FancyBboxPatch((TGT_X, cy - h / 2), TGT_W, h,
+                                  boxstyle="round,pad=0.008", facecolor=color, alpha=0.88, edgecolor="none")
             ax.add_patch(box)
             pct = val / total * 100
-            label = name if len(name) <= 18 else name[:16] + ".."
+            label = name if len(name) <= 20 else name[:18] + ".."
             ax.text(TGT_X + TGT_W / 2, cy,
                     f"{label}   {val:.1f} kWh ({pct:.0f}%)",
-                    ha="center", va="center", fontsize=7.5, fontweight="bold", color="white")
-            tgt_positions[name] = cy
+                    ha="center", va="center", fontsize=7, fontweight="bold", color="white")
+            y_cursor -= h + GAP
 
-        # Feed-in below house
+        # Feed-in
         for name, val in feed_in:
             if val > 0.001:
-                ax.text(HOUSE_X + HOUSE_W / 2, bot_y - 0.02,
+                ax.text(HOUSE_X + HOUSE_W / 2, BOT - 0.04,
                         f"{self.t('sankey.feed_in')}: {val:.2f} kWh",
-                        ha="center", va="center", fontsize=9, color=tc["green"], fontweight="bold")
+                        ha="center", va="center", fontsize=9, color="#43A047", fontweight="bold")
 
-        # --- Flow bands (thick, semi-transparent) ---
+        # --- Flow bands: Source → House ---
+        # Stack bands on the house node left edge
+        house_band_y = house_cy + house_h / 2  # start from top of house
         for name, val in left_items:
-            sy = src_positions[name]
             color = pv_color if "pv" in name.lower() or "solar" in name.lower() else src_color
-            lw = max(3, val / total * 20)
-            arrow = FancyArrowPatch(
-                (SRC_X + SRC_W, sy), (HOUSE_X, house_cy),
-                connectionstyle="arc3,rad=0.08",
-                arrowstyle="-|>", color=color, linewidth=lw,
-                alpha=0.25, mutation_scale=15,
-            )
-            ax.add_patch(arrow)
+            band_h_src = src_hs[name]
+            band_h_house = max(0.01, (val / total) * house_h)
+            house_band_y -= band_h_house
+            self._sankey_band(ax,
+                              SRC_X + SRC_W, src_cy[name], band_h_src * 0.85,
+                              HOUSE_X, house_band_y + band_h_house / 2, band_h_house,
+                              color, alpha=0.30)
 
+        # --- Flow bands: House → Consumers ---
+        house_band_y = house_cy + house_h / 2  # start from top of house
         for i, (name, val) in enumerate(right_items):
-            ty = tgt_positions[name]
             color = palette[i % len(palette)]
-            lw = max(2, val / total * 15)
-            arrow = FancyArrowPatch(
-                (HOUSE_X + HOUSE_W, house_cy), (TGT_X, ty),
-                connectionstyle="arc3,rad=-0.05",
-                arrowstyle="-|>", color=color, linewidth=lw,
-                alpha=0.25, mutation_scale=12,
-            )
-            ax.add_patch(arrow)
+            band_h_tgt = tgt_hs[name]
+            band_h_house = max(0.01, (val / total) * house_h)
+            house_band_y -= band_h_house
+            self._sankey_band(ax,
+                              HOUSE_X + HOUSE_W, house_band_y + band_h_house / 2, band_h_house,
+                              TGT_X, tgt_cy[name], band_h_tgt * 0.85,
+                              color, alpha=0.30)
 
         # Column headers
-        ax.text(SRC_X + SRC_W / 2, 0.98, self.t("sankey.sources"),
-                ha="center", va="top", fontsize=10, fontweight="bold", color=fg)
-        ax.text(TGT_X + TGT_W / 2, 0.98, self.t("sankey.consumers"),
-                ha="center", va="top", fontsize=10, fontweight="bold", color=fg)
+        ax.text(SRC_X + SRC_W / 2, 0.97, self.t("sankey.sources"),
+                ha="center", va="top", fontsize=9, fontweight="bold", color=fg)
+        ax.text(TGT_X + TGT_W / 2, 0.97, self.t("sankey.consumers"),
+                ha="center", va="top", fontsize=9, fontweight="bold", color=fg)
 
         ax.set_xlim(-0.01, 1.01)
-        ax.set_ylim(-0.05, 1.02)
+        ax.set_ylim(-0.08, 1.01)
