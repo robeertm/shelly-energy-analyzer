@@ -828,39 +828,9 @@ class PlotsMixin:
     def _build_plots_tab(self) -> None:
             frm = self.tab_plots
 
-            # Header
-            top = ttk.Frame(frm)
-            top.pack(fill="x", padx=12, pady=(10, 6))
-            ttk.Label(top, text=self.t("plots.header")).pack(side="left")
-            ttk.Button(top, text=self.t("plots.reload"), command=self._reload_data).pack(side="left", padx=(12, 0))
-
-            # Debug: show which CSV columns are mapped to L1/L2/L3 and totals.
-            try:
-                ttk.Checkbutton(
-                    top,
-                    text="Debug: Spalten-Mapping",
-                    variable=self._plots_debug_mapping_enabled,
-                    command=self._redraw_plots_active,
-                ).pack(side="left", padx=(12, 0))
-                ttk.Label(top, textvariable=self._plots_debug_mapping_text).pack(side="left", padx=(10, 0))
-            except Exception:
-                pass
-
-            # Optional absolute time range (shared across all plot tabs)
-            rng = ttk.Frame(frm)
-            rng.pack(fill="x", padx=12, pady=(0, 10))
-            ttk.Label(rng, text=self.t("plots.range")).pack(side="left")
-            ttk.Label(rng, text=self.t("common.from")).pack(side="left", padx=(10, 4))
-            ttk.Entry(rng, textvariable=self._plots_start, width=12).pack(side="left")
-            ttk.Label(rng, text=self.t("common.to")).pack(side="left", padx=(10, 4))
-            ttk.Entry(rng, textvariable=self._plots_end, width=12).pack(side="left")
-            ttk.Label(rng, text=self.t("common.date_hint")).pack(side="left", padx=(8, 0))
-            ttk.Button(rng, text=self.t("btn.apply"), command=self._redraw_plots_active).pack(side="left", padx=10)
-            ttk.Button(rng, text=self.t("btn.reset"), command=self._reset_plots_range).pack(side="left")
-
-            # Metric tabs (no W/V/A toggle anymore): kWh, V, A, W
+            # Metric tabs
             nb = ttk.Notebook(frm)
-            nb.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+            nb.pack(fill="both", expand=True, padx=12, pady=(6, 0))
             self._plots_metric_nb = nb
 
             # Keep device selection stable when switching between metric tabs.
@@ -871,13 +841,14 @@ class PlotsMixin:
                 self._plots_last_device_idx = 0
             self._plots_syncing_tabs = False
 
-            def _on_metric_tab_changed(_evt: Any = None) -> None:
+            def _sync_device_tabs() -> None:
+                """Keep device-tab selection in sync across metric notebooks."""
                 if getattr(self, "_plots_syncing_tabs", False):
                     return
                 try:
                     midx = int(nb.index("current"))
                 except Exception:
-                    midx = 0
+                    return
                 metric_key = (
                     self._plots_metric_key_order[midx]
                     if 0 <= midx < len(self._plots_metric_key_order)
@@ -886,14 +857,10 @@ class PlotsMixin:
                 dev_nb = self._plots_device_nb.get(metric_key)
                 if dev_nb is None:
                     return
-
-                # Remember the selected device-tab index for this metric.
                 try:
                     self._plots_last_device_idx = int(dev_nb.index("current"))
                 except Exception:
                     return
-
-                # Apply the same device-tab index to all metric notebooks (if that tab exists).
                 try:
                     self._plots_syncing_tabs = True
                     for _k, _nb in self._plots_device_nb.items():
@@ -908,11 +875,6 @@ class PlotsMixin:
                 finally:
                     self._plots_syncing_tabs = False
 
-            try:
-                nb.bind("<<NotebookTabChanged>>", _on_metric_tab_changed)
-            except Exception:
-                pass
-
             # Reset plot objects
             self._plots_figs2 = {}
             self._plots_axes2 = {}
@@ -920,7 +882,7 @@ class PlotsMixin:
             self._plots_device_nb = {}
             self._plots_device_order = {}
 
-            # ── Single shared control bar above the metric notebook ──
+            # Gran map used by the shared control bar (defined before tabs so closures can reference it)
             _gran_map = {
                 "all": self.t("plots.mode.all"),
                 "hours": self.t("plots.mode.hours"),
@@ -929,76 +891,6 @@ class PlotsMixin:
                 "months": self.t("plots.mode.months"),
             }
             _gran_inv = {v: k for k, v in _gran_map.items()}
-
-            ctrl_row = ttk.Frame(frm)
-            ctrl_row.pack(fill="x", padx=12, pady=(0, 6))
-            ttk.Label(ctrl_row, text=self.t("plots.kwh.granularity")).pack(side="left")
-
-            self._plots_gran_display = tk.StringVar(value=_gran_map.get("days", ""))
-            self._plots_last_n_shared = tk.StringVar(value="7")
-            gran_cb = ttk.Combobox(
-                ctrl_row, state="readonly", width=12,
-                textvariable=self._plots_gran_display, values=list(_gran_map.values()),
-            )
-            gran_cb.pack(side="left", padx=(10, 0))
-            ttk.Label(ctrl_row, text=self.t("plots.kwh.last")).pack(side="left", padx=(16, 4))
-            sp_n = ttk.Spinbox(ctrl_row, from_=1, to=9999, width=5, textvariable=self._plots_last_n_shared)
-            sp_n.pack(side="left")
-
-            def _apply_shared_controls(_e=None) -> None:
-                """Apply the shared granularity + last-N to the active metric tab."""
-                disp = str(self._plots_gran_display.get() or "").strip()
-                unit = _gran_inv.get(disp, "all")
-                try:
-                    n = int(self._plots_last_n_shared.get() or 7)
-                except Exception:
-                    n = 7
-                n = max(1, min(9999, n))
-
-                # Determine which metric tab is active
-                try:
-                    midx = int(nb.index("current"))
-                except Exception:
-                    midx = 0
-                metric_key = (
-                    self._plots_metric_key_order[midx]
-                    if 0 <= midx < len(self._plots_metric_key_order)
-                    else "kwh"
-                )
-                is_wva = metric_key in {"V", "A", "W", "VAR", "COSPHI", "HZ"}
-
-                if unit == "all":
-                    if is_wva:
-                        self._wva_len.set(9999.0)
-                        self._wva_unit.set("days")
-                    elif metric_key == "kwh":
-                        self._plots_mode.set("all")
-                    elif metric_key == "CO2":
-                        self._plots_co2_mode.set("all")
-                    elif metric_key == "DYNPRICE":
-                        self._plots_dynprice_mode.set("all")
-                else:
-                    if is_wva:
-                        self._wva_len.set(float(n))
-                        self._wva_unit.set(unit)
-                    elif metric_key == "kwh":
-                        self._plots_mode.set(f"{unit}:{n}")
-                    elif metric_key == "CO2":
-                        self._plots_co2_mode.set(f"{unit}:{n}")
-                    elif metric_key == "DYNPRICE":
-                        self._plots_dynprice_mode.set(f"{unit}:{n}")
-                self._redraw_plots_active()
-
-            # Bind all relevant events for instant refresh
-            try:
-                gran_cb.bind("<<ComboboxSelected>>", _apply_shared_controls)
-                sp_n.bind("<Return>", _apply_shared_controls)
-                sp_n.bind("<<Increment>>", _apply_shared_controls)
-                sp_n.bind("<<Decrement>>", _apply_shared_controls)
-                sp_n.bind("<FocusOut>", _apply_shared_controls)
-                sp_n.bind("<ButtonRelease-1>", lambda _e: sp_n.after(50, _apply_shared_controls))
-            except Exception:
-                pass
 
             def _make_device_notebook(parent: ttk.Frame, metric_key: str, two_axes: bool = False) -> None:
                 dev_nb = ttk.Notebook(parent)
@@ -1105,15 +997,89 @@ class PlotsMixin:
             nb.add(tab_dynprice, text=self.t("plots.dynprice.tab"))
             _make_device_notebook(tab_dynprice, "DYNPRICE")
 
-            # Redraw when switching metric tabs
+            # ── Shared control bar at the bottom ──
+            ctrl_row = ttk.Frame(frm)
+            ctrl_row.pack(fill="x", padx=12, pady=(4, 8))
+            ttk.Label(ctrl_row, text=self.t("plots.kwh.granularity")).pack(side="left")
+
+            self._plots_gran_display = tk.StringVar(value=_gran_map.get("days", ""))
+            self._plots_last_n_shared = tk.StringVar(value="7")
+            gran_cb = ttk.Combobox(
+                ctrl_row, state="readonly", width=12,
+                textvariable=self._plots_gran_display, values=list(_gran_map.values()),
+            )
+            gran_cb.pack(side="left", padx=(10, 0))
+            ttk.Label(ctrl_row, text=self.t("plots.kwh.last")).pack(side="left", padx=(16, 4))
+            sp_n = ttk.Spinbox(ctrl_row, from_=1, to=9999, width=5, textvariable=self._plots_last_n_shared)
+            sp_n.pack(side="left")
+
+            def _apply_shared_controls(_e=None) -> None:
+                """Apply the shared granularity + last-N to the active metric tab."""
+                disp = str(self._plots_gran_display.get() or "").strip()
+                unit = _gran_inv.get(disp, "all")
+                try:
+                    n = int(self._plots_last_n_shared.get() or 7)
+                except Exception:
+                    n = 7
+                n = max(1, min(9999, n))
+
+                try:
+                    midx = int(nb.index("current"))
+                except Exception:
+                    midx = 0
+                metric_key = (
+                    self._plots_metric_key_order[midx]
+                    if 0 <= midx < len(self._plots_metric_key_order)
+                    else "kwh"
+                )
+                is_wva = metric_key in {"V", "A", "W", "VAR", "COSPHI", "HZ"}
+
+                if unit == "all":
+                    if is_wva:
+                        self._wva_len.set(9999.0)
+                        self._wva_unit.set("days")
+                    elif metric_key == "kwh":
+                        self._plots_mode.set("all")
+                    elif metric_key == "CO2":
+                        self._plots_co2_mode.set("all")
+                    elif metric_key == "DYNPRICE":
+                        self._plots_dynprice_mode.set("all")
+                else:
+                    if is_wva:
+                        self._wva_len.set(float(n))
+                        self._wva_unit.set(unit)
+                    elif metric_key == "kwh":
+                        self._plots_mode.set(f"{unit}:{n}")
+                    elif metric_key == "CO2":
+                        self._plots_co2_mode.set(f"{unit}:{n}")
+                    elif metric_key == "DYNPRICE":
+                        self._plots_dynprice_mode.set(f"{unit}:{n}")
+                self._redraw_plots_active()
+
+            # Bind all events for instant refresh
             try:
-                nb.bind("<<NotebookTabChanged>>", lambda _e: self._redraw_plots_active())
+                gran_cb.bind("<<ComboboxSelected>>", _apply_shared_controls)
+                sp_n.bind("<Return>", _apply_shared_controls)
+                sp_n.bind("<<Increment>>", _apply_shared_controls)
+                sp_n.bind("<<Decrement>>", _apply_shared_controls)
+                sp_n.bind("<FocusOut>", _apply_shared_controls)
+                sp_n.bind("<ButtonRelease-1>", lambda _e: sp_n.after(50, _apply_shared_controls))
+            except Exception:
+                pass
+
+            # Redraw when switching metric tabs (sync device tabs + apply current controls)
+            def _on_tab_switch(_e=None) -> None:
+                _sync_device_tabs()
+                _apply_shared_controls()
+
+            try:
+                nb.bind("<<NotebookTabChanged>>", _on_tab_switch)
             except Exception:
                 pass
 
             # Initial draw
             try:
-                self.after(300, self._redraw_plots_active)
+                self.after(300, _apply_shared_controls)
             except Exception:
                 self._redraw_plots_active()
 
