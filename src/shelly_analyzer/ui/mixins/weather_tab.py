@@ -169,7 +169,7 @@ class WeatherMixin:
 
         # Get weather + energy data
         now = datetime.datetime.now(datetime.timezone.utc)
-        start_ts = int((now - datetime.timedelta(days=30)).timestamp())
+        start_ts = int((now - datetime.timedelta(days=7)).timestamp())
         end_ts = int(now.timestamp())
 
         weather_df = self.storage.db.query_weather(start_ts, end_ts)

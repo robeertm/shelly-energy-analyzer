@@ -2064,19 +2064,29 @@ function renderCosts(data, el) {{
     var arrow = diff > 0 ? '\u2191' : '\u2193';
     return arrow + ' ' + Math.abs(diff).toFixed(2) + ' \u20ac';
   }}
+  // 24h Spot Price Chart (at top, before device cards)
+  if (data.spot_enabled && data.spot_chart && data.spot_chart.length > 0) {{
+    var fixedCt = data.fixed_ct_per_kwh || 0;
+    html += '<div class="card" style="margin-bottom:10px">' +
+      '<div style="font-size:12px;font-weight:650;color:#ff9800;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">' +
+      '\u26a1 ' + t('spot.chart.title', 'Spot Price 24h') + '</div>' +
+      '<canvas id="spot-24h-chart" style="width:100%;height:160px"></canvas>' +
+      '<div id="spot-chart-labels" style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;padding:0 4px"></div>' +
+      '</div>';
+  }}
+
   html += '<div class="card-grid">';
   data.devices.forEach(function(d) {{
-    const co2Row = co2Active
-      ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">' +
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">CO\u2082</div>' +
-          '<div class="metric-grid">' +
-          metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_co2_kg,3,'kg'), '') +
-          metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_co2_kg,3,'kg'), '') +
-          metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_co2_kg,3,'kg'), '') +
-          metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_co2_kg,2,'kg'), '') +
-          '</div></div>'
-      : '';
-    const spotRow = spotActive
+    // Fixed tariff section
+    var fixedLabel = '<div style="font-size:11px;color:#2196F3;margin-bottom:4px">\U0001f4b2 ' + t('plots.dynprice.fixed', 'Festpreis') + '</div>';
+    var fixedGrid = '<div class="metric-grid">' +
+      metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_eur,2,'\u20ac'), fmt(d.today_kwh,3,'kWh')) +
+      metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_eur,2,'\u20ac'), fmt(d.week_kwh,3,'kWh')) +
+      metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_eur,2,'\u20ac'), fmt(d.month_kwh,3,'kWh')) +
+      metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_eur,2,'\u20ac'), fmt(d.proj_kwh,1,'kWh')) +
+      '</div>';
+    // Dynamic tariff section
+    var dynSection = spotActive
       ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">' +
           '<div style="font-size:11px;color:#ff9800;margin-bottom:4px">\u26a1 ' + t('spot.cost_label', 'Dyn. Tarif') + '</div>' +
           '<div class="metric-grid">' +
@@ -2086,16 +2096,23 @@ function renderCosts(data, el) {{
           metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_spot_eur||0,2,'\u20ac'), '') +
           '</div></div>'
       : '';
+    // CO2 section
+    var co2Section = co2Active
+      ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">' +
+          '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">CO\u2082</div>' +
+          '<div class="metric-grid">' +
+          metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_co2_kg,3,'kg'), '') +
+          metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_co2_kg,3,'kg'), '') +
+          metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_co2_kg,3,'kg'), '') +
+          metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_co2_kg,2,'kg'), '') +
+          '</div></div>'
+      : '';
+    // Card: fixed costs → dynamic costs → CO2
     html += '<div class="card">' +
       '<div class="card-title">' + esc(d.name || d.key) + '</div>' +
-      '<div class="metric-grid">' +
-      metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_eur,2,'\u20ac'), fmt(d.today_kwh,3,'kWh')) +
-      metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_eur,2,'\u20ac'), fmt(d.week_kwh,3,'kWh')) +
-      metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_eur,2,'\u20ac'), fmt(d.month_kwh,3,'kWh')) +
-      metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_eur,2,'\u20ac'), fmt(d.proj_kwh,1,'kWh')) +
-      '</div>' +
-      co2Row +
-      spotRow +
+      fixedLabel + fixedGrid +
+      dynSection +
+      co2Section +
       '</div>';
   }});
   html += '</div>';
@@ -2112,17 +2129,6 @@ function renderCosts(data, el) {{
       html += '<tr style="border-bottom:1px solid var(--border);' + style + '"><td style="padding:4px">' + esc(tp.start_date) + (active ? ' \u2713' : '') + '</td><td style="text-align:right;padding:4px">' + tp.price.toFixed(4) + ' \u20ac/kWh</td><td style="text-align:right;padding:4px">' + tp.base_fee.toFixed(2) + ' \u20ac/' + t('web.costs.year', 'year') + '</td></tr>';
     }});
     html += '</table></div>';
-  }}
-
-  // 24h Spot Price Chart
-  if (data.spot_enabled && data.spot_chart && data.spot_chart.length > 0) {{
-    var fixedCt = data.fixed_ct_per_kwh || 0;
-    html += '<div class="card" style="margin-top:10px">' +
-      '<div style="font-size:12px;font-weight:650;color:#ff9800;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">' +
-      '\u26a1 ' + t('spot.chart.title', 'Spot Price 24h') + '</div>' +
-      '<canvas id="spot-24h-chart" style="width:100%;height:160px"></canvas>' +
-      '<div id="spot-chart-labels" style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;padding:0 4px"></div>' +
-      '</div>';
   }}
 
   el.innerHTML = html;

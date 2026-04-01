@@ -6836,6 +6836,8 @@ _I18N.setdefault("de", {}).update({
     "sankey.self_consumption": "Eigenverbrauch",
     "sankey.feed_in": "Einspeisung",
     "sankey.total": "Gesamtverbrauch",
+    "sankey.sources": "Quellen",
+    "sankey.consumers": "Verbraucher",
     # MQTT
     "settings.mqtt.title": "📡 MQTT / Home Assistant",
     "settings.mqtt.enabled": "MQTT aktivieren",
@@ -6984,6 +6986,8 @@ _I18N.setdefault("en", {}).update({
     "sankey.self_consumption": "Self-consumption",
     "sankey.feed_in": "Feed-in",
     "sankey.total": "Total consumption",
+    "sankey.sources": "Sources",
+    "sankey.consumers": "Consumers",
     "settings.mqtt.title": "📡 MQTT / Home Assistant",
     "settings.mqtt.enabled": "Enable MQTT",
     "settings.mqtt.broker": "Broker:",
