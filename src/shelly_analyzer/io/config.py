@@ -408,6 +408,25 @@ class Co2Config:
 
 
 @dataclass(frozen=True)
+class SpotPriceConfig:
+    """Dynamic spot market electricity price settings."""
+    enabled: bool = False
+    # Primary API: "energy_charts" (15-min from Oct 2025) or "awattar" (hourly, from 2015)
+    primary_api: str = "energy_charts"
+    # Bidding zone for Energy-Charts API (DE-LU, AT, etc.)
+    bidding_zone: str = "DE-LU"
+    # How often to fetch new prices (hours)
+    fetch_interval_hours: int = 1
+    # Markup/surcharge added to wholesale spot price to approximate retail dynamic tariff
+    # (covers network fees, taxes, supplier margin, etc.) in ct/kWh (net, excl. VAT)
+    markup_ct_per_kwh: float = 16.0
+    # Whether to apply VAT on top of (spot price + markup)
+    include_vat: bool = True
+    # Show dynamic price comparison even if user has a fixed tariff
+    show_as_comparison: bool = True
+
+
+@dataclass(frozen=True)
 class ForecastConfig:
     """Consumption forecasting settings."""
     enabled: bool = False
@@ -507,6 +526,7 @@ class AppConfig:
     tou: TouConfig = field(default_factory=TouConfig)
     anomaly: AnomalyConfig = field(default_factory=AnomalyConfig)
     co2: Co2Config = field(default_factory=Co2Config)
+    spot_price: SpotPriceConfig = field(default_factory=SpotPriceConfig)
     forecast: ForecastConfig = field(default_factory=ForecastConfig)
     weather: WeatherConfig = field(default_factory=WeatherConfig)
     mqtt: MqttConfig = field(default_factory=MqttConfig)
@@ -864,6 +884,17 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         cross_border_flows=bool(co2_raw.get("cross_border_flows", Co2Config.cross_border_flows)),
     )
 
+    spot_raw = raw.get("spot_price", {}) if isinstance(raw.get("spot_price"), dict) else {}
+    spot_price = SpotPriceConfig(
+        enabled=bool(spot_raw.get("enabled", SpotPriceConfig.enabled)),
+        primary_api=str(spot_raw.get("primary_api", SpotPriceConfig.primary_api) or "energy_charts"),
+        bidding_zone=str(spot_raw.get("bidding_zone", SpotPriceConfig.bidding_zone) or "DE-LU"),
+        fetch_interval_hours=_coerce_int(spot_raw.get("fetch_interval_hours", SpotPriceConfig.fetch_interval_hours), SpotPriceConfig.fetch_interval_hours),
+        markup_ct_per_kwh=_coerce_float(spot_raw.get("markup_ct_per_kwh", SpotPriceConfig.markup_ct_per_kwh), SpotPriceConfig.markup_ct_per_kwh),
+        include_vat=bool(spot_raw.get("include_vat", SpotPriceConfig.include_vat)),
+        show_as_comparison=bool(spot_raw.get("show_as_comparison", SpotPriceConfig.show_as_comparison)),
+    )
+
     forecast_raw = raw.get("forecast", {}) if isinstance(raw.get("forecast"), dict) else {}
     forecast = ForecastConfig(
         enabled=bool(forecast_raw.get("enabled", ForecastConfig.enabled)),
@@ -979,6 +1010,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         tou=tou,
         anomaly=anomaly,
         co2=co2,
+        spot_price=spot_price,
         forecast=forecast,
         weather=weather,
         mqtt=mqtt_cfg,
@@ -1245,6 +1277,15 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "green_threshold_g_per_kwh": float(getattr(cfg.co2, "green_threshold_g_per_kwh", 150.0)),
             "dirty_threshold_g_per_kwh": float(getattr(cfg.co2, "dirty_threshold_g_per_kwh", 400.0)),
             "cross_border_flows": bool(getattr(cfg.co2, "cross_border_flows", False)),
+        },
+        "spot_price": {
+            "enabled": bool(getattr(cfg.spot_price, "enabled", False)),
+            "primary_api": str(getattr(cfg.spot_price, "primary_api", "energy_charts") or "energy_charts"),
+            "bidding_zone": str(getattr(cfg.spot_price, "bidding_zone", "DE-LU") or "DE-LU"),
+            "fetch_interval_hours": int(getattr(cfg.spot_price, "fetch_interval_hours", 1)),
+            "markup_ct_per_kwh": float(getattr(cfg.spot_price, "markup_ct_per_kwh", 16.0)),
+            "include_vat": bool(getattr(cfg.spot_price, "include_vat", True)),
+            "show_as_comparison": bool(getattr(cfg.spot_price, "show_as_comparison", True)),
         },
         "forecast": {
             "enabled": bool(getattr(cfg.forecast, "enabled", False)),

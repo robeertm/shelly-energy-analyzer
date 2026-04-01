@@ -114,6 +114,16 @@ CREATE TABLE IF NOT EXISTS weather_data (
     description TEXT,
     fetched_at  INTEGER
 );
+
+CREATE TABLE IF NOT EXISTS spot_prices (
+    slot_ts       INTEGER NOT NULL,
+    zone          TEXT    NOT NULL,
+    price_eur_mwh REAL    NOT NULL,
+    resolution    INTEGER NOT NULL DEFAULT 3600,
+    source        TEXT,
+    fetched_at    INTEGER,
+    PRIMARY KEY (slot_ts, zone)
+) WITHOUT ROWID;
 """
 
 # Additional columns added in v6.0.0.2 for full Shelly EMData CSV support.
@@ -1192,3 +1202,132 @@ class EnergyDB:
             with conn:
                 cur = conn.execute("DELETE FROM co2_intensity")
                 return cur.rowcount
+
+    # ── Spot price helpers ─────────────────────────────────────────────
+
+    def upsert_spot_prices(self, rows: List[Tuple[int, str, float, int, str, int]]) -> int:
+        """Insert or replace spot price rows.
+
+        Each row: (slot_ts, zone, price_eur_mwh, resolution, source, fetched_at).
+        """
+        if not rows:
+            return 0
+        conn = self._conn()
+        with self._write_lock:
+            with conn:
+                conn.executemany(
+                    "INSERT OR REPLACE INTO spot_prices "
+                    "(slot_ts, zone, price_eur_mwh, resolution, source, fetched_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    rows,
+                )
+        return len(rows)
+
+    def query_spot_prices(self, zone: str, start_ts: int, end_ts: int) -> pd.DataFrame:
+        """Return spot price rows for a zone in [start_ts, end_ts)."""
+        conn = self._conn()
+        return pd.read_sql_query(
+            "SELECT slot_ts, zone, price_eur_mwh, resolution, source, fetched_at "
+            "FROM spot_prices "
+            "WHERE zone = ? AND slot_ts >= ? AND slot_ts < ? "
+            "ORDER BY slot_ts",
+            conn,
+            params=(zone, start_ts, end_ts),
+        )
+
+    def latest_spot_price_ts(self, zone: str) -> Optional[int]:
+        """Return the most recent slot_ts for a zone, or None."""
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT MAX(slot_ts) FROM spot_prices WHERE zone = ?",
+            (zone,),
+        ).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
+
+    def find_spot_price_gaps(self, zone: str, start_ts: int, end_ts: int) -> List[Tuple[int, int]]:
+        """Find missing hourly slots in [start_ts, end_ts) for spot prices.
+
+        Returns list of (gap_start_ts, gap_end_ts) tuples.
+        """
+        conn = self._conn()
+        existing = {
+            row[0]
+            for row in conn.execute(
+                "SELECT DISTINCT (slot_ts / 3600) * 3600 FROM spot_prices "
+                "WHERE zone = ? AND slot_ts >= ? AND slot_ts < ?",
+                (zone, start_ts, end_ts),
+            ).fetchall()
+        }
+        gaps: List[Tuple[int, int]] = []
+        ts = (start_ts // 3600) * 3600
+        gap_start: Optional[int] = None
+        while ts < end_ts:
+            if ts not in existing:
+                if gap_start is None:
+                    gap_start = ts
+            else:
+                if gap_start is not None:
+                    gaps.append((gap_start, ts))
+                    gap_start = None
+            ts += 3600
+        if gap_start is not None:
+            gaps.append((gap_start, end_ts))
+        return gaps
+
+    def calc_spot_cost(
+        self,
+        device_key: str,
+        zone: str,
+        start_ts: int,
+        end_ts: int,
+        markup_eur_per_kwh: float,
+        vat_rate: float,
+    ) -> Tuple[float, float, float]:
+        """Calculate energy cost using spot market prices.
+
+        Joins hourly_energy with spot_prices. For each matching hour:
+            cost = kwh * ((price_eur_mwh / 1000) + markup) * (1 + vat_rate)
+
+        Returns (total_cost_eur, total_kwh, avg_price_ct_per_kwh).
+        avg_price_ct_per_kwh is the volume-weighted average spot price (net, excl. markup/VAT).
+        """
+        conn = self._conn()
+        try:
+            df_h = pd.read_sql_query(
+                "SELECT hour_ts, kwh FROM hourly_energy "
+                "WHERE device_key = ? AND hour_ts >= ? AND hour_ts < ?",
+                conn,
+                params=(device_key, start_ts, end_ts),
+            )
+            if df_h.empty:
+                return 0.0, 0.0, 0.0
+
+            # For spot prices, average 15-min slots per hour for joining
+            df_sp = pd.read_sql_query(
+                "SELECT (slot_ts / 3600) * 3600 AS hour_ts, "
+                "       AVG(price_eur_mwh) AS price_eur_mwh "
+                "FROM spot_prices "
+                "WHERE zone = ? AND slot_ts >= ? AND slot_ts < ? "
+                "GROUP BY (slot_ts / 3600) * 3600",
+                conn,
+                params=(zone, start_ts, end_ts),
+            )
+            if df_sp.empty:
+                return 0.0, 0.0, 0.0
+
+            merged = pd.merge(df_h, df_sp, on="hour_ts", how="inner")
+            if merged.empty:
+                return 0.0, 0.0, 0.0
+
+            kwh = merged["kwh"].astype(float)
+            price_eur_kwh = merged["price_eur_mwh"].astype(float) / 1000.0
+
+            total_kwh = float(kwh.sum())
+            total_cost = float(((price_eur_kwh + markup_eur_per_kwh) * (1.0 + vat_rate) * kwh).sum())
+
+            avg_price_ct = float((price_eur_kwh * kwh).sum() / total_kwh * 100.0) if total_kwh > 0 else 0.0
+
+            return total_cost, total_kwh, avg_price_ct
+        except Exception as e:
+            logger.debug("calc_spot_cost error: %s", e)
+            return 0.0, 0.0, 0.0
