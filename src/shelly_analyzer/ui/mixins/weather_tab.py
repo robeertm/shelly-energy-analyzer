@@ -242,7 +242,10 @@ class WeatherMixin:
         ax1.clear()
         # Remove previous colorbar if it exists
         if hasattr(self, "_weather_cbar") and self._weather_cbar is not None:
-            self._weather_cbar.remove()
+            try:
+                self._weather_cbar.remove()
+            except Exception:
+                pass
             self._weather_cbar = None
         hours_of_day = np.array([h.hour + h.minute / 60.0 for h in matched_hours])
         scatter = ax1.scatter(temps, kwh, c=hours_of_day, cmap="twilight_shifted",
@@ -266,7 +269,14 @@ class WeatherMixin:
         import matplotlib.dates as mdates
         ax2 = self._weather_ts_ax
         ax2.clear()
+        # Remove stale twin axes from previous refreshes
+        if hasattr(self, "_weather_ts_twin") and self._weather_ts_twin is not None:
+            try:
+                self._weather_ts_twin.remove()
+            except Exception:
+                pass
         ax2_twin = ax2.twinx()
+        self._weather_ts_twin = ax2_twin
         dates = mdates.date2num(matched_hours)
         ax2.bar(dates, matched_kwh, color=tc["blue"], alpha=0.6,
                 width=1.0 / 24.0, align="center")
