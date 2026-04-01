@@ -4584,7 +4584,9 @@ class CoreMixin:
                 pricing = getattr(self.cfg, "pricing", PricingConfig())
                 tou = getattr(self.cfg, "tou", TouConfig())
 
-                # Unit price (gross) – use date-aware pricing
+                _use_dynamic = self._is_dynamic_tariff()
+
+                # Unit price (gross) – use date-aware pricing (used for fixed tariff mode)
                 try:
                     unit = float(pricing.effective_pricing_for_date(now.date()).unit_price_gross())
                 except Exception:
@@ -4651,7 +4653,13 @@ class CoreMixin:
                                     df_rng = df.loc[m]
                                     kwh_s = pd.to_numeric(df_rng["energy_kwh"], errors="coerce").fillna(0.0) if "energy_kwh" in df_rng.columns else pd.Series(dtype=float)
                                     kwh = float(kwh_s.sum())
-                                    if tou_enabled and len(df_rng) > 0 and "energy_kwh" in df_rng.columns:
+                                    if _use_dynamic:
+                                        _dyn_cost, _, _ = self._calc_spot_cost_for_range(
+                                            int(rng_start.timestamp()), int(rng_end.timestamp()),
+                                            device_key=d.key, kwh_fallback=kwh
+                                        )
+                                        cost = _dyn_cost if _dyn_cost > 0 else kwh * unit
+                                    elif tou_enabled and len(df_rng) > 0 and "energy_kwh" in df_rng.columns:
                                         cost, breakdown = _tou_cost_breakdown(df_rng["timestamp"], kwh_s, pricing, tou, tz)
                                     else:
                                         cost = kwh * unit
@@ -4677,20 +4685,33 @@ class CoreMixin:
                                 vars_dev[key]["tou"].set("  |  ".join(parts))
                             else:
                                 vars_dev[key]["tou"].set("")
-                            # Spot price comparison
+                            # Tariff comparison line
                             if _spot_enabled and "spot" in vars_dev[key]:
-                                spot_cost, spot_avg, spot_src = self._calc_spot_cost_for_range(
-                                    int(rng_s.timestamp()), int(rng_e.timestamp()),
-                                    device_key=d.key, kwh_fallback=kwh
-                                )
-                                if spot_cost > 0:
-                                    delta = spot_cost - cost
-                                    arrow = "\u2191" if delta > 0 else "\u2193"
-                                    vars_dev[key]["spot"].set(
-                                        f"\u26a1 {self.t('spot.cost_label')}: {spot_cost:.2f} \u20ac ({arrow} {abs(delta):.2f} \u20ac)"
-                                    )
+                                if _use_dynamic:
+                                    # Dynamic is primary → show fixed as comparison
+                                    fixed_cost = kwh * unit
+                                    if cost > 0 and fixed_cost > 0:
+                                        delta = fixed_cost - cost
+                                        arrow = "\u2191" if delta > 0 else "\u2193"
+                                        vars_dev[key]["spot"].set(
+                                            f"\U0001f4b2 {self.t('plots.dynprice.fixed')}: {fixed_cost:.2f} \u20ac ({arrow} {abs(delta):.2f} \u20ac)"
+                                        )
+                                    else:
+                                        vars_dev[key]["spot"].set("")
                                 else:
-                                    vars_dev[key]["spot"].set("")
+                                    # Fixed is primary → show dynamic as comparison
+                                    spot_cost, spot_avg, spot_src = self._calc_spot_cost_for_range(
+                                        int(rng_s.timestamp()), int(rng_e.timestamp()),
+                                        device_key=d.key, kwh_fallback=kwh
+                                    )
+                                    if spot_cost > 0:
+                                        delta = spot_cost - cost
+                                        arrow = "\u2191" if delta > 0 else "\u2193"
+                                        vars_dev[key]["spot"].set(
+                                            f"\u26a1 {self.t('spot.cost_label')}: {spot_cost:.2f} \u20ac ({arrow} {abs(delta):.2f} \u20ac)"
+                                        )
+                                    else:
+                                        vars_dev[key]["spot"].set("")
                             elif "spot" in vars_dev.get(key, {}):
                                 vars_dev[key]["spot"].set("")
 
@@ -4758,7 +4779,14 @@ class CoreMixin:
                                 df_rng = df.loc[m]
                                 kwh_s = pd.to_numeric(df_rng["energy_kwh"], errors="coerce").fillna(0.0) if "energy_kwh" in df_rng.columns else pd.Series(dtype=float)
                                 kwh = float(kwh_s.sum())
-                                if tou_enabled and len(df_rng) > 0 and "energy_kwh" in df_rng.columns:
+                                if _use_dynamic:
+                                    _dc, _, _ = self._calc_spot_cost_for_range(
+                                        int(rng_start.timestamp()), int(rng_end.timestamp()),
+                                        device_key=d.key, kwh_fallback=kwh
+                                    )
+                                    cost = _dc if _dc > 0 else kwh * unit
+                                    breakdown = {}
+                                elif tou_enabled and len(df_rng) > 0 and "energy_kwh" in df_rng.columns:
                                     cost, breakdown = _tou_cost_breakdown(df_rng["timestamp"], kwh_s, pricing, tou, tz)
                                 else:
                                     cost = kwh * unit
@@ -6238,30 +6266,41 @@ class CoreMixin:
 
             pricing_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.pricing.title'))
             pricing_box.pack(fill="x", pady=(0, 10))
-            ttk.Label(pricing_box, text=self.t('settings.pricing.price')).grid(row=0, column=0, padx=8, pady=8, sticky="w")
+
+            # Tariff type selector
+            _spot_cfg_p = getattr(self.cfg, "spot_price", None)
+            _current_tt = str(getattr(_spot_cfg_p, "tariff_type", "fixed") or "fixed")
+            self._tariff_type_var = tk.StringVar(value=_current_tt)
+            tt_frame = ttk.Frame(pricing_box)
+            tt_frame.grid(row=0, column=0, columnspan=3, padx=8, pady=(8, 4), sticky="w")
+            ttk.Label(tt_frame, text=self.t("settings.pricing.tariff_type"), font=("", 10, "bold")).pack(side="left")
+            ttk.Radiobutton(tt_frame, text=self.t("settings.pricing.tariff_fixed"), variable=self._tariff_type_var, value="fixed").pack(side="left", padx=(12, 4))
+            ttk.Radiobutton(tt_frame, text=self.t("settings.pricing.tariff_dynamic"), variable=self._tariff_type_var, value="dynamic").pack(side="left", padx=4)
+
+            ttk.Label(pricing_box, text=self.t('settings.pricing.price')).grid(row=1, column=0, padx=8, pady=8, sticky="w")
             self.price_var = tk.StringVar(value=str(self.cfg.pricing.electricity_price_eur_per_kwh))
-            ttk.Entry(pricing_box, textvariable=self.price_var, width=10).grid(row=0, column=1, padx=8, pady=8, sticky="w")
+            ttk.Entry(pricing_box, textvariable=self.price_var, width=10).grid(row=1, column=1, padx=8, pady=8, sticky="w")
             self.price_includes_vat_var = tk.BooleanVar(value=bool(self.cfg.pricing.price_includes_vat))
             self.vat_enabled_var = tk.BooleanVar(value=bool(self.cfg.pricing.vat_enabled))
             self.vat_rate_var = tk.StringVar(value=str(self.cfg.pricing.vat_rate_percent))
             ttk.Checkbutton(pricing_box, text=self.t('settings.pricing.price_includes_vat'), variable=self.price_includes_vat_var).grid(
-                row=0, column=2, padx=8, pady=8, sticky="w"
+                row=1, column=2, padx=8, pady=8, sticky="w"
             )
             ttk.Checkbutton(pricing_box, text=self.t('settings.pricing.vat_enabled'), variable=self.vat_enabled_var).grid(
-                row=1, column=0, padx=8, pady=8, sticky="w"
+                row=2, column=0, padx=8, pady=8, sticky="w"
             )
-            ttk.Label(pricing_box, text=self.t('settings.pricing.vat_rate')).grid(row=1, column=1, padx=8, pady=8, sticky="e")
-            ttk.Entry(pricing_box, textvariable=self.vat_rate_var, width=6).grid(row=1, column=2, padx=8, pady=8, sticky="w")
+            ttk.Label(pricing_box, text=self.t('settings.pricing.vat_rate')).grid(row=2, column=1, padx=8, pady=8, sticky="e")
+            ttk.Entry(pricing_box, textvariable=self.vat_rate_var, width=6).grid(row=2, column=2, padx=8, pady=8, sticky="w")
 
-            ttk.Label(pricing_box, text=self.t('settings.pricing.base_fee')).grid(row=2, column=0, padx=8, pady=8, sticky="w")
+            ttk.Label(pricing_box, text=self.t('settings.pricing.base_fee')).grid(row=3, column=0, padx=8, pady=8, sticky="w")
             self.base_fee_var = tk.StringVar(value=str(getattr(self.cfg.pricing, 'base_fee_eur_per_year', 127.51)))
-            ttk.Entry(pricing_box, textvariable=self.base_fee_var, width=10).grid(row=2, column=1, padx=8, pady=8, sticky="w")
+            ttk.Entry(pricing_box, textvariable=self.base_fee_var, width=10).grid(row=3, column=1, padx=8, pady=8, sticky="w")
             self.base_fee_includes_vat_var = tk.BooleanVar(value=bool(getattr(self.cfg.pricing, 'base_fee_includes_vat', True)))
-            ttk.Checkbutton(pricing_box, text=self.t('settings.pricing.base_fee_includes_vat'), variable=self.base_fee_includes_vat_var).grid(row=2, column=2, padx=8, pady=8, sticky="w")
+            ttk.Checkbutton(pricing_box, text=self.t('settings.pricing.base_fee_includes_vat'), variable=self.base_fee_includes_vat_var).grid(row=3, column=2, padx=8, pady=8, sticky="w")
 
-            ttk.Label(pricing_box, text=self.t('settings.pricing.co2_intensity')).grid(row=3, column=0, padx=8, pady=8, sticky="w")
+            ttk.Label(pricing_box, text=self.t('settings.pricing.co2_intensity')).grid(row=4, column=0, padx=8, pady=8, sticky="w")
             self.co2_intensity_var = tk.StringVar(value=str(getattr(self.cfg.pricing, 'co2_intensity_g_per_kwh', 380.0)))
-            ttk.Entry(pricing_box, textvariable=self.co2_intensity_var, width=10).grid(row=3, column=1, padx=8, pady=8, sticky="w")
+            ttk.Entry(pricing_box, textvariable=self.co2_intensity_var, width=10).grid(row=4, column=1, padx=8, pady=8, sticky="w")
 
             def _co2_preset_menu():
                 m = tk.Menu(self, tearoff=0)
@@ -8153,6 +8192,7 @@ class CoreMixin:
                     supplier_margin_ct=float(getattr(self, "_spot_margin_var", tk.DoubleVar(value=2.50)).get()),
                     include_vat=bool(getattr(self, "_spot_vat_var", tk.BooleanVar(value=True)).get()),
                     show_as_comparison=bool(getattr(self, "_spot_comparison_var", tk.BooleanVar(value=True)).get()),
+                    tariff_type=str(getattr(self, "_tariff_type_var", tk.StringVar(value="fixed")).get() or "fixed"),
                 )
             except Exception:
                 spot_price = getattr(self.cfg, "spot_price", SpotPriceConfig())
@@ -9945,10 +9985,10 @@ class CoreMixin:
                     pass
             return p
 
-        # Price (€/kWh) from PricingConfig (gross)
+        # Price (€/kWh) – use dynamic if configured, else fixed
         unit_gross = None
         try:
-            unit_gross = float(self.cfg.pricing.unit_price_gross())
+            unit_gross = float(self._get_effective_unit_price())
         except Exception:
             try:
                 unit_gross = float(getattr(getattr(self.cfg, "pricing", None), "electricity_price_eur_per_kwh", None))
@@ -11505,7 +11545,13 @@ class CoreMixin:
                                         from shelly_analyzer.services.export import (
                                             export_pdf_invoice as _exp_inv, InvoiceLine as _IL
                                         )
-                                        _price_net   = self.cfg.pricing.unit_price_net() if hasattr(self.cfg.pricing, "unit_price_net") else self.cfg.pricing.unit_price_gross()
+                                        # For dynamic tariff: use average spot price for the period as unit price on invoices
+                                        if self._is_dynamic_tariff():
+                                            _eff_gross = self._get_effective_unit_price()
+                                            _vr = self.cfg.pricing.vat_rate()
+                                            _price_net = _eff_gross / (1.0 + _vr) if _vr > 0 else _eff_gross
+                                        else:
+                                            _price_net = self.cfg.pricing.unit_price_net() if hasattr(self.cfg.pricing, "unit_price_net") else self.cfg.pricing.unit_price_gross()
                                         _vat_enabled = bool(getattr(self.cfg.pricing, "vat_enabled", False))
                                         _vat_rate    = float(getattr(self.cfg.pricing, "vat_rate_percent", 0.0) or 0.0)
                                         _inv_totals  = (report_data.totals if report_data else None) or self._build_report_totals(start_dt, end_dt) or []
@@ -12023,6 +12069,63 @@ class CoreMixin:
             if static_g > 0 and kwh_fallback > 0:
                 return kwh_fallback * static_g / 1000.0, static_g, "static"
             return 0.0, static_g, "none"
+
+    def _is_dynamic_tariff(self) -> bool:
+            """Check if the user has selected a dynamic spot tariff as primary."""
+            spot_cfg = getattr(self.cfg, "spot_price", None)
+            if not spot_cfg or not getattr(spot_cfg, "enabled", False):
+                return False
+            return str(getattr(spot_cfg, "tariff_type", "fixed")) == "dynamic"
+
+    def _calc_cost_for_range(self, start_ts: int, end_ts: int,
+                                 device_key: str, kwh: float,
+                                 pricing=None, tou=None, tz=None) -> float:
+            """Calculate cost for a range using the configured tariff type.
+
+            If tariff_type == "dynamic", uses spot market prices from DB.
+            Otherwise uses fixed tariff (with TOU if enabled).
+            Returns total cost in EUR.
+            """
+            if self._is_dynamic_tariff():
+                spot_cost, _, _ = self._calc_spot_cost_for_range(start_ts, end_ts, device_key, kwh)
+                if spot_cost > 0:
+                    return spot_cost
+                # Fallback to fixed if no spot data available
+            if pricing is None:
+                pricing = getattr(self.cfg, "pricing", None)
+            if tou is None:
+                tou = getattr(self.cfg, "tou", None)
+            if pricing is None:
+                return 0.0
+            unit = float(pricing.unit_price_gross())
+            return kwh * unit
+
+    def _get_effective_unit_price(self) -> float:
+            """Return the effective unit price in EUR/kWh for the current hour.
+
+            For dynamic tariff: spot price + markup + VAT for the current hour.
+            For fixed tariff: configured fixed price.
+            """
+            if self._is_dynamic_tariff():
+                import time as _t
+                now_ts = int(_t.time())
+                hour_ts = (now_ts // 3600) * 3600
+                spot_cfg = getattr(self.cfg, "spot_price", None)
+                zone = getattr(spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
+                markup = float(spot_cfg.total_markup_ct()) / 100.0
+                pricing = getattr(self.cfg, "pricing", None)
+                vat_rate = pricing.vat_rate() if getattr(spot_cfg, "include_vat", True) and pricing else 0.0
+                try:
+                    df = self.storage.db.query_spot_prices(zone, hour_ts, hour_ts + 3600)
+                    if not df.empty:
+                        raw_eur = float(df["price_eur_mwh"].mean()) / 1000.0
+                        return (raw_eur + markup) * (1.0 + vat_rate)
+                except Exception:
+                    pass
+            pricing = getattr(self.cfg, "pricing", None)
+            if pricing:
+                return float(pricing.unit_price_gross())
+            return 0.30
 
     def _calc_spot_cost_for_range(self, start_ts: int, end_ts: int,
                                       device_key: str = "", kwh_fallback: float = 0.0) -> tuple:

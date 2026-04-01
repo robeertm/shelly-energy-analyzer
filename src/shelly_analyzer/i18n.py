@@ -4825,6 +4825,22 @@ _I18N.setdefault("ru", {}).update({
     "compare.quick.year": "Текущий vs. прошлый год",
 })
 
+# Tariff type selector (all languages)
+for _lang, _vals in [
+    ("es", ("Tipo de tarifa:", "Precio fijo", "Tarifa dinámica (spot)")),
+    ("fr", ("Type de tarif :", "Prix fixe", "Tarif dynamique (spot)")),
+    ("pt", ("Tipo de tarifa:", "Preço fixo", "Tarifa dinâmica (spot)")),
+    ("it", ("Tipo di tariffa:", "Prezzo fisso", "Tariffa dinamica (spot)")),
+    ("pl", ("Typ taryfy:", "Cena stała", "Taryfa dynamiczna (spot)")),
+    ("cs", ("Typ tarifu:", "Pevná cena", "Dynamický tarif (spot)")),
+    ("ru", ("Тип тарифа:", "Фиксированная цена", "Динамический тариф (спот)")),
+]:
+    _I18N.setdefault(_lang, {}).update({
+        "settings.pricing.tariff_type": _vals[0],
+        "settings.pricing.tariff_fixed": _vals[1],
+        "settings.pricing.tariff_dynamic": _vals[2],
+    })
+
 # -------- Dynamic price plots (v13.8.2) --------
 
 _I18N.setdefault("de", {}).update({
@@ -4902,6 +4918,9 @@ _I18N.setdefault("ru", {}).update({
 # -------- Dynamic spot prices (v13.8.0) --------
 
 _I18N.setdefault("de", {}).update({
+    "settings.pricing.tariff_type": "Tarifart:",
+    "settings.pricing.tariff_fixed": "Festpreis",
+    "settings.pricing.tariff_dynamic": "Dynamischer Tarif (Spotmarkt)",
     "spot.settings.title": "\u26a1 Dynamische Strompreise",
     "spot.settings.enabled": "Dynamische Preise aktivieren",
     "spot.settings.api": "Datenquelle",
@@ -4923,6 +4942,9 @@ _I18N.setdefault("de", {}).update({
 })
 
 _I18N.setdefault("en", {}).update({
+    "settings.pricing.tariff_type": "Tariff type:",
+    "settings.pricing.tariff_fixed": "Fixed price",
+    "settings.pricing.tariff_dynamic": "Dynamic tariff (spot market)",
     "spot.settings.title": "\u26a1 Dynamic Electricity Prices",
     "spot.settings.enabled": "Enable dynamic prices",
     "spot.settings.api": "Data source",
