@@ -424,8 +424,8 @@ class SpotPriceConfig:
     concession_fee_ct: float = 1.66    # Konzessionsabgabe (varies by municipality size)
     kwk_surcharge_ct: float = 0.277    # KWK-Aufschlag (annual, set by TSOs)
     sec19_surcharge_ct: float = 0.643  # §19 StromNEV-Umlage (annual)
-    offshore_surcharge_ct: float = 0.816  # Offshore-Netzumlage (annual)
-    supplier_margin_ct: float = 2.50   # Anbieter-Marge (Tibber ~2, Ostrom ~3, 1Komma5° ~1)
+    offshore_surcharge_ct: float = 0.656  # Offshore-Netzumlage (2025, annual)
+    supplier_margin_ct: float = 1.50   # Anbieter-Marge (Tibber ~1, Ostrom ~2, 1Komma5° ~1)
     # Legacy single-value field (ignored if any breakdown field is explicitly set; kept for backward compat)
     markup_ct_per_kwh: float = 0.0
     # Whether to apply VAT on top of (spot price + markup)

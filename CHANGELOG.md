@@ -1,12 +1,10 @@
 # Changelog
 
-## 13.9.18 - 2026-04-01
-### Removed
-- **Traffic sparkline bar chart** – Removed the jittery live sparkline canvas from the Sync tab. Only the clean category table remains.
-
+## 13.9.19 - 2026-04-01
 ### Fixed
-- **Traffic table: proper column stretch** – Category column stretches to fill width; numeric columns fixed-width. No more ugly empty space.
-- **Traffic table: no jitter** – Rows updated in-place instead of deleted/reinserted. Removed unused rate_history from TrafficMonitor.
+- **Web spot chart: dark mode** – Chart now properly detects `data-theme="dark"` instead of wrong `classList.contains('dark')`. Background, grid, labels, and tooltip all adapt to the current theme. Theme toggle triggers immediate chart redraw.
+- **Dynamic tariff: lower defaults** – Offshore surcharge updated to 2025 value (0.656 ct, was 0.816). Default supplier margin lowered to 1.50 ct (was 2.50) to better match Tibber/similar providers. Total default markup now ~15.3 ct/kWh (was ~16.4).
+- **Traffic sparkline removed** – Removed jittery sparkline canvas. Traffic table rows updated in-place. Columns stretch properly.
 
 ## 13.9.15 - 2026-04-01
 ### Fixed

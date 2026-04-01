@@ -1177,6 +1177,10 @@ document.getElementById('btn-theme').addEventListener('click', function() {{
   root.dataset.theme = next;
   localStorage.setItem('sea_theme', next);
   this.textContent = next === 'dark' ? '☀' : '🌙';
+  // Redraw spot chart with new theme colours
+  if (window._lastSpotChart && window._lastSpotFixedCt != null) {{
+    _drawSpotChart(window._lastSpotChart, window._lastSpotFixedCt);
+  }}
 }});
 (function() {{
   const th = document.documentElement.dataset.theme;
@@ -2140,6 +2144,8 @@ function renderCosts(data, el) {{
 }}
 
 function _drawSpotChart(hourly, fixedCt) {{
+  window._lastSpotChart = hourly;
+  window._lastSpotFixedCt = fixedCt;
   var canvas = document.getElementById('spot-24h-chart');
   if (!canvas) return;
   var rect = canvas.getBoundingClientRect();
@@ -2164,7 +2170,7 @@ function _drawSpotChart(hourly, fixedCt) {{
   var vRange = maxV - minV;
 
   // Background
-  var isDark = document.documentElement.classList.contains('dark');
+  var isDark = document.documentElement.dataset.theme === 'dark';
   ctx.fillStyle = isDark ? '#111' : '#fff';
   ctx.fillRect(0, 0, W, H);
 
@@ -2238,9 +2244,14 @@ function _drawSpotChart(hourly, fixedCt) {{
     lblEl.innerHTML = '<span>' + _fmtH(first) + '</span><span>' + _fmtH(mid) + '</span><span>' + _fmtH(last) + '</span>';
   }}
 
-  // Touch/hover tooltip
+  // Touch/hover tooltip (remove old one on redraw)
+  var _oldTip = canvas.parentElement.querySelector('.spot-tip');
+  if (_oldTip) _oldTip.remove();
   var _spotTip = document.createElement('div');
-  _spotTip.style.cssText = 'position:absolute;display:none;background:#fff3e0;border:1px solid #ff9800;border-radius:6px;padding:4px 8px;font-size:11px;pointer-events:none;z-index:99;white-space:nowrap;color:#333';
+  _spotTip.className = 'spot-tip';
+  var _tipBg = isDark ? '#2a1a00' : '#fff3e0';
+  var _tipFg = isDark ? '#eee' : '#333';
+  _spotTip.style.cssText = 'position:absolute;display:none;background:' + _tipBg + ';border:1px solid #ff9800;border-radius:6px;padding:4px 8px;font-size:11px;pointer-events:none;z-index:99;white-space:nowrap;color:' + _tipFg;
   canvas.parentElement.style.position = 'relative';
   canvas.parentElement.appendChild(_spotTip);
 
