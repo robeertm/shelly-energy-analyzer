@@ -8630,17 +8630,21 @@ class CoreMixin:
                     fmt_bytes(data["received"]),
                     fmt_bytes(data["sent"]),
                 ))
-            # Update compact sparkline bars (1 bar per second, fit to window)
+            # Update compact sparkline bars (fixed bar count from window width)
             spark = getattr(self, "_traffic_spark", None)
             hist = snap.get("rate_history")
             if spark and hist and hist.get("recv"):
                 spark.delete("all")
                 w = spark.winfo_width() or 400
                 h = spark.winfo_height() or 36
+                # Fixed bar count: 3px per bar, always the same number
+                bar_w = 3
+                num_bars = max(1, w // bar_w)
+                bar_w = w / num_bars  # exact fit, no gap
+                # Aggregate raw samples into 1-second buckets
                 ts_raw = hist["ts"]
                 recv_raw = hist["recv"]
                 sent_raw = hist["sent"]
-                # Aggregate to 1-second buckets (average samples per second)
                 buckets: dict = {}
                 for i, t in enumerate(ts_raw):
                     sec = int(round(t))
@@ -8649,26 +8653,24 @@ class CoreMixin:
                     buckets[sec][0] += recv_raw[i]
                     buckets[sec][1] += sent_raw[i]
                     buckets[sec][2] += 1
-                # How many bars fit? 3px per bar minimum
-                bar_w = 3
-                max_bars = max(1, w // bar_w)
-                # Get the most recent max_bars seconds
-                sorted_secs = sorted(buckets.keys())
-                if len(sorted_secs) > max_bars:
-                    sorted_secs = sorted_secs[-max_bars:]
-                n = len(sorted_secs)
-                if n > 0:
-                    bar_w = w / n
-                    recv = [buckets[s][0] / max(1, buckets[s][2]) for s in sorted_secs]
-                    sent = [buckets[s][1] / max(1, buckets[s][2]) for s in sorted_secs]
-                    max_val = max(max(recv), max(sent), 1)
-                    for i in range(n):
-                        x = i * bar_w
-                        rh = max(1, (recv[i] / max_val) * (h - 2))
+                # Build fixed-length arrays: last num_bars seconds, right-aligned
+                recv = [0.0] * num_bars
+                sent = [0.0] * num_bars
+                for sec, (r, s, c) in buckets.items():
+                    # sec is negative (seconds ago), map to bar index
+                    idx = num_bars - 1 + sec  # sec=0 → last bar, sec=-1 → second to last
+                    if 0 <= idx < num_bars:
+                        recv[idx] = r / max(1, c)
+                        sent[idx] = s / max(1, c)
+                max_val = max(max(recv), max(sent), 1)
+                for i in range(num_bars):
+                    x = i * bar_w
+                    rh = max(0, (recv[i] / max_val) * (h - 2))
+                    if rh > 0.5:
                         spark.create_rectangle(x, h - rh, x + bar_w - 0.5, h, fill="#2196F3", outline="", width=0)
-                        sh = max(0, (sent[i] / max_val) * (h - 2))
-                        if sh > 0.5:
-                            spark.create_rectangle(x, h - rh - sh, x + bar_w - 0.5, h - rh, fill="#FF9800", outline="", width=0)
+                    sh = max(0, (sent[i] / max_val) * (h - 2))
+                    if sh > 0.5:
+                        spark.create_rectangle(x, h - rh - sh, x + bar_w - 0.5, h - rh, fill="#FF9800", outline="", width=0)
 
     def _mdns_refresh_tree(self) -> None:
             try:
