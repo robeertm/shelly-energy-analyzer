@@ -1615,6 +1615,10 @@ class CoreMixin:
                 # CO₂ tab
                 if "co2" in tnorm.lower().replace("₂", "2"):
                     return "CO2"
+                # Dyn. Preis tab
+                tl2 = tnorm.lower()
+                if "dyn" in tl2 or "preis" in tl2 or "price" in tl2:
+                    return "DYNPRICE"
                 return "kwh"
             except Exception:
                 return "kwh"
