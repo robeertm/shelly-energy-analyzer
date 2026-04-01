@@ -296,7 +296,7 @@ class WeatherMixin:
         for spine in ax2_twin.spines.values():
             spine.set_color(tc["fg"])
 
-        self._weather_fig.tight_layout()
+        self._weather_fig.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.18, wspace=0.40)
         self._weather_canvas.draw_idle()
 
     def _draw_empty_weather_charts(self, msg: str) -> None:
@@ -306,7 +306,7 @@ class WeatherMixin:
             ax.text(0.5, 0.5, msg, ha="center", va="center", fontsize=11, color=tc["muted"])
             ax.axis("off")
             self._apply_plot_theme(self._weather_fig, ax, self._weather_canvas)
-        self._weather_fig.tight_layout()
+        self._weather_fig.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.18, wspace=0.40)
         self._weather_canvas.draw_idle()
 
     def _draw_energy_only_chart(self, hourly, dev_name: str) -> None:
@@ -330,5 +330,5 @@ class WeatherMixin:
         ax2.set_axisbelow(True)
         self._apply_plot_theme(self._weather_fig, ax2)
 
-        self._weather_fig.tight_layout()
+        self._weather_fig.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.18, wspace=0.40)
         self._weather_canvas.draw_idle()
