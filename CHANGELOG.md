@@ -1,5 +1,12 @@
 # Changelog
 
+## 13.9.8 - 2026-04-01
+### Fixed
+- **Dyn. Preis tab not detected** – `_active_metric_key()` now recognizes the dynamic price tab so the shared controls correctly apply to it.
+
+### Improved
+- **Plots controls centered above tabs** – Dropdown + Letzte N spinbox now sit centered above the metric sub-tabs (kWh/V/A/W/…), not below. Removed header, reload, debug, and date range row.
+
 ## 13.9.7 - 2026-04-01
 ### Improved
 - **Plots tab: minimal clean layout** – Removed header label, reload button, debug checkbox, date range row (Von/Bis/Anwenden/Zurücksetzen). Single control bar (dropdown + Letzte N) now sits at the bottom below all tabs. Controls apply instantly on tab switch, dropdown change, spinbox change, focus out, or click away.
