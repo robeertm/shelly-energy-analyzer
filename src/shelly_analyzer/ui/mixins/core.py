@@ -4425,8 +4425,18 @@ class CoreMixin:
             from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
             self._cost_spot_fig = Figure(figsize=(12, 3.0), dpi=96)
             self._cost_spot_ax = self._cost_spot_fig.add_subplot(111)
+            self._cost_spot_ax.set_navigate(False)
             self._cost_spot_canvas = FigureCanvasTkAgg(self._cost_spot_fig, master=spot_chart_frame)
-            self._cost_spot_canvas.get_tk_widget().pack(fill="x", expand=False)
+            # Disable matplotlib scroll-zoom so mousewheel scrolls the page, not the plot
+            try:
+                for cid in list(self._cost_spot_canvas.callbacks.callbacks.get("scroll_event", {}).keys()):
+                    self._cost_spot_canvas.mpl_disconnect(cid)
+            except Exception:
+                pass
+            _spot_tk_widget = self._cost_spot_canvas.get_tk_widget()
+            _spot_tk_widget.pack(fill="x", expand=False)
+            # Forward mousewheel from matplotlib widget to outer scroll canvas
+            _spot_tk_widget.bind("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
 
             # Initial refresh
             self.after(500, self._refresh_costs_tab)
