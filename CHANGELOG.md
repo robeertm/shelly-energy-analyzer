@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.10 - 2026-04-01
+### Changed
+- **Network traffic: 0.5s sampling** – Rate history sampled every 500ms (was 3s). Desktop UI updates at 0.5s, web polls at 500ms. Buffer holds 600 samples (~5 min).
+
 ## 13.9.9 - 2026-04-01
 ### Changed
 - **Network traffic chart: 5 min window** – Live rate chart now shows last 5 minutes instead of 1 hour for a more responsive view.

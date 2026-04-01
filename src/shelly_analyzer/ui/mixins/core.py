@@ -8601,9 +8601,9 @@ class CoreMixin:
             self.after(500, self._drain_queues_loop)
 
     def _traffic_ui_update(self) -> None:
-            # Throttle to every 2 seconds
+            # Throttle to every 0.5 seconds
             now = time.time()
-            if now - getattr(self, "_traffic_last_update", 0) < 2.0:
+            if now - getattr(self, "_traffic_last_update", 0) < 0.5:
                 return
             self._traffic_last_update = now
             tree = getattr(self, "_traffic_tree", None)
