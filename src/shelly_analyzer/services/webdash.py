@@ -2231,6 +2231,31 @@ function _drawSpotChart(hourly, fixedCt) {{
     function _fmtH(d) {{ return ('0' + d.getHours()).slice(-2) + ':00 ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2); }}
     lblEl.innerHTML = '<span>' + _fmtH(first) + '</span><span>' + _fmtH(mid) + '</span><span>' + _fmtH(last) + '</span>';
   }}
+
+  // Touch/hover tooltip
+  var _spotTip = document.createElement('div');
+  _spotTip.style.cssText = 'position:absolute;display:none;background:#fff3e0;border:1px solid #ff9800;border-radius:6px;padding:4px 8px;font-size:11px;pointer-events:none;z-index:99;white-space:nowrap;color:#333';
+  canvas.parentElement.style.position = 'relative';
+  canvas.parentElement.appendChild(_spotTip);
+
+  function _spotHover(e) {{
+    var r = canvas.getBoundingClientRect();
+    var x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+    var idx = Math.round((x - pad.left) / plotW * hourly.length);
+    if (idx < 0 || idx >= hourly.length) {{ _spotTip.style.display = 'none'; return; }}
+    var h = hourly[idx];
+    var d = new Date(h.ts * 1000);
+    var hStr = ('0' + d.getHours()).slice(-2) + ':00 ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2);
+    _spotTip.innerHTML = '<b>' + hStr + '</b><br>Spot: ' + h.raw_ct.toFixed(1) + ' ct/kWh<br>Total: ' + h.total_ct.toFixed(1) + ' ct/kWh';
+    _spotTip.style.display = 'block';
+    var tipX = Math.min(x, r.width - 120);
+    _spotTip.style.left = tipX + 'px';
+    _spotTip.style.top = '4px';
+  }}
+  canvas.addEventListener('mousemove', _spotHover);
+  canvas.addEventListener('touchmove', _spotHover);
+  canvas.addEventListener('mouseleave', function() {{ _spotTip.style.display = 'none'; }});
+  canvas.addEventListener('touchend', function() {{ _spotTip.style.display = 'none'; }});
 }}
 
 function metricCardHtml(label, value, sub) {{

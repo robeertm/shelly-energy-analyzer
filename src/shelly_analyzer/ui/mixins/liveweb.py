@@ -774,7 +774,7 @@ class LiveWebMixin:
                     _spot_enabled = getattr(_spot_cfg, "enabled", False) if _spot_cfg else False
                     if _spot_enabled:
                         _sp_zone = getattr(_spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
-                        _sp_markup = float(getattr(_spot_cfg, "markup_ct_per_kwh", 16.0)) / 100.0
+                        _sp_markup = float(_spot_cfg.total_markup_ct() if hasattr(_spot_cfg, "total_markup_ct") else getattr(_spot_cfg, "markup_ct_per_kwh", 16.0)) / 100.0
                         _sp_vat = self.cfg.pricing.vat_rate() if getattr(_spot_cfg, "include_vat", True) else 0.0
                         for dev_data in devices_out:
                             for rng_key, (rng_start, rng_end) in _ranges.items():
@@ -810,7 +810,7 @@ class LiveWebMixin:
                     if _spot_enabled:
                         try:
                             _sp_zone2 = getattr(_spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
-                            _sp_markup2 = float(getattr(_spot_cfg, "markup_ct_per_kwh", 16.0))
+                            _sp_markup2 = float(_spot_cfg.total_markup_ct() if hasattr(_spot_cfg, "total_markup_ct") else getattr(_spot_cfg, "markup_ct_per_kwh", 16.0))
                             _sp_vat2 = (self.cfg.pricing.vat_rate() if getattr(_spot_cfg, "include_vat", True) else 0.0)
                             _chart_start = int((_now - _td(hours=24)).timestamp())
                             _chart_end = int((_now + _td(hours=24)).timestamp())

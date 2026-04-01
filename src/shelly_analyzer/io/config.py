@@ -417,13 +417,27 @@ class SpotPriceConfig:
     bidding_zone: str = "DE-LU"
     # How often to fetch new prices (hours)
     fetch_interval_hours: int = 1
-    # Markup/surcharge added to wholesale spot price to approximate retail dynamic tariff
-    # (covers network fees, taxes, supplier margin, etc.) in ct/kWh (net, excl. VAT)
-    markup_ct_per_kwh: float = 16.0
+    # Detailed markup breakdown (all in ct/kWh, net, excl. VAT)
+    # These sum up to the total surcharge added on top of the EPEX Spot wholesale price.
+    grid_fee_ct: float = 8.50          # Netzentgelte (varies by region, 6-13 ct/kWh)
+    electricity_tax_ct: float = 2.05   # Stromsteuer (§3 StromStG, fixed by law)
+    concession_fee_ct: float = 1.66    # Konzessionsabgabe (varies by municipality size)
+    kwk_surcharge_ct: float = 0.277    # KWK-Aufschlag (annual, set by TSOs)
+    sec19_surcharge_ct: float = 0.643  # §19 StromNEV-Umlage (annual)
+    offshore_surcharge_ct: float = 0.816  # Offshore-Netzumlage (annual)
+    supplier_margin_ct: float = 2.50   # Anbieter-Marge (Tibber ~2, Ostrom ~3, 1Komma5° ~1)
+    # Legacy single-value field (ignored if any breakdown field is explicitly set; kept for backward compat)
+    markup_ct_per_kwh: float = 0.0
     # Whether to apply VAT on top of (spot price + markup)
     include_vat: bool = True
     # Show dynamic price comparison even if user has a fixed tariff
     show_as_comparison: bool = True
+
+    def total_markup_ct(self) -> float:
+        """Sum of all surcharge components in ct/kWh (net)."""
+        return (self.grid_fee_ct + self.electricity_tax_ct + self.concession_fee_ct
+                + self.kwk_surcharge_ct + self.sec19_surcharge_ct
+                + self.offshore_surcharge_ct + self.supplier_margin_ct)
 
 
 @dataclass(frozen=True)
@@ -885,12 +899,22 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     )
 
     spot_raw = raw.get("spot_price", {}) if isinstance(raw.get("spot_price"), dict) else {}
+    # Migrate legacy single markup_ct_per_kwh: if breakdown fields are absent but markup exists, distribute
+    _legacy_markup = _coerce_float(spot_raw.get("markup_ct_per_kwh", 0.0), 0.0)
+    _has_breakdown = any(k in spot_raw for k in ("grid_fee_ct", "electricity_tax_ct", "supplier_margin_ct"))
     spot_price = SpotPriceConfig(
         enabled=bool(spot_raw.get("enabled", SpotPriceConfig.enabled)),
         primary_api=str(spot_raw.get("primary_api", SpotPriceConfig.primary_api) or "energy_charts"),
         bidding_zone=str(spot_raw.get("bidding_zone", SpotPriceConfig.bidding_zone) or "DE-LU"),
         fetch_interval_hours=_coerce_int(spot_raw.get("fetch_interval_hours", SpotPriceConfig.fetch_interval_hours), SpotPriceConfig.fetch_interval_hours),
-        markup_ct_per_kwh=_coerce_float(spot_raw.get("markup_ct_per_kwh", SpotPriceConfig.markup_ct_per_kwh), SpotPriceConfig.markup_ct_per_kwh),
+        grid_fee_ct=_coerce_float(spot_raw.get("grid_fee_ct", SpotPriceConfig.grid_fee_ct if _has_breakdown else (max(0, _legacy_markup - 7.5) if _legacy_markup > 0 else SpotPriceConfig.grid_fee_ct)), SpotPriceConfig.grid_fee_ct),
+        electricity_tax_ct=_coerce_float(spot_raw.get("electricity_tax_ct", SpotPriceConfig.electricity_tax_ct), SpotPriceConfig.electricity_tax_ct),
+        concession_fee_ct=_coerce_float(spot_raw.get("concession_fee_ct", SpotPriceConfig.concession_fee_ct), SpotPriceConfig.concession_fee_ct),
+        kwk_surcharge_ct=_coerce_float(spot_raw.get("kwk_surcharge_ct", SpotPriceConfig.kwk_surcharge_ct), SpotPriceConfig.kwk_surcharge_ct),
+        sec19_surcharge_ct=_coerce_float(spot_raw.get("sec19_surcharge_ct", SpotPriceConfig.sec19_surcharge_ct), SpotPriceConfig.sec19_surcharge_ct),
+        offshore_surcharge_ct=_coerce_float(spot_raw.get("offshore_surcharge_ct", SpotPriceConfig.offshore_surcharge_ct), SpotPriceConfig.offshore_surcharge_ct),
+        supplier_margin_ct=_coerce_float(spot_raw.get("supplier_margin_ct", SpotPriceConfig.supplier_margin_ct), SpotPriceConfig.supplier_margin_ct),
+        markup_ct_per_kwh=_legacy_markup,
         include_vat=bool(spot_raw.get("include_vat", SpotPriceConfig.include_vat)),
         show_as_comparison=bool(spot_raw.get("show_as_comparison", SpotPriceConfig.show_as_comparison)),
     )
@@ -1283,7 +1307,13 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "primary_api": str(getattr(cfg.spot_price, "primary_api", "energy_charts") or "energy_charts"),
             "bidding_zone": str(getattr(cfg.spot_price, "bidding_zone", "DE-LU") or "DE-LU"),
             "fetch_interval_hours": int(getattr(cfg.spot_price, "fetch_interval_hours", 1)),
-            "markup_ct_per_kwh": float(getattr(cfg.spot_price, "markup_ct_per_kwh", 16.0)),
+            "grid_fee_ct": float(getattr(cfg.spot_price, "grid_fee_ct", 8.50)),
+            "electricity_tax_ct": float(getattr(cfg.spot_price, "electricity_tax_ct", 2.05)),
+            "concession_fee_ct": float(getattr(cfg.spot_price, "concession_fee_ct", 1.66)),
+            "kwk_surcharge_ct": float(getattr(cfg.spot_price, "kwk_surcharge_ct", 0.277)),
+            "sec19_surcharge_ct": float(getattr(cfg.spot_price, "sec19_surcharge_ct", 0.643)),
+            "offshore_surcharge_ct": float(getattr(cfg.spot_price, "offshore_surcharge_ct", 0.816)),
+            "supplier_margin_ct": float(getattr(cfg.spot_price, "supplier_margin_ct", 2.50)),
             "include_vat": bool(getattr(cfg.spot_price, "include_vat", True)),
             "show_as_comparison": bool(getattr(cfg.spot_price, "show_as_comparison", True)),
         },

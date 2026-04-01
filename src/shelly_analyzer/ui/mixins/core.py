@@ -4437,7 +4437,7 @@ class CoreMixin:
                 return
 
             zone = getattr(spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
-            markup_ct = float(getattr(spot_cfg, "markup_ct_per_kwh", 16.0))
+            markup_ct = float(spot_cfg.total_markup_ct() if hasattr(spot_cfg, "total_markup_ct") else getattr(spot_cfg, "markup_ct_per_kwh", 16.0))
             pricing = getattr(self.cfg, "pricing", None)
             vat_rate = pricing.vat_rate() if getattr(spot_cfg, "include_vat", True) and pricing else 0.0
 
@@ -4519,6 +4519,47 @@ class CoreMixin:
                 fontsize=9,
             )
             ax.legend(fontsize=8, loc="upper right")
+
+            # Mouse hover tooltip
+            _spot_annot = ax.annotate("", xy=(0, 0), xytext=(0, 12),
+                                       textcoords="offset points", ha="center", va="bottom",
+                                       fontsize=8, fontweight="bold",
+                                       bbox=dict(boxstyle="round,pad=0.3", fc="#fff3e0", ec="#ff9800", alpha=0.95))
+            _spot_annot.set_visible(False)
+            _spot_bars_data = list(zip(x_dates, values, hours_dt, hourly["raw_ct"].tolist()))
+
+            def _on_spot_hover(event):
+                if event.inaxes != ax:
+                    if _spot_annot.get_visible():
+                        _spot_annot.set_visible(False)
+                        canvas.draw_idle()
+                    return
+                # Find closest bar
+                ex = event.xdata
+                if ex is None:
+                    return
+                best_i, best_dist = 0, float("inf")
+                for i, (xd, _, _, _) in enumerate(_spot_bars_data):
+                    d = abs(ex - xd)
+                    if d < best_dist:
+                        best_dist = d
+                        best_i = i
+                if best_dist > 1.0 / 12.0:  # ~2h tolerance
+                    if _spot_annot.get_visible():
+                        _spot_annot.set_visible(False)
+                        canvas.draw_idle()
+                    return
+                xd, total_ct, dt, raw_ct = _spot_bars_data[best_i]
+                _spot_annot.xy = (xd, total_ct)
+                _spot_annot.set_text(
+                    f"{dt.strftime('%H:%M %d.%m')}\n"
+                    f"Spot: {raw_ct:.1f} ct/kWh\n"
+                    f"Total: {total_ct:.1f} ct/kWh"
+                )
+                _spot_annot.set_visible(True)
+                canvas.draw_idle()
+
+            canvas.mpl_connect("motion_notify_event", _on_spot_hover)
 
             try:
                 fig.subplots_adjust(left=0.08, right=0.97, top=0.85, bottom=0.25)
@@ -6769,28 +6810,62 @@ class CoreMixin:
                 state="readonly",
             ).grid(row=2, column=1, padx=8, pady=4, sticky="w")
 
-            ttk.Label(spot_box, text=self.t("spot.settings.markup")).grid(row=3, column=0, padx=8, pady=4, sticky="w")
-            self._spot_markup_var = tk.DoubleVar(value=float(getattr(_spot_cfg, "markup_ct_per_kwh", 16.0)))
-            ttk.Entry(spot_box, textvariable=self._spot_markup_var, width=8).grid(row=3, column=1, padx=8, pady=4, sticky="w")
-            ttk.Label(spot_box, text=self.t("spot.settings.markup.hint"), foreground="#888888", font=("", 8)).grid(row=3, column=2, columnspan=2, padx=8, pady=4, sticky="w")
+            # Markup breakdown
+            ttk.Label(spot_box, text=self.t("spot.settings.markup"), font=("", 9, "bold")).grid(row=3, column=0, columnspan=4, padx=8, pady=(8, 2), sticky="w")
+
+            self._spot_grid_fee_var = tk.DoubleVar(value=float(getattr(_spot_cfg, "grid_fee_ct", 8.50)))
+            self._spot_tax_var = tk.DoubleVar(value=float(getattr(_spot_cfg, "electricity_tax_ct", 2.05)))
+            self._spot_concession_var = tk.DoubleVar(value=float(getattr(_spot_cfg, "concession_fee_ct", 1.66)))
+            self._spot_kwk_var = tk.DoubleVar(value=float(getattr(_spot_cfg, "kwk_surcharge_ct", 0.277)))
+            self._spot_sec19_var = tk.DoubleVar(value=float(getattr(_spot_cfg, "sec19_surcharge_ct", 0.643)))
+            self._spot_offshore_var = tk.DoubleVar(value=float(getattr(_spot_cfg, "offshore_surcharge_ct", 0.816)))
+            self._spot_margin_var = tk.DoubleVar(value=float(getattr(_spot_cfg, "supplier_margin_ct", 2.50)))
+
+            _markup_fields = [
+                ("spot.markup.grid_fee", self._spot_grid_fee_var, 4),
+                ("spot.markup.electricity_tax", self._spot_tax_var, 5),
+                ("spot.markup.concession", self._spot_concession_var, 6),
+                ("spot.markup.kwk", self._spot_kwk_var, 7),
+                ("spot.markup.sec19", self._spot_sec19_var, 8),
+                ("spot.markup.offshore", self._spot_offshore_var, 9),
+                ("spot.markup.supplier", self._spot_margin_var, 10),
+            ]
+            for _lbl_key, _var, _row in _markup_fields:
+                ttk.Label(spot_box, text=self.t(_lbl_key)).grid(row=_row, column=0, padx=(16, 8), pady=1, sticky="w")
+                ttk.Entry(spot_box, textvariable=_var, width=8).grid(row=_row, column=1, padx=8, pady=1, sticky="w")
+                ttk.Label(spot_box, text="ct/kWh", foreground="#888888", font=("", 8)).grid(row=_row, column=2, padx=0, pady=1, sticky="w")
+
+            self._spot_total_var = tk.StringVar()
+            def _update_spot_total(*_args):
+                try:
+                    total = sum(v.get() for v in [self._spot_grid_fee_var, self._spot_tax_var, self._spot_concession_var,
+                                                   self._spot_kwk_var, self._spot_sec19_var, self._spot_offshore_var, self._spot_margin_var])
+                    self._spot_total_var.set(f"\u2211 {total:.2f} ct/kWh")
+                except Exception:
+                    pass
+            for _v in [self._spot_grid_fee_var, self._spot_tax_var, self._spot_concession_var,
+                       self._spot_kwk_var, self._spot_sec19_var, self._spot_offshore_var, self._spot_margin_var]:
+                _v.trace_add("write", _update_spot_total)
+            _update_spot_total()
+            ttk.Label(spot_box, textvariable=self._spot_total_var, font=("", 9, "bold"), foreground="#ff9800").grid(row=11, column=0, columnspan=3, padx=8, pady=(4, 2), sticky="w")
 
             self._spot_vat_var = tk.BooleanVar(value=bool(getattr(_spot_cfg, "include_vat", True)))
             ttk.Checkbutton(
                 spot_box,
                 text=self.t("spot.settings.include_vat"),
                 variable=self._spot_vat_var,
-            ).grid(row=4, column=0, columnspan=2, padx=8, pady=(2, 2), sticky="w")
+            ).grid(row=12, column=0, columnspan=2, padx=8, pady=(2, 2), sticky="w")
 
             self._spot_comparison_var = tk.BooleanVar(value=bool(getattr(_spot_cfg, "show_as_comparison", True)))
             ttk.Checkbutton(
                 spot_box,
                 text=self.t("spot.settings.show_comparison"),
                 variable=self._spot_comparison_var,
-            ).grid(row=5, column=0, columnspan=2, padx=8, pady=(2, 2), sticky="w")
+            ).grid(row=13, column=0, columnspan=2, padx=8, pady=(2, 2), sticky="w")
 
-            ttk.Label(spot_box, text=self.t("spot.settings.interval")).grid(row=6, column=0, padx=8, pady=(4, 8), sticky="w")
+            ttk.Label(spot_box, text=self.t("spot.settings.interval")).grid(row=14, column=0, padx=8, pady=(4, 8), sticky="w")
             self._spot_interval_var = tk.IntVar(value=int(getattr(_spot_cfg, "fetch_interval_hours", 1)))
-            ttk.Entry(spot_box, textvariable=self._spot_interval_var, width=6).grid(row=6, column=1, padx=8, pady=(4, 8), sticky="w")
+            ttk.Entry(spot_box, textvariable=self._spot_interval_var, width=6).grid(row=14, column=1, padx=8, pady=(4, 8), sticky="w")
 
             # ── Solar amortization settings ────────────────────────────────────
             ttk.Label(solar_box, text=self.t('settings.solar.investment')).grid(row=6, column=0, padx=8, pady=4, sticky="w")
@@ -8069,7 +8144,13 @@ class CoreMixin:
                     primary_api=str(getattr(self, "_spot_api_var", tk.StringVar(value="energy_charts")).get() or "energy_charts"),
                     bidding_zone=str(getattr(self, "_spot_zone_var", tk.StringVar(value="DE-LU")).get() or "DE-LU"),
                     fetch_interval_hours=int(getattr(self, "_spot_interval_var", tk.IntVar(value=1)).get() or 1),
-                    markup_ct_per_kwh=float(getattr(self, "_spot_markup_var", tk.DoubleVar(value=16.0)).get() or 16.0),
+                    grid_fee_ct=float(getattr(self, "_spot_grid_fee_var", tk.DoubleVar(value=8.50)).get()),
+                    electricity_tax_ct=float(getattr(self, "_spot_tax_var", tk.DoubleVar(value=2.05)).get()),
+                    concession_fee_ct=float(getattr(self, "_spot_concession_var", tk.DoubleVar(value=1.66)).get()),
+                    kwk_surcharge_ct=float(getattr(self, "_spot_kwk_var", tk.DoubleVar(value=0.277)).get()),
+                    sec19_surcharge_ct=float(getattr(self, "_spot_sec19_var", tk.DoubleVar(value=0.643)).get()),
+                    offshore_surcharge_ct=float(getattr(self, "_spot_offshore_var", tk.DoubleVar(value=0.816)).get()),
+                    supplier_margin_ct=float(getattr(self, "_spot_margin_var", tk.DoubleVar(value=2.50)).get()),
                     include_vat=bool(getattr(self, "_spot_vat_var", tk.BooleanVar(value=True)).get()),
                     show_as_comparison=bool(getattr(self, "_spot_comparison_var", tk.BooleanVar(value=True)).get()),
                 )
@@ -11955,7 +12036,7 @@ class CoreMixin:
                 return 0.0, 0.0, "none"
 
             zone = getattr(spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
-            markup = float(getattr(spot_cfg, "markup_ct_per_kwh", 16.0)) / 100.0
+            markup = float(spot_cfg.total_markup_ct() if hasattr(spot_cfg, "total_markup_ct") else getattr(spot_cfg, "markup_ct_per_kwh", 16.0)) / 100.0
             pricing = getattr(self.cfg, "pricing", None)
             if getattr(spot_cfg, "include_vat", True) and pricing:
                 vat_rate = pricing.vat_rate()
