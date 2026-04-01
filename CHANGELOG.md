@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.7 - 2026-04-01
+### Improved
+- **Plots tab: minimal clean layout** – Removed header label, reload button, debug checkbox, date range row (Von/Bis/Anwenden/Zurücksetzen). Single control bar (dropdown + Letzte N) now sits at the bottom below all tabs. Controls apply instantly on tab switch, dropdown change, spinbox change, focus out, or click away.
+
 ## 13.9.6 - 2026-04-01
 ### Improved
 - **Plots tab: single shared control bar** – One dropdown (Alle/Stunden/Tage/Wochen/Monate) + one "Letzte" spinbox above all sub-tabs. Controls apply to whichever metric tab is active. Instant refresh on dropdown change, spinbox increment/decrement, Enter key, focus out, or mouse click away. No per-tab duplicate controls.
