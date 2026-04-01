@@ -1,5 +1,18 @@
 # Changelog
 
+## 13.8.3 - 2026-04-01
+### Added
+- **Costs tab: 24h spot market price chart** – Rolling bar chart showing spot electricity prices with colour-coded bars (green = cheap, red = expensive relative to fixed tariff). Fixed-price reference line and average price display. Available in both desktop (matplotlib) and web dashboard (Canvas).
+
+### Fixed
+- **Web dashboard: spot price HTML rendering** – Dynamic tariff comparison in costs tab no longer shows raw HTML tags; now correctly displays plain-text delta values.
+- **Dark mode theme switching refreshes all tabs** – Changing the plot theme (day/night/auto) in Settings now immediately refreshes Weather, Forecast, CO₂, Standby, Solar, Sankey, Tenant, Plots, and Costs tabs. Previously only the Live tab was updated.
+- **Weather tab: empty scatter plot on repeated refresh** – Fixed twin-axis accumulation that caused the temperature vs. consumption chart to appear empty after multiple refreshes. Old twin axes are now properly cleaned up.
+- **Weather tab: colorbar removal error** – Protected against matplotlib colorbar removal failures that could break the scatter plot.
+
+### Improved
+- **README.md updated** – Added documentation for dynamic spot prices, 24h price chart, "vs. Dynamic Tariff" comparison, tariff schedule, and theme switching improvements. Version updated to v13.8.3.
+
 ## 13.8.2 - 2026-04-01
 ### Added
 - **Plots tab: "Dyn. Preis" sub-tab** – New sub-tab after CO₂ showing a grouped bar chart comparing fixed tariff costs (blue) vs dynamic spot market costs (orange) for the selected device and time range. Supports hourly/daily/weekly/monthly granularity with custom range controls. Displays total costs, delta, and per-bar annotations. Full dark mode support and all 9 languages.

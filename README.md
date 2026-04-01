@@ -4,7 +4,7 @@ A cross-platform desktop application to analyze, visualize and export energy dat
 
 This repository is **GitHub-ready** (MIT license, clean structure, no secrets). Releases are published via **GitHub Releases** so the built-in updater can find and download new versions.
 
-> **Current version: v12.1.2** — all major feature modules complete.
+> **Current version: v13.8.3** — all major feature modules complete.
 
 ---
 
@@ -53,7 +53,8 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Live cost display (kWh x configured price)
 - Phase balance indicator for 3-phase devices (detects imbalance)
 - Interactive legend toggle on live plots (click L1/L2/L3/N to show/hide)
-- Day / Night / Auto theme switching
+- Day / Night / Auto theme switching — all tabs and charts respect the selected theme; switching theme refreshes all charts immediately
+- **Tariff schedule** — define future price changes with start dates; the app automatically uses the correct price for any date range
 
 ### 💰 Cost Dashboard
 - Dedicated "Costs" tab with today / week / month / year overview
@@ -61,6 +62,18 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Previous month comparison (% change)
 - Per-device breakdown with cost share and bar chart
 - **CO2 tracking with real grid data** — per-device CO2 footprint (Today / Week / Month / Year / Forecast in kg) using real hourly ENTSO-E grid intensity data; falls back to configurable static CO2 intensity (g/kWh) if ENTSO-E is not configured
+- **Dynamic spot price comparison** — shows what each period would cost with a dynamic tariff (EPEX Spot + configurable markup + VAT) alongside your fixed tariff; orange-highlighted delta per card
+- **24h spot market price chart** — rolling bar chart with colour-coded bars (green = cheap, red = expensive) and fixed-price reference line; shown in both desktop and web dashboard
+
+### ⚡ Dynamic Spot Market Prices
+- **Automatic price import** from free public APIs: Energy-Charts (Fraunhofer ISE, 15-min resolution from Oct 2025) and aWATTar (hourly, history from 2015)
+- Background service backfills from oldest measurement timestamp — no manual intervention
+- Configurable markup (default 16 ct/kWh net) covering grid fees, taxes, and supplier margin
+- VAT toggle — apply your configured VAT rate on top of spot price + markup
+- **Plots sub-tab "Dyn. Preis"** — grouped bar chart comparing fixed vs. dynamic tariff costs per hour/day/week/month
+- **Compare tab "vs. Dynamic Tariff"** — one-click toggle to compare your fixed tariff against spot prices for any period
+- Supported bidding zones: DE-LU, AT, CH, BE, DK, ES, FI, FR, NL, NO, PL, SE and more
+- No API key required — both APIs are free and public
 
 ### 💱 Time-of-Use (TOU) Tariffs
 - Define multiple time-based electricity price zones (peak, off-peak, etc.)
@@ -69,8 +82,9 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Seamless integration with cost dashboard and exports
 
 ### 📈 Historical Analysis & Consumption Forecast
-- Plots for W / V / A / kWh / VAR / cos phi / Hz (grid frequency) / CO2 emissions
+- Plots for W / V / A / kWh / VAR / cos phi / Hz (grid frequency) / CO2 emissions / **dynamic prices**
 - CO2 emissions plot tab — hourly energy x real grid CO2 intensity (ENTSO-E), colour-coded bars by intensity level
+- **Dynamic price plot tab** — grouped bar chart comparing fixed tariff cost (blue) vs. spot market cost (orange) per period, with totals and delta display
 - Per-device and per-phase views
 - SQLite-based storage (fast range queries, WAL mode)
 - **Consumption forecasting** — linear regression with weekday/hourly seasonality on historical daily data; trend analysis (rising/falling/stable in %/month); projected costs for next month and next year; confidence bands; weekday and hourly profile charts with color-coded patterns (red = above average, green = below average)
@@ -85,6 +99,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 ### 🔍 Comparison Mode
 - Compare two arbitrary date ranges side-by-side (e.g. this week vs. last week)
 - **Quick-compare buttons** — one click to compare Month, Quarter, Half-Year or Year against the previous period
+- **"vs. Dynamic Tariff" toggle** — compare your fixed tariff costs against spot market prices for any period
 - Overlaid line charts for any metric (kWh, W, cost, ...)
 - Weekly granularity — aggregate daily data into ISO calendar weeks
 - Percentage delta indicators for quick at-a-glance diff
@@ -206,7 +221,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Full single-page app (SPA) accessible from any device on the local network
 - **11 tabs** matching the desktop application:
   - **Live** — real-time device cards with colour-coded power, sparkline charts, collapsible detail rows, NILM appliance chips, freeze button, time-scale selector
-  - **Costs** — per-device cost overview with ENTSO-E CO2 tracking
+  - **Costs** — per-device cost overview with ENTSO-E CO2 tracking, dynamic spot price comparison, and 24h spot market price chart
   - **Heatmap** — interactive yearly calendar heatmap and weekday x hour heatmap; horizontally scrollable on mobile with readable 3-char month labels
   - **Solar** — PV dashboard with feed-in, self-consumption, autarky %, CO2 savings, inline settings
   - **Comparison** — period-over-period comparison with device selectors, grouped bar chart, delta display
@@ -313,8 +328,8 @@ To publish an update:
 git add -A
 git commit -m "Description of changes"
 git push
-git tag v12.1.2
-git push origin v12.1.2
+git tag v13.8.3
+git push origin v13.8.3
 ```
 
 The GitHub Actions workflow will automatically build the release ZIP and publish it.
