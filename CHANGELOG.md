@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.6 - 2026-04-01
+### Improved
+- **Plots tab: single shared control bar** – One dropdown (Alle/Stunden/Tage/Wochen/Monate) + one "Letzte" spinbox above all sub-tabs. Controls apply to whichever metric tab is active. Instant refresh on dropdown change, spinbox increment/decrement, Enter key, focus out, or mouse click away. No per-tab duplicate controls.
+
 ## 13.9.5 - 2026-04-01
 ### Improved
 - **Plots tab: unified controls** – All sub-tabs (kWh, V, A, W, VAR, cos φ, Hz, CO₂, Dyn. Preis) now use the same compact control: one dropdown (Alle/Stunden/Tage/Wochen/Monate) + "Letzte" spinbox. No more duplicate dropdowns or Apply buttons – changes apply immediately on selection.

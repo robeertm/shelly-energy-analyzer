@@ -920,7 +920,7 @@ class PlotsMixin:
             self._plots_device_nb = {}
             self._plots_device_order = {}
 
-            # Shared granularity options for all plot tabs
+            # ── Single shared control bar above the metric notebook ──
             _gran_map = {
                 "all": self.t("plots.mode.all"),
                 "hours": self.t("plots.mode.hours"),
@@ -930,69 +930,75 @@ class PlotsMixin:
             }
             _gran_inv = {v: k for k, v in _gran_map.items()}
 
-            def _make_unified_controls(parent: ttk.Frame, metric_key: str,
-                                        mode_var: tk.StringVar,
-                                        last_n_var: tk.StringVar,
-                                        is_wva: bool = False) -> None:
-                """Build unified controls: dropdown (Alle/Stunden/Tage/Wochen/Monate) + Letzte N spinbox."""
-                row = ttk.Frame(parent)
-                row.pack(fill="x", pady=(8, 6))
-                ttk.Label(row, text=self.t("plots.kwh.granularity")).pack(side="left")
+            ctrl_row = ttk.Frame(frm)
+            ctrl_row.pack(fill="x", padx=12, pady=(0, 6))
+            ttk.Label(ctrl_row, text=self.t("plots.kwh.granularity")).pack(side="left")
 
-                # Determine current selection from mode_var
-                cur_mode = str(mode_var.get() or "all")
-                if ":" in cur_mode:
-                    cur_unit, cur_n = cur_mode.split(":", 1)
-                    try:
-                        last_n_var.set(str(int(cur_n)))
-                    except Exception:
-                        pass
-                else:
-                    cur_unit = cur_mode
+            self._plots_gran_display = tk.StringVar(value=_gran_map.get("days", ""))
+            self._plots_last_n_shared = tk.StringVar(value="7")
+            gran_cb = ttk.Combobox(
+                ctrl_row, state="readonly", width=12,
+                textvariable=self._plots_gran_display, values=list(_gran_map.values()),
+            )
+            gran_cb.pack(side="left", padx=(10, 0))
+            ttk.Label(ctrl_row, text=self.t("plots.kwh.last")).pack(side="left", padx=(16, 4))
+            sp_n = ttk.Spinbox(ctrl_row, from_=1, to=9999, width=5, textvariable=self._plots_last_n_shared)
+            sp_n.pack(side="left")
 
-                gran_display = tk.StringVar(value=_gran_map.get(cur_unit, _gran_map.get("all", "")))
-                gran_cb = ttk.Combobox(
-                    row, state="readonly", width=12,
-                    textvariable=gran_display, values=list(_gran_map.values()),
+            def _apply_shared_controls(_e=None) -> None:
+                """Apply the shared granularity + last-N to the active metric tab."""
+                disp = str(self._plots_gran_display.get() or "").strip()
+                unit = _gran_inv.get(disp, "all")
+                try:
+                    n = int(self._plots_last_n_shared.get() or 7)
+                except Exception:
+                    n = 7
+                n = max(1, min(9999, n))
+
+                # Determine which metric tab is active
+                try:
+                    midx = int(nb.index("current"))
+                except Exception:
+                    midx = 0
+                metric_key = (
+                    self._plots_metric_key_order[midx]
+                    if 0 <= midx < len(self._plots_metric_key_order)
+                    else "kwh"
                 )
-                gran_cb.pack(side="left", padx=(10, 0))
+                is_wva = metric_key in {"V", "A", "W", "VAR", "COSPHI", "HZ"}
 
-                ttk.Label(row, text=self.t("plots.kwh.last")).pack(side="left", padx=(16, 4))
-                sp_n = ttk.Spinbox(row, from_=1, to=9999, width=5, textvariable=last_n_var)
-                sp_n.pack(side="left")
+                if unit == "all":
+                    if is_wva:
+                        self._wva_len.set(9999.0)
+                        self._wva_unit.set("days")
+                    elif metric_key == "kwh":
+                        self._plots_mode.set("all")
+                    elif metric_key == "CO2":
+                        self._plots_co2_mode.set("all")
+                    elif metric_key == "DYNPRICE":
+                        self._plots_dynprice_mode.set("all")
+                else:
+                    if is_wva:
+                        self._wva_len.set(float(n))
+                        self._wva_unit.set(unit)
+                    elif metric_key == "kwh":
+                        self._plots_mode.set(f"{unit}:{n}")
+                    elif metric_key == "CO2":
+                        self._plots_co2_mode.set(f"{unit}:{n}")
+                    elif metric_key == "DYNPRICE":
+                        self._plots_dynprice_mode.set(f"{unit}:{n}")
+                self._redraw_plots_active()
 
-                def _apply(_e=None) -> None:
-                    disp = str(gran_display.get() or "").strip()
-                    unit = _gran_inv.get(disp, "all")
-                    if unit == "all":
-                        if is_wva:
-                            self._wva_len.set(9999.0)
-                            self._wva_unit.set("days")
-                        else:
-                            mode_var.set("all")
-                    else:
-                        try:
-                            n = int(last_n_var.get() or 7)
-                        except Exception:
-                            n = 7
-                        n = max(1, min(9999, n))
-                        if is_wva:
-                            self._wva_len.set(float(n))
-                            self._wva_unit.set(unit)
-                        else:
-                            mode_var.set(f"{unit}:{n}")
-                    self._redraw_plots_metric(metric_key)
-
-                try:
-                    gran_cb.bind("<<ComboboxSelected>>", _apply)
-                except Exception:
-                    pass
-                try:
-                    sp_n.bind("<Return>", _apply)
-                    sp_n.bind("<<Increment>>", _apply)
-                    sp_n.bind("<<Decrement>>", _apply)
-                except Exception:
-                    pass
+            # Bind all relevant events for instant refresh
+            try:
+                gran_cb.bind("<<ComboboxSelected>>", _apply_shared_controls)
+                sp_n.bind("<Return>", _apply_shared_controls)
+                sp_n.bind("<<Increment>>", _apply_shared_controls)
+                sp_n.bind("<<Decrement>>", _apply_shared_controls)
+                sp_n.bind("<FocusOut>", _apply_shared_controls)
+                sp_n.bind("<ButtonRelease-1>", lambda _e: sp_n.after(50, _apply_shared_controls))
+            except Exception:
+                pass
 
             def _make_device_notebook(parent: ttk.Frame, metric_key: str, two_axes: bool = False) -> None:
                 dev_nb = ttk.Notebook(parent)
@@ -1057,60 +1063,46 @@ class PlotsMixin:
             # --- kWh tab ---
             tab_kwh = ttk.Frame(nb)
             nb.add(tab_kwh, text="kWh")
-            _make_unified_controls(tab_kwh, "kwh", self._plots_mode, self._plots_last_n)
             _make_device_notebook(tab_kwh, "kwh")
-
-            # WVA tabs share _wva_len as last-N variable
-            if not hasattr(self, '_wva_last_n_str'):
-                self._wva_last_n_str = tk.StringVar(value=str(int(self._wva_len.get() or 24)))
-            _wva_mode_var = tk.StringVar(value="hours")
 
             # --- V tab ---
             tab_v = ttk.Frame(nb)
             nb.add(tab_v, text="V")
-            _make_unified_controls(tab_v, "V", _wva_mode_var, self._wva_last_n_str, is_wva=True)
             _make_device_notebook(tab_v, "V", two_axes=True)
 
             # --- A tab ---
             tab_a = ttk.Frame(nb)
             nb.add(tab_a, text="A")
-            _make_unified_controls(tab_a, "A", _wva_mode_var, self._wva_last_n_str, is_wva=True)
             _make_device_notebook(tab_a, "A", two_axes=True)
 
             # --- W tab ---
             tab_w = ttk.Frame(nb)
             nb.add(tab_w, text="W")
-            _make_unified_controls(tab_w, "W", _wva_mode_var, self._wva_last_n_str, is_wva=True)
             _make_device_notebook(tab_w, "W", two_axes=False)
 
             # --- VAR tab ---
             tab_var = ttk.Frame(nb)
             nb.add(tab_var, text="VAR")
-            _make_unified_controls(tab_var, "VAR", _wva_mode_var, self._wva_last_n_str, is_wva=True)
             _make_device_notebook(tab_var, "VAR", two_axes=True)
 
             # --- cos φ tab ---
             tab_pf = ttk.Frame(nb)
             nb.add(tab_pf, text="cos φ")
-            _make_unified_controls(tab_pf, "COSPHI", _wva_mode_var, self._wva_last_n_str, is_wva=True)
             _make_device_notebook(tab_pf, "COSPHI", two_axes=True)
 
             # --- Hz tab (grid frequency) ---
             tab_hz = ttk.Frame(nb)
             nb.add(tab_hz, text="Hz")
-            _make_unified_controls(tab_hz, "HZ", _wva_mode_var, self._wva_last_n_str, is_wva=True)
             _make_device_notebook(tab_hz, "HZ", two_axes=False)
 
             # --- CO₂ tab ---
             tab_co2 = ttk.Frame(nb)
             nb.add(tab_co2, text="CO₂")
-            _make_unified_controls(tab_co2, "CO2", self._plots_co2_mode, self._plots_co2_last_n)
             _make_device_notebook(tab_co2, "CO2")
 
             # --- Dyn. Preis tab ---
             tab_dynprice = ttk.Frame(nb)
             nb.add(tab_dynprice, text=self.t("plots.dynprice.tab"))
-            _make_unified_controls(tab_dynprice, "DYNPRICE", self._plots_dynprice_mode, self._plots_dynprice_last_n)
             _make_device_notebook(tab_dynprice, "DYNPRICE")
 
             # Redraw when switching metric tabs
