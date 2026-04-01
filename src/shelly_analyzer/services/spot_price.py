@@ -183,33 +183,51 @@ class SpotPriceFetchService:
     def _tick(self) -> None:
         try:
             cfg = self._get_config()
-        except Exception:
+        except Exception as e:
+            self._svc_log(f"Spot: config error: {e}")
             return
 
         spot_cfg = getattr(cfg, "spot_price", None)
         if spot_cfg is None or not getattr(spot_cfg, "enabled", False):
+            self._svc_log("Spot: disabled in config, skipping")
             return
 
         zone = getattr(spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
         primary_api = getattr(spot_cfg, "primary_api", "energy_charts") or "energy_charts"
+
+        self._svc_log(f"Spot: checking for missing prices (zone={zone}, api={primary_api})")
 
         now_ts = int(time.time())
 
         # Find oldest energy measurement to know how far back to fetch
         oldest_measurement = self._db.oldest_measurement_ts()
         if oldest_measurement is None:
+            self._svc_log("Spot: no measurements found, fetching last 2 days")
             oldest_measurement = now_ts - 2 * 86400
+        else:
+            d_oldest = datetime.fromtimestamp(oldest_measurement, tz=timezone.utc).strftime("%Y-%m-%d")
+            self._svc_log(f"Spot: oldest measurement: {d_oldest}")
 
         # Range: oldest measurement to now + 24h (day-ahead prices)
         range_start = (oldest_measurement // 3600) * 3600
         range_end = ((now_ts // 3600) + 25) * 3600
 
         if range_start >= range_end:
+            self._svc_log("Spot: range_start >= range_end, nothing to do")
             return
+
+        # Check existing data
+        latest_ts = self._db.latest_spot_price_ts(zone)
+        if latest_ts:
+            d_latest = datetime.fromtimestamp(latest_ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+            self._svc_log(f"Spot: latest price in DB: {d_latest}")
+        else:
+            self._svc_log("Spot: no prices in DB yet")
 
         # Find gaps
         gaps = self._db.find_spot_price_gaps(zone, range_start, range_end)
         if not gaps:
+            self._svc_log("Spot: no gaps found, all prices up to date")
             return
 
         # Merge nearby gaps into fetch ranges (day-aligned)
@@ -242,6 +260,10 @@ class SpotPriceFetchService:
             while chunk_start < fr_end and not self._stop_event.is_set():
                 chunk_end = min(chunk_start + _MAX_CHUNK, fr_end)
 
+                d_cs = datetime.fromtimestamp(chunk_start, tz=timezone.utc).strftime("%Y-%m-%d")
+                d_ce = datetime.fromtimestamp(chunk_end, tz=timezone.utc).strftime("%Y-%m-%d")
+                self._svc_log(f"Spot: fetching {d_cs} \u2192 {d_ce} via {primary_api}...")
+
                 rows = self._fetch_chunk(primary_api, zone, chunk_start, chunk_end)
                 if rows:
                     db_rows = [
@@ -250,13 +272,18 @@ class SpotPriceFetchService:
                     ]
                     written = self._db.upsert_spot_prices(db_rows)
                     total_written += written
+                    self._svc_log(f"Spot: {written} prices written to DB ({d_cs}\u2192{d_ce})")
+                else:
+                    self._svc_log(f"Spot: no data returned for {d_cs}\u2192{d_ce}")
 
                 chunk_start = chunk_end
                 if chunk_start < fr_end:
                     time.sleep(_REQUEST_DELAY)
 
         if total_written > 0:
-            self._svc_log(f"Spot Import: {total_written} prices stored")
+            self._svc_log(f"Spot Import complete: {total_written} prices stored in total")
+        else:
+            self._svc_log("Spot Import: no prices could be fetched")
         self._last_error = None
 
     def _fetch_chunk(
@@ -269,14 +296,21 @@ class SpotPriceFetchService:
                 raw = fetch_energy_charts(zone, start_ts, end_ts)
                 if raw:
                     return [(ts, p, r, "energy_charts") for ts, p, r in raw]
+                else:
+                    self._svc_log(f"Spot: energy_charts returned empty for zone={zone}")
             else:
                 raw = fetch_awattar(start_ts, end_ts)
                 if raw:
                     return [(ts, p, r, "awattar") for ts, p, r in raw]
+                else:
+                    self._svc_log("Spot: awattar returned empty")
         except Exception as e:
+            self._svc_log(f"Spot: primary API ({primary_api}) error: {e}")
             logger.warning("SpotPrice primary API (%s) failed: %s", primary_api, e)
 
         # Fallback to other API
+        fallback = "awattar" if primary_api == "energy_charts" else "energy_charts"
+        self._svc_log(f"Spot: trying fallback API ({fallback})...")
         time.sleep(_REQUEST_DELAY)
         try:
             if primary_api == "energy_charts":
@@ -287,7 +321,10 @@ class SpotPriceFetchService:
                 source = "energy_charts"
             if raw:
                 return [(ts, p, r, source) for ts, p, r in raw]
+            else:
+                self._svc_log(f"Spot: fallback API ({fallback}) also returned empty")
         except Exception as e:
+            self._svc_log(f"Spot: fallback API ({fallback}) error: {e}")
             logger.warning("SpotPrice fallback API failed: %s", e)
             self._last_error = str(e)
 
