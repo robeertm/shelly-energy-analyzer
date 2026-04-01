@@ -132,6 +132,15 @@ class CompareMixin:
         self._cmp_gran_cb.pack(side="left", padx=(0, 16))
         self._cmp_gran_cb.bind("<<ComboboxSelected>>", lambda _e: self.after(50, self._refresh_compare))
 
+        # ── Spot compare toggle ───────────────────────────────────────────────
+        self._cmp_spot_var = tk.BooleanVar(value=False)
+        spot_chk = ttk.Checkbutton(
+            opts, text=self.t("compare.vs_dynamic"),
+            variable=self._cmp_spot_var,
+            command=lambda: self.after(50, self._refresh_compare),
+        )
+        spot_chk.pack(side="left", padx=(16, 0))
+
         # ── Quick-compare buttons ─────────────────────────────────────────────
         quick_frm = ttk.Frame(frm)
         quick_frm.pack(fill="x", padx=14, pady=(0, 4))
@@ -248,6 +257,46 @@ class CompareMixin:
 
         except Exception as e:
             logger.warning("_cmp_load_daily error for '%s': %s", device_key, e, exc_info=True)
+            return {}
+
+    def _cmp_load_daily_spot(
+        self,
+        device_key: str,
+        from_date: date,
+        to_date: date,
+    ) -> Dict[str, float]:
+        """Load daily spot-price costs for a device between two dates.
+
+        Returns ``{"%Y-%m-%d": cost_eur}`` for each day.
+        """
+        try:
+            spot_cfg = getattr(self.cfg, "spot_price", None)
+            if not spot_cfg or not getattr(spot_cfg, "enabled", False):
+                return {}
+
+            zone = getattr(spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
+            markup = float(getattr(spot_cfg, "markup_ct_per_kwh", 16.0)) / 100.0
+            pricing = getattr(self.cfg, "pricing", None)
+            if getattr(spot_cfg, "include_vat", True) and pricing:
+                vat_rate = pricing.vat_rate()
+            else:
+                vat_rate = 0.0
+
+            db = self.storage.db
+            out: Dict[str, float] = {}
+            d = from_date
+            while d <= to_date:
+                start_ts = int(datetime(d.year, d.month, d.day).timestamp())
+                end_ts = start_ts + 86400
+                cost, kwh, avg = db.calc_spot_cost(
+                    device_key, zone, start_ts, end_ts, markup, vat_rate
+                )
+                if cost > 0:
+                    out[d.strftime("%Y-%m-%d")] = cost
+                d += timedelta(days=1)
+            return out
+        except Exception as e:
+            logger.warning("_cmp_load_daily_spot error: %s", e, exc_info=True)
             return {}
 
     # ── Aggregation helpers ───────────────────────────────────────────────────
@@ -398,8 +447,18 @@ class CompareMixin:
             gran_idx = self._cmp_gran_cb.current()
             gran = self._cmp_gran_keys[gran_idx] if 0 <= gran_idx < len(self._cmp_gran_keys) else "daily"
 
-            daily_a = self._cmp_load_daily(key_a, from_a, to_a, use_eur, price_kwh)
-            daily_b = self._cmp_load_daily(key_b, from_b, to_b, use_eur, price_kwh)
+            # Spot comparison mode: Period A = fixed tariff, Period B = dynamic tariff (same dates)
+            _spot_mode = getattr(self, "_cmp_spot_var", None) and self._cmp_spot_var.get() and use_eur
+
+            if _spot_mode:
+                daily_a = self._cmp_load_daily(key_a, from_a, to_a, True, price_kwh)
+                daily_b = self._cmp_load_daily_spot(key_a, from_a, to_a)
+                # Override Period B dates to match Period A
+                from_b, to_b = from_a, to_a
+                key_b = key_a
+            else:
+                daily_a = self._cmp_load_daily(key_a, from_a, to_a, use_eur, price_kwh)
+                daily_b = self._cmp_load_daily(key_b, from_b, to_b, use_eur, price_kwh)
 
             # If both periods returned no data, show a clear message rather than
             # rendering an empty chart with invisible zero-height bars.
@@ -412,18 +471,22 @@ class CompareMixin:
             total_b = sum(daily_b.values())
 
             # Delta summary
+            _lbl_a = self.t("costs.tou.flat_rate") if _spot_mode else "A"
+            _lbl_b = self.t("spot.cost_label") if _spot_mode else "B"
+            if _spot_mode:
+                unit_label = "€"
             if total_b > 0:
                 pct = (total_a - total_b) / total_b * 100.0
                 sign = "+" if pct >= 0 else ""
                 delta_str = (
-                    f"A: {total_a:.2f} {unit_label}  |  "
-                    f"B: {total_b:.2f} {unit_label}  |  "
+                    f"{_lbl_a}: {total_a:.2f} {unit_label}  |  "
+                    f"{_lbl_b}: {total_b:.2f} {unit_label}  |  "
                     f"Δ: {total_a - total_b:+.2f} {unit_label} ({sign}{pct:.1f}%)"
                 )
             else:
                 delta_str = (
-                    f"A: {total_a:.2f} {unit_label}  |  "
-                    f"B: {total_b:.2f} {unit_label}  |  "
+                    f"{_lbl_a}: {total_a:.2f} {unit_label}  |  "
+                    f"{_lbl_b}: {total_b:.2f} {unit_label}  |  "
                     f"Δ: {total_a - total_b:+.2f} {unit_label}"
                 )
             self._cmp_delta_var.set(delta_str)

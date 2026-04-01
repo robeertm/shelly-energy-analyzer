@@ -4281,11 +4281,13 @@ class CoreMixin:
                     v_eur = tk.StringVar(value="– €")
                     v_co2 = tk.StringVar(value="")
                     v_tou = tk.StringVar(value="")
+                    v_spot = tk.StringVar(value="")
                     ttk.Label(card, textvariable=v_kwh, font=("", 10)).pack(anchor="w", padx=6, pady=(4, 0))
                     ttk.Label(card, textvariable=v_eur, font=("", 12, "bold")).pack(anchor="w", padx=6, pady=(1, 0))
                     ttk.Label(card, textvariable=v_co2, font=("", 9), foreground="#4caf50").pack(anchor="w", padx=6, pady=(0, 1))
-                    ttk.Label(card, textvariable=v_tou, font=("", 8), foreground="#888888").pack(anchor="w", padx=6, pady=(0, 4))
-                    agg_vars[key] = {"kwh": v_kwh, "eur": v_eur, "co2": v_co2, "tou": v_tou}
+                    ttk.Label(card, textvariable=v_tou, font=("", 8), foreground="#888888").pack(anchor="w", padx=6, pady=(0, 1))
+                    ttk.Label(card, textvariable=v_spot, font=("", 8), foreground="#ff9800").pack(anchor="w", padx=6, pady=(0, 4))
+                    agg_vars[key] = {"kwh": v_kwh, "eur": v_eur, "co2": v_co2, "tou": v_tou, "spot": v_spot}
                 # Projection + comparison row
                 row2_agg = ttk.Frame(agg_frame)
                 row2_agg.pack(fill="x", padx=8, pady=(0, 6))
@@ -4334,11 +4336,13 @@ class CoreMixin:
                         v_eur = tk.StringVar(value="– €")
                         v_co2 = tk.StringVar(value="")
                         v_tou = tk.StringVar(value="")
+                        v_spot = tk.StringVar(value="")
                         ttk.Label(card, textvariable=v_kwh, font=("", 10)).pack(anchor="w", padx=6, pady=(4, 0))
                         ttk.Label(card, textvariable=v_eur, font=("", 12, "bold")).pack(anchor="w", padx=6, pady=(1, 0))
                         ttk.Label(card, textvariable=v_co2, font=("", 9), foreground="#4caf50").pack(anchor="w", padx=6, pady=(0, 1))
-                        ttk.Label(card, textvariable=v_tou, font=("", 8), foreground="#888888").pack(anchor="w", padx=6, pady=(0, 4))
-                        vars_dev[key] = {"kwh": v_kwh, "eur": v_eur, "co2": v_co2, "tou": v_tou}
+                        ttk.Label(card, textvariable=v_tou, font=("", 8), foreground="#888888").pack(anchor="w", padx=6, pady=(0, 1))
+                        ttk.Label(card, textvariable=v_spot, font=("", 8), foreground="#ff9800").pack(anchor="w", padx=6, pady=(0, 4))
+                        vars_dev[key] = {"kwh": v_kwh, "eur": v_eur, "co2": v_co2, "tou": v_tou, "spot": v_spot}
 
                     # Row 2: Projection + Previous month comparison
                     row2 = ttk.Frame(dev_frame)
@@ -4418,6 +4422,8 @@ class CoreMixin:
                     "last_month": (last_month_start, month_start),
                 }
 
+                _spot_enabled = getattr(getattr(self.cfg, "spot_price", None), "enabled", False)
+
                 for d in list(getattr(self.cfg, "devices", []) or []):
                     if d.key not in getattr(self, "_cost_device_vars", {}):
                         continue
@@ -4472,6 +4478,22 @@ class CoreMixin:
                                 vars_dev[key]["tou"].set("  |  ".join(parts))
                             else:
                                 vars_dev[key]["tou"].set("")
+                            # Spot price comparison
+                            if _spot_enabled and "spot" in vars_dev[key]:
+                                spot_cost, spot_avg, spot_src = self._calc_spot_cost_for_range(
+                                    int(rng_s.timestamp()), int(rng_e.timestamp()),
+                                    device_key=d.key, kwh_fallback=kwh
+                                )
+                                if spot_cost > 0:
+                                    delta = spot_cost - cost
+                                    arrow = "\u2191" if delta > 0 else "\u2193"
+                                    vars_dev[key]["spot"].set(
+                                        f"\u26a1 {self.t('spot.cost_label')}: {spot_cost:.2f} \u20ac ({arrow} {abs(delta):.2f} \u20ac)"
+                                    )
+                                else:
+                                    vars_dev[key]["spot"].set("")
+                            elif "spot" in vars_dev.get(key, {}):
+                                vars_dev[key]["spot"].set("")
 
                     # Projection
                     try:
@@ -4574,6 +4596,25 @@ class CoreMixin:
                                 ))
                             else:
                                 agg_vars[key]["tou"].set("")
+                            # Spot price comparison (aggregate)
+                            if _spot_enabled and "spot" in agg_vars.get(key, {}):
+                                agg_spot = 0.0
+                                for _ad in agg_devices:
+                                    _sc, _, _ = self._calc_spot_cost_for_range(
+                                        int(rng_s.timestamp()), int(rng_e.timestamp()),
+                                        device_key=_ad.key
+                                    )
+                                    agg_spot += _sc
+                                if agg_spot > 0:
+                                    _sdelta = agg_spot - cost
+                                    _sarrow = "\u2191" if _sdelta > 0 else "\u2193"
+                                    agg_vars[key]["spot"].set(
+                                        f"\u26a1 {self.t('spot.cost_label')}: {agg_spot:.2f} \u20ac ({_sarrow} {abs(_sdelta):.2f} \u20ac)"
+                                    )
+                                else:
+                                    agg_vars[key]["spot"].set("")
+                            elif "spot" in agg_vars.get(key, {}):
+                                agg_vars[key]["spot"].set("")
 
                     try:
                         import calendar
@@ -6532,6 +6573,61 @@ class CoreMixin:
                 command=_co2_test_connection,
             ).grid(row=6, column=2, columnspan=2, padx=8, pady=(4, 8), sticky="w")
 
+            # ── Spot price settings ───────────────────────────────────────────
+            _spot_cfg = getattr(self.cfg, "spot_price", None)
+            spot_box = ttk.LabelFrame(tab_main_sf, text=self.t("spot.settings.title"))
+            spot_box.pack(fill="x", pady=(0, 10))
+
+            self._spot_enabled_var = tk.BooleanVar(value=bool(getattr(_spot_cfg, "enabled", False)))
+            ttk.Checkbutton(
+                spot_box,
+                text=self.t("spot.settings.enabled"),
+                variable=self._spot_enabled_var,
+            ).grid(row=0, column=0, columnspan=4, padx=8, pady=(6, 2), sticky="w")
+
+            ttk.Label(spot_box, text=self.t("spot.settings.api")).grid(row=1, column=0, padx=8, pady=4, sticky="w")
+            self._spot_api_var = tk.StringVar(value=str(getattr(_spot_cfg, "primary_api", "energy_charts") or "energy_charts"))
+            ttk.Combobox(
+                spot_box,
+                textvariable=self._spot_api_var,
+                values=["energy_charts", "awattar"],
+                width=16,
+                state="readonly",
+            ).grid(row=1, column=1, padx=8, pady=4, sticky="w")
+
+            ttk.Label(spot_box, text=self.t("spot.settings.zone")).grid(row=2, column=0, padx=8, pady=4, sticky="w")
+            self._spot_zone_var = tk.StringVar(value=str(getattr(_spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"))
+            ttk.Combobox(
+                spot_box,
+                textvariable=self._spot_zone_var,
+                values=["DE-LU", "AT", "CH", "BE", "DK-1", "DK-2", "ES", "FI", "FR", "NL", "NO-1", "NO-2", "PL", "SE-1", "SE-2", "SE-3", "SE-4"],
+                width=12,
+                state="readonly",
+            ).grid(row=2, column=1, padx=8, pady=4, sticky="w")
+
+            ttk.Label(spot_box, text=self.t("spot.settings.markup")).grid(row=3, column=0, padx=8, pady=4, sticky="w")
+            self._spot_markup_var = tk.DoubleVar(value=float(getattr(_spot_cfg, "markup_ct_per_kwh", 16.0)))
+            ttk.Entry(spot_box, textvariable=self._spot_markup_var, width=8).grid(row=3, column=1, padx=8, pady=4, sticky="w")
+            ttk.Label(spot_box, text=self.t("spot.settings.markup.hint"), foreground="#888888", font=("", 8)).grid(row=3, column=2, columnspan=2, padx=8, pady=4, sticky="w")
+
+            self._spot_vat_var = tk.BooleanVar(value=bool(getattr(_spot_cfg, "include_vat", True)))
+            ttk.Checkbutton(
+                spot_box,
+                text=self.t("spot.settings.include_vat"),
+                variable=self._spot_vat_var,
+            ).grid(row=4, column=0, columnspan=2, padx=8, pady=(2, 2), sticky="w")
+
+            self._spot_comparison_var = tk.BooleanVar(value=bool(getattr(_spot_cfg, "show_as_comparison", True)))
+            ttk.Checkbutton(
+                spot_box,
+                text=self.t("spot.settings.show_comparison"),
+                variable=self._spot_comparison_var,
+            ).grid(row=5, column=0, columnspan=2, padx=8, pady=(2, 2), sticky="w")
+
+            ttk.Label(spot_box, text=self.t("spot.settings.interval")).grid(row=6, column=0, padx=8, pady=(4, 8), sticky="w")
+            self._spot_interval_var = tk.IntVar(value=int(getattr(_spot_cfg, "fetch_interval_hours", 1)))
+            ttk.Entry(spot_box, textvariable=self._spot_interval_var, width=6).grid(row=6, column=1, padx=8, pady=(4, 8), sticky="w")
+
             # ── Solar amortization settings ────────────────────────────────────
             ttk.Label(solar_box, text=self.t('settings.solar.investment')).grid(row=6, column=0, padx=8, pady=4, sticky="w")
             self._solar_invest_var = tk.StringVar(value=str(getattr(_solar_cfg, "investment_eur", 0.0)))
@@ -7801,6 +7897,21 @@ class CoreMixin:
             except Exception:
                 co2 = getattr(self.cfg, "co2", Co2Config())
 
+            # Spot price config
+            try:
+                from shelly_analyzer.io.config import SpotPriceConfig
+                spot_price = SpotPriceConfig(
+                    enabled=bool(getattr(self, "_spot_enabled_var", tk.BooleanVar(value=False)).get()),
+                    primary_api=str(getattr(self, "_spot_api_var", tk.StringVar(value="energy_charts")).get() or "energy_charts"),
+                    bidding_zone=str(getattr(self, "_spot_zone_var", tk.StringVar(value="DE-LU")).get() or "DE-LU"),
+                    fetch_interval_hours=int(getattr(self, "_spot_interval_var", tk.IntVar(value=1)).get() or 1),
+                    markup_ct_per_kwh=float(getattr(self, "_spot_markup_var", tk.DoubleVar(value=16.0)).get() or 16.0),
+                    include_vat=bool(getattr(self, "_spot_vat_var", tk.BooleanVar(value=True)).get()),
+                    show_as_comparison=bool(getattr(self, "_spot_comparison_var", tk.BooleanVar(value=True)).get()),
+                )
+            except Exception:
+                spot_price = getattr(self.cfg, "spot_price", SpotPriceConfig())
+
             # Forecast config
             try:
                 from shelly_analyzer.io.config import ForecastConfig
@@ -7900,6 +8011,7 @@ class CoreMixin:
                 tou=tou,
                 anomaly=getattr(self.cfg, "anomaly", None) or AnomalyConfig(),
                 co2=co2,
+                spot_price=spot_price,
                 forecast=forecast,
                 weather=weather,
                 mqtt=mqtt_cfg,
@@ -11666,6 +11778,36 @@ class CoreMixin:
             if static_g > 0 and kwh_fallback > 0:
                 return kwh_fallback * static_g / 1000.0, static_g, "static"
             return 0.0, static_g, "none"
+
+    def _calc_spot_cost_for_range(self, start_ts: int, end_ts: int,
+                                      device_key: str = "", kwh_fallback: float = 0.0) -> tuple:
+            """Calculate what the given energy would cost at spot market prices.
+
+            Returns (spot_cost_eur, avg_price_ct_per_kwh, source) where source
+            is "spot" if real data was used, or "none" if unavailable.
+            """
+            spot_cfg = getattr(self.cfg, "spot_price", None)
+            if not spot_cfg or not getattr(spot_cfg, "enabled", False):
+                return 0.0, 0.0, "none"
+
+            zone = getattr(spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
+            markup = float(getattr(spot_cfg, "markup_ct_per_kwh", 16.0)) / 100.0
+            pricing = getattr(self.cfg, "pricing", None)
+            if getattr(spot_cfg, "include_vat", True) and pricing:
+                vat_rate = pricing.vat_rate()
+            else:
+                vat_rate = 0.0
+
+            try:
+                db = self.storage.db
+                cost, kwh, avg_ct = db.calc_spot_cost(
+                    device_key, zone, start_ts, end_ts, markup, vat_rate
+                )
+                if cost > 0:
+                    return cost, avg_ct, "spot"
+            except Exception:
+                pass
+            return 0.0, 0.0, "none"
 
     def _calc_co2_hourly_series(self, start_ts: int, end_ts: int) -> "pd.DataFrame":
             """Return a DataFrame with columns [hour_ts, co2_g, intensity_g_per_kwh, kwh]

@@ -4825,6 +4825,134 @@ _I18N.setdefault("ru", {}).update({
     "compare.quick.year": "Текущий vs. прошлый год",
 })
 
+# -------- Dynamic spot prices (v13.8.0) --------
+
+_I18N.setdefault("de", {}).update({
+    "spot.settings.title": "\u26a1 Dynamische Strompreise",
+    "spot.settings.enabled": "Dynamische Preise aktivieren",
+    "spot.settings.api": "Datenquelle",
+    "spot.settings.zone": "Preiszone",
+    "spot.settings.markup": "Aufschlag (ct/kWh, netto)",
+    "spot.settings.markup.hint": "Netzentgelte, Abgaben, Marge",
+    "spot.settings.include_vat": "MwSt. aufschlagen",
+    "spot.settings.show_comparison": "Als Vergleich anzeigen",
+    "spot.settings.interval": "Aktualisierung (Stunden)",
+    "spot.cost_label": "Dyn. Tarif",
+    "compare.vs_dynamic": "\u26a1 vs. Dynamischer Tarif",
+})
+
+_I18N.setdefault("en", {}).update({
+    "spot.settings.title": "\u26a1 Dynamic Electricity Prices",
+    "spot.settings.enabled": "Enable dynamic prices",
+    "spot.settings.api": "Data source",
+    "spot.settings.zone": "Price zone",
+    "spot.settings.markup": "Surcharge (ct/kWh, net)",
+    "spot.settings.markup.hint": "Grid fees, levies, margin",
+    "spot.settings.include_vat": "Apply VAT",
+    "spot.settings.show_comparison": "Show as comparison",
+    "spot.settings.interval": "Refresh interval (hours)",
+    "spot.cost_label": "Dyn. tariff",
+    "compare.vs_dynamic": "\u26a1 vs. Dynamic Tariff",
+})
+
+_I18N.setdefault("es", {}).update({
+    "spot.settings.title": "\u26a1 Precios dinámicos de electricidad",
+    "spot.settings.enabled": "Activar precios dinámicos",
+    "spot.settings.api": "Fuente de datos",
+    "spot.settings.zone": "Zona de precios",
+    "spot.settings.markup": "Recargo (ct/kWh, neto)",
+    "spot.settings.markup.hint": "Tarifas de red, impuestos, margen",
+    "spot.settings.include_vat": "Aplicar IVA",
+    "spot.settings.show_comparison": "Mostrar como comparación",
+    "spot.settings.interval": "Intervalo de actualización (horas)",
+    "spot.cost_label": "Tarifa dyn.",
+    "compare.vs_dynamic": "\u26a1 vs. Tarifa dinámica",
+})
+
+_I18N.setdefault("fr", {}).update({
+    "spot.settings.title": "\u26a1 Prix dynamiques de l'électricité",
+    "spot.settings.enabled": "Activer les prix dynamiques",
+    "spot.settings.api": "Source de données",
+    "spot.settings.zone": "Zone de prix",
+    "spot.settings.markup": "Supplément (ct/kWh, net)",
+    "spot.settings.markup.hint": "Frais de réseau, taxes, marge",
+    "spot.settings.include_vat": "Appliquer la TVA",
+    "spot.settings.show_comparison": "Afficher comme comparaison",
+    "spot.settings.interval": "Intervalle de mise à jour (heures)",
+    "spot.cost_label": "Tarif dyn.",
+    "compare.vs_dynamic": "\u26a1 vs. Tarif dynamique",
+})
+
+_I18N.setdefault("pt", {}).update({
+    "spot.settings.title": "\u26a1 Preços dinâmicos de eletricidade",
+    "spot.settings.enabled": "Ativar preços dinâmicos",
+    "spot.settings.api": "Fonte de dados",
+    "spot.settings.zone": "Zona de preços",
+    "spot.settings.markup": "Sobretaxa (ct/kWh, líquido)",
+    "spot.settings.markup.hint": "Tarifas de rede, impostos, margem",
+    "spot.settings.include_vat": "Aplicar IVA",
+    "spot.settings.show_comparison": "Mostrar como comparação",
+    "spot.settings.interval": "Intervalo de atualização (horas)",
+    "spot.cost_label": "Tarifa din.",
+    "compare.vs_dynamic": "\u26a1 vs. Tarifa dinâmica",
+})
+
+_I18N.setdefault("it", {}).update({
+    "spot.settings.title": "\u26a1 Prezzi dinamici dell'elettricità",
+    "spot.settings.enabled": "Attiva prezzi dinamici",
+    "spot.settings.api": "Fonte dati",
+    "spot.settings.zone": "Zona prezzi",
+    "spot.settings.markup": "Sovrapprezzo (ct/kWh, netto)",
+    "spot.settings.markup.hint": "Oneri di rete, imposte, margine",
+    "spot.settings.include_vat": "Applica IVA",
+    "spot.settings.show_comparison": "Mostra come confronto",
+    "spot.settings.interval": "Intervallo aggiornamento (ore)",
+    "spot.cost_label": "Tariffa din.",
+    "compare.vs_dynamic": "\u26a1 vs. Tariffa dinamica",
+})
+
+_I18N.setdefault("pl", {}).update({
+    "spot.settings.title": "\u26a1 Dynamiczne ceny energii",
+    "spot.settings.enabled": "Włącz ceny dynamiczne",
+    "spot.settings.api": "Źródło danych",
+    "spot.settings.zone": "Strefa cenowa",
+    "spot.settings.markup": "Narzut (ct/kWh, netto)",
+    "spot.settings.markup.hint": "Opłaty sieciowe, podatki, marża",
+    "spot.settings.include_vat": "Dolicz VAT",
+    "spot.settings.show_comparison": "Pokaż jako porównanie",
+    "spot.settings.interval": "Interwał aktualizacji (godziny)",
+    "spot.cost_label": "Taryfa dyn.",
+    "compare.vs_dynamic": "\u26a1 vs. Taryfa dynamiczna",
+})
+
+_I18N.setdefault("cs", {}).update({
+    "spot.settings.title": "\u26a1 Dynamické ceny elektřiny",
+    "spot.settings.enabled": "Povolit dynamické ceny",
+    "spot.settings.api": "Zdroj dat",
+    "spot.settings.zone": "Cenová zóna",
+    "spot.settings.markup": "Příplatek (ct/kWh, bez DPH)",
+    "spot.settings.markup.hint": "Síťové poplatky, daně, marže",
+    "spot.settings.include_vat": "Připočítat DPH",
+    "spot.settings.show_comparison": "Zobrazit jako srovnání",
+    "spot.settings.interval": "Interval aktualizace (hodiny)",
+    "spot.cost_label": "Dyn. tarif",
+    "compare.vs_dynamic": "\u26a1 vs. Dynamický tarif",
+})
+
+_I18N.setdefault("ru", {}).update({
+    "spot.settings.title": "\u26a1 Динамические цены на электроэнергию",
+    "spot.settings.enabled": "Включить динамические цены",
+    "spot.settings.api": "Источник данных",
+    "spot.settings.zone": "Ценовая зона",
+    "spot.settings.markup": "Наценка (ct/кВтч, нетто)",
+    "spot.settings.markup.hint": "Сетевые сборы, налоги, маржа",
+    "spot.settings.include_vat": "Применить НДС",
+    "spot.settings.show_comparison": "Показать для сравнения",
+    "spot.settings.interval": "Интервал обновления (часы)",
+    "spot.cost_label": "Дин. тариф",
+    "compare.vs_dynamic": "\u26a1 vs. Динамический тариф",
+})
+
 # -------- Anomaly detection (v7.8.0) --------
 
 _I18N.setdefault("de", {}).update({

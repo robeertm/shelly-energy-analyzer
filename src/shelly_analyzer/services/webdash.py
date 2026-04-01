@@ -2044,6 +2044,7 @@ function renderCosts(data, el) {{
     return;
   }}
   const co2Active = data.co2_g_per_kwh > 0;
+  const spotActive = !!data.spot_enabled;
   let html = '';
   if (data.summary) {{
     const s = data.summary;
@@ -2054,6 +2055,14 @@ function renderCosts(data, el) {{
       metricCardHtml(t('web.costs.month', 'Month'), fmt(s.month_eur,2,'\u20ac'), fmt(s.month_kwh,3,'kWh')) +
       metricCardHtml(t('web.costs.year', 'Year'), fmt(s.year_eur,2,'\u20ac'), fmt(s.year_kwh,3,'kWh')) +
       '</div></div>';
+  }}
+  function spotLine(key, d) {{
+    var v = d[key + '_spot_eur'];
+    var f = d[key + '_eur'];
+    if (!spotActive || v == null || v <= 0) return '';
+    var diff = v - f;
+    var arrow = diff > 0 ? '\u2191' : '\u2193';
+    return '<div style="font-size:10px;color:#ff9800;margin-top:2px">\u26a1 ' + t('spot.cost_label', 'Dyn.') + ': ' + v.toFixed(2) + ' \u20ac (' + arrow + ' ' + Math.abs(diff).toFixed(2) + ' \u20ac)</div>';
   }}
   html += '<div class="card-grid">';
   data.devices.forEach(function(d) {{
@@ -2067,6 +2076,16 @@ function renderCosts(data, el) {{
           metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_co2_kg,2,'kg'), '') +
           '</div></div>'
       : '';
+    const spotRow = spotActive
+      ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">' +
+          '<div style="font-size:11px;color:#ff9800;margin-bottom:4px">\u26a1 ' + t('spot.cost_label', 'Dyn. Tarif') + '</div>' +
+          '<div class="metric-grid">' +
+          metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_spot_eur,2,'\u20ac'), spotLine('today',d)) +
+          metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_spot_eur,2,'\u20ac'), spotLine('week',d)) +
+          metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_spot_eur,2,'\u20ac'), spotLine('month',d)) +
+          metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_spot_eur||0,2,'\u20ac'), '') +
+          '</div></div>'
+      : '';
     html += '<div class="card">' +
       '<div class="card-title">' + esc(d.name || d.key) + '</div>' +
       '<div class="metric-grid">' +
@@ -2076,6 +2095,7 @@ function renderCosts(data, el) {{
       metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_eur,2,'\u20ac'), fmt(d.proj_kwh,1,'kWh')) +
       '</div>' +
       co2Row +
+      spotRow +
       '</div>';
   }});
   html += '</div>';
@@ -3092,6 +3112,8 @@ function initCompare() {{
   presets.forEach(function(p) {{
     qhtml += '<button class="btn btn-outline btn-sm" onclick="loadComparePreset(\\'' + p[0] + '\\')">' + p[1] + '</button>';
   }});
+  qhtml += '<label style="display:inline-flex;align-items:center;gap:4px;margin-left:12px;font-size:12px;cursor:pointer">' +
+    '<input type="checkbox" id="cmp-spot" onchange="loadCompare()"> \u26a1 ' + t('compare.vs_dynamic', 'vs. Dynamic Tariff') + '</label>';
   qhtml += '</div>';
   quick.innerHTML = qhtml;
 }}
@@ -3105,11 +3127,13 @@ async function loadComparePreset(preset) {{
       : preset === 'quarter' ? 'weekly'
       : (preset === 'halfyear' || preset === 'year') ? 'monthly'
       : ((document.getElementById('cmp-gran')||{{}}).value||'total');
+    const spotChk = document.getElementById('cmp-spot');
+    const spotMode = spotChk && spotChk.checked ? '&mode=spot' : '';
     const url = '/api/compare?preset=' + preset +
       '&device_a=' + encodeURIComponent((document.getElementById('cmp-da')||{{}}).value||'') +
       '&device_b=' + encodeURIComponent((document.getElementById('cmp-db')||{{}}).value||'') +
       '&unit=' + ((document.getElementById('cmp-unit')||{{}}).value||'kWh') +
-      '&gran=' + autoGran;
+      '&gran=' + autoGran + spotMode;
     const r = await fetch(url);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
@@ -3131,11 +3155,13 @@ async function loadCompare() {{
     const tb = document.getElementById('cmp-tb').value;
     const unit = document.getElementById('cmp-unit').value;
     const gran = document.getElementById('cmp-gran').value;
+    const spotChk2 = document.getElementById('cmp-spot');
+    const spotMode2 = spotChk2 && spotChk2.checked ? '&mode=spot' : '';
     const url = '/api/compare?device_a=' + encodeURIComponent(da) +
       '&from_a=' + fa + '&to_a=' + ta +
       '&device_b=' + encodeURIComponent(db) +
       '&from_b=' + fb + '&to_b=' + tb +
-      '&unit=' + unit + '&gran=' + gran;
+      '&unit=' + unit + '&gran=' + gran + spotMode2;
     const r = await fetch(url);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
