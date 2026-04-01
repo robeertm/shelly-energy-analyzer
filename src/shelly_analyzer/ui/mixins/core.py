@@ -8630,25 +8630,42 @@ class CoreMixin:
                     fmt_bytes(data["received"]),
                     fmt_bytes(data["sent"]),
                 ))
-            # Update compact sparkline bars
+            # Update compact sparkline bars (1 bar per second, fit to window)
             spark = getattr(self, "_traffic_spark", None)
             hist = snap.get("rate_history")
             if spark and hist and hist.get("recv"):
                 spark.delete("all")
                 w = spark.winfo_width() or 400
                 h = spark.winfo_height() or 36
-                recv = hist["recv"]
-                sent = hist["sent"]
-                n = len(recv)
+                ts_raw = hist["ts"]
+                recv_raw = hist["recv"]
+                sent_raw = hist["sent"]
+                # Aggregate to 1-second buckets (average samples per second)
+                buckets: dict = {}
+                for i, t in enumerate(ts_raw):
+                    sec = int(round(t))
+                    if sec not in buckets:
+                        buckets[sec] = [0.0, 0.0, 0]
+                    buckets[sec][0] += recv_raw[i]
+                    buckets[sec][1] += sent_raw[i]
+                    buckets[sec][2] += 1
+                # How many bars fit? 3px per bar minimum
+                bar_w = 3
+                max_bars = max(1, w // bar_w)
+                # Get the most recent max_bars seconds
+                sorted_secs = sorted(buckets.keys())
+                if len(sorted_secs) > max_bars:
+                    sorted_secs = sorted_secs[-max_bars:]
+                n = len(sorted_secs)
                 if n > 0:
+                    bar_w = w / n
+                    recv = [buckets[s][0] / max(1, buckets[s][2]) for s in sorted_secs]
+                    sent = [buckets[s][1] / max(1, buckets[s][2]) for s in sorted_secs]
                     max_val = max(max(recv), max(sent), 1)
-                    bar_w = max(1, w / n)
                     for i in range(n):
                         x = i * bar_w
-                        # Download bar (blue, from bottom)
                         rh = max(1, (recv[i] / max_val) * (h - 2))
                         spark.create_rectangle(x, h - rh, x + bar_w - 0.5, h, fill="#2196F3", outline="", width=0)
-                        # Upload bar (orange, from bottom, stacked)
                         sh = max(0, (sent[i] / max_val) * (h - 2))
                         if sh > 0.5:
                             spark.create_rectangle(x, h - rh - sh, x + bar_w - 0.5, h - rh, fill="#FF9800", outline="", width=0)
