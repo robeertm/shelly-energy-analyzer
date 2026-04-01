@@ -4825,6 +4825,80 @@ _I18N.setdefault("ru", {}).update({
     "compare.quick.year": "Текущий vs. прошлый год",
 })
 
+# -------- Dynamic price plots (v13.8.2) --------
+
+_I18N.setdefault("de", {}).update({
+    "plots.dynprice.tab": "Dyn. Preis",
+    "plots.dynprice.title": "Festpreis vs. Dynamisch",
+    "plots.dynprice.fixed": "Festpreis",
+    "plots.dynprice.dynamic": "Dyn. Tarif",
+    "plots.dynprice.not_enabled": "Dynamische Preise nicht aktiviert \u2013 bitte unter Einstellungen aktivieren.",
+})
+
+_I18N.setdefault("en", {}).update({
+    "plots.dynprice.tab": "Dyn. Price",
+    "plots.dynprice.title": "Fixed vs. Dynamic",
+    "plots.dynprice.fixed": "Fixed",
+    "plots.dynprice.dynamic": "Dynamic",
+    "plots.dynprice.not_enabled": "Dynamic prices not enabled \u2013 please enable in Settings.",
+})
+
+_I18N.setdefault("es", {}).update({
+    "plots.dynprice.tab": "Precio din.",
+    "plots.dynprice.title": "Fijo vs. Dinámico",
+    "plots.dynprice.fixed": "Fijo",
+    "plots.dynprice.dynamic": "Dinámico",
+    "plots.dynprice.not_enabled": "Precios dinámicos no activados.",
+})
+
+_I18N.setdefault("fr", {}).update({
+    "plots.dynprice.tab": "Prix dyn.",
+    "plots.dynprice.title": "Fixe vs. Dynamique",
+    "plots.dynprice.fixed": "Fixe",
+    "plots.dynprice.dynamic": "Dynamique",
+    "plots.dynprice.not_enabled": "Prix dynamiques non activés.",
+})
+
+_I18N.setdefault("pt", {}).update({
+    "plots.dynprice.tab": "Preço din.",
+    "plots.dynprice.title": "Fixo vs. Dinâmico",
+    "plots.dynprice.fixed": "Fixo",
+    "plots.dynprice.dynamic": "Dinâmico",
+    "plots.dynprice.not_enabled": "Preços dinâmicos não ativados.",
+})
+
+_I18N.setdefault("it", {}).update({
+    "plots.dynprice.tab": "Prezzo din.",
+    "plots.dynprice.title": "Fisso vs. Dinamico",
+    "plots.dynprice.fixed": "Fisso",
+    "plots.dynprice.dynamic": "Dinamico",
+    "plots.dynprice.not_enabled": "Prezzi dinamici non attivati.",
+})
+
+_I18N.setdefault("pl", {}).update({
+    "plots.dynprice.tab": "Cena dyn.",
+    "plots.dynprice.title": "Stała vs. Dynamiczna",
+    "plots.dynprice.fixed": "Stała",
+    "plots.dynprice.dynamic": "Dynamiczna",
+    "plots.dynprice.not_enabled": "Ceny dynamiczne nieaktywne.",
+})
+
+_I18N.setdefault("cs", {}).update({
+    "plots.dynprice.tab": "Dyn. cena",
+    "plots.dynprice.title": "Pevná vs. Dynamická",
+    "plots.dynprice.fixed": "Pevná",
+    "plots.dynprice.dynamic": "Dynamická",
+    "plots.dynprice.not_enabled": "Dynamické ceny nejsou aktivovány.",
+})
+
+_I18N.setdefault("ru", {}).update({
+    "plots.dynprice.tab": "Дин. цена",
+    "plots.dynprice.title": "Фикс. vs. Динам.",
+    "plots.dynprice.fixed": "Фиксир.",
+    "plots.dynprice.dynamic": "Динамич.",
+    "plots.dynprice.not_enabled": "Динамические цены не активированы.",
+})
+
 # -------- Dynamic spot prices (v13.8.0) --------
 
 _I18N.setdefault("de", {}).update({
