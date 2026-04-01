@@ -4539,11 +4539,14 @@ class CoreMixin:
             )
             ax.legend(fontsize=8, loc="upper right")
 
-            # Mouse hover tooltip
+            # Mouse hover tooltip (theme-aware)
+            _tc = self._get_theme_colors()
+            _tip_bg = "#2a1a00" if _tc["bg"] == "#111111" else "#fff3e0"
+            _tip_fg = "#eeeeee" if _tc["bg"] == "#111111" else "#333333"
             _spot_annot = ax.annotate("", xy=(0, 0), xytext=(0, 12),
                                        textcoords="offset points", ha="center", va="bottom",
-                                       fontsize=8, fontweight="bold",
-                                       bbox=dict(boxstyle="round,pad=0.3", fc="#fff3e0", ec="#ff9800", alpha=0.95))
+                                       fontsize=8, fontweight="bold", color=_tip_fg,
+                                       bbox=dict(boxstyle="round,pad=0.3", fc=_tip_bg, ec="#ff9800", alpha=0.95))
             _spot_annot.set_visible(False)
             _spot_bars_data = list(zip(x_dates, values, hours_dt, hourly["raw_ct"].tolist()))
 

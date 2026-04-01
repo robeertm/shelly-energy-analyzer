@@ -1,5 +1,10 @@
 # Changelog
 
+## 13.9.20 - 2026-04-01
+### Fixed
+- **Weather tab: stable plot widths** – Replaced `tight_layout()` with fixed `subplots_adjust()` so scatter (left) and time series (right) always share equal width. The colorbar no longer causes progressive shrinking of the left plot on each refresh.
+- **Costs tab: spot tooltip dark mode** – Tooltip background and text color now adapt to the current theme. No more unreadable light-on-light text in dark mode.
+
 ## 13.9.19 - 2026-04-01
 ### Fixed
 - **Web spot chart: dark mode** – Chart now properly detects `data-theme="dark"` instead of wrong `classList.contains('dark')`. Background, grid, labels, and tooltip all adapt to the current theme. Theme toggle triggers immediate chart redraw.
