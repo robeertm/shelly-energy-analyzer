@@ -1,5 +1,14 @@
 # Changelog
 
+## 13.9.0 - 2026-04-01
+### Added
+- **Tariff type selector: Fixed or Dynamic** – New radio button in Settings → Preise & Tarife to choose between fixed price tariff and dynamic spot market tariff as the PRIMARY billing method. When "Dynamic" is selected, ALL cost calculations throughout the entire app use spot market prices (EPEX Spot + surcharges + VAT) instead of the configured fixed price.
+- **Dynamic tariff as primary affects everything** – Costs tab, live cost_today, web dashboard costs, standby analysis, tenant billing, forecast projections, solar savings, PDF exports, and invoices all automatically switch to dynamic pricing when selected. The comparison line flips: shows what the fixed tariff would have cost instead.
+
+### Changed
+- Central `_get_effective_unit_price()` and `_calc_cost_for_range()` helpers dispatch to the correct pricing method based on tariff type. All downstream UI and service code uses these helpers.
+- Invoice generation uses average spot price for the billing period when dynamic tariff is active.
+
 ## 13.8.4 - 2026-04-01
 ### Added
 - **Spot price tooltip on hover** – Mouse-over on the 24h spot price chart (desktop + web) shows a detailed tooltip with timestamp, raw spot price (ct/kWh), and total price including surcharges. Web version works with touch as well.

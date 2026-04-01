@@ -110,7 +110,7 @@ class TenantMixin:
             self._draw_empty_tenant_charts()
             return
 
-        price = self.cfg.pricing.unit_price_gross()
+        price = self._get_effective_unit_price()
         base_fee = getattr(self.cfg.pricing, "base_fee_eur_per_year", 127.51)
         vat = self.cfg.pricing.vat_rate()
         common_keys = list(getattr(tenant_cfg, "common_device_keys", []))
