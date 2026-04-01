@@ -5439,7 +5439,7 @@ _CONTROL_TEMPLATE = """<!doctype html>
           <tbody id="traffic-tbody"></tbody>
         </table>
         </div>
-        <canvas id="traffic-chart" style="width:100%;height:100px"></canvas>
+        <canvas id="traffic-chart" style="width:100%;height:120px"></canvas>
       </div>
 
       <div class="card">
@@ -5718,47 +5718,102 @@ async function _refreshTraffic() {{
         + '<td style="padding:4px 8px;text-align:right">' + _fmtBytes(data.sent||0) + '</td>';
       tbody.appendChild(tr);
     }}
-    // Draw traffic chart
-    _drawTrafficChart(cats);
+    // Draw live traffic rate chart
+    _drawTrafficRateChart(d.rate_history);
   }} catch(e) {{}}
 }}
-function _drawTrafficChart(cats) {{
+function _drawTrafficRateChart(hist) {{
   const cv = document.getElementById('traffic-chart');
-  if (!cv || !cats.length) return;
+  if (!cv || !hist || !hist.ts || !hist.ts.length) return;
   const dpr = window.devicePixelRatio || 1;
   const W = cv.offsetWidth;
-  const H = cv.offsetHeight || 100;
+  const H = cv.offsetHeight || 120;
   cv.width = W * dpr;
   cv.height = H * dpr;
   const ctx = cv.getContext('2d');
   ctx.scale(dpr, dpr);
   const isDark = document.body.classList.contains('dark');
   const fg = isDark ? '#bbb' : '#555';
-  const catColors = {{shelly:'#e53935',entsoe:'#43A047',spot_price:'#FF9800',weather:'#2196F3',telegram:'#9C27B0',github:'#607D8B',local:'#78909C',other:'#BDBDBD'}};
-  const maxRecv = Math.max(...cats.map(function(c){{ return c[1].received||0; }}), 1);
-  const barH = Math.min(14, (H - 8) / cats.length - 2);
-  const labelW = 80;
-  const chartW = W - labelW - 60;
-  let y = 4;
-  ctx.font = '10px sans-serif';
-  ctx.textBaseline = 'middle';
-  for (const [cat, data] of cats) {{
-    const icon = _trafficCatIcons[cat] || '';
-    const label = _trafficCatLabels[cat] || cat;
-    const recv = data.received || 0;
-    const barW = Math.max(2, (recv / maxRecv) * chartW);
-    ctx.fillStyle = fg;
-    ctx.textAlign = 'right';
-    ctx.fillText(icon + ' ' + label, labelW - 4, y + barH / 2);
-    ctx.fillStyle = catColors[cat] || '#78909C';
-    ctx.globalAlpha = 0.8;
-    ctx.fillRect(labelW, y, barW, barH);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = fg;
-    ctx.textAlign = 'left';
-    ctx.fillText(_fmtBytes(recv), labelW + barW + 4, y + barH / 2);
-    y += barH + 2;
+  const gridC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+
+  const ts = hist.ts;   // seconds ago (negative)
+  const recv = hist.recv;
+  const sent = hist.sent;
+  const maxVal = Math.max(1, Math.max(...recv), Math.max(...sent));
+
+  const padL = 50, padR = 10, padT = 10, padB = 22;
+  const cW = W - padL - padR;
+  const cH = H - padT - padB;
+  const minT = ts[0] || -3600;
+  const maxT = ts[ts.length - 1] || 0;
+  const rangeT = Math.max(1, maxT - minT);
+
+  function xOf(t) {{ return padL + ((t - minT) / rangeT) * cW; }}
+  function yOf(v) {{ return padT + cH - (v / maxVal) * cH; }}
+
+  // Grid lines
+  ctx.strokeStyle = gridC;
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {{
+    const y = padT + (cH * i / 4);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + cW, y); ctx.stroke();
   }}
+
+  // Draw filled area + line for recv
+  function drawSeries(vals, lineColor, fillColor) {{
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = fillColor;
+    ctx.beginPath();
+    ctx.moveTo(xOf(ts[0]), yOf(0));
+    for (let i = 0; i < vals.length; i++) ctx.lineTo(xOf(ts[i]), yOf(vals[i]));
+    ctx.lineTo(xOf(ts[vals.length - 1]), yOf(0));
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < vals.length; i++) {{
+      if (i === 0) ctx.moveTo(xOf(ts[i]), yOf(vals[i]));
+      else ctx.lineTo(xOf(ts[i]), yOf(vals[i]));
+    }}
+    ctx.stroke();
+  }}
+  drawSeries(recv, '#2196F3', '#2196F3');
+  drawSeries(sent, '#FF9800', '#FF9800');
+
+  // Y-axis labels
+  ctx.fillStyle = fg;
+  ctx.font = '9px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i <= 4; i++) {{
+    const v = maxVal * (4 - i) / 4;
+    ctx.fillText(_fmtRate(v), padL - 4, padT + (cH * i / 4));
+  }}
+
+  // X-axis labels (minutes ago)
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const steps = [0, -15, -30, -45, -60];
+  for (const m of steps) {{
+    const t = m * 60;
+    if (t >= minT && t <= maxT) {{
+      ctx.fillText(m === 0 ? 'now' : m + 'm', xOf(t), padT + cH + 4);
+    }}
+  }}
+
+  // Legend
+  ctx.font = '9px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#2196F3';
+  ctx.fillRect(padL + 4, padT + 2, 12, 3);
+  ctx.fillStyle = fg;
+  ctx.fillText('\u2193 Down', padL + 20, padT + 1);
+  ctx.fillStyle = '#FF9800';
+  ctx.fillRect(padL + 70, padT + 2, 12, 3);
+  ctx.fillStyle = fg;
+  ctx.fillText('\u2191 Up', padL + 86, padT + 1);
 }}
 setInterval(_refreshTraffic, 3000);
 _refreshTraffic();

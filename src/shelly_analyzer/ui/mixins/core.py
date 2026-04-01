@@ -1182,10 +1182,10 @@ class CoreMixin:
             self._traffic_tree.configure(yscrollcommand=tree_sb.set)
             self._traffic_tree.pack(side="left", fill="x", expand=True)
             tree_sb.pack(side="right", fill="y")
-            # Small traffic bar chart
+            # Live traffic rate chart (last hour)
             from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
             from matplotlib.figure import Figure
-            self._traffic_fig = Figure(figsize=(6, 1.2), dpi=96)
+            self._traffic_fig = Figure(figsize=(6, 1.4), dpi=96)
             self._traffic_ax = self._traffic_fig.add_subplot(111)
             self._traffic_canvas = FigureCanvasTkAgg(self._traffic_fig, master=traffic_lf)
             self._traffic_canvas.get_tk_widget().pack(fill="x", padx=8, pady=(0, 6))
@@ -1679,6 +1679,10 @@ class CoreMixin:
                 return pd.Timedelta(minutes=val)
             if unit.startswith("day"):
                 return pd.Timedelta(days=val)
+            if unit.startswith("week"):
+                return pd.Timedelta(weeks=val)
+            if unit.startswith("month"):
+                return pd.Timedelta(days=val * 30)
             return pd.Timedelta(hours=val)
 
     def _df_has_wva_cols(self, df: Optional[pd.DataFrame], metric: str) -> bool:
@@ -8626,29 +8630,27 @@ class CoreMixin:
                     fmt_bytes(data["received"]),
                     fmt_bytes(data["sent"]),
                 ))
-            # Update traffic chart
+            # Update live traffic rate chart
             ax = getattr(self, "_traffic_ax", None)
-            if ax and cats:
+            hist = snap.get("rate_history")
+            if ax and hist and hist.get("ts"):
                 ax.clear()
-                tc = self._get_theme_colors()
-                cat_colors = {
-                    "shelly": "#e53935", "entsoe": "#43A047", "spot_price": "#FF9800",
-                    "weather": "#2196F3", "telegram": "#9C27B0", "github": "#607D8B",
-                    "local": "#78909C", "other": "#BDBDBD",
-                }
-                names = [f"{_CAT_ICONS.get(c, '')} {_CAT_LABELS.get(c, c)}" for c, _ in cats]
-                recv = [d["received"] for _, d in cats]
-                colors = [cat_colors.get(c, "#78909C") for c, _ in cats]
-                y_pos = range(len(names))
-                ax.barh(y_pos, recv, color=colors, alpha=0.8, height=0.7)
-                ax.set_yticks(y_pos)
-                ax.set_yticklabels(names, fontsize=7)
-                ax.invert_yaxis()
-                ax.set_xlabel("")
-                ax.tick_params(axis='x', labelsize=7)
-                # Format x-axis as bytes
-                ax.xaxis.set_major_formatter(
-                    lambda x, _: fmt_bytes(int(x))
+                ts = hist["ts"]  # seconds ago (negative)
+                recv = hist["recv"]
+                sent = hist["sent"]
+                # Convert to minutes ago for readability
+                ts_min = [t / 60.0 for t in ts]
+                ax.fill_between(ts_min, recv, alpha=0.3, color="#2196F3")
+                ax.plot(ts_min, recv, color="#2196F3", linewidth=1.2, label="↓ Down")
+                ax.fill_between(ts_min, sent, alpha=0.3, color="#FF9800")
+                ax.plot(ts_min, sent, color="#FF9800", linewidth=1.2, label="↑ Up")
+                ax.set_ylabel("B/s", fontsize=7)
+                ax.set_xlabel("min", fontsize=7)
+                ax.tick_params(axis='both', labelsize=7)
+                ax.legend(fontsize=7, loc="upper left", framealpha=0.5)
+                ax.grid(True, alpha=0.2)
+                ax.yaxis.set_major_formatter(
+                    lambda x, _: fmt_rate(x)
                 )
                 fig = getattr(self, "_traffic_fig", None)
                 canvas = getattr(self, "_traffic_canvas", None)
