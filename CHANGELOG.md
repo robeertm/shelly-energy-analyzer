@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.22 - 2026-04-01
+### Fixed
+- **Costs tab: spot chart no longer scrollable** – Disabled matplotlib's built-in scroll-zoom on the spot price chart. Mousewheel now scrolls the page instead of zooming the plot. Chart axis navigation disabled via `set_navigate(False)`.
+
 ## 13.9.21 - 2026-04-01
 ### Fixed
 - **Weather tab: fixed plot widths** – Scatter + timeseries use a GridSpec with dedicated colorbar column (width ratio 1:0.04:1). The colorbar now reuses a fixed `cax` instead of `fig.colorbar(ax=...)` which stole space from the scatter plot on every refresh. Both plots stay equal width permanently.
