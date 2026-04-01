@@ -1,5 +1,10 @@
 # Changelog
 
+## 13.9.5 - 2026-04-01
+### Improved
+- **Plots tab: unified controls** – All sub-tabs (kWh, V, A, W, VAR, cos φ, Hz, CO₂, Dyn. Preis) now use the same compact control: one dropdown (Alle/Stunden/Tage/Wochen/Monate) + "Letzte" spinbox. No more duplicate dropdowns or Apply buttons – changes apply immediately on selection.
+- **Live traffic rate chart** – Desktop and web now show a real-time line chart of download (blue) and upload (orange) rates over the last hour, replacing the static category bar chart.
+
 ## 13.9.4 - 2026-04-01
 ### Added
 - **Web Sankey: canvas-based energy flow diagram** – The web dashboard now renders a proper Sankey-style energy flow diagram with bezier flow bands matching the desktop version (Sources → House → Consumers columns, proportional band widths, color-coded flows).
