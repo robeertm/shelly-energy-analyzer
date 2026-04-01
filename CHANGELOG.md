@@ -1,8 +1,9 @@
 # Changelog
 
-## 13.9.16 - 2026-04-01
+## 13.9.17 - 2026-04-01
 ### Fixed
-- **Traffic frame no longer too wide** – Treeview now in its own grid frame with `grid_propagate(False)` and fixed height, preventing it from dictating the parent LabelFrame width. All traffic widgets use grid layout.
+- **Traffic table: proper column stretch** – Category column now stretches to fill available width; numeric columns (requests, received, sent) stay fixed-width and right-aligned. No more ugly empty space.
+- **Traffic table: no more jitter** – Rows are updated in-place instead of deleted and re-inserted every 2 seconds. Only the values change; row order adjusts via move. Eliminates visual flickering.
 
 ## 13.9.15 - 2026-04-01
 ### Fixed

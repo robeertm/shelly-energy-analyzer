@@ -1179,10 +1179,10 @@ class CoreMixin:
             self._traffic_tree.heading("requests", text=self.t("traffic.requests"))
             self._traffic_tree.heading("received", text="↓ " + self.t("traffic.received"))
             self._traffic_tree.heading("sent", text="↑ " + self.t("traffic.sent"))
-            self._traffic_tree.column("cat", width=120, minwidth=80, stretch=True, anchor="w")
-            self._traffic_tree.column("requests", width=60, minwidth=40, stretch=True, anchor="center")
-            self._traffic_tree.column("received", width=80, minwidth=50, stretch=True, anchor="e")
-            self._traffic_tree.column("sent", width=80, minwidth=50, stretch=True, anchor="e")
+            self._traffic_tree.column("cat", width=200, minwidth=120, stretch=True, anchor="w")
+            self._traffic_tree.column("requests", width=80, minwidth=60, stretch=False, anchor="center")
+            self._traffic_tree.column("received", width=120, minwidth=80, stretch=False, anchor="e")
+            self._traffic_tree.column("sent", width=120, minwidth=80, stretch=False, anchor="e")
             tree_sb = ttk.Scrollbar(tree_frm, orient="vertical", command=self._traffic_tree.yview)
             self._traffic_tree.configure(yscrollcommand=tree_sb.set)
             self._traffic_tree.grid(row=0, column=0, sticky="nsew")
@@ -8621,38 +8621,43 @@ class CoreMixin:
                 mins = (snap["uptime_s"] % 3600) // 60
                 uptime = f"{hrs}h {mins}m" if hrs else f"{mins}m"
                 tv.set(f"{self.t('traffic.total')}: ↓ {fmt_bytes(snap['total_received'])}  ↑ {fmt_bytes(snap['total_sent'])}  |  {snap['total_requests']} Requests  |  {uptime}")
-            # Update category table
-            for iid in tree.get_children():
-                tree.delete(iid)
-            # Sort by received bytes (descending)
+            # Update category table in-place (no delete/reinsert to avoid jitter)
             cats = sorted(snap["categories"].items(), key=lambda x: x[1]["received"], reverse=True)
-            for cat, data in cats:
-                icon = _CAT_ICONS.get(cat, "📡")
+            cat_iids: Dict[str, str] = getattr(self, "_traffic_cat_iids", {})
+            existing = set(tree.get_children())
+            seen_iids: set = set()
+            for idx, (cat, data) in enumerate(cats):
+                icon = _CAT_ICONS.get(cat, "\U0001f4e1")
                 label = _CAT_LABELS.get(cat, cat)
-                tree.insert("", "end", values=(
-                    f"{icon} {label}",
-                    str(data["requests"]),
-                    fmt_bytes(data["received"]),
-                    fmt_bytes(data["sent"]),
-                ))
-            # Update compact sparkline bars (fixed bar count from window width)
+                vals = (f"{icon} {label}", str(data["requests"]), fmt_bytes(data["received"]), fmt_bytes(data["sent"]))
+                iid = cat_iids.get(cat)
+                if iid and iid in existing:
+                    tree.item(iid, values=vals)
+                    tree.move(iid, "", idx)
+                    seen_iids.add(iid)
+                else:
+                    iid = tree.insert("", idx, values=vals)
+                    cat_iids[cat] = iid
+                    seen_iids.add(iid)
+            for old_iid in existing - seen_iids:
+                tree.delete(old_iid)
+            self._traffic_cat_iids = cat_iids
+            # Update compact sparkline bars (fixed bar count, stable rendering)
             spark = getattr(self, "_traffic_spark", None)
             hist = snap.get("rate_history")
             if spark and hist and hist.get("recv"):
-                spark.delete("all")
                 w = spark.winfo_width() or 400
                 h = spark.winfo_height() or 36
-                # Fixed bar count: 3px per bar, always the same number
                 bar_w = 3
                 num_bars = max(1, w // bar_w)
-                bar_w = w / num_bars  # exact fit, no gap
-                # Aggregate raw samples into 1-second buckets
+                bar_w_exact = w / num_bars
+                # Aggregate raw samples into 1-second buckets using floor (stable)
                 ts_raw = hist["ts"]
                 recv_raw = hist["recv"]
                 sent_raw = hist["sent"]
                 buckets: dict = {}
                 for i, t in enumerate(ts_raw):
-                    sec = int(round(t))
+                    sec = int(t) if t >= 0 else -int(-t) - 1  # floor toward -inf
                     if sec not in buckets:
                         buckets[sec] = [0.0, 0.0, 0]
                     buckets[sec][0] += recv_raw[i]
@@ -8662,20 +8667,29 @@ class CoreMixin:
                 recv = [0.0] * num_bars
                 sent = [0.0] * num_bars
                 for sec, (r, s, c) in buckets.items():
-                    # sec is negative (seconds ago), map to bar index
-                    idx = num_bars - 1 + sec  # sec=0 → last bar, sec=-1 → second to last
+                    idx = num_bars - 1 + sec  # sec=0 → last bar
                     if 0 <= idx < num_bars:
                         recv[idx] = r / max(1, c)
                         sent[idx] = s / max(1, c)
-                max_val = max(max(recv), max(sent), 1)
+                # Smooth max: decay slowly to avoid vertical jitter
+                cur_max = max(max(recv), max(sent), 1)
+                prev_max = getattr(self, "_traffic_spark_max", cur_max)
+                smooth_max = max(cur_max, prev_max * 0.95)
+                self._traffic_spark_max = smooth_max
+                # Only redraw if values actually changed
+                new_bars = (tuple(recv), tuple(sent), num_bars)
+                if new_bars == getattr(self, "_traffic_spark_prev", None):
+                    return
+                self._traffic_spark_prev = new_bars
+                spark.delete("all")
                 for i in range(num_bars):
-                    x = i * bar_w
-                    rh = max(0, (recv[i] / max_val) * (h - 2))
+                    x = i * bar_w_exact
+                    rh = max(0, (recv[i] / smooth_max) * (h - 2))
                     if rh > 0.5:
-                        spark.create_rectangle(x, h - rh, x + bar_w - 0.5, h, fill="#2196F3", outline="", width=0)
-                    sh = max(0, (sent[i] / max_val) * (h - 2))
+                        spark.create_rectangle(x, h - rh, x + bar_w_exact - 0.5, h, fill="#2196F3", outline="", width=0)
+                    sh = max(0, (sent[i] / smooth_max) * (h - 2))
                     if sh > 0.5:
-                        spark.create_rectangle(x, h - rh - sh, x + bar_w - 0.5, h - rh, fill="#FF9800", outline="", width=0)
+                        spark.create_rectangle(x, h - rh - sh, x + bar_w_exact - 0.5, h - rh, fill="#FF9800", outline="", width=0)
 
     def _mdns_refresh_tree(self) -> None:
             try:
