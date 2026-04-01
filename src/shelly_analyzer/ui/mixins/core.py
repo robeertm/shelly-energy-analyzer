@@ -46,6 +46,7 @@ from shelly_analyzer.io.config import (
     BillingParty,
     Co2Config,
     CsvPackConfig,
+    DemoConfig,
     DeviceConfig,
     DownloadConfig,
     ForecastConfig,
@@ -7886,20 +7887,24 @@ class CoreMixin:
             self.cfg = AppConfig(
                 version=__version__,
                 devices=devs,
+                groups=getattr(self.cfg, "groups", []),
                 download=download,
                 csv_pack=csv_pack,
                 ui=ui,
                 updates=updates,
+                demo=getattr(self.cfg, "demo", None) or DemoConfig(),
                 pricing=pricing,
                 billing=billing,
                 alerts=alerts,
                 solar=solar,
                 tou=tou,
+                anomaly=getattr(self.cfg, "anomaly", None) or AnomalyConfig(),
                 co2=co2,
                 forecast=forecast,
                 weather=weather,
                 mqtt=mqtt_cfg,
                 tenant=tenant,
+                schedules=getattr(self.cfg, "schedules", []),
             )
             save_config(self.cfg, self.cfg_path)
 

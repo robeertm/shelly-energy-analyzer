@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.7.2 - 2026-04-01
+### Fixed
+- **Anomaly detection settings now persist across app restarts** – The `_save_settings()` method was reconstructing `AppConfig` without the `anomaly`, `groups`, `demo`, and `schedules` fields, causing them to reset to defaults whenever settings were saved. All existing config fields are now preserved.
+
 ## 13.7.1 - 2026-03-31
 ### Fixed
 - **Settings "Save Config" button no longer cut off on small monitors** – Bottom action bar (Save, Reload, Screenshot) is now packed before the notebook widget, ensuring it always stays visible regardless of screen size.
