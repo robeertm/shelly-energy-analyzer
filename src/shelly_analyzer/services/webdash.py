@@ -3736,39 +3736,213 @@ function renderSankey(d) {{
     metricCardHtml('PV', (d.pv_production_kwh||0).toFixed(2) + ' kWh', '') +
     metricCardHtml('Feed-in', (d.feed_in_kwh||0).toFixed(2) + ' kWh', '') +
     '</div></div>';
-  // Flow visualization as stacked bars
-  const chEl = document.getElementById('sankey-chart');
   if (!d.sankey || !d.sankey.node || !d.sankey.link || !d.sankey.link.value || d.sankey.link.value.length === 0) {{
     html += '<div class="card"><p class="info-msg">No energy flow data for this period.</p></div>';
     document.getElementById('sankey-cards').innerHTML = html;
     return;
   }}
-  // Build per-device breakdown chart
+  html += '<div class="card" style="padding:8px"><canvas id="sankey-flow-canvas" style="width:100%;height:340px"></canvas></div>';
+  document.getElementById('sankey-cards').innerHTML = html;
+  requestAnimationFrame(function() {{ _drawSankeyFlow('sankey-flow-canvas', d); }});
+}}
+
+function _drawSankeyFlow(canvasId, d) {{
+  const cv = document.getElementById(canvasId);
+  if (!cv) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.offsetWidth;
+  const H = cv.offsetHeight || 340;
+  cv.width = W * dpr;
+  cv.height = H * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const isDark = document.body.classList.contains('dark');
+  const fg = isDark ? '#e0e0e0' : '#333';
+  const bg = isDark ? '#111' : '#fff';
+
   const nodeLabels = d.sankey.node.label || [];
   const nodeColors = d.sankey.node.color || [];
   const linkSrc = d.sankey.link.source || [];
   const linkTgt = d.sankey.link.target || [];
   const linkVal = d.sankey.link.value || [];
-  // Find consumer nodes (targets of "House" node)
+
+  // Build sources and consumers from link data
   const houseIdx = nodeLabels.indexOf('House');
+  const sources = [];
   const consumers = [];
+  const feedIn = [];
   linkSrc.forEach(function(s, i) {{
+    if (linkTgt[i] === houseIdx && linkVal[i] > 0.001) {{
+      sources.push({{ name: nodeLabels[s], kwh: linkVal[i], color: nodeColors[s] || '#e53935' }});
+    }}
     if (s === houseIdx && linkVal[i] > 0.001) {{
-      consumers.push({{ name: nodeLabels[linkTgt[i]], kwh: linkVal[i], color: nodeColors[linkTgt[i]] || '#3498db' }});
+      const tName = nodeLabels[linkTgt[i]];
+      if (tName === 'Feed-in') {{
+        feedIn.push({{ name: tName, kwh: linkVal[i], color: nodeColors[linkTgt[i]] || '#43A047' }});
+      }} else {{
+        consumers.push({{ name: tName, kwh: linkVal[i], color: nodeColors[linkTgt[i]] || '#3498db' }});
+      }}
+    }}
+    // PV → Feed-in (not through house)
+    if (s !== houseIdx && linkTgt[i] !== houseIdx && linkVal[i] > 0.001) {{
+      const tName = nodeLabels[linkTgt[i]];
+      if (tName === 'Feed-in') {{
+        feedIn.push({{ name: tName, kwh: linkVal[i], color: nodeColors[linkTgt[i]] || '#43A047' }});
+      }}
     }}
   }});
+  sources.sort(function(a, b) {{ return b.kwh - a.kwh; }});
   consumers.sort(function(a, b) {{ return b.kwh - a.kwh; }});
-  if (consumers.length) {{
-    html += '<div class="card"><canvas id="sankey-flow-chart" height="160" style="width:100%"></canvas></div>';
+  const topConsumers = consumers.slice(0, 10);
+
+  const total = Math.max(d.total_consumption_kwh || 0.01, 0.01);
+
+  // Layout constants (in pixels)
+  const PAD_X = 10, PAD_Y = 30;
+  const SRC_X = PAD_X, SRC_W = W * 0.15;
+  const HOUSE_X = W * 0.30, HOUSE_W = W * 0.16;
+  const TGT_X = W * 0.58, TGT_W = W * 0.40;
+  const TOP = PAD_Y + 14, BOT = H - 20;
+  const usable = BOT - TOP;
+  const GAP = 4;
+
+  // Helper: draw rounded rect
+  function roundRect(x, y, w, h, r) {{
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
   }}
-  document.getElementById('sankey-cards').innerHTML = html;
-  if (consumers.length) {{
-    requestAnimationFrame(function() {{
-      const names = consumers.map(function(c) {{ return c.name.substring(0, 14); }});
-      const vals = consumers.map(function(c) {{ return c.kwh; }});
-      const colors = consumers.map(function(c) {{ return c.color; }});
-      _drawBarChart('sankey-flow-chart', names, vals, {{ colors: colors, title: 'Consumption by Device (kWh)', decimals: 2 }});
-    }});
+
+  // Helper: draw bezier flow band
+  function flowBand(x0, y0, h0, x1, y1, h1, color, alpha) {{
+    const dx = (x1 - x0) * 0.4;
+    ctx.save();
+    ctx.globalAlpha = alpha || 0.3;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0 - h0 / 2);
+    ctx.bezierCurveTo(x0 + dx, y0 - h0 / 2, x1 - dx, y1 - h1 / 2, x1, y1 - h1 / 2);
+    ctx.lineTo(x1, y1 + h1 / 2);
+    ctx.bezierCurveTo(x1 - dx, y1 + h1 / 2, x0 + dx, y0 + h0 / 2, x0, y0 + h0 / 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }}
+
+  // --- Column headers ---
+  ctx.font = 'bold 11px sans-serif';
+  ctx.fillStyle = fg;
+  ctx.textAlign = 'center';
+  ctx.fillText('Sources', SRC_X + SRC_W / 2, TOP - 6);
+  ctx.fillText('Consumers', TGT_X + TGT_W / 2, TOP - 6);
+
+  // --- Source nodes ---
+  const nSrc = Math.max(sources.length, 1);
+  const srcTotalH = usable - (nSrc - 1) * GAP;
+  const srcCy = [], srcH = [];
+  let yCursor = TOP;
+  for (let i = 0; i < sources.length; i++) {{
+    const s = sources[i];
+    const h = Math.max(20, (s.kwh / total) * srcTotalH);
+    const cy = yCursor + h / 2;
+    srcCy.push(cy); srcH.push(h);
+    ctx.fillStyle = s.color;
+    ctx.globalAlpha = 0.92;
+    roundRect(SRC_X, yCursor, SRC_W, h, 6);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Label
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    if (h > 28) {{
+      ctx.font = 'bold 9px sans-serif';
+      ctx.fillText(s.name, SRC_X + SRC_W / 2, cy - 2);
+      ctx.font = '8px sans-serif';
+      const pct = (s.kwh / total * 100).toFixed(0);
+      ctx.fillText(s.kwh.toFixed(1) + ' kWh (' + pct + '%)', SRC_X + SRC_W / 2, cy + 10);
+    }} else {{
+      ctx.font = 'bold 8px sans-serif';
+      ctx.fillText(s.name + ' ' + s.kwh.toFixed(1), SRC_X + SRC_W / 2, cy + 3);
+    }}
+    yCursor += h + GAP;
+  }}
+
+  // --- House node ---
+  const houseCy = (TOP + BOT) / 2;
+  const houseH = Math.min(60, usable * 0.22);
+  ctx.fillStyle = isDark ? 'rgba(21,101,192,0.6)' : 'rgba(227,242,253,0.8)';
+  roundRect(HOUSE_X, houseCy - houseH / 2, HOUSE_W, houseH, 10);
+  ctx.fill();
+  ctx.strokeStyle = '#1976D2';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = fg;
+  ctx.globalAlpha = 0.7;
+  ctx.font = '9px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Total', HOUSE_X + HOUSE_W / 2, houseCy - 4);
+  ctx.globalAlpha = 1;
+  ctx.font = 'bold 12px sans-serif';
+  ctx.fillText((d.total_consumption_kwh || 0).toFixed(1) + ' kWh', HOUSE_X + HOUSE_W / 2, houseCy + 12);
+
+  // --- Consumer nodes ---
+  const nTgt = Math.max(topConsumers.length, 1);
+  const tgtTotalH = usable - (nTgt - 1) * GAP;
+  const tgtCy = [], tgtH = [];
+  yCursor = TOP;
+  for (let i = 0; i < topConsumers.length; i++) {{
+    const c = topConsumers[i];
+    const h = Math.max(18, (c.kwh / total) * tgtTotalH);
+    const cy = yCursor + h / 2;
+    tgtCy.push(cy); tgtH.push(h);
+    ctx.fillStyle = c.color;
+    ctx.globalAlpha = 0.88;
+    roundRect(TGT_X, yCursor, TGT_W, h, 6);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 9px sans-serif';
+    const label = c.name.length > 20 ? c.name.substring(0, 18) + '..' : c.name;
+    const pct = (c.kwh / total * 100).toFixed(0);
+    ctx.fillText(label + '   ' + c.kwh.toFixed(1) + ' kWh (' + pct + '%)', TGT_X + TGT_W / 2, cy + 3);
+    yCursor += h + GAP;
+  }}
+
+  // --- Feed-in label ---
+  if (feedIn.length && feedIn[0].kwh > 0.001) {{
+    ctx.fillStyle = '#43A047';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Feed-in: ' + feedIn[0].kwh.toFixed(2) + ' kWh', HOUSE_X + HOUSE_W / 2, BOT + 12);
+  }}
+
+  // --- Flow bands: Sources → House ---
+  let hBandY = houseCy - houseH / 2;
+  for (let i = 0; i < sources.length; i++) {{
+    const bHouse = Math.max(4, (sources[i].kwh / total) * houseH);
+    const bandCy = hBandY + bHouse / 2;
+    flowBand(SRC_X + SRC_W, srcCy[i], srcH[i] * 0.85, HOUSE_X, bandCy, bHouse, sources[i].color, 0.28);
+    hBandY += bHouse;
+  }}
+
+  // --- Flow bands: House → Consumers ---
+  hBandY = houseCy - houseH / 2;
+  for (let i = 0; i < topConsumers.length; i++) {{
+    const bHouse = Math.max(4, (topConsumers[i].kwh / total) * houseH);
+    const bandCy = hBandY + bHouse / 2;
+    flowBand(HOUSE_X + HOUSE_W, bandCy, bHouse, TGT_X, tgtCy[i], tgtH[i] * 0.85, topConsumers[i].color, 0.28);
+    hBandY += bHouse;
   }}
 }}
 
@@ -5254,6 +5428,7 @@ _CONTROL_TEMPLATE = """<!doctype html>
         <h2>📊 Network Traffic</h2>
         <div id="traffic-rate" style="font-size:16px;font-weight:bold;margin-bottom:8px">↓ 0 B/s  ↑ 0 B/s</div>
         <div id="traffic-total" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
+        <div style="max-height:220px;overflow-y:auto;margin-bottom:8px">
         <table style="width:100%;font-size:13px;border-collapse:collapse" id="traffic-table">
           <thead><tr style="border-bottom:1px solid var(--border);text-align:left">
             <th style="padding:4px 8px">Category</th>
@@ -5263,6 +5438,8 @@ _CONTROL_TEMPLATE = """<!doctype html>
           </tr></thead>
           <tbody id="traffic-tbody"></tbody>
         </table>
+        </div>
+        <canvas id="traffic-chart" style="width:100%;height:100px"></canvas>
       </div>
 
       <div class="card">
@@ -5502,8 +5679,8 @@ document.getElementById("btn_sync").addEventListener("click", async ()=>{
 });
 
 // --- Network Traffic ---
-const _trafficCatIcons = {shelly:'🔌',entsoe:'🌿',weather:'🌡️',telegram:'💬',github:'🔄',local:'🏠',other:'📡'};
-const _trafficCatLabels = {shelly:'Shelly Devices',entsoe:'ENTSO-E API',weather:'OpenWeather',telegram:'Telegram',github:'GitHub',local:'Local/Web',other:'Other'};
+const _trafficCatIcons = {shelly:'🔌',entsoe:'🌿',spot_price:'⚡',weather:'🌡️',telegram:'💬',github:'🔄',local:'🏠',other:'📡'};
+const _trafficCatLabels = {shelly:'Shelly Devices',entsoe:'ENTSO-E API',spot_price:'Spot Prices',weather:'OpenWeather',telegram:'Telegram',github:'GitHub',local:'Local/Web',other:'Other'};
 function _fmtBytes(n) {{
   if (n < 1024) return n + ' B';
   if (n < 1048576) return (n/1024).toFixed(1) + ' KB';
@@ -5541,7 +5718,47 @@ async function _refreshTraffic() {{
         + '<td style="padding:4px 8px;text-align:right">' + _fmtBytes(data.sent||0) + '</td>';
       tbody.appendChild(tr);
     }}
+    // Draw traffic chart
+    _drawTrafficChart(cats);
   }} catch(e) {{}}
+}}
+function _drawTrafficChart(cats) {{
+  const cv = document.getElementById('traffic-chart');
+  if (!cv || !cats.length) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.offsetWidth;
+  const H = cv.offsetHeight || 100;
+  cv.width = W * dpr;
+  cv.height = H * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const isDark = document.body.classList.contains('dark');
+  const fg = isDark ? '#bbb' : '#555';
+  const catColors = {{shelly:'#e53935',entsoe:'#43A047',spot_price:'#FF9800',weather:'#2196F3',telegram:'#9C27B0',github:'#607D8B',local:'#78909C',other:'#BDBDBD'}};
+  const maxRecv = Math.max(...cats.map(function(c){{ return c[1].received||0; }}), 1);
+  const barH = Math.min(14, (H - 8) / cats.length - 2);
+  const labelW = 80;
+  const chartW = W - labelW - 60;
+  let y = 4;
+  ctx.font = '10px sans-serif';
+  ctx.textBaseline = 'middle';
+  for (const [cat, data] of cats) {{
+    const icon = _trafficCatIcons[cat] || '';
+    const label = _trafficCatLabels[cat] || cat;
+    const recv = data.received || 0;
+    const barW = Math.max(2, (recv / maxRecv) * chartW);
+    ctx.fillStyle = fg;
+    ctx.textAlign = 'right';
+    ctx.fillText(icon + ' ' + label, labelW - 4, y + barH / 2);
+    ctx.fillStyle = catColors[cat] || '#78909C';
+    ctx.globalAlpha = 0.8;
+    ctx.fillRect(labelW, y, barW, barH);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = fg;
+    ctx.textAlign = 'left';
+    ctx.fillText(_fmtBytes(recv), labelW + barW + 4, y + barH / 2);
+    y += barH + 2;
+  }}
 }}
 setInterval(_refreshTraffic, 3000);
 _refreshTraffic();
