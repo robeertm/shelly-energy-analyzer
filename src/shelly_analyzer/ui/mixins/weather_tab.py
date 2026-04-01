@@ -91,9 +91,13 @@ class WeatherMixin:
         chart_lf = ttk.LabelFrame(content, text=self.t("weather.chart.title"))
         chart_lf.grid(row=2, column=0, sticky="nsew", padx=14, pady=(4, 12))
 
+        from matplotlib.gridspec import GridSpec
         self._weather_fig = Figure(figsize=(10, 4), dpi=96)
-        self._weather_scatter_ax = self._weather_fig.add_subplot(121)
-        self._weather_ts_ax = self._weather_fig.add_subplot(122)
+        gs = GridSpec(1, 3, figure=self._weather_fig, width_ratios=[1, 0.04, 1],
+                      left=0.07, right=0.93, top=0.90, bottom=0.18, wspace=0.35)
+        self._weather_scatter_ax = self._weather_fig.add_subplot(gs[0, 0])
+        self._weather_cbar_ax = self._weather_fig.add_subplot(gs[0, 1])
+        self._weather_ts_ax = self._weather_fig.add_subplot(gs[0, 2])
         self._weather_canvas = FigureCanvasTkAgg(self._weather_fig, master=chart_lf)
         self._weather_canvas.get_tk_widget().pack(fill="both", expand=True)
 
@@ -240,19 +244,19 @@ class WeatherMixin:
         # Draw scatter plot – color by hour-of-day (useful extra dimension)
         ax1 = self._weather_scatter_ax
         ax1.clear()
-        # Remove previous colorbar if it exists
-        if hasattr(self, "_weather_cbar") and self._weather_cbar is not None:
-            try:
-                self._weather_cbar.remove()
-            except Exception:
-                pass
-            self._weather_cbar = None
+        cbar_ax = self._weather_cbar_ax
+        cbar_ax.clear()
         hours_of_day = np.array([h.hour + h.minute / 60.0 for h in matched_hours])
         scatter = ax1.scatter(temps, kwh, c=hours_of_day, cmap="twilight_shifted",
                               vmin=0, vmax=24, alpha=0.65, s=22, edgecolors="none")
-        self._weather_cbar = self._weather_fig.colorbar(scatter, ax=ax1, pad=0.02, shrink=0.8)
-        self._weather_cbar.set_label(self.t("weather.chart.hour"), fontsize=8)
-        self._weather_cbar.set_ticks([0, 6, 12, 18, 24])
+        self._weather_fig.colorbar(scatter, cax=cbar_ax)
+        cbar_ax.set_ylabel(self.t("weather.chart.hour"), fontsize=8)
+        cbar_ax.set_yticks([0, 6, 12, 18, 24])
+        # Theme the colorbar
+        cbar_ax.yaxis.set_tick_params(color=tc["fg"])
+        cbar_ax.yaxis.label.set_color(tc["fg"])
+        for lbl in cbar_ax.get_yticklabels():
+            lbl.set_color(tc["fg"])
         if len(temps) > 2:
             z = np.polyfit(temps, kwh, 1)
             p = np.poly1d(z)
@@ -296,7 +300,6 @@ class WeatherMixin:
         for spine in ax2_twin.spines.values():
             spine.set_color(tc["fg"])
 
-        self._weather_fig.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.18, wspace=0.40)
         self._weather_canvas.draw_idle()
 
     def _draw_empty_weather_charts(self, msg: str) -> None:
@@ -306,7 +309,8 @@ class WeatherMixin:
             ax.text(0.5, 0.5, msg, ha="center", va="center", fontsize=11, color=tc["muted"])
             ax.axis("off")
             self._apply_plot_theme(self._weather_fig, ax, self._weather_canvas)
-        self._weather_fig.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.18, wspace=0.40)
+        self._weather_cbar_ax.clear()
+        self._weather_cbar_ax.axis("off")
         self._weather_canvas.draw_idle()
 
     def _draw_energy_only_chart(self, hourly, dev_name: str) -> None:
@@ -329,6 +333,6 @@ class WeatherMixin:
         ax2.grid(axis="y", alpha=0.3)
         ax2.set_axisbelow(True)
         self._apply_plot_theme(self._weather_fig, ax2)
-
-        self._weather_fig.subplots_adjust(left=0.08, right=0.92, top=0.92, bottom=0.18, wspace=0.40)
+        self._weather_cbar_ax.clear()
+        self._weather_cbar_ax.axis("off")
         self._weather_canvas.draw_idle()

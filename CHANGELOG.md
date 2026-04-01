@@ -1,9 +1,10 @@
 # Changelog
 
-## 13.9.20 - 2026-04-01
+## 13.9.21 - 2026-04-01
 ### Fixed
-- **Weather tab: stable plot widths** – Replaced `tight_layout()` with fixed `subplots_adjust()` so scatter (left) and time series (right) always share equal width. The colorbar no longer causes progressive shrinking of the left plot on each refresh.
-- **Costs tab: spot tooltip dark mode** – Tooltip background and text color now adapt to the current theme. No more unreadable light-on-light text in dark mode.
+- **Weather tab: fixed plot widths** – Scatter + timeseries use a GridSpec with dedicated colorbar column (width ratio 1:0.04:1). The colorbar now reuses a fixed `cax` instead of `fig.colorbar(ax=...)` which stole space from the scatter plot on every refresh. Both plots stay equal width permanently.
+- **Weather tab: colorbar dark mode** – Colorbar tick labels and axis label now use theme foreground color instead of hardcoded black.
+- **Costs tab: spot tooltip dark mode** – Tooltip background and text color adapt to the current theme.
 
 ## 13.9.19 - 2026-04-01
 ### Fixed
