@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.12 - 2026-04-01
+### Fixed
+- **Traffic sparkline fits window** – Samples aggregated to 1-second buckets, bar count limited to window width (3px min per bar). Only the most recent N seconds shown, all bars equal width.
+
 ## 13.9.11 - 2026-04-01
 ### Improved
 - **Traffic chart: compact sparkline bars** – Replaced tall matplotlib plot with a thin 36px tkinter Canvas sparkline. Blue bars = download, orange stacked = upload. Fits neatly below the traffic table.
