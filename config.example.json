@@ -157,6 +157,15 @@
     "dirty_threshold_g_per_kwh": 400.0,
     "cross_border_flows": false
   },
+  "spot_price": {
+    "enabled": false,
+    "primary_api": "energy_charts",
+    "bidding_zone": "DE-LU",
+    "fetch_interval_hours": 1,
+    "markup_ct_per_kwh": 16.0,
+    "include_vat": true,
+    "show_as_comparison": true
+  },
   "anomaly": {
     "enabled": false,
     "sigma_threshold": 2.0,

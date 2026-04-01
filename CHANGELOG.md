@@ -1,5 +1,14 @@
 # Changelog
 
+## 13.8.0 - 2026-04-01
+### Added
+- **Dynamic spot market electricity prices** – New feature that imports EPEX Spot day-ahead prices from free public APIs (Energy-Charts with 15-min resolution from Oct 2025, aWATTar hourly fallback). Background service automatically backfills prices from the first measurement timestamp.
+- **Costs tab: dynamic tariff comparison** – Every cost card (today/week/month/year) now shows what the same consumption would cost with a dynamic tariff (spot price + configurable markup + VAT). Displayed in orange alongside the fixed tariff cost, both in desktop and web dashboard.
+- **Compare tab: fixed vs. dynamic tariff mode** – New "vs. Dynamic Tariff" toggle in the comparison tab lets users directly compare their fixed tariff costs against dynamic spot market prices for any period. Available in both desktop and web dashboard.
+- **Spot price settings** – Full configuration UI under Settings: enable/disable, choose API source (Energy-Charts or aWATTar), set bidding zone, configure markup (default 16 ct/kWh net for grid fees, taxes, supplier margin), VAT toggle, fetch interval.
+- **New `spot_prices` database table** – Stores fetched spot prices with support for both 15-min and hourly resolution. Efficient hourly join with `hourly_energy` table for cost calculations.
+- **i18n: all 9 languages** – Full translation coverage for spot price feature (de, en, es, fr, pt, it, pl, cs, ru).
+
 ## 13.7.2 - 2026-04-01
 ### Fixed
 - **Anomaly detection settings now persist across app restarts** – The `_save_settings()` method was reconstructing `AppConfig` without the `anomaly`, `groups`, `demo`, and `schedules` fields, causing them to reset to defaults whenever settings were saved. All existing config fields are now preserved.

@@ -769,11 +769,42 @@ class LiveWebMixin:
                     except Exception:
                         pass
 
+                    # Spot price comparison
+                    _spot_cfg = getattr(self.cfg, "spot_price", None)
+                    _spot_enabled = getattr(_spot_cfg, "enabled", False) if _spot_cfg else False
+                    if _spot_enabled:
+                        _sp_zone = getattr(_spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
+                        _sp_markup = float(getattr(_spot_cfg, "markup_ct_per_kwh", 16.0)) / 100.0
+                        _sp_vat = self.cfg.pricing.vat_rate() if getattr(_spot_cfg, "include_vat", True) else 0.0
+                        for dev_data in devices_out:
+                            for rng_key, (rng_start, rng_end) in _ranges.items():
+                                try:
+                                    _sc, _sk, _sa = self.storage.db.calc_spot_cost(
+                                        dev_data["key"], _sp_zone,
+                                        int(rng_start.timestamp()), int(rng_end.timestamp()),
+                                        _sp_markup, _sp_vat
+                                    )
+                                    dev_data[rng_key + "_spot_eur"] = round(_sc, 2)
+                                except Exception:
+                                    dev_data[rng_key + "_spot_eur"] = 0.0
+                            # Spot projection
+                            try:
+                                _sp_month = dev_data.get("month_spot_eur", 0.0)
+                                if _sp_month > 0:
+                                    import calendar as _cal2
+                                    _dim2 = _cal2.monthrange(_now.year, _now.month)[1]
+                                    _el2 = max(1, (_now - _month_start).total_seconds() / 86400.0)
+                                    dev_data["proj_spot_eur"] = round(_sp_month / _el2 * _dim2, 2)
+                                else:
+                                    dev_data["proj_spot_eur"] = 0.0
+                            except Exception:
+                                dev_data["proj_spot_eur"] = 0.0
+
                     _tariff_sched = [
                         {"start_date": tp.start_date, "price": tp.electricity_price_eur_per_kwh, "base_fee": tp.base_fee_eur_per_year}
                         for tp in getattr(self.cfg.pricing, "tariff_schedule", []) or []
                     ]
-                    return {"ok": True, "devices": devices_out, "unit_eur": _unit, "co2_g_per_kwh": _co2_g, "solar_co2_saved_month_kg": round(_solar_co2_saved_month_kg, 3), "tariff_schedule": _tariff_sched}
+                    return {"ok": True, "devices": devices_out, "unit_eur": _unit, "co2_g_per_kwh": _co2_g, "solar_co2_saved_month_kg": round(_solar_co2_saved_month_kg, 3), "tariff_schedule": _tariff_sched, "spot_enabled": _spot_enabled}
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
 
@@ -1431,9 +1462,19 @@ class LiveWebMixin:
                             from_b = _date4(_now4.year - 1, 1, 1)
                             to_b = _date4(_now4.year - 1, 12, 31)
 
+                    # Spot comparison mode
+                    _spot_mode4 = str(params.get("mode") or "").strip() == "spot"
+
                     # Load daily data using existing helper method
-                    daily_a = self._cmp_load_daily(device_a, from_a, to_a, use_eur, _price4)
-                    daily_b = self._cmp_load_daily(device_b, from_b, to_b, use_eur, _price4)
+                    if _spot_mode4:
+                        daily_a = self._cmp_load_daily(device_a, from_a, to_a, True, _price4)
+                        daily_b = self._cmp_load_daily_spot(device_a, from_a, to_a)
+                        from_b, to_b = from_a, to_a
+                        device_b = device_a
+                        use_eur = True
+                    else:
+                        daily_a = self._cmp_load_daily(device_a, from_a, to_a, use_eur, _price4)
+                        daily_b = self._cmp_load_daily(device_b, from_b, to_b, use_eur, _price4)
 
                     total_a = sum(daily_a.values())
                     total_b = sum(daily_b.values())

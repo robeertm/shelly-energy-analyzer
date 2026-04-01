@@ -53,6 +53,24 @@ class Co2Mixin:
         self._co2_fetch_svc.start()
         self.protocol("WM_DELETE_WINDOW", self._co2_on_close)
 
+        # Start spot price fetch service
+        self._spot_price_service_init()
+
+    def _spot_price_service_init(self) -> None:
+        """Start the background spot price fetch service."""
+        try:
+            from shelly_analyzer.services.spot_price import SpotPriceFetchService
+            self._spot_price_svc = SpotPriceFetchService(
+                db=self.storage.db,
+                get_config=lambda: self.cfg,
+            )
+            self._spot_price_svc.set_log_callback(
+                lambda msg: self.after(0, lambda m=msg: self._log_sync(m))
+            )
+            self._spot_price_svc.start()
+        except Exception:
+            logger.debug("SpotPriceFetchService init failed", exc_info=True)
+
     def _co2_reload(self) -> None:
         """Trigger an immediate CO₂ data fetch from the background service."""
         try:
@@ -85,6 +103,10 @@ class Co2Mixin:
         """Stop services and flush NILM data on window close."""
         try:
             self._co2_fetch_svc.stop()
+        except Exception:
+            pass
+        try:
+            self._spot_price_svc.stop()
         except Exception:
             pass
         # Flush NILM learner data to disk before exiting
