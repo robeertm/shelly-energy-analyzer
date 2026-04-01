@@ -275,7 +275,7 @@ class CompareMixin:
                 return {}
 
             zone = getattr(spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
-            markup = float(getattr(spot_cfg, "markup_ct_per_kwh", 16.0)) / 100.0
+            markup = float(spot_cfg.total_markup_ct() if hasattr(spot_cfg, "total_markup_ct") else getattr(spot_cfg, "markup_ct_per_kwh", 16.0)) / 100.0
             pricing = getattr(self.cfg, "pricing", None)
             if getattr(spot_cfg, "include_vat", True) and pricing:
                 vat_rate = pricing.vat_rate()

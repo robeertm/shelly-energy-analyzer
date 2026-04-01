@@ -1747,7 +1747,7 @@ class PlotsMixin:
             spot_cfg = getattr(self.cfg, "spot_price", None)
             spot_enabled = getattr(spot_cfg, "enabled", False) if spot_cfg else False
             zone = getattr(spot_cfg, "bidding_zone", "DE-LU") or "DE-LU" if spot_cfg else "DE-LU"
-            markup = float(getattr(spot_cfg, "markup_ct_per_kwh", 16.0) if spot_cfg else 16.0) / 100.0
+            markup = float((spot_cfg.total_markup_ct() if hasattr(spot_cfg, "total_markup_ct") else getattr(spot_cfg, "markup_ct_per_kwh", 16.0)) if spot_cfg else 16.0) / 100.0
             pricing = getattr(self.cfg, "pricing", None)
             if spot_cfg and getattr(spot_cfg, "include_vat", True) and pricing:
                 vat_rate = pricing.vat_rate()
