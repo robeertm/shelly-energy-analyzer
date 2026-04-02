@@ -112,6 +112,9 @@ class LiveWebMixin:
                         lang=self.lang,
                         on_window_change=self._on_web_window_change,
                         on_action=self._web_action_dispatch,
+                        ssl_mode=str(getattr(self.cfg.ui, "live_web_ssl_mode", "auto") or "auto"),
+                        ssl_cert=str(getattr(self.cfg.ui, "live_web_ssl_cert", "") or ""),
+                        ssl_key=str(getattr(self.cfg.ui, "live_web_ssl_key", "") or ""),
                     )
                     self._live_web.start()
                 return self._live_web.url() if self._live_web else None

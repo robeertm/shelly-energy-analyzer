@@ -1,5 +1,16 @@
 # Changelog
 
+## 14.1.0 - 2026-04-02
+### Added
+- **SSL/HTTPS settings** – New HTTPS mode selector in Settings → Web Dashboard:
+  - **Auto** (default): Self-signed certificate (existing behavior)
+  - **Custom**: Use your own certificate files (Let's Encrypt, etc.) with file browser for cert + key paths
+  - **Off**: Plain HTTP for LAN-only use without certificate issues
+- Settings are persisted in config (`live_web_ssl_mode`, `live_web_ssl_cert`, `live_web_ssl_key`)
+
+### Fixed
+- **Scriptable widget protocol** – Now tries both `https://` and `http://` to match server SSL mode
+
 ## 14.0.3 - 2026-04-02
 ### Fixed
 - **Scriptable widget: HTTPS support** – Widget tried `http://` but server uses HTTPS with self-signed certificate. Now tries `https` first, falls back to `http`. Better offline error message with WiFi hint.

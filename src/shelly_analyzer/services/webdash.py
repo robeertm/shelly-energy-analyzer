@@ -7207,9 +7207,15 @@ class LiveWebDashboard:
         on_window_change: Optional[Callable[[int], None]] = None,
         on_action: Optional[Callable[[str, Dict[str, Any]], Dict[str, Any]]] = None,
         lang: str = "de",
+        ssl_mode: str = "auto",
+        ssl_cert: str = "",
+        ssl_key: str = "",
     ) -> None:
         self.store = store
         self.port = int(port)
+        self.ssl_mode = str(ssl_mode or "auto").strip().lower()
+        self.ssl_cert = str(ssl_cert or "").strip()
+        self.ssl_key = str(ssl_key or "").strip()
         self.refresh_seconds = float(refresh_seconds)
         self.window_minutes = int(window_minutes)
         self.token = ""  # auth disabled
@@ -7660,21 +7666,31 @@ class LiveWebDashboard:
         if self._httpd is None:
             raise last_err or OSError("could not bind web dashboard")
 
-        # Wrap with SSL so browsers allow Geolocation API (requires secure context)
+        # Wrap with SSL (unless ssl_mode == "off")
         self._is_https = False
-        try:
-            import ssl as _ssl
-            _cert_dir = (self.out_dir or Path(".")) / "data" / "runtime" / "ssl"
-            _cert, _key = _ensure_ssl_cert(_cert_dir)
-            ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
-            ctx.load_cert_chain(str(_cert), str(_key))
-            self._httpd.socket = ctx.wrap_socket(self._httpd.socket, server_side=True)
-            self._is_https = True
-            logging.getLogger(__name__).info("Web dashboard HTTPS enabled (self-signed cert)")
-        except Exception as e:
-            logging.getLogger(__name__).warning(
-                "HTTPS not available (GPS may not work): %s – falling back to HTTP", e
-            )
+        _log = logging.getLogger(__name__)
+        if self.ssl_mode != "off":
+            try:
+                import ssl as _ssl
+                ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
+                if self.ssl_mode == "custom" and self.ssl_cert and self.ssl_key:
+                    # User-provided certificate (e.g. Let's Encrypt)
+                    ctx.load_cert_chain(self.ssl_cert, self.ssl_key)
+                    _log.info("Web dashboard HTTPS enabled (custom certificate: %s)", self.ssl_cert)
+                else:
+                    # Auto: self-signed certificate
+                    _cert_dir = (self.out_dir or Path(".")) / "data" / "runtime" / "ssl"
+                    _cert, _key = _ensure_ssl_cert(_cert_dir)
+                    ctx.load_cert_chain(str(_cert), str(_key))
+                    _log.info("Web dashboard HTTPS enabled (self-signed cert)")
+                self._httpd.socket = ctx.wrap_socket(self._httpd.socket, server_side=True)
+                self._is_https = True
+            except Exception as e:
+                _log.warning(
+                    "HTTPS not available (GPS may not work): %s – falling back to HTTP", e
+                )
+        else:
+            _log.info("Web dashboard running in HTTP mode (SSL disabled)")
 
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
         self._thread.start()
