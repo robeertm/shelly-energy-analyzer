@@ -1,5 +1,9 @@
 # Changelog
 
+## 14.0.2 - 2026-04-02
+### Fixed
+- **Web dashboard crash on startup** – Local variable `html = _render_template(...)` shadowed `import html` module, causing `html.escape()` to fail with `'str' object has no attribute 'escape'`. Renamed to `_rendered_html`. This broke the Plotly plots page device list and caused connection resets.
+
 ## 14.0.1 - 2026-04-02
 ### Fixed
 - **Widget API crash** – `/api/widget` route referenced undefined `qs` variable, causing the web server to drop the connection. Now passes empty dict like other API routes.
