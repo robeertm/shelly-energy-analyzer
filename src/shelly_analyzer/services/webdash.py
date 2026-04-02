@@ -385,8 +385,50 @@ else                          widget = buildMedium(data);
 
 // Auto-refresh every 5 minutes
 widget.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000);
-
 Script.setWidget(widget);
+
+// When tapped (running in-app): show live table + open dashboard
+if (!config.runsInWidget) {
+  const table = new UITable();
+  table.showSeparators = true;
+
+  function addRow(title, value, color) {
+    const r = new UITableRow();
+    const t = r.addText(title);
+    t.widthWeight = 40;
+    const v = r.addText(value);
+    v.widthWeight = 60;
+    if (color) v.titleColor = color;
+    table.addRow(r);
+  }
+
+  addRow("⚡ Leistung", fmt(data.power_w, 0) + " W");
+  addRow("📅 Heute", fmt(data.today_kwh, 2) + " kWh  ·  " + fmt(data.today_eur, 2) + " €");
+  addRow("📆 Monat", fmt(data.month_kwh, 1) + " kWh  ·  " + fmt(data.month_eur, 2) + " €");
+  addRow("📊 Prognose", fmt(data.proj_kwh, 0) + " kWh  ·  " + fmt(data.proj_eur, 2) + " €");
+  if (data.spot_enabled && data.spot_ct != null) {
+    const delta = data.spot_ct - data.fixed_ct;
+    const sign = delta > 0 ? "+" : "";
+    const col = delta <= 0 ? Color.green() : Color.red();
+    addRow("💰 Spotpreis", data.spot_ct.toFixed(1) + " ct/kWh (" + sign + delta.toFixed(1) + " ct)", col);
+    addRow("💰 Festpreis", data.fixed_ct.toFixed(1) + " ct/kWh", C.blue);
+  }
+  if (data.devices && data.devices.length > 0) {
+    addRow("", "");
+    for (const dev of data.devices) {
+      addRow("🏠 " + dev.name, fmt(dev.power_w,0) + " W  ·  " + fmt(dev.today_kwh,2) + " kWh  ·  " + fmt(dev.today_eur,2) + " €");
+    }
+  }
+
+  // Open dashboard button
+  const btnRow = new UITableRow();
+  const btn = btnRow.addButton("🌐 Dashboard öffnen");
+  btn.onTap = () => Safari.open(BASE);
+  table.addRow(btnRow);
+
+  await table.present();
+}
+
 Script.complete();
 
 // ─── Small Widget: Current price + power ────────────────────────
