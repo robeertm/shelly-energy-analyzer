@@ -1,5 +1,15 @@
 # Changelog
 
+## 13.9.26 - 2026-04-02
+### Fixed
+- **CO2 tab: timer accumulation** – Refresh timer now cancels the previous one before scheduling, preventing exponentially increasing CPU usage over time.
+- **CO2 tab: macOS scroll** – Removed broken local mousewheel binding (delta/120=0 on macOS). Global handler covers it.
+- **CO2 tab: local timezone** – Heatmap, intensity chart, and all tables now show local time instead of UTC. German users no longer see times off by 1-2 hours.
+- **ENTSO-E: sub-hourly averaging** – PT15M generation/load data (4 points per hour) was summed instead of averaged, inflating MW values up to 4x. Now correctly averages sub-hourly values.
+- **Web: phase data update** – Phase values updated in the wrong element because `allKvs[1]` index shifted when reactive power/balance elements were added. Now uses stable `#kv-phases-{key}` ID selector.
+- **Web: duplicate `read_file_bytes`** – Removed first (dead) definition, kept second with `.csv` support added.
+- **Updates: dead code removed** – Orphaned ZIP download block after `_updates_open_release` that always failed with undefined `zip_path`/`rel.zip_url`, showing misleading "unreachable" status.
+
 ## 13.9.25 - 2026-04-02
 ### Fixed
 - **Mousewheel scrolling unified** – Removed 4 redundant per-tab mousewheel bindings (costs, settings main, settings devices, groups) that hijacked the global handler and broke scrolling in other tabs. The single smart global handler at app init now handles all tabs correctly, including macOS small-delta support.

@@ -290,6 +290,9 @@ def _parse_generation_xml(xml_text: str) -> Dict[str, Dict[int, float]]:
             if fuel not in results:
                 results[fuel] = {}
 
+            # Track counts per hour for averaging sub-hourly data
+            counts: Dict[int, int] = {}
+
             for point in period.iter(f"{{{_NS}}}Point"):
                 pos_el = point.find(f"{{{_NS}}}position")
                 qty_el = point.find(f"{{{_NS}}}quantity")
@@ -307,6 +310,12 @@ def _parse_generation_xml(xml_text: str) -> Dict[str, Dict[int, float]]:
                 hour_ts = int(hour_dt.timestamp())
 
                 results[fuel][hour_ts] = results[fuel].get(hour_ts, 0.0) + qty
+                counts[hour_ts] = counts.get(hour_ts, 0) + 1
+
+            # Average sub-hourly values (e.g. 4x PT15M) to get hourly mean MW
+            for hour_ts, n in counts.items():
+                if n > 1:
+                    results[fuel][hour_ts] /= n
 
     return results
 
@@ -478,6 +487,8 @@ def _parse_load_xml(xml_text: str) -> Dict[int, float]:
             else:
                 step_minutes = 60
 
+            counts: Dict[int, int] = {}
+
             for point in period.iter(f"{{{_NS}}}Point"):
                 pos_el = point.find(f"{{{_NS}}}position")
                 qty_el = point.find(f"{{{_NS}}}quantity")
@@ -493,6 +504,12 @@ def _parse_load_xml(xml_text: str) -> Dict[int, float]:
                 hour_dt = pt_dt.replace(minute=0, second=0, microsecond=0)
                 hour_ts = int(hour_dt.timestamp())
                 result[hour_ts] = result.get(hour_ts, 0.0) + qty
+                counts[hour_ts] = counts.get(hour_ts, 0) + 1
+
+            # Average sub-hourly values to get hourly mean MW
+            for hour_ts, n in counts.items():
+                if n > 1:
+                    result[hour_ts] /= n
 
     return result
 

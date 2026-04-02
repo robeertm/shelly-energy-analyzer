@@ -31,6 +31,11 @@ _CAR_G_PER_KM = 170.0
 _TREE_KG_PER_YEAR = 22.0
 
 
+def _local_tz():
+    """Return the system's local timezone."""
+    return datetime.now().astimezone().tzinfo
+
+
 class Co2Mixin:
     """CO₂ intensity tab: live intensity, history chart, summary, heatmap."""
 
@@ -186,16 +191,6 @@ class Co2Mixin:
         canvas.bind("<Configure>", lambda e: canvas.itemconfigure(_win, width=e.width))
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-
-        def _on_mw(event):
-            try:
-                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            except Exception:
-                pass
-        # Only scroll when mouse is over the scroll canvas itself, not over
-        # embedded matplotlib charts (which would scroll the chart away).
-        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mw))
-        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
         sf = self._co2_scroll_frame
 
@@ -386,7 +381,7 @@ class Co2Mixin:
         self._co2_tbl2.pack(side="left", fill="x", expand=True, padx=(4, 0), pady=4)
 
         # Trigger initial refresh after a short delay
-        self.after(800, self._refresh_co2_tab)
+        self._co2_refresh_timer = self.after(800, self._refresh_co2_tab)
 
         # Start the progress-bar polling loop
         self.after(500, self._co2_poll_progress)
@@ -403,7 +398,9 @@ class Co2Mixin:
         """
         # Schedule periodic auto-refresh so new data appears automatically
         try:
-            self.after(60_000, self._refresh_co2_tab)
+            if hasattr(self, '_co2_refresh_timer') and self._co2_refresh_timer:
+                self.after_cancel(self._co2_refresh_timer)
+            self._co2_refresh_timer = self.after(60_000, self._refresh_co2_tab)
         except Exception:
             pass
 
@@ -557,7 +554,9 @@ class Co2Mixin:
                             pass
                     else:
                         self._co2_progress_label_var.set("")
-                        self.after(300, self._refresh_co2_tab)
+                        if hasattr(self, '_co2_refresh_timer') and self._co2_refresh_timer:
+                            self.after_cancel(self._co2_refresh_timer)
+                        self._co2_refresh_timer = self.after(300, self._refresh_co2_tab)
         except Exception:
             logger.debug("Co2Mixin: progress poll error", exc_info=True)
         try:
@@ -758,7 +757,7 @@ class Co2Mixin:
         try:
             import numpy as np
             df = df.copy()
-            df["dt"] = pd.to_datetime(df["hour_ts"], unit="s", utc=True)
+            df["dt"] = pd.to_datetime(df["hour_ts"], unit="s", utc=True).dt.tz_convert(_local_tz())
             df = df.sort_values("dt")
 
             x = df["dt"].values
@@ -816,7 +815,7 @@ class Co2Mixin:
             xlabels = []
             for i in xticks:
                 if i < len(hours):
-                    dt = datetime.fromtimestamp(int(hours[i]), tz=timezone.utc)
+                    dt = datetime.fromtimestamp(int(hours[i]), tz=_local_tz())
                     xlabels.append(dt.strftime("%H:00"))
                 else:
                     xlabels.append("")
@@ -850,7 +849,7 @@ class Co2Mixin:
             df = df.sort_values("hour_ts", ascending=False).head(500)
             for _, row in df.iterrows():
                 dt_str = datetime.fromtimestamp(
-                    int(row["hour_ts"]), tz=timezone.utc
+                    int(row["hour_ts"]), tz=_local_tz()
                 ).strftime("%Y-%m-%d %H:%M")
                 tree.insert(
                     "",
@@ -891,7 +890,7 @@ class Co2Mixin:
                         intensity = float(r["intensity_g_per_kwh"])
                         co2_g = kwh * intensity
                         dt_str = datetime.fromtimestamp(
-                            int(r["hour_ts"]), tz=timezone.utc
+                            int(r["hour_ts"]), tz=_local_tz()
                         ).strftime("%Y-%m-%d %H:%M")
                         rows_out.append((int(r["hour_ts"]), dt_str, dev.name or dev.key, kwh, intensity, co2_g))
                 except Exception:
