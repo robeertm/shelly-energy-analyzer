@@ -284,6 +284,7 @@ class CoreMixin:
             self._traffic_monitor.install()
             # device_key -> metric -> ringbuffer of (ts,val)
             self._live_series: Dict[str, Dict[str, Any]] = {}
+            self._live_history: Dict[str, Any] = {}
             # Today kWh (base from imported CSVs + live delta)
             # base_* are recomputed after sync/reload; live_* are accumulated incrementally.
             self._today_base_kwh: Dict[str, float] = {}
@@ -4289,14 +4290,6 @@ class CoreMixin:
             canvas.pack(side="left", fill="both", expand=True)
             scrollbar.pack(side="right", fill="y")
 
-            # Mouse wheel scrolling
-            def _on_mousewheel(event):
-                try:
-                    canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-                except Exception:
-                    pass
-            canvas.bind_all("<MouseWheel>", _on_mousewheel)
-
             # Build per-device sections
             self._cost_device_vars = {}  # {device_key: {range_key: {kwh: StringVar, eur: StringVar, co2: StringVar}, proj_kwh, proj_eur, proj_co2, cmp_text}}
             self._cost_aggregate_vars = {}  # vars for group/all aggregate section
@@ -4441,10 +4434,6 @@ class CoreMixin:
                 pass
             _spot_tk_widget = self._cost_spot_canvas.get_tk_widget()
             _spot_tk_widget.pack(fill="x", expand=False)
-            # Forward mousewheel from matplotlib widget to outer scroll canvas
-            _spot_tk_widget.bind("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
-            _spot_tk_widget.bind("<Button-4>", lambda e: canvas.yview_scroll(-3, "units"))
-            _spot_tk_widget.bind("<Button-5>", lambda e: canvas.yview_scroll(3, "units"))
 
             # Initial refresh
             self.after(500, self._refresh_costs_tab)
@@ -5364,13 +5353,7 @@ class CoreMixin:
             _tm_canvas.bind("<Configure>", lambda e: _tm_canvas.itemconfigure(_tm_win, width=e.width))
             _tm_canvas.pack(side="left", fill="both", expand=True)
             _tm_sb.pack(side="right", fill="y")
-            def _tm_mousewheel(event):
-                try:
-                    _tm_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-                except Exception:
-                    pass
-            tab_main_sf.bind("<Enter>", lambda e: _tm_canvas.bind_all("<MouseWheel>", _tm_mousewheel))
-            tab_main_sf.bind("<Leave>", lambda e: _tm_canvas.unbind_all("<MouseWheel>"))
+
             nb.add(tab_expert, text=self.t('settings.expert'))
             nb.add(tab_billing, text=self.t('tabs.billing'))
             nb.add(tab_updates, text=self.t('settings.updates'))
@@ -5484,38 +5467,6 @@ class CoreMixin:
 
             devices_inner.bind("<Configure>", _devices_on_inner_config)
             devices_canvas.bind("<Configure>", _devices_on_canvas_config)
-
-            # Mouse wheel scrolling (Windows/macOS) + Linux buttons
-            def _devices_on_mousewheel(e):
-                try:
-                    # On Windows: delta is multiple of 120, on macOS smaller
-                    delta = int(-1 * (e.delta / 120)) if abs(getattr(e, "delta", 0)) >= 120 else (-1 if e.delta > 0 else 1)
-                    devices_canvas.yview_scroll(delta, "units")
-                except Exception:
-                    pass
-
-            def _devices_on_button4(_e):
-                try:
-                    devices_canvas.yview_scroll(-1, "units")
-                except Exception:
-                    pass
-
-            def _devices_on_button5(_e):
-                try:
-                    devices_canvas.yview_scroll(1, "units")
-                except Exception:
-                    pass
-
-            def _devices_bind_wheel(_w):
-                _w.bind("<Enter>", lambda _e: devices_canvas.bind_all("<MouseWheel>", _devices_on_mousewheel))
-                _w.bind("<Leave>", lambda _e: devices_canvas.unbind_all("<MouseWheel>"))
-                _w.bind("<Enter>", lambda _e: devices_canvas.bind_all("<Button-4>", _devices_on_button4), add="+")
-                _w.bind("<Enter>", lambda _e: devices_canvas.bind_all("<Button-5>", _devices_on_button5), add="+")
-                _w.bind("<Leave>", lambda _e: devices_canvas.unbind_all("<Button-4>"), add="+")
-                _w.bind("<Leave>", lambda _e: devices_canvas.unbind_all("<Button-5>"), add="+")
-
-            _devices_bind_wheel(devices_canvas)
-            _devices_bind_wheel(devices_inner)
 
             # Build the actual UI into this inner frame
             td = devices_inner
@@ -5731,7 +5682,7 @@ class CoreMixin:
                         else:
                             messagebox.showwarning("Telegram", self.t("msg.error_detail", err=err or "?"))
                     try:
-                        self.root.after(0, _done)
+                        self.after(0, _done)
                     except Exception:
                         _done()
 
@@ -5892,7 +5843,7 @@ class CoreMixin:
                         else:
                             messagebox.showwarning("Webhook", self.t("msg.error_detail", err=err or "?"))
                     try:
-                        self.root.after(0, _done)
+                        self.after(0, _done)
                     except Exception:
                         _done()
                 try:
@@ -6043,7 +5994,7 @@ class CoreMixin:
                         else:
                             messagebox.showwarning(self.t("settings.email.title"), self.t("msg.error_detail", err=err or "?"))
                     try:
-                        self.root.after(0, _done)
+                        self.after(0, _done)
                     except Exception:
                         _done()
                 try:
@@ -6364,7 +6315,7 @@ class CoreMixin:
                     pass
 
             btn_co2_presets = ttk.Button(pricing_box, text=self.t('settings.pricing.co2_presets'), command=_co2_preset_menu)
-            btn_co2_presets.grid(row=3, column=2, padx=8, pady=8, sticky="w")
+            btn_co2_presets.grid(row=4, column=2, padx=8, pady=8, sticky="w")
             self._co2_preset_btn = btn_co2_presets
 
             # ---------- TOU / Mehrtarif settings ----------
@@ -7295,13 +7246,6 @@ class CoreMixin:
             win = canvas.create_window((0, 0), window=inner, anchor="nw")
             inner.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
             canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win, width=e.width))
-
-            def _bind_wheel(w):
-                w.bind("<Enter>", lambda _e: canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")))
-                w.bind("<Leave>", lambda _e: canvas.unbind_all("<MouseWheel>"))
-
-            _bind_wheel(canvas)
-            _bind_wheel(inner)
 
             ttk.Label(inner, text=self.t("groups.title"), font=("TkDefaultFont", 13, "bold")).pack(anchor="w", padx=12, pady=(12, 4))
 
@@ -11792,7 +11736,7 @@ class CoreMixin:
                     else:
                         messagebox.showwarning(self.t("settings.email.title"), self.t("msg.error_detail", err=err or "?"))
                 try:
-                    self.root.after(0, _done)
+                    self.after(0, _done)
                 except Exception:
                     _done()
             try:
@@ -11989,7 +11933,7 @@ class CoreMixin:
                     else:
                         messagebox.showwarning(self.t("settings.email.title"), self.t("msg.error_detail", err=err or "?"))
                 try:
-                    self.root.after(0, _done)
+                    self.after(0, _done)
                 except Exception:
                     _done()
             try:
@@ -13433,9 +13377,12 @@ class CoreMixin:
 
             def _save_tg() -> None:
                 try:
-                    self.cfg.ui.telegram_enabled = bool(self._wiz_tg_enabled.get())
-                    self.cfg.ui.telegram_bot_token = str(self._wiz_tg_token.get() or "").strip()
-                    self.cfg.ui.telegram_chat_id = str(self._wiz_tg_chat.get() or "").strip()
+                    new_ui = replace(self.cfg.ui,
+                        telegram_enabled=bool(self._wiz_tg_enabled.get()),
+                        telegram_bot_token=str(self._wiz_tg_token.get() or "").strip(),
+                        telegram_chat_id=str(self._wiz_tg_chat.get() or "").strip(),
+                    )
+                    self.cfg = replace(self.cfg, ui=new_ui)
                     save_config(self.cfg, self.cfg_path)
                 except Exception:
                     pass
@@ -14012,9 +13959,12 @@ class CoreMixin:
             """Finalize setup: enable tabs, build them and jump to Settings->Devices."""
             # Save Telegram values from wizard
             try:
-                self.cfg.ui.telegram_enabled = bool(getattr(self, "_wiz_tg_enabled", tk.BooleanVar(value=False)).get())
-                self.cfg.ui.telegram_bot_token = str(getattr(self, "_wiz_tg_token", tk.StringVar(value="")).get() or "").strip()
-                self.cfg.ui.telegram_chat_id = str(getattr(self, "_wiz_tg_chat", tk.StringVar(value="")).get() or "").strip()
+                new_ui = replace(self.cfg.ui,
+                    telegram_enabled=bool(getattr(self, "_wiz_tg_enabled", tk.BooleanVar(value=False)).get()),
+                    telegram_bot_token=str(getattr(self, "_wiz_tg_token", tk.StringVar(value="")).get() or "").strip(),
+                    telegram_chat_id=str(getattr(self, "_wiz_tg_chat", tk.StringVar(value="")).get() or "").strip(),
+                )
+                self.cfg = replace(self.cfg, ui=new_ui)
                 save_config(self.cfg, self.cfg_path)
             except Exception:
                 pass

@@ -157,7 +157,7 @@ def compute_forecast(
     # Summary calculations
     forecast_month_kwh = sum(forecast_kwh[:30]) if len(forecast_kwh) >= 30 else sum(forecast_kwh)
     avg_daily = float(kwh_vals.mean())
-    forecast_year_kwh = avg_daily * 365 + slope * 365 * 182.5  # linear extrapolation
+    forecast_year_kwh = avg_daily * 365  # avg_daily already includes trend
 
     return ForecastResult(
         device_key=device_key,

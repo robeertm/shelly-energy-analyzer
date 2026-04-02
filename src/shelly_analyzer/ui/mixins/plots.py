@@ -969,7 +969,7 @@ class PlotsMixin:
 
                 # Redraw when switching device tabs
                 try:
-                    dev_nb.bind("<<NotebookTabChanged>>", lambda _e, mk=metric_key: self._redraw_plots_metric(mk))
+                    dev_nb.bind("<<NotebookTabChanged>>", lambda _e, mk=metric_key: self._redraw_plots_metric(mk), add="+")
                 except Exception:
                     pass
 

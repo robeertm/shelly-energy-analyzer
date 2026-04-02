@@ -652,7 +652,7 @@ _HTML_TEMPLATE = """<!doctype html>
       flex-wrap: wrap;
       gap: 10px;
       font-size: 12px;
-      color: var(--text);
+      color: var(--fg);
     }}
     .chart-detail-legend-item {{ display: flex; align-items: center; gap: 5px; }}
     .chart-detail-legend-dot {{ width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }}
@@ -1395,7 +1395,9 @@ function startLive() {{
   tick(true);
   loadHistory();
   liveTimer = setInterval(function() {{ if (!frozen) tick(false); }}, REFRESH_MS);
-  document.getElementById('btn-freeze').addEventListener('click', toggleFreeze);
+  var _fb = document.getElementById('btn-freeze');
+  _fb.removeEventListener('click', toggleFreeze);
+  _fb.addEventListener('click', toggleFreeze);
   // NILM learning status (update every 30s)
   _updateNilmStatus();
   if (!window._nilmTimer) window._nilmTimer = setInterval(_updateNilmStatus, 30000);
@@ -2269,6 +2271,11 @@ function _drawSpotChart(hourly, fixedCt) {{
     _spotTip.style.left = tipX + 'px';
     _spotTip.style.top = '4px';
   }}
+  if (canvas._spotHover) {{
+    canvas.removeEventListener('mousemove', canvas._spotHover);
+    canvas.removeEventListener('touchmove', canvas._spotHover);
+  }}
+  canvas._spotHover = _spotHover;
   canvas.addEventListener('mousemove', _spotHover);
   canvas.addEventListener('touchmove', _spotHover);
   canvas.addEventListener('mouseleave', function() {{ _spotTip.style.display = 'none'; }});
@@ -3768,7 +3775,7 @@ function _drawSankeyFlow(canvasId, d) {{
   const ctx = cv.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  const isDark = document.body.classList.contains('dark');
+  const isDark = document.documentElement.dataset.theme === 'dark';
   const fg = isDark ? '#e0e0e0' : '#333';
   const bg = isDark ? '#111' : '#fff';
 
@@ -4468,7 +4475,7 @@ _PLOTS_TEMPLATE = """<!doctype html>
 // Apply persisted theme (shared with Live/Control pages)
 (function(){
   try {
-    const ls = localStorage.getItem('sea_web_theme');
+    const ls = localStorage.getItem('sea_theme');
     if (ls) document.documentElement.dataset.theme = ls;
     else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
       document.documentElement.dataset.theme = 'dark';
@@ -4625,7 +4632,7 @@ function t(k){ return (I18N && I18N[k]) ? I18N[k] : k; }
 
 // Theme (shared with Live/Control)
 try {
-  const LS_THEME = 'sea_web_theme';
+  const LS_THEME = 'sea_theme';
   let theme = localStorage.getItem(LS_THEME);
   if (!theme) {
     theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
@@ -4635,7 +4642,7 @@ try {
 
 function toggleTheme(){
   try {
-    const LS_THEME = 'sea_web_theme';
+    const LS_THEME = 'sea_theme';
     const cur = document.documentElement.dataset.theme || 'light';
     const nxt = (cur === 'dark') ? 'light' : 'dark';
     document.documentElement.dataset.theme = nxt;
@@ -5550,7 +5557,7 @@ _CONTROL_TEMPLATE = """<!doctype html>
 
 <script>
 // Theme (shared with Live page)
-const LS_THEME = "sea_web_theme";
+const LS_THEME = "sea_theme";
 function setTheme(theme){
   const v = (theme==='dark')?'dark':'light';
   document.documentElement.dataset.theme = v;
@@ -5586,7 +5593,7 @@ try {
   }
 } catch (e) {}
 
-function qs() { return ""; }
+function qs() { return window.location.search || ""; }
 
 async function api(path, opts) {
   const u = path + qs();
@@ -5743,7 +5750,7 @@ function _drawTrafficRateChart(hist) {{
   cv.height = H * dpr;
   const ctx = cv.getContext('2d');
   ctx.scale(dpr, dpr);
-  const isDark = document.body.classList.contains('dark');
+  const isDark = document.documentElement.dataset.theme === 'dark';
   const fg = isDark ? '#bbb' : '#555';
   const gridC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
 
