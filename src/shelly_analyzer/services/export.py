@@ -827,6 +827,12 @@ class EmailReportData:
     co2_daily_intensities: List[float] = field(default_factory=list)   # avg g/kWh per day
     co2_green_thresh: float = 150.0
     co2_dirty_thresh: float = 400.0
+    # v13.10 – spot price data for notifications
+    spot_enabled: bool = False
+    spot_total_eur: float = 0.0          # total spot cost for period
+    spot_avg_ct_per_kwh: float = 0.0     # average spot price ct/kWh
+    spot_current_ct: float = 0.0         # current hour spot price ct/kWh
+    fixed_ct_per_kwh: float = 0.0        # fixed tariff ct/kWh for comparison
 
 
 # ---------- Matplotlib chart helpers ----------
@@ -1541,7 +1547,26 @@ def export_pdf_email_daily(
                   peak_w_lbl, _fmt_int(peak_w, lang), "W")
     _draw_kpi_box(c, margin + 2 * (kpi_w + kpi_gap), y, kpi_w, kpi_h,
                   peak_h_lbl, peak_hour_lbl, "")
-    y -= kpi_h + 0.5 * cm
+    y -= kpi_h + 0.3 * cm
+
+    # Row 3 of KPIs: Spot price (if enabled)
+    if data.spot_enabled and data.spot_total_eur > 0:
+        _spot_lbl = "Dyn. Spotpreis" if not is_en else "Dynamic Spot"
+        _spot_avg_lbl = "\u00d8 Spotpreis" if not is_en else "\u00d8 Spot Price"
+        _spot_cur_lbl = "Aktuell" if not is_en else "Current"
+        _delta_eur = data.spot_total_eur - total_eur
+        _delta_sign = "+" if _delta_eur > 0 else ""
+        _draw_kpi_box(c, margin,                         y, kpi_w, kpi_h,
+                      _spot_lbl,
+                      _fmt_money(data.spot_total_eur, lang), f"EUR ({_delta_sign}{_delta_eur:.2f})")
+        _draw_kpi_box(c, margin + kpi_w + kpi_gap,       y, kpi_w, kpi_h,
+                      _spot_avg_lbl,
+                      f"{data.spot_avg_ct_per_kwh:.1f}", "ct/kWh")
+        if data.spot_current_ct > 0:
+            _draw_kpi_box(c, margin + 2 * (kpi_w + kpi_gap), y, kpi_w, kpi_h,
+                          _spot_cur_lbl,
+                          f"{data.spot_current_ct:.1f}", "ct/kWh")
+        y -= kpi_h + 0.3 * cm
 
     # Comparisons
     prev_day_lbl = "vs. Vortag:" if not is_en else "vs. previous day:"
@@ -1820,7 +1845,28 @@ def export_pdf_email_monthly(
     _draw_kpi_box(c, margin + 2 * (kpi_w + kpi_gap), y, kpi_w, kpi_h,
                   "Gunstigster Tag" if not is_en else "Best day",
                   best_day_str, "")
-    y -= kpi_h + 0.5 * cm
+    y -= kpi_h + 0.3 * cm
+
+    # Row 3: Spot price (if enabled)
+    if data.spot_enabled and data.spot_total_eur > 0:
+        _spot_lbl_m = "Dyn. Spotpreis" if not is_en else "Dynamic Spot"
+        _spot_avg_lbl_m = "\u00d8 Spotpreis" if not is_en else "\u00d8 Spot Price"
+        _spot_cur_lbl_m = "Aktuell" if not is_en else "Current"
+        _delta_eur_m = data.spot_total_eur - total_eur
+        _delta_sign_m = "+" if _delta_eur_m > 0 else ""
+        _draw_kpi_box(c, margin,                         y, kpi_w, kpi_h,
+                      _spot_lbl_m,
+                      _fmt_money(data.spot_total_eur, lang), f"EUR ({_delta_sign_m}{_delta_eur_m:.2f})")
+        _draw_kpi_box(c, margin + kpi_w + kpi_gap,       y, kpi_w, kpi_h,
+                      _spot_avg_lbl_m,
+                      f"{data.spot_avg_ct_per_kwh:.1f}", "ct/kWh")
+        if data.spot_current_ct > 0:
+            _draw_kpi_box(c, margin + 2 * (kpi_w + kpi_gap), y, kpi_w, kpi_h,
+                          _spot_cur_lbl_m,
+                          f"{data.spot_current_ct:.1f}", "ct/kWh")
+        y -= kpi_h + 0.3 * cm
+
+    y -= 0.2 * cm
 
     # Comparisons
     prev_mo_lbl = "vs. Vormonat:" if not is_en else "vs. previous month:"

@@ -4414,6 +4414,14 @@ class CoreMixin:
             # ── Spot price 24h chart ──────────────────────────────────────
             spot_chart_frame = ttk.LabelFrame(self._cost_scroll_frame, text=self.t("spot.chart.title"))
             spot_chart_frame.pack(fill="x", padx=14, pady=(8, 12))
+            # Current spot price label (prominent)
+            _cur_price_frame = ttk.Frame(spot_chart_frame)
+            _cur_price_frame.pack(fill="x", padx=8, pady=(4, 0))
+            self._cost_spot_current_var = tk.StringVar(value="")
+            _cur_price_lbl = tk.Label(_cur_price_frame, textvariable=self._cost_spot_current_var,
+                                       font=("", 13, "bold"), fg="#ff9800", anchor="w")
+            _cur_price_lbl.pack(side="left", padx=4)
+            self._cost_spot_current_label = _cur_price_lbl
             from matplotlib.figure import Figure
             from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
             self._cost_spot_fig = Figure(figsize=(12, 3.0), dpi=96)
@@ -4503,6 +4511,35 @@ class CoreMixin:
             hours_dt = [datetime.fromtimestamp(int(ts), tz=timezone.utc) for ts in hourly["hour_ts"]]
             values = hourly["total_ct"].tolist()
 
+            # Update current spot price label
+            try:
+                now_utc = datetime.fromtimestamp(now_ts, tz=timezone.utc)
+                current_hour_ts = int(now_ts // 3600) * 3600
+                cur_idx = None
+                for i, ts in enumerate(hourly["hour_ts"]):
+                    if int(ts) == current_hour_ts:
+                        cur_idx = i
+                        break
+                if cur_idx is not None:
+                    cur_total = values[cur_idx]
+                    cur_raw = hourly["raw_ct"].tolist()[cur_idx]
+                    delta = cur_total - fixed_ct
+                    arrow = "▲" if delta > 0 else "▼"
+                    sign = "+" if delta > 0 else ""
+                    self._cost_spot_current_var.set(
+                        f"⚡ {self.t('spot.current_price', 'Aktueller Preis')}: {cur_total:.1f} ct/kWh  "
+                        f"({arrow} {sign}{delta:.1f} ct vs. {self.t('plots.dynprice.fixed')})"
+                    )
+                    color = "#4caf50" if delta <= 0 else "#e53935"
+                    try:
+                        self._cost_spot_current_label.configure(fg=color)
+                    except Exception:
+                        pass
+                else:
+                    self._cost_spot_current_var.set("")
+            except Exception:
+                pass
+
             # Bar colors: green (cheap) → yellow → orange → red (expensive)
             bar_colors = []
             for v in values:
@@ -4552,8 +4589,8 @@ class CoreMixin:
             _tip_fg = "#eeeeee" if _tc["bg"] == "#111111" else "#333333"
             _spot_annot = ax.annotate("", xy=(0, 0), xytext=(0, 12),
                                        textcoords="offset points", ha="center", va="bottom",
-                                       fontsize=8, fontweight="bold", color=_tip_fg,
-                                       bbox=dict(boxstyle="round,pad=0.3", fc=_tip_bg, ec="#ff9800", alpha=0.95))
+                                       fontsize=8, fontweight="bold", color=_tip_fg, zorder=99,
+                                       bbox=dict(boxstyle="round,pad=0.3", fc=_tip_bg, ec="#ff9800", alpha=1.0))
             _spot_annot.set_visible(False)
             _spot_bars_data = list(zip(x_dates, values, hours_dt, hourly["raw_ct"].tolist()))
 
@@ -12454,7 +12491,7 @@ class CoreMixin:
                 _co2_dirty = float(getattr(_co2_cfg, "dirty_threshold_g_per_kwh", 400.0) or 400.0)
 
                 _log.info("_build_email_report_data: done, totals=%d devices, total_kwh=%.3f, peak_hour=%d", len(totals), total_kwh, peak_hour)
-                return EmailReportData(
+                result = EmailReportData(
                     report_type=report_type,
                     period_start=start_dt,
                     period_end=end_dt,
@@ -12488,6 +12525,34 @@ class CoreMixin:
                     co2_green_thresh=_co2_green,
                     co2_dirty_thresh=_co2_dirty,
                 )
+
+                # Add spot price data if enabled
+                try:
+                    _email_spot_cfg = getattr(self.cfg, "spot_price", None)
+                    if _email_spot_cfg and getattr(_email_spot_cfg, "enabled", False):
+                        result.spot_enabled = True
+                        result.fixed_ct_per_kwh = round(price * 100, 2)
+                        _sp_cost_e, _sp_avg_e, _sp_src_e = self._calc_spot_cost_for_range(
+                            start_ts, end_ts, device_key="", kwh_fallback=total_kwh,
+                        )
+                        if _sp_cost_e > 0:
+                            result.spot_total_eur = round(_sp_cost_e, 2)
+                            result.spot_avg_ct_per_kwh = round(_sp_avg_e, 1)
+                        # Current spot price
+                        import time as _time_email
+                        _now_email_ts = int(_time_email.time())
+                        _zone_e = getattr(_email_spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
+                        _markup_e = float(_email_spot_cfg.total_markup_ct() if hasattr(_email_spot_cfg, "total_markup_ct") else 16.0)
+                        _vat_e = self.cfg.pricing.vat_rate() if getattr(_email_spot_cfg, "include_vat", True) else 0.0
+                        _cur_h_e = (_now_email_ts // 3600) * 3600
+                        _df_cur_e = self.storage.db.query_spot_prices(_zone_e, _cur_h_e, _cur_h_e + 3600)
+                        if not _df_cur_e.empty:
+                            _raw_e = float(_df_cur_e["price_eur_mwh"].mean()) / 10.0
+                            result.spot_current_ct = round((_raw_e + _markup_e) * (1.0 + _vat_e), 1)
+                except Exception:
+                    pass
+
+                return result
             except Exception as _exc:
                 _log.warning("_build_email_report_data failed: %s", _exc, exc_info=True)
                 return None
@@ -12824,6 +12889,46 @@ class CoreMixin:
                 except Exception:
                     pass
 
+            # Dynamic spot price comparison
+            try:
+                _spot_cfg_tg = getattr(self.cfg, "spot_price", None)
+                if _spot_cfg_tg and getattr(_spot_cfg_tg, "enabled", False):
+                    _s_ts_sp = int(start_dt.timestamp())
+                    _e_ts_sp = int(end_dt.timestamp())
+                    _sp_cost, _sp_avg_ct, _sp_src = self._calc_spot_cost_for_range(
+                        _s_ts_sp, _e_ts_sp, device_key="", kwh_fallback=total_kwh,
+                    )
+                    if _sp_cost > 0 and unit_gross is not None:
+                        _fixed_cost = total_kwh * unit_gross
+                        _delta = _sp_cost - _fixed_cost
+                        _arrow = "📈" if _delta > 0 else "📉"
+                        _sign = "+" if _delta > 0 else ""
+                        lines.append(f"⚡ Dyn. Spotpreis: {_sp_cost:.2f} € (Ø {_sp_avg_ct:.1f} ct/kWh)")
+                        lines.append(f"   {_arrow} vs. Festpreis: {_sign}{_delta:.2f} € ({_sign}{(_delta / _fixed_cost * 100):.1f}%)" if _fixed_cost > 0 else "")
+
+                    # Current spot price
+                    try:
+                        import time as _time_tg
+                        _now_ts_tg = int(_time_tg.time())
+                        _zone_tg = getattr(_spot_cfg_tg, "bidding_zone", "DE-LU") or "DE-LU"
+                        _markup_ct_tg = float(_spot_cfg_tg.total_markup_ct() if hasattr(_spot_cfg_tg, "total_markup_ct") else getattr(_spot_cfg_tg, "markup_ct_per_kwh", 16.0))
+                        _pricing_tg = getattr(self.cfg, "pricing", None)
+                        _vat_tg = _pricing_tg.vat_rate() if getattr(_spot_cfg_tg, "include_vat", True) and _pricing_tg else 0.0
+                        _cur_hour_ts = (_now_ts_tg // 3600) * 3600
+                        _df_cur = self.storage.db.query_spot_prices(_zone_tg, _cur_hour_ts, _cur_hour_ts + 3600)
+                        if not _df_cur.empty:
+                            _cur_raw_ct = float(_df_cur["price_eur_mwh"].mean()) / 10.0
+                            _cur_total_ct = (_cur_raw_ct + _markup_ct_tg) * (1.0 + _vat_tg)
+                            _fixed_ct_tg = (unit_gross * 100.0) if unit_gross else 0.0
+                            _d = _cur_total_ct - _fixed_ct_tg
+                            _a = "▲" if _d > 0 else "▼"
+                            _s = "+" if _d > 0 else ""
+                            lines.append(f"   💡 Aktuell: {_cur_total_ct:.1f} ct/kWh ({_a} {_s}{_d:.1f} ct vs. Festpreis)")
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
             # CO₂ emissions (ENTSO-E weighted with static fallback)
             _tg_co2_intensity = 0.0  # effective intensity for per-device/standby use
             try:
@@ -12908,10 +13013,22 @@ class CoreMixin:
             lines.append("")
             lines.append("🏠 Pro Gerät:")
             if per_dev_kwh:
+                _spot_cfg_pd = getattr(self.cfg, "spot_price", None)
+                _spot_pd_ok = _spot_cfg_pd and getattr(_spot_cfg_pd, "enabled", False)
                 for name, _key, kwh in per_dev_kwh:
                     parts_dev = [f"{kwh:.3f} kWh"]
                     if unit_gross is not None:
                         parts_dev.append(f"{(kwh * unit_gross):.2f} €")
+                    # Per-device spot cost
+                    if _spot_pd_ok:
+                        try:
+                            _pd_spot, _pd_avg, _pd_src = self._calc_spot_cost_for_range(
+                                _s_ts, _e_ts, device_key=_key, kwh_fallback=kwh,
+                            )
+                            if _pd_spot > 0:
+                                parts_dev.append(f"⚡{_pd_spot:.2f} €")
+                        except Exception:
+                            pass
                     # Per-device CO₂ using ENTSO-E data with fallback
                     try:
                         _dev_co2, _, _ = self._calc_co2_for_range(
