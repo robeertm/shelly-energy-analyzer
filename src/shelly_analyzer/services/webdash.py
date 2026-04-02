@@ -329,7 +329,6 @@ _SCRIPTABLE_WIDGET_JS = r"""
 // und gib die Adresse ein, z.B. "192.168.1.50:8765"
 
 const PARAM = args.widgetParameter || "192.168.1.50:8765";
-const BASE = "http://" + PARAM;
 const DARK = Device.isUsingDarkAppearance();
 
 // Colors
@@ -344,17 +343,34 @@ const C = {
   blue:    new Color("#2196F3"),
 };
 
+// Try HTTPS first (self-signed cert), fall back to HTTP
 let data;
-try {
-  const req = new Request(BASE + "/api/widget");
-  req.timeoutInterval = 8;
-  data = await req.loadJSON();
-} catch(e) {
+let BASE;
+for (const proto of ["https", "http"]) {
+  BASE = proto + "://" + PARAM;
+  try {
+    const req = new Request(BASE + "/api/widget");
+    req.timeoutInterval = 6;
+    data = await req.loadJSON();
+    if (data) break;
+  } catch(e) {
+    data = null;
+  }
+}
+if (!data) {
   const w = new ListWidget();
   w.backgroundColor = C.bg;
-  w.addText("⚡ Offline").font = Font.boldSystemFont(14);
-  w.addText(PARAM).textColor = C.muted;
-  w.addText(e.message).textColor = C.red;
+  const t1 = w.addText("⚡ Offline");
+  t1.font = Font.boldSystemFont(14);
+  t1.textColor = C.red;
+  w.addSpacer(4);
+  const t2 = w.addText(PARAM);
+  t2.font = Font.systemFont(11);
+  t2.textColor = C.muted;
+  w.addSpacer(2);
+  const t3 = w.addText("Prüfe WiFi & IP-Adresse");
+  t3.font = Font.systemFont(10);
+  t3.textColor = C.muted;
   Script.setWidget(w);
   Script.complete();
   return;
