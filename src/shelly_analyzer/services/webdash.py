@@ -2066,14 +2066,26 @@ function renderCosts(data, el) {{
     if (!spotActive || v == null || v <= 0) return '';
     var diff = v - f;
     var arrow = diff > 0 ? '\u2191' : '\u2193';
-    return arrow + ' ' + Math.abs(diff).toFixed(2) + ' \u20ac';
+    var color = diff <= 0 ? '#4caf50' : '#e53935';
+    return '<span style="color:' + color + ';font-weight:bold">' + arrow + ' ' + Math.abs(diff).toFixed(2) + ' \u20ac</span>';
   }}
   // 24h Spot Price Chart (at top, before device cards)
   if (data.spot_enabled && data.spot_chart && data.spot_chart.length > 0) {{
     var fixedCt = data.fixed_ct_per_kwh || 0;
+    var curSpotHtml = '';
+    if (data.current_spot_ct != null && fixedCt > 0) {{
+      var delta = data.current_spot_ct - fixedCt;
+      var arrow = delta > 0 ? '\u25b2' : '\u25bc';
+      var sign = delta > 0 ? '+' : '';
+      var priceColor = delta <= 0 ? '#4caf50' : '#e53935';
+      curSpotHtml = '<div style="font-size:15px;font-weight:bold;color:' + priceColor + ';margin:4px 0 8px 0">' +
+        '\u26a1 ' + t('spot.current_price', 'Aktueller Preis') + ': ' + data.current_spot_ct.toFixed(1) + ' ct/kWh  ' +
+        '<span style="font-size:12px">(' + arrow + ' ' + sign + delta.toFixed(1) + ' ct vs. ' + t('plots.dynprice.fixed', 'Festpreis') + ')</span></div>';
+    }}
     html += '<div class="card" style="margin-bottom:10px">' +
       '<div style="font-size:12px;font-weight:650;color:#ff9800;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">' +
       '\u26a1 ' + t('spot.chart.title', 'Spot Price 24h') + '</div>' +
+      curSpotHtml +
       '<canvas id="spot-24h-chart" style="width:100%;height:160px"></canvas>' +
       '<div id="spot-chart-labels" style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:2px;padding:0 4px"></div>' +
       '</div>';
@@ -2094,9 +2106,9 @@ function renderCosts(data, el) {{
       ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">' +
           '<div style="font-size:11px;color:#ff9800;margin-bottom:4px">\u26a1 ' + t('spot.cost_label', 'Dyn. Tarif') + '</div>' +
           '<div class="metric-grid">' +
-          metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_spot_eur,2,'\u20ac'), spotSub('today',d)) +
-          metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_spot_eur,2,'\u20ac'), spotSub('week',d)) +
-          metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_spot_eur,2,'\u20ac'), spotSub('month',d)) +
+          metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_spot_eur,2,'\u20ac'), spotSub('today',d), true) +
+          metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_spot_eur,2,'\u20ac'), spotSub('week',d), true) +
+          metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_spot_eur,2,'\u20ac'), spotSub('month',d), true) +
           metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_spot_eur||0,2,'\u20ac'), '') +
           '</div></div>'
       : '';
@@ -2268,11 +2280,11 @@ function _drawSpotChart(hourly, fixedCt) {{
   canvas.addEventListener('touchend', function() {{ _spotTip.style.display = 'none'; }});
 }}
 
-function metricCardHtml(label, value, sub) {{
+function metricCardHtml(label, value, sub, rawSub) {{
   return '<div class="metric-card">' +
     '<div class="metric-label">' + esc(label) + '</div>' +
     '<div class="metric-value">' + esc(value) + '</div>' +
-    (sub ? '<div class="metric-sub">' + esc(sub) + '</div>' : '') +
+    (sub ? '<div class="metric-sub">' + (rawSub ? sub : esc(sub)) + '</div>' : '') +
     '</div>';
 }}
 

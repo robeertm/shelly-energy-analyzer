@@ -849,6 +849,15 @@ class LiveWebMixin:
                         except Exception:
                             pass
 
+                    # Current hour spot price
+                    _current_spot_ct = None
+                    if _spot_chart:
+                        _cur_hour_ts = int(_now.timestamp()) // 3600 * 3600
+                        for _sp_entry in _spot_chart:
+                            if int(_sp_entry["ts"]) == _cur_hour_ts:
+                                _current_spot_ct = _sp_entry["total_ct"]
+                                break
+
                     return {
                         "ok": True, "devices": devices_out, "unit_eur": _unit,
                         "co2_g_per_kwh": _co2_g,
@@ -857,6 +866,7 @@ class LiveWebMixin:
                         "spot_enabled": _spot_enabled,
                         "spot_chart": _spot_chart,
                         "fixed_ct_per_kwh": round(_unit * 100, 2),
+                        "current_spot_ct": _current_spot_ct,
                     }
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
