@@ -4192,6 +4192,9 @@ class CoreMixin:
                         lang=self.lang,
                         on_window_change=self._on_web_window_change,
                         on_action=self._web_action_dispatch,
+                        ssl_mode=str(getattr(self.cfg.ui, "live_web_ssl_mode", "auto") or "auto"),
+                        ssl_cert=str(getattr(self.cfg.ui, "live_web_ssl_cert", "") or ""),
+                        ssl_key=str(getattr(self.cfg.ui, "live_web_ssl_key", "") or ""),
                     )
                     self._live_web.start()
                 url = self._live_web.url() if self._live_web else None
@@ -7071,6 +7074,41 @@ class CoreMixin:
             ttk.Entry(web_box, width=8, textvariable=self.set_live_web_refresh_var).grid(row=0, column=4, padx=8, pady=8, sticky="w")
             ttk.Label(web_box, text=self.t('settings.web.note')).grid(row=1, column=0, columnspan=5, padx=8, pady=(0, 8), sticky="w")
 
+            # SSL / HTTPS settings
+            _ssl_mode_val = str(getattr(self.cfg.ui, "live_web_ssl_mode", "auto") or "auto")
+            _ssl_modes = {"auto": "Auto (Self-Signed)", "custom": "Custom (Let's Encrypt)", "off": "Off (HTTP)"}
+            _ssl_display = _ssl_modes.get(_ssl_mode_val, _ssl_modes["auto"])
+            if not hasattr(self, "_ssl_mode_var"):
+                self._ssl_mode_var = tk.StringVar(value=_ssl_display)
+                self._ssl_cert_var = tk.StringVar(value=str(getattr(self.cfg.ui, "live_web_ssl_cert", "") or ""))
+                self._ssl_key_var = tk.StringVar(value=str(getattr(self.cfg.ui, "live_web_ssl_key", "") or ""))
+                self._ssl_display_to_code = {v: k for k, v in _ssl_modes.items()}
+
+            ttk.Label(web_box, text="HTTPS:").grid(row=2, column=0, padx=8, pady=6, sticky="w")
+            _ssl_cb = ttk.Combobox(web_box, width=22, state="readonly", textvariable=self._ssl_mode_var,
+                                    values=list(_ssl_modes.values()))
+            _ssl_cb.grid(row=2, column=1, columnspan=2, padx=8, pady=6, sticky="w")
+
+            ttk.Label(web_box, text="Cert:").grid(row=3, column=0, padx=8, pady=4, sticky="w")
+            _cert_entry = ttk.Entry(web_box, width=40, textvariable=self._ssl_cert_var)
+            _cert_entry.grid(row=3, column=1, columnspan=3, padx=8, pady=4, sticky="we")
+            def _browse_cert():
+                from tkinter import filedialog
+                p = filedialog.askopenfilename(title="SSL Certificate (PEM)", filetypes=[("PEM", "*.pem"), ("CRT", "*.crt"), ("All", "*")])
+                if p:
+                    self._ssl_cert_var.set(p)
+            ttk.Button(web_box, text="...", width=3, command=_browse_cert).grid(row=3, column=4, padx=4, pady=4)
+
+            ttk.Label(web_box, text="Key:").grid(row=4, column=0, padx=8, pady=4, sticky="w")
+            _key_entry = ttk.Entry(web_box, width=40, textvariable=self._ssl_key_var)
+            _key_entry.grid(row=4, column=1, columnspan=3, padx=8, pady=4, sticky="we")
+            def _browse_key():
+                from tkinter import filedialog
+                p = filedialog.askopenfilename(title="SSL Private Key (PEM)", filetypes=[("PEM", "*.pem"), ("KEY", "*.key"), ("All", "*")])
+                if p:
+                    self._ssl_key_var.set(p)
+            ttk.Button(web_box, text="...", width=3, command=_browse_key).grid(row=4, column=4, padx=4, pady=4)
+
 
             # ---------------- Advanced (Config) ----------------
             ttk.Label(tab_advanced, text=self.t('settings.advanced')).pack(anchor="w", pady=(0, 6))
@@ -8011,6 +8049,10 @@ class CoreMixin:
                 live_web_enabled=bool(self.set_live_web_enabled_var.get()),
                 live_web_port=int(self.set_live_web_port_var.get() or 8765),
                 live_web_refresh_seconds=float(self.set_live_web_refresh_var.get() or 1.0),
+                live_web_ssl_mode=getattr(self, "_ssl_display_to_code", {}).get(
+                    getattr(self, "_ssl_mode_var", tk.StringVar()).get(), "auto"),
+                live_web_ssl_cert=str(getattr(self, "_ssl_cert_var", tk.StringVar()).get() or ""),
+                live_web_ssl_key=str(getattr(self, "_ssl_key_var", tk.StringVar()).get() or ""),
                 live_web_token=live_web_token,
                 live_smoothing_enabled=smoothing_enabled,
                 live_smoothing_seconds=smoothing_seconds,
