@@ -1,5 +1,14 @@
 # Changelog
 
+## 13.10.0 - 2026-04-02
+### Added
+- **Current spot price display** – App and web costs tab now show the current kWh spot price prominently above the 24h chart, with color-coded delta vs. fixed tariff (green = cheaper, red = more expensive).
+- **Spot prices in notifications** – Telegram summaries and email PDF reports now include dynamic spot cost totals, average spot price, current price, and per-device spot cost comparison vs. fixed tariff.
+- **Web costs tab: color-coded price comparison** – Dynamic tariff difference indicators (↑/↓) in device cards are now color-coded: green when spot is cheaper, red when more expensive.
+
+### Fixed
+- **App costs tab: opaque tooltip** – Spot chart hover tooltip is now fully opaque (was 95% transparent) and rendered on top with `zorder=99`, so it properly covers chart bars instead of showing through.
+
 ## 13.9.27 - 2026-04-02
 ### Changed
 - **Web costs tab: removed CO2 section** – CO2 data (today/week/month/projected kg) removed from device cost cards. CO2 tracking remains available in the dedicated CO2 tab.
