@@ -2078,9 +2078,9 @@ function renderCosts(data, el) {{
       var arrow = delta > 0 ? '\u25b2' : '\u25bc';
       var sign = delta > 0 ? '+' : '';
       var priceColor = delta <= 0 ? '#4caf50' : '#e53935';
-      curSpotHtml = '<div style="font-size:15px;font-weight:bold;color:' + priceColor + ';margin:4px 0 8px 0">' +
-        '\u26a1 ' + t('spot.current_price', 'Aktueller Preis') + ': ' + data.current_spot_ct.toFixed(1) + ' ct/kWh  ' +
-        '<span style="font-size:12px">(' + arrow + ' ' + sign + delta.toFixed(1) + ' ct vs. ' + t('plots.dynprice.fixed', 'Festpreis') + ')</span></div>';
+      curSpotHtml = '<div style="font-size:16px;font-weight:bold;color:' + priceColor + ';margin:2px 0 8px 0;white-space:nowrap">' +
+        data.current_spot_ct.toFixed(1) + ' ct/kWh ' +
+        '<span style="font-size:11px;font-weight:normal">(' + arrow + sign + delta.toFixed(1) + ' ct)</span></div>';
     }}
     html += '<div class="card" style="margin-bottom:10px">' +
       '<div style="font-size:12px;font-weight:650;color:#ff9800;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">' +

@@ -4416,11 +4416,14 @@ class CoreMixin:
             spot_chart_frame.pack(fill="x", padx=14, pady=(8, 12))
             # Current spot price label (prominent)
             _cur_price_frame = ttk.Frame(spot_chart_frame)
-            _cur_price_frame.pack(fill="x", padx=8, pady=(4, 0))
+            _cur_price_frame.pack(fill="x", padx=8, pady=(6, 2))
             self._cost_spot_current_var = tk.StringVar(value="")
+            # Use tk.Label with explicit theme-aware bg so it blends in
+            _tc = self._get_theme_colors()
             _cur_price_lbl = tk.Label(_cur_price_frame, textvariable=self._cost_spot_current_var,
-                                       font=("", 13, "bold"), fg="#ff9800", anchor="w")
-            _cur_price_lbl.pack(side="left", padx=4)
+                                       font=("", 14, "bold"), fg="#ff9800", bg=_tc["bg"],
+                                       anchor="w", padx=4, pady=2)
+            _cur_price_lbl.pack(side="left", fill="x", expand=True)
             self._cost_spot_current_label = _cur_price_lbl
             from matplotlib.figure import Figure
             from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -4522,17 +4525,16 @@ class CoreMixin:
                         break
                 if cur_idx is not None:
                     cur_total = values[cur_idx]
-                    cur_raw = hourly["raw_ct"].tolist()[cur_idx]
                     delta = cur_total - fixed_ct
                     arrow = "▲" if delta > 0 else "▼"
                     sign = "+" if delta > 0 else ""
                     self._cost_spot_current_var.set(
-                        f"⚡ {self.t('spot.current_price', 'Aktueller Preis')}: {cur_total:.1f} ct/kWh  "
-                        f"({arrow} {sign}{delta:.1f} ct vs. {self.t('plots.dynprice.fixed')})"
+                        f"Aktuell: {cur_total:.1f} ct/kWh  ({arrow} {sign}{delta:.1f} ct)"
                     )
                     color = "#4caf50" if delta <= 0 else "#e53935"
                     try:
-                        self._cost_spot_current_label.configure(fg=color)
+                        _tc_upd = self._get_theme_colors()
+                        self._cost_spot_current_label.configure(fg=color, bg=_tc_upd["bg"])
                     except Exception:
                         pass
                 else:
