@@ -115,6 +115,8 @@ class LiveWebMixin:
                         ssl_mode=str(getattr(self.cfg.ui, "live_web_ssl_mode", "auto") or "auto"),
                         ssl_cert=str(getattr(self.cfg.ui, "live_web_ssl_cert", "") or ""),
                         ssl_key=str(getattr(self.cfg.ui, "live_web_ssl_key", "") or ""),
+                        widget_domain=str(getattr(self.cfg.ui, "widget_domain", "") or ""),
+                        widget_devices=str(getattr(self.cfg.ui, "widget_devices", "") or ""),
                     )
                     self._live_web.start()
                 return self._live_web.url() if self._live_web else None
@@ -650,12 +652,19 @@ class LiveWebMixin:
                         _unit = float(getattr(getattr(self.cfg, "pricing", None), "electricity_price_eur_per_kwh", 0.30) or 0.30)
                     _fixed_ct = round(_unit * 100, 2)
 
-                    # Total consumption today + month across all 3-phase devices
-                    _three_phase = [d for d in (self.cfg.devices or [])
-                                    if int(getattr(d, "phases", 3) or 3) >= 3
-                                    and str(getattr(d, "kind", "em")) != "switch"]
+                    # Filter devices for widget
+                    _all_devs = [d for d in (self.cfg.devices or [])
+                                 if int(getattr(d, "phases", 3) or 3) >= 3
+                                 and str(getattr(d, "kind", "em")) != "switch"]
+                    _widget_keys = str(getattr(self.cfg.ui, "widget_devices", "") or "").strip()
+                    if _widget_keys:
+                        _allowed = {k.strip() for k in _widget_keys.split(",") if k.strip()}
+                        _three_phase = [d for d in _all_devs if d.key in _allowed]
+                    else:
+                        _three_phase = _all_devs
                     _today_kwh = 0.0
                     _month_kwh = 0.0
+                    _per_device = []
                     for d in _three_phase:
                         try:
                             cd = self.computed.get(d.key)
@@ -674,9 +683,28 @@ class LiveWebMixin:
                                 pass
                             _e = pd.to_numeric(df["energy_kwh"], errors="coerce").fillna(0.0)
                             m_today = (df["timestamp"] >= _today_start) & (df["timestamp"] < _now)
-                            _today_kwh += float(_e.loc[m_today].sum())
+                            _d_today = float(_e.loc[m_today].sum())
+                            _today_kwh += _d_today
                             m_month = (df["timestamp"] >= _month_start) & (df["timestamp"] < _now)
-                            _month_kwh += float(_e.loc[m_month].sum())
+                            _d_month = float(_e.loc[m_month].sum())
+                            _month_kwh += _d_month
+                            # Per-device power
+                            _d_power = 0.0
+                            try:
+                                if "total_power" in df.columns:
+                                    _lp = df["total_power"].dropna()
+                                    if not _lp.empty:
+                                        _d_power = float(_lp.iloc[-1])
+                            except Exception:
+                                pass
+                            _per_device.append({
+                                "key": d.key, "name": d.name,
+                                "power_w": round(_d_power, 0),
+                                "today_kwh": round(_d_today, 3),
+                                "today_eur": round(_d_today * _unit, 2),
+                                "month_kwh": round(_d_month, 3),
+                                "month_eur": round(_d_month * _unit, 2),
+                            })
                         except Exception:
                             pass
 
@@ -779,6 +807,7 @@ class LiveWebMixin:
                         "spot_ct": _current_spot_ct,
                         "spot_today_eur": _spot_today_eur,
                         "spot_chart": _spot_chart_mini,
+                        "devices": _per_device,
                     }
                 except Exception as e:
                     return {"ok": False, "error": str(e)}

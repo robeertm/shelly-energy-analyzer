@@ -4195,6 +4195,8 @@ class CoreMixin:
                         ssl_mode=str(getattr(self.cfg.ui, "live_web_ssl_mode", "auto") or "auto"),
                         ssl_cert=str(getattr(self.cfg.ui, "live_web_ssl_cert", "") or ""),
                         ssl_key=str(getattr(self.cfg.ui, "live_web_ssl_key", "") or ""),
+                        widget_domain=str(getattr(self.cfg.ui, "widget_domain", "") or ""),
+                        widget_devices=str(getattr(self.cfg.ui, "widget_devices", "") or ""),
                     )
                     self._live_web.start()
                 url = self._live_web.url() if self._live_web else None
@@ -7109,6 +7111,22 @@ class CoreMixin:
                     self._ssl_key_var.set(p)
             ttk.Button(web_box, text="...", width=3, command=_browse_key).grid(row=4, column=4, padx=4, pady=4)
 
+            # Widget settings
+            ttk.Label(web_box, text="─── iOS Widget ───").grid(row=5, column=0, columnspan=5, padx=8, pady=(8, 2), sticky="w")
+
+            if not hasattr(self, "_widget_domain_var"):
+                self._widget_domain_var = tk.StringVar(value=str(getattr(self.cfg.ui, "widget_domain", "") or ""))
+                self._widget_devices_var = tk.StringVar(value=str(getattr(self.cfg.ui, "widget_devices", "") or ""))
+
+            ttk.Label(web_box, text="Domain:").grid(row=6, column=0, padx=8, pady=4, sticky="w")
+            ttk.Entry(web_box, width=30, textvariable=self._widget_domain_var).grid(row=6, column=1, columnspan=2, padx=8, pady=4, sticky="we")
+            ttk.Label(web_box, text="(auto aus Cert)").grid(row=6, column=3, columnspan=2, padx=4, pady=4, sticky="w")
+
+            ttk.Label(web_box, text="Geräte:").grid(row=7, column=0, padx=8, pady=4, sticky="w")
+            _dev_names = ", ".join(d.key for d in (self.cfg.devices or []) if int(getattr(d, "phases", 3) or 3) >= 3 and str(getattr(d, "kind", "em")) != "switch")
+            ttk.Entry(web_box, width=30, textvariable=self._widget_devices_var).grid(row=7, column=1, columnspan=2, padx=8, pady=4, sticky="we")
+            ttk.Label(web_box, text=f"(leer = alle: {_dev_names})").grid(row=7, column=3, columnspan=2, padx=4, pady=4, sticky="w")
+
 
             # ---------------- Advanced (Config) ----------------
             ttk.Label(tab_advanced, text=self.t('settings.advanced')).pack(anchor="w", pady=(0, 6))
@@ -8053,6 +8071,8 @@ class CoreMixin:
                     getattr(self, "_ssl_mode_var", tk.StringVar()).get(), "auto"),
                 live_web_ssl_cert=str(getattr(self, "_ssl_cert_var", tk.StringVar()).get() or ""),
                 live_web_ssl_key=str(getattr(self, "_ssl_key_var", tk.StringVar()).get() or ""),
+                widget_domain=str(getattr(self, "_widget_domain_var", tk.StringVar()).get() or ""),
+                widget_devices=str(getattr(self, "_widget_devices_var", tk.StringVar()).get() or ""),
                 live_web_token=live_web_token,
                 live_smoothing_enabled=smoothing_enabled,
                 live_smoothing_seconds=smoothing_seconds,
