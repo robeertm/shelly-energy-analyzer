@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.27 - 2026-04-02
+### Changed
+- **Web costs tab: removed CO2 section** – CO2 data (today/week/month/projected kg) removed from device cost cards. CO2 tracking remains available in the dedicated CO2 tab.
+
 ## 13.9.26 - 2026-04-02
 ### Fixed
 - **CO2 tab: timer accumulation** – Refresh timer now cancels the previous one before scheduling, preventing exponentially increasing CPU usage over time.
