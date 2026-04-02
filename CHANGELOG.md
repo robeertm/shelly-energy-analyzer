@@ -1,5 +1,9 @@
 # Changelog
 
+## 14.1.2 - 2026-04-02
+### Fixed
+- **Scriptable widget crash: `dc.setAlpha is not a function`** – Scriptable's DrawContext has no `setAlpha()` method. Fixed by passing alpha directly to `new Color(hex, alpha)` constructor. Future/past bar transparency now works correctly.
+
 ## 14.1.1 - 2026-04-02
 ### Fixed
 - **SSL settings not persisted** – `live_web_ssl_mode`, `live_web_ssl_cert`, `live_web_ssl_key` were missing from config loader and saver in `config.py`, causing the fields to be dropped on every save/load cycle. Added to both `load_config()` and `save_config()`.
