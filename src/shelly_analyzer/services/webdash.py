@@ -2048,7 +2048,6 @@ function renderCosts(data, el) {{
     el.innerHTML = '<p class="info-msg">' + t('web.dash.no_cost_data', 'No cost data available.') + '</p>';
     return;
   }}
-  const co2Active = data.co2_g_per_kwh > 0;
   const spotActive = !!data.spot_enabled;
   let html = '';
   if (data.summary) {{
@@ -2101,23 +2100,11 @@ function renderCosts(data, el) {{
           metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_spot_eur||0,2,'\u20ac'), '') +
           '</div></div>'
       : '';
-    // CO2 section
-    var co2Section = co2Active
-      ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">' +
-          '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">CO\u2082</div>' +
-          '<div class="metric-grid">' +
-          metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_co2_kg,3,'kg'), '') +
-          metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_co2_kg,3,'kg'), '') +
-          metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_co2_kg,3,'kg'), '') +
-          metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_co2_kg,2,'kg'), '') +
-          '</div></div>'
-      : '';
-    // Card: fixed costs → dynamic costs → CO2
+    // Card: fixed costs → dynamic costs
     html += '<div class="card">' +
       '<div class="card-title">' + esc(d.name || d.key) + '</div>' +
       fixedLabel + fixedGrid +
       dynSection +
-      co2Section +
       '</div>';
   }});
   html += '</div>';
