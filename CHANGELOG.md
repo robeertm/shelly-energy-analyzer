@@ -1,5 +1,9 @@
 # Changelog
 
+## 14.0.3 - 2026-04-02
+### Fixed
+- **Scriptable widget: HTTPS support** – Widget tried `http://` but server uses HTTPS with self-signed certificate. Now tries `https` first, falls back to `http`. Better offline error message with WiFi hint.
+
 ## 14.0.2 - 2026-04-02
 ### Fixed
 - **Web dashboard crash on startup** – Local variable `html = _render_template(...)` shadowed `import html` module, causing `html.escape()` to fail with `'str' object has no attribute 'escape'`. Renamed to `_rendered_html`. This broke the Plotly plots page device list and caused connection resets.
