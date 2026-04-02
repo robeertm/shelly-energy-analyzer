@@ -319,6 +319,352 @@ def _plotly_min_js_bytes() -> bytes:
         return b""
 
 
+# ── Scriptable Widget JS (served via /widget.js) ───────────────────────────
+_SCRIPTABLE_WIDGET_JS = r"""
+// Shelly Energy Analyzer – iOS Scriptable Widget
+// Lade dieses Script in der Scriptable App.
+// Widget-Parameter: IP:PORT deines Analyzers (z.B. 192.168.1.50:8765)
+//
+// Konfiguration: Tippe bei Widget hinzufügen auf "Parameter"
+// und gib die Adresse ein, z.B. "192.168.1.50:8765"
+
+const PARAM = args.widgetParameter || "192.168.1.50:8765";
+const BASE = "http://" + PARAM;
+const DARK = Device.isUsingDarkAppearance();
+
+// Colors
+const C = {
+  bg:      DARK ? new Color("#1a1a1a") : new Color("#ffffff"),
+  card:    DARK ? new Color("#252525") : new Color("#f5f5f5"),
+  text:    DARK ? new Color("#eeeeee") : new Color("#222222"),
+  muted:   DARK ? new Color("#888888") : new Color("#999999"),
+  accent:  new Color("#ff9800"),
+  green:   new Color("#4caf50"),
+  red:     new Color("#e53935"),
+  blue:    new Color("#2196F3"),
+};
+
+let data;
+try {
+  const req = new Request(BASE + "/api/widget");
+  req.timeoutInterval = 8;
+  data = await req.loadJSON();
+} catch(e) {
+  const w = new ListWidget();
+  w.backgroundColor = C.bg;
+  w.addText("⚡ Offline").font = Font.boldSystemFont(14);
+  w.addText(PARAM).textColor = C.muted;
+  w.addText(e.message).textColor = C.red;
+  Script.setWidget(w);
+  Script.complete();
+  return;
+}
+
+const family = config.widgetFamily || "medium";
+
+if (family === "small")       Script.setWidget(buildSmall(data));
+else if (family === "large")  Script.setWidget(buildLarge(data));
+else                          Script.setWidget(buildMedium(data));
+
+Script.complete();
+
+// ─── Small Widget: Current price + power ────────────────────────
+function buildSmall(d) {
+  const w = new ListWidget();
+  w.backgroundColor = C.bg;
+  w.setPadding(12, 14, 12, 14);
+  w.url = BASE;
+
+  // Title
+  const title = w.addText("⚡ Energie");
+  title.font = Font.boldSystemFont(11);
+  title.textColor = C.accent;
+  w.addSpacer(6);
+
+  // Current power
+  const pw = w.addText(fmt(d.power_w, 0) + " W");
+  pw.font = Font.boldSystemFont(22);
+  pw.textColor = C.text;
+
+  // Today
+  const tl = w.addText("Heute: " + fmt(d.today_kwh, 1) + " kWh · " + fmt(d.today_eur, 2) + " €");
+  tl.font = Font.systemFont(10);
+  tl.textColor = C.muted;
+  w.addSpacer(4);
+
+  // Spot price
+  if (d.spot_enabled && d.spot_ct != null) {
+    const delta = d.spot_ct - d.fixed_ct;
+    const arrow = delta > 0 ? "▲" : "▼";
+    const sign = delta > 0 ? "+" : "";
+    const col = delta <= 0 ? C.green : C.red;
+    const sp = w.addText(d.spot_ct.toFixed(1) + " ct " + arrow + sign + delta.toFixed(1));
+    sp.font = Font.boldSystemFont(13);
+    sp.textColor = col;
+  }
+
+  w.addSpacer();
+  const ts = w.addText(fmtTime(d.ts));
+  ts.font = Font.systemFont(8);
+  ts.textColor = C.muted;
+  return w;
+}
+
+// ─── Medium Widget: Price + consumption + mini chart ────────────
+function buildMedium(d) {
+  const w = new ListWidget();
+  w.backgroundColor = C.bg;
+  w.setPadding(12, 14, 8, 14);
+  w.url = BASE;
+
+  // Header row
+  const hStack = w.addStack();
+  hStack.layoutHorizontally();
+  hStack.centerAlignContent();
+  const title = hStack.addText("⚡ Shelly Analyzer");
+  title.font = Font.boldSystemFont(11);
+  title.textColor = C.accent;
+  hStack.addSpacer();
+  const ts = hStack.addText(fmtTime(d.ts));
+  ts.font = Font.systemFont(9);
+  ts.textColor = C.muted;
+  w.addSpacer(4);
+
+  // Main row: left = metrics, right = mini chart
+  const main = w.addStack();
+  main.layoutHorizontally();
+
+  // Left column: metrics
+  const left = main.addStack();
+  left.layoutVertically();
+  left.size = new Size(155, 0);
+
+  // Current power
+  const pw = left.addText(fmt(d.power_w, 0) + " W");
+  pw.font = Font.boldSystemFont(20);
+  pw.textColor = C.text;
+  left.addSpacer(2);
+
+  // Spot price
+  if (d.spot_enabled && d.spot_ct != null) {
+    const delta = d.spot_ct - d.fixed_ct;
+    const arrow = delta > 0 ? "▲" : "▼";
+    const sign = delta > 0 ? "+" : "";
+    const col = delta <= 0 ? C.green : C.red;
+    const sp = left.addText(d.spot_ct.toFixed(1) + " ct/kWh " + arrow + sign + delta.toFixed(1));
+    sp.font = Font.boldSystemFont(12);
+    sp.textColor = col;
+    left.addSpacer(2);
+  }
+
+  // Today
+  const row1 = left.addStack();
+  row1.layoutHorizontally();
+  const tLbl = row1.addText("Heute ");
+  tLbl.font = Font.systemFont(10);
+  tLbl.textColor = C.muted;
+  const tVal = row1.addText(fmt(d.today_kwh, 1) + " kWh · " + fmt(d.today_eur, 2) + " €");
+  tVal.font = Font.mediumSystemFont(10);
+  tVal.textColor = C.text;
+  left.addSpacer(1);
+
+  // Month
+  const row2 = left.addStack();
+  row2.layoutHorizontally();
+  const mLbl = row2.addText("Monat ");
+  mLbl.font = Font.systemFont(10);
+  mLbl.textColor = C.muted;
+  const mVal = row2.addText(fmt(d.month_kwh, 1) + " kWh · " + fmt(d.month_eur, 2) + " €");
+  mVal.font = Font.mediumSystemFont(10);
+  mVal.textColor = C.text;
+
+  main.addSpacer();
+
+  // Right: mini spot chart (drawn as image)
+  if (d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) {
+    const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, 100, 60);
+    const imgStack = main.addStack();
+    imgStack.layoutVertically();
+    const img = imgStack.addImage(chartImg);
+    img.imageSize = new Size(100, 60);
+  }
+
+  return w;
+}
+
+// ─── Large Widget: Full detail ──────────────────────────────────
+function buildLarge(d) {
+  const w = new ListWidget();
+  w.backgroundColor = C.bg;
+  w.setPadding(14, 16, 10, 16);
+  w.url = BASE;
+
+  // Header
+  const hStack = w.addStack();
+  hStack.layoutHorizontally();
+  const title = hStack.addText("⚡ Shelly Energy Analyzer");
+  title.font = Font.boldSystemFont(13);
+  title.textColor = C.accent;
+  hStack.addSpacer();
+  const ts = hStack.addText(fmtTime(d.ts));
+  ts.font = Font.systemFont(9);
+  ts.textColor = C.muted;
+  w.addSpacer(6);
+
+  // Power
+  const pw = w.addText(fmt(d.power_w, 0) + " W");
+  pw.font = Font.boldSystemFont(26);
+  pw.textColor = C.text;
+  w.addSpacer(4);
+
+  // Spot price prominent
+  if (d.spot_enabled && d.spot_ct != null) {
+    const delta = d.spot_ct - d.fixed_ct;
+    const arrow = delta > 0 ? "▲" : "▼";
+    const sign = delta > 0 ? "+" : "";
+    const col = delta <= 0 ? C.green : C.red;
+    const spRow = w.addStack();
+    spRow.layoutHorizontally();
+    spRow.centerAlignContent();
+    const sp1 = spRow.addText("Spotpreis: " + d.spot_ct.toFixed(1) + " ct/kWh");
+    sp1.font = Font.boldSystemFont(14);
+    sp1.textColor = col;
+    spRow.addSpacer(6);
+    const sp2 = spRow.addText(arrow + " " + sign + delta.toFixed(1) + " ct");
+    sp2.font = Font.systemFont(11);
+    sp2.textColor = col;
+    w.addSpacer(2);
+    const fixLbl = w.addText("Festpreis: " + d.fixed_ct.toFixed(1) + " ct/kWh");
+    fixLbl.font = Font.systemFont(10);
+    fixLbl.textColor = C.blue;
+    w.addSpacer(4);
+  }
+
+  // Chart
+  if (d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) {
+    const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, 280, 80);
+    const img = w.addImage(chartImg);
+    img.imageSize = new Size(280, 80);
+    w.addSpacer(6);
+  }
+
+  // Metrics grid
+  const g = w.addStack();
+  g.layoutHorizontally();
+  addMetric(g, "Heute", fmt(d.today_kwh,1) + " kWh", fmt(d.today_eur,2) + " €");
+  g.addSpacer();
+  addMetric(g, "Monat", fmt(d.month_kwh,1) + " kWh", fmt(d.month_eur,2) + " €");
+  g.addSpacer();
+  addMetric(g, "Prognose", fmt(d.proj_kwh,0) + " kWh", fmt(d.proj_eur,2) + " €");
+
+  // Spot today cost
+  if (d.spot_enabled && d.spot_today_eur != null) {
+    w.addSpacer(4);
+    const stRow = w.addStack();
+    stRow.layoutHorizontally();
+    const stLbl = stRow.addText("⚡ Spotkosten heute: ");
+    stLbl.font = Font.systemFont(10);
+    stLbl.textColor = C.muted;
+    const diff = d.spot_today_eur - d.today_eur;
+    const stVal = stRow.addText(fmt(d.spot_today_eur,2) + " € (" + (diff >= 0 ? "+" : "") + fmt(diff,2) + " €)");
+    stVal.font = Font.mediumSystemFont(10);
+    stVal.textColor = diff <= 0 ? C.green : C.red;
+  }
+
+  w.addSpacer();
+  return w;
+}
+
+// ─── Helpers ────────────────────────────────────────────────────
+function fmt(v, dec) {
+  if (v == null) return "–";
+  return Number(v).toFixed(dec);
+}
+
+function fmtTime(ts) {
+  if (!ts) return "";
+  const d = new Date(ts * 1000);
+  return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+}
+
+function addMetric(parent, label, line1, line2) {
+  const s = parent.addStack();
+  s.layoutVertically();
+  const l = s.addText(label);
+  l.font = Font.systemFont(9);
+  l.textColor = C.muted;
+  const v1 = s.addText(line1);
+  v1.font = Font.mediumSystemFont(11);
+  v1.textColor = C.text;
+  if (line2) {
+    const v2 = s.addText(line2);
+    v2.font = Font.boldSystemFont(12);
+    v2.textColor = C.text;
+  }
+}
+
+// ─── Mini Spot Chart (DrawContext) ──────────────────────────────
+function drawMiniChart(chart, fixedCt, W, H) {
+  const dc = new DrawContext();
+  dc.size = new Size(W, H);
+  dc.opaque = false;
+  dc.respectScreenScale = true;
+
+  const vals = chart.map(p => p[1]);
+  const allV = vals.concat([fixedCt]);
+  let minV = Math.min(...allV);
+  let maxV = Math.max(...allV);
+  let rng = maxV - minV;
+  if (rng < 1) rng = 1;
+  minV = Math.max(0, minV - rng * 0.1);
+  maxV = maxV + rng * 0.15;
+  const vR = maxV - minV;
+
+  const pad = {l: 2, r: 2, t: 2, b: 2};
+  const pW = W - pad.l - pad.r;
+  const pH = H - pad.t - pad.b;
+  const barW = Math.max(1, pW / chart.length - 1);
+
+  const now = Date.now() / 1000;
+
+  // Bars
+  for (let i = 0; i < chart.length; i++) {
+    const v = chart[i][1];
+    const ts = chart[i][0];
+    const x = pad.l + (i / chart.length) * pW;
+    const barH = Math.max(1, ((v - minV) / vR) * pH);
+    const y = pad.t + pH - barH;
+
+    const ratio = fixedCt > 0 ? v / fixedCt : 1;
+    let col;
+    if (ratio <= 0.7) col = Color.dynamic(new Color("#4caf50"), new Color("#4caf50"));
+    else if (ratio <= 0.9) col = Color.dynamic(new Color("#8bc34a"), new Color("#8bc34a"));
+    else if (ratio <= 1.0) col = Color.dynamic(new Color("#ffeb3b"), new Color("#ddd000"));
+    else if (ratio <= 1.2) col = Color.dynamic(new Color("#ff9800"), new Color("#ff9800"));
+    else col = Color.dynamic(new Color("#e53935"), new Color("#e53935"));
+
+    dc.setFillColor(col);
+    const alpha = ts > now ? 0.45 : 0.85;
+    dc.setAlpha(alpha);
+    dc.fillRect(new Rect(x, y, barW, barH));
+    dc.setAlpha(1.0);
+  }
+
+  // Fixed price line (dashed = two thin lines)
+  const fY = pad.t + pH * (1 - (fixedCt - minV) / vR);
+  dc.setStrokeColor(new Color("#2196F3"));
+  dc.setLineWidth(1);
+  const path = new Path();
+  path.move(new Point(pad.l, fY));
+  path.addLine(new Point(W - pad.r, fY));
+  dc.addPath(path);
+  dc.strokePath();
+
+  return dc.getImage();
+}
+"""
+
+
 _HTML_TEMPLATE = """<!doctype html>
 <html lang="{lang}">
 <head>
@@ -1135,6 +1481,24 @@ _HTML_TEMPLATE = """<!doctype html>
       <button class="icon-btn" onclick="closeLiveSettings()">✕</button>
     </div>
     <div id="live-settings-list"></div>
+
+    <!-- iOS Widget Section -->
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:650;color:#ff9800;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">📱 iOS Widget (Scriptable)</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+        1. Installiere <a href="https://apps.apple.com/app/scriptable/id1405459188" target="_blank" style="color:#ff9800">Scriptable</a> aus dem App Store<br>
+        2. Tippe auf den Button um das Script zu kopieren<br>
+        3. Erstelle ein neues Script in Scriptable und füge es ein<br>
+        4. Füge ein Scriptable-Widget zum Homescreen hinzu<br>
+        5. Wähle das Script und setze als Parameter: <code id="widget-addr" style="background:var(--card-bg,#f0f0f0);padding:2px 6px;border-radius:3px;font-size:11px;user-select:all"></code>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-accent" onclick="copyWidgetScript()" style="font-size:11px;padding:6px 12px">📋 Script kopieren</button>
+        <button class="btn" onclick="window.open('/widget.js','_blank')" style="font-size:11px;padding:6px 12px;background:var(--card-bg);color:var(--fg);border:1px solid var(--border)">⬇ Download .js</button>
+      </div>
+      <div id="widget-copy-msg" style="font-size:10px;color:#4caf50;margin-top:4px;display:none">Kopiert!</div>
+    </div>
+
     <div style="text-align:right;margin-top:12px">
       <button class="btn btn-accent" onclick="closeLiveSettings()">{web_dash_done}</button>
     </div>
@@ -1299,6 +1663,24 @@ function openLiveSettings() {{
 function closeLiveSettings() {{
   document.getElementById('live-settings-modal').classList.remove('open');
   _loadLsSettings();
+}}
+
+// Widget helper: show server address + copy script
+(function() {{
+  var addrEl = document.getElementById('widget-addr');
+  if (addrEl) addrEl.textContent = location.host;
+}})();
+async function copyWidgetScript() {{
+  try {{
+    const r = await fetch('/widget.js');
+    const txt = await r.text();
+    await navigator.clipboard.writeText(txt);
+    var msg = document.getElementById('widget-copy-msg');
+    if (msg) {{ msg.style.display = 'block'; setTimeout(function(){{ msg.style.display='none'; }}, 2000); }}
+  }} catch(e) {{
+    // Fallback: open in new tab
+    window.open('/widget.js', '_blank');
+  }}
 }}
 
 function toggleDeviceVis(key) {{
@@ -6539,6 +6921,33 @@ class _Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
 
+            # --- Widget API (compact JSON for iOS Scriptable) ---
+            if path_only.startswith("/api/widget"):
+                try:
+                    payload = self.dashboard.on_action("widget", dict(qs))
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            # --- Scriptable widget script (JS download) ---
+            if path_only == "/widget.js":
+                body = self.dashboard.get_widget_script().encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/javascript; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
             if path_only == "/plots" or path_only.startswith("/plots/"):
                 _ae = self.headers.get("Accept-Encoding", "")
                 _gz = self.dashboard.plots_html_bytes_gz
@@ -7172,6 +7581,10 @@ class LiveWebDashboard:
             "devices_meta": devices_meta,
             "lang": self.lang,
         }
+
+    def get_widget_script(self) -> str:
+        """Return the Scriptable JS widget script with the server URL baked in."""
+        return _SCRIPTABLE_WIDGET_JS
 
     def set_window_minutes(self, minutes: int) -> int:
         minutes = int(minutes)

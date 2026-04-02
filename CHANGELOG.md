@@ -1,5 +1,15 @@
 # Changelog
 
+## 14.0.0 - 2026-04-02
+### Added
+- **iOS Widget (Scriptable)** – Real iOS home screen widget for live energy data. Three sizes supported:
+  - **Small**: Current power (W), today's consumption + cost, current spot price with delta
+  - **Medium**: All of small + month stats + mini spot price chart with color-coded bars
+  - **Large**: Full detail with spot chart, metrics grid (today/month/projection), spot cost comparison
+- **`/api/widget` endpoint** – Compact JSON API optimized for widget polling: power, consumption, costs, spot price, mini chart data
+- **`/widget.js` route** – Downloadable Scriptable script with baked-in server URL
+- **Widget setup in web settings** – Step-by-step install instructions with "Copy Script" and "Download .js" buttons, auto-detected server address as widget parameter
+
 ## 13.10.1 - 2026-04-02
 ### Fixed
 - **Web costs tab: current price display** – Removed duplicate ⚡ icon, shortened text to prevent line breaks on narrow screens, added `white-space:nowrap`.
