@@ -692,12 +692,25 @@ class LiveWebMixin:
                     # Current power (sum of all devices)
                     _power_w = 0.0
                     try:
-                        snap = self._web_live_store.snapshot() if hasattr(self, "_web_live_store") else {}
-                        for _dk, _dv in snap.items():
-                            if isinstance(_dv, dict):
-                                _power_w += float(_dv.get("total_power", 0) or 0)
+                        _store = getattr(self, "_live_state_store", None)
+                        if _store:
+                            snap = _store.snapshot()
+                            for _dk, _pts in snap.items():
+                                if isinstance(_pts, list) and _pts:
+                                    _power_w += float(_pts[-1].get("power_total_w", 0) or 0)
                     except Exception:
                         pass
+                    # Fallback: sum from computed dataframes
+                    if _power_w == 0:
+                        try:
+                            for d in _three_phase:
+                                cd = self.computed.get(d.key)
+                                if cd and hasattr(cd, "df") and "total_power" in cd.df.columns:
+                                    _last_p = cd.df["total_power"].dropna()
+                                    if not _last_p.empty:
+                                        _power_w += float(_last_p.iloc[-1])
+                        except Exception:
+                            pass
 
                     # Spot price data
                     _spot_cfg = getattr(self.cfg, "spot_price", None)
