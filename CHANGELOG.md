@@ -1,5 +1,14 @@
 # Changelog
 
+## 14.3.0 - 2026-04-02
+### Added
+- **SSL certificate monitoring** – Daily background check of custom SSL certificate expiry. Status shown in Settings → Web Dashboard with color-coded indicator:
+  - ✅ Green: >30 days remaining (shows exact date + days)
+  - 🔶 Orange: ≤30 days remaining
+  - ⚠️ Red: ≤7 days remaining
+- **SSL auto-renewal** – When enabled, automatically runs `certbot renew` and copies renewed certs when expiry is within configured threshold (default: 30 days). Runs in background thread.
+- **Settings UI** – Auto-Renew checkbox + configurable renewal threshold (days) in Web Dashboard section. Persisted in config (`live_web_ssl_auto_renew`, `live_web_ssl_renew_days`).
+
 ## 14.2.0 - 2026-04-02
 ### Added
 - **Widget device filter** – New `widget_devices` config field (comma-separated device keys) to choose which Shellys appear in the iOS widget. Empty = all 3-phase devices. Configurable in Settings → Web Dashboard.
