@@ -1,5 +1,9 @@
 # Changelog
 
+## 14.3.1 - 2026-04-02
+### Added
+- **Widget tap-to-refresh** – Tapping the iOS widget opens Scriptable with a live detail view: current power, today/month/projection costs, spot price comparison, per-device breakdown, and a "Dashboard öffnen" button that opens Safari to the full web dashboard.
+
 ## 14.3.0 - 2026-04-02
 ### Added
 - **SSL certificate monitoring** – Daily background check of custom SSL certificate expiry. Status shown in Settings → Web Dashboard with color-coded indicator:
