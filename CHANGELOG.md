@@ -1,5 +1,9 @@
 # Changelog
 
+## 13.9.24 - 2026-04-02
+### Added
+- **Spot price settings: "Standard" button** – Resets all dynamic tariff surcharge fields (grid fee, electricity tax, concession, KWK, §19, offshore, supplier margin) back to the dataclass defaults from `SpotPriceConfig`.
+
 ## 13.9.23 - 2026-04-01
 ### Fixed
 - **Costs tab: spot chart fully locked** – Disconnected all matplotlib interactive events (scroll, button press/release, key press) on the spot chart canvas so the plot can no longer be panned, zoomed, or scrolled within its frame. Mousewheel and Linux scroll buttons (Button-4/5) forwarded to the outer scroll canvas.

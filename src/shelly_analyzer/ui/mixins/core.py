@@ -6926,7 +6926,18 @@ class CoreMixin:
                        self._spot_kwk_var, self._spot_sec19_var, self._spot_offshore_var, self._spot_margin_var]:
                 _v.trace_add("write", _update_spot_total)
             _update_spot_total()
-            ttk.Label(spot_box, textvariable=self._spot_total_var, font=("", 9, "bold"), foreground="#ff9800").grid(row=11, column=0, columnspan=3, padx=8, pady=(4, 2), sticky="w")
+            ttk.Label(spot_box, textvariable=self._spot_total_var, font=("", 9, "bold"), foreground="#ff9800").grid(row=11, column=0, columnspan=2, padx=8, pady=(4, 2), sticky="w")
+
+            def _spot_reset_defaults():
+                from shelly_analyzer.io.config import SpotPriceConfig
+                self._spot_grid_fee_var.set(SpotPriceConfig.grid_fee_ct)
+                self._spot_tax_var.set(SpotPriceConfig.electricity_tax_ct)
+                self._spot_concession_var.set(SpotPriceConfig.concession_fee_ct)
+                self._spot_kwk_var.set(SpotPriceConfig.kwk_surcharge_ct)
+                self._spot_sec19_var.set(SpotPriceConfig.sec19_surcharge_ct)
+                self._spot_offshore_var.set(SpotPriceConfig.offshore_surcharge_ct)
+                self._spot_margin_var.set(SpotPriceConfig.supplier_margin_ct)
+            ttk.Button(spot_box, text="Standard", command=_spot_reset_defaults).grid(row=11, column=2, padx=8, pady=(4, 2), sticky="w")
 
             self._spot_vat_var = tk.BooleanVar(value=bool(getattr(_spot_cfg, "include_vat", True)))
             ttk.Checkbutton(
