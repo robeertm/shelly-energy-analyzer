@@ -630,6 +630,143 @@ class LiveWebMixin:
                 export_to_excel(sheets, out)
                 return {"ok": True, "files": [{"name": out.name, "url": f"/files/web/{out.name}"}]}
 
+            # --- Widget data (compact JSON for iOS Scriptable) ---
+            if action == "widget":
+                try:
+                    from datetime import datetime as _dt, timedelta as _td
+                    from zoneinfo import ZoneInfo as _ZI
+                    _tz = _ZI("Europe/Berlin")
+                    _now = _dt.now(_tz)
+                    _today_start = _now.replace(hour=0, minute=0, second=0, microsecond=0)
+                    _month_start = _today_start.replace(day=1)
+
+                    try:
+                        from datetime import date as _date_w
+                        _unit = float(self.cfg.pricing.effective_pricing_for_date(_date_w.today()).unit_price_gross())
+                    except Exception:
+                        _unit = float(getattr(getattr(self.cfg, "pricing", None), "electricity_price_eur_per_kwh", 0.30) or 0.30)
+                    _fixed_ct = round(_unit * 100, 2)
+
+                    # Total consumption today + month across all 3-phase devices
+                    _three_phase = [d for d in (self.cfg.devices or [])
+                                    if int(getattr(d, "phases", 3) or 3) >= 3
+                                    and str(getattr(d, "kind", "em")) != "switch"]
+                    _today_kwh = 0.0
+                    _month_kwh = 0.0
+                    for d in _three_phase:
+                        try:
+                            cd = self.computed.get(d.key)
+                            if cd is None:
+                                continue
+                            df = cd.df.copy()
+                            if "timestamp" not in df.columns:
+                                continue
+                            df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+                            df = df.dropna(subset=["timestamp"])
+                            try:
+                                if df["timestamp"].dt.tz is None:
+                                    df["timestamp"] = df["timestamp"].dt.tz_localize("UTC")
+                                df["timestamp"] = df["timestamp"].dt.tz_convert(_tz)
+                            except Exception:
+                                pass
+                            _e = pd.to_numeric(df["energy_kwh"], errors="coerce").fillna(0.0)
+                            m_today = (df["timestamp"] >= _today_start) & (df["timestamp"] < _now)
+                            _today_kwh += float(_e.loc[m_today].sum())
+                            m_month = (df["timestamp"] >= _month_start) & (df["timestamp"] < _now)
+                            _month_kwh += float(_e.loc[m_month].sum())
+                        except Exception:
+                            pass
+
+                    _today_kwh = round(_today_kwh, 3)
+                    _month_kwh = round(_month_kwh, 3)
+                    _today_eur = round(_today_kwh * _unit, 2)
+                    _month_eur = round(_month_kwh * _unit, 2)
+
+                    # Projection
+                    import calendar as _cal_w
+                    _dim = _cal_w.monthrange(_now.year, _now.month)[1]
+                    _elapsed = max(1, (_now - _month_start).total_seconds() / 86400.0)
+                    _proj_kwh = round(_month_kwh / _elapsed * _dim, 1)
+                    _proj_eur = round(_proj_kwh * _unit, 2)
+
+                    # Current power (sum of all devices)
+                    _power_w = 0.0
+                    try:
+                        snap = self._web_live_store.snapshot() if hasattr(self, "_web_live_store") else {}
+                        for _dk, _dv in snap.items():
+                            if isinstance(_dv, dict):
+                                _power_w += float(_dv.get("total_power", 0) or 0)
+                    except Exception:
+                        pass
+
+                    # Spot price data
+                    _spot_cfg = getattr(self.cfg, "spot_price", None)
+                    _spot_enabled = getattr(_spot_cfg, "enabled", False) if _spot_cfg else False
+                    _current_spot_ct = None
+                    _spot_today_eur = None
+                    _spot_chart_mini = []
+                    if _spot_enabled:
+                        try:
+                            _sp_zone = getattr(_spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
+                            _sp_markup = float(_spot_cfg.total_markup_ct() if hasattr(_spot_cfg, "total_markup_ct") else 16.0)
+                            _sp_vat = self.cfg.pricing.vat_rate() if getattr(_spot_cfg, "include_vat", True) else 0.0
+
+                            # Current hour price
+                            import time as _time_w
+                            _now_ts_w = int(_time_w.time())
+                            _cur_h = (_now_ts_w // 3600) * 3600
+                            _df_cur = self.storage.db.query_spot_prices(_sp_zone, _cur_h, _cur_h + 3600)
+                            if not _df_cur.empty:
+                                _raw = float(_df_cur["price_eur_mwh"].mean()) / 10.0
+                                _current_spot_ct = round((_raw + _sp_markup) * (1.0 + _sp_vat), 1)
+
+                            # Today's spot cost
+                            _sp_mk_eur = _sp_markup / 100.0
+                            try:
+                                _sc, _, _ = self.storage.db.calc_spot_cost(
+                                    "", _sp_zone,
+                                    int(_today_start.timestamp()), int(_now.timestamp()),
+                                    _sp_mk_eur, _sp_vat
+                                )
+                                if _sc > 0:
+                                    _spot_today_eur = round(_sc, 2)
+                            except Exception:
+                                pass
+
+                            # Mini chart: last 12h + next 12h (compact: just ts + total_ct)
+                            _chart_s = int((_now - _td(hours=12)).timestamp())
+                            _chart_e = int((_now + _td(hours=12)).timestamp())
+                            _df_sp = self.storage.db.query_spot_prices(_sp_zone, _chart_s, _chart_e)
+                            if not _df_sp.empty:
+                                _df_sp["hour_ts"] = (_df_sp["slot_ts"] // 3600) * 3600
+                                _df_h = _df_sp.groupby("hour_ts").agg(price=("price_eur_mwh", "mean")).reset_index()
+                                _df_h = _df_h.sort_values("hour_ts")
+                                for _, _r in _df_h.iterrows():
+                                    _raw_ct = float(_r["price"]) / 10.0
+                                    _total_ct = (_raw_ct + _sp_markup) * (1.0 + _sp_vat)
+                                    _spot_chart_mini.append([int(_r["hour_ts"]), round(_total_ct, 1)])
+                        except Exception:
+                            pass
+
+                    return {
+                        "ok": True,
+                        "ts": int(_now.timestamp()),
+                        "power_w": round(_power_w, 0),
+                        "today_kwh": _today_kwh,
+                        "today_eur": _today_eur,
+                        "month_kwh": _month_kwh,
+                        "month_eur": _month_eur,
+                        "proj_kwh": _proj_kwh,
+                        "proj_eur": _proj_eur,
+                        "fixed_ct": _fixed_ct,
+                        "spot_enabled": _spot_enabled,
+                        "spot_ct": _current_spot_ct,
+                        "spot_today_eur": _spot_today_eur,
+                        "spot_chart": _spot_chart_mini,
+                    }
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
             # --- Cost data for web dashboard ---
             if action == "costs":
                 try:
