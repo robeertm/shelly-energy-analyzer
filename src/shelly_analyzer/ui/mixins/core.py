@@ -923,9 +923,107 @@ class CoreMixin:
                 self._build_settings_tab()
                 self._schedule_init()
                 self._tabs_built = True
+                # Start daily SSL certificate check
+                self.after(5000, self._ssl_cert_check_tick)
 
             self._page_labels = []
             self._update_device_page_choices()
+
+    # ── SSL Certificate monitoring & auto-renewal ────────────────────
+
+    def _ssl_get_cert_info(self) -> Optional[dict]:
+            """Read cert expiry from the configured custom SSL certificate."""
+            try:
+                cert_path = str(getattr(self.cfg.ui, "live_web_ssl_cert", "") or "")
+                if not cert_path or str(getattr(self.cfg.ui, "live_web_ssl_mode", "auto")) != "custom":
+                    return None
+                import subprocess
+                out = subprocess.check_output(
+                    ["openssl", "x509", "-in", cert_path, "-noout", "-subject", "-enddate"],
+                    timeout=5, text=True
+                ).strip()
+                # Parse: notAfter=Jul  1 18:05:33 2026 GMT
+                from datetime import datetime, timezone
+                domain = ""
+                expiry = None
+                for line in out.split("\n"):
+                    if "CN=" in line:
+                        domain = line.split("CN=")[-1].strip()
+                    if "notAfter=" in line:
+                        date_str = line.split("notAfter=")[-1].strip()
+                        expiry = datetime.strptime(date_str, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
+                if expiry:
+                    days_left = (expiry - datetime.now(timezone.utc)).days
+                    return {"domain": domain, "expiry": expiry, "days_left": days_left, "cert_path": cert_path}
+            except Exception:
+                pass
+            return None
+
+    def _ssl_try_renew(self, domain: str) -> bool:
+            """Attempt to renew Let's Encrypt cert via certbot."""
+            import logging as _log_m
+            _log = _log_m.getLogger(__name__)
+            try:
+                import subprocess
+                _log.info("SSL auto-renew: attempting certbot renew for %s", domain)
+                result = subprocess.run(
+                    ["sudo", "certbot", "renew", "--cert-name", domain, "--quiet"],
+                    capture_output=True, text=True, timeout=120,
+                )
+                if result.returncode == 0:
+                    _log.info("SSL auto-renew: certbot renew succeeded")
+                    # Copy renewed certs to app ssl dir
+                    src_cert = f"/etc/letsencrypt/live/{domain}/fullchain.pem"
+                    src_key = f"/etc/letsencrypt/live/{domain}/privkey.pem"
+                    dst_dir = self.project_root / "data" / "runtime" / "ssl"
+                    dst_dir.mkdir(parents=True, exist_ok=True)
+                    subprocess.run(["sudo", "cp", src_cert, str(dst_dir / "fullchain.pem")], timeout=10)
+                    subprocess.run(["sudo", "cp", src_key, str(dst_dir / "privkey.pem")], timeout=10)
+                    import getpass
+                    _user = getpass.getuser()
+                    subprocess.run(["sudo", "chown", _user, str(dst_dir / "fullchain.pem"), str(dst_dir / "privkey.pem")], timeout=10)
+                    _log.info("SSL auto-renew: certs copied to %s", dst_dir)
+                    return True
+                else:
+                    _log.warning("SSL auto-renew: certbot renew failed: %s", result.stderr.strip())
+            except Exception as e:
+                _log.warning("SSL auto-renew: error: %s", e)
+            return False
+
+    def _ssl_cert_check_tick(self) -> None:
+            """Periodic check (daily) of SSL certificate expiry + auto-renew."""
+            import logging as _log_m
+            _log = _log_m.getLogger(__name__)
+            try:
+                info = self._ssl_get_cert_info()
+                if info:
+                    _log.info("SSL cert: %s, expires in %d days (%s)",
+                              info["domain"], info["days_left"], info["expiry"].strftime("%Y-%m-%d"))
+                    # Update UI label if present
+                    try:
+                        if hasattr(self, "_ssl_status_var"):
+                            if info["days_left"] <= 7:
+                                status = f"⚠️ {info['domain']} – {info['days_left']} Tage verbleibend!"
+                            elif info["days_left"] <= 30:
+                                status = f"🔶 {info['domain']} – {info['days_left']} Tage verbleibend"
+                            else:
+                                status = f"✅ {info['domain']} – gültig bis {info['expiry'].strftime('%d.%m.%Y')} ({info['days_left']} Tage)"
+                            self._ssl_status_var.set(status)
+                    except Exception:
+                        pass
+                    # Auto-renew if enabled and expiring soon
+                    renew_days = int(getattr(self.cfg.ui, "live_web_ssl_renew_days", 30))
+                    auto_renew = bool(getattr(self.cfg.ui, "live_web_ssl_auto_renew", True))
+                    if auto_renew and info["days_left"] <= renew_days and info["domain"]:
+                        import threading
+                        threading.Thread(target=self._ssl_try_renew, args=(info["domain"],), daemon=True).start()
+            except Exception as e:
+                _log.warning("SSL cert check error: %s", e)
+            # Schedule next check in 24 hours
+            try:
+                self.after(86400 * 1000, self._ssl_cert_check_tick)
+            except Exception:
+                pass
 
     def _get_visible_devices(self) -> List[DeviceConfig]:
             """Return the devices currently visible in the UI (max 2 for plots/live).
@@ -7111,21 +7209,45 @@ class CoreMixin:
                     self._ssl_key_var.set(p)
             ttk.Button(web_box, text="...", width=3, command=_browse_key).grid(row=4, column=4, padx=4, pady=4)
 
+            # SSL certificate status + auto-renew
+            if not hasattr(self, "_ssl_status_var"):
+                self._ssl_status_var = tk.StringVar(value="")
+                self._ssl_auto_renew_var = tk.BooleanVar(value=bool(getattr(self.cfg.ui, "live_web_ssl_auto_renew", True)))
+                self._ssl_renew_days_var = tk.IntVar(value=int(getattr(self.cfg.ui, "live_web_ssl_renew_days", 30)))
+            # Trigger initial status read
+            _cert_info = self._ssl_get_cert_info()
+            if _cert_info:
+                _dl = _cert_info["days_left"]
+                if _dl <= 7:
+                    self._ssl_status_var.set(f"⚠️ {_cert_info['domain']} – {_dl} Tage verbleibend!")
+                elif _dl <= 30:
+                    self._ssl_status_var.set(f"🔶 {_cert_info['domain']} – {_dl} Tage verbleibend")
+                else:
+                    self._ssl_status_var.set(f"✅ {_cert_info['domain']} – gültig bis {_cert_info['expiry'].strftime('%d.%m.%Y')} ({_dl} Tage)")
+
+            _status_lbl = ttk.Label(web_box, textvariable=self._ssl_status_var, font=("", 9))
+            _status_lbl.grid(row=5, column=0, columnspan=5, padx=8, pady=(6, 2), sticky="w")
+
+            ttk.Checkbutton(web_box, text="Auto-Renew (certbot)", variable=self._ssl_auto_renew_var).grid(row=6, column=0, columnspan=2, padx=8, pady=4, sticky="w")
+            ttk.Label(web_box, text="Renew bei <").grid(row=6, column=2, padx=(8, 2), pady=4, sticky="e")
+            ttk.Entry(web_box, width=4, textvariable=self._ssl_renew_days_var).grid(row=6, column=3, padx=2, pady=4, sticky="w")
+            ttk.Label(web_box, text="Tagen").grid(row=6, column=4, padx=2, pady=4, sticky="w")
+
             # Widget settings
-            ttk.Label(web_box, text="─── iOS Widget ───").grid(row=5, column=0, columnspan=5, padx=8, pady=(8, 2), sticky="w")
+            ttk.Label(web_box, text="─── iOS Widget ───").grid(row=7, column=0, columnspan=5, padx=8, pady=(8, 2), sticky="w")
 
             if not hasattr(self, "_widget_domain_var"):
                 self._widget_domain_var = tk.StringVar(value=str(getattr(self.cfg.ui, "widget_domain", "") or ""))
                 self._widget_devices_var = tk.StringVar(value=str(getattr(self.cfg.ui, "widget_devices", "") or ""))
 
-            ttk.Label(web_box, text="Domain:").grid(row=6, column=0, padx=8, pady=4, sticky="w")
-            ttk.Entry(web_box, width=30, textvariable=self._widget_domain_var).grid(row=6, column=1, columnspan=2, padx=8, pady=4, sticky="we")
-            ttk.Label(web_box, text="(auto aus Cert)").grid(row=6, column=3, columnspan=2, padx=4, pady=4, sticky="w")
+            ttk.Label(web_box, text="Domain:").grid(row=8, column=0, padx=8, pady=4, sticky="w")
+            ttk.Entry(web_box, width=30, textvariable=self._widget_domain_var).grid(row=8, column=1, columnspan=2, padx=8, pady=4, sticky="we")
+            ttk.Label(web_box, text="(auto aus Cert)").grid(row=8, column=3, columnspan=2, padx=4, pady=4, sticky="w")
 
-            ttk.Label(web_box, text="Geräte:").grid(row=7, column=0, padx=8, pady=4, sticky="w")
+            ttk.Label(web_box, text="Geräte:").grid(row=9, column=0, padx=8, pady=4, sticky="w")
             _dev_names = ", ".join(d.key for d in (self.cfg.devices or []) if int(getattr(d, "phases", 3) or 3) >= 3 and str(getattr(d, "kind", "em")) != "switch")
-            ttk.Entry(web_box, width=30, textvariable=self._widget_devices_var).grid(row=7, column=1, columnspan=2, padx=8, pady=4, sticky="we")
-            ttk.Label(web_box, text=f"(leer = alle: {_dev_names})").grid(row=7, column=3, columnspan=2, padx=4, pady=4, sticky="w")
+            ttk.Entry(web_box, width=30, textvariable=self._widget_devices_var).grid(row=9, column=1, columnspan=2, padx=8, pady=4, sticky="we")
+            ttk.Label(web_box, text=f"(leer = alle: {_dev_names})").grid(row=9, column=3, columnspan=2, padx=4, pady=4, sticky="w")
 
 
             # ---------------- Advanced (Config) ----------------
@@ -8071,6 +8193,8 @@ class CoreMixin:
                     getattr(self, "_ssl_mode_var", tk.StringVar()).get(), "auto"),
                 live_web_ssl_cert=str(getattr(self, "_ssl_cert_var", tk.StringVar()).get() or ""),
                 live_web_ssl_key=str(getattr(self, "_ssl_key_var", tk.StringVar()).get() or ""),
+                live_web_ssl_auto_renew=bool(getattr(self, "_ssl_auto_renew_var", tk.BooleanVar(value=True)).get()),
+                live_web_ssl_renew_days=int(getattr(self, "_ssl_renew_days_var", tk.IntVar(value=30)).get() or 30),
                 widget_domain=str(getattr(self, "_widget_domain_var", tk.StringVar()).get() or ""),
                 widget_devices=str(getattr(self, "_widget_devices_var", tk.StringVar()).get() or ""),
                 live_web_token=live_web_token,
