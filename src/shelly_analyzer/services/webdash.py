@@ -652,18 +652,18 @@ function drawMiniChart(chart, fixedCt, W, H) {
     const y = pad.t + pH - barH;
 
     const ratio = fixedCt > 0 ? v / fixedCt : 1;
-    let col;
-    if (ratio <= 0.7) col = Color.dynamic(new Color("#4caf50"), new Color("#4caf50"));
-    else if (ratio <= 0.9) col = Color.dynamic(new Color("#8bc34a"), new Color("#8bc34a"));
-    else if (ratio <= 1.0) col = Color.dynamic(new Color("#ffeb3b"), new Color("#ddd000"));
-    else if (ratio <= 1.2) col = Color.dynamic(new Color("#ff9800"), new Color("#ff9800"));
-    else col = Color.dynamic(new Color("#e53935"), new Color("#e53935"));
+    let hex;
+    if (ratio <= 0.7) hex = "#4caf50";
+    else if (ratio <= 0.9) hex = "#8bc34a";
+    else if (ratio <= 1.0) hex = "#ffeb3b";
+    else if (ratio <= 1.2) hex = "#ff9800";
+    else hex = "#e53935";
 
+    // Bake alpha into color (Scriptable has no setAlpha)
+    const a = ts > now ? 0.45 : 0.85;
+    const col = new Color(hex, a);
     dc.setFillColor(col);
-    const alpha = ts > now ? 0.45 : 0.85;
-    dc.setAlpha(alpha);
     dc.fillRect(new Rect(x, y, barW, barH));
-    dc.setAlpha(1.0);
   }
 
   // Fixed price line (dashed = two thin lines)
