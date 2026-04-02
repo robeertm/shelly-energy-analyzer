@@ -7300,7 +7300,7 @@ class LiveWebDashboard:
         # common.* and btn.* keys as well, not only web.*.
         web_i18n = get_lang_map(self.lang)
 
-        html = _render_template(
+        _rendered_html = _render_template(
             _HTML_TEMPLATE,
             {
                 "lang": self.lang,
@@ -7387,7 +7387,7 @@ class LiveWebDashboard:
                 "i18n_json": json.dumps(web_i18n, ensure_ascii=False),
             },
         )
-        self._html_bytes = html.encode("utf-8")
+        self._html_bytes = _rendered_html.encode("utf-8")
         self._html_bytes_gz = gzip.compress(self._html_bytes, compresslevel=6)
 
         self._control_bytes = _render_template(
