@@ -378,10 +378,15 @@ if (!data) {
 
 const family = config.widgetFamily || "medium";
 
-if (family === "small")       Script.setWidget(buildSmall(data));
-else if (family === "large")  Script.setWidget(buildLarge(data));
-else                          Script.setWidget(buildMedium(data));
+let widget;
+if (family === "small")       widget = buildSmall(data);
+else if (family === "large")  widget = buildLarge(data);
+else                          widget = buildMedium(data);
 
+// Auto-refresh every 5 minutes
+widget.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000);
+
+Script.setWidget(widget);
 Script.complete();
 
 // ─── Small Widget: Current price + power ────────────────────────
@@ -585,6 +590,24 @@ function buildLarge(d) {
     const stVal = stRow.addText(fmt(d.spot_today_eur,2) + " € (" + (diff >= 0 ? "+" : "") + fmt(diff,2) + " €)");
     stVal.font = Font.mediumSystemFont(10);
     stVal.textColor = diff <= 0 ? C.green : C.red;
+  }
+
+  // Per-device breakdown
+  if (d.devices && d.devices.length > 0) {
+    w.addSpacer(6);
+    for (const dev of d.devices) {
+      const dr = w.addStack();
+      dr.layoutHorizontally();
+      dr.centerAlignContent();
+      const dn = dr.addText(dev.name);
+      dn.font = Font.mediumSystemFont(10);
+      dn.textColor = C.text;
+      dn.lineLimit = 1;
+      dr.addSpacer();
+      const dv = dr.addText(fmt(dev.power_w,0) + " W  " + fmt(dev.today_kwh,1) + " kWh  " + fmt(dev.today_eur,2) + " €");
+      dv.font = Font.systemFont(10);
+      dv.textColor = C.muted;
+    }
   }
 
   w.addSpacer();
@@ -7210,12 +7233,16 @@ class LiveWebDashboard:
         ssl_mode: str = "auto",
         ssl_cert: str = "",
         ssl_key: str = "",
+        widget_domain: str = "",
+        widget_devices: str = "",
     ) -> None:
         self.store = store
         self.port = int(port)
         self.ssl_mode = str(ssl_mode or "auto").strip().lower()
         self.ssl_cert = str(ssl_cert or "").strip()
         self.ssl_key = str(ssl_key or "").strip()
+        self.widget_domain = str(widget_domain or "").strip()
+        self.widget_devices = str(widget_devices or "").strip()
         self.refresh_seconds = float(refresh_seconds)
         self.window_minutes = int(window_minutes)
         self.token = ""  # auth disabled
@@ -7606,7 +7633,15 @@ class LiveWebDashboard:
 
     def get_widget_script(self) -> str:
         """Return the Scriptable JS widget script with the server URL baked in."""
-        return _SCRIPTABLE_WIDGET_JS
+        script = _SCRIPTABLE_WIDGET_JS
+        # Bake in the known domain:port as default
+        if self.widget_domain:
+            default_addr = f"{self.widget_domain}:{self.port}"
+            script = script.replace(
+                '192.168.1.50:8765',
+                default_addr,
+            )
+        return script
 
     def set_window_minutes(self, minutes: int) -> int:
         minutes = int(minutes)
@@ -7691,6 +7726,21 @@ class LiveWebDashboard:
                 )
         else:
             _log.info("Web dashboard running in HTTP mode (SSL disabled)")
+
+        # Auto-detect widget domain from SSL cert CN if not set
+        if not self.widget_domain and self.ssl_cert and self._is_https:
+            try:
+                import subprocess as _sp
+                _cn = _sp.check_output(
+                    ["openssl", "x509", "-in", self.ssl_cert, "-noout", "-subject"],
+                    timeout=5, text=True
+                ).strip()
+                # e.g. "subject=CN=energie.maro-datacenter.de"
+                if "CN=" in _cn:
+                    self.widget_domain = _cn.split("CN=")[-1].strip()
+                    _log.info("Widget domain auto-detected from cert: %s", self.widget_domain)
+            except Exception:
+                pass
 
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
         self._thread.start()

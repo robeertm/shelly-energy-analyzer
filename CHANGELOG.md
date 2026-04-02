@@ -1,5 +1,13 @@
 # Changelog
 
+## 14.2.0 - 2026-04-02
+### Added
+- **Widget device filter** – New `widget_devices` config field (comma-separated device keys) to choose which Shellys appear in the iOS widget. Empty = all 3-phase devices. Configurable in Settings → Web Dashboard.
+- **Widget auto-domain** – `widget_domain` auto-detected from SSL certificate CN (e.g. `energie.maro-datacenter.de`). Baked into the Scriptable script download so no manual parameter needed.
+- **Widget auto-refresh** – `refreshAfterDate` set to 5 minutes, so iOS refreshes the widget regularly.
+- **Per-device data in widget** – Large widget shows per-device breakdown (name, power W, today kWh, today €). API `/api/widget` now includes `devices` array.
+- **Widget settings UI** – Domain and device filter fields in Settings → Web Dashboard with helper text showing available device keys.
+
 ## 14.1.2 - 2026-04-02
 ### Fixed
 - **Scriptable widget crash: `dc.setAlpha is not a function`** – Scriptable's DrawContext has no `setAlpha()` method. Fixed by passing alpha directly to `new Color(hex, alpha)` constructor. Future/past bar transparency now works correctly.

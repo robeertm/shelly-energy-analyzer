@@ -104,6 +104,10 @@ class UiConfig:
     live_web_ssl_cert: str = ""   # path to PEM certificate file (for mode "custom")
     live_web_ssl_key: str = ""    # path to PEM private key file (for mode "custom")
 
+    # iOS Widget settings
+    widget_domain: str = ""       # auto-detected from SSL cert CN, e.g. "energie.example.de"
+    widget_devices: str = ""      # comma-separated device keys, empty = all 3-phase devices
+
     # Optional token to protect the local web dashboard and remote actions.
     # If empty, the app may generate a random token on first start.
     live_web_token: str = ""
@@ -693,6 +697,8 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         live_web_ssl_mode=str(ui_raw.get("live_web_ssl_mode", UiConfig.live_web_ssl_mode) or "auto"),
         live_web_ssl_cert=str(ui_raw.get("live_web_ssl_cert", UiConfig.live_web_ssl_cert) or ""),
         live_web_ssl_key=str(ui_raw.get("live_web_ssl_key", UiConfig.live_web_ssl_key) or ""),
+        widget_domain=str(ui_raw.get("widget_domain", UiConfig.widget_domain) or ""),
+        widget_devices=str(ui_raw.get("widget_devices", UiConfig.widget_devices) or ""),
         live_web_token=str(ui_raw.get("live_web_token", UiConfig.live_web_token) or ""),
         live_smoothing_enabled=bool(ui_raw.get("live_smoothing_enabled", UiConfig.live_smoothing_enabled)),
         live_smoothing_seconds=_coerce_int(ui_raw.get("live_smoothing_seconds", UiConfig.live_smoothing_seconds), UiConfig.live_smoothing_seconds),
@@ -1137,6 +1143,8 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "live_web_ssl_mode": getattr(cfg.ui, "live_web_ssl_mode", "auto"),
             "live_web_ssl_cert": getattr(cfg.ui, "live_web_ssl_cert", ""),
             "live_web_ssl_key": getattr(cfg.ui, "live_web_ssl_key", ""),
+            "widget_domain": getattr(cfg.ui, "widget_domain", ""),
+            "widget_devices": getattr(cfg.ui, "widget_devices", ""),
             "live_web_token": cfg.ui.live_web_token,
             "live_smoothing_enabled": getattr(cfg.ui, "live_smoothing_enabled", False),
             "live_smoothing_seconds": getattr(cfg.ui, "live_smoothing_seconds", 10),
