@@ -275,14 +275,6 @@ class UpdatesMixin:
                 except Exception:
                     pass
 
-            try:
-                req = urllib.request.Request(rel.zip_url, headers={"User-Agent": "shelly-energy-analyzer"})
-                with urllib.request.urlopen(req, timeout=10.0) as resp:
-                    data = resp.read()
-                zip_path.write_bytes(data)
-            except Exception:
-                self._updates_set_status(self.t("updates.status.unreachable"))
-                return
 
     def _updates_populate_release_list(self, releases: list) -> None:
             """Populate the version history listbox with the given releases (called on UI thread)."""
