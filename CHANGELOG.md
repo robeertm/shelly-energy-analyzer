@@ -1,8 +1,24 @@
 # Changelog
 
-## 13.9.24 - 2026-04-02
+## 13.9.25 - 2026-04-02
+### Fixed
+- **Mousewheel scrolling unified** – Removed 4 redundant per-tab mousewheel bindings (costs, settings main, settings devices, groups) that hijacked the global handler and broke scrolling in other tabs. The single smart global handler at app init now handles all tabs correctly, including macOS small-delta support.
+- **Frozen dataclass mutation** – Telegram settings from setup wizard were silently lost because `UiConfig` is frozen. Now uses `dataclasses.replace()` to create a new config properly.
+- **self.root.after → self.after** – Fixed 5 occurrences where `self.root.after()` raised `AttributeError` because the class IS the root (inherits from Tk). Telegram/webhook/email test callbacks now schedule correctly on the main thread.
+- **Live history export** – `self._live_history` was never initialized, causing live tab PNG/PDF export to silently fail. Now initialized as empty dict.
+- **Grid overlap in pricing settings** – CO2 presets button and base-fee-VAT checkbox both occupied row 3 column 2. Moved CO2 presets to row 4.
+- **Forecast year formula** – Removed double-counted trend term (`slope * 365 * 182.5`) from annual forecast. `avg_daily` already includes the trend.
+- **Web: freeze button handler accumulation** – Each tab switch added another click handler. Now removes old handler before adding.
+- **Web: dark mode in Sankey/Traffic charts** – Used wrong detection (`body.classList`) instead of `documentElement.dataset.theme`.
+- **Web: theme key mismatch** – Live page used `sea_theme`, other pages used `sea_web_theme`. Now unified to `sea_theme`.
+- **Web: CSS `--text` variable** – Chart detail legend referenced undefined `--text`, changed to `--fg`.
+- **Web: spot chart listener leak** – mousemove/touchmove handlers accumulated on each redraw. Now cleaned up before re-adding.
+- **Web: Control page auth tokens** – `qs()` always returned empty string, breaking authenticated downloads. Now returns `window.location.search`.
+- **Plots: device tab binding** – Second `NotebookTabChanged` bind replaced the first. Added `add="+"`.
+- **Web plots: column name mismatch** – Timeseries data used hardcoded `df["ts"]` instead of checking for `"timestamp"` column.
+
 ### Added
-- **Spot price settings: "Standard" button** – Resets all dynamic tariff surcharge fields (grid fee, electricity tax, concession, KWK, §19, offshore, supplier margin) back to the dataclass defaults from `SpotPriceConfig`.
+- **Spot price settings: "Standard" button** – Resets all dynamic tariff surcharge fields back to defaults.
 
 ## 13.9.23 - 2026-04-01
 ### Fixed

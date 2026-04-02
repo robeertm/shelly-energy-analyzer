@@ -2204,7 +2204,8 @@ class LiveWebMixin:
                     diag_ts["counts"][k] = int(len(df))
                     if start is None and end is None:
                         try:
-                            end_i = pd.to_datetime(df["ts"]).max()
+                            _tcol = "timestamp" if "timestamp" in df.columns else ("ts" if "ts" in df.columns else None)
+                            end_i = pd.to_datetime(df[_tcol]).max() if _tcol else None
                             start_i = end_i - delta
                         except Exception:
                             start_i, end_i = None, None
