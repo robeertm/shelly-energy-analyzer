@@ -1543,7 +1543,7 @@ function devCardHTML(d) {{
   const phases = (d.phases && d.phases.length > 0) ? d.phases : null;
   let phaseHtml = '';
   if (phases) {{
-    phaseHtml = '<dl class="dev-kv">';
+    phaseHtml = '<dl class="dev-kv" id="kv-phases-' + d.key + '">';
     phases.forEach(function(ph, i) {{
       phaseHtml += '<dt>' + t('web.dash.phase', 'Phase') + ' ' + (i+1) + '</dt><dd>' + fmt(ph.voltage_v,1,'V') + ' \xb7 ' + fmt(ph.current_a,2,'A') + ' \xb7 ' + fmt(ph.power_w,0,'W') + '</dd>';
     }});
@@ -1654,8 +1654,7 @@ function updateDeviceCard(card, d) {{
     }}
     const phases = d.phases && d.phases.length > 0 ? d.phases : null;
     if (phases) {{
-      const allKvs = exp.querySelectorAll('.dev-kv');
-      const phaseDl = allKvs.length > 1 ? allKvs[1] : null;
+      const phaseDl = exp.querySelector('#kv-phases-' + d.key);
       if (phaseDl) {{
         const pDds = phaseDl.querySelectorAll('dd');
         phases.forEach(function(ph, i) {{
@@ -7088,33 +7087,6 @@ class LiveWebDashboard:
         ).encode("utf-8")
         self._plots_bytes_gz = gzip.compress(self._plots_bytes, compresslevel=6)
 
-    def read_file_bytes(self, rel_path: str) -> Tuple[bytes, str]:
-        """Serve files from <project>/exports only.
-
-        `rel_path` is the part after /files/.
-        """
-        rel_path = (rel_path or "").lstrip("/")
-        # Only allow under exports/ (or a subfolder inside it)
-        root = (self.out_dir / "exports").resolve()
-        p = (root / rel_path).resolve()
-        if root not in p.parents and p != root:
-            raise FileNotFoundError(rel_path)
-        if not p.exists() or not p.is_file():
-            raise FileNotFoundError(rel_path)
-        data = p.read_bytes()
-        ext = p.suffix.lower()
-        ctype = {
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".pdf": "application/pdf",
-            ".zip": "application/zip",
-            ".json": "application/json; charset=utf-8",
-            ".txt": "text/plain; charset=utf-8",
-            ".csv": "text/csv; charset=utf-8",
-        }.get(ext, "application/octet-stream")
-        return data, ctype
-
     @property
     def control_html_bytes(self) -> bytes:
         return self._control_bytes
@@ -7164,6 +7136,8 @@ class LiveWebDashboard:
             ctype = "application/json; charset=utf-8"
         elif ext in {".txt", ".log"}:
             ctype = "text/plain; charset=utf-8"
+        elif ext in {".csv"}:
+            ctype = "text/csv; charset=utf-8"
         return data, ctype
 
     
