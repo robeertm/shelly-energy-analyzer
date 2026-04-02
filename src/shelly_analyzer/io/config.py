@@ -96,6 +96,14 @@ class UiConfig:
     live_web_port: int = 8765
     live_web_refresh_seconds: float = 1.0
 
+    # SSL/HTTPS mode for the web dashboard:
+    #   "auto"   = self-signed certificate (default, may cause browser warnings)
+    #   "custom" = use user-provided cert/key files (e.g. Let's Encrypt)
+    #   "off"    = plain HTTP (no encryption)
+    live_web_ssl_mode: str = "auto"
+    live_web_ssl_cert: str = ""   # path to PEM certificate file (for mode "custom")
+    live_web_ssl_key: str = ""    # path to PEM private key file (for mode "custom")
+
     # Optional token to protect the local web dashboard and remote actions.
     # If empty, the app may generate a random token on first start.
     live_web_token: str = ""
