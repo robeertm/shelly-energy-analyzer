@@ -1,5 +1,10 @@
 # Changelog
 
+## 14.0.1 - 2026-04-02
+### Fixed
+- **Widget API crash** – `/api/widget` route referenced undefined `qs` variable, causing the web server to drop the connection. Now passes empty dict like other API routes.
+- **Widget power reading** – Fixed LiveStateStore snapshot access: use correct `power_total_w` key and list-of-dicts format. Added fallback to computed dataframes when live store is unavailable.
+
 ## 14.0.0 - 2026-04-02
 ### Added
 - **iOS Widget (Scriptable)** – Real iOS home screen widget for live energy data. Three sizes supported:

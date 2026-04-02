@@ -6924,7 +6924,7 @@ class _Handler(BaseHTTPRequestHandler):
             # --- Widget API (compact JSON for iOS Scriptable) ---
             if path_only.startswith("/api/widget"):
                 try:
-                    payload = self.dashboard.on_action("widget", dict(qs))
+                    payload = self.dashboard.on_action("widget", {})
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
