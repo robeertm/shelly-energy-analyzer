@@ -1,5 +1,10 @@
 # Changelog
 
+## 13.10.1 - 2026-04-02
+### Fixed
+- **Web costs tab: current price display** – Removed duplicate ⚡ icon, shortened text to prevent line breaks on narrow screens, added `white-space:nowrap`.
+- **App costs tab: current price label invisible** – `tk.Label` now uses theme-aware background color (`_get_theme_colors()`) so it blends into the ttk frame on both light and dark themes. Font size increased to 14pt.
+
 ## 13.10.0 - 2026-04-02
 ### Added
 - **Current spot price display** – App and web costs tab now show the current kWh spot price prominently above the 24h chart, with color-coded delta vs. fixed tariff (green = cheaper, red = more expensive).
