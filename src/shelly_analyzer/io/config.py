@@ -103,6 +103,8 @@ class UiConfig:
     live_web_ssl_mode: str = "auto"
     live_web_ssl_cert: str = ""   # path to PEM certificate file (for mode "custom")
     live_web_ssl_key: str = ""    # path to PEM private key file (for mode "custom")
+    live_web_ssl_auto_renew: bool = True   # auto-renew Let's Encrypt certs via certbot
+    live_web_ssl_renew_days: int = 30      # renew when fewer than N days remaining
 
     # iOS Widget settings
     widget_domain: str = ""       # auto-detected from SSL cert CN, e.g. "energie.example.de"
@@ -697,6 +699,8 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         live_web_ssl_mode=str(ui_raw.get("live_web_ssl_mode", UiConfig.live_web_ssl_mode) or "auto"),
         live_web_ssl_cert=str(ui_raw.get("live_web_ssl_cert", UiConfig.live_web_ssl_cert) or ""),
         live_web_ssl_key=str(ui_raw.get("live_web_ssl_key", UiConfig.live_web_ssl_key) or ""),
+        live_web_ssl_auto_renew=bool(ui_raw.get("live_web_ssl_auto_renew", UiConfig.live_web_ssl_auto_renew)),
+        live_web_ssl_renew_days=_coerce_int(ui_raw.get("live_web_ssl_renew_days", UiConfig.live_web_ssl_renew_days), UiConfig.live_web_ssl_renew_days),
         widget_domain=str(ui_raw.get("widget_domain", UiConfig.widget_domain) or ""),
         widget_devices=str(ui_raw.get("widget_devices", UiConfig.widget_devices) or ""),
         live_web_token=str(ui_raw.get("live_web_token", UiConfig.live_web_token) or ""),
@@ -1143,6 +1147,8 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "live_web_ssl_mode": getattr(cfg.ui, "live_web_ssl_mode", "auto"),
             "live_web_ssl_cert": getattr(cfg.ui, "live_web_ssl_cert", ""),
             "live_web_ssl_key": getattr(cfg.ui, "live_web_ssl_key", ""),
+            "live_web_ssl_auto_renew": getattr(cfg.ui, "live_web_ssl_auto_renew", True),
+            "live_web_ssl_renew_days": getattr(cfg.ui, "live_web_ssl_renew_days", 30),
             "widget_domain": getattr(cfg.ui, "widget_domain", ""),
             "widget_devices": getattr(cfg.ui, "widget_devices", ""),
             "live_web_token": cfg.ui.live_web_token,
