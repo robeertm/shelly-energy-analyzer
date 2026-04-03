@@ -1609,6 +1609,35 @@ _HTML_TEMPLATE = """<!doctype html>
     </div>
   </div>
 
+    <!-- New feature panes -->
+    <div id="pane-smart_sched" class="pane">
+      <div class="metric-grid" id="ss-cards"></div>
+      <div id="ss-result" class="card" style="margin:12px;padding:16px"></div>
+      <div id="ss-chart" style="margin:12px"></div>
+    </div>
+    <div id="pane-ev_log" class="pane">
+      <div class="metric-grid" id="ev-cards"></div>
+      <div id="ev-table" style="margin:12px;overflow-x:auto"></div>
+    </div>
+    <div id="pane-tariff" class="pane">
+      <div id="tariff-table" style="margin:12px;overflow-x:auto"></div>
+      <div id="tariff-chart" style="margin:12px"></div>
+    </div>
+    <div id="pane-battery" class="pane">
+      <div class="metric-grid" id="bat-cards"></div>
+      <div id="bat-chart" style="margin:12px"></div>
+    </div>
+    <div id="pane-advisor" class="pane">
+      <div id="advisor-savings" class="card" style="margin:12px;padding:16px;font-size:20px;font-weight:700;color:#4caf50;text-align:center"></div>
+      <div id="advisor-llm" class="card" style="margin:12px;padding:16px;display:none"></div>
+      <div id="advisor-tips" style="margin:12px"></div>
+    </div>
+    <div id="pane-goals" class="pane">
+      <div id="goals-streak" class="card" style="margin:12px;padding:16px;text-align:center;font-size:20px"></div>
+      <div class="metric-grid" id="goals-progress"></div>
+      <div id="goals-badges" style="margin:12px;display:flex;flex-wrap:wrap;gap:12px;justify-content:center"></div>
+    </div>
+
   <nav id="bottom-nav">
     <button class="nav-btn active" onclick="switchPane('live',this)">
       <span class="nav-icon">📡</span>
@@ -1687,39 +1716,6 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-label">Goals</span>
     </button>
   </nav>
-</div>
-
-<div id="pane-smart_sched" class="pane">
-  <div class="metric-grid" id="ss-cards"></div>
-  <div id="ss-result" class="card" style="margin:12px;padding:16px"></div>
-  <div id="ss-chart" style="margin:12px"></div>
-</div>
-
-<div id="pane-ev_log" class="pane">
-  <div class="metric-grid" id="ev-cards"></div>
-  <div id="ev-table" style="margin:12px;overflow-x:auto"></div>
-</div>
-
-<div id="pane-tariff" class="pane">
-  <div id="tariff-table" style="margin:12px;overflow-x:auto"></div>
-  <div id="tariff-chart" style="margin:12px"></div>
-</div>
-
-<div id="pane-battery" class="pane">
-  <div class="metric-grid" id="bat-cards"></div>
-  <div id="bat-chart" style="margin:12px"></div>
-</div>
-
-<div id="pane-advisor" class="pane">
-  <div id="advisor-savings" class="card" style="margin:12px;padding:16px;font-size:20px;font-weight:700;color:#4caf50;text-align:center"></div>
-  <div id="advisor-llm" class="card" style="margin:12px;padding:16px;display:none"></div>
-  <div id="advisor-tips" style="margin:12px"></div>
-</div>
-
-<div id="pane-goals" class="pane">
-  <div id="goals-streak" class="card" style="margin:12px;padding:16px;text-align:center;font-size:20px"></div>
-  <div class="metric-grid" id="goals-progress"></div>
-  <div id="goals-badges" style="margin:12px;display:flex;flex-wrap:wrap;gap:12px;justify-content:center"></div>
 </div>
 
 <div id="hm-tooltip"></div>

@@ -1,8 +1,12 @@
 # Changelog
 
+## 15.0.7 - 2026-04-03
+### Fixed
+- **Web dashboard: new panes outside container** – The 6 new pane divs were placed AFTER the closing `</div>` of the `#panes` container (after `</nav></div>`), so they were outside the visible layout area. Moved them INSIDE the `#panes` container, before `<nav id="bottom-nav">`, matching the position of all existing panes.
+
 ## 15.0.6 - 2026-04-03
 ### Fixed
-- **Web dashboard: new tabs empty (2 JS bugs)** – (1) The 6 new JS functions (`loadSmartSched`, etc.) were wrapped in an IIFE `(function(){ ... })()` making them invisible to the global `onPaneActivated` caller. Removed the IIFE wrapper. (2) All fetch calls used `qs()` which is only defined on the control page, not the main page. Removed `qs()` from all 6 fetch URLs.
+- **Web dashboard: new tabs JS bugs** – (1) IIFE wrapper removed. (2) Undefined `qs()` calls removed.
 
 ## 15.0.5 - 2026-04-03
 ### Fixed
