@@ -1,5 +1,10 @@
 # Changelog
 
+## 15.0.14 - 2026-04-03
+### Fixed
+- **Web dashboard: content vertically centered instead of top-aligned** – Changed `#panes` from `flex: 1` to `flex: 1 1 0%` with `min-height: 0`. Without `min-height: 0`, the flex child's implicit min-height prevented the scroll container from sizing correctly, causing short panes to float in the middle. Reverted the `min-height: calc(100vh - 180px)` on `.pane.active` which made the problem worse.
+- **Goals badges: uneven grid alignment** – Changed badge grid from `auto-fill, minmax(64px, 1fr)` to fixed `repeat(5, 1fr)`. Badge names now use `text-overflow: ellipsis` and `white-space: nowrap` so long names like "Energiesparer" don't push other badges aside. Reduced emoji size to 20px and text to 8px for uniform appearance.
+
 ## 15.0.13 - 2026-04-03
 ### Fixed
 - **Web dashboard: pane content pushed to bottom** – Root cause found via Playwright DOM inspection: `.pane.active` with short content caused the `#panes` flex container to collapse, and `padding-bottom: 120px` pushed the content to the very bottom. Fix: added `min-height: calc(100vh - 180px)` to `.pane.active` so every pane fills the visible area and content starts at the top. This affects ALL panes, not just the new ones.
