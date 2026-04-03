@@ -1,8 +1,8 @@
 # Changelog
 
-## 15.0.1 - 2026-04-03
+## 15.0.2 - 2026-04-03
 ### Fixed
-- **Tab bar scroll buttons** – Added ◀/▶ navigation buttons above the tab bar so all 23 tabs are accessible on small monitors where labels get clipped. Compact tab padding via ttk.Style.
+- **Scrollable tab bar** – Replaced the built-in ttk.Notebook tab row (which truncates labels on small screens) with a custom horizontally-scrollable button row. Every tab label is always fully readable regardless of window size. Mousewheel scrolls the tab bar. Active tab is visually highlighted.
 - **New tabs fill window width** – All 6 new tabs (Smart Plan, EV Log, Tariff, Battery, Advisor, Goals) now stretch their content to fill the full window width instead of being stuck at a narrow default.
 
 ## 15.0.0 - 2026-04-03
