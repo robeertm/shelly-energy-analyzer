@@ -1,10 +1,10 @@
 # Changelog
 
-## 15.0.17 - 2026-04-03
+## 15.0.18 - 2026-04-03
 ### Fixed
-- **Desktop tariff comparison: table rows invisible in dark mode** – macOS Aqua theme ignores `ttk.Style` background/foreground for Treeview. Switched to `tag_configure()` which works on all platforms. Current tariff row highlighted in orange. Replaced emoji indicators with Unicode triangles for compatibility.
+- **Desktop tariff comparison: replaced invisible Treeview with card layout** – macOS Aqua dark mode makes ttk.Treeview rows invisible (both `ttk.Style` and `tag_configure` are ignored). Replaced Treeview entirely with `tk.Label`/`tk.Frame` card layout using explicit `fg`/`bg` colors. Each tariff is a bordered card showing name, annual cost, provider details, and savings indicator. Current tariff highlighted with orange border.
 ### Added
-- **Tariff comparison: consumption summary line** – Shows data period (days), total consumption (kWh), and annualized estimate above the tariff table.
+- **Tariff comparison: consumption summary line** – Shows data period (days), total consumption (kWh), and annualized estimate above the tariff cards.
 
 ## 15.0.15 - 2026-04-03
 ### Fixed
