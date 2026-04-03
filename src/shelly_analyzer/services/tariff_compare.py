@@ -94,6 +94,34 @@ def simulate_spot_tariff(
     return total_cost * annual_factor + base_fee_eur_per_year
 
 
+def _get_consumption_stats(db, cfg) -> Optional[Dict]:
+    """Return consumption summary stats used for tariff comparison."""
+    import time
+    now = int(time.time())
+    start_ts = now - 90 * 86400
+    try:
+        total_kwh = 0.0
+        hours = 0
+        devices = cfg.devices if hasattr(cfg, 'devices') else []
+        for dev in devices:
+            if getattr(dev, 'kind', 'em') != 'em':
+                continue
+            try:
+                df = db.query_hourly(dev.key, start_ts, now)
+                if df is not None and not df.empty:
+                    total_kwh += float(df["kwh"].sum())
+                    hours += len(df)
+            except Exception:
+                pass
+        if hours <= 0:
+            return None
+        days = hours / 24
+        annual_kwh = total_kwh * (8760 / hours)
+        return {"total_kwh": total_kwh, "hours": hours, "days": days, "annual_kwh": annual_kwh}
+    except Exception:
+        return None
+
+
 def compare_tariffs(
     db, cfg,
     current_price_eur_per_kwh: float = 0.3265,

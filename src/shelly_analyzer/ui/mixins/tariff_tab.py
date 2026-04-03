@@ -26,11 +26,29 @@ class TariffMixin:
         canvas.pack(side="left", fill="both", expand=True)
 
         ttk.Label(inner, text=self.t("tariff.title"), font=("", 14, "bold")).pack(anchor="w", padx=12, pady=(12, 4))
-        ttk.Label(inner, text=self.t("tariff.hint"), foreground="gray").pack(anchor="w", padx=12, pady=(0, 8))
+        ttk.Label(inner, text=self.t("tariff.hint"), foreground="gray").pack(anchor="w", padx=12, pady=(0, 4))
+
+        # Consumption stats summary
+        self._tariff_stats_var = tk.StringVar(value="")
+        ttk.Label(inner, textvariable=self._tariff_stats_var, font=("", 11)).pack(anchor="w", padx=12, pady=(0, 8))
 
         # Table
         cols = ("name", "provider", "type", "annual", "monthly", "effective", "savings")
-        self._tariff_tree = ttk.Treeview(inner, columns=cols, show="headings", height=12)
+        self._tariff_tree = ttk.Treeview(inner, columns=cols, show="headings", height=10)
+
+        # Theme-aware Treeview colors so rows are visible in dark mode
+        tc = self._get_theme_colors()
+        style = ttk.Style()
+        style.configure("Tariff.Treeview",
+                         background=tc["bg"], foreground=tc["fg"],
+                         fieldbackground=tc["bg"], rowheight=26)
+        style.configure("Tariff.Treeview.Heading",
+                         background=tc["bg"], foreground=tc["fg"])
+        style.map("Tariff.Treeview",
+                   background=[("selected", tc["blue"])],
+                   foreground=[("selected", "#FFFFFF")])
+        self._tariff_tree.configure(style="Tariff.Treeview")
+
         for col, hdr, w in [
             ("name", self.t("tariff.col_name"), 160),
             ("provider", self.t("tariff.col_provider"), 100),
@@ -42,11 +60,11 @@ class TariffMixin:
         ]:
             self._tariff_tree.heading(col, text=hdr)
             self._tariff_tree.column(col, width=w, anchor="center")
-        self._tariff_tree.pack(fill="both", expand=True, padx=12, pady=8)
+        self._tariff_tree.pack(fill="x", padx=12, pady=8)
 
         # Chart frame
         self._tariff_chart_frame = ttk.Frame(inner)
-        self._tariff_chart_frame.pack(fill="both", expand=True, padx=12, pady=8)
+        self._tariff_chart_frame.pack(fill="x", padx=12, pady=8)
 
         ttk.Button(inner, text=self.t("tariff.refresh_btn"), command=self._tariff_refresh).pack(padx=12, pady=8)
 
@@ -55,13 +73,21 @@ class TariffMixin:
     def _tariff_refresh(self) -> None:
         def _worker():
             try:
-                from shelly_analyzer.services.tariff_compare import compare_tariffs
+                from shelly_analyzer.services.tariff_compare import compare_tariffs, _get_consumption_stats
                 results = compare_tariffs(
                     self.storage.db, self.cfg,
                     current_price_eur_per_kwh=self.cfg.pricing.electricity_price_eur_per_kwh,
                     current_base_fee_eur_per_year=self.cfg.pricing.base_fee_eur_per_year,
                 )
+                stats = _get_consumption_stats(self.storage.db, self.cfg)
                 def _update():
+                    # Show consumption summary
+                    if stats and hasattr(self, '_tariff_stats_var'):
+                        self._tariff_stats_var.set(
+                            f"{self.t('tariff.period')}: {stats['days']} {self.t('tariff.days')}  |  "
+                            f"{self.t('tariff.consumption')}: {stats['total_kwh']:.0f} kWh  |  "
+                            f"{self.t('tariff.annual_est')}: {stats['annual_kwh']:.0f} kWh/{self.t('tariff.year')}"
+                        )
                     self._tariff_tree.delete(*self._tariff_tree.get_children())
                     for r in results:
                         savings_text = f"{'\U0001f7e2 ' if r.savings_vs_current_eur > 0 else '\U0001f534 '}{r.savings_vs_current_eur:+.0f} \u20ac"
