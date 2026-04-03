@@ -32,27 +32,9 @@ class TariffMixin:
         self._tariff_stats_var = tk.StringVar(value="")
         ttk.Label(inner, textvariable=self._tariff_stats_var, font=("", 11)).pack(anchor="w", padx=12, pady=(0, 8))
 
-        # Table
-        cols = ("name", "provider", "type", "annual", "monthly", "effective", "savings")
-        self._tariff_tree = ttk.Treeview(inner, columns=cols, show="headings", height=10)
-
-        # Theme-aware row colors via tag (ttk.Style is ignored by macOS Aqua)
-        tc = self._get_theme_colors()
-        self._tariff_tree.tag_configure("row", background=tc["bg"], foreground=tc["fg"])
-        self._tariff_tree.tag_configure("current", background="#3e2c00", foreground="#ff9800")
-
-        for col, hdr, w in [
-            ("name", self.t("tariff.col_name"), 160),
-            ("provider", self.t("tariff.col_provider"), 100),
-            ("type", self.t("tariff.col_type"), 70),
-            ("annual", self.t("tariff.col_annual"), 100),
-            ("monthly", self.t("tariff.col_monthly"), 90),
-            ("effective", "ct/kWh", 70),
-            ("savings", self.t("tariff.col_savings"), 100),
-        ]:
-            self._tariff_tree.heading(col, text=hdr)
-            self._tariff_tree.column(col, width=w, anchor="center")
-        self._tariff_tree.pack(fill="x", padx=12, pady=8)
+        # Card container for tariff results (replaces Treeview for dark-mode compat)
+        self._tariff_cards_frame = ttk.Frame(inner)
+        self._tariff_cards_frame.pack(fill="x", padx=12, pady=4)
 
         # Chart frame
         self._tariff_chart_frame = ttk.Frame(inner)
@@ -74,33 +56,13 @@ class TariffMixin:
                 stats = _get_consumption_stats(self.storage.db, self.cfg)
                 def _update():
                     try:
-                        # Show consumption summary
                         if stats and hasattr(self, '_tariff_stats_var'):
                             self._tariff_stats_var.set(
                                 f"{self.t('tariff.period')}: {stats['days']:.1f} {self.t('tariff.days')}  |  "
                                 f"{self.t('tariff.consumption')}: {stats['total_kwh']:.0f} kWh  |  "
                                 f"{self.t('tariff.annual_est')}: {stats['annual_kwh']:.0f} kWh/{self.t('tariff.year')}"
                             )
-                        self._tariff_tree.delete(*self._tariff_tree.get_children())
-                        _log.info("Tariff: inserting %d rows", len(results))
-                        for r in results:
-                            if r.is_current:
-                                savings_text = "\u2014"
-                            elif r.savings_vs_current_eur > 0:
-                                savings_text = f"\u25bc {r.savings_vs_current_eur:+.0f} \u20ac"
-                            else:
-                                savings_text = f"\u25b2 {r.savings_vs_current_eur:+.0f} \u20ac"
-                            tag = "current" if r.is_current else "row"
-                            self._tariff_tree.insert("", "end", values=(
-                                ("\u2192 " if r.is_current else "") + r.name,
-                                r.provider,
-                                r.tariff_type.upper(),
-                                f"{r.annual_cost_eur:.0f} \u20ac",
-                                f"{r.monthly_avg_eur:.0f} \u20ac",
-                                f"{r.effective_price_ct:.1f}",
-                                savings_text,
-                            ), tags=(tag,))
-                        _log.info("Tariff: tree now has %d children", len(self._tariff_tree.get_children()))
+                        self._tariff_render_cards(results)
                         self._tariff_draw_chart(results)
                     except Exception as exc:
                         _log.error("Tariff _update error: %s", exc, exc_info=True)
@@ -108,6 +70,55 @@ class TariffMixin:
             except Exception as e:
                 _log.error("Tariff comparison: %s", e)
         threading.Thread(target=_worker, daemon=True).start()
+
+    def _tariff_render_cards(self, results) -> None:
+        """Render tariff results as tk.Label cards (always visible, theme-proof)."""
+        frm = self._tariff_cards_frame
+        for w in frm.winfo_children():
+            w.destroy()
+
+        tc = self._get_theme_colors()
+
+        for i, r in enumerate(results):
+            bg = "#2a2000" if r.is_current else tc["bg"]
+            border_color = "#ff9800" if r.is_current else tc.get("muted", "#555555")
+
+            # Card frame with border effect
+            card = tk.Frame(frm, bg=border_color, padx=1, pady=1)
+            card.pack(fill="x", pady=2)
+            card_inner = tk.Frame(card, bg=bg, padx=10, pady=6)
+            card_inner.pack(fill="x")
+
+            # Row 1: name + annual cost
+            row1 = tk.Frame(card_inner, bg=bg)
+            row1.pack(fill="x")
+
+            name_text = r.name
+            if r.is_current:
+                name_text = "\u2192 " + name_text + "  [Aktuell]"
+            tk.Label(row1, text=name_text, font=("", 12, "bold"),
+                     fg="#ff9800" if r.is_current else tc["fg"], bg=bg,
+                     anchor="w").pack(side="left")
+            tk.Label(row1, text=f"{r.annual_cost_eur:.0f} \u20ac/Jahr", font=("", 12, "bold"),
+                     fg=tc["fg"], bg=bg, anchor="e").pack(side="right")
+
+            # Row 2: provider, type, monthly, ct/kWh, savings
+            row2 = tk.Frame(card_inner, bg=bg)
+            row2.pack(fill="x", pady=(2, 0))
+
+            detail = f"{r.provider} \u00b7 {r.tariff_type.upper()} \u00b7 {r.monthly_avg_eur:.0f} \u20ac/Mon \u00b7 {r.effective_price_ct:.1f} ct/kWh"
+            tk.Label(row2, text=detail, font=("", 10),
+                     fg=tc.get("muted", "#888888"), bg=bg, anchor="w").pack(side="left")
+
+            if not r.is_current:
+                if r.savings_vs_current_eur > 0:
+                    sav_text = f"\u25bc {r.savings_vs_current_eur:.0f} \u20ac"
+                    sav_color = tc.get("green", "#27ae60")
+                else:
+                    sav_text = f"\u25b2 {abs(r.savings_vs_current_eur):.0f} \u20ac"
+                    sav_color = tc.get("red", "#e74c3c")
+                tk.Label(row2, text=sav_text, font=("", 10, "bold"),
+                         fg=sav_color, bg=bg, anchor="e").pack(side="right")
 
     def _tariff_draw_chart(self, results) -> None:
         for w in self._tariff_chart_frame.winfo_children():
