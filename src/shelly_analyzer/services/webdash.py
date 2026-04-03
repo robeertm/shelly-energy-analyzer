@@ -1609,29 +1609,24 @@ _HTML_TEMPLATE = """<!doctype html>
     </div>
   </div>
 
-    <!-- New feature panes – no extra padding (inherits #panes padding:10px) -->
+    <!-- New feature panes (same pattern as costs/forecast/standby) -->
     <div id="pane-smart_sched" class="pane">
-      <div id="ss-result" class="card" style="padding:12px"></div>
+      <div id="ss-content"><p class="loading-msg">Lade…</p></div>
     </div>
     <div id="pane-ev_log" class="pane">
-      <div class="metric-grid" id="ev-cards"></div>
-      <div id="ev-table" style="margin-top:8px;overflow-x:auto;-webkit-overflow-scrolling:touch"></div>
+      <div id="ev-content"><p class="loading-msg">Lade…</p></div>
     </div>
     <div id="pane-tariff" class="pane">
-      <div id="tariff-table" style="overflow-x:auto;-webkit-overflow-scrolling:touch"></div>
+      <div id="tariff-content"><p class="loading-msg">Lade…</p></div>
     </div>
     <div id="pane-battery" class="pane">
-      <div class="metric-grid" id="bat-cards"></div>
+      <div id="bat-content"><p class="loading-msg">Lade…</p></div>
     </div>
     <div id="pane-advisor" class="pane">
-      <div id="advisor-savings" class="card" style="padding:12px;font-size:16px;font-weight:700;color:#4caf50;text-align:center"></div>
-      <div id="advisor-llm" class="card" style="padding:12px;margin-top:6px;display:none"></div>
-      <div id="advisor-tips" style="margin-top:6px"></div>
+      <div id="advisor-content"><p class="loading-msg">Lade…</p></div>
     </div>
     <div id="pane-goals" class="pane">
-      <div id="goals-streak" class="card" style="padding:10px;text-align:center;font-size:16px"></div>
-      <div class="metric-grid" id="goals-progress" style="margin-top:6px"></div>
-      <div id="goals-badges" style="margin-top:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px"></div>
+      <div id="goals-content"><p class="loading-msg">Lade…</p></div>
     </div>
 
   <nav id="bottom-nav">
@@ -5003,159 +4998,223 @@ _loadLsSettings();
 
   /* ── Smart Schedule ── */
   async function loadSmartSched() {{
-    const el = document.getElementById('ss-result');
+    const el = document.getElementById('ss-content');
     el.innerHTML = '<p class="loading-msg">Lade…</p>';
     try {{
       const r = await fetch('/api/smart_schedule');
+      if (!r.ok) throw new Error(r.status);
       const d = await r.json();
-      if(!d.ok) {{ el.innerHTML = '<p class="error-msg">Fehler</p>'; return; }}
-      const rec = d.data.recommendation;
-      if(rec) {{
-        const start = new Date(rec.start_ts*1000).toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}});
-        const end = new Date(rec.end_ts*1000).toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}});
-        el.innerHTML = '<div class="card"><div class="card-title">⏱ Günstigster Block</div><div class="metric-grid">' +
-          metricCardHtml('Zeitfenster', start + ' – ' + end) +
-          metricCardHtml('Ø Preis', rec.avg_price_ct.toFixed(1) + ' ct/kWh') +
-          metricCardHtml('Ersparnis', rec.savings_vs_avg_ct.toFixed(1) + ' ct/kWh') +
-          metricCardHtml('Dauer', rec.block_hours + ' h') +
-          '</div></div>';
-      }} else {{
-        el.innerHTML = '<div class="card" style="padding:14px;color:var(--muted)">Keine Spot-Preisdaten verfügbar.</div>';
-      }}
-    }} catch(e) {{ el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>'; }}
+      if (!d.ok) throw new Error(d.error || 'unknown');
+      renderSmartSched(d.data, el);
+    }} catch(e) {{
+      el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>';
+    }}
+  }}
+  function renderSmartSched(data, el) {{
+    const rec = data.recommendation;
+    if (!rec) {{
+      el.innerHTML = '<div class="card" style="padding:14px"><p class="info-msg">Keine Spot-Preisdaten verfügbar. Spot-Preise in den Einstellungen aktivieren.</p></div>';
+      return;
+    }}
+    const start = new Date(rec.start_ts*1000).toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}});
+    const end = new Date(rec.end_ts*1000).toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}});
+    el.innerHTML = '<div class="card" style="margin-bottom:10px"><div class="card-title">⏱ Günstigster Zeitblock</div>' +
+      '<div class="metric-grid">' +
+      metricCardHtml('Zeitfenster', start + ' – ' + end) +
+      metricCardHtml('Ø Preis', rec.avg_price_ct.toFixed(1) + ' ct/kWh') +
+      metricCardHtml('Ersparnis', rec.savings_vs_avg_ct.toFixed(1) + ' ct/kWh') +
+      metricCardHtml('Dauer', rec.block_hours + ' h') +
+      '</div></div>';
   }}
 
   /* ── EV Log ── */
   async function loadEvLog() {{
-    const el = document.getElementById('ev-cards');
-    const tbl = document.getElementById('ev-table');
+    const el = document.getElementById('ev-content');
     el.innerHTML = '<p class="loading-msg">Lade…</p>';
-    tbl.innerHTML = '';
     try {{
       const r = await fetch('/api/ev_sessions');
+      if (!r.ok) throw new Error(r.status);
       const d = await r.json();
-      if(!d.ok) return;
-      const s = d.data;
-      el.innerHTML = '<div class="card"><div class="card-title">🚗 Ladeübersicht</div><div class="metric-grid">' +
-        metricCardHtml('Ladevorgänge', s.total_sessions) +
-        metricCardHtml('Gesamt', (s.total_kwh||0).toFixed(1) + ' kWh') +
-        metricCardHtml('Kosten', (s.total_cost||0).toFixed(2) + ' €') +
-        metricCardHtml('Ø Dauer', (s.avg_duration_min||0).toFixed(0) + ' min') +
-        '</div></div>';
-      if(!s.sessions||!s.sessions.length) {{ tbl.innerHTML='<div class="card" style="padding:14px;color:var(--muted)">Keine Ladevorgänge erkannt.</div>'; return; }}
-      let h = '<div class="card" style="padding:10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:1px solid var(--border)">';
-      ['Datum','Zeit','Dauer','kWh','€'].forEach(c=>h+='<th style="padding:5px;color:var(--muted)">'+c+'</th>');
-      h += '</tr></thead><tbody>';
-      (s.sessions||[]).slice(-20).reverse().forEach(se=>{{
-        const sd = new Date(se.start_ts*1000);
-        h += '<tr style="border-bottom:1px solid var(--border)">' +
-          '<td style="padding:4px;text-align:center">' + sd.toLocaleDateString([],{{day:'2-digit',month:'2-digit'}}) + '</td>' +
-          '<td style="padding:4px;text-align:center">' + sd.toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}}) + '</td>' +
-          '<td style="padding:4px;text-align:center">' + Math.round((se.end_ts-se.start_ts)/60) + 'm</td>' +
-          '<td style="padding:4px;text-align:center">' + se.energy_kwh.toFixed(1) + '</td>' +
-          '<td style="padding:4px;text-align:center">' + se.cost_eur.toFixed(2) + '</td></tr>';
-      }});
-      h += '</tbody></table></div>';
-      tbl.innerHTML = h;
-    }} catch(e) {{ el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>'; }}
+      if (!d.ok) throw new Error(d.error || 'unknown');
+      renderEvLog(d.data, el);
+    }} catch(e) {{
+      el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>';
+    }}
+  }}
+  function renderEvLog(data, el) {{
+    let html = '<div class="card" style="margin-bottom:10px"><div class="card-title">🚗 Ladeübersicht</div>' +
+      '<div class="metric-grid">' +
+      metricCardHtml('Ladevorgänge', data.total_sessions || 0) +
+      metricCardHtml('Gesamt', (data.total_kwh||0).toFixed(1) + ' kWh') +
+      metricCardHtml('Kosten', (data.total_cost||0).toFixed(2) + ' €') +
+      metricCardHtml('Ø Dauer', (data.avg_duration_min||0).toFixed(0) + ' min') +
+      '</div></div>';
+    if (!data.sessions || !data.sessions.length) {{
+      html += '<div class="card" style="padding:14px"><p class="info-msg">Keine Ladevorgänge erkannt. Wallbox-Gerät in den Einstellungen konfigurieren.</p></div>';
+      el.innerHTML = html;
+      return;
+    }}
+    html += '<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">' +
+      '<thead><tr style="border-bottom:1px solid var(--border)">';
+    ['Datum','Zeit','Dauer','kWh','€'].forEach(function(c){{ html += '<th style="padding:6px;color:var(--muted)">'+c+'</th>'; }});
+    html += '</tr></thead><tbody>';
+    data.sessions.slice(-20).reverse().forEach(function(se) {{
+      const sd = new Date(se.start_ts*1000);
+      html += '<tr style="border-bottom:1px solid var(--border)">' +
+        '<td style="padding:4px;text-align:center">' + sd.toLocaleDateString([],{{day:'2-digit',month:'2-digit'}}) + '</td>' +
+        '<td style="padding:4px;text-align:center">' + sd.toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}}) + '</td>' +
+        '<td style="padding:4px;text-align:center">' + Math.round((se.end_ts-se.start_ts)/60) + 'm</td>' +
+        '<td style="padding:4px;text-align:center">' + se.energy_kwh.toFixed(1) + '</td>' +
+        '<td style="padding:4px;text-align:center">' + se.cost_eur.toFixed(2) + '</td></tr>';
+    }});
+    html += '</tbody></table></div>';
+    el.innerHTML = html;
   }}
 
   /* ── Tariff Comparison ── */
   async function loadTariff() {{
-    const el = document.getElementById('tariff-table');
+    const el = document.getElementById('tariff-content');
     el.innerHTML = '<p class="loading-msg">Lade…</p>';
     try {{
       const r = await fetch('/api/tariff_compare');
+      if (!r.ok) throw new Error(r.status);
       const d = await r.json();
-      if(!d.ok) return;
-      const results = d.data.results || [];
-      if(!results.length) {{ el.innerHTML = '<div class="card" style="padding:14px;color:var(--muted)">Keine Daten.</div>'; return; }}
-      let html = '';
-      results.forEach(r=>{{
-        const border = r.is_current ? '2px solid #ff9800' : '1px solid var(--border)';
-        const sav = r.is_current ? '' : (r.savings_vs_current_eur>0 ? '<span style="color:#4caf50;font-weight:600">▼ '+r.savings_vs_current_eur.toFixed(0)+' €/J</span>' : '<span style="color:#e53935">▲ '+Math.abs(r.savings_vs_current_eur).toFixed(0)+' €/J</span>');
-        const badge = r.is_current ? ' <span style="background:#ff9800;color:#fff;font-size:10px;padding:2px 6px;border-radius:8px">Aktuell</span>' : '';
-        html += '<div class="card" style="padding:12px;border:'+border+'"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">' +
-          '<div><b style="font-size:14px">'+r.name+'</b>'+badge+'<br><span style="font-size:11px;color:var(--muted)">'+r.provider+' · '+r.tariff_type.toUpperCase()+'</span></div>' +
-          '<div style="text-align:right"><div style="font-size:17px;font-weight:700">'+r.annual_cost_eur.toFixed(0)+' €<span style="font-size:11px;font-weight:400;color:var(--muted)">/J</span></div>'+sav+'</div>' +
-          '</div></div>';
-      }});
-      el.innerHTML = html;
-    }} catch(e) {{ el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>'; }}
+      if (!d.ok) throw new Error(d.error || 'unknown');
+      renderTariff(d.data, el);
+    }} catch(e) {{
+      el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>';
+    }}
+  }}
+  function renderTariff(data, el) {{
+    const results = data.results || [];
+    if (!results.length) {{
+      el.innerHTML = '<div class="card" style="padding:14px"><p class="info-msg">Keine Verbrauchsdaten vorhanden.</p></div>';
+      return;
+    }}
+    let html = '';
+    results.forEach(function(r) {{
+      const border = r.is_current ? '2px solid #ff9800' : '1px solid var(--border)';
+      const sav = r.is_current ? '' : (r.savings_vs_current_eur > 0
+        ? '<span style="color:#4caf50;font-weight:600">▼ ' + r.savings_vs_current_eur.toFixed(0) + ' €/Jahr</span>'
+        : '<span style="color:#e53935">▲ ' + Math.abs(r.savings_vs_current_eur).toFixed(0) + ' €/Jahr</span>');
+      const badge = r.is_current ? ' <span style="background:#ff9800;color:#fff;font-size:10px;padding:2px 6px;border-radius:8px">Aktuell</span>' : '';
+      html += '<div class="card" style="border:' + border + '">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">' +
+        '<div><b style="font-size:14px">' + esc(r.name) + '</b>' + badge +
+        '<br><span style="font-size:11px;color:var(--muted)">' + esc(r.provider) + ' · ' + r.tariff_type.toUpperCase() + '</span></div>' +
+        '<div style="text-align:right"><div style="font-size:17px;font-weight:700">' + r.annual_cost_eur.toFixed(0) +
+        ' €<span style="font-size:11px;font-weight:400;color:var(--muted)">/Jahr</span></div>' + sav + '</div>' +
+        '</div></div>';
+    }});
+    el.innerHTML = html;
   }}
 
   /* ── Battery ── */
   async function loadBattery() {{
-    const el = document.getElementById('bat-cards');
+    const el = document.getElementById('bat-content');
     el.innerHTML = '<p class="loading-msg">Lade…</p>';
     try {{
       const r = await fetch('/api/battery');
+      if (!r.ok) throw new Error(r.status);
       const d = await r.json();
-      if(!d.ok) return;
-      const s = d.data;
-      const ml = {{charging:'Laden',discharging:'Entladen',idle:'Standby'}};
-      el.innerHTML = '<div class="card"><div class="card-title">🔋 Batterie</div><div class="metric-grid">' +
-        metricCardHtml('SOC', s.soc_pct.toFixed(0) + '%') +
-        metricCardHtml('Leistung', s.power_w.toFixed(0) + ' W') +
-        metricCardHtml('Modus', ml[s.mode]||s.mode) +
-        metricCardHtml('Zyklen', s.cycle_count) +
-        metricCardHtml('Effizienz', s.avg_efficiency_pct.toFixed(1) + '%') +
-        '</div></div>';
-    }} catch(e) {{ el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>'; }}
+      if (!d.ok) throw new Error(d.error || 'unknown');
+      renderBattery(d.data, el);
+    }} catch(e) {{
+      el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>';
+    }}
+  }}
+  function renderBattery(data, el) {{
+    const ml = {{charging:'Laden', discharging:'Entladen', idle:'Standby'}};
+    el.innerHTML = '<div class="card" style="margin-bottom:10px"><div class="card-title">🔋 Batteriespeicher</div>' +
+      '<div class="metric-grid">' +
+      metricCardHtml('SOC', data.soc_pct.toFixed(0) + '%') +
+      metricCardHtml('Leistung', data.power_w.toFixed(0) + ' W') +
+      metricCardHtml('Modus', ml[data.mode] || data.mode) +
+      metricCardHtml('Zyklen', data.cycle_count) +
+      metricCardHtml('Effizienz', data.avg_efficiency_pct.toFixed(1) + '%') +
+      '</div></div>';
   }}
 
   /* ── AI Advisor ── */
   async function loadAdvisor() {{
-    const el = document.getElementById('advisor-savings');
+    const el = document.getElementById('advisor-content');
     el.innerHTML = '<p class="loading-msg">Lade…</p>';
     try {{
       const r = await fetch('/api/advisor');
+      if (!r.ok) throw new Error(r.status);
       const d = await r.json();
-      if(!d.ok) return;
-      const data = d.data;
-      el.innerHTML = '💰 ' + data.total_savings_potential_eur.toFixed(0) + ' €/Jahr Einsparpotenzial';
-      if(data.llm_summary) {{
-        const lel = document.getElementById('advisor-llm');
-        lel.style.display = 'block';
-        lel.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:4px">🤖 KI-Zusammenfassung</div>' + data.llm_summary;
-      }}
-      let html = '';
-      (data.tips||[]).forEach(tip=>{{
-        const sav = tip.potential_savings_eur > 0 ? '<div style="color:#4caf50;font-size:12px;margin-top:4px">💰 '+tip.potential_savings_eur.toFixed(0)+' €/J</div>' : '';
-        html += '<div class="card" style="padding:12px"><b>'+tip.icon+' '+tip.title+'</b><div style="color:var(--muted);font-size:12px;margin-top:4px">'+tip.description+'</div>'+sav+'</div>';
-      }});
-      document.getElementById('advisor-tips').innerHTML = html;
-    }} catch(e) {{ el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>'; }}
+      if (!d.ok) throw new Error(d.error || 'unknown');
+      renderAdvisor(d.data, el);
+    }} catch(e) {{
+      el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>';
+    }}
+  }}
+  function renderAdvisor(data, el) {{
+    let html = '<div class="card" style="margin-bottom:10px;text-align:center">' +
+      '<div class="card-title">🤖 KI-Energieberater</div>' +
+      '<div style="font-size:20px;font-weight:700;color:#4caf50;padding:8px 0">💰 ' +
+      data.total_savings_potential_eur.toFixed(0) + ' €/Jahr Einsparpotenzial</div></div>';
+    if (data.llm_summary) {{
+      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">🤖 KI-Zusammenfassung</div>' +
+        '<div style="padding:4px 0">' + esc(data.llm_summary) + '</div></div>';
+    }}
+    (data.tips || []).forEach(function(tip) {{
+      const sav = tip.potential_savings_eur > 0
+        ? '<div style="color:#4caf50;font-size:12px;margin-top:4px">💰 ' + tip.potential_savings_eur.toFixed(0) + ' €/Jahr</div>'
+        : '';
+      html += '<div class="card"><div class="card-title">' + tip.icon + ' ' + esc(tip.title) + '</div>' +
+        '<div style="color:var(--muted);font-size:12px">' + esc(tip.description) + '</div>' + sav + '</div>';
+    }});
+    el.innerHTML = html;
   }}
 
   /* ── Goals & Gamification ── */
   async function loadGoals() {{
-    const el = document.getElementById('goals-streak');
+    const el = document.getElementById('goals-content');
     el.innerHTML = '<p class="loading-msg">Lade…</p>';
     try {{
       const r = await fetch('/api/goals');
+      if (!r.ok) throw new Error(r.status);
       const d = await r.json();
-      if(!d.ok) return;
-      const data = d.data;
-      const s = data.streak||{{}};
-      const fire = '🔥'.repeat(Math.min(s.current_days||0, 5));
-      el.innerHTML = fire + ' <b>' + (s.current_days||0) + '</b> Tage unter dem Durchschnitt';
+      if (!d.ok) throw new Error(d.error || 'unknown');
+      renderGoals(d.data, el);
+    }} catch(e) {{
+      el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>';
+    }}
+  }}
+  function renderGoals(data, el) {{
+    function bar(pct) {{
+      return '<div style="height:6px;background:var(--border);border-radius:3px;margin-top:6px">' +
+        '<div style="height:100%;width:' + Math.min(pct,100) + '%;background:' +
+        (pct <= 100 ? '#4caf50' : '#e53935') + ';border-radius:3px"></div></div>';
+    }}
+    const s = data.streak || {{}};
+    const fire = '🔥'.repeat(Math.min(s.current_days || 0, 5));
+    let html = '<div class="card" style="margin-bottom:10px;text-align:center">' +
+      '<div style="font-size:18px;padding:6px 0">' + fire + ' <b>' + (s.current_days || 0) + '</b> Tage unter dem Durchschnitt</div></div>';
 
-      const wg = data.weekly_goal||{{}};
-      const mg = data.monthly_goal||{{}};
-      function bar(pct) {{ return '<div style="height:6px;background:var(--border);border-radius:3px;margin-top:4px"><div style="height:100%;width:'+Math.min(pct,100)+'%;background:'+(pct<=100?'#4caf50':'#e53935')+';border-radius:3px"></div></div>'; }}
-      document.getElementById('goals-progress').innerHTML =
-        '<div class="card" style="padding:12px"><b>📅 Woche</b><div style="margin-top:4px">'+wg.actual_kwh.toFixed(1)+' / '+wg.target_kwh.toFixed(1)+' kWh</div>'+bar(wg.progress_pct)+'</div>' +
-        '<div class="card" style="padding:12px"><b>📆 Monat</b><div style="margin-top:4px">'+mg.actual_kwh.toFixed(1)+' / '+mg.target_kwh.toFixed(1)+' kWh</div>'+bar(mg.progress_pct)+'</div>';
+    const wg = data.weekly_goal || {{}};
+    const mg = data.monthly_goal || {{}};
+    html += '<div class="card-grid">' +
+      '<div class="card"><div class="card-title">📅 Wochenziel</div>' +
+      '<div>' + (wg.actual_kwh||0).toFixed(1) + ' / ' + (wg.target_kwh||0).toFixed(1) + ' kWh</div>' + bar(wg.progress_pct||0) + '</div>' +
+      '<div class="card"><div class="card-title">📆 Monatsziel</div>' +
+      '<div>' + (mg.actual_kwh||0).toFixed(1) + ' / ' + (mg.target_kwh||0).toFixed(1) + ' kWh</div>' + bar(mg.progress_pct||0) + '</div>' +
+      '</div>';
 
-      let bhtml = '';
-      (data.badges||[]).forEach(b=>{{
-        const opacity = b.unlocked ? '1' : '0.4';
-        const lock = b.unlocked ? '' : '🔒 ';
-        bhtml += '<div style="text-align:center;opacity:'+opacity+';padding:6px"><div style="font-size:22px">'+b.icon+'</div><div style="font-size:9px;margin-top:2px;line-height:1.2">'+lock+b.name+'</div>'+bar(b.progress_pct)+'</div>';
-      }});
-      document.getElementById('goals-badges').innerHTML = bhtml;
-    }} catch(e) {{ el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>'; }}
+    html += '<div class="card" style="margin-top:10px"><div class="card-title">🏆 Abzeichen (' +
+      (data.unlocked_count||0) + '/' + (data.total_badges||0) + ')</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px;padding:6px 0">';
+    (data.badges || []).forEach(function(b) {{
+      const opacity = b.unlocked ? '1' : '0.4';
+      const lock = b.unlocked ? '' : '🔒 ';
+      html += '<div style="text-align:center;opacity:' + opacity + '">' +
+        '<div style="font-size:22px">' + b.icon + '</div>' +
+        '<div style="font-size:9px;line-height:1.2;margin-top:2px">' + lock + esc(b.name) + '</div>' +
+        bar(b.progress_pct || 0) + '</div>';
+    }});
+    html += '</div></div>';
+    el.innerHTML = html;
   }}
 
   /* ── Language selector ── */
