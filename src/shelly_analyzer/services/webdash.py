@@ -506,88 +506,69 @@ function buildMedium(d) {
   const ts = hStack.addText(fmtTime(d.ts));
   ts.font = Font.systemFont(9);
   ts.textColor = C.muted;
-  w.addSpacer(4);
+  w.addSpacer(3);
 
-  // Main row: left = metrics, right = mini chart
-  const main = w.addStack();
-  main.layoutHorizontally();
+  // Top row: power + spot + stats
+  const topRow = w.addStack();
+  topRow.layoutHorizontally();
 
-  // Left column: metrics
-  const left = main.addStack();
+  // Left: power + spot
+  const left = topRow.addStack();
   left.layoutVertically();
-  left.size = new Size(155, 0);
 
-  // Current power
   const pw = left.addText(fmt(d.power_w, 0) + " W");
-  pw.font = Font.boldSystemFont(20);
+  pw.font = Font.boldSystemFont(18);
   pw.textColor = C.text;
-  left.addSpacer(2);
 
-  // Spot price
   if (d.spot_enabled && d.spot_ct != null) {
     const delta = d.spot_ct - d.fixed_ct;
     const arrow = delta > 0 ? "▲" : "▼";
     const sign = delta > 0 ? "+" : "";
     const col = delta <= 0 ? C.green : C.red;
-    const sp = left.addText(d.spot_ct.toFixed(1) + " ct/kWh " + arrow + sign + delta.toFixed(1));
-    sp.font = Font.boldSystemFont(12);
+    const sp = left.addText(d.spot_ct.toFixed(1) + " ct " + arrow + sign + delta.toFixed(1));
+    sp.font = Font.boldSystemFont(11);
     sp.textColor = col;
-    left.addSpacer(2);
   }
 
-  // Today
-  const row1 = left.addStack();
-  row1.layoutHorizontally();
-  const tLbl = row1.addText("Heute ");
-  tLbl.font = Font.systemFont(10);
-  tLbl.textColor = C.muted;
-  const tVal = row1.addText(fmt(d.today_kwh, 1) + " kWh · " + fmt(d.today_eur, 2) + " €");
+  if (d.co2_enabled && d.co2_current != null) {
+    const co2t = left.addText("CO₂ " + d.co2_current.toFixed(0) + " g/kWh");
+    co2t.font = Font.boldSystemFont(10);
+    co2t.textColor = co2Color(d.co2_current, d.co2_green_thr, d.co2_dirty_thr);
+  }
+
+  topRow.addSpacer();
+
+  // Right: today + month
+  const right = topRow.addStack();
+  right.layoutVertically();
+  const tVal = right.addText(fmt(d.today_kwh, 1) + " kWh · " + fmt(d.today_eur, 2) + " €");
   tVal.font = Font.mediumSystemFont(10);
   tVal.textColor = C.text;
-  left.addSpacer(1);
-
-  // Month
-  const row2 = left.addStack();
-  row2.layoutHorizontally();
-  const mLbl = row2.addText("Monat ");
-  mLbl.font = Font.systemFont(10);
-  mLbl.textColor = C.muted;
-  const mVal = row2.addText(fmt(d.month_kwh, 1) + " kWh · " + fmt(d.month_eur, 2) + " €");
+  const tLbl = right.addText("Heute");
+  tLbl.font = Font.systemFont(8);
+  tLbl.textColor = C.muted;
+  right.addSpacer(2);
+  const mVal = right.addText(fmt(d.month_kwh, 1) + " kWh · " + fmt(d.month_eur, 2) + " €");
   mVal.font = Font.mediumSystemFont(10);
   mVal.textColor = C.text;
+  const mLbl = right.addText("Monat");
+  mLbl.font = Font.systemFont(8);
+  mLbl.textColor = C.muted;
 
-  // CO2 intensity inline
-  if (d.co2_enabled && d.co2_current != null) {
-    left.addSpacer(1);
-    const co2Row = left.addStack();
-    co2Row.layoutHorizontally();
-    const co2Lbl = co2Row.addText("CO₂ ");
-    co2Lbl.font = Font.systemFont(10);
-    co2Lbl.textColor = C.muted;
-    const co2Val = co2Row.addText(d.co2_current.toFixed(0) + " g/kWh");
-    co2Val.font = Font.boldSystemFont(10);
-    co2Val.textColor = co2Color(d.co2_current, d.co2_green_thr, d.co2_dirty_thr);
-  }
+  w.addSpacer(3);
 
-  main.addSpacer();
-
-  // Right: charts stacked vertically
-  const rightCol = main.addStack();
-  rightCol.layoutVertically();
-
-  // Mini spot chart
+  // Charts – full width
   if (d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) {
-    const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, 100, 55);
-    const img = rightCol.addImage(chartImg);
-    img.imageSize = new Size(100, 55);
+    const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, 600, 44);
+    const img = w.addImage(chartImg);
+    img.applyFillingContentMode();
   }
 
-  // Mini CO2 chart
   if (d.co2_enabled && d.co2_chart && d.co2_chart.length > 2) {
-    if (d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) rightCol.addSpacer(2);
-    const co2Img = drawCo2Chart(d.co2_chart, d.co2_green_thr, d.co2_dirty_thr, 100, 55);
-    const img2 = rightCol.addImage(co2Img);
-    img2.imageSize = new Size(100, 55);
+    w.addSpacer(1);
+    const co2Img = drawCo2Chart(d.co2_chart, d.co2_green_thr, d.co2_dirty_thr, 600, 44);
+    const img2 = w.addImage(co2Img);
+    img2.applyFillingContentMode();
   }
 
   return w;
@@ -641,11 +622,11 @@ function buildLarge(d) {
     w.addSpacer(4);
   }
 
-  // Spot chart
+  // Spot chart – full width
   if (d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) {
-    const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, 280, 80);
+    const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, 600, 80);
     const img = w.addImage(chartImg);
-    img.imageSize = new Size(280, 80);
+    img.applyFillingContentMode();
     w.addSpacer(4);
   }
 
@@ -660,11 +641,11 @@ function buildLarge(d) {
     w.addSpacer(2);
   }
 
-  // CO2 chart
+  // CO2 chart – full width
   if (d.co2_enabled && d.co2_chart && d.co2_chart.length > 2) {
-    const co2Img = drawCo2Chart(d.co2_chart, d.co2_green_thr, d.co2_dirty_thr, 280, 60);
+    const co2Img = drawCo2Chart(d.co2_chart, d.co2_green_thr, d.co2_dirty_thr, 600, 60);
     const co2ImgW = w.addImage(co2Img);
-    co2ImgW.imageSize = new Size(280, 60);
+    co2ImgW.applyFillingContentMode();
     w.addSpacer(4);
   }
 
