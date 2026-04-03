@@ -82,6 +82,9 @@ class UiConfig:
     # UI language: de|en|es
     language: str = "de"
 
+    # Desktop theme: "auto" | "light" | "dark"
+    theme: str = "auto"
+
     # How much history is SHOWN in Live plots (minutes).
     live_window_minutes: int = 10
 
@@ -540,6 +543,145 @@ class DeviceSchedule:
 
 
 @dataclass(frozen=True)
+class SmartScheduleConfig:
+    """Smart scheduling based on spot prices."""
+    enabled: bool = False
+    default_duration_hours: float = 3.0
+    auto_schedule_enabled: bool = False
+
+
+@dataclass(frozen=True)
+class PvSurplusConsumer:
+    """A relay consumer for PV surplus control."""
+    device_key: str = ""
+    switch_id: int = 0
+    priority: int = 1
+    min_power_w: float = 500.0
+    name: str = ""
+
+
+@dataclass(frozen=True)
+class PvSurplusConfig:
+    """PV surplus control: auto-switch relays on solar excess."""
+    enabled: bool = False
+    on_threshold_w: float = 500.0
+    off_threshold_w: float = 200.0
+    debounce_seconds: int = 30
+    consumers: List[PvSurplusConsumer] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class EvChargingConfig:
+    """EV charging session detection and logging."""
+    enabled: bool = False
+    wallbox_device_key: str = ""
+    detection_threshold_w: float = 1500.0
+    min_session_minutes: int = 5
+
+
+@dataclass(frozen=True)
+class TariffTemplate:
+    """A tariff template for comparison."""
+    name: str = ""
+    provider: str = ""
+    tariff_type: str = "fixed"  # fixed | tou | spot
+    price_eur_per_kwh: float = 0.30
+    base_fee_eur_per_year: float = 100.0
+    # For TOU tariffs
+    ht_price: float = 0.35
+    nt_price: float = 0.22
+    ht_start: int = 6
+    ht_end: int = 22
+    # For spot tariffs
+    spot_markup_ct: float = 15.0
+
+
+@dataclass(frozen=True)
+class TariffCompareConfig:
+    """Tariff comparison settings."""
+    enabled: bool = False
+    custom_tariffs: List[TariffTemplate] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class BatteryConfig:
+    """Battery storage monitoring settings."""
+    enabled: bool = False
+    device_key: str = ""
+    capacity_kwh: float = 10.0
+    max_charge_rate_kw: float = 5.0
+    max_discharge_rate_kw: float = 5.0
+    efficiency_pct: float = 95.0
+
+
+@dataclass(frozen=True)
+class InfluxDBConfig:
+    """InfluxDB time-series export."""
+    enabled: bool = False
+    url: str = "http://localhost:8086"
+    token: str = ""
+    org: str = ""
+    bucket: str = "shelly"
+    measurement: str = "energy"
+    push_interval_seconds: int = 60
+    version: int = 2  # 1 or 2
+
+
+@dataclass(frozen=True)
+class PrometheusConfig:
+    """Prometheus metrics endpoint."""
+    enabled: bool = False
+    port: int = 9090
+    path: str = "/metrics"
+
+
+@dataclass(frozen=True)
+class ApiConfig:
+    """REST API v1 settings."""
+    enabled: bool = False
+    api_key: str = ""
+    cors_allowed_origins: str = "*"
+    rate_limit_per_minute: int = 60
+
+
+@dataclass(frozen=True)
+class AdvisorConfig:
+    """AI Energy Advisor settings."""
+    enabled: bool = False
+    use_llm: bool = False
+    llm_provider: str = "ollama"  # ollama | openai | anthropic
+    llm_model: str = "llama3"
+    ollama_url: str = "http://localhost:11434"
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+
+
+@dataclass(frozen=True)
+class GamificationConfig:
+    """Gamification / goals and badges settings."""
+    enabled: bool = False
+    weekly_goal_kwh: float = 0.0  # 0 = auto from last 4 weeks avg * 0.9
+    monthly_goal_kwh: float = 0.0
+
+
+@dataclass(frozen=True)
+class LocationDef:
+    """A single location (site) definition for multi-location support."""
+    location_id: str = ""
+    name: str = ""
+    device_keys: List[str] = field(default_factory=list)
+    db_file: str = ""  # empty = default DB
+
+
+@dataclass(frozen=True)
+class MultiLocationConfig:
+    """Multi-location support settings."""
+    enabled: bool = False
+    locations: List[LocationDef] = field(default_factory=list)
+    active_location_id: str = ""  # empty = all / single-site mode
+
+
+@dataclass(frozen=True)
 class AppConfig:
     version: str = __version__
     devices: List[DeviceConfig] = field(default_factory=list)
@@ -563,6 +705,19 @@ class AppConfig:
     mqtt: MqttConfig = field(default_factory=MqttConfig)
     tenant: TenantConfig = field(default_factory=TenantConfig)
     schedules: List[DeviceSchedule] = field(default_factory=list)
+
+    # New feature configs
+    smart_schedule: SmartScheduleConfig = field(default_factory=SmartScheduleConfig)
+    pv_surplus: PvSurplusConfig = field(default_factory=PvSurplusConfig)
+    ev_charging: EvChargingConfig = field(default_factory=EvChargingConfig)
+    tariff_compare: TariffCompareConfig = field(default_factory=TariffCompareConfig)
+    battery: BatteryConfig = field(default_factory=BatteryConfig)
+    influxdb: InfluxDBConfig = field(default_factory=InfluxDBConfig)
+    prometheus: PrometheusConfig = field(default_factory=PrometheusConfig)
+    api: ApiConfig = field(default_factory=ApiConfig)
+    advisor: AdvisorConfig = field(default_factory=AdvisorConfig)
+    gamification: GamificationConfig = field(default_factory=GamificationConfig)
+    multi_location: MultiLocationConfig = field(default_factory=MultiLocationConfig)
 
 
 def default_config_path(project_root: Optional[Path] = None) -> Path:
@@ -691,6 +846,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         live_poll_seconds=_coerce_float(ui_raw.get("live_poll_seconds", UiConfig.live_poll_seconds), UiConfig.live_poll_seconds),
         plot_redraw_seconds=_coerce_float(ui_raw.get("plot_redraw_seconds", UiConfig.plot_redraw_seconds), UiConfig.plot_redraw_seconds),
         language=str(ui_raw.get("language", UiConfig.language)),
+        theme=str(ui_raw.get("theme", UiConfig.theme) or "auto"),
         live_retention_minutes=_coerce_int(ui_raw.get("live_retention_minutes", UiConfig.live_retention_minutes), UiConfig.live_retention_minutes),
         live_window_minutes=_coerce_int(ui_raw.get("live_window_minutes", UiConfig.live_window_minutes), UiConfig.live_window_minutes),
         live_web_enabled=bool(ui_raw.get("live_web_enabled", UiConfig.live_web_enabled)),
@@ -1044,6 +1200,136 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
                 shelly_id_off=_coerce_int(s.get("shelly_id_off", -1), -1),
             ))
 
+    # ── New feature configs ──────────────────────────────────────────────
+    ss_raw = raw.get("smart_schedule", {}) if isinstance(raw.get("smart_schedule"), dict) else {}
+    smart_schedule = SmartScheduleConfig(
+        enabled=bool(ss_raw.get("enabled", False)),
+        default_duration_hours=_coerce_float(ss_raw.get("default_duration_hours", 3.0), 3.0),
+        auto_schedule_enabled=bool(ss_raw.get("auto_schedule_enabled", False)),
+    )
+
+    pvs_raw = raw.get("pv_surplus", {}) if isinstance(raw.get("pv_surplus"), dict) else {}
+    pvs_consumers: List[PvSurplusConsumer] = []
+    for c in (pvs_raw.get("consumers", []) if isinstance(pvs_raw.get("consumers"), list) else []):
+        if isinstance(c, dict):
+            pvs_consumers.append(PvSurplusConsumer(
+                device_key=str(c.get("device_key", "") or ""),
+                switch_id=_coerce_int(c.get("switch_id", 0), 0),
+                priority=_coerce_int(c.get("priority", 1), 1),
+                min_power_w=_coerce_float(c.get("min_power_w", 500.0), 500.0),
+                name=str(c.get("name", "") or ""),
+            ))
+    pv_surplus = PvSurplusConfig(
+        enabled=bool(pvs_raw.get("enabled", False)),
+        on_threshold_w=_coerce_float(pvs_raw.get("on_threshold_w", 500.0), 500.0),
+        off_threshold_w=_coerce_float(pvs_raw.get("off_threshold_w", 200.0), 200.0),
+        debounce_seconds=_coerce_int(pvs_raw.get("debounce_seconds", 30), 30),
+        consumers=pvs_consumers,
+    )
+
+    evc_raw = raw.get("ev_charging", {}) if isinstance(raw.get("ev_charging"), dict) else {}
+    ev_charging = EvChargingConfig(
+        enabled=bool(evc_raw.get("enabled", False)),
+        wallbox_device_key=str(evc_raw.get("wallbox_device_key", "") or ""),
+        detection_threshold_w=_coerce_float(evc_raw.get("detection_threshold_w", 1500.0), 1500.0),
+        min_session_minutes=_coerce_int(evc_raw.get("min_session_minutes", 5), 5),
+    )
+
+    tc_raw = raw.get("tariff_compare", {}) if isinstance(raw.get("tariff_compare"), dict) else {}
+    tc_tariffs: List[TariffTemplate] = []
+    for tt in (tc_raw.get("custom_tariffs", []) if isinstance(tc_raw.get("custom_tariffs"), list) else []):
+        if isinstance(tt, dict):
+            tc_tariffs.append(TariffTemplate(
+                name=str(tt.get("name", "") or ""),
+                provider=str(tt.get("provider", "") or ""),
+                tariff_type=str(tt.get("tariff_type", "fixed") or "fixed"),
+                price_eur_per_kwh=_coerce_float(tt.get("price_eur_per_kwh", 0.30), 0.30),
+                base_fee_eur_per_year=_coerce_float(tt.get("base_fee_eur_per_year", 100.0), 100.0),
+                ht_price=_coerce_float(tt.get("ht_price", 0.35), 0.35),
+                nt_price=_coerce_float(tt.get("nt_price", 0.22), 0.22),
+                ht_start=_coerce_int(tt.get("ht_start", 6), 6),
+                ht_end=_coerce_int(tt.get("ht_end", 22), 22),
+                spot_markup_ct=_coerce_float(tt.get("spot_markup_ct", 15.0), 15.0),
+            ))
+    tariff_compare = TariffCompareConfig(
+        enabled=bool(tc_raw.get("enabled", False)),
+        custom_tariffs=tc_tariffs,
+    )
+
+    bat_raw = raw.get("battery", {}) if isinstance(raw.get("battery"), dict) else {}
+    battery_cfg = BatteryConfig(
+        enabled=bool(bat_raw.get("enabled", False)),
+        device_key=str(bat_raw.get("device_key", "") or ""),
+        capacity_kwh=_coerce_float(bat_raw.get("capacity_kwh", 10.0), 10.0),
+        max_charge_rate_kw=_coerce_float(bat_raw.get("max_charge_rate_kw", 5.0), 5.0),
+        max_discharge_rate_kw=_coerce_float(bat_raw.get("max_discharge_rate_kw", 5.0), 5.0),
+        efficiency_pct=_coerce_float(bat_raw.get("efficiency_pct", 95.0), 95.0),
+    )
+
+    idb_raw = raw.get("influxdb", {}) if isinstance(raw.get("influxdb"), dict) else {}
+    influxdb_cfg = InfluxDBConfig(
+        enabled=bool(idb_raw.get("enabled", False)),
+        url=str(idb_raw.get("url", "http://localhost:8086") or "http://localhost:8086"),
+        token=str(idb_raw.get("token", "") or ""),
+        org=str(idb_raw.get("org", "") or ""),
+        bucket=str(idb_raw.get("bucket", "shelly") or "shelly"),
+        measurement=str(idb_raw.get("measurement", "energy") or "energy"),
+        push_interval_seconds=_coerce_int(idb_raw.get("push_interval_seconds", 60), 60),
+        version=_coerce_int(idb_raw.get("version", 2), 2),
+    )
+
+    prom_raw = raw.get("prometheus", {}) if isinstance(raw.get("prometheus"), dict) else {}
+    prometheus_cfg = PrometheusConfig(
+        enabled=bool(prom_raw.get("enabled", False)),
+        port=_coerce_int(prom_raw.get("port", 9090), 9090),
+        path=str(prom_raw.get("path", "/metrics") or "/metrics"),
+    )
+
+    api_raw = raw.get("api", {}) if isinstance(raw.get("api"), dict) else {}
+    api_cfg = ApiConfig(
+        enabled=bool(api_raw.get("enabled", False)),
+        api_key=str(api_raw.get("api_key", "") or ""),
+        cors_allowed_origins=str(api_raw.get("cors_allowed_origins", "*") or "*"),
+        rate_limit_per_minute=_coerce_int(api_raw.get("rate_limit_per_minute", 60), 60),
+    )
+
+    adv_raw = raw.get("advisor", {}) if isinstance(raw.get("advisor"), dict) else {}
+    advisor_cfg = AdvisorConfig(
+        enabled=bool(adv_raw.get("enabled", False)),
+        use_llm=bool(adv_raw.get("use_llm", False)),
+        llm_provider=str(adv_raw.get("llm_provider", "ollama") or "ollama"),
+        llm_model=str(adv_raw.get("llm_model", "llama3") or "llama3"),
+        ollama_url=str(adv_raw.get("ollama_url", "http://localhost:11434") or "http://localhost:11434"),
+        openai_api_key=str(adv_raw.get("openai_api_key", "") or ""),
+        anthropic_api_key=str(adv_raw.get("anthropic_api_key", "") or ""),
+    )
+
+    gam_raw = raw.get("gamification", {}) if isinstance(raw.get("gamification"), dict) else {}
+    gamification_cfg = GamificationConfig(
+        enabled=bool(gam_raw.get("enabled", False)),
+        weekly_goal_kwh=_coerce_float(gam_raw.get("weekly_goal_kwh", 0.0), 0.0),
+        monthly_goal_kwh=_coerce_float(gam_raw.get("monthly_goal_kwh", 0.0), 0.0),
+    )
+
+    ml_raw = raw.get("multi_location", {}) if isinstance(raw.get("multi_location"), dict) else {}
+    ml_locations: List[LocationDef] = []
+    for loc in (ml_raw.get("locations", []) if isinstance(ml_raw.get("locations"), list) else []):
+        if isinstance(loc, dict):
+            lkeys = loc.get("device_keys", [])
+            if not isinstance(lkeys, list):
+                lkeys = []
+            ml_locations.append(LocationDef(
+                location_id=str(loc.get("location_id", "") or ""),
+                name=str(loc.get("name", "") or ""),
+                device_keys=[str(k) for k in lkeys],
+                db_file=str(loc.get("db_file", "") or ""),
+            ))
+    multi_location_cfg = MultiLocationConfig(
+        enabled=bool(ml_raw.get("enabled", False)),
+        locations=ml_locations,
+        active_location_id=str(ml_raw.get("active_location_id", "") or ""),
+    )
+
     cfg = AppConfig(
         version=str(raw.get("version", __version__)),
         devices=devices,
@@ -1066,6 +1352,17 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         tenant=tenant,
         groups=groups,
         schedules=schedules,
+        smart_schedule=smart_schedule,
+        pv_surplus=pv_surplus,
+        ev_charging=ev_charging,
+        tariff_compare=tariff_compare,
+        battery=battery_cfg,
+        influxdb=influxdb_cfg,
+        prometheus=prometheus_cfg,
+        api=api_cfg,
+        advisor=advisor_cfg,
+        gamification=gamification_cfg,
+        multi_location=multi_location_cfg,
     )
 
     # Write back migrated schema (and missing blocks) if needed
@@ -1133,6 +1430,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "live_poll_seconds": cfg.ui.live_poll_seconds,
             "plot_redraw_seconds": cfg.ui.plot_redraw_seconds,
             "language": getattr(cfg.ui, "language", "de"),
+            "theme": getattr(cfg.ui, "theme", "auto"),
             "live_window_minutes": cfg.ui.live_window_minutes,
             "live_retention_minutes": getattr(cfg.ui, "live_retention_minutes", 120),
             "device_page_index": getattr(cfg.ui, "device_page_index", 0),
@@ -1391,6 +1689,102 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             ],
             "common_device_keys": list(getattr(cfg.tenant, "common_device_keys", []) or []),
             "billing_period_months": int(getattr(cfg.tenant, "billing_period_months", 12)),
+        },
+        "smart_schedule": {
+            "enabled": bool(getattr(cfg.smart_schedule, "enabled", False)),
+            "default_duration_hours": float(getattr(cfg.smart_schedule, "default_duration_hours", 3.0)),
+            "auto_schedule_enabled": bool(getattr(cfg.smart_schedule, "auto_schedule_enabled", False)),
+        },
+        "pv_surplus": {
+            "enabled": bool(getattr(cfg.pv_surplus, "enabled", False)),
+            "on_threshold_w": float(getattr(cfg.pv_surplus, "on_threshold_w", 500.0)),
+            "off_threshold_w": float(getattr(cfg.pv_surplus, "off_threshold_w", 200.0)),
+            "debounce_seconds": int(getattr(cfg.pv_surplus, "debounce_seconds", 30)),
+            "consumers": [
+                {
+                    "device_key": c.device_key,
+                    "switch_id": c.switch_id,
+                    "priority": c.priority,
+                    "min_power_w": c.min_power_w,
+                    "name": c.name,
+                }
+                for c in (getattr(cfg.pv_surplus, "consumers", []) or [])
+            ],
+        },
+        "ev_charging": {
+            "enabled": bool(getattr(cfg.ev_charging, "enabled", False)),
+            "wallbox_device_key": str(getattr(cfg.ev_charging, "wallbox_device_key", "") or ""),
+            "detection_threshold_w": float(getattr(cfg.ev_charging, "detection_threshold_w", 1500.0)),
+            "min_session_minutes": int(getattr(cfg.ev_charging, "min_session_minutes", 5)),
+        },
+        "tariff_compare": {
+            "enabled": bool(getattr(cfg.tariff_compare, "enabled", False)),
+            "custom_tariffs": [
+                {
+                    "name": tt.name, "provider": tt.provider, "tariff_type": tt.tariff_type,
+                    "price_eur_per_kwh": tt.price_eur_per_kwh, "base_fee_eur_per_year": tt.base_fee_eur_per_year,
+                    "ht_price": tt.ht_price, "nt_price": tt.nt_price,
+                    "ht_start": tt.ht_start, "ht_end": tt.ht_end,
+                    "spot_markup_ct": tt.spot_markup_ct,
+                }
+                for tt in (getattr(cfg.tariff_compare, "custom_tariffs", []) or [])
+            ],
+        },
+        "battery": {
+            "enabled": bool(getattr(cfg.battery, "enabled", False)),
+            "device_key": str(getattr(cfg.battery, "device_key", "") or ""),
+            "capacity_kwh": float(getattr(cfg.battery, "capacity_kwh", 10.0)),
+            "max_charge_rate_kw": float(getattr(cfg.battery, "max_charge_rate_kw", 5.0)),
+            "max_discharge_rate_kw": float(getattr(cfg.battery, "max_discharge_rate_kw", 5.0)),
+            "efficiency_pct": float(getattr(cfg.battery, "efficiency_pct", 95.0)),
+        },
+        "influxdb": {
+            "enabled": bool(getattr(cfg.influxdb, "enabled", False)),
+            "url": str(getattr(cfg.influxdb, "url", "http://localhost:8086") or "http://localhost:8086"),
+            "token": str(getattr(cfg.influxdb, "token", "") or ""),
+            "org": str(getattr(cfg.influxdb, "org", "") or ""),
+            "bucket": str(getattr(cfg.influxdb, "bucket", "shelly") or "shelly"),
+            "measurement": str(getattr(cfg.influxdb, "measurement", "energy") or "energy"),
+            "push_interval_seconds": int(getattr(cfg.influxdb, "push_interval_seconds", 60)),
+            "version": int(getattr(cfg.influxdb, "version", 2)),
+        },
+        "prometheus": {
+            "enabled": bool(getattr(cfg.prometheus, "enabled", False)),
+            "port": int(getattr(cfg.prometheus, "port", 9090)),
+            "path": str(getattr(cfg.prometheus, "path", "/metrics") or "/metrics"),
+        },
+        "api": {
+            "enabled": bool(getattr(cfg.api, "enabled", False)),
+            "api_key": str(getattr(cfg.api, "api_key", "") or ""),
+            "cors_allowed_origins": str(getattr(cfg.api, "cors_allowed_origins", "*") or "*"),
+            "rate_limit_per_minute": int(getattr(cfg.api, "rate_limit_per_minute", 60)),
+        },
+        "advisor": {
+            "enabled": bool(getattr(cfg.advisor, "enabled", False)),
+            "use_llm": bool(getattr(cfg.advisor, "use_llm", False)),
+            "llm_provider": str(getattr(cfg.advisor, "llm_provider", "ollama") or "ollama"),
+            "llm_model": str(getattr(cfg.advisor, "llm_model", "llama3") or "llama3"),
+            "ollama_url": str(getattr(cfg.advisor, "ollama_url", "http://localhost:11434") or "http://localhost:11434"),
+            "openai_api_key": str(getattr(cfg.advisor, "openai_api_key", "") or ""),
+            "anthropic_api_key": str(getattr(cfg.advisor, "anthropic_api_key", "") or ""),
+        },
+        "gamification": {
+            "enabled": bool(getattr(cfg.gamification, "enabled", False)),
+            "weekly_goal_kwh": float(getattr(cfg.gamification, "weekly_goal_kwh", 0.0)),
+            "monthly_goal_kwh": float(getattr(cfg.gamification, "monthly_goal_kwh", 0.0)),
+        },
+        "multi_location": {
+            "enabled": bool(getattr(cfg.multi_location, "enabled", False)),
+            "locations": [
+                {
+                    "location_id": loc.location_id,
+                    "name": loc.name,
+                    "device_keys": list(loc.device_keys),
+                    "db_file": loc.db_file,
+                }
+                for loc in (getattr(cfg.multi_location, "locations", []) or [])
+            ],
+            "active_location_id": str(getattr(cfg.multi_location, "active_location_id", "") or ""),
         },
     }
     path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

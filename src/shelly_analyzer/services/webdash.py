@@ -1662,7 +1662,64 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">📥</span>
       <span class="nav-label">{web_tab_export}</span>
     </button>
+    <button class="nav-btn" onclick="switchPane('smart_sched',this)">
+      <span class="nav-icon">⏱</span>
+      <span class="nav-label">Schedule</span>
+    </button>
+    <button class="nav-btn" onclick="switchPane('ev_log',this)">
+      <span class="nav-icon">🚗</span>
+      <span class="nav-label">EV Log</span>
+    </button>
+    <button class="nav-btn" onclick="switchPane('tariff',this)">
+      <span class="nav-icon">💱</span>
+      <span class="nav-label">Tariff</span>
+    </button>
+    <button class="nav-btn" onclick="switchPane('battery',this)">
+      <span class="nav-icon">🔋</span>
+      <span class="nav-label">Battery</span>
+    </button>
+    <button class="nav-btn" onclick="switchPane('advisor',this)">
+      <span class="nav-icon">🤖</span>
+      <span class="nav-label">Advisor</span>
+    </button>
+    <button class="nav-btn" onclick="switchPane('goals',this)">
+      <span class="nav-icon">🏆</span>
+      <span class="nav-label">Goals</span>
+    </button>
   </nav>
+</div>
+
+<div id="pane-smart_sched" class="pane">
+  <div class="metric-grid" id="ss-cards"></div>
+  <div id="ss-result" class="card" style="margin:12px;padding:16px"></div>
+  <div id="ss-chart" style="margin:12px"></div>
+</div>
+
+<div id="pane-ev_log" class="pane">
+  <div class="metric-grid" id="ev-cards"></div>
+  <div id="ev-table" style="margin:12px;overflow-x:auto"></div>
+</div>
+
+<div id="pane-tariff" class="pane">
+  <div id="tariff-table" style="margin:12px;overflow-x:auto"></div>
+  <div id="tariff-chart" style="margin:12px"></div>
+</div>
+
+<div id="pane-battery" class="pane">
+  <div class="metric-grid" id="bat-cards"></div>
+  <div id="bat-chart" style="margin:12px"></div>
+</div>
+
+<div id="pane-advisor" class="pane">
+  <div id="advisor-savings" class="card" style="margin:12px;padding:16px;font-size:20px;font-weight:700;color:#4caf50;text-align:center"></div>
+  <div id="advisor-llm" class="card" style="margin:12px;padding:16px;display:none"></div>
+  <div id="advisor-tips" style="margin:12px"></div>
+</div>
+
+<div id="pane-goals" class="pane">
+  <div id="goals-streak" class="card" style="margin:12px;padding:16px;text-align:center;font-size:20px"></div>
+  <div class="metric-grid" id="goals-progress"></div>
+  <div id="goals-badges" style="margin:12px;display:flex;flex-wrap:wrap;gap:12px;justify-content:center"></div>
 </div>
 
 <div id="hm-tooltip"></div>
@@ -1684,6 +1741,12 @@ _HTML_TEMPLATE = """<!doctype html>
       <button class="icon-btn" onclick="closeLiveSettings()">✕</button>
     </div>
     <div id="live-settings-list"></div>
+
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;color:var(--muted)">🌐 Language</label><br>
+      <select id="lang-select" style="margin-top:4px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--fg);font-size:13px" onchange="setLanguage(this.value)">
+      </select>
+    </div>
 
     <!-- iOS Widget Section -->
     <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
@@ -1786,6 +1849,12 @@ function onPaneActivated(name) {{
     else if (name === 'sankey') loadSankey();
     else if (name === 'ev') {{ _evInitKeyRow(); loadEv(); }}
     else if (name === 'export') initExport();
+    else if (name === 'smart_sched') loadSmartSched();
+    else if (name === 'ev_log') loadEvLog();
+    else if (name === 'tariff') loadTariff();
+    else if (name === 'battery') loadBattery();
+    else if (name === 'advisor') loadAdvisor();
+    else if (name === 'goals') loadGoals();
   }}
 }}
 
@@ -4937,6 +5006,148 @@ function initExport() {{
 ────────────────────────────────────────────── */
 _loadLsSettings();
 (function() {{
+  /* ── Smart Schedule ── */
+  function loadSmartSched() {{
+    fetch('/api/smart_schedule' + qs()).then(r=>r.json()).then(d=>{{
+      if(!d.ok) return;
+      const r = d.data;
+      const cards = document.getElementById('ss-cards');
+      const result = document.getElementById('ss-result');
+      if(r.recommendation) {{
+        const rec = r.recommendation;
+        const start = new Date(rec.start_ts*1000).toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}});
+        const end = new Date(rec.end_ts*1000).toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}});
+        result.innerHTML = '<div style="font-size:16px;font-weight:700">⏱ ' + start + ' – ' + end + '</div>' +
+          '<div style="margin-top:8px;color:var(--muted)">Ø ' + rec.avg_price_ct.toFixed(1) + ' ct/kWh · Ersparnis: ' + rec.savings_vs_avg_ct.toFixed(1) + ' ct/kWh</div>';
+      }} else {{
+        result.innerHTML = '<div style="color:var(--muted)">Keine Spot-Preisdaten verfügbar.</div>';
+      }}
+    }}).catch(()=>{{}});
+  }}
+
+  /* ── EV Log ── */
+  function loadEvLog() {{
+    fetch('/api/ev_sessions' + qs()).then(r=>r.json()).then(d=>{{
+      if(!d.ok) return;
+      const s = d.data;
+      const cards = document.getElementById('ev-cards');
+      cards.innerHTML = '<div class="card" style="padding:16px;text-align:center"><div style="font-size:24px;font-weight:700">' + s.total_sessions + '</div><div style="color:var(--muted)">Ladevorgänge</div></div>' +
+        '<div class="card" style="padding:16px;text-align:center"><div style="font-size:24px;font-weight:700">' + s.total_kwh.toFixed(1) + ' kWh</div><div style="color:var(--muted)">Gesamt</div></div>' +
+        '<div class="card" style="padding:16px;text-align:center"><div style="font-size:24px;font-weight:700">' + s.total_cost.toFixed(2) + ' €</div><div style="color:var(--muted)">Kosten</div></div>';
+      let tbl = '<table style="width:100%;border-collapse:collapse"><thead><tr style="border-bottom:1px solid var(--border)">';
+      ['Datum','Start','Ende','Dauer','kWh','Peak W','Kosten'].forEach(h=>tbl+='<th style="padding:8px;text-align:center;color:var(--muted)">'+h+'</th>');
+      tbl += '</tr></thead><tbody>';
+      (s.sessions||[]).slice(-30).reverse().forEach(se=>{{
+        const sd = new Date(se.start_ts*1000);
+        const ed = new Date(se.end_ts*1000);
+        const dur = Math.round((se.end_ts-se.start_ts)/60);
+        tbl += '<tr style="border-bottom:1px solid var(--border)">';
+        tbl += '<td style="padding:6px;text-align:center">' + sd.toLocaleDateString() + '</td>';
+        tbl += '<td style="padding:6px;text-align:center">' + sd.toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}}) + '</td>';
+        tbl += '<td style="padding:6px;text-align:center">' + ed.toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}}) + '</td>';
+        tbl += '<td style="padding:6px;text-align:center">' + dur + ' min</td>';
+        tbl += '<td style="padding:6px;text-align:center">' + se.energy_kwh.toFixed(2) + '</td>';
+        tbl += '<td style="padding:6px;text-align:center">' + se.peak_power_w.toFixed(0) + '</td>';
+        tbl += '<td style="padding:6px;text-align:center">' + se.cost_eur.toFixed(2) + ' €</td>';
+        tbl += '</tr>';
+      }});
+      tbl += '</tbody></table>';
+      document.getElementById('ev-table').innerHTML = tbl;
+    }}).catch(()=>{{}});
+  }}
+
+  /* ── Tariff Comparison ── */
+  function loadTariff() {{
+    fetch('/api/tariff_compare' + qs()).then(r=>r.json()).then(d=>{{
+      if(!d.ok) return;
+      const results = d.data.results || [];
+      let tbl = '<table style="width:100%;border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border)">';
+      ['Tarif','Anbieter','Typ','€/Jahr','€/Monat','ct/kWh','Ersparnis'].forEach(h=>tbl+='<th style="padding:8px;text-align:center;color:var(--muted)">'+h+'</th>');
+      tbl += '</tr></thead><tbody>';
+      results.forEach(r=>{{
+        const bg = r.is_current ? 'background:rgba(255,152,0,0.1)' : '';
+        const sav = r.is_current ? '—' : ((r.savings_vs_current_eur>0?'🟢 +':'🔴 ')+r.savings_vs_current_eur.toFixed(0)+' €');
+        tbl += '<tr style="border-bottom:1px solid var(--border);'+bg+'">';
+        tbl += '<td style="padding:8px;font-weight:'+(r.is_current?'700':'400')+'">'+(r.is_current?'→ ':'')+r.name+'</td>';
+        tbl += '<td style="padding:8px;text-align:center">'+r.provider+'</td>';
+        tbl += '<td style="padding:8px;text-align:center">'+r.tariff_type.toUpperCase()+'</td>';
+        tbl += '<td style="padding:8px;text-align:center;font-weight:600">'+r.annual_cost_eur.toFixed(0)+' €</td>';
+        tbl += '<td style="padding:8px;text-align:center">'+r.monthly_avg_eur.toFixed(0)+' €</td>';
+        tbl += '<td style="padding:8px;text-align:center">'+r.effective_price_ct.toFixed(1)+'</td>';
+        tbl += '<td style="padding:8px;text-align:center">'+sav+'</td></tr>';
+      }});
+      tbl += '</tbody></table>';
+      document.getElementById('tariff-table').innerHTML = tbl;
+    }}).catch(()=>{{}});
+  }}
+
+  /* ── Battery ── */
+  function loadBattery() {{
+    fetch('/api/battery' + qs()).then(r=>r.json()).then(d=>{{
+      if(!d.ok) return;
+      const s = d.data;
+      const cards = document.getElementById('bat-cards');
+      const modeColors = {{charging:'#4caf50',discharging:'#ff9800',idle:'var(--muted)'}};
+      cards.innerHTML = '<div class="card" style="padding:16px;text-align:center"><div style="font-size:28px;font-weight:700">'+s.soc_pct.toFixed(0)+'%</div><div style="color:var(--muted)">SOC</div></div>' +
+        '<div class="card" style="padding:16px;text-align:center"><div style="font-size:24px;font-weight:700">'+s.power_w.toFixed(0)+' W</div><div style="color:var(--muted)">Leistung</div></div>' +
+        '<div class="card" style="padding:16px;text-align:center"><div style="font-size:24px;font-weight:700;color:'+(modeColors[s.mode]||'var(--fg)')+'">'+s.mode+'</div><div style="color:var(--muted)">Modus</div></div>' +
+        '<div class="card" style="padding:16px;text-align:center"><div style="font-size:24px;font-weight:700">'+s.cycle_count+'</div><div style="color:var(--muted)">Zyklen</div></div>' +
+        '<div class="card" style="padding:16px;text-align:center"><div style="font-size:24px;font-weight:700">'+s.avg_efficiency_pct.toFixed(1)+'%</div><div style="color:var(--muted)">Effizienz</div></div>';
+    }}).catch(()=>{{}});
+  }}
+
+  /* ── AI Advisor ── */
+  function loadAdvisor() {{
+    fetch('/api/advisor' + qs()).then(r=>r.json()).then(d=>{{
+      if(!d.ok) return;
+      const data = d.data;
+      document.getElementById('advisor-savings').textContent = '💰 ' + data.total_savings_potential_eur.toFixed(0) + ' €/Jahr Einsparpotenzial';
+      if(data.llm_summary) {{
+        const el = document.getElementById('advisor-llm');
+        el.style.display = 'block';
+        el.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">🤖 KI-Zusammenfassung</div>' + data.llm_summary;
+      }}
+      let html = '';
+      (data.tips||[]).forEach(tip=>{{
+        const sav = tip.potential_savings_eur > 0 ? '<div style="color:#4caf50;font-size:12px;margin-top:4px">💰 '+tip.potential_savings_eur.toFixed(0)+' €/Jahr</div>' : '';
+        html += '<div class="card" style="padding:14px;margin-bottom:8px"><div style="font-weight:600">'+tip.icon+' '+tip.title+'</div><div style="color:var(--muted);font-size:13px;margin-top:4px">'+tip.description+'</div>'+sav+'</div>';
+      }});
+      document.getElementById('advisor-tips').innerHTML = html;
+    }}).catch(()=>{{}});
+  }}
+
+  /* ── Goals & Gamification ── */
+  function loadGoals() {{
+    fetch('/api/goals' + qs()).then(r=>r.json()).then(d=>{{
+      if(!d.ok) return;
+      const data = d.data;
+      const s = data.streak||{{}};
+      const fire = '🔥'.repeat(Math.min(s.current_days||0, 5));
+      document.getElementById('goals-streak').innerHTML = fire + ' <b>' + (s.current_days||0) + '</b> Tage unter dem Durchschnitt';
+
+      const wg = data.weekly_goal||{{}};
+      const mg = data.monthly_goal||{{}};
+      const prog = document.getElementById('goals-progress');
+      function bar(pct) {{ return '<div style="height:6px;background:var(--border);border-radius:3px;margin-top:6px"><div style="height:100%;width:'+Math.min(pct,100)+'%;background:'+(pct<=100?'#4caf50':'#e53935')+';border-radius:3px"></div></div>'; }}
+      prog.innerHTML = '<div class="card" style="padding:16px"><div style="font-weight:600">📅 Wochenziel</div><div style="margin-top:6px">'+wg.actual_kwh.toFixed(1)+' / '+wg.target_kwh.toFixed(1)+' kWh</div>'+bar(wg.progress_pct)+'</div>' +
+        '<div class="card" style="padding:16px"><div style="font-weight:600">📆 Monatsziel</div><div style="margin-top:6px">'+mg.actual_kwh.toFixed(1)+' / '+mg.target_kwh.toFixed(1)+' kWh</div>'+bar(mg.progress_pct)+'</div>';
+
+      let bhtml = '';
+      (data.badges||[]).forEach(b=>{{
+        const lock = b.unlocked ? '' : '🔒 ';
+        const opacity = b.unlocked ? '1' : '0.4';
+        bhtml += '<div style="text-align:center;opacity:'+opacity+';width:80px"><div style="font-size:28px">'+b.icon+'</div><div style="font-size:10px;margin-top:2px">'+lock+b.name+'</div>'+bar(b.progress_pct)+'</div>';
+      }});
+      document.getElementById('goals-badges').innerHTML = bhtml;
+    }}).catch(()=>{{}});
+  }}
+
+  /* ── Language selector ── */
+  function setLanguage(lang) {{
+    fetch('/api/run' + qs(), {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{action:'set_language',params:{{language:lang}}}})}}
+    ).then(()=>window.location.reload()).catch(()=>{{}});
+  }}
+
   // Restore last pane
   const last = localStorage.getItem('sea_pane');
   if (last && last !== 'live') {{
@@ -7124,6 +7335,145 @@ class _Handler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
 
+            # --- Smart Schedule API ---
+            if path_only.startswith("/api/smart_schedule"):
+                try:
+                    _sp = urlparse(self.path)
+                    _sqs = parse_qs(_sp.query or "")
+                    _sparams = {k: (v[0] if isinstance(v, list) and v else v) for k, v in _sqs.items()}
+                    payload = self.dashboard.on_action("smart_schedule", _sparams)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            # --- EV Sessions API ---
+            if path_only.startswith("/api/ev_sessions"):
+                try:
+                    _sp = urlparse(self.path)
+                    _sqs = parse_qs(_sp.query or "")
+                    _sparams = {k: (v[0] if isinstance(v, list) and v else v) for k, v in _sqs.items()}
+                    payload = self.dashboard.on_action("ev_sessions", _sparams)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            # --- Tariff Compare API ---
+            if path_only.startswith("/api/tariff_compare"):
+                try:
+                    _sp = urlparse(self.path)
+                    _sqs = parse_qs(_sp.query or "")
+                    _sparams = {k: (v[0] if isinstance(v, list) and v else v) for k, v in _sqs.items()}
+                    payload = self.dashboard.on_action("tariff_compare", _sparams)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            # --- Battery API ---
+            if path_only.startswith("/api/battery"):
+                try:
+                    _sp = urlparse(self.path)
+                    _sqs = parse_qs(_sp.query or "")
+                    _sparams = {k: (v[0] if isinstance(v, list) and v else v) for k, v in _sqs.items()}
+                    payload = self.dashboard.on_action("battery", _sparams)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            # --- Advisor API ---
+            if path_only.startswith("/api/advisor"):
+                try:
+                    _sp = urlparse(self.path)
+                    _sqs = parse_qs(_sp.query or "")
+                    _sparams = {k: (v[0] if isinstance(v, list) and v else v) for k, v in _sqs.items()}
+                    payload = self.dashboard.on_action("advisor", _sparams)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            # --- Goals API ---
+            if path_only.startswith("/api/goals"):
+                try:
+                    _sp = urlparse(self.path)
+                    _sqs = parse_qs(_sp.query or "")
+                    _sparams = {k: (v[0] if isinstance(v, list) and v else v) for k, v in _sqs.items()}
+                    payload = self.dashboard.on_action("goals", _sparams)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            # --- API v1 ---
+            if path_only.startswith("/api/v1/"):
+                try:
+                    from shelly_analyzer.services import api_v1
+                    payload = api_v1.handle_v1_request(self.path, self.dashboard)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            # --- Prometheus Metrics ---
+            if path_only == "/metrics":
+                try:
+                    from shelly_analyzer.services import metrics
+                    body = metrics.render(self.dashboard).encode("utf-8")
+                except Exception as e:
+                    body = f"# error: {e}\n".encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
             # --- Widget API (compact JSON for iOS Scriptable) ---
             if path_only.startswith("/api/widget"):
                 try:
@@ -7277,7 +7627,23 @@ class _Handler(BaseHTTPRequestHandler):
                     # browser UI can track progress. However, switch status
                     # reads/toggles are lightweight and the Live Dashboard
                     # expects an immediate result to update the "Schalter" pill.
-                    if action in {"get_switch", "set_switch", "toggle_switch", "get_freeze", "set_freeze", "toggle_freeze"}:
+                    if action == "set_language":
+                        lang = str(params.get("language", "de") or "de")
+                        try:
+                            if hasattr(self.dashboard, "config") and self.dashboard.config:
+                                self.dashboard.config["language"] = lang
+                            payload = {"ok": True, "language": lang}
+                        except Exception as e:
+                            payload = {"ok": False, "error": str(e)}
+                        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.send_header("Cache-Control", "no-store")
+                        self.send_header("Content-Length", str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
+                    elif action in {"get_switch", "set_switch", "toggle_switch", "get_freeze", "set_freeze", "toggle_freeze"}:
                         if not self.dashboard.on_action:
                             payload = {"ok": False, "error": "Remote actions not available"}
                         else:

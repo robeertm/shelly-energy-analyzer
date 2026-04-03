@@ -19,8 +19,14 @@ from .mixins.standby_tab import StandbyMixin
 from .mixins.weather_tab import WeatherMixin
 from .mixins.sankey_tab import SankeyMixin
 from .mixins.tenant_tab import TenantMixin
+from .mixins.smart_schedule_tab import SmartScheduleMixin
+from .mixins.ev_log_tab import EvLogMixin
+from .mixins.tariff_tab import TariffMixin
+from .mixins.battery_tab import BatteryMixin
+from .mixins.advisor_tab import AdvisorMixin
+from .mixins.goals_tab import GoalsMixin
 
 
-class App(CoreMixin, tk.Tk, ScalingMixin, PlotsMixin, LiveWebMixin, UpdatesMixin, HeatmapMixin, SolarMixin, CompareMixin, AnomalyMixin, ScheduleMixin, Co2Mixin, ForecastMixin, StandbyMixin, WeatherMixin, SankeyMixin, TenantMixin):
+class App(CoreMixin, tk.Tk, ScalingMixin, PlotsMixin, LiveWebMixin, UpdatesMixin, HeatmapMixin, SolarMixin, CompareMixin, AnomalyMixin, ScheduleMixin, Co2Mixin, ForecastMixin, StandbyMixin, WeatherMixin, SankeyMixin, TenantMixin, SmartScheduleMixin, EvLogMixin, TariffMixin, BatteryMixin, AdvisorMixin, GoalsMixin):
     """Main GUI application class (composed from mixins)."""
     pass

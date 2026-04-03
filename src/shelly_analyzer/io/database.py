@@ -124,6 +124,46 @@ CREATE TABLE IF NOT EXISTS spot_prices (
     fetched_at    INTEGER,
     PRIMARY KEY (slot_ts, zone)
 ) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS ev_charging_sessions (
+    session_id   TEXT    PRIMARY KEY,
+    device_key   TEXT    NOT NULL,
+    start_ts     INTEGER NOT NULL,
+    end_ts       INTEGER NOT NULL,
+    energy_kwh   REAL    NOT NULL DEFAULT 0,
+    peak_power_w REAL,
+    avg_power_w  REAL,
+    cost_eur     REAL,
+    cost_model   TEXT    DEFAULT 'fixed'
+);
+
+CREATE TABLE IF NOT EXISTS battery_state (
+    timestamp   INTEGER NOT NULL,
+    device_key  TEXT    NOT NULL,
+    soc_pct     REAL,
+    power_w     REAL,
+    mode        TEXT,
+    cycle_count INTEGER DEFAULT 0,
+    PRIMARY KEY (timestamp, device_key)
+) WITHOUT ROWID;
+
+CREATE TABLE IF NOT EXISTS badges (
+    badge_id    TEXT    NOT NULL,
+    device_key  TEXT    NOT NULL DEFAULT '',
+    unlocked_at INTEGER NOT NULL,
+    value       REAL    DEFAULT 0,
+    PRIMARY KEY (badge_id, device_key)
+);
+
+CREATE TABLE IF NOT EXISTS goals (
+    goal_id      TEXT    PRIMARY KEY,
+    device_key   TEXT    NOT NULL DEFAULT '',
+    period_start INTEGER NOT NULL,
+    period_end   INTEGER NOT NULL,
+    target_kwh   REAL    NOT NULL,
+    actual_kwh   REAL    DEFAULT 0,
+    achieved     INTEGER DEFAULT 0
+);
 """
 
 # Additional columns added in v6.0.0.2 for full Shelly EMData CSV support.

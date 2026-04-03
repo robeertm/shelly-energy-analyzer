@@ -1,5 +1,29 @@
 # Changelog
 
+## 15.0.0 - 2026-04-03
+### Added
+- **Smart Scheduling** – New tab that finds the cheapest time block from spot market prices for running large appliances (washer, dryer, dishwasher). Configurable duration (0.5–12h), shows average price and savings vs. daily average. Optional auto-scheduling via Shelly RPC.
+- **PV Surplus Control** – Automatic relay switching based on solar excess power. State machine with configurable thresholds (on/off), debounce timer, and priority-ordered consumer list. When surplus exceeds threshold, switches on consumers (boiler, wallbox); switches off when surplus drops.
+- **EV Charging Log** – Automatic detection of electric vehicle charging sessions from wallbox power patterns. Logs each session with start/end time, energy (kWh), peak power, duration, and cost. Monthly summary with total sessions, kWh, and cost.
+- **Tariff Comparison** – Compare actual consumption costs across 8 pre-defined German electricity tariffs (Stadtwerke, Tibber, 1Komma5°, Ostrom, E.ON, Vattenfall, EnBW, HT/NT). Simulates fixed, time-of-use, and dynamic spot tariffs. Shows annual savings potential.
+- **Battery Storage Monitoring** – Track battery state of charge (SOC), charge/discharge cycles, round-trip efficiency, and power flow. SOC timeline chart, cycle detection, and optimal charging time recommendations based on spot prices.
+- **InfluxDB Export** – Push energy metrics to InfluxDB v1.x or v2.x via HTTP line protocol. Configurable push interval, measurement name, and authentication. Supports all device metrics (power, voltage, current, energy).
+- **Prometheus Metrics** – Expose `/metrics` endpoint in Prometheus text exposition format. Gauges for power (W), voltage (V), current (A), frequency (Hz) per device and phase. Ready for Grafana dashboards.
+- **REST API v1** – Formalized API with `/api/v1/devices`, `/api/v1/devices/{key}/samples`, `/api/v1/devices/{key}/hourly`, `/api/v1/costs`, `/api/v1/spot_prices`, `/api/v1/co2`, `/api/v1/status`, and `/api/v1/openapi.json`. Bearer token authentication, CORS headers, rate limiting.
+- **AI Energy Advisor** – Personalized energy-saving tips from rule-based analysis of standby consumption, spot price spreads, consumption trends, and weather data. Optional LLM enrichment via Ollama (local), OpenAI, or Anthropic API for natural language summaries.
+- **Gamification** – Weekly and monthly consumption goals with auto-calculated targets (90% of previous period). 10 badges (Energy Saver, Standby Killer, Solar Champion, 7/30-day Streak, Night Saver, Peak Avoider, and more). Streak tracking with progress visualization.
+- **Multi-Location Support** – Manage multiple sites (home, office, vacation home) with separate device sets and optional separate databases. Location switcher in desktop UI and web dashboard. Aggregate view across all locations.
+- **Desktop Dark/Light Mode** – Theme toggle in Settings (Auto/Light/Dark). Affects all matplotlib plots, treeviews, and UI elements. Auto mode detects macOS system appearance.
+- **Web Language Selector** – Language switcher in web dashboard settings modal. Supports all 9 languages (DE, EN, ES, FR, PT, IT, PL, CS, RU).
+
+### Changed
+- **Version bump to 15.0.0** – Major release with 12 new features.
+- **6 new desktop tabs** – Smart Plan, E-Auto, Tariff Compare, Battery, AI Advisor, Goals.
+- **6 new web dashboard panes** – Matching web UI for all new features.
+- **4 new database tables** – `ev_charging_sessions`, `battery_state`, `badges`, `goals`.
+- **11 new config sections** – SmartScheduleConfig, PvSurplusConfig, EvChargingConfig, TariffCompareConfig, BatteryConfig, InfluxDBConfig, PrometheusConfig, ApiConfig, AdvisorConfig, GamificationConfig, MultiLocationConfig.
+- **~320 new i18n keys** per language across all 9 supported languages.
+
 ## 14.3.4 - 2026-04-03
 ### Fixed
 - **Widget power doubled** – Widget API summed power from all devices instead of only the selected widget devices. Now correctly filters by `widget_devices` config.
