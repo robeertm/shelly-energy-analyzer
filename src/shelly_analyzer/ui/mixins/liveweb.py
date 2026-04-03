@@ -720,14 +720,15 @@ class LiveWebMixin:
                     _proj_kwh = round(_month_kwh / _elapsed * _dim, 1)
                     _proj_eur = round(_proj_kwh * _unit, 2)
 
-                    # Current power (sum of all devices)
+                    # Current power (sum of filtered widget devices only)
+                    _widget_dev_keys = {d.key for d in _three_phase}
                     _power_w = 0.0
                     try:
                         _store = getattr(self, "_live_state_store", None)
                         if _store:
                             snap = _store.snapshot()
                             for _dk, _pts in snap.items():
-                                if isinstance(_pts, list) and _pts:
+                                if _dk in _widget_dev_keys and isinstance(_pts, list) and _pts:
                                     _power_w += float(_pts[-1].get("power_total_w", 0) or 0)
                     except Exception:
                         pass
