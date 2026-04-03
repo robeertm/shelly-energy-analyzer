@@ -1818,6 +1818,9 @@ function switchPane(name, btn) {{
   if (btn) btn.classList.add('active');
   currentPane = name;
   localStorage.setItem('sea_pane', name);
+  // Scroll to top when switching tabs so content starts at the top
+  const pc = document.getElementById('panes');
+  if (pc) pc.scrollTop = 0;
   onPaneActivated(name);
 }}
 

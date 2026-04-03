@@ -1,8 +1,12 @@
 # Changelog
 
+## 15.0.10 - 2026-04-03
+### Fixed
+- **Web dashboard: scroll to top on tab switch** – When switching tabs, the `#panes` container now resets `scrollTop = 0`. Previously the scroll position from the previous tab carried over, causing new tab content to appear far below the visible area (especially on mobile where the previous tab had been scrolled down).
+
 ## 15.0.9 - 2026-04-03
 ### Fixed
-- **Web dashboard: content starts at top** – Removed extra `padding:12px` and `<h2>` titles from all 6 new panes. Content now starts flush at the top of the scroll area, matching the existing tabs. The `#panes` container already provides 10px padding. Reduced all spacing (margins, gaps, font sizes) for compact mobile layout.
+- **Web dashboard: content starts at top** – Removed extra padding and headers from new panes for compact mobile layout.
 
 ## 15.0.8 - 2026-04-03
 ### Fixed
