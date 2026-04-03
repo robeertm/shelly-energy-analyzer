@@ -1608,7 +1608,6 @@ _HTML_TEMPLATE = """<!doctype html>
         </div>
       </div>
     </div>
-  </div>
 
     <!-- New feature panes (same pattern as costs/forecast/standby) -->
     <div id="pane-smart_sched" class="pane">
