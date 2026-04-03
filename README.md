@@ -50,6 +50,28 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 |----------------|---------------|---------------|
 | ![Hz](docs/screenshots/plots_hz_haus.png) | ![CO2](docs/screenshots/plots_co2_haus.png) | ![Dyn Price](docs/screenshots/plots_dynprice_haus.png) |
 
+### Web Dashboard (Mobile)
+
+| Live | Costs | Heatmap |
+|------|-------|---------|
+| ![Live](docs/screenshots/web_01_live.png) | ![Costs](docs/screenshots/web_02_costs.png) | ![Heatmap](docs/screenshots/web_03_heatmap.png) |
+
+| Solar | Compare | CO₂ |
+|-------|---------|-----|
+| ![Solar](docs/screenshots/web_04_solar.png) | ![Compare](docs/screenshots/web_05_compare.png) | ![CO2](docs/screenshots/web_06_co2.png) |
+
+| Anomalies | Forecast | Standby |
+|-----------|----------|---------|
+| ![Anomalies](docs/screenshots/web_07_anomalies.png) | ![Forecast](docs/screenshots/web_08_forecast.png) | ![Standby](docs/screenshots/web_09_standby.png) |
+
+| Energy Flow | Export | Live (Dark) |
+|-------------|-------|-------------|
+| ![Energy Flow](docs/screenshots/web_10_energy_flow.png) | ![Export](docs/screenshots/web_11_export.png) | ![Live Dark](docs/screenshots/web_01_live_dark.png) |
+
+| Costs (Dark) | CO₂ (Dark) |
+|--------------|------------|
+| ![Costs Dark](docs/screenshots/web_02_costs_dark.png) | ![CO2 Dark](docs/screenshots/web_06_co2_dark.png) |
+
 ---
 
 ## Key Features
