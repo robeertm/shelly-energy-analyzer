@@ -835,46 +835,100 @@ class CoreMixin:
             ttk.Button(bar, text="▶", width=3, command=_page_next).pack(side="left", padx=(0, 6))
 
 
-            # ── Scrollable tab bar ────────────────────────────────────────
-            # Wrap the Notebook in a frame with left/right scroll buttons
-            # so all tabs are accessible even on small screens.
+            # ── Custom scrollable tab bar ────────────────────────────────
+            # The built-in ttk.Notebook tab row truncates labels when there
+            # are many tabs.  We hide the native tabs and render our own
+            # horizontally-scrollable button row where every label is always
+            # fully readable.
             _nb_outer = ttk.Frame(self)
             _nb_outer.pack(fill="both", expand=True)
 
-            _tab_scroll_frm = ttk.Frame(_nb_outer)
-            _tab_scroll_frm.pack(fill="x", side="top")
+            # --- scrollable button row ---
+            _tab_bar = ttk.Frame(_nb_outer)
+            _tab_bar.pack(fill="x", side="top")
 
+            _tab_canvas = tk.Canvas(_tab_bar, height=32, highlightthickness=0)
+            _tab_btn_frame = ttk.Frame(_tab_canvas)
+            _tab_canvas_win = _tab_canvas.create_window((0, 0), window=_tab_btn_frame, anchor="nw")
+            _tab_btn_frame.bind("<Configure>", lambda e: _tab_canvas.configure(scrollregion=_tab_canvas.bbox("all")))
+            _tab_canvas.bind("<Configure>", lambda e: _tab_canvas.itemconfigure(_tab_canvas_win, height=e.height))
+            _tab_canvas.pack(fill="x", expand=True, side="left")
+
+            # Mousewheel horizontal scroll on the tab bar
+            def _tab_bar_scroll(evt):
+                try:
+                    # macOS: evt.delta, Linux: Button-4/5
+                    if evt.delta:
+                        _tab_canvas.xview_scroll(-1 if evt.delta > 0 else 1, "units")
+                    elif evt.num == 4:
+                        _tab_canvas.xview_scroll(-3, "units")
+                    elif evt.num == 5:
+                        _tab_canvas.xview_scroll(3, "units")
+                except Exception:
+                    pass
+            _tab_canvas.bind("<MouseWheel>", _tab_bar_scroll)
+            _tab_canvas.bind("<Button-4>", _tab_bar_scroll)
+            _tab_canvas.bind("<Button-5>", _tab_bar_scroll)
+            _tab_btn_frame.bind("<MouseWheel>", _tab_bar_scroll)
+            _tab_btn_frame.bind("<Button-4>", _tab_bar_scroll)
+            _tab_btn_frame.bind("<Button-5>", _tab_bar_scroll)
+
+            # --- hidden-tab notebook ---
             self.notebook = ttk.Notebook(_nb_outer)
             self.notebook.pack(fill="both", expand=True)
-
-            # Style: compact tab padding so more tabs fit
+            # Hide the built-in tab row by setting tab height to 0
             try:
                 _s = ttk.Style()
-                _s.configure("TNotebook.Tab", padding=[6, 4])
+                _s.layout("Tabless.TNotebook", [("Notebook.client", {"sticky": "nswe"})])
+                self.notebook.configure(style="Tabless.TNotebook")
             except Exception:
                 pass
 
-            def _scroll_tabs(direction: int) -> None:
-                """Scroll the tab bar left/right by selecting adjacent tabs."""
+            self._tab_buttons: list = []  # track buttons for highlight updates
+
+            def _select_tab_by_index(idx: int) -> None:
                 try:
-                    tabs = self.notebook.tabs()
-                    if not tabs:
-                        return
-                    cur = self.notebook.index(self.notebook.select())
-                    nxt = cur + direction
-                    if 0 <= nxt < len(tabs):
-                        self.notebook.select(nxt)
+                    self.notebook.select(idx)
+                    # Update button highlights
+                    for i, btn in enumerate(self._tab_buttons):
+                        try:
+                            if i == idx:
+                                btn.state(["pressed"])
+                            else:
+                                btn.state(["!pressed"])
+                        except Exception:
+                            pass
                 except Exception:
                     pass
 
-            _btn_left = ttk.Button(_tab_scroll_frm, text="◀", width=2,
-                                   command=lambda: _scroll_tabs(-1))
-            _btn_left.pack(side="left", padx=2)
-            _btn_right = ttk.Button(_tab_scroll_frm, text="▶", width=2,
-                                    command=lambda: _scroll_tabs(1))
-            _btn_right.pack(side="left", padx=2)
-            ttk.Label(_tab_scroll_frm, text=self.t("ui.view") if hasattr(self, 't') else "",
-                      foreground="gray", font=("", 9)).pack(side="left", padx=8)
+            def _add_tab_button(text: str, idx: int) -> None:
+                btn = ttk.Button(_tab_btn_frame, text=text,
+                                 command=lambda i=idx: _select_tab_by_index(i))
+                btn.pack(side="left", padx=1, pady=2)
+                self._tab_buttons.append(btn)
+                # Forward mousewheel from button to canvas
+                btn.bind("<MouseWheel>", _tab_bar_scroll)
+                btn.bind("<Button-4>", _tab_bar_scroll)
+                btn.bind("<Button-5>", _tab_bar_scroll)
+
+            # Sync button highlights when notebook tab changes (e.g. from code)
+            def _on_nb_tab_changed(_evt=None):
+                try:
+                    cur = self.notebook.index(self.notebook.select())
+                    for i, btn in enumerate(self._tab_buttons):
+                        try:
+                            if i == cur:
+                                btn.state(["pressed"])
+                            else:
+                                btn.state(["!pressed"])
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            self.notebook.bind("<<NotebookTabChanged>>", _on_nb_tab_changed, add="+")
+
+            self._add_tab_button_fn = _add_tab_button  # store for later use
+
             self.tab_sync = ttk.Frame(self.notebook)
             self.tab_plots = ttk.Frame(self.notebook)
             self.tab_live = ttk.Frame(self.notebook)
@@ -899,29 +953,37 @@ class CoreMixin:
             self.tab_export = ttk.Frame(self.notebook)
             self.tab_settings = ttk.Frame(self.notebook)
             # Notebook tab labels are translated based on the selected UI language.
-            self.notebook.add(self.tab_sync, text=self.t("tabs.sync"))
-            self.notebook.add(self.tab_plots, text=self.t("tabs.plots"))
-            self.notebook.add(self.tab_live, text=self.t("tabs.live"))
-            self.notebook.add(self.tab_costs, text=self.t("tabs.costs"))
-            self.notebook.add(self.tab_heatmap, text=self.t("tabs.heatmap"))
-            self.notebook.add(self.tab_solar, text=self.t("tabs.solar"))
-            self.notebook.add(self.tab_compare, text=self.t("tabs.compare"))
-            self.notebook.add(self.tab_anomaly, text=self.t("tabs.anomaly"))
-            self.notebook.add(self.tab_schedule, text=self.t("tabs.schedule"))
-            self.notebook.add(self.tab_co2, text=self.t("tabs.co2"))
-            self.notebook.add(self.tab_forecast, text=self.t("tabs.forecast"))
-            self.notebook.add(self.tab_standby, text=self.t("tabs.standby"))
-            self.notebook.add(self.tab_weather, text=self.t("tabs.weather"))
-            self.notebook.add(self.tab_sankey, text=self.t("tabs.sankey"))
-            self.notebook.add(self.tab_tenant, text=self.t("tabs.tenant"))
-            self.notebook.add(self.tab_smart_sched, text=self.t("tabs.smart_sched"))
-            self.notebook.add(self.tab_ev_log, text=self.t("tabs.ev_log"))
-            self.notebook.add(self.tab_tariff, text=self.t("tabs.tariff"))
-            self.notebook.add(self.tab_battery, text=self.t("tabs.battery"))
-            self.notebook.add(self.tab_advisor, text=self.t("tabs.advisor"))
-            self.notebook.add(self.tab_goals, text=self.t("tabs.goals"))
-            self.notebook.add(self.tab_export, text=self.t("tabs.export"))
-            self.notebook.add(self.tab_settings, text=self.t("tabs.settings"))
+            # Each tab is added to the notebook AND gets a button in the
+            # scrollable tab bar so labels are always fully readable.
+            _tab_defs = [
+                (self.tab_sync, "tabs.sync"),
+                (self.tab_plots, "tabs.plots"),
+                (self.tab_live, "tabs.live"),
+                (self.tab_costs, "tabs.costs"),
+                (self.tab_heatmap, "tabs.heatmap"),
+                (self.tab_solar, "tabs.solar"),
+                (self.tab_compare, "tabs.compare"),
+                (self.tab_anomaly, "tabs.anomaly"),
+                (self.tab_schedule, "tabs.schedule"),
+                (self.tab_co2, "tabs.co2"),
+                (self.tab_forecast, "tabs.forecast"),
+                (self.tab_standby, "tabs.standby"),
+                (self.tab_weather, "tabs.weather"),
+                (self.tab_sankey, "tabs.sankey"),
+                (self.tab_tenant, "tabs.tenant"),
+                (self.tab_smart_sched, "tabs.smart_sched"),
+                (self.tab_ev_log, "tabs.ev_log"),
+                (self.tab_tariff, "tabs.tariff"),
+                (self.tab_battery, "tabs.battery"),
+                (self.tab_advisor, "tabs.advisor"),
+                (self.tab_goals, "tabs.goals"),
+                (self.tab_export, "tabs.export"),
+                (self.tab_settings, "tabs.settings"),
+            ]
+            for _idx, (_tab_frm, _tab_key) in enumerate(_tab_defs):
+                _label = self.t(_tab_key)
+                self.notebook.add(_tab_frm, text=_label)
+                self._add_tab_button_fn(_label, _idx)
 
             # First-run / no-devices mode: show a guided Setup wizard and keep other tabs disabled
             if bool(getattr(self, "_setup_required", False)):
