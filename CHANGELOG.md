@@ -1,5 +1,9 @@
 # Changelog
 
+## 15.0.3 - 2026-04-03
+### Fixed
+- **Native tab row hidden** – The built-in ttk.Notebook tab row was still visible on macOS despite the Tabless style. Now clipped off-screen via `place(y=-30)` so only the custom scrollable button bar is visible.
+
 ## 15.0.2 - 2026-04-03
 ### Fixed
 - **Scrollable tab bar** – Replaced the built-in ttk.Notebook tab row (which truncates labels on small screens) with a custom horizontally-scrollable button row. Every tab label is always fully readable regardless of window size. Mousewheel scrolls the tab bar. Active tab is visually highlighted.
