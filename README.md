@@ -72,6 +72,12 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 |--------------|------------|
 | ![Costs Dark](docs/screenshots/web_02_costs_dark.png) | ![CO2 Dark](docs/screenshots/web_06_co2_dark.png) |
 
+### iOS Widget (Scriptable)
+
+| Small | Medium | Large |
+|-------|--------|-------|
+| ![Small](docs/screenshots/widget_small.png) | ![Medium](docs/screenshots/widget_medium.png) | ![Large](docs/screenshots/widget_large.png) |
+
 ---
 
 ## Key Features
