@@ -1,8 +1,12 @@
 # Changelog
 
+## 15.0.6 - 2026-04-03
+### Fixed
+- **Web dashboard: new tabs empty (2 JS bugs)** – (1) The 6 new JS functions (`loadSmartSched`, etc.) were wrapped in an IIFE `(function(){ ... })()` making them invisible to the global `onPaneActivated` caller. Removed the IIFE wrapper. (2) All fetch calls used `qs()` which is only defined on the control page, not the main page. Removed `qs()` from all 6 fetch URLs.
+
 ## 15.0.5 - 2026-04-03
 ### Fixed
-- **Web dashboard: new tabs empty** – Action handlers for the 6 new features were inserted *after* the `raise ValueError("Unknown action")` line in `_web_action_dispatch`, so they were never reached. Moved all handlers *before* the raise. Removed duplicate handlers that were accidentally placed inside `_web_plots_data`.
+- **Web dashboard: new tabs empty** – Action handlers for the 6 new features were inserted *after* the `raise ValueError("Unknown action")` line in `_web_action_dispatch`, so they were never reached. Moved all handlers *before* the raise. Removed duplicate handlers.
 
 ## 15.0.3 - 2026-04-03
 ### Fixed
