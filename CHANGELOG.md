@@ -1,8 +1,12 @@
 # Changelog
 
+## 15.0.11 - 2026-04-03
+### Fixed
+- **Web dashboard: rewrite new tab JS to match existing pattern** – All 6 new tab functions rewritten to use `async/await`, `metricCardHtml()` helper, `.card > .card-title + .metric-grid` structure, and `loading-msg` placeholders – identical to the working Costs/Forecast/CO2 tabs. Content now renders at the top of the pane instead of floating at the bottom.
+
 ## 15.0.10 - 2026-04-03
 ### Fixed
-- **Web dashboard: scroll to top on tab switch** – When switching tabs, the `#panes` container now resets `scrollTop = 0`. Previously the scroll position from the previous tab carried over, causing new tab content to appear far below the visible area (especially on mobile where the previous tab had been scrolled down).
+- **Web dashboard: scroll to top on tab switch**
 
 ## 15.0.9 - 2026-04-03
 ### Fixed
