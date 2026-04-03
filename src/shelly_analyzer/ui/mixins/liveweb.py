@@ -2550,6 +2550,102 @@ class LiveWebMixin:
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 
+            # ── New feature action handlers ──────────────────────────────────
+            if action == "smart_schedule":
+                try:
+                    from shelly_analyzer.services.smart_schedule import get_schedule_recommendations
+                    zone = str(getattr(self.cfg.spot_price, "bidding_zone", "DE-LU") or "DE-LU")
+                    duration = float(params.get("duration", getattr(self.cfg.smart_schedule, "default_duration_hours", 3.0)))
+                    rec = get_schedule_recommendations(self.storage.db, zone, duration)
+                    if rec:
+                        return {"ok": True, "data": {"recommendation": {
+                            "start_ts": rec.start_ts, "end_ts": rec.end_ts,
+                            "avg_price_ct": rec.avg_price_ct,
+                            "savings_vs_avg_ct": rec.savings_vs_avg_ct,
+                            "block_hours": rec.block_hours,
+                        }}}
+                    return {"ok": True, "data": {"recommendation": None}}
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
+            if action == "ev_sessions":
+                try:
+                    from shelly_analyzer.services.ev_charging_log import detect_charging_sessions, get_monthly_summary
+                    dev_key = str(getattr(self.cfg.ev_charging, "wallbox_device_key", "") or "")
+                    if not dev_key:
+                        return {"ok": True, "data": {"total_sessions": 0, "total_kwh": 0, "total_cost": 0, "sessions": []}}
+                    df = self.storage.read_device_df(dev_key)
+                    sessions = detect_charging_sessions(
+                        df, dev_key,
+                        threshold_w=float(getattr(self.cfg.ev_charging, "detection_threshold_w", 1500)),
+                        min_duration_s=int(getattr(self.cfg.ev_charging, "min_session_minutes", 5)) * 60,
+                        price_eur_per_kwh=float(self.cfg.pricing.electricity_price_eur_per_kwh),
+                    )
+                    summary = get_monthly_summary(sessions)
+                    return {"ok": True, "data": {
+                        "total_sessions": summary.total_sessions,
+                        "total_kwh": summary.total_kwh,
+                        "total_cost": summary.total_cost,
+                        "avg_kwh_per_session": summary.avg_kwh_per_session,
+                        "avg_duration_min": summary.avg_duration_min,
+                        "sessions": [
+                            {"session_id": s.session_id, "start_ts": s.start_ts, "end_ts": s.end_ts,
+                             "energy_kwh": s.energy_kwh, "peak_power_w": s.peak_power_w,
+                             "avg_power_w": s.avg_power_w, "cost_eur": s.cost_eur}
+                            for s in sessions
+                        ],
+                    }}
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
+            if action == "tariff_compare":
+                try:
+                    from shelly_analyzer.services.tariff_compare import compare_tariffs
+                    results = compare_tariffs(
+                        self.storage.db, self.cfg,
+                        current_price_eur_per_kwh=float(self.cfg.pricing.electricity_price_eur_per_kwh),
+                        current_base_fee_eur_per_year=float(self.cfg.pricing.base_fee_eur_per_year),
+                    )
+                    return {"ok": True, "data": {"results": [
+                        {"name": r.name, "provider": r.provider, "tariff_type": r.tariff_type,
+                         "annual_cost_eur": r.annual_cost_eur, "monthly_avg_eur": r.monthly_avg_eur,
+                         "effective_price_ct": r.effective_price_ct,
+                         "savings_vs_current_eur": r.savings_vs_current_eur, "is_current": r.is_current}
+                        for r in results
+                    ]}}
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
+            if action == "battery":
+                try:
+                    from shelly_analyzer.services.battery import get_battery_status
+                    status = get_battery_status(self.storage.db, self.cfg.battery)
+                    return {"ok": True, "data": {
+                        "soc_pct": status.soc_pct, "power_w": status.power_w,
+                        "mode": status.mode, "cycle_count": status.cycle_count,
+                        "total_charged_kwh": status.total_charged_kwh,
+                        "total_discharged_kwh": status.total_discharged_kwh,
+                        "avg_efficiency_pct": status.avg_efficiency_pct,
+                    }}
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
+            if action == "advisor":
+                try:
+                    from shelly_analyzer.services.ai_advisor import get_advisor_tips
+                    result = get_advisor_tips(self.storage.db, self.cfg, self.storage)
+                    return {"ok": True, "data": result}
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
+            if action == "goals":
+                try:
+                    from shelly_analyzer.services.gamification import get_gamification_status
+                    result = get_gamification_status(self.storage.db, self.cfg)
+                    return {"ok": True, "data": result}
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
     def _live_drain(self) -> None:
             if not self._live_pollers:
                 return
