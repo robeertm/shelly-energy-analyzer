@@ -1,8 +1,13 @@
 # Changelog
 
-## 15.0.11 - 2026-04-03
+## 15.0.12 - 2026-04-03
 ### Fixed
-- **Web dashboard: rewrite new tab JS to match existing pattern** – All 6 new tab functions rewritten to use `async/await`, `metricCardHtml()` helper, `.card > .card-title + .metric-grid` structure, and `loading-msg` placeholders – identical to the working Costs/Forecast/CO2 tabs. Content now renders at the top of the pane instead of floating at the bottom.
+- **Web dashboard: complete rebuild of new tabs** – Removed all old pane HTML and JS. Rebuilt from scratch following the exact pattern of the working Costs/Forecast/Standby tabs:
+  - Each pane is `<div id="pane-xxx" class="pane"><div id="xxx-content"><p class="loading-msg">Lade…</p></div></div>` (single content container)
+  - Each JS function uses `async function loadXxx()` → `renderXxx(data, el)` pattern
+  - All content rendered via `el.innerHTML = html` into one container
+  - Uses `metricCardHtml()`, `.card`, `.card-title`, `.metric-grid`, `.card-grid` CSS classes
+  - Loading placeholder shown while fetching, error message on failure
 
 ## 15.0.10 - 2026-04-03
 ### Fixed
