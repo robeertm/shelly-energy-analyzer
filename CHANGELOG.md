@@ -1,8 +1,8 @@
 # Changelog
 
-## 15.0.4 - 2026-04-03
+## 15.0.5 - 2026-04-03
 ### Fixed
-- **Web dashboard: new tabs empty** – The 6 new API endpoints (`/api/smart_schedule`, `/api/ev_sessions`, `/api/tariff_compare`, `/api/battery`, `/api/advisor`, `/api/goals`) called `on_action()` but the action dispatcher in `liveweb.py` had no handlers for them. Added all 6 action handlers that call the corresponding service modules and return proper JSON data.
+- **Web dashboard: new tabs empty** – Action handlers for the 6 new features were inserted *after* the `raise ValueError("Unknown action")` line in `_web_action_dispatch`, so they were never reached. Moved all handlers *before* the raise. Removed duplicate handlers that were accidentally placed inside `_web_plots_data`.
 
 ## 15.0.3 - 2026-04-03
 ### Fixed
