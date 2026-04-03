@@ -5005,10 +5005,10 @@ function initExport() {{
    BOOT
 ────────────────────────────────────────────── */
 _loadLsSettings();
-(function() {{
+
   /* ── Smart Schedule ── */
   function loadSmartSched() {{
-    fetch('/api/smart_schedule' + qs()).then(r=>r.json()).then(d=>{{
+    fetch('/api/smart_schedule').then(r=>r.json()).then(d=>{{
       if(!d.ok) return;
       const r = d.data;
       const cards = document.getElementById('ss-cards');
@@ -5027,7 +5027,7 @@ _loadLsSettings();
 
   /* ── EV Log ── */
   function loadEvLog() {{
-    fetch('/api/ev_sessions' + qs()).then(r=>r.json()).then(d=>{{
+    fetch('/api/ev_sessions').then(r=>r.json()).then(d=>{{
       if(!d.ok) return;
       const s = d.data;
       const cards = document.getElementById('ev-cards');
@@ -5058,7 +5058,7 @@ _loadLsSettings();
 
   /* ── Tariff Comparison ── */
   function loadTariff() {{
-    fetch('/api/tariff_compare' + qs()).then(r=>r.json()).then(d=>{{
+    fetch('/api/tariff_compare').then(r=>r.json()).then(d=>{{
       if(!d.ok) return;
       const results = d.data.results || [];
       let tbl = '<table style="width:100%;border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border)">';
@@ -5083,7 +5083,7 @@ _loadLsSettings();
 
   /* ── Battery ── */
   function loadBattery() {{
-    fetch('/api/battery' + qs()).then(r=>r.json()).then(d=>{{
+    fetch('/api/battery').then(r=>r.json()).then(d=>{{
       if(!d.ok) return;
       const s = d.data;
       const cards = document.getElementById('bat-cards');
@@ -5098,7 +5098,7 @@ _loadLsSettings();
 
   /* ── AI Advisor ── */
   function loadAdvisor() {{
-    fetch('/api/advisor' + qs()).then(r=>r.json()).then(d=>{{
+    fetch('/api/advisor').then(r=>r.json()).then(d=>{{
       if(!d.ok) return;
       const data = d.data;
       document.getElementById('advisor-savings').textContent = '💰 ' + data.total_savings_potential_eur.toFixed(0) + ' €/Jahr Einsparpotenzial';
@@ -5118,7 +5118,7 @@ _loadLsSettings();
 
   /* ── Goals & Gamification ── */
   function loadGoals() {{
-    fetch('/api/goals' + qs()).then(r=>r.json()).then(d=>{{
+    fetch('/api/goals').then(r=>r.json()).then(d=>{{
       if(!d.ok) return;
       const data = d.data;
       const s = data.streak||{{}};
@@ -5144,7 +5144,7 @@ _loadLsSettings();
 
   /* ── Language selector ── */
   function setLanguage(lang) {{
-    fetch('/api/run' + qs(), {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{action:'set_language',params:{{language:lang}}}})}}
+    fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{action:'set_language',params:{{language:lang}}}})}}
     ).then(()=>window.location.reload()).catch(()=>{{}});
   }}
 
@@ -5157,7 +5157,7 @@ _loadLsSettings();
   }} else {{
     startLive();
   }}
-}})();
+
 </script>
 </body>
 </html>
