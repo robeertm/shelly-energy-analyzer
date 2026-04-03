@@ -1,5 +1,11 @@
 # Changelog
 
+## 15.0.16 - 2026-04-03
+### Fixed
+- **Desktop tariff comparison: table rows invisible in dark mode** – Treeview had no explicit foreground/background colors, so rows were invisible (dark text on dark background). Added theme-aware styling (`Tariff.Treeview`) using `_get_theme_colors()`. Changed table layout from `fill=both, expand=True` to `fill=x` so chart doesn't squeeze the table.
+### Added
+- **Tariff comparison: consumption summary line** – Shows data period (days), total consumption (kWh), and annualized estimate above the tariff table, so users understand the calculation basis.
+
 ## 15.0.15 - 2026-04-03
 ### Fixed
 - **Web dashboard: new panes outside #panes container (root cause)** – An extra `</div>` after the export pane closed the `#panes` container prematurely. The 6 new panes ended up as children of `#app` instead of `#panes`, placing them below the scroll area. Removed the stray `</div>`. Verified via Playwright that `pane-battery.parentElement.id` is now `panes` (was `app`).
