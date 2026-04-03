@@ -36,18 +36,10 @@ class TariffMixin:
         cols = ("name", "provider", "type", "annual", "monthly", "effective", "savings")
         self._tariff_tree = ttk.Treeview(inner, columns=cols, show="headings", height=10)
 
-        # Theme-aware Treeview colors so rows are visible in dark mode
+        # Theme-aware row colors via tag (ttk.Style is ignored by macOS Aqua)
         tc = self._get_theme_colors()
-        style = ttk.Style()
-        style.configure("Tariff.Treeview",
-                         background=tc["bg"], foreground=tc["fg"],
-                         fieldbackground=tc["bg"], rowheight=26)
-        style.configure("Tariff.Treeview.Heading",
-                         background=tc["bg"], foreground=tc["fg"])
-        style.map("Tariff.Treeview",
-                   background=[("selected", tc["blue"])],
-                   foreground=[("selected", "#FFFFFF")])
-        self._tariff_tree.configure(style="Tariff.Treeview")
+        self._tariff_tree.tag_configure("row", background=tc["bg"], foreground=tc["fg"])
+        self._tariff_tree.tag_configure("current", background="#3e2c00", foreground="#ff9800")
 
         for col, hdr, w in [
             ("name", self.t("tariff.col_name"), 160),
@@ -81,28 +73,37 @@ class TariffMixin:
                 )
                 stats = _get_consumption_stats(self.storage.db, self.cfg)
                 def _update():
-                    # Show consumption summary
-                    if stats and hasattr(self, '_tariff_stats_var'):
-                        self._tariff_stats_var.set(
-                            f"{self.t('tariff.period')}: {stats['days']} {self.t('tariff.days')}  |  "
-                            f"{self.t('tariff.consumption')}: {stats['total_kwh']:.0f} kWh  |  "
-                            f"{self.t('tariff.annual_est')}: {stats['annual_kwh']:.0f} kWh/{self.t('tariff.year')}"
-                        )
-                    self._tariff_tree.delete(*self._tariff_tree.get_children())
-                    for r in results:
-                        savings_text = f"{'\U0001f7e2 ' if r.savings_vs_current_eur > 0 else '\U0001f534 '}{r.savings_vs_current_eur:+.0f} \u20ac"
-                        if r.is_current:
-                            savings_text = "\u2014"
-                        self._tariff_tree.insert("", "end", values=(
-                            ("\u2192 " if r.is_current else "") + r.name,
-                            r.provider,
-                            r.tariff_type.upper(),
-                            f"{r.annual_cost_eur:.0f} \u20ac",
-                            f"{r.monthly_avg_eur:.0f} \u20ac",
-                            f"{r.effective_price_ct:.1f}",
-                            savings_text,
-                        ))
-                    self._tariff_draw_chart(results)
+                    try:
+                        # Show consumption summary
+                        if stats and hasattr(self, '_tariff_stats_var'):
+                            self._tariff_stats_var.set(
+                                f"{self.t('tariff.period')}: {stats['days']:.1f} {self.t('tariff.days')}  |  "
+                                f"{self.t('tariff.consumption')}: {stats['total_kwh']:.0f} kWh  |  "
+                                f"{self.t('tariff.annual_est')}: {stats['annual_kwh']:.0f} kWh/{self.t('tariff.year')}"
+                            )
+                        self._tariff_tree.delete(*self._tariff_tree.get_children())
+                        _log.info("Tariff: inserting %d rows", len(results))
+                        for r in results:
+                            if r.is_current:
+                                savings_text = "\u2014"
+                            elif r.savings_vs_current_eur > 0:
+                                savings_text = f"\u25bc {r.savings_vs_current_eur:+.0f} \u20ac"
+                            else:
+                                savings_text = f"\u25b2 {r.savings_vs_current_eur:+.0f} \u20ac"
+                            tag = "current" if r.is_current else "row"
+                            self._tariff_tree.insert("", "end", values=(
+                                ("\u2192 " if r.is_current else "") + r.name,
+                                r.provider,
+                                r.tariff_type.upper(),
+                                f"{r.annual_cost_eur:.0f} \u20ac",
+                                f"{r.monthly_avg_eur:.0f} \u20ac",
+                                f"{r.effective_price_ct:.1f}",
+                                savings_text,
+                            ), tags=(tag,))
+                        _log.info("Tariff: tree now has %d children", len(self._tariff_tree.get_children()))
+                        self._tariff_draw_chart(results)
+                    except Exception as exc:
+                        _log.error("Tariff _update error: %s", exc, exc_info=True)
                 self.after(0, _update)
             except Exception as e:
                 _log.error("Tariff comparison: %s", e)
