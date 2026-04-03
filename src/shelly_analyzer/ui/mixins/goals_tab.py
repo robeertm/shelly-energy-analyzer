@@ -19,8 +19,9 @@ class GoalsMixin:
         scrollbar = ttk.Scrollbar(frm, orient="vertical", command=canvas.yview)
         self._goals_inner = ttk.Frame(canvas)
         self._goals_inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=self._goals_inner, anchor="nw")
+        _win_id = canvas.create_window((0, 0), window=self._goals_inner, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(_win_id, width=e.width))
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
 
