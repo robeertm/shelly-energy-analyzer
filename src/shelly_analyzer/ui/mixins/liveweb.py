@@ -792,6 +792,37 @@ class LiveWebMixin:
                         except Exception:
                             pass
 
+                    # CO2 intensity data
+                    _co2_enabled = False
+                    _co2_current = None
+                    _co2_chart_mini = []
+                    _co2_green_thr = 150.0
+                    _co2_dirty_thr = 400.0
+                    try:
+                        _co2_cfg_w = getattr(self.cfg, "co2", None)
+                        if _co2_cfg_w and getattr(_co2_cfg_w, "enabled", False):
+                            _co2_enabled = True
+                            _co2_zone_w = str(getattr(_co2_cfg_w, "bidding_zone", "DE_LU") or "DE_LU")
+                            _co2_green_thr = float(getattr(_co2_cfg_w, "green_threshold_g_per_kwh", 150.0))
+                            _co2_dirty_thr = float(getattr(_co2_cfg_w, "dirty_threshold_g_per_kwh", 400.0))
+                            import time as _time_co2
+                            _now_ts_co2 = int(_time_co2.time())
+                            _cur_h_co2 = (_now_ts_co2 // 3600) * 3600
+                            # Current intensity
+                            _df_co2_cur = self.storage.db.query_co2_intensity(_co2_zone_w, _cur_h_co2, _cur_h_co2 + 3600)
+                            if _df_co2_cur is not None and not _df_co2_cur.empty:
+                                _co2_current = round(float(_df_co2_cur["intensity_g_per_kwh"].mean()), 0)
+                            # 24h chart: last 12h + next 12h
+                            _co2_chart_s = int((_now - _td(hours=12)).timestamp())
+                            _co2_chart_e = int((_now + _td(hours=12)).timestamp())
+                            _df_co2_ch = self.storage.db.query_co2_intensity(_co2_zone_w, _co2_chart_s, _co2_chart_e)
+                            if _df_co2_ch is not None and not _df_co2_ch.empty:
+                                _df_co2_ch = _df_co2_ch.sort_values("hour_ts")
+                                for _, _r_co2 in _df_co2_ch.iterrows():
+                                    _co2_chart_mini.append([int(_r_co2["hour_ts"]), round(float(_r_co2["intensity_g_per_kwh"]), 0)])
+                    except Exception:
+                        pass
+
                     return {
                         "ok": True,
                         "ts": int(_now.timestamp()),
@@ -808,6 +839,11 @@ class LiveWebMixin:
                         "spot_today_eur": _spot_today_eur,
                         "spot_chart": _spot_chart_mini,
                         "devices": _per_device,
+                        "co2_enabled": _co2_enabled,
+                        "co2_current": _co2_current,
+                        "co2_chart": _co2_chart_mini,
+                        "co2_green_thr": _co2_green_thr,
+                        "co2_dirty_thr": _co2_dirty_thr,
                     }
                 except Exception as e:
                     return {"ok": False, "error": str(e)}
