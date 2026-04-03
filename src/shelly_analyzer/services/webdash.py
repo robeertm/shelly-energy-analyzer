@@ -558,19 +558,18 @@ function buildMedium(d) {
   w.addSpacer(3);
 
   // Charts – full width, fixed height
+  const mCW = 290;
   if (d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) {
-    const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, 400, 40);
+    const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, mCW, 40);
     const img = w.addImage(chartImg);
-    img.applyFittingContentMode();
-    img.imageSize = new Size(0, 40);
+    img.imageSize = new Size(mCW, 40);
   }
 
   if (d.co2_enabled && d.co2_chart && d.co2_chart.length > 2) {
     w.addSpacer(1);
-    const co2Img = drawCo2Chart(d.co2_chart, d.co2_green_thr, d.co2_dirty_thr, 400, 40);
+    const co2Img = drawCo2Chart(d.co2_chart, d.co2_green_thr, d.co2_dirty_thr, mCW, 40);
     const img2 = w.addImage(co2Img);
-    img2.applyFittingContentMode();
-    img2.imageSize = new Size(0, 40);
+    img2.imageSize = new Size(mCW, 40);
   }
 
   return w;
@@ -625,11 +624,11 @@ function buildLarge(d) {
   }
 
   // Spot chart – full width, fixed height
+  const lCW = 330;
   if (d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) {
-    const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, 400, 70);
+    const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, lCW, 70);
     const img = w.addImage(chartImg);
-    img.applyFittingContentMode();
-    img.imageSize = new Size(0, 70);
+    img.imageSize = new Size(lCW, 70);
     w.addSpacer(4);
   }
 
@@ -646,10 +645,9 @@ function buildLarge(d) {
 
   // CO2 chart – full width, fixed height
   if (d.co2_enabled && d.co2_chart && d.co2_chart.length > 2) {
-    const co2Img = drawCo2Chart(d.co2_chart, d.co2_green_thr, d.co2_dirty_thr, 400, 55);
+    const co2Img = drawCo2Chart(d.co2_chart, d.co2_green_thr, d.co2_dirty_thr, lCW, 55);
     const co2ImgW = w.addImage(co2Img);
-    co2ImgW.applyFittingContentMode();
-    co2ImgW.imageSize = new Size(0, 55);
+    co2ImgW.imageSize = new Size(lCW, 55);
     w.addSpacer(4);
   }
 
