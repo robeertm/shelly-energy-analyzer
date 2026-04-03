@@ -707,10 +707,10 @@ class PlotsMixin:
                 return False
 
     def _resolve_plot_theme(self) -> str:
-            """Return 'day' or 'night' based on global config (plot_theme_mode).
+            """Return 'day' or 'night' based on global config (plot_theme_mode + ui.theme).
 
             Supports: auto (system dark-mode detection with time-of-day fallback),
-            day, night.
+            day, night.  Also respects ui.theme setting (light/dark/auto).
             """
             try:
                 pref = str(getattr(self.cfg.ui, "plot_theme_mode", "auto") or "auto").strip().lower()
@@ -719,7 +719,16 @@ class PlotsMixin:
             if pref not in ("auto", "day", "night"):
                 pref = "auto"
 
+            # If ui.theme explicitly set to dark/light, override auto detection
             if pref == "auto":
+                try:
+                    ui_theme = str(getattr(self.cfg.ui, "theme", "auto") or "auto").strip().lower()
+                    if ui_theme == "dark":
+                        return "night"
+                    elif ui_theme == "light":
+                        return "day"
+                except Exception:
+                    pass
                 try:
                     return "night" if self._system_is_dark() else "day"
                 except Exception:
