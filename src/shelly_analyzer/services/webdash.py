@@ -5002,131 +5002,160 @@ function initExport() {{
 _loadLsSettings();
 
   /* ── Smart Schedule ── */
-  function loadSmartSched() {{
-    fetch('/api/smart_schedule').then(r=>r.json()).then(d=>{{
-      if(!d.ok) return;
-      const r = d.data;
-      const cards = document.getElementById('ss-cards');
-      const result = document.getElementById('ss-result');
-      if(r.recommendation) {{
-        const rec = r.recommendation;
+  async function loadSmartSched() {{
+    const el = document.getElementById('ss-result');
+    el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    try {{
+      const r = await fetch('/api/smart_schedule');
+      const d = await r.json();
+      if(!d.ok) {{ el.innerHTML = '<p class="error-msg">Fehler</p>'; return; }}
+      const rec = d.data.recommendation;
+      if(rec) {{
         const start = new Date(rec.start_ts*1000).toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}});
         const end = new Date(rec.end_ts*1000).toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}});
-        result.innerHTML = '<div style="font-size:16px;font-weight:700">⏱ ' + start + ' – ' + end + '</div>' +
-          '<div style="margin-top:8px;color:var(--muted)">Ø ' + rec.avg_price_ct.toFixed(1) + ' ct/kWh · Ersparnis: ' + rec.savings_vs_avg_ct.toFixed(1) + ' ct/kWh</div>';
+        el.innerHTML = '<div class="card"><div class="card-title">⏱ Günstigster Block</div><div class="metric-grid">' +
+          metricCardHtml('Zeitfenster', start + ' – ' + end) +
+          metricCardHtml('Ø Preis', rec.avg_price_ct.toFixed(1) + ' ct/kWh') +
+          metricCardHtml('Ersparnis', rec.savings_vs_avg_ct.toFixed(1) + ' ct/kWh') +
+          metricCardHtml('Dauer', rec.block_hours + ' h') +
+          '</div></div>';
       }} else {{
-        result.innerHTML = '<div style="color:var(--muted)">Keine Spot-Preisdaten verfügbar.</div>';
+        el.innerHTML = '<div class="card" style="padding:14px;color:var(--muted)">Keine Spot-Preisdaten verfügbar.</div>';
       }}
-    }}).catch(()=>{{}});
+    }} catch(e) {{ el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>'; }}
   }}
 
   /* ── EV Log ── */
-  function loadEvLog() {{
-    fetch('/api/ev_sessions').then(r=>r.json()).then(d=>{{
+  async function loadEvLog() {{
+    const el = document.getElementById('ev-cards');
+    const tbl = document.getElementById('ev-table');
+    el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    tbl.innerHTML = '';
+    try {{
+      const r = await fetch('/api/ev_sessions');
+      const d = await r.json();
       if(!d.ok) return;
       const s = d.data;
-      const cards = document.getElementById('ev-cards');
-      cards.innerHTML = '<div class="card" style="padding:12px;text-align:center"><div style="font-size:18px;font-weight:700">' + s.total_sessions + '</div><div style="font-size:11px;color:var(--muted)">Ladevorgänge</div></div>' +
-        '<div class="card" style="padding:12px;text-align:center"><div style="font-size:18px;font-weight:700">' + (s.total_kwh||0).toFixed(1) + ' kWh</div><div style="font-size:11px;color:var(--muted)">Gesamt</div></div>' +
-        '<div class="card" style="padding:12px;text-align:center"><div style="font-size:18px;font-weight:700">' + (s.total_cost||0).toFixed(2) + ' €</div><div style="font-size:11px;color:var(--muted)">Kosten</div></div>';
-      if(!s.sessions||!s.sessions.length) {{ document.getElementById('ev-table').innerHTML='<div class="card" style="padding:14px;color:var(--muted);text-align:center">Keine Ladevorgänge erkannt. Wallbox-Gerät in den Einstellungen konfigurieren.</div>'; return; }}
-      let tbl = '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:1px solid var(--border)">';
-      ['Datum','Zeit','Dauer','kWh','Kosten'].forEach(h=>tbl+='<th style="padding:6px;text-align:center;color:var(--muted)">'+h+'</th>');
-      tbl += '</tr></thead><tbody>';
+      el.innerHTML = '<div class="card"><div class="card-title">🚗 Ladeübersicht</div><div class="metric-grid">' +
+        metricCardHtml('Ladevorgänge', s.total_sessions) +
+        metricCardHtml('Gesamt', (s.total_kwh||0).toFixed(1) + ' kWh') +
+        metricCardHtml('Kosten', (s.total_cost||0).toFixed(2) + ' €') +
+        metricCardHtml('Ø Dauer', (s.avg_duration_min||0).toFixed(0) + ' min') +
+        '</div></div>';
+      if(!s.sessions||!s.sessions.length) {{ tbl.innerHTML='<div class="card" style="padding:14px;color:var(--muted)">Keine Ladevorgänge erkannt.</div>'; return; }}
+      let h = '<div class="card" style="padding:10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:1px solid var(--border)">';
+      ['Datum','Zeit','Dauer','kWh','€'].forEach(c=>h+='<th style="padding:5px;color:var(--muted)">'+c+'</th>');
+      h += '</tr></thead><tbody>';
       (s.sessions||[]).slice(-20).reverse().forEach(se=>{{
         const sd = new Date(se.start_ts*1000);
-        const dur = Math.round((se.end_ts-se.start_ts)/60);
-        tbl += '<tr style="border-bottom:1px solid var(--border)">';
-        tbl += '<td style="padding:5px;text-align:center">' + sd.toLocaleDateString([],{{day:'2-digit',month:'2-digit'}}) + '</td>';
-        tbl += '<td style="padding:5px;text-align:center">' + sd.toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}}) + '</td>';
-        tbl += '<td style="padding:5px;text-align:center">' + dur + 'm</td>';
-        tbl += '<td style="padding:5px;text-align:center">' + se.energy_kwh.toFixed(1) + '</td>';
-        tbl += '<td style="padding:5px;text-align:center">' + se.cost_eur.toFixed(2) + '€</td>';
-        tbl += '</tr>';
+        h += '<tr style="border-bottom:1px solid var(--border)">' +
+          '<td style="padding:4px;text-align:center">' + sd.toLocaleDateString([],{{day:'2-digit',month:'2-digit'}}) + '</td>' +
+          '<td style="padding:4px;text-align:center">' + sd.toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}}) + '</td>' +
+          '<td style="padding:4px;text-align:center">' + Math.round((se.end_ts-se.start_ts)/60) + 'm</td>' +
+          '<td style="padding:4px;text-align:center">' + se.energy_kwh.toFixed(1) + '</td>' +
+          '<td style="padding:4px;text-align:center">' + se.cost_eur.toFixed(2) + '</td></tr>';
       }});
-      tbl += '</tbody></table>';
-      document.getElementById('ev-table').innerHTML = tbl;
-    }}).catch(()=>{{}});
+      h += '</tbody></table></div>';
+      tbl.innerHTML = h;
+    }} catch(e) {{ el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>'; }}
   }}
 
   /* ── Tariff Comparison ── */
-  function loadTariff() {{
-    fetch('/api/tariff_compare').then(r=>r.json()).then(d=>{{
+  async function loadTariff() {{
+    const el = document.getElementById('tariff-table');
+    el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    try {{
+      const r = await fetch('/api/tariff_compare');
+      const d = await r.json();
       if(!d.ok) return;
       const results = d.data.results || [];
-      if(!results.length) {{ document.getElementById('tariff-table').innerHTML='<div class="card" style="padding:14px;color:var(--muted)">Keine Verbrauchsdaten für Tarifvergleich vorhanden.</div>'; return; }}
+      if(!results.length) {{ el.innerHTML = '<div class="card" style="padding:14px;color:var(--muted)">Keine Daten.</div>'; return; }}
       let html = '';
       results.forEach(r=>{{
         const border = r.is_current ? '2px solid #ff9800' : '1px solid var(--border)';
-        const sav = r.is_current ? '' : (r.savings_vs_current_eur>0 ? '<span style="color:#4caf50;font-weight:600">▼ '+r.savings_vs_current_eur.toFixed(0)+' €/Jahr</span>' : '<span style="color:#e53935">▲ '+Math.abs(r.savings_vs_current_eur).toFixed(0)+' €/Jahr</span>');
-        const badge = r.is_current ? '<span style="background:#ff9800;color:#fff;font-size:10px;padding:2px 6px;border-radius:8px;margin-left:6px">Aktuell</span>' : '';
-        html += '<div class="card" style="padding:12px;margin-bottom:8px;border:'+border+'">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">';
-        html += '<div><span style="font-weight:600;font-size:14px">'+r.name+'</span>'+badge+'<br><span style="font-size:11px;color:var(--muted)">'+r.provider+' · '+r.tariff_type.toUpperCase()+'</span></div>';
-        html += '<div style="text-align:right"><div style="font-size:18px;font-weight:700">'+r.annual_cost_eur.toFixed(0)+' €<span style="font-size:11px;font-weight:400;color:var(--muted)">/Jahr</span></div>'+sav+'</div>';
-        html += '</div></div>';
+        const sav = r.is_current ? '' : (r.savings_vs_current_eur>0 ? '<span style="color:#4caf50;font-weight:600">▼ '+r.savings_vs_current_eur.toFixed(0)+' €/J</span>' : '<span style="color:#e53935">▲ '+Math.abs(r.savings_vs_current_eur).toFixed(0)+' €/J</span>');
+        const badge = r.is_current ? ' <span style="background:#ff9800;color:#fff;font-size:10px;padding:2px 6px;border-radius:8px">Aktuell</span>' : '';
+        html += '<div class="card" style="padding:12px;border:'+border+'"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">' +
+          '<div><b style="font-size:14px">'+r.name+'</b>'+badge+'<br><span style="font-size:11px;color:var(--muted)">'+r.provider+' · '+r.tariff_type.toUpperCase()+'</span></div>' +
+          '<div style="text-align:right"><div style="font-size:17px;font-weight:700">'+r.annual_cost_eur.toFixed(0)+' €<span style="font-size:11px;font-weight:400;color:var(--muted)">/J</span></div>'+sav+'</div>' +
+          '</div></div>';
       }});
-      document.getElementById('tariff-table').innerHTML = html;
-    }}).catch(()=>{{}});
+      el.innerHTML = html;
+    }} catch(e) {{ el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>'; }}
   }}
 
   /* ── Battery ── */
-  function loadBattery() {{
-    fetch('/api/battery').then(r=>r.json()).then(d=>{{
+  async function loadBattery() {{
+    const el = document.getElementById('bat-cards');
+    el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    try {{
+      const r = await fetch('/api/battery');
+      const d = await r.json();
       if(!d.ok) return;
       const s = d.data;
-      const cards = document.getElementById('bat-cards');
-      const mc = {{charging:'#4caf50',discharging:'#ff9800',idle:'var(--muted)'}};
       const ml = {{charging:'Laden',discharging:'Entladen',idle:'Standby'}};
-      function mc2(v,l,u,c){{ return '<div class="card" style="padding:12px;text-align:center"><div style="font-size:18px;font-weight:700;color:'+(c||'var(--fg)')+'">'+v+'</div><div style="font-size:11px;color:var(--muted)">'+l+'</div></div>'; }}
-      cards.innerHTML = mc2(s.soc_pct.toFixed(0)+'%','SOC') + mc2(s.power_w.toFixed(0)+' W','Leistung') + mc2(ml[s.mode]||s.mode,'Modus',null,mc[s.mode]) + mc2(s.cycle_count,'Zyklen') + mc2(s.avg_efficiency_pct.toFixed(1)+'%','Effizienz');
-    }}).catch(()=>{{}});
+      el.innerHTML = '<div class="card"><div class="card-title">🔋 Batterie</div><div class="metric-grid">' +
+        metricCardHtml('SOC', s.soc_pct.toFixed(0) + '%') +
+        metricCardHtml('Leistung', s.power_w.toFixed(0) + ' W') +
+        metricCardHtml('Modus', ml[s.mode]||s.mode) +
+        metricCardHtml('Zyklen', s.cycle_count) +
+        metricCardHtml('Effizienz', s.avg_efficiency_pct.toFixed(1) + '%') +
+        '</div></div>';
+    }} catch(e) {{ el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>'; }}
   }}
 
   /* ── AI Advisor ── */
-  function loadAdvisor() {{
-    fetch('/api/advisor').then(r=>r.json()).then(d=>{{
+  async function loadAdvisor() {{
+    const el = document.getElementById('advisor-savings');
+    el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    try {{
+      const r = await fetch('/api/advisor');
+      const d = await r.json();
       if(!d.ok) return;
       const data = d.data;
-      document.getElementById('advisor-savings').textContent = '💰 ' + data.total_savings_potential_eur.toFixed(0) + ' €/Jahr Einsparpotenzial';
+      el.innerHTML = '💰 ' + data.total_savings_potential_eur.toFixed(0) + ' €/Jahr Einsparpotenzial';
       if(data.llm_summary) {{
-        const el = document.getElementById('advisor-llm');
-        el.style.display = 'block';
-        el.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">🤖 KI-Zusammenfassung</div>' + data.llm_summary;
+        const lel = document.getElementById('advisor-llm');
+        lel.style.display = 'block';
+        lel.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:4px">🤖 KI-Zusammenfassung</div>' + data.llm_summary;
       }}
       let html = '';
       (data.tips||[]).forEach(tip=>{{
-        const sav = tip.potential_savings_eur > 0 ? '<div style="color:#4caf50;font-size:12px;margin-top:4px">💰 '+tip.potential_savings_eur.toFixed(0)+' €/Jahr</div>' : '';
-        html += '<div class="card" style="padding:14px;margin-bottom:8px"><div style="font-weight:600">'+tip.icon+' '+tip.title+'</div><div style="color:var(--muted);font-size:13px;margin-top:4px">'+tip.description+'</div>'+sav+'</div>';
+        const sav = tip.potential_savings_eur > 0 ? '<div style="color:#4caf50;font-size:12px;margin-top:4px">💰 '+tip.potential_savings_eur.toFixed(0)+' €/J</div>' : '';
+        html += '<div class="card" style="padding:12px"><b>'+tip.icon+' '+tip.title+'</b><div style="color:var(--muted);font-size:12px;margin-top:4px">'+tip.description+'</div>'+sav+'</div>';
       }});
       document.getElementById('advisor-tips').innerHTML = html;
-    }}).catch(()=>{{}});
+    }} catch(e) {{ el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>'; }}
   }}
 
   /* ── Goals & Gamification ── */
-  function loadGoals() {{
-    fetch('/api/goals').then(r=>r.json()).then(d=>{{
+  async function loadGoals() {{
+    const el = document.getElementById('goals-streak');
+    el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    try {{
+      const r = await fetch('/api/goals');
+      const d = await r.json();
       if(!d.ok) return;
       const data = d.data;
       const s = data.streak||{{}};
       const fire = '🔥'.repeat(Math.min(s.current_days||0, 5));
-      document.getElementById('goals-streak').innerHTML = fire + ' <b>' + (s.current_days||0) + '</b> Tage unter dem Durchschnitt';
+      el.innerHTML = fire + ' <b>' + (s.current_days||0) + '</b> Tage unter dem Durchschnitt';
 
       const wg = data.weekly_goal||{{}};
       const mg = data.monthly_goal||{{}};
-      const prog = document.getElementById('goals-progress');
-      function bar(pct) {{ return '<div style="height:6px;background:var(--border);border-radius:3px;margin-top:6px"><div style="height:100%;width:'+Math.min(pct,100)+'%;background:'+(pct<=100?'#4caf50':'#e53935')+';border-radius:3px"></div></div>'; }}
-      prog.innerHTML = '<div class="card" style="padding:16px"><div style="font-weight:600">📅 Wochenziel</div><div style="margin-top:6px">'+wg.actual_kwh.toFixed(1)+' / '+wg.target_kwh.toFixed(1)+' kWh</div>'+bar(wg.progress_pct)+'</div>' +
-        '<div class="card" style="padding:16px"><div style="font-weight:600">📆 Monatsziel</div><div style="margin-top:6px">'+mg.actual_kwh.toFixed(1)+' / '+mg.target_kwh.toFixed(1)+' kWh</div>'+bar(mg.progress_pct)+'</div>';
+      function bar(pct) {{ return '<div style="height:6px;background:var(--border);border-radius:3px;margin-top:4px"><div style="height:100%;width:'+Math.min(pct,100)+'%;background:'+(pct<=100?'#4caf50':'#e53935')+';border-radius:3px"></div></div>'; }}
+      document.getElementById('goals-progress').innerHTML =
+        '<div class="card" style="padding:12px"><b>📅 Woche</b><div style="margin-top:4px">'+wg.actual_kwh.toFixed(1)+' / '+wg.target_kwh.toFixed(1)+' kWh</div>'+bar(wg.progress_pct)+'</div>' +
+        '<div class="card" style="padding:12px"><b>📆 Monat</b><div style="margin-top:4px">'+mg.actual_kwh.toFixed(1)+' / '+mg.target_kwh.toFixed(1)+' kWh</div>'+bar(mg.progress_pct)+'</div>';
 
       let bhtml = '';
       (data.badges||[]).forEach(b=>{{
         const opacity = b.unlocked ? '1' : '0.4';
         const lock = b.unlocked ? '' : '🔒 ';
-        bhtml += '<div style="text-align:center;opacity:'+opacity+';padding:8px"><div style="font-size:24px">'+b.icon+'</div><div style="font-size:10px;margin-top:2px;line-height:1.2">'+lock+b.name+'</div>'+bar(b.progress_pct)+'</div>';
+        bhtml += '<div style="text-align:center;opacity:'+opacity+';padding:6px"><div style="font-size:22px">'+b.icon+'</div><div style="font-size:9px;margin-top:2px;line-height:1.2">'+lock+b.name+'</div>'+bar(b.progress_pct)+'</div>';
       }});
       document.getElementById('goals-badges').innerHTML = bhtml;
-    }}).catch(()=>{{}});
+    }} catch(e) {{ el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>'; }}
   }}
 
   /* ── Language selector ── */
