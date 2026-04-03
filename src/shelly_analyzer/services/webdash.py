@@ -1610,32 +1610,36 @@ _HTML_TEMPLATE = """<!doctype html>
   </div>
 
     <!-- New feature panes -->
-    <div id="pane-smart_sched" class="pane">
-      <div class="metric-grid" id="ss-cards"></div>
-      <div id="ss-result" class="card" style="margin:12px;padding:16px"></div>
-      <div id="ss-chart" style="margin:12px"></div>
+    <div id="pane-smart_sched" class="pane" style="padding:12px">
+      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">⏱ {smart_sched_title}</h2>
+      <div id="ss-result" class="card" style="padding:14px"></div>
+      <div id="ss-chart" style="margin-top:10px"></div>
     </div>
-    <div id="pane-ev_log" class="pane">
+    <div id="pane-ev_log" class="pane" style="padding:12px">
+      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">🚗 {ev_log_title}</h2>
       <div class="metric-grid" id="ev-cards"></div>
-      <div id="ev-table" style="margin:12px;overflow-x:auto"></div>
+      <div id="ev-table" style="margin-top:10px;overflow-x:auto;-webkit-overflow-scrolling:touch"></div>
     </div>
-    <div id="pane-tariff" class="pane">
-      <div id="tariff-table" style="margin:12px;overflow-x:auto"></div>
-      <div id="tariff-chart" style="margin:12px"></div>
+    <div id="pane-tariff" class="pane" style="padding:12px">
+      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">💱 {tariff_title}</h2>
+      <div id="tariff-table" style="overflow-x:auto;-webkit-overflow-scrolling:touch"></div>
     </div>
-    <div id="pane-battery" class="pane">
+    <div id="pane-battery" class="pane" style="padding:12px">
+      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">🔋 {battery_title}</h2>
       <div class="metric-grid" id="bat-cards"></div>
-      <div id="bat-chart" style="margin:12px"></div>
+      <div id="bat-chart" style="margin-top:10px"></div>
     </div>
-    <div id="pane-advisor" class="pane">
-      <div id="advisor-savings" class="card" style="margin:12px;padding:16px;font-size:20px;font-weight:700;color:#4caf50;text-align:center"></div>
-      <div id="advisor-llm" class="card" style="margin:12px;padding:16px;display:none"></div>
-      <div id="advisor-tips" style="margin:12px"></div>
+    <div id="pane-advisor" class="pane" style="padding:12px">
+      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">🤖 {advisor_title}</h2>
+      <div id="advisor-savings" class="card" style="padding:14px;font-size:18px;font-weight:700;color:#4caf50;text-align:center"></div>
+      <div id="advisor-llm" class="card" style="padding:14px;margin-top:8px;display:none"></div>
+      <div id="advisor-tips" style="margin-top:10px"></div>
     </div>
-    <div id="pane-goals" class="pane">
-      <div id="goals-streak" class="card" style="margin:12px;padding:16px;text-align:center;font-size:20px"></div>
-      <div class="metric-grid" id="goals-progress"></div>
-      <div id="goals-badges" style="margin:12px;display:flex;flex-wrap:wrap;gap:12px;justify-content:center"></div>
+    <div id="pane-goals" class="pane" style="padding:12px">
+      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">🏆 {goals_title}</h2>
+      <div id="goals-streak" class="card" style="padding:14px;text-align:center;font-size:18px"></div>
+      <div class="metric-grid" id="goals-progress" style="margin-top:10px"></div>
+      <div id="goals-badges" style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:10px"></div>
     </div>
 
   <nav id="bottom-nav">
@@ -5027,24 +5031,22 @@ _loadLsSettings();
       if(!d.ok) return;
       const s = d.data;
       const cards = document.getElementById('ev-cards');
-      cards.innerHTML = '<div class="card" style="padding:16px;text-align:center"><div style="font-size:24px;font-weight:700">' + s.total_sessions + '</div><div style="color:var(--muted)">Ladevorgänge</div></div>' +
-        '<div class="card" style="padding:16px;text-align:center"><div style="font-size:24px;font-weight:700">' + s.total_kwh.toFixed(1) + ' kWh</div><div style="color:var(--muted)">Gesamt</div></div>' +
-        '<div class="card" style="padding:16px;text-align:center"><div style="font-size:24px;font-weight:700">' + s.total_cost.toFixed(2) + ' €</div><div style="color:var(--muted)">Kosten</div></div>';
-      let tbl = '<table style="width:100%;border-collapse:collapse"><thead><tr style="border-bottom:1px solid var(--border)">';
-      ['Datum','Start','Ende','Dauer','kWh','Peak W','Kosten'].forEach(h=>tbl+='<th style="padding:8px;text-align:center;color:var(--muted)">'+h+'</th>');
+      cards.innerHTML = '<div class="card" style="padding:12px;text-align:center"><div style="font-size:18px;font-weight:700">' + s.total_sessions + '</div><div style="font-size:11px;color:var(--muted)">Ladevorgänge</div></div>' +
+        '<div class="card" style="padding:12px;text-align:center"><div style="font-size:18px;font-weight:700">' + (s.total_kwh||0).toFixed(1) + ' kWh</div><div style="font-size:11px;color:var(--muted)">Gesamt</div></div>' +
+        '<div class="card" style="padding:12px;text-align:center"><div style="font-size:18px;font-weight:700">' + (s.total_cost||0).toFixed(2) + ' €</div><div style="font-size:11px;color:var(--muted)">Kosten</div></div>';
+      if(!s.sessions||!s.sessions.length) {{ document.getElementById('ev-table').innerHTML='<div class="card" style="padding:14px;color:var(--muted);text-align:center">Keine Ladevorgänge erkannt. Wallbox-Gerät in den Einstellungen konfigurieren.</div>'; return; }}
+      let tbl = '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:1px solid var(--border)">';
+      ['Datum','Zeit','Dauer','kWh','Kosten'].forEach(h=>tbl+='<th style="padding:6px;text-align:center;color:var(--muted)">'+h+'</th>');
       tbl += '</tr></thead><tbody>';
-      (s.sessions||[]).slice(-30).reverse().forEach(se=>{{
+      (s.sessions||[]).slice(-20).reverse().forEach(se=>{{
         const sd = new Date(se.start_ts*1000);
-        const ed = new Date(se.end_ts*1000);
         const dur = Math.round((se.end_ts-se.start_ts)/60);
         tbl += '<tr style="border-bottom:1px solid var(--border)">';
-        tbl += '<td style="padding:6px;text-align:center">' + sd.toLocaleDateString() + '</td>';
-        tbl += '<td style="padding:6px;text-align:center">' + sd.toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}}) + '</td>';
-        tbl += '<td style="padding:6px;text-align:center">' + ed.toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}}) + '</td>';
-        tbl += '<td style="padding:6px;text-align:center">' + dur + ' min</td>';
-        tbl += '<td style="padding:6px;text-align:center">' + se.energy_kwh.toFixed(2) + '</td>';
-        tbl += '<td style="padding:6px;text-align:center">' + se.peak_power_w.toFixed(0) + '</td>';
-        tbl += '<td style="padding:6px;text-align:center">' + se.cost_eur.toFixed(2) + ' €</td>';
+        tbl += '<td style="padding:5px;text-align:center">' + sd.toLocaleDateString([],{{day:'2-digit',month:'2-digit'}}) + '</td>';
+        tbl += '<td style="padding:5px;text-align:center">' + sd.toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}}) + '</td>';
+        tbl += '<td style="padding:5px;text-align:center">' + dur + 'm</td>';
+        tbl += '<td style="padding:5px;text-align:center">' + se.energy_kwh.toFixed(1) + '</td>';
+        tbl += '<td style="padding:5px;text-align:center">' + se.cost_eur.toFixed(2) + '€</td>';
         tbl += '</tr>';
       }});
       tbl += '</tbody></table>';
@@ -5057,23 +5059,19 @@ _loadLsSettings();
     fetch('/api/tariff_compare').then(r=>r.json()).then(d=>{{
       if(!d.ok) return;
       const results = d.data.results || [];
-      let tbl = '<table style="width:100%;border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border)">';
-      ['Tarif','Anbieter','Typ','€/Jahr','€/Monat','ct/kWh','Ersparnis'].forEach(h=>tbl+='<th style="padding:8px;text-align:center;color:var(--muted)">'+h+'</th>');
-      tbl += '</tr></thead><tbody>';
+      if(!results.length) {{ document.getElementById('tariff-table').innerHTML='<div class="card" style="padding:14px;color:var(--muted)">Keine Verbrauchsdaten für Tarifvergleich vorhanden.</div>'; return; }}
+      let html = '';
       results.forEach(r=>{{
-        const bg = r.is_current ? 'background:rgba(255,152,0,0.1)' : '';
-        const sav = r.is_current ? '—' : ((r.savings_vs_current_eur>0?'🟢 +':'🔴 ')+r.savings_vs_current_eur.toFixed(0)+' €');
-        tbl += '<tr style="border-bottom:1px solid var(--border);'+bg+'">';
-        tbl += '<td style="padding:8px;font-weight:'+(r.is_current?'700':'400')+'">'+(r.is_current?'→ ':'')+r.name+'</td>';
-        tbl += '<td style="padding:8px;text-align:center">'+r.provider+'</td>';
-        tbl += '<td style="padding:8px;text-align:center">'+r.tariff_type.toUpperCase()+'</td>';
-        tbl += '<td style="padding:8px;text-align:center;font-weight:600">'+r.annual_cost_eur.toFixed(0)+' €</td>';
-        tbl += '<td style="padding:8px;text-align:center">'+r.monthly_avg_eur.toFixed(0)+' €</td>';
-        tbl += '<td style="padding:8px;text-align:center">'+r.effective_price_ct.toFixed(1)+'</td>';
-        tbl += '<td style="padding:8px;text-align:center">'+sav+'</td></tr>';
+        const border = r.is_current ? '2px solid #ff9800' : '1px solid var(--border)';
+        const sav = r.is_current ? '' : (r.savings_vs_current_eur>0 ? '<span style="color:#4caf50;font-weight:600">▼ '+r.savings_vs_current_eur.toFixed(0)+' €/Jahr</span>' : '<span style="color:#e53935">▲ '+Math.abs(r.savings_vs_current_eur).toFixed(0)+' €/Jahr</span>');
+        const badge = r.is_current ? '<span style="background:#ff9800;color:#fff;font-size:10px;padding:2px 6px;border-radius:8px;margin-left:6px">Aktuell</span>' : '';
+        html += '<div class="card" style="padding:12px;margin-bottom:8px;border:'+border+'">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">';
+        html += '<div><span style="font-weight:600;font-size:14px">'+r.name+'</span>'+badge+'<br><span style="font-size:11px;color:var(--muted)">'+r.provider+' · '+r.tariff_type.toUpperCase()+'</span></div>';
+        html += '<div style="text-align:right"><div style="font-size:18px;font-weight:700">'+r.annual_cost_eur.toFixed(0)+' €<span style="font-size:11px;font-weight:400;color:var(--muted)">/Jahr</span></div>'+sav+'</div>';
+        html += '</div></div>';
       }});
-      tbl += '</tbody></table>';
-      document.getElementById('tariff-table').innerHTML = tbl;
+      document.getElementById('tariff-table').innerHTML = html;
     }}).catch(()=>{{}});
   }}
 
@@ -5083,12 +5081,10 @@ _loadLsSettings();
       if(!d.ok) return;
       const s = d.data;
       const cards = document.getElementById('bat-cards');
-      const modeColors = {{charging:'#4caf50',discharging:'#ff9800',idle:'var(--muted)'}};
-      cards.innerHTML = '<div class="card" style="padding:16px;text-align:center"><div style="font-size:28px;font-weight:700">'+s.soc_pct.toFixed(0)+'%</div><div style="color:var(--muted)">SOC</div></div>' +
-        '<div class="card" style="padding:16px;text-align:center"><div style="font-size:24px;font-weight:700">'+s.power_w.toFixed(0)+' W</div><div style="color:var(--muted)">Leistung</div></div>' +
-        '<div class="card" style="padding:16px;text-align:center"><div style="font-size:24px;font-weight:700;color:'+(modeColors[s.mode]||'var(--fg)')+'">'+s.mode+'</div><div style="color:var(--muted)">Modus</div></div>' +
-        '<div class="card" style="padding:16px;text-align:center"><div style="font-size:24px;font-weight:700">'+s.cycle_count+'</div><div style="color:var(--muted)">Zyklen</div></div>' +
-        '<div class="card" style="padding:16px;text-align:center"><div style="font-size:24px;font-weight:700">'+s.avg_efficiency_pct.toFixed(1)+'%</div><div style="color:var(--muted)">Effizienz</div></div>';
+      const mc = {{charging:'#4caf50',discharging:'#ff9800',idle:'var(--muted)'}};
+      const ml = {{charging:'Laden',discharging:'Entladen',idle:'Standby'}};
+      function mc2(v,l,u,c){{ return '<div class="card" style="padding:12px;text-align:center"><div style="font-size:18px;font-weight:700;color:'+(c||'var(--fg)')+'">'+v+'</div><div style="font-size:11px;color:var(--muted)">'+l+'</div></div>'; }}
+      cards.innerHTML = mc2(s.soc_pct.toFixed(0)+'%','SOC') + mc2(s.power_w.toFixed(0)+' W','Leistung') + mc2(ml[s.mode]||s.mode,'Modus',null,mc[s.mode]) + mc2(s.cycle_count,'Zyklen') + mc2(s.avg_efficiency_pct.toFixed(1)+'%','Effizienz');
     }}).catch(()=>{{}});
   }}
 
@@ -5130,9 +5126,9 @@ _loadLsSettings();
 
       let bhtml = '';
       (data.badges||[]).forEach(b=>{{
-        const lock = b.unlocked ? '' : '🔒 ';
         const opacity = b.unlocked ? '1' : '0.4';
-        bhtml += '<div style="text-align:center;opacity:'+opacity+';width:80px"><div style="font-size:28px">'+b.icon+'</div><div style="font-size:10px;margin-top:2px">'+lock+b.name+'</div>'+bar(b.progress_pct)+'</div>';
+        const lock = b.unlocked ? '' : '🔒 ';
+        bhtml += '<div style="text-align:center;opacity:'+opacity+';padding:8px"><div style="font-size:24px">'+b.icon+'</div><div style="font-size:10px;margin-top:2px;line-height:1.2">'+lock+b.name+'</div>'+bar(b.progress_pct)+'</div>';
       }});
       document.getElementById('goals-badges').innerHTML = bhtml;
     }}).catch(()=>{{}});
@@ -7909,6 +7905,13 @@ class LiveWebDashboard:
                 "t_transitions": _t(self.lang, "web.nilm.transitions"),
                 "t_waiting": _t(self.lang, "web.nilm.waiting"),
                 "web_tab_export": _t(self.lang, "web.tab.export"),
+                # New feature pane titles
+                "smart_sched_title": _t(self.lang, "smart_sched.title") if _t(self.lang, "smart_sched.title") != "smart_sched.title" else "Smart-Zeitplanung",
+                "ev_log_title": _t(self.lang, "ev_log.title") if _t(self.lang, "ev_log.title") != "ev_log.title" else "E-Auto Ladeprotokoll",
+                "tariff_title": _t(self.lang, "tariff.title") if _t(self.lang, "tariff.title") != "tariff.title" else "Tarifvergleich",
+                "battery_title": _t(self.lang, "battery.title") if _t(self.lang, "battery.title") != "battery.title" else "Batteriespeicher",
+                "advisor_title": _t(self.lang, "advisor.title") if _t(self.lang, "advisor.title") != "advisor.title" else "KI-Energieberater",
+                "goals_title": _t(self.lang, "goals.title") if _t(self.lang, "goals.title") != "goals.title" else "Ziele & Erfolge",
                 # Export pane
                 "exp_daterange": _t(self.lang, "web.control.export.daterange"),
                 "exp_from": _t(self.lang, "web.control.plots.from"),

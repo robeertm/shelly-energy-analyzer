@@ -1,8 +1,19 @@
 # Changelog
 
+## 15.0.8 - 2026-04-03
+### Fixed
+- **Web dashboard: responsive scaling** – Redesigned all 6 new web panes for mobile:
+  - Panes have proper `padding:12px` and section titles matching existing tabs
+  - Tariff comparison: replaced 7-column table with mobile-friendly card layout (name, price, savings per row)
+  - EV log: reduced table to 5 columns (removed redundant end time/peak), smaller font size (12px)
+  - Battery: smaller metric cards (18px values instead of 28px), German mode labels
+  - Goals: badges use CSS Grid `auto-fill` instead of fixed 80px widths
+  - All metric values scaled down from 24-28px to 18px for mobile readability
+  - Added template variable titles (i18n) for each pane header
+
 ## 15.0.7 - 2026-04-03
 ### Fixed
-- **Web dashboard: new panes outside container** – The 6 new pane divs were placed AFTER the closing `</div>` of the `#panes` container (after `</nav></div>`), so they were outside the visible layout area. Moved them INSIDE the `#panes` container, before `<nav id="bottom-nav">`, matching the position of all existing panes.
+- **Web dashboard: panes inside container** – Moved 6 new pane divs inside `#panes` container.
 
 ## 15.0.6 - 2026-04-03
 ### Fixed
