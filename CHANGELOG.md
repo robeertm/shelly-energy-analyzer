@@ -1,6 +1,9 @@
 # Changelog
 
-## 14.3.2 - 2026-04-03
+## 14.3.3 - 2026-04-03
+### Fixed
+- **Widget power doubled** – Widget API summed power from all devices instead of only the selected widget devices. Now correctly filters by `widget_devices` config.
+
 ### Added
 - **Widget CO₂ chart** – iOS Scriptable widget now shows live CO₂ grid intensity (g/kWh) with color-coded bars (green/yellow/orange/red based on thresholds). Small widget shows current value, medium widget shows value + mini chart, large widget shows prominent value + full chart with green/dirty threshold lines. Tap-to-refresh detail view also includes CO₂ intensity.
 
