@@ -12,35 +12,43 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 
 ### Desktop App
 
-| Live (3-Phase) | Costs | Heatmap (kWh) |
-|----------------|-------|---------------|
-| ![Live](docs/screenshots/desktop_10_live.png) | ![Costs](docs/screenshots/desktop_11_costs.png) | ![Heatmap](docs/screenshots/desktop_12_heatmap_kwh.png) |
-
-| Forecast | CO2 Intensity | Energy Flow |
-|----------|--------------|-------------|
-| ![Forecast](docs/screenshots/desktop_19_forecast.png) | ![CO2](docs/screenshots/desktop_17_co2_top.png) | ![Energy Flow](docs/screenshots/desktop_22_energy_flow.png) |
-
-| Compare | Plots (Voltage) | Plots (CO2) |
-|---------|-----------------|-------------|
-| ![Compare](docs/screenshots/desktop_14_compare.png) | ![Voltage](docs/screenshots/desktop_03_plots_voltage.png) | ![CO2 Plot](docs/screenshots/desktop_09_plots_co2.png) |
-
-| Heatmap (CO2) | Weather | Anomalies |
-|---------------|---------|-----------|
-| ![Heatmap CO2](docs/screenshots/desktop_13_heatmap_co2.png) | ![Weather](docs/screenshots/desktop_21_weather.png) | ![Anomalies](docs/screenshots/desktop_15_anomalies.png) |
-
-### Web Dashboard (Mobile)
-
-| Live | Live (expanded) | Costs |
+| Sync | Live (3-Phase) | Costs |
 |------|----------------|-------|
-| ![Live](docs/screenshots/01_live.png) | ![Detail](docs/screenshots/01_live_detail.png) | ![Costs](docs/screenshots/02_costs.png) |
+| ![Sync](docs/screenshots/desktop_01_sync.png) | ![Live](docs/screenshots/desktop_03_live.png) | ![Costs](docs/screenshots/desktop_04_costs.png) |
 
-| Heatmap | CO2 | Forecast |
-|---------|-----|----------|
-| ![Heatmap](docs/screenshots/03_heatmap.png) | ![CO2](docs/screenshots/06_co2.png) | ![Forecast](docs/screenshots/08_forecast.png) |
+| Heatmap | Solar | Compare |
+|---------|-------|---------|
+| ![Heatmap](docs/screenshots/desktop_05_heatmap.png) | ![Solar](docs/screenshots/desktop_06_solar.png) | ![Compare](docs/screenshots/desktop_07_compare.png) |
 
-| Energy Flow | Standby | Export |
-|-------------|---------|--------|
-| ![Energy Flow](docs/screenshots/10_energy_flow.png) | ![Standby](docs/screenshots/09_standby.png) | ![Export](docs/screenshots/11_export.png) |
+| CO₂ Intensity | Forecast | Standby |
+|---------------|----------|---------|
+| ![CO2](docs/screenshots/desktop_10_co2.png) | ![Forecast](docs/screenshots/desktop_11_forecast.png) | ![Standby](docs/screenshots/desktop_12_standby.png) |
+
+| Weather | Energy Flow | Tenants |
+|---------|-------------|---------|
+| ![Weather](docs/screenshots/desktop_13_weather.png) | ![Energy Flow](docs/screenshots/desktop_14_energy_flow.png) | ![Tenants](docs/screenshots/desktop_15_tenants.png) |
+
+| Anomalies | Schedules | Export |
+|-----------|-----------|--------|
+| ![Anomalies](docs/screenshots/desktop_08_anomalies.png) | ![Schedules](docs/screenshots/desktop_09_schedules.png) | ![Export](docs/screenshots/desktop_16_export.png) |
+
+| Updates |
+|---------|
+| ![Updates](docs/screenshots/desktop_17_updates.png) |
+
+### Plots
+
+| W (Power) | V (Voltage) | A (Current) |
+|-----------|-------------|-------------|
+| ![W](docs/screenshots/plots_w_haus.png) | ![V](docs/screenshots/plots_v_haus.png) | ![A](docs/screenshots/plots_a_haus.png) |
+
+| kWh (Energy) | VAR (Reactive) | cos φ (Power Factor) |
+|--------------|----------------|----------------------|
+| ![kWh](docs/screenshots/plots_kwh_haus.png) | ![VAR](docs/screenshots/plots_var_haus.png) | ![cos φ](docs/screenshots/plots_cosphi_haus.png) |
+
+| Hz (Frequency) | CO₂ Emissions | Dynamic Price |
+|----------------|---------------|---------------|
+| ![Hz](docs/screenshots/plots_hz_haus.png) | ![CO2](docs/screenshots/plots_co2_haus.png) | ![Dyn Price](docs/screenshots/plots_dynprice_haus.png) |
 
 ---
 
