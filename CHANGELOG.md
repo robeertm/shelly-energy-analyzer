@@ -1,8 +1,12 @@
 # Changelog
 
+## 15.0.15 - 2026-04-03
+### Fixed
+- **Web dashboard: new panes outside #panes container (root cause)** – An extra `</div>` after the export pane closed the `#panes` container prematurely. The 6 new panes ended up as children of `#app` instead of `#panes`, placing them below the scroll area. Removed the stray `</div>`. Verified via Playwright that `pane-battery.parentElement.id` is now `panes` (was `app`).
+
 ## 15.0.14 - 2026-04-03
 ### Fixed
-- **Web dashboard: content vertically centered instead of top-aligned** – Changed `#panes` from `flex: 1` to `flex: 1 1 0%` with `min-height: 0`. Without `min-height: 0`, the flex child's implicit min-height prevented the scroll container from sizing correctly, causing short panes to float in the middle. Reverted the `min-height: calc(100vh - 180px)` on `.pane.active` which made the problem worse.
+- **Web dashboard: CSS fixes for content alignment** – Changed `#panes` from `flex: 1` to `flex: 1 1 0%` with `min-height: 0`. Without `min-height: 0`, the flex child's implicit min-height prevented the scroll container from sizing correctly, causing short panes to float in the middle. Reverted the `min-height: calc(100vh - 180px)` on `.pane.active` which made the problem worse.
 - **Goals badges: uneven grid alignment** – Changed badge grid from `auto-fill, minmax(64px, 1fr)` to fixed `repeat(5, 1fr)`. Badge names now use `text-overflow: ellipsis` and `white-space: nowrap` so long names like "Energiesparer" don't push other badges aside. Reduced emoji size to 20px and text to 8px for uniform appearance.
 
 ## 15.0.13 - 2026-04-03
