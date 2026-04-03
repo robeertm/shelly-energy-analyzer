@@ -1,5 +1,9 @@
 # Changelog
 
+## 15.0.13 - 2026-04-03
+### Fixed
+- **Web dashboard: pane content pushed to bottom** – Root cause found via Playwright DOM inspection: `.pane.active` with short content caused the `#panes` flex container to collapse, and `padding-bottom: 120px` pushed the content to the very bottom. Fix: added `min-height: calc(100vh - 180px)` to `.pane.active` so every pane fills the visible area and content starts at the top. This affects ALL panes, not just the new ones.
+
 ## 15.0.12 - 2026-04-03
 ### Fixed
 - **Web dashboard: complete rebuild of new tabs** – Removed all old pane HTML and JS. Rebuilt from scratch following the exact pattern of the working Costs/Forecast/Standby tabs:
