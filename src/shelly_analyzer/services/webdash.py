@@ -919,16 +919,17 @@ _HTML_TEMPLATE = """<!doctype html>
       flex-shrink: 0;
     }}
     #panes {{
-      flex: 1;
+      flex: 1 1 0%;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       overflow-x: hidden;
       padding: 10px;
       padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
+      min-height: 0;
     }}
     /* ── Panes ── */
     .pane {{ display: none; animation: fadeIn 0.2s ease; }}
-    .pane.active {{ display: block; min-height: calc(100vh - 180px); }}
+    .pane.active {{ display: block; }}
     @keyframes fadeIn {{ from {{ opacity: 0; transform: translateY(4px); }} to {{ opacity: 1; transform: translateY(0); }} }}
     /* ── Bottom nav ── */
     #bottom-nav {{
@@ -5204,13 +5205,13 @@ _loadLsSettings();
 
     html += '<div class="card" style="margin-top:10px"><div class="card-title">🏆 Abzeichen (' +
       (data.unlocked_count||0) + '/' + (data.total_badges||0) + ')</div>' +
-      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px;padding:6px 0">';
+      '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:6px 0">';
     (data.badges || []).forEach(function(b) {{
       const opacity = b.unlocked ? '1' : '0.4';
       const lock = b.unlocked ? '' : '🔒 ';
-      html += '<div style="text-align:center;opacity:' + opacity + '">' +
-        '<div style="font-size:22px">' + b.icon + '</div>' +
-        '<div style="font-size:9px;line-height:1.2;margin-top:2px">' + lock + esc(b.name) + '</div>' +
+      html += '<div style="text-align:center;opacity:' + opacity + ';overflow:hidden">' +
+        '<div style="font-size:20px">' + b.icon + '</div>' +
+        '<div style="font-size:8px;line-height:1.1;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + lock + esc(b.name) + '</div>' +
         bar(b.progress_pct || 0) + '</div>';
     }});
     html += '</div></div>';
