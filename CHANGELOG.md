@@ -1,5 +1,9 @@
 # Changelog
 
+## 15.0.4 - 2026-04-03
+### Fixed
+- **Web dashboard: new tabs empty** – The 6 new API endpoints (`/api/smart_schedule`, `/api/ev_sessions`, `/api/tariff_compare`, `/api/battery`, `/api/advisor`, `/api/goals`) called `on_action()` but the action dispatcher in `liveweb.py` had no handlers for them. Added all 6 action handlers that call the corresponding service modules and return proper JSON data.
+
 ## 15.0.3 - 2026-04-03
 ### Fixed
 - **Native tab row hidden** – The built-in ttk.Notebook tab row was still visible on macOS despite the Tabless style. Now clipped off-screen via `place(y=-30)` so only the custom scrollable button bar is visible.
