@@ -928,7 +928,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }}
     /* ── Panes ── */
     .pane {{ display: none; animation: fadeIn 0.2s ease; }}
-    .pane.active {{ display: block; }}
+    .pane.active {{ display: block; min-height: calc(100vh - 180px); }}
     @keyframes fadeIn {{ from {{ opacity: 0; transform: translateY(4px); }} to {{ opacity: 1; transform: translateY(0); }} }}
     /* ── Bottom nav ── */
     #bottom-nav {{
