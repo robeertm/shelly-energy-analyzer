@@ -940,6 +940,11 @@ _I18N: Dict[str, Dict[str, str]] = {
         "tariff.col_monthly": "Monat",
         "tariff.col_savings": "Ersparnis",
         "tariff.refresh_btn": "Aktualisieren",
+        "tariff.period": "Zeitraum",
+        "tariff.days": "Tage",
+        "tariff.consumption": "Verbrauch",
+        "tariff.annual_est": "Hochrechnung",
+        "tariff.year": "Jahr",
 
         # Battery
         "battery.title": "🔋 Batteriespeicher",
@@ -1900,6 +1905,11 @@ _I18N: Dict[str, Dict[str, str]] = {
         "tariff.col_monthly": "Monthly",
         "tariff.col_savings": "Savings",
         "tariff.refresh_btn": "Refresh",
+        "tariff.period": "Period",
+        "tariff.days": "days",
+        "tariff.consumption": "Consumption",
+        "tariff.annual_est": "Estimate",
+        "tariff.year": "year",
 
         "battery.title": "🔋 Battery Storage",
         "battery.hint": "Monitor state of charge, cycles, and efficiency.",
