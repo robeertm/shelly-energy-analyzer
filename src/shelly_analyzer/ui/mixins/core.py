@@ -873,16 +873,20 @@ class CoreMixin:
             _tab_btn_frame.bind("<Button-4>", _tab_bar_scroll)
             _tab_btn_frame.bind("<Button-5>", _tab_bar_scroll)
 
-            # --- hidden-tab notebook ---
-            self.notebook = ttk.Notebook(_nb_outer)
-            self.notebook.pack(fill="both", expand=True)
-            # Hide the built-in tab row by setting tab height to 0
-            try:
-                _s = ttk.Style()
-                _s.layout("Tabless.TNotebook", [("Notebook.client", {"sticky": "nswe"})])
-                self.notebook.configure(style="Tabless.TNotebook")
-            except Exception:
-                pass
+            # --- content area (replaces notebook tab row) ---
+            # We keep using ttk.Notebook internally so the existing code
+            # (notebook.select, notebook.index, <<NotebookTabChanged>>, etc.)
+            # continues to work without changes.  We just force the native
+            # tab row off-screen by placing the notebook inside a container
+            # and shifting it upward so the tab row is clipped.
+            _nb_clip = ttk.Frame(_nb_outer)
+            _nb_clip.pack(fill="both", expand=True)
+            _nb_clip.pack_propagate(False)
+
+            self.notebook = ttk.Notebook(_nb_clip)
+            # Measure the tab row height so we can shift it off-screen
+            # We'll do the shift after tabs are added (see below).
+            self._nb_clip = _nb_clip
 
             self._tab_buttons: list = []  # track buttons for highlight updates
 
@@ -984,6 +988,10 @@ class CoreMixin:
                 _label = self.t(_tab_key)
                 self.notebook.add(_tab_frm, text=_label)
                 self._add_tab_button_fn(_label, _idx)
+
+            # Now pack the notebook shifted upward so native tab row is clipped
+            # The native tab row is typically ~28-32px high on macOS.
+            self.notebook.place(x=0, y=-30, relwidth=1.0, relheight=1.0, height=30)
 
             # First-run / no-devices mode: show a guided Setup wizard and keep other tabs disabled
             if bool(getattr(self, "_setup_required", False)):
