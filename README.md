@@ -4,7 +4,7 @@ A cross-platform desktop application to analyze, visualize and export energy dat
 
 This repository is **GitHub-ready** (MIT license, clean structure, no secrets). Releases are published via **GitHub Releases** so the built-in updater can find and download new versions.
 
-> **Current version: v13.8.3** — all major feature modules complete.
+> **Current version: v14.3.6** — all major feature modules complete.
 
 ---
 
@@ -190,7 +190,8 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Send-now buttons for immediate on-demand delivery
 
 ### 🔔 Notifications
-- **Telegram bot** — threshold alerts (W, V, A, VAR, cos phi, Hz) with optional plots; daily & monthly summaries with kWh bar charts and CO2 charts
+- **Telegram bot** — threshold alerts (W, V, A, VAR, cos phi, Hz) with optional plots; daily & monthly summaries with kWh bar charts, CO2 charts, and **dynamic spot price comparison** (total spot cost, average price, per-device delta vs. fixed tariff)
+- **E-mail reports** — automated daily and monthly PDF reports now include spot price KPIs (total spot cost, average ct/kWh, current price, fixed tariff comparison)
 - **Webhook notifications** — HTTP POST to any endpoint (Home Assistant, n8n, Zapier, ...) on threshold breach or scheduled events; configurable JSON payload template
 
 ### 📦 Device Grouping
@@ -221,7 +222,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Full single-page app (SPA) accessible from any device on the local network
 - **11 tabs** matching the desktop application:
   - **Live** — real-time device cards with colour-coded power, sparkline charts, collapsible detail rows, NILM appliance chips, freeze button, time-scale selector
-  - **Costs** — per-device cost overview with ENTSO-E CO2 tracking, dynamic spot price comparison, and 24h spot market price chart
+  - **Costs** — per-device cost overview with ENTSO-E CO2 tracking, dynamic spot price comparison, and 24h spot market price chart; current spot price prominently displayed with color-coded delta
   - **Heatmap** — interactive yearly calendar heatmap and weekday x hour heatmap; horizontally scrollable on mobile with readable 3-char month labels
   - **Solar** — PV dashboard with feed-in, self-consumption, autarky %, CO2 savings, inline settings
   - **Comparison** — period-over-period comparison with device selectors, grouped bar chart, delta display
@@ -237,6 +238,28 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Gzip-compressed HTML (~75% smaller payload) for fast mobile page loads
 - **Single-row horizontal scrolling nav bar** — all tabs accessible without wrapping
 - Mobile-first design: bottom navigation, min 44px touch targets, 360px to 1920px viewport
+- **SSL/HTTPS support** — three modes: Auto (self-signed), Custom (Let's Encrypt / own certs), Off (plain HTTP)
+
+### 📱 iOS Widget (Scriptable)
+- Real iOS home screen widget via the **Scriptable** app for live energy data at a glance
+- **Three widget sizes**:
+  - **Small** — current power (W), today's consumption + cost, spot price with delta, CO₂ intensity
+  - **Medium** — all of small + month stats, full-width spot price chart + CO₂ intensity chart
+  - **Large** — full detail with spot chart, CO₂ chart, metrics grid (today/month/projection), spot cost comparison, per-device breakdown
+- **CO₂ intensity chart** — color-coded bars (green/yellow/orange/red) based on ENTSO-E thresholds, with green and dirty threshold reference lines
+- **Spot price chart** — 24h bar chart with color-coded bars relative to fixed tariff and fixed-price reference line
+- **Tap-to-refresh** — tapping the widget opens a live detail view in Scriptable with all metrics, per-device data, and a "Dashboard öffnen" button to open the full web dashboard in Safari
+- **Auto-refresh** — widget refreshes every 5 minutes via `refreshAfterDate`
+- **Device filter** — configurable which Shellys appear in the widget (`widget_devices` in Settings)
+- **Auto-domain** — server domain auto-detected from SSL certificate CN; baked into the downloadable script
+- **Widget setup UI** — step-by-step instructions, "Copy Script" and "Download .js" buttons in web dashboard settings
+- Dark/Light mode support (follows iOS system appearance)
+
+### 🔒 SSL / Let's Encrypt
+- **SSL mode selector** in Settings → Web Dashboard: Auto (self-signed), Custom (own certs), Off (HTTP only)
+- **Let's Encrypt integration** — use certbot certificates for trusted HTTPS without browser warnings
+- **Certificate monitoring** — daily background check of certificate expiry with color-coded status indicator (green >30d, orange ≤30d, red ≤7d)
+- **Auto-renewal** — optional automatic `certbot renew` when certificate is within configured threshold (default: 30 days); copies renewed certs to app directory
 
 ### 🖥 Cross-Platform
 - macOS / Windows / Linux
@@ -328,8 +351,8 @@ To publish an update:
 git add -A
 git commit -m "Description of changes"
 git push
-git tag v13.8.3
-git push origin v13.8.3
+git tag v14.3.6
+git push origin v14.3.6
 ```
 
 The GitHub Actions workflow will automatically build the release ZIP and publish it.
