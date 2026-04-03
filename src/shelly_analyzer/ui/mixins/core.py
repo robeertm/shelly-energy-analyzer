@@ -835,8 +835,46 @@ class CoreMixin:
             ttk.Button(bar, text="▶", width=3, command=_page_next).pack(side="left", padx=(0, 6))
 
 
-            self.notebook = ttk.Notebook(self)
+            # ── Scrollable tab bar ────────────────────────────────────────
+            # Wrap the Notebook in a frame with left/right scroll buttons
+            # so all tabs are accessible even on small screens.
+            _nb_outer = ttk.Frame(self)
+            _nb_outer.pack(fill="both", expand=True)
+
+            _tab_scroll_frm = ttk.Frame(_nb_outer)
+            _tab_scroll_frm.pack(fill="x", side="top")
+
+            self.notebook = ttk.Notebook(_nb_outer)
             self.notebook.pack(fill="both", expand=True)
+
+            # Style: compact tab padding so more tabs fit
+            try:
+                _s = ttk.Style()
+                _s.configure("TNotebook.Tab", padding=[6, 4])
+            except Exception:
+                pass
+
+            def _scroll_tabs(direction: int) -> None:
+                """Scroll the tab bar left/right by selecting adjacent tabs."""
+                try:
+                    tabs = self.notebook.tabs()
+                    if not tabs:
+                        return
+                    cur = self.notebook.index(self.notebook.select())
+                    nxt = cur + direction
+                    if 0 <= nxt < len(tabs):
+                        self.notebook.select(nxt)
+                except Exception:
+                    pass
+
+            _btn_left = ttk.Button(_tab_scroll_frm, text="◀", width=2,
+                                   command=lambda: _scroll_tabs(-1))
+            _btn_left.pack(side="left", padx=2)
+            _btn_right = ttk.Button(_tab_scroll_frm, text="▶", width=2,
+                                    command=lambda: _scroll_tabs(1))
+            _btn_right.pack(side="left", padx=2)
+            ttk.Label(_tab_scroll_frm, text=self.t("ui.view") if hasattr(self, 't') else "",
+                      foreground="gray", font=("", 9)).pack(side="left", padx=8)
             self.tab_sync = ttk.Frame(self.notebook)
             self.tab_plots = ttk.Frame(self.notebook)
             self.tab_live = ttk.Frame(self.notebook)
