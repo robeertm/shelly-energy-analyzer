@@ -341,6 +341,9 @@ const C = {
   green:   new Color("#4caf50"),
   red:     new Color("#e53935"),
   blue:    new Color("#2196F3"),
+  co2green: new Color("#4caf50"),
+  co2yellow: new Color("#ffeb3b"),
+  co2red:   new Color("#e53935"),
 };
 
 // Try HTTPS first (self-signed cert), fall back to HTTP
@@ -413,6 +416,10 @@ if (!config.runsInWidget) {
     addRow("💰 Spotpreis", data.spot_ct.toFixed(1) + " ct/kWh (" + sign + delta.toFixed(1) + " ct)", col);
     addRow("💰 Festpreis", data.fixed_ct.toFixed(1) + " ct/kWh", C.blue);
   }
+  if (data.co2_enabled && data.co2_current != null) {
+    const co2Col = co2Color(data.co2_current, data.co2_green_thr, data.co2_dirty_thr);
+    addRow("🌿 CO₂ Intensität", data.co2_current.toFixed(0) + " g/kWh", co2Col);
+  }
   if (data.devices && data.devices.length > 0) {
     addRow("", "");
     for (const dev of data.devices) {
@@ -464,6 +471,14 @@ function buildSmall(d) {
     const sp = w.addText(d.spot_ct.toFixed(1) + " ct " + arrow + sign + delta.toFixed(1));
     sp.font = Font.boldSystemFont(13);
     sp.textColor = col;
+  }
+
+  // CO2 intensity
+  if (d.co2_enabled && d.co2_current != null) {
+    w.addSpacer(2);
+    const co2 = w.addText("🌿 " + d.co2_current.toFixed(0) + " g/kWh");
+    co2.font = Font.mediumSystemFont(10);
+    co2.textColor = co2Color(d.co2_current, d.co2_green_thr, d.co2_dirty_thr);
   }
 
   w.addSpacer();
@@ -541,15 +556,38 @@ function buildMedium(d) {
   mVal.font = Font.mediumSystemFont(10);
   mVal.textColor = C.text;
 
+  // CO2 intensity inline
+  if (d.co2_enabled && d.co2_current != null) {
+    left.addSpacer(1);
+    const co2Row = left.addStack();
+    co2Row.layoutHorizontally();
+    const co2Lbl = co2Row.addText("CO₂ ");
+    co2Lbl.font = Font.systemFont(10);
+    co2Lbl.textColor = C.muted;
+    const co2Val = co2Row.addText(d.co2_current.toFixed(0) + " g/kWh");
+    co2Val.font = Font.boldSystemFont(10);
+    co2Val.textColor = co2Color(d.co2_current, d.co2_green_thr, d.co2_dirty_thr);
+  }
+
   main.addSpacer();
 
-  // Right: mini spot chart (drawn as image)
+  // Right: charts stacked vertically
+  const rightCol = main.addStack();
+  rightCol.layoutVertically();
+
+  // Mini spot chart
   if (d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) {
-    const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, 100, 60);
-    const imgStack = main.addStack();
-    imgStack.layoutVertically();
-    const img = imgStack.addImage(chartImg);
-    img.imageSize = new Size(100, 60);
+    const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, 100, 55);
+    const img = rightCol.addImage(chartImg);
+    img.imageSize = new Size(100, 55);
+  }
+
+  // Mini CO2 chart
+  if (d.co2_enabled && d.co2_chart && d.co2_chart.length > 2) {
+    if (d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) rightCol.addSpacer(2);
+    const co2Img = drawCo2Chart(d.co2_chart, d.co2_green_thr, d.co2_dirty_thr, 100, 55);
+    const img2 = rightCol.addImage(co2Img);
+    img2.imageSize = new Size(100, 55);
   }
 
   return w;
@@ -603,12 +641,31 @@ function buildLarge(d) {
     w.addSpacer(4);
   }
 
-  // Chart
+  // Spot chart
   if (d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) {
     const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, 280, 80);
     const img = w.addImage(chartImg);
     img.imageSize = new Size(280, 80);
-    w.addSpacer(6);
+    w.addSpacer(4);
+  }
+
+  // CO2 section
+  if (d.co2_enabled && d.co2_current != null) {
+    const co2Row = w.addStack();
+    co2Row.layoutHorizontally();
+    co2Row.centerAlignContent();
+    const co2Lbl = co2Row.addText("🌿 CO₂: " + d.co2_current.toFixed(0) + " g/kWh");
+    co2Lbl.font = Font.boldSystemFont(12);
+    co2Lbl.textColor = co2Color(d.co2_current, d.co2_green_thr, d.co2_dirty_thr);
+    w.addSpacer(2);
+  }
+
+  // CO2 chart
+  if (d.co2_enabled && d.co2_chart && d.co2_chart.length > 2) {
+    const co2Img = drawCo2Chart(d.co2_chart, d.co2_green_thr, d.co2_dirty_thr, 280, 60);
+    const co2ImgW = w.addImage(co2Img);
+    co2ImgW.imageSize = new Size(280, 60);
+    w.addSpacer(4);
   }
 
   // Metrics grid
@@ -682,6 +739,88 @@ function addMetric(parent, label, line1, line2) {
     v2.font = Font.boldSystemFont(12);
     v2.textColor = C.text;
   }
+}
+
+// ─── CO2 Color Helper ──────────────────────────────────────────
+function co2Color(val, green, dirty) {
+  if (val <= green) return new Color("#4caf50");
+  if (val <= (green + dirty) / 2) return new Color("#8bc34a");
+  if (val <= dirty) return new Color("#ff9800");
+  return new Color("#e53935");
+}
+
+// ─── Mini CO2 Chart (DrawContext) ──────────────────────────────
+function drawCo2Chart(chart, greenThr, dirtyThr, W, H) {
+  const dc = new DrawContext();
+  dc.size = new Size(W, H);
+  dc.opaque = false;
+  dc.respectScreenScale = true;
+
+  const vals = chart.map(p => p[1]);
+  let minV = Math.min(...vals);
+  let maxV = Math.max(...vals);
+  let rng = maxV - minV;
+  if (rng < 10) rng = 10;
+  minV = Math.max(0, minV - rng * 0.1);
+  maxV = maxV + rng * 0.15;
+  const vR = maxV - minV;
+
+  const pad = {l: 2, r: 2, t: 10, b: 2};
+  const pW = W - pad.l - pad.r;
+  const pH = H - pad.t - pad.b;
+  const barW = Math.max(1, pW / chart.length - 1);
+
+  const now = Date.now() / 1000;
+
+  // Label
+  dc.setFont(Font.boldSystemFont(7));
+  dc.setTextColor(DARK ? new Color("#888888") : new Color("#999999"));
+  dc.drawTextInRect("CO₂ g/kWh", new Rect(pad.l, 0, W, 10));
+
+  // Bars
+  for (let i = 0; i < chart.length; i++) {
+    const v = chart[i][1];
+    const ts = chart[i][0];
+    const x = pad.l + (i / chart.length) * pW;
+    const barH = Math.max(1, ((v - minV) / vR) * pH);
+    const y = pad.t + pH - barH;
+
+    let hex;
+    if (v <= greenThr) hex = "#4caf50";
+    else if (v <= (greenThr + dirtyThr) / 2) hex = "#8bc34a";
+    else if (v <= dirtyThr) hex = "#ff9800";
+    else hex = "#e53935";
+
+    const a = ts > now ? 0.45 : 0.85;
+    dc.setFillColor(new Color(hex, a));
+    dc.fillRect(new Rect(x, y, barW, barH));
+  }
+
+  // Green threshold line
+  if (greenThr >= minV && greenThr <= maxV) {
+    const gY = pad.t + pH * (1 - (greenThr - minV) / vR);
+    dc.setStrokeColor(new Color("#4caf50", 0.6));
+    dc.setLineWidth(0.5);
+    const gp = new Path();
+    gp.move(new Point(pad.l, gY));
+    gp.addLine(new Point(W - pad.r, gY));
+    dc.addPath(gp);
+    dc.strokePath();
+  }
+
+  // Dirty threshold line
+  if (dirtyThr >= minV && dirtyThr <= maxV) {
+    const dY = pad.t + pH * (1 - (dirtyThr - minV) / vR);
+    dc.setStrokeColor(new Color("#e53935", 0.6));
+    dc.setLineWidth(0.5);
+    const dp = new Path();
+    dp.move(new Point(pad.l, dY));
+    dp.addLine(new Point(W - pad.r, dY));
+    dc.addPath(dp);
+    dc.strokePath();
+  }
+
+  return dc.getImage();
 }
 
 // ─── Mini Spot Chart (DrawContext) ──────────────────────────────

@@ -1,5 +1,9 @@
 # Changelog
 
+## 14.3.2 - 2026-04-03
+### Added
+- **Widget CO₂ chart** – iOS Scriptable widget now shows live CO₂ grid intensity (g/kWh) with color-coded bars (green/yellow/orange/red based on thresholds). Small widget shows current value, medium widget shows value + mini chart, large widget shows prominent value + full chart with green/dirty threshold lines. Tap-to-refresh detail view also includes CO₂ intensity.
+
 ## 14.3.1 - 2026-04-02
 ### Added
 - **Widget tap-to-refresh** – Tapping the iOS widget opens Scriptable with a live detail view: current power, today/month/projection costs, spot price comparison, per-device breakdown, and a "Dashboard öffnen" button that opens Safari to the full web dashboard.
