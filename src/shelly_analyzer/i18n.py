@@ -890,6 +890,89 @@ _I18N: Dict[str, Dict[str, str]] = {
         "live.export.png_done": "PNG exportiert: {n} Datei(en)",
         "telegram.no_images": "Keine Bilder gesendet",
 
+        # ── New feature tabs ──────────────────────────────────────────────
+        "tabs.smart_sched": "⏱ Smart-Plan",
+        "tabs.ev_log": "🚗 E-Auto",
+        "tabs.tariff": "💱 Tarifvergleich",
+        "tabs.battery": "🔋 Batterie",
+        "tabs.advisor": "🤖 KI-Berater",
+        "tabs.goals": "🏆 Ziele",
+
+        # Theme
+        "settings.theme": "Design",
+        "settings.theme.auto": "Automatisch",
+        "settings.theme.light": "Hell",
+        "settings.theme.dark": "Dunkel",
+
+        # Smart Schedule
+        "smart_sched.title": "⏱ Smart-Zeitplanung",
+        "smart_sched.hint": "Finde den günstigsten Zeitblock anhand der aktuellen Spot-Preise.",
+        "smart_sched.duration": "Dauer:",
+        "smart_sched.find_btn": "Günstigsten Block finden",
+        "smart_sched.result": "Empfehlung",
+        "smart_sched.no_data": "Keine Spot-Preisdaten verfügbar. Spot-Preise in den Einstellungen aktivieren.",
+        "smart_sched.cheapest_block": "Günstigster Block",
+        "smart_sched.avg_price": "Durchschnittspreis",
+        "smart_sched.savings": "Ersparnis vs. Tagesdurchschnitt",
+        "smart_sched.chart_title": "24h Preisverlauf",
+
+        # EV Charging
+        "ev_log.title": "🚗 E-Auto Ladeprotokoll",
+        "ev_log.hint": "Automatische Erkennung von Ladevorgängen an der Wallbox.",
+        "ev_log.sessions": "Ladevorgänge",
+        "ev_log.total_kwh": "Gesamt kWh",
+        "ev_log.total_cost": "Gesamtkosten",
+        "ev_log.detect_btn": "Ladevorgänge erkennen",
+        "ev_log.col_date": "Datum",
+        "ev_log.col_start": "Start",
+        "ev_log.col_end": "Ende",
+        "ev_log.col_duration": "Dauer",
+        "ev_log.col_peak": "Spitze W",
+        "ev_log.col_cost": "Kosten",
+
+        # Tariff Comparison
+        "tariff.title": "💱 Tarifvergleich",
+        "tariff.hint": "Vergleich Ihres Verbrauchs mit verschiedenen Stromtarifen.",
+        "tariff.col_name": "Tarif",
+        "tariff.col_provider": "Anbieter",
+        "tariff.col_type": "Typ",
+        "tariff.col_annual": "Jahreskosten",
+        "tariff.col_monthly": "Monat",
+        "tariff.col_savings": "Ersparnis",
+        "tariff.refresh_btn": "Aktualisieren",
+
+        # Battery
+        "battery.title": "🔋 Batteriespeicher",
+        "battery.hint": "Monitoring von Ladezustand, Zyklen und Effizienz.",
+        "battery.power": "Leistung",
+        "battery.mode": "Modus",
+        "battery.cycles": "Zyklen",
+        "battery.efficiency": "Effizienz",
+        "battery.soc_timeline": "SOC-Verlauf",
+        "battery.refresh_btn": "Aktualisieren",
+        "battery.mode_charging": "Laden",
+        "battery.mode_discharging": "Entladen",
+        "battery.mode_idle": "Standby",
+
+        # AI Advisor
+        "advisor.title": "🤖 KI-Energieberater",
+        "advisor.hint": "Personalisierte Energiespar-Tipps basierend auf Ihren Daten.",
+        "advisor.total_savings": "Gesamtes Einsparpotenzial",
+        "advisor.llm_summary": "KI-Zusammenfassung",
+        "advisor.no_llm": "LLM nicht aktiviert – regelbasierte Tipps werden angezeigt.",
+        "advisor.refresh_btn": "Tipps aktualisieren",
+        "advisor.savings_potential": "Einsparpotenzial",
+
+        # Gamification
+        "goals.title": "🏆 Ziele & Erfolge",
+        "goals.streak": "Serie",
+        "goals.days_streak": "Tage unter dem Durchschnitt",
+        "goals.weekly": "Wochenziel",
+        "goals.monthly": "Monatsziel",
+        "goals.badges": "Abzeichen",
+        "goals.remaining": "Verbleibend",
+        "goals.refresh_btn": "Aktualisieren",
+
     },
     "en": {
         # App
@@ -1771,6 +1854,82 @@ _I18N: Dict[str, Dict[str, str]] = {
         "live.export.png_done": "PNG exported: {n} file(s)",
         "telegram.no_images": "No images sent",
 
+        # ── New feature tabs ──────────────────────────────────────────────
+        "tabs.smart_sched": "⏱ Smart Plan",
+        "tabs.ev_log": "🚗 EV Log",
+        "tabs.tariff": "💱 Tariff Compare",
+        "tabs.battery": "🔋 Battery",
+        "tabs.advisor": "🤖 AI Advisor",
+        "tabs.goals": "🏆 Goals",
+
+        "settings.theme": "Theme",
+        "settings.theme.auto": "Automatic",
+        "settings.theme.light": "Light",
+        "settings.theme.dark": "Dark",
+
+        "smart_sched.title": "⏱ Smart Scheduling",
+        "smart_sched.hint": "Find the cheapest time block based on current spot prices.",
+        "smart_sched.duration": "Duration:",
+        "smart_sched.find_btn": "Find Cheapest Block",
+        "smart_sched.result": "Recommendation",
+        "smart_sched.no_data": "No spot price data available. Enable spot prices in settings.",
+        "smart_sched.cheapest_block": "Cheapest block",
+        "smart_sched.avg_price": "Average price",
+        "smart_sched.savings": "Savings vs. daily average",
+        "smart_sched.chart_title": "24h Price Chart",
+
+        "ev_log.title": "🚗 EV Charging Log",
+        "ev_log.hint": "Automatic detection of charging sessions at the wallbox.",
+        "ev_log.sessions": "Sessions",
+        "ev_log.total_kwh": "Total kWh",
+        "ev_log.total_cost": "Total Cost",
+        "ev_log.detect_btn": "Detect Sessions",
+        "ev_log.col_date": "Date",
+        "ev_log.col_start": "Start",
+        "ev_log.col_end": "End",
+        "ev_log.col_duration": "Duration",
+        "ev_log.col_peak": "Peak W",
+        "ev_log.col_cost": "Cost",
+
+        "tariff.title": "💱 Tariff Comparison",
+        "tariff.hint": "Compare your consumption with different electricity tariffs.",
+        "tariff.col_name": "Tariff",
+        "tariff.col_provider": "Provider",
+        "tariff.col_type": "Type",
+        "tariff.col_annual": "Annual Cost",
+        "tariff.col_monthly": "Monthly",
+        "tariff.col_savings": "Savings",
+        "tariff.refresh_btn": "Refresh",
+
+        "battery.title": "🔋 Battery Storage",
+        "battery.hint": "Monitor state of charge, cycles, and efficiency.",
+        "battery.power": "Power",
+        "battery.mode": "Mode",
+        "battery.cycles": "Cycles",
+        "battery.efficiency": "Efficiency",
+        "battery.soc_timeline": "SOC Timeline",
+        "battery.refresh_btn": "Refresh",
+        "battery.mode_charging": "Charging",
+        "battery.mode_discharging": "Discharging",
+        "battery.mode_idle": "Idle",
+
+        "advisor.title": "🤖 AI Energy Advisor",
+        "advisor.hint": "Personalized energy-saving tips based on your data.",
+        "advisor.total_savings": "Total Savings Potential",
+        "advisor.llm_summary": "AI Summary",
+        "advisor.no_llm": "LLM not enabled – showing rule-based tips.",
+        "advisor.refresh_btn": "Refresh Tips",
+        "advisor.savings_potential": "Savings potential",
+
+        "goals.title": "🏆 Goals & Achievements",
+        "goals.streak": "Streak",
+        "goals.days_streak": "days below average",
+        "goals.weekly": "Weekly Goal",
+        "goals.monthly": "Monthly Goal",
+        "goals.badges": "Badges",
+        "goals.remaining": "Remaining",
+        "goals.refresh_btn": "Refresh",
+
     },
     "es": {
         # App
@@ -2459,6 +2618,17 @@ _I18N: Dict[str, Dict[str, str]] = {
         "appliance.air_conditioner.name": "Aire acondicionado",
         "appliance.fan.name": "Ventilador",
 
+        "tabs.smart_sched": "⏱ Plan Smart",
+        "tabs.ev_log": "🚗 Carga EV",
+        "tabs.tariff": "💱 Comparar Tarifas",
+        "tabs.battery": "🔋 Batería",
+        "tabs.advisor": "🤖 Asesor IA",
+        "tabs.goals": "🏆 Objetivos",
+        "settings.theme": "Tema",
+        "settings.theme.auto": "Automático",
+        "settings.theme.light": "Claro",
+        "settings.theme.dark": "Oscuro",
+
     },
 }
 
@@ -2694,6 +2864,16 @@ _I18N["fr"] = _mk_lang({
     "appliance.led_light.name": "Éclairage LED",
     "appliance.air_conditioner.name": "Climatiseur",
     "appliance.fan.name": "Ventilateur",
+    "tabs.smart_sched": "⏱ Plan Smart",
+    "tabs.ev_log": "🚗 Charge VE",
+    "tabs.tariff": "💱 Comparaison Tarifs",
+    "tabs.battery": "🔋 Batterie",
+    "tabs.advisor": "🤖 Conseiller IA",
+    "tabs.goals": "🏆 Objectifs",
+    "settings.theme": "Thème",
+    "settings.theme.auto": "Automatique",
+    "settings.theme.light": "Clair",
+    "settings.theme.dark": "Sombre",
 })
 
 
@@ -2834,6 +3014,16 @@ _I18N["pt"] = _mk_lang({
     "appliance.led_light.name": "Iluminação LED",
     "appliance.air_conditioner.name": "Ar condicionado",
     "appliance.fan.name": "Ventoinha",
+    "tabs.smart_sched": "⏱ Plano Smart",
+    "tabs.ev_log": "🚗 Carga VE",
+    "tabs.tariff": "💱 Comparar Tarifas",
+    "tabs.battery": "🔋 Bateria",
+    "tabs.advisor": "🤖 Consultor IA",
+    "tabs.goals": "🏆 Objetivos",
+    "settings.theme": "Tema",
+    "settings.theme.auto": "Automático",
+    "settings.theme.light": "Claro",
+    "settings.theme.dark": "Escuro",
 })
 
 
@@ -2972,6 +3162,16 @@ _I18N["it"] = _mk_lang({
     "appliance.led_light.name": "Illuminazione LED",
     "appliance.air_conditioner.name": "Condizionatore",
     "appliance.fan.name": "Ventilatore",
+    "tabs.smart_sched": "⏱ Piano Smart",
+    "tabs.ev_log": "🚗 Ricarica EV",
+    "tabs.tariff": "💱 Confronto Tariffe",
+    "tabs.battery": "🔋 Batteria",
+    "tabs.advisor": "🤖 Consulente IA",
+    "tabs.goals": "🏆 Obiettivi",
+    "settings.theme": "Tema",
+    "settings.theme.auto": "Automatico",
+    "settings.theme.light": "Chiaro",
+    "settings.theme.dark": "Scuro",
 })
 
 
@@ -3109,6 +3309,16 @@ _I18N["pl"] = _mk_lang({
     "appliance.led_light.name": "Oświetlenie LED",
     "appliance.air_conditioner.name": "Klimatyzator",
     "appliance.fan.name": "Wentylator",
+    "tabs.smart_sched": "⏱ Smart Plan",
+    "tabs.ev_log": "🚗 Ładowanie EV",
+    "tabs.tariff": "💱 Porównanie Taryf",
+    "tabs.battery": "🔋 Bateria",
+    "tabs.advisor": "🤖 Doradca AI",
+    "tabs.goals": "🏆 Cele",
+    "settings.theme": "Motyw",
+    "settings.theme.auto": "Automatyczny",
+    "settings.theme.light": "Jasny",
+    "settings.theme.dark": "Ciemny",
 })
 
 
@@ -3246,6 +3456,16 @@ _I18N["cs"] = _mk_lang({
     "appliance.led_light.name": "LED osvětlení",
     "appliance.air_conditioner.name": "Klimatizace",
     "appliance.fan.name": "Ventilátor",
+    "tabs.smart_sched": "⏱ Smart Plán",
+    "tabs.ev_log": "🚗 Nabíjení EV",
+    "tabs.tariff": "💱 Srovnání Tarifů",
+    "tabs.battery": "🔋 Baterie",
+    "tabs.advisor": "🤖 AI Poradce",
+    "tabs.goals": "🏆 Cíle",
+    "settings.theme": "Motiv",
+    "settings.theme.auto": "Automatický",
+    "settings.theme.light": "Světlý",
+    "settings.theme.dark": "Tmavý",
 })
 
 
@@ -3383,6 +3603,16 @@ _I18N["ru"] = _mk_lang({
     "appliance.led_light.name": "LED-освещение",
     "appliance.air_conditioner.name": "Кондиционер",
     "appliance.fan.name": "Вентилятор",
+    "tabs.smart_sched": "⏱ Умный план",
+    "tabs.ev_log": "🚗 Зарядка EV",
+    "tabs.tariff": "💱 Сравнение тарифов",
+    "tabs.battery": "🔋 Батарея",
+    "tabs.advisor": "🤖 ИИ-советник",
+    "tabs.goals": "🏆 Цели",
+    "settings.theme": "Тема",
+    "settings.theme.auto": "Автоматически",
+    "settings.theme.light": "Светлая",
+    "settings.theme.dark": "Тёмная",
 })
 
 # -------- Web tab names v9.0.0 --------

@@ -1,10 +1,10 @@
 # Shelly Energy Analyzer
 
-A cross-platform desktop application to analyze, visualize and export energy data from Shelly devices (1-phase and 3-phase) — including live dashboards, cost tracking, historical plots, CSV/PDF exports, Telegram alerts, solar/PV monitoring, anomaly detection, NILM appliance detection, device scheduling, consumption forecasting, weather correlation, tenant billing and much more.
+A cross-platform desktop application to analyze, visualize and export energy data from Shelly devices (1-phase and 3-phase) — including live dashboards, cost tracking, historical plots, CSV/PDF exports, Telegram alerts, solar/PV monitoring, anomaly detection, NILM appliance detection, device scheduling, consumption forecasting, weather correlation, tenant billing, smart scheduling, EV charging logs, tariff comparison, battery monitoring, AI energy advisor, gamification, InfluxDB/Prometheus export, REST API, multi-location support, and much more.
 
 This repository is **GitHub-ready** (MIT license, clean structure, no secrets). Releases are published via **GitHub Releases** so the built-in updater can find and download new versions.
 
-> **Current version: v14.3.6** — all major feature modules complete.
+> **Current version: v15.0.0** — 12 new features: smart scheduling, PV surplus control, EV charging log, tariff comparison, battery monitoring, InfluxDB/Prometheus export, REST API v1, AI energy advisor, gamification, multi-location support, desktop dark mode, and web language selector.
 
 ---
 
@@ -296,6 +296,57 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - **Let's Encrypt integration** — use certbot certificates for trusted HTTPS without browser warnings
 - **Certificate monitoring** — daily background check of certificate expiry with color-coded status indicator (green >30d, orange ≤30d, red ≤7d)
 - **Auto-renewal** — optional automatic `certbot renew` when certificate is within configured threshold (default: 30 days); copies renewed certs to app directory
+
+### ⏱ Smart Scheduling (Spot Price Optimizer)
+- **Find cheapest time blocks** from day-ahead spot market prices for running large appliances
+- Configurable duration (0.5–12 hours), shows average price and savings vs. daily average
+- Optional **auto-scheduling** via Shelly RPC relay control
+
+### ☀️ PV Surplus Control
+- **Automatic relay switching** based on solar excess power with state machine (IDLE → PENDING_ON → ON → PENDING_OFF)
+- Configurable thresholds (on/off), debounce timer, and **priority-ordered consumer list**
+- Switches on consumers (boiler, wallbox) when surplus exceeds threshold; switches off when surplus drops
+
+### 🚗 EV Charging Log
+- **Automatic detection** of electric vehicle charging sessions from wallbox power patterns
+- Logs each session: start/end time, energy (kWh), peak power, duration, and cost
+- Monthly summary with total sessions, kWh, and cost breakdown
+
+### 💱 Tariff Comparison
+- Compare actual consumption costs across **8 pre-defined German electricity tariffs** (Stadtwerke, Tibber, 1Komma5°, Ostrom, E.ON, Vattenfall, EnBW, HT/NT)
+- Simulates **fixed, time-of-use, and dynamic spot** tariff models
+- Shows annual savings potential per tariff
+
+### 🔋 Battery Storage Monitoring
+- Track battery **state of charge (SOC)**, charge/discharge cycles, and round-trip efficiency
+- SOC timeline chart, cycle detection, optimal charging time recommendations based on spot prices
+
+### 📊 InfluxDB / Prometheus Export
+- **InfluxDB**: Push energy metrics via HTTP line protocol (v1.x + v2.x). Configurable interval, measurement name, authentication
+- **Prometheus**: Expose `/metrics` endpoint in text exposition format. Gauges for power, voltage, current, frequency per device/phase
+
+### 🔌 REST API v1
+- Formalized API: `/api/v1/devices`, `/api/v1/devices/{key}/samples`, `/api/v1/costs`, `/api/v1/spot_prices`, `/api/v1/co2`, `/api/v1/openapi.json`
+- **Bearer token authentication**, CORS headers, rate limiting
+
+### 🤖 AI Energy Advisor
+- **Rule-based tips** from standby analysis, spot price spreads, consumption trends, and weather data
+- Optional **LLM enrichment** via Ollama (local), OpenAI, or Anthropic API for natural language summaries
+- Sorted by savings potential (€/year)
+
+### 🏆 Gamification (Goals & Achievements)
+- Weekly and monthly **consumption goals** with auto-calculated targets (90% of previous period)
+- **10 badges**: Energy Saver, Standby Killer, Solar Champion, 7/30-day Streak, Night Saver, Peak Avoider, and more
+- **Streak tracking** with progress visualization
+
+### 🏠 Multi-Location Support
+- Manage **multiple sites** (home, office, vacation home) with separate device sets
+- Optional **separate databases** per location
+- Location switcher in desktop UI and web dashboard; aggregate view across all locations
+
+### 🌙 Desktop Dark/Light Mode
+- **Theme toggle** in Settings: Auto (detects macOS appearance), Light, Dark
+- Affects all matplotlib plots, treeviews, and UI elements
 
 ### 🖥 Cross-Platform
 - macOS / Windows / Linux

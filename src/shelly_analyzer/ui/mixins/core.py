@@ -852,6 +852,12 @@ class CoreMixin:
             self.tab_weather = ttk.Frame(self.notebook)
             self.tab_sankey = ttk.Frame(self.notebook)
             self.tab_tenant = ttk.Frame(self.notebook)
+            self.tab_smart_sched = ttk.Frame(self.notebook)
+            self.tab_ev_log = ttk.Frame(self.notebook)
+            self.tab_tariff = ttk.Frame(self.notebook)
+            self.tab_battery = ttk.Frame(self.notebook)
+            self.tab_advisor = ttk.Frame(self.notebook)
+            self.tab_goals = ttk.Frame(self.notebook)
             self.tab_export = ttk.Frame(self.notebook)
             self.tab_settings = ttk.Frame(self.notebook)
             # Notebook tab labels are translated based on the selected UI language.
@@ -870,6 +876,12 @@ class CoreMixin:
             self.notebook.add(self.tab_weather, text=self.t("tabs.weather"))
             self.notebook.add(self.tab_sankey, text=self.t("tabs.sankey"))
             self.notebook.add(self.tab_tenant, text=self.t("tabs.tenant"))
+            self.notebook.add(self.tab_smart_sched, text=self.t("tabs.smart_sched"))
+            self.notebook.add(self.tab_ev_log, text=self.t("tabs.ev_log"))
+            self.notebook.add(self.tab_tariff, text=self.t("tabs.tariff"))
+            self.notebook.add(self.tab_battery, text=self.t("tabs.battery"))
+            self.notebook.add(self.tab_advisor, text=self.t("tabs.advisor"))
+            self.notebook.add(self.tab_goals, text=self.t("tabs.goals"))
             self.notebook.add(self.tab_export, text=self.t("tabs.export"))
             self.notebook.add(self.tab_settings, text=self.t("tabs.settings"))
 
@@ -880,7 +892,7 @@ class CoreMixin:
                 self.notebook.insert(0, self.tab_setup, text=self.t("tabs.setup"))
 
                 # Put placeholders into disabled tabs (avoid CSV warnings on first run)
-                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_compare, self.tab_anomaly, self.tab_schedule, self.tab_co2, self.tab_forecast, self.tab_standby, self.tab_weather, self.tab_sankey, self.tab_tenant, self.tab_export):
+                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_compare, self.tab_anomaly, self.tab_schedule, self.tab_co2, self.tab_forecast, self.tab_standby, self.tab_weather, self.tab_sankey, self.tab_tenant, self.tab_smart_sched, self.tab_ev_log, self.tab_tariff, self.tab_battery, self.tab_advisor, self.tab_goals, self.tab_export):
                     try:
                         ttk.Label(
                             tab,
@@ -919,6 +931,30 @@ class CoreMixin:
                 self._build_weather_tab()
                 self._build_sankey_tab()
                 self._build_tenant_tab()
+                try:
+                    self._build_smart_schedule_tab()
+                except Exception:
+                    pass
+                try:
+                    self._build_ev_log_tab()
+                except Exception:
+                    pass
+                try:
+                    self._build_tariff_tab()
+                except Exception:
+                    pass
+                try:
+                    self._build_battery_tab()
+                except Exception:
+                    pass
+                try:
+                    self._build_advisor_tab()
+                except Exception:
+                    pass
+                try:
+                    self._build_goals_tab()
+                except Exception:
+                    pass
                 self._build_export_tab()
                 self._build_settings_tab()
                 self._schedule_init()
@@ -6397,6 +6433,29 @@ class CoreMixin:
             cb.grid(row=0, column=1, padx=8, pady=8, sticky='w')
             cb.bind('<<ComboboxSelected>>', _on_lang_pick)
 
+            # Theme selector
+            ttk.Label(lang_box, text=self.t('settings.theme') + ':').grid(row=1, column=0, padx=8, pady=8, sticky='w')
+            _theme_choices = [
+                f"auto - {self.t('settings.theme.auto')}",
+                f"light - {self.t('settings.theme.light')}",
+                f"dark - {self.t('settings.theme.dark')}",
+            ]
+            _cur_theme = str(getattr(self.cfg.ui, 'theme', 'auto') or 'auto')
+            if not getattr(self, '_theme_display_var', None):
+                self._theme_display_var = tk.StringVar()
+            self._theme_display_var.set(f"{_cur_theme} - {self.t('settings.theme.' + _cur_theme)}")
+            if not getattr(self, '_set_theme_var', None):
+                self._set_theme_var = tk.StringVar(value=_cur_theme)
+            def _on_theme_pick(_evt=None):
+                s = (self._theme_display_var.get() or '').strip()
+                code = s.split('-', 1)[0].strip().lower() if s else 'auto'
+                if code not in ('auto', 'light', 'dark'):
+                    code = 'auto'
+                self._set_theme_var.set(code)
+            tcb = ttk.Combobox(lang_box, values=_theme_choices, textvariable=self._theme_display_var, state='readonly', width=24)
+            tcb.grid(row=1, column=1, padx=8, pady=8, sticky='w')
+            tcb.bind('<<ComboboxSelected>>', _on_theme_pick)
+
             pricing_box = ttk.LabelFrame(tab_main_sf, text=self.t('settings.pricing.title'))
             pricing_box.pack(fill="x", pady=(0, 10))
 
@@ -8179,9 +8238,18 @@ class CoreMixin:
             if plot_theme_mode not in ('auto', 'day', 'night'):
                 plot_theme_mode = 'auto'
 
+            # Theme selection
+            try:
+                sel_theme = str(getattr(self, '_set_theme_var', None).get() or 'auto').strip().lower()
+            except Exception:
+                sel_theme = str(getattr(self.cfg.ui, 'theme', 'auto') or 'auto')
+            if sel_theme not in ('auto', 'light', 'dark'):
+                sel_theme = 'auto'
+
             ui = UiConfig(
                 live_poll_seconds=live_poll_s,
                 language=sel_lang,
+                theme=sel_theme,
                 plot_theme_mode=plot_theme_mode,
                 plot_redraw_seconds=redraw_s,
                 live_window_minutes=live_window_min,
@@ -14309,7 +14377,7 @@ class CoreMixin:
 
             # Enable tabs
             try:
-                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_compare, self.tab_anomaly, self.tab_schedule, self.tab_co2, self.tab_forecast, self.tab_standby, self.tab_weather, self.tab_sankey, self.tab_tenant, self.tab_export):
+                for tab in (self.tab_sync, self.tab_plots, self.tab_live, self.tab_costs, self.tab_heatmap, self.tab_solar, self.tab_compare, self.tab_anomaly, self.tab_schedule, self.tab_co2, self.tab_forecast, self.tab_standby, self.tab_weather, self.tab_sankey, self.tab_tenant, self.tab_smart_sched, self.tab_ev_log, self.tab_tariff, self.tab_battery, self.tab_advisor, self.tab_goals, self.tab_export):
                     try:
                         self.notebook.tab(tab, state="normal")
                     except Exception:
