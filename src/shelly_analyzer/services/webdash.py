@@ -1609,37 +1609,29 @@ _HTML_TEMPLATE = """<!doctype html>
     </div>
   </div>
 
-    <!-- New feature panes -->
-    <div id="pane-smart_sched" class="pane" style="padding:12px">
-      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">⏱ {smart_sched_title}</h2>
-      <div id="ss-result" class="card" style="padding:14px"></div>
-      <div id="ss-chart" style="margin-top:10px"></div>
+    <!-- New feature panes – no extra padding (inherits #panes padding:10px) -->
+    <div id="pane-smart_sched" class="pane">
+      <div id="ss-result" class="card" style="padding:12px"></div>
     </div>
-    <div id="pane-ev_log" class="pane" style="padding:12px">
-      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">🚗 {ev_log_title}</h2>
+    <div id="pane-ev_log" class="pane">
       <div class="metric-grid" id="ev-cards"></div>
-      <div id="ev-table" style="margin-top:10px;overflow-x:auto;-webkit-overflow-scrolling:touch"></div>
+      <div id="ev-table" style="margin-top:8px;overflow-x:auto;-webkit-overflow-scrolling:touch"></div>
     </div>
-    <div id="pane-tariff" class="pane" style="padding:12px">
-      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">💱 {tariff_title}</h2>
+    <div id="pane-tariff" class="pane">
       <div id="tariff-table" style="overflow-x:auto;-webkit-overflow-scrolling:touch"></div>
     </div>
-    <div id="pane-battery" class="pane" style="padding:12px">
-      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">🔋 {battery_title}</h2>
+    <div id="pane-battery" class="pane">
       <div class="metric-grid" id="bat-cards"></div>
-      <div id="bat-chart" style="margin-top:10px"></div>
     </div>
-    <div id="pane-advisor" class="pane" style="padding:12px">
-      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">🤖 {advisor_title}</h2>
-      <div id="advisor-savings" class="card" style="padding:14px;font-size:18px;font-weight:700;color:#4caf50;text-align:center"></div>
-      <div id="advisor-llm" class="card" style="padding:14px;margin-top:8px;display:none"></div>
-      <div id="advisor-tips" style="margin-top:10px"></div>
+    <div id="pane-advisor" class="pane">
+      <div id="advisor-savings" class="card" style="padding:12px;font-size:16px;font-weight:700;color:#4caf50;text-align:center"></div>
+      <div id="advisor-llm" class="card" style="padding:12px;margin-top:6px;display:none"></div>
+      <div id="advisor-tips" style="margin-top:6px"></div>
     </div>
-    <div id="pane-goals" class="pane" style="padding:12px">
-      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">🏆 {goals_title}</h2>
-      <div id="goals-streak" class="card" style="padding:14px;text-align:center;font-size:18px"></div>
-      <div class="metric-grid" id="goals-progress" style="margin-top:10px"></div>
-      <div id="goals-badges" style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:10px"></div>
+    <div id="pane-goals" class="pane">
+      <div id="goals-streak" class="card" style="padding:10px;text-align:center;font-size:16px"></div>
+      <div class="metric-grid" id="goals-progress" style="margin-top:6px"></div>
+      <div id="goals-badges" style="margin-top:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px"></div>
     </div>
 
   <nav id="bottom-nav">

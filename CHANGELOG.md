@@ -1,5 +1,9 @@
 # Changelog
 
+## 15.0.9 - 2026-04-03
+### Fixed
+- **Web dashboard: content starts at top** – Removed extra `padding:12px` and `<h2>` titles from all 6 new panes. Content now starts flush at the top of the scroll area, matching the existing tabs. The `#panes` container already provides 10px padding. Reduced all spacing (margins, gaps, font sizes) for compact mobile layout.
+
 ## 15.0.8 - 2026-04-03
 ### Fixed
 - **Web dashboard: responsive scaling** – Redesigned all 6 new web panes for mobile:
