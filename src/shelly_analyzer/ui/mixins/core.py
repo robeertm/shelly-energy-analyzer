@@ -622,6 +622,30 @@ class CoreMixin:
             except Exception:
                 pass
 
+    def _build_influxdb_cfg(self):
+            from shelly_analyzer.io.config import InfluxDBConfig
+            try:
+                return InfluxDBConfig(
+                    enabled=bool(getattr(self, "_idb_enabled_var", tk.BooleanVar(value=False)).get()),
+                    url=str(getattr(self, "_idb_url_var", tk.StringVar(value="http://127.0.0.1:8086")).get() or "http://127.0.0.1:8086"),
+                    token=str(getattr(self, "_idb_token_var", tk.StringVar()).get() or ""),
+                    org=str(getattr(self, "_idb_org_var", tk.StringVar()).get() or ""),
+                    bucket=str(getattr(self, "_idb_bucket_var", tk.StringVar(value="shelly")).get() or "shelly"),
+                    push_interval_seconds=int(getattr(self, "_idb_interval_var", tk.IntVar(value=60)).get() or 60),
+                    version=int(getattr(self, "_idb_version_var", tk.IntVar(value=2)).get() or 2),
+                )
+            except Exception:
+                return getattr(self.cfg, "influxdb", InfluxDBConfig())
+
+    def _build_prometheus_cfg(self):
+            from shelly_analyzer.io.config import PrometheusConfig
+            try:
+                return PrometheusConfig(
+                    enabled=bool(getattr(self, "_prom_enabled_var", tk.BooleanVar(value=False)).get()),
+                )
+            except Exception:
+                return getattr(self.cfg, "prometheus", PrometheusConfig())
+
     def _start_dpi_watch(self) -> None:
             """Watch for monitor DPI changes (e.g. moving window between screens)."""
             try:
@@ -7300,6 +7324,41 @@ class CoreMixin:
             self._mqtt_tls_var = tk.BooleanVar(value=bool(getattr(_mqtt_cfg, "use_tls", False)))
             ttk.Checkbutton(mqtt_box, text=self.t("settings.mqtt.tls"), variable=self._mqtt_tls_var).grid(row=4, column=2, columnspan=2, padx=8, pady=(4, 8), sticky="w")
 
+            # ── InfluxDB settings ─────────────────────────────────────────────
+            _idb_cfg = getattr(self.cfg, "influxdb", None)
+            idb_box = ttk.LabelFrame(tab_main_sf, text="InfluxDB Export")
+            idb_box.pack(fill="x", pady=(0, 10))
+            self._idb_enabled_var = tk.BooleanVar(value=bool(getattr(_idb_cfg, "enabled", False)))
+            ttk.Checkbutton(idb_box, text=self.t("settings.influxdb.enabled"), variable=self._idb_enabled_var).grid(row=0, column=0, columnspan=2, padx=8, pady=6, sticky="w")
+            ttk.Label(idb_box, text="URL:").grid(row=1, column=0, padx=8, pady=4, sticky="w")
+            self._idb_url_var = tk.StringVar(value=str(getattr(_idb_cfg, "url", "http://127.0.0.1:8086") or "http://127.0.0.1:8086"))
+            ttk.Entry(idb_box, textvariable=self._idb_url_var, width=35).grid(row=1, column=1, padx=8, pady=4, sticky="w")
+            ttk.Label(idb_box, text="Version:").grid(row=1, column=2, padx=8, pady=4, sticky="w")
+            self._idb_version_var = tk.IntVar(value=int(getattr(_idb_cfg, "version", 2)))
+            ttk.Combobox(idb_box, values=["1", "2"], textvariable=self._idb_version_var, width=4, state="readonly").grid(row=1, column=3, padx=8, pady=4, sticky="w")
+            ttk.Label(idb_box, text="Token:").grid(row=2, column=0, padx=8, pady=4, sticky="w")
+            self._idb_token_var = tk.StringVar(value=str(getattr(_idb_cfg, "token", "") or ""))
+            ttk.Entry(idb_box, textvariable=self._idb_token_var, width=35, show="*").grid(row=2, column=1, padx=8, pady=4, sticky="w")
+            ttk.Label(idb_box, text="Org:").grid(row=2, column=2, padx=8, pady=4, sticky="w")
+            self._idb_org_var = tk.StringVar(value=str(getattr(_idb_cfg, "org", "") or ""))
+            ttk.Entry(idb_box, textvariable=self._idb_org_var, width=15).grid(row=2, column=3, padx=8, pady=4, sticky="w")
+            ttk.Label(idb_box, text="Bucket:").grid(row=3, column=0, padx=8, pady=4, sticky="w")
+            self._idb_bucket_var = tk.StringVar(value=str(getattr(_idb_cfg, "bucket", "shelly") or "shelly"))
+            ttk.Entry(idb_box, textvariable=self._idb_bucket_var, width=20).grid(row=3, column=1, padx=8, pady=4, sticky="w")
+            ttk.Label(idb_box, text="Interval (s):").grid(row=3, column=2, padx=8, pady=4, sticky="w")
+            self._idb_interval_var = tk.IntVar(value=int(getattr(_idb_cfg, "push_interval_seconds", 60)))
+            ttk.Entry(idb_box, textvariable=self._idb_interval_var, width=6).grid(row=3, column=3, padx=8, pady=(4, 8), sticky="w")
+
+            # ── Prometheus settings ───────────────────────────────────────────
+            _prom_cfg = getattr(self.cfg, "prometheus", None)
+            prom_box = ttk.LabelFrame(tab_main_sf, text="Prometheus Export")
+            prom_box.pack(fill="x", pady=(0, 10))
+            self._prom_enabled_var = tk.BooleanVar(value=bool(getattr(_prom_cfg, "enabled", False)))
+            ttk.Checkbutton(prom_box, text=self.t("settings.prometheus.enabled"), variable=self._prom_enabled_var).grid(row=0, column=0, columnspan=2, padx=8, pady=6, sticky="w")
+            ttk.Label(prom_box, text="Endpoint:").grid(row=1, column=0, padx=8, pady=(4, 8), sticky="w")
+            _prom_hint = f"http://<host>:{getattr(self.cfg.web, 'port', 8765)}/metrics"
+            ttk.Label(prom_box, text=_prom_hint, foreground="#888888").grid(row=1, column=1, padx=8, pady=(4, 8), sticky="w")
+
             # ── Tenant settings ───────────────────────────────────────────────
             _tn_cfg = getattr(self.cfg, "tenant", None)
             tn_box = ttk.LabelFrame(tab_main_sf, text=self.t("settings.tenant.title"))
@@ -8713,8 +8772,23 @@ class CoreMixin:
                 mqtt=mqtt_cfg,
                 tenant=tenant,
                 schedules=getattr(self.cfg, "schedules", []),
+                influxdb=self._build_influxdb_cfg(),
+                prometheus=self._build_prometheus_cfg(),
             )
             save_config(self.cfg, self.cfg_path)
+
+            # Start/stop InfluxDB exporter based on config
+            try:
+                from shelly_analyzer.services.influxdb_export import InfluxDBExporter
+                _idb_prev = getattr(self, "_influxdb_exporter", None)
+                if _idb_prev:
+                    _idb_prev.stop()
+                    self._influxdb_exporter = None
+                if self.cfg.influxdb.enabled:
+                    self._influxdb_exporter = InfluxDBExporter(self.cfg, self.storage)
+                    self._influxdb_exporter.start()
+            except Exception as _ie:
+                _log.debug("InfluxDB exporter: %s", _ie)
 
             # Archive data folders for removed devices (do not delete) - optional
             if removed_keys:

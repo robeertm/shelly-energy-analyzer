@@ -1773,6 +1773,15 @@ _HTML_TEMPLATE = """<!doctype html>
     <div style="margin-bottom:12px">
       <label style="font-size:12px;font-weight:600;color:var(--muted)">🌐 Language</label><br>
       <select id="lang-select" style="margin-top:4px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--fg);font-size:13px" onchange="setLanguage(this.value)">
+        <option value="de">Deutsch</option>
+        <option value="en">English</option>
+        <option value="es">Español</option>
+        <option value="fr">Français</option>
+        <option value="pt">Português</option>
+        <option value="it">Italiano</option>
+        <option value="pl">Polski</option>
+        <option value="cs">Čeština</option>
+        <option value="ru">Русский</option>
       </select>
     </div>
 
@@ -5259,6 +5268,10 @@ _loadLsSettings();
   }}
 
   /* ── Language selector ── */
+  (function() {{
+    const sel = document.getElementById('lang-select');
+    if (sel) sel.value = '{lang}';
+  }})();
   function setLanguage(lang) {{
     fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{action:'set_language',params:{{language:lang}}}})}}
     ).then(()=>window.location.reload()).catch(()=>{{}});
@@ -7578,8 +7591,13 @@ class _Handler(BaseHTTPRequestHandler):
             # --- Prometheus Metrics ---
             if path_only == "/metrics":
                 try:
-                    from shelly_analyzer.services import metrics
-                    body = metrics.render(self.dashboard).encode("utf-8")
+                    from shelly_analyzer.services.prometheus_export import generate_metrics
+                    _dash = self.dashboard
+                    body = generate_metrics(
+                        getattr(_dash, 'live_state_store', {}),
+                        getattr(getattr(_dash, 'cfg', None), 'devices', []),
+                        getattr(_dash, 'cfg', None),
+                    ).encode("utf-8")
                 except Exception as e:
                     body = f"# error: {e}\n".encode("utf-8")
                 self.send_response(200)
