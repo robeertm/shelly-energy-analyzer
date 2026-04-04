@@ -1,5 +1,9 @@
 # Changelog
 
+## 15.0.23 - 2026-04-04
+### Fixed
+- **Startup crash: 'AppConfig' has no attribute 'web'** – Prometheus hint label used `self.cfg.web.port` but `web` config doesn't exist. Fixed with safe `getattr` chain.
+
 ## 15.0.22 - 2026-04-04
 ### Added
 - **Desktop: InfluxDB & Prometheus settings UI** – New settings sections for InfluxDB export (URL, token, org, bucket, version, interval) and Prometheus endpoint. InfluxDB exporter starts/stops automatically on settings save.

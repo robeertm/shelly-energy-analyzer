@@ -7356,7 +7356,7 @@ class CoreMixin:
             self._prom_enabled_var = tk.BooleanVar(value=bool(getattr(_prom_cfg, "enabled", False)))
             ttk.Checkbutton(prom_box, text=self.t("settings.prometheus.enabled"), variable=self._prom_enabled_var).grid(row=0, column=0, columnspan=2, padx=8, pady=6, sticky="w")
             ttk.Label(prom_box, text="Endpoint:").grid(row=1, column=0, padx=8, pady=(4, 8), sticky="w")
-            _prom_hint = f"http://<host>:{getattr(self.cfg.web, 'port', 8765)}/metrics"
+            _prom_hint = f"http://<host>:{getattr(getattr(self.cfg, 'web', None), 'port', 8765)}/metrics"
             ttk.Label(prom_box, text=_prom_hint, foreground="#888888").grid(row=1, column=1, padx=8, pady=(4, 8), sticky="w")
 
             # ── Tenant settings ───────────────────────────────────────────────
