@@ -1,5 +1,9 @@
 # Changelog
 
+## 15.0.21 - 2026-04-04
+### Added
+- **i18n: ~940 new translations for ES/FR/PT** – Spanish now has 1328/1329 keys (near-complete), French and Portuguese 1284/1329. All remaining gaps fall back to English. Covers forecast, standby, weather, Sankey, MQTT, solar amortization, tenant billing, smart scheduling, EV log, tariff, battery, advisor, goals, and web dashboard sections.
+
 ## 15.0.20 - 2026-04-04
 ### Changed
 - **Desktop: remove refresh buttons from new tabs** – Tariff, Battery, Advisor, and Goals tabs no longer have manual "Aktualisieren" buttons. Data refreshes automatically on tab switch via `_on_tab_changed()`.
