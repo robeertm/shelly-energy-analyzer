@@ -1,5 +1,16 @@
 # Changelog
 
+## 15.0.19 - 2026-04-04
+### Fixed
+- **Cross-platform: 7 compatibility fixes for Windows/Linux**
+  1. **i18n: 11 missing EN translation keys** – Added missing keys (telegram detail, web CO₂ labels). All 9 languages now have complete fallback chains (FR/PT/IT/PL/CS/RU inherit from EN via `_mk_lang`; ES falls back to EN at runtime).
+  2. **Tab bar hiding: platform-aware offset** – `place(y=-30)` macOS hack replaced with platform-specific offsets (macOS: 30px, Windows: 26px, Linux: 32px).
+  3. **SSL certificate generation: cross-platform** – Added `cryptography` library as primary method (pure Python, works everywhere). Falls back to `openssl` CLI only if library unavailable. CN extraction also uses `cryptography` first.
+  4. **Emoji in desktop UI: auto-strip on unsupported platforms** – New `_strip_emoji()` function detects platform emoji support. Desktop `self.t()` automatically strips emoji on Linux and older Windows. macOS and Win10+ retain emoji.
+  5. **Tariff tab: light/dark mode card colors** – Current tariff highlight uses `#fff3e0` (warm) on light theme, `#2a2000` on dark. Chart uses theme-aware colors via `_apply_plot_theme()`.
+  6. **Hardcoded grays (#888888)** – Reviewed; these are equally readable on both dark and light backgrounds (muted gray). No change needed.
+  7. **Network defaults: localhost → 127.0.0.1** – MQTT broker, InfluxDB URL, and Ollama URL defaults changed from `localhost` to `127.0.0.1` for reliable resolution on all platforms.
+
 ## 15.0.18 - 2026-04-03
 ### Fixed
 - **Desktop tariff comparison: replaced invisible Treeview with card layout** – macOS Aqua dark mode makes ttk.Treeview rows invisible (both `ttk.Style` and `tag_configure` are ignored). Replaced Treeview entirely with `tk.Label`/`tk.Frame` card layout using explicit `fg`/`bg` colors. Each tariff is a bordered card showing name, annual cost, provider details, and savings indicator. Current tariff highlighted with orange border.
