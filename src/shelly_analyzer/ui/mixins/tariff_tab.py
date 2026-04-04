@@ -40,8 +40,6 @@ class TariffMixin:
         self._tariff_chart_frame = ttk.Frame(inner)
         self._tariff_chart_frame.pack(fill="x", padx=12, pady=8)
 
-        ttk.Button(inner, text=self.t("tariff.refresh_btn"), command=self._tariff_refresh).pack(padx=12, pady=8)
-
         self._tariff_refresh()
 
     def _tariff_refresh(self) -> None:

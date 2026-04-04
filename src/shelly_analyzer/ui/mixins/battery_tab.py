@@ -53,7 +53,6 @@ class BatteryMixin:
         self._bat_chart_frame = ttk.LabelFrame(inner, text=self.t("battery.soc_timeline"))
         self._bat_chart_frame.pack(fill="both", expand=True, padx=12, pady=8)
 
-        ttk.Button(inner, text=self.t("battery.refresh_btn"), command=self._bat_refresh).pack(padx=12, pady=8)
         self._bat_refresh()
 
     def _bat_refresh(self) -> None:
