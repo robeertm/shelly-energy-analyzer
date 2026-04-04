@@ -56,7 +56,6 @@ class GoalsMixin:
         self._goals_badges_frame = ttk.Frame(badges_frm)
         self._goals_badges_frame.pack(fill="x", padx=8, pady=8)
 
-        ttk.Button(inner, text=self.t("goals.refresh_btn"), command=self._goals_refresh).pack(padx=12, pady=8)
         self._goals_refresh()
 
     def _goals_refresh(self) -> None:
