@@ -483,7 +483,7 @@ class WeatherConfig:
 class MqttConfig:
     """MQTT publisher for Home Assistant integration."""
     enabled: bool = False
-    broker: str = "localhost"
+    broker: str = "127.0.0.1"
     port: int = 1883
     username: str = ""
     password: str = ""
@@ -618,7 +618,7 @@ class BatteryConfig:
 class InfluxDBConfig:
     """InfluxDB time-series export."""
     enabled: bool = False
-    url: str = "http://localhost:8086"
+    url: str = "http://127.0.0.1:8086"
     token: str = ""
     org: str = ""
     bucket: str = "shelly"
@@ -651,7 +651,7 @@ class AdvisorConfig:
     use_llm: bool = False
     llm_provider: str = "ollama"  # ollama | openai | anthropic
     llm_model: str = "llama3"
-    ollama_url: str = "http://localhost:11434"
+    ollama_url: str = "http://127.0.0.1:11434"
     openai_api_key: str = ""
     anthropic_api_key: str = ""
 
@@ -1120,7 +1120,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     mqtt_raw = raw.get("mqtt", {}) if isinstance(raw.get("mqtt"), dict) else {}
     mqtt_cfg = MqttConfig(
         enabled=bool(mqtt_raw.get("enabled", MqttConfig.enabled)),
-        broker=str(mqtt_raw.get("broker", MqttConfig.broker) or "localhost"),
+        broker=str(mqtt_raw.get("broker", MqttConfig.broker) or "127.0.0.1"),
         port=_coerce_int(mqtt_raw.get("port", MqttConfig.port), MqttConfig.port),
         username=str(mqtt_raw.get("username", MqttConfig.username) or ""),
         password=str(mqtt_raw.get("password", MqttConfig.password) or ""),
@@ -1269,7 +1269,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     idb_raw = raw.get("influxdb", {}) if isinstance(raw.get("influxdb"), dict) else {}
     influxdb_cfg = InfluxDBConfig(
         enabled=bool(idb_raw.get("enabled", False)),
-        url=str(idb_raw.get("url", "http://localhost:8086") or "http://localhost:8086"),
+        url=str(idb_raw.get("url", "http://127.0.0.1:8086") or "http://127.0.0.1:8086"),
         token=str(idb_raw.get("token", "") or ""),
         org=str(idb_raw.get("org", "") or ""),
         bucket=str(idb_raw.get("bucket", "shelly") or "shelly"),
@@ -1299,7 +1299,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         use_llm=bool(adv_raw.get("use_llm", False)),
         llm_provider=str(adv_raw.get("llm_provider", "ollama") or "ollama"),
         llm_model=str(adv_raw.get("llm_model", "llama3") or "llama3"),
-        ollama_url=str(adv_raw.get("ollama_url", "http://localhost:11434") or "http://localhost:11434"),
+        ollama_url=str(adv_raw.get("ollama_url", "http://127.0.0.1:11434") or "http://127.0.0.1:11434"),
         openai_api_key=str(adv_raw.get("openai_api_key", "") or ""),
         anthropic_api_key=str(adv_raw.get("anthropic_api_key", "") or ""),
     )
@@ -1663,7 +1663,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
         },
         "mqtt": {
             "enabled": bool(getattr(cfg.mqtt, "enabled", False)),
-            "broker": str(getattr(cfg.mqtt, "broker", "localhost") or "localhost"),
+            "broker": str(getattr(cfg.mqtt, "broker", "localhost") or "127.0.0.1"),
             "port": int(getattr(cfg.mqtt, "port", 1883)),
             "username": str(getattr(cfg.mqtt, "username", "") or ""),
             "password": str(getattr(cfg.mqtt, "password", "") or ""),
@@ -1740,7 +1740,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
         },
         "influxdb": {
             "enabled": bool(getattr(cfg.influxdb, "enabled", False)),
-            "url": str(getattr(cfg.influxdb, "url", "http://localhost:8086") or "http://localhost:8086"),
+            "url": str(getattr(cfg.influxdb, "url", "http://127.0.0.1:8086") or "http://127.0.0.1:8086"),
             "token": str(getattr(cfg.influxdb, "token", "") or ""),
             "org": str(getattr(cfg.influxdb, "org", "") or ""),
             "bucket": str(getattr(cfg.influxdb, "bucket", "shelly") or "shelly"),
@@ -1764,7 +1764,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "use_llm": bool(getattr(cfg.advisor, "use_llm", False)),
             "llm_provider": str(getattr(cfg.advisor, "llm_provider", "ollama") or "ollama"),
             "llm_model": str(getattr(cfg.advisor, "llm_model", "llama3") or "llama3"),
-            "ollama_url": str(getattr(cfg.advisor, "ollama_url", "http://localhost:11434") or "http://localhost:11434"),
+            "ollama_url": str(getattr(cfg.advisor, "ollama_url", "http://127.0.0.1:11434") or "http://127.0.0.1:11434"),
             "openai_api_key": str(getattr(cfg.advisor, "openai_api_key", "") or ""),
             "anthropic_api_key": str(getattr(cfg.advisor, "anthropic_api_key", "") or ""),
         },

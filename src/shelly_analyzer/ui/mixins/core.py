@@ -36,7 +36,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from matplotlib.figure import Figure
 import matplotlib.dates as mdates
 from shelly_analyzer import __version__
-from shelly_analyzer.i18n import t as _t, normalize_lang, LANGS, format_date_local, format_number_local
+from shelly_analyzer.i18n import t as _t, normalize_lang, LANGS, format_date_local, format_number_local, _strip_emoji
 from shelly_analyzer.core.energy import filter_by_time, calculate_energy
 from shelly_analyzer.core.stats import daily_kwh, weekly_kwh, monthly_kwh
 from shelly_analyzer.io.config import (
@@ -196,7 +196,7 @@ class CoreMixin:
                 self._setup_required = bool(self._first_run)
             self._tabs_built = False
             self.lang = normalize_lang(getattr(self.cfg.ui, "language", "de"))
-            self.t = lambda k, **kw: _t(self.lang, k, **kw)
+            self.t = lambda k, **kw: _t(self.lang, k, strip_emoji=True, **kw)
             # UI variables that may be referenced before their tabs are built
             # (e.g., during setup wizard / early autosync).
             self.sync_summary = tk.StringVar(value=self.t("common.no_data"))
@@ -542,7 +542,7 @@ class CoreMixin:
             except Exception:
                 pass
             self.lang = lang
-            self.t = lambda k, **kw: _t(self.lang, k, **kw)
+            self.t = lambda k, **kw: _t(self.lang, k, strip_emoji=True, **kw)
             try:
                 self.title(f"{self.t('app.title')} {__version__}")
             except Exception:
@@ -989,9 +989,16 @@ class CoreMixin:
                 self.notebook.add(_tab_frm, text=_label)
                 self._add_tab_button_fn(_label, _idx)
 
-            # Now pack the notebook shifted upward so native tab row is clipped
-            # The native tab row is typically ~28-32px high on macOS.
-            self.notebook.place(x=0, y=-30, relwidth=1.0, relheight=1.0, height=30)
+            # Hide native tab row by shifting notebook upward (clipped by parent).
+            # Tab height varies by platform/theme, so use a generous offset.
+            import sys as _sys
+            if _sys.platform.startswith("darwin"):
+                _tab_offset = 30   # macOS Aqua: ~28-32px
+            elif _sys.platform == "win32":
+                _tab_offset = 26   # Windows: ~22-26px
+            else:
+                _tab_offset = 32   # Linux GTK/Qt: ~28-34px
+            self.notebook.place(x=0, y=-_tab_offset, relwidth=1.0, relheight=1.0, height=_tab_offset)
 
             # First-run / no-devices mode: show a guided Setup wizard and keep other tabs disabled
             if bool(getattr(self, "_setup_required", False)):
@@ -7999,7 +8006,7 @@ class CoreMixin:
             try:
                 self.cfg = load_config(self.cfg_path)
                 self.lang = normalize_lang(getattr(self.cfg.ui, 'language', 'de'))
-                self.t = lambda k, **kw: _t(self.lang, k, **kw)
+                self.t = lambda k, **kw: _t(self.lang, k, strip_emoji=True, **kw)
                 self.title(f"{self.t('app.title')} {__version__}")
             except Exception as e:
                 messagebox.showerror(self.t('settings.expert'), f"{self.t('settings.raw.reload_error')}:\n{e}")
@@ -8784,7 +8791,7 @@ class CoreMixin:
     def _reload_settings(self) -> None:
             self.cfg = load_config(self.cfg_path)
             self.lang = normalize_lang(getattr(self.cfg.ui, "language", "de"))
-            self.t = lambda k, **kw: _t(self.lang, k, **kw)
+            self.t = lambda k, **kw: _t(self.lang, k, strip_emoji=True, **kw)
             self.title(f"{self.t('app.title')} {__version__}")
             # Reset cached group vars so they reflect reloaded config
             self._group_vars = None
