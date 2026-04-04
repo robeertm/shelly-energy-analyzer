@@ -4,27 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shelly-energy-analyzer"
-version = "15.0.23"
-description = "Shelly EM/3EM Energy Analyzer (GUI + Export)"
+version = "16.0.0"
+description = "Shelly EM/3EM Energy Analyzer (Flask Web App)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Shelly Energy Analyzer Contributors" }]
 keywords = ["shelly", "energy", "power", "tkinter", "pandas"]
 dependencies = [
+  "flask>=3.0",
+  "waitress>=3.0",
   "requests>=2.31",
   "pandas>=2.0",
   "numpy>=1.23",
-  "matplotlib>=3.7",
   "openpyxl>=3.1",
   "reportlab>=4.0",
   "pillow>=10.0",
   "qrcode>=7.4",
   "plotly>=5.18",
-  "pywebview>=5.0",
   "zeroconf>=0.131",
   "paho-mqtt>=1.6",
 ]
+
+[project.optional-dependencies]
+charts = ["matplotlib>=3.7"]
 
 [project.scripts]
 shelly-analyzer = "shelly_analyzer.__main__:main"

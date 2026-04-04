@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="{lang}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{web_control_title}</title>
+  <style>
+    :root {{
+      /* Light theme (default) */
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --fg: #111827;
+      --muted: #4b5563;
+      --accent: #2563eb;
+      --border: rgba(17,24,39,0.12);
+      --chipbg: rgba(17,24,39,0.04);
+    }}
+    :root[data-theme="dark"] {{
+      --bg: #0b0f14;
+      --card: #121821;
+      --fg: #e8eef6;
+      --muted: #9fb0c3;
+      --accent: #6aa7ff;
+      --border: rgba(255,255,255,0.08);
+      --chipbg: rgba(255,255,255,0.02);
+    }}
+    html, body {{
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }}
+    .wrap {{ padding: 10px; box-sizing: border-box; }}
+    .topbar {{
+      display:flex;
+      align-items:flex-start;
+      justify-content:flex-start;
+      gap:10px;
+      margin: 6px 2px 10px;
+      flex-wrap: wrap;
+    }}
+    .toptext {{ flex: 1 1 100%; min-width: 0; }}
+    .navrow {{
+      display:flex;
+      flex-wrap: wrap;
+      gap:10px;
+      align-items:center;
+    }}
+    .title {{ font-size: 16px; font-weight: 650; }}
+    .meta {{ font-size: 12px; color: var(--muted); }}
+    a.navlink {{
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--chipbg);
+    }}
+    a.navlink.active {{ color: var(--fg); border-color: rgba(106,167,255,0.35); }}
+    .grid {{ display:grid; grid-template-columns: 1fr; gap: 10px; }}
+    @media (min-width: 900px) {{ .grid {{ grid-template-columns: 1fr 1fr; }} }}
+    .card {{
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px;
+      box-sizing: border-box;
+      min-width: 0;
+    }}
+    .card h2 {{ margin:0 0 8px; font-size:14px; font-weight:650; }}
+    label {{ font-size: 12px; color: var(--muted); }}
+    input, select {{
+      font-size: 13px;
+      padding: 6px 8px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--chipbg);
+      color: var(--fg);
+    }}
+    button {{
+      font-size: 13px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(106,167,255,0.35);
+      background: rgba(106,167,255,0.12);
+      color: var(--fg);
+      cursor: pointer;
+    }}
+    button:disabled {{ opacity: 0.5; cursor: default; }}
+    .row {{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }}
+    .row > * {{ flex: 0 0 auto; }}
+    /* Button rows: keep buttons aligned on mobile + desktop.
+       Mobile: 2 per row (last one spans full width if odd).
+       Desktop/tablet: 3 per row. */
+    .btnrow {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      align-items: stretch;
+    }}
+    .btnrow button {{ width: 100%; }}
+    .btnrow button:last-child:nth-child(odd) {{ grid-column: 1 / -1; }}
+    @media (min-width: 700px) {{
+      .btnrow {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+      .btnrow button:last-child:nth-child(odd) {{ grid-column: auto; }}
+    }}
+    .log {{
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      white-space: pre-wrap;
+      max-height: 240px;
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px;
+      background: var(--chipbg);
+    }}
+    .files a {{ color: var(--accent); text-decoration: none; }}
+    .jobslist {{ display: grid; gap: 8px; margin-top: 8px; }}
+    .jobcard {{
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px;
+      background: var(--chipbg);
+    }}
+    .jobhead {{ display:flex; justify-content:space-between; gap:10px; align-items:baseline; }}
+    .jobtitle {{ font-size: 13px; color: var(--fg); font-weight: 650; }}
+    .jobmeta {{ font-size: 12px; color: var(--muted); }}
+    .progrow {{ display:flex; gap:8px; align-items:center; margin-top: 6px; }}
+    progress {{ width: 100%; height: 12px; }}
+    .jobfiles {{ margin-top: 6px; display:flex; flex-wrap:wrap; gap:8px; }}
+    .jobfiles a {{ color: var(--accent); text-decoration: none; font-size: 12px; }}
+    .thumbs {{ display:grid; grid-template-columns: 1fr; gap: 8px; margin-top: 8px; }}
+    @media (min-width: 700px) {{ .thumbs {{ grid-template-columns: 1fr 1fr; }} }}
+    img.thumb {{ width: 100%; border-radius: 12px; border: 1px solid var(--border); }}
+    /* Export card redesign */
+    .export-card {{ grid-column: 1 / -1; }}
+    .export-sections {{ display: grid; grid-template-columns: 1fr; gap: 10px; }}
+    @media (min-width: 700px) {{ .export-sections {{ grid-template-columns: 1fr 1fr; }} }}
+    .export-section {{ border: 1px solid var(--border); border-radius: 12px; padding: 10px; background: var(--chipbg); }}
+    .export-section h3 {{ margin: 0 0 8px; font-size: 12px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }}
+    .quick-dates {{ display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }}
+    .quick-dates button {{ font-size: 11px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--chipbg); color: var(--muted); cursor: pointer; }}
+    .quick-dates button:hover {{ color: var(--fg); border-color: rgba(106,167,255,0.35); }}
+    .export-actions {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }}
+    @media (min-width: 700px) {{ .export-actions {{ grid-template-columns: repeat(3, 1fr); }} }}
+    .export-actions button {{ display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; font-size: 12px; text-align: center; min-height: 54px; justify-content: center; }}
+    .export-actions button .btn-icon {{ font-size: 18px; line-height: 1; }}
+    .export-actions button .btn-label {{ font-size: 11px; line-height: 1.2; }}
+    .export-actions button:disabled {{ opacity: 0.5; cursor: default; }}
+    .export-actions button.loading {{ position: relative; color: transparent; }}
+    .export-actions button.loading::after {{ content: ""; position: absolute; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: btn-spin 0.6s linear infinite; }}
+    @keyframes btn-spin {{ to {{ transform: rotate(360deg); }} }}
+    .inline-field {{ display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }}
+    .inline-field label {{ min-width: 30px; }}
+    .inline-field input, .inline-field select {{ flex: 1; min-width: 0; }}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="toptext">
+        <div class="title">{web_control_title}</div>
+        <div class="meta">{web_control_meta}</div>
+      </div>
+      <div class="navrow">
+        <a class="navlink active" id="nav_control" href="/control">{web_nav_control}</a>
+        <a class="navlink" id="btn_theme" href="#">🌓</a>
+        <a class="navlink" id="nav_live" href="/">{web_nav_live}</a>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>{web_control_sync}</h2>
+        <div class="row">
+          <label for="sync_mode">{web_control_mode}</label>
+          <select id="sync_mode">
+            <option value="incremental">incremental</option>
+            <option value="day">day</option>
+            <option value="week">week</option>
+            <option value="month">month</option>
+            <option value="custom">custom</option>
+          </select>
+          <label for="sync_start">{web_control_start}</label>
+          <input id="sync_start" placeholder="01.10.2025" />
+          <button id="btn_sync">{web_control_btn_sync}</button>
+        </div>
+        <div class="log" id="sync_log">–</div>
+      </div>
+
+      <div class="card">
+        <h2>📊 Network Traffic</h2>
+        <div id="traffic-rate" style="font-size:16px;font-weight:bold;margin-bottom:8px">↓ 0 B/s  ↑ 0 B/s</div>
+        <div id="traffic-total" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
+        <div style="max-height:220px;overflow-y:auto;margin-bottom:8px">
+        <table style="width:100%;font-size:13px;border-collapse:collapse" id="traffic-table">
+          <thead><tr style="border-bottom:1px solid var(--border);text-align:left">
+            <th style="padding:4px 8px">Category</th>
+            <th style="padding:4px 8px;text-align:center">Requests</th>
+            <th style="padding:4px 8px;text-align:right">↓ Received</th>
+            <th style="padding:4px 8px;text-align:right">↑ Sent</th>
+          </tr></thead>
+          <tbody id="traffic-tbody"></tbody>
+        </table>
+        </div>
+        <canvas id="traffic-chart" style="width:100%;height:120px"></canvas>
+      </div>
+
+      <div class="card">
+        <h2>{web_control_plots}</h2>
+        <div class="row" style="margin-bottom:8px">
+          <a class="navlink" id="open_plotly" href="/plots">{web_control_open_plotly}</a>
+        </div>
+        <div class="row">
+          <label for="plot_mode">{web_control_mode}</label>
+          <select id="plot_mode">
+            <option value="days">days</option>
+            <option value="weeks">weeks</option>
+            <option value="months">months</option>
+            <option value="all">all</option>
+          </select>
+          <label for="plot_start">{web_control_plots_from}</label>
+          <input id="plot_start" placeholder="YYYY-MM-DD" />
+          <label for="plot_end">{web_control_plots_to}</label>
+          <input id="plot_end" placeholder="YYYY-MM-DD" />
+          <button id="btn_plots">{web_control_btn_plots}</button>
+        </div>
+        <div class="thumbs" id="plot_thumbs"></div>
+      </div>
+
+      <div class="card export-card">
+        <h2>{web_control_export}</h2>
+        <div class="export-sections">
+          <div class="export-section">
+            <h3>{web_control_export_daterange}</h3>
+            <div class="quick-dates">
+              <button data-quick="today">{web_control_export_today}</button>
+              <button data-quick="week">{web_control_export_this_week}</button>
+              <button data-quick="month">{web_control_export_this_month}</button>
+              <button data-quick="year">{web_control_export_this_year}</button>
+              <button data-quick="all">{web_control_export_all}</button>
+            </div>
+            <div class="inline-field">
+              <label for="exp_start">{web_control_plots_from}</label>
+              <input id="exp_start" type="date" />
+            </div>
+            <div class="inline-field">
+              <label for="exp_end">{web_control_plots_to}</label>
+              <input id="exp_end" type="date" />
+            </div>
+          </div>
+          <div class="export-section">
+            <h3>{web_control_export_invoice_settings}</h3>
+            <div class="inline-field">
+              <label for="inv_period">{web_control_invoice}</label>
+              <select id="inv_period">
+                <option value="custom">custom</option>
+                <option value="day">day</option>
+                <option value="week">week</option>
+                <option value="month" selected>month</option>
+                <option value="year">year</option>
+              </select>
+            </div>
+            <div class="inline-field">
+              <label for="inv_anchor">{web_control_anchor}</label>
+              <input id="inv_anchor" type="date" />
+            </div>
+            <span class="meta">{web_control_custom_note}</span>
+            <div class="inline-field" style="margin-top:6px">
+              <label for="bundle_hours">{web_control_export_bundle_hours}</label>
+              <input id="bundle_hours" type="number" value="48" min="1" max="8760" style="width:80px;flex:0 0 80px;" />
+            </div>
+          </div>
+        </div>
+
+        <div class="export-section" style="margin-top:10px">
+          <h3>{web_control_export_actions}</h3>
+          <div class="export-actions">
+            <button id="btn_summary"><span class="btn-icon">📄</span><span class="btn-label">{web_control_btn_summary}</span></button>
+            <button id="btn_invoices"><span class="btn-icon">🧾</span><span class="btn-label">{web_control_btn_invoices}</span></button>
+            <button id="btn_excel"><span class="btn-icon">📊</span><span class="btn-label">{web_control_btn_excel}</span></button>
+            <button id="btn_report_day"><span class="btn-icon">📅</span><span class="btn-label">{web_control_btn_report_day}</span></button>
+            <button id="btn_report_month"><span class="btn-icon">📆</span><span class="btn-label">{web_control_btn_report_month}</span></button>
+            <button id="btn_bundle"><span class="btn-icon">📦</span><span class="btn-label">{web_control_btn_bundle}</span></button>
+          </div>
+        </div>
+
+        <div class="export-section" style="margin-top:10px">
+          <h3>{web_control_export_preview}</h3>
+          <div id="ctrl_export_results">
+            <div class="ctrl-exp-ph" id="ctrl_export_ph" style="color:var(--muted);font-size:12px;text-align:center;padding:12px 0">{web_control_export_no_preview}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>{web_control_jobs}</h2>
+        <div class="meta">{web_control_jobs_meta}</div>
+        <div class="jobslist" id="jobs"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// Theme (shared with Live page)
+const LS_THEME = "sea_theme";
+function setTheme(theme){
+  const v = (theme==='dark')?'dark':'light';
+  document.documentElement.dataset.theme = v;
+  localStorage.setItem(LS_THEME, v);
+  updateThemeBtn();
+}
+function updateThemeBtn(){
+  const el = document.getElementById('btn_theme');
+  if(!el) return;
+  const cur = document.documentElement.dataset.theme || 'dark';
+  el.textContent = (cur==='dark') ? '🌙' : '☀️';
+  el.title = (cur==='dark') ? 'Dark mode' : 'Light mode';
+}
+(function initTheme(){
+  let theme = localStorage.getItem(LS_THEME);
+  if(!theme){ theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light'; }
+  document.documentElement.dataset.theme = theme;
+  updateThemeBtn();
+})();
+(function bindTheme(){
+  const el = document.getElementById('btn_theme');
+  if(el) el.addEventListener('click', (ev)=>{ ev.preventDefault(); const cur=document.documentElement.dataset.theme||'dark'; setTheme(cur==='dark'?'light':'dark'); });
+})();
+
+// keep token across navigation links
+try {
+  const qs = window.location.search || "";
+  if (qs) {
+    document.getElementById("nav_live").setAttribute("href", "/" + qs);
+    document.getElementById("nav_control").setAttribute("href", "/control" + qs);
+    const op = document.getElementById("open_plotly");
+    if (op) op.setAttribute("href", "/plots" + qs);
+  }
+} catch (e) {}
+
+function qs() { return window.location.search || ""; }
+
+async function api(path, opts) {
+  const u = path + qs();
+  const r = await fetch(u, opts || {cache:"no-store"});
+  if (!r.ok) {
+    let t = "";
+    try { t = await r.text(); } catch(e) {}
+    throw new Error(`HTTP ${r.status}: ${t || r.statusText}`);
+  }
+  return r;
+}
+
+async function run(action, params) {
+  const r = await api("/api/run", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({action, params: params || {} })
+  });
+  try {
+    return await r.json();
+  } catch (e) {
+    const t = await r.text();
+    throw new Error(t || "Antwort ist kein JSON");
+  }
+}
+
+function esc(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function renderJob(j) {
+  const t = j.started_at ? new Date(j.started_at*1000).toLocaleString() : "";
+  const st = j.status || "";
+  const a = j.action || "";
+  const pct = (j.progress_overall !== undefined && j.progress_overall !== null) ? parseInt(j.progress_overall,10) : 0;
+  const err = j.error ? `<div class="jobmeta"><b>{t_error_label}:</b> ${{esc(j.error)}}</div>` : "";
+  let progLines = "";
+  const prog = j.progress || {};
+  const keys = Object.keys(prog);
+  if (keys.length) {
+    progLines = keys.map(k => {
+      const p = prog[k] || {};
+      const pd = parseInt(p.done||0,10);
+      const pt = parseInt(p.total||1,10);
+      const pp = parseInt(p.percent||0,10);
+      const pm = esc(p.message||"");
+      return `<div class="jobmeta">${esc(k)}: ${pp}% (${pd}/${pt}) ${pm?"• "+pm:""}</div>`;
+    }).join("");
+  }
+  let files = "";
+  const r = j.result || {};
+  if (r && r.files && Array.isArray(r.files)) {
+    files = `<div class="jobfiles">` + r.files.map(f => {
+      const url = (f.url||"") + qs();
+      const name = esc(f.name||"file");
+      return `<a href="${url}" target="_blank">${name}</a>`;
+    }).join("") + `</div>`;
+  }
+  return `
+    <div class="jobcard">
+      <div class="jobhead">
+        <div class="jobtitle">#${esc(j.id)} • ${esc(a)}</div>
+        <div class="jobmeta">${esc(st)} • ${esc(t)}</div>
+      </div>
+      <div class="progrow">
+        <progress max="100" value="${isNaN(pct)?0:pct}"></progress>
+        <div class="jobmeta">${isNaN(pct)?0:pct}%</div>
+      </div>
+      ${progLines}
+      ${err}
+      ${files}
+    </div>
+  `;
+}
+
+async function refreshJobs() {
+  try {
+    const r = await api("/api/jobs", {cache:"no-store"});
+    const j = await r.json();
+    const arr = (j && j.jobs) ? j.jobs : [];
+    const el = document.getElementById("jobs");
+    if (!el) return;
+    if (!arr.length) { el.innerHTML = `<div class="jobmeta">–</div>`; return; }
+    el.innerHTML = arr.map(renderJob).join("");
+  } catch (e) {}
+}
+
+setInterval(refreshJobs, 1500);
+refreshJobs();
+
+document.getElementById("btn_sync").addEventListener("click", async ()=>{
+  const mode = document.getElementById("sync_mode").value;
+  const start = document.getElementById("sync_start").value;
+  document.getElementById("sync_log").textContent = "{t_starting}";
+  try {
+    const res = await run("sync", {mode, start_date: start});
+    document.getElementById("sync_log").textContent = JSON.stringify(res, null, 2);
+  } catch (e) {
+    document.getElementById("sync_log").textContent = "{t_error_label}: " + (e && e.message ? e.message : String(e));
+  }
+});
+
+// --- Network Traffic ---
+const _trafficCatIcons = {shelly:'🔌',entsoe:'🌿',spot_price:'⚡',weather:'🌡️',telegram:'💬',github:'🔄',local:'🏠',other:'📡'};
+const _trafficCatLabels = {shelly:'Shelly Devices',entsoe:'ENTSO-E API',spot_price:'Spot Prices',weather:'OpenWeather',telegram:'Telegram',github:'GitHub',local:'Local/Web',other:'Other'};
+function _fmtBytes(n) {{
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n/1024).toFixed(1) + ' KB';
+  if (n < 1073741824) return (n/1048576).toFixed(1) + ' MB';
+  return (n/1073741824).toFixed(2) + ' GB';
+}}
+function _fmtRate(bps) {{
+  if (bps < 1024) return bps.toFixed(0) + ' B/s';
+  if (bps < 1048576) return (bps/1024).toFixed(1) + ' KB/s';
+  return (bps/1048576).toFixed(1) + ' MB/s';
+}}
+async function _refreshTraffic() {{
+  try {{
+    const r = await fetch('/api/traffic');
+    const d = await r.json();
+    const rateEl = document.getElementById('traffic-rate');
+    const totalEl = document.getElementById('traffic-total');
+    const tbody = document.getElementById('traffic-tbody');
+    if (!rateEl) return;
+    rateEl.textContent = '\u2193 ' + _fmtRate(d.rate_recv_bps||0) + '  \u2191 ' + _fmtRate(d.rate_sent_bps||0);
+    const hrs = Math.floor((d.uptime_s||0)/3600);
+    const mins = Math.floor(((d.uptime_s||0)%3600)/60);
+    const uptime = hrs ? hrs+'h '+mins+'m' : mins+'m';
+    totalEl.textContent = 'Total: \u2193 ' + _fmtBytes(d.total_received||0) + '  \u2191 ' + _fmtBytes(d.total_sent||0) + '  |  ' + (d.total_requests||0) + ' Requests  |  ' + uptime;
+    tbody.innerHTML = '';
+    const cats = Object.entries(d.categories||{{}}).sort((a,b) => (b[1].received||0)-(a[1].received||0));
+    for (const [cat, data] of cats) {{
+      const icon = _trafficCatIcons[cat] || '📡';
+      const label = _trafficCatLabels[cat] || cat;
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid var(--border)';
+      tr.innerHTML = '<td style="padding:4px 8px">' + icon + ' ' + label + '</td>'
+        + '<td style="padding:4px 8px;text-align:center">' + (data.requests||0) + '</td>'
+        + '<td style="padding:4px 8px;text-align:right">' + _fmtBytes(data.received||0) + '</td>'
+        + '<td style="padding:4px 8px;text-align:right">' + _fmtBytes(data.sent||0) + '</td>';
+      tbody.appendChild(tr);
+    }}
+    // Draw live traffic rate chart
+    _drawTrafficRateChart(d.rate_history);
+  }} catch(e) {{}}
+}}
+function _drawTrafficRateChart(hist) {{
+  const cv = document.getElementById('traffic-chart');
+  if (!cv || !hist || !hist.ts || !hist.ts.length) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.offsetWidth;
+  const H = cv.offsetHeight || 120;
+  cv.width = W * dpr;
+  cv.height = H * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const isDark = document.documentElement.dataset.theme === 'dark';
+  const fg = isDark ? '#bbb' : '#555';
+  const gridC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+
+  const ts = hist.ts;   // seconds ago (negative)
+  const recv = hist.recv;
+  const sent = hist.sent;
+  const maxVal = Math.max(1, Math.max(...recv), Math.max(...sent));
+
+  const padL = 50, padR = 10, padT = 10, padB = 22;
+  const cW = W - padL - padR;
+  const cH = H - padT - padB;
+  const minT = ts[0] || -3600;
+  const maxT = ts[ts.length - 1] || 0;
+  const rangeT = Math.max(1, maxT - minT);
+
+  function xOf(t) {{ return padL + ((t - minT) / rangeT) * cW; }}
+  function yOf(v) {{ return padT + cH - (v / maxVal) * cH; }}
+
+  // Grid lines
+  ctx.strokeStyle = gridC;
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {{
+    const y = padT + (cH * i / 4);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + cW, y); ctx.stroke();
+  }}
+
+  // Draw filled area + line for recv
+  function drawSeries(vals, lineColor, fillColor) {{
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = fillColor;
+    ctx.beginPath();
+    ctx.moveTo(xOf(ts[0]), yOf(0));
+    for (let i = 0; i < vals.length; i++) ctx.lineTo(xOf(ts[i]), yOf(vals[i]));
+    ctx.lineTo(xOf(ts[vals.length - 1]), yOf(0));
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < vals.length; i++) {{
+      if (i === 0) ctx.moveTo(xOf(ts[i]), yOf(vals[i]));
+      else ctx.lineTo(xOf(ts[i]), yOf(vals[i]));
+    }}
+    ctx.stroke();
+  }}
+  drawSeries(recv, '#2196F3', '#2196F3');
+  drawSeries(sent, '#FF9800', '#FF9800');
+
+  // Y-axis labels
+  ctx.fillStyle = fg;
+  ctx.font = '9px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i <= 4; i++) {{
+    const v = maxVal * (4 - i) / 4;
+    ctx.fillText(_fmtRate(v), padL - 4, padT + (cH * i / 4));
+  }}
+
+  // X-axis labels (minutes ago)
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const steps = [0, -1, -2, -3, -4, -5];
+  for (const m of steps) {{
+    const t = m * 60;
+    if (t >= minT && t <= maxT) {{
+      ctx.fillText(m === 0 ? 'now' : m + 'm', xOf(t), padT + cH + 4);
+    }}
+  }}
+
+  // Legend
+  ctx.font = '9px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#2196F3';
+  ctx.fillRect(padL + 4, padT + 2, 12, 3);
+  ctx.fillStyle = fg;
+  ctx.fillText('\u2193 Down', padL + 20, padT + 1);
+  ctx.fillStyle = '#FF9800';
+  ctx.fillRect(padL + 70, padT + 2, 12, 3);
+  ctx.fillStyle = fg;
+  ctx.fillText('\u2191 Up', padL + 86, padT + 1);
+}}
+setInterval(_refreshTraffic, 500);
+_refreshTraffic();
+
+document.getElementById("btn_plots").addEventListener("click", async ()=>{
+  const mode = document.getElementById("plot_mode").value;
+  const start = document.getElementById("plot_start").value;
+  const end = document.getElementById("plot_end").value;
+  const thumbs = document.getElementById("plot_thumbs");
+  thumbs.innerHTML = "";
+  try {
+    const res = await run("plots", {mode, start, end});
+    if (res && res.files) {
+      res.files.forEach(f => {
+        const img = document.createElement("img");
+        img.className = "thumb";
+        img.src = f.url + qs();
+        img.alt = f.name;
+        thumbs.appendChild(img);
+      });
+    } else {
+      thumbs.innerHTML = `<div class="jobmeta">${esc(JSON.stringify(res||{}, null, 2))}</div>`;
+    }
+  } catch (e) {
+    thumbs.innerHTML = `<div class="jobmeta">{t_error_label}: ${{esc(e && e.message ? e.message : String(e))}}</div>`;
+  }
+});
+
+// --- Quick date presets ---
+document.querySelectorAll(".quick-dates button[data-quick]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const q = btn.dataset.quick;
+    const now = new Date();
+    const fmt = d => d.toISOString().slice(0,10);
+    const elS = document.getElementById("exp_start");
+    const elE = document.getElementById("exp_end");
+    if (q === "today") {
+      elS.value = fmt(now); elE.value = fmt(now);
+    } else if (q === "week") {
+      const mon = new Date(now); mon.setDate(now.getDate() - now.getDay() + (now.getDay()===0?-6:1));
+      elS.value = fmt(mon); elE.value = fmt(now);
+    } else if (q === "month") {
+      const ms = new Date(now.getFullYear(), now.getMonth(), 1);
+      elS.value = fmt(ms); elE.value = fmt(now);
+    } else if (q === "year") {
+      const ys = new Date(now.getFullYear(), 0, 1);
+      elS.value = fmt(ys); elE.value = fmt(now);
+    } else if (q === "all") {
+      elS.value = ""; elE.value = "";
+    }
+  });
+});
+
+// --- Export helpers ---
+function setButtonLoading(btn, loading) {
+  if (loading) { btn.disabled = true; btn.classList.add("loading"); }
+  else { btn.disabled = false; btn.classList.remove("loading"); }
+}
+function _ctrlFileIcon(name) {
+  const n = (name||"").toLowerCase();
+  if (n.endsWith(".pdf")) return "📄";
+  if (n.endsWith(".xlsx") || n.endsWith(".xls")) return "📊";
+  if (n.endsWith(".zip")) return "📦";
+  if (n.endsWith(".png") || n.endsWith(".jpg") || n.endsWith(".jpeg")) return "🖼️";
+  return "📎";
+}
+function _ctrlFileCard(f) {
+  const icon = _ctrlFileIcon(f.name);
+  const url = (f.url||"") + qs();
+  const name = esc(f.name || "file");
+  const ext = (f.name||"").split(".").pop().toUpperCase();
+  return `<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--card);margin-bottom:6px">
+    <div style="font-size:28px">${icon}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:600;word-break:break-all">${name}</div>
+      <div style="font-size:11px;color:var(--muted)">${ext}</div>
+    </div>
+    <a href="${url}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:8px 16px;border-radius:10px;border:1px solid rgba(106,167,255,0.35);background:rgba(106,167,255,0.12);color:var(--accent);text-decoration:none;font-weight:600;white-space:nowrap;min-height:40px">Öffnen</a>
+  </div>`;
+}
+function showResults(files) {
+  const el = document.getElementById("ctrl_export_results");
+  const ph = document.getElementById("ctrl_export_ph");
+  if (!files || !files.length) return;
+  if (ph) ph.style.display = "none";
+  el.insertAdjacentHTML("afterbegin", files.map(f => _ctrlFileCard(f)).join(""));
+}
+function showJobAccepted(jobId) {
+  const el = document.getElementById("ctrl_export_results");
+  const ph = document.getElementById("ctrl_export_ph");
+  if (ph) ph.style.display = "none";
+  el.insertAdjacentHTML("afterbegin", `<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid rgba(106,167,255,0.25);border-radius:12px;background:rgba(106,167,255,0.06);margin-bottom:6px;color:var(--accent);font-size:12px">✓ Job #${esc(String(jobId))} gestartet – siehe Jobs unten.</div>`);
+}
+function showError(msg) {
+  const el = document.getElementById("ctrl_export_results");
+  const ph = document.getElementById("ctrl_export_ph");
+  if (ph) ph.style.display = "none";
+  el.insertAdjacentHTML("afterbegin", `<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--card);margin-bottom:6px">
+    <div style="font-size:24px">⚠️</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:600;color:#ef4444">{t_error_label}</div>
+      <div style="font-size:11px;color:var(--muted)">${esc(msg)}</div>
+    </div>
+  </div>`);
+}
+function handleResult(res) {
+  if (res && res.files && res.files.length) showResults(res.files);
+  else if (res && res.job && res.job.id) showJobAccepted(res.job.id);
+  else if (res && res.ok) showJobAccepted(res.job ? res.job.id : "?");
+  else if (res && res.error) showError(res.error);
+  else showError(JSON.stringify(res));
+}
+
+// --- Export button handlers ---
+async function ctrlExport(btn, action, params) {
+  setButtonLoading(btn, true);
+  try { handleResult(await run(action, params)); }
+  catch (e) { showError(e&&e.message?e.message:String(e)); }
+  setButtonLoading(btn, false);
+}
+
+document.getElementById("btn_summary").addEventListener("click", function(){
+  ctrlExport(this, "export_summary", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value});
+});
+document.getElementById("btn_invoices").addEventListener("click", function(){
+  ctrlExport(this, "export_invoices", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value, period: document.getElementById("inv_period").value, anchor: document.getElementById("inv_anchor").value});
+});
+document.getElementById("btn_excel").addEventListener("click", function(){
+  ctrlExport(this, "export_excel", {start: document.getElementById("exp_start").value, end: document.getElementById("exp_end").value});
+});
+document.getElementById("btn_bundle").addEventListener("click", function(){
+  ctrlExport(this, "bundle", {hours: parseInt(document.getElementById("bundle_hours").value) || 48});
+});
+document.getElementById("btn_report_day").addEventListener("click", function(){
+  ctrlExport(this, "report", {period: "day", anchor: document.getElementById("inv_anchor").value});
+});
+document.getElementById("btn_report_month").addEventListener("click", function(){
+  ctrlExport(this, "report", {period: "month", anchor: document.getElementById("inv_anchor").value});
+});
+</script>
+</body>
+</html>
