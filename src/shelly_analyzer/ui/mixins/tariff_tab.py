@@ -80,7 +80,10 @@ class TariffMixin:
         tc = self._get_theme_colors()
 
         for i, r in enumerate(results):
-            bg = "#2a2000" if r.is_current else tc["bg"]
+            if r.is_current:
+                bg = "#2a2000" if tc["bg"] == "#111111" else "#fff3e0"
+            else:
+                bg = tc["bg"]
             border_color = "#ff9800" if r.is_current else tc.get("muted", "#555555")
 
             # Card frame with border effect
@@ -131,16 +134,18 @@ class TariffMixin:
             from matplotlib.figure import Figure
             from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
+            tc = self._get_theme_colors()
             fig = Figure(figsize=(8, 3), dpi=100)
             ax = fig.add_subplot(111)
             names = [r.name[:20] for r in results]
             costs = [r.annual_cost_eur for r in results]
-            colors = ["#ff9800" if r.is_current else "#2196F3" for r in results]
+            colors = ["#ff9800" if r.is_current else tc["blue"] for r in results]
 
             bars = ax.barh(names, costs, color=colors)
             ax.set_xlabel("\u20ac/Jahr")
             ax.invert_yaxis()
             fig.tight_layout()
+            self._apply_plot_theme(fig, ax)
 
             canvas = FigureCanvasTkAgg(fig, self._tariff_chart_frame)
             canvas.draw()

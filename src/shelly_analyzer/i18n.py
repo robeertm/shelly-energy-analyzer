@@ -1940,6 +1940,19 @@ _I18N: Dict[str, Dict[str, str]] = {
         "goals.remaining": "Remaining",
         "goals.refresh_btn": "Refresh",
 
+        # Missing keys (cross-platform audit)
+        "settings.alerts.telegram.detail": "Detail Level",
+        "settings.alerts.telegram.detail.detailed": "Detailed",
+        "settings.alerts.telegram.detail.simple": "Simple",
+        "web.co2.car": "Car km avoided",
+        "web.co2.chart_title": "CO\u2082 Intensity 24h",
+        "web.co2.current": "Current Grid CO\u2082 Intensity",
+        "web.co2.device_rates": "CO\u2082 per Device (live)",
+        "web.co2.fuel": "Fuel",
+        "web.co2.fuel_mix": "Generation Mix",
+        "web.co2.not_enabled": "CO\u2082 tracking is not enabled. Enable it under Settings \u2192 ENTSO-E.",
+        "web.co2.trees": "Trees (equiv.)",
+
     },
     "es": {
         # App
@@ -3877,7 +3890,41 @@ def get_lang_map(lang: str, prefix: str = None) -> dict:
 
 
 
-def t(lang: str, key: str, **kwargs: object) -> str:
+def _platform_supports_emoji() -> bool:
+    """Check if the current platform can render emoji in tkinter."""
+    import sys
+    if sys.platform.startswith("darwin"):
+        return True
+    if sys.platform == "win32":
+        try:
+            ver = sys.getwindowsversion()
+            return ver.major >= 10
+        except Exception:
+            return False
+    return False
+
+
+_EMOJI_SUPPORTED: bool | None = None
+
+
+def _strip_emoji(text: str) -> str:
+    """Remove emoji from text on platforms that can't render them in tkinter."""
+    global _EMOJI_SUPPORTED
+    if _EMOJI_SUPPORTED is None:
+        _EMOJI_SUPPORTED = _platform_supports_emoji()
+    if _EMOJI_SUPPORTED:
+        return text
+    import re
+    return re.sub(
+        r'[\U0001F300-\U0001FAFF\U00002600-\U000027BF\U0000FE00-\U0000FE0F'
+        r'\U0001F900-\U0001F9FF\U00002702-\U000027B0\U0000231A-\U0000231B'
+        r'\U00002328\U000023CF\U000023E9-\U000023F3\U000023F8-\U000023FA'
+        r'\U0000200D\U00002B05-\U00002B07\U00002B1B-\U00002B1C\U00002B50'
+        r'\U00002B55\U00003030\U0000303D\U00003297\U00003299]+', '', text
+    ).strip()
+
+
+def t(lang: str, key: str, *, strip_emoji: bool = False, **kwargs: object) -> str:
     """Translate a key for a language.
 
     Fallback order:
@@ -3885,6 +3932,9 @@ def t(lang: str, key: str, **kwargs: object) -> str:
       2) English
       3) German
       4) key itself
+
+    If *strip_emoji* is True, emoji are removed on platforms that cannot
+    render them in tkinter (Linux, older Windows).
     """
     lang = normalize_lang(lang)
     s = (
@@ -3894,9 +3944,10 @@ def t(lang: str, key: str, **kwargs: object) -> str:
         or key
     )
     try:
-        return str(s).format(**kwargs)
+        result = str(s).format(**kwargs)
     except Exception:
-        return str(s)
+        result = str(s)
+    return _strip_emoji(result) if strip_emoji else result
 
 
 def normalize_lang(lang: str) -> str:

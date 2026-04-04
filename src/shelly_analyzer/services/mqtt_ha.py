@@ -27,7 +27,7 @@ except ImportError:
 class MqttConfig:
     """MQTT connection settings (mirrors io/config.py MqttConfig)."""
     enabled: bool = False
-    broker: str = "localhost"
+    broker: str = "127.0.0.1"
     port: int = 1883
     username: str = ""
     password: str = ""

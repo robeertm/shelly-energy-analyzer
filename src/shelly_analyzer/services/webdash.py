@@ -68,8 +68,8 @@ def _load_devices_meta_file(p: Path) -> List[Dict[str, Any]]:
 def _ensure_ssl_cert(cert_dir: Path) -> Tuple[Path, Path]:
     """Generate a self-signed TLS certificate if none exists.
 
-    Returns (cert_path, key_path).  Uses ``openssl`` CLI which is available
-    on macOS, Linux, and most Raspberry Pi installations.
+    Returns (cert_path, key_path).  Tries the ``cryptography`` library first
+    (cross-platform), then falls back to ``openssl`` CLI.
     """
     cert_dir.mkdir(parents=True, exist_ok=True)
     cert_path = cert_dir / "server.crt"
@@ -77,9 +77,50 @@ def _ensure_ssl_cert(cert_dir: Path) -> Tuple[Path, Path]:
     if cert_path.exists() and key_path.exists():
         return cert_path, key_path
 
-    import subprocess
     logger = logging.getLogger(__name__)
     logger.info("Generating self-signed TLS certificate for HTTPS …")
+
+    # Try 1: pure-Python via cryptography library (works on all platforms)
+    try:
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        import datetime
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Shelly Energy Analyzer")])
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(name)
+            .issuer_name(name)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(datetime.datetime.utcnow())
+            .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=3650))
+            .sign(key, hashes.SHA256())
+        )
+        key_path.write_bytes(key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        ))
+        cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+        logger.info("TLS certificate created (cryptography lib): %s", cert_path)
+        return cert_path, key_path
+    except ImportError:
+        logger.debug("cryptography library not available, trying openssl CLI")
+    except Exception as e:
+        logger.debug("cryptography cert generation failed: %s", e)
+
+    # Try 2: openssl CLI (available on macOS, Linux, some Windows)
+    import shutil, subprocess
+    if not shutil.which("openssl"):
+        raise RuntimeError(
+            "Cannot generate TLS certificate: neither 'cryptography' library "
+            "nor 'openssl' CLI found. Install one of them or provide your own "
+            "certificate files."
+        )
     try:
         subprocess.run(
             [
@@ -94,7 +135,7 @@ def _ensure_ssl_cert(cert_dir: Path) -> Tuple[Path, Path]:
             capture_output=True,
             timeout=30,
         )
-        logger.info("TLS certificate created: %s", cert_path)
+        logger.info("TLS certificate created (openssl CLI): %s", cert_path)
     except Exception as e:
         logger.warning("Failed to generate TLS certificate: %s", e)
         raise
@@ -8342,15 +8383,28 @@ class LiveWebDashboard:
         # Auto-detect widget domain from SSL cert CN if not set
         if not self.widget_domain and self.ssl_cert and self._is_https:
             try:
-                import subprocess as _sp
-                _cn = _sp.check_output(
-                    ["openssl", "x509", "-in", self.ssl_cert, "-noout", "-subject"],
-                    timeout=5, text=True
-                ).strip()
-                # e.g. "subject=CN=energie.maro-datacenter.de"
-                if "CN=" in _cn:
-                    self.widget_domain = _cn.split("CN=")[-1].strip()
+                # Try cryptography library first (cross-platform)
+                from cryptography import x509 as _x509
+                _cert_pem = Path(self.ssl_cert).read_bytes()
+                _cert_obj = _x509.load_pem_x509_certificate(_cert_pem)
+                _cn_attrs = _cert_obj.subject.get_attributes_for_oid(_x509.oid.NameOID.COMMON_NAME)
+                if _cn_attrs:
+                    self.widget_domain = str(_cn_attrs[0].value)
                     _log.info("Widget domain auto-detected from cert: %s", self.widget_domain)
+            except ImportError:
+                # Fallback: openssl CLI
+                try:
+                    import subprocess as _sp, shutil as _sh
+                    if _sh.which("openssl"):
+                        _cn = _sp.check_output(
+                            ["openssl", "x509", "-in", self.ssl_cert, "-noout", "-subject"],
+                            timeout=5, text=True
+                        ).strip()
+                        if "CN=" in _cn:
+                            self.widget_domain = _cn.split("CN=")[-1].strip()
+                            _log.info("Widget domain auto-detected from cert: %s", self.widget_domain)
+                except Exception:
+                    pass
             except Exception:
                 pass
 
