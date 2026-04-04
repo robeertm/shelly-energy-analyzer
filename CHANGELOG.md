@@ -1,5 +1,12 @@
 # Changelog
 
+## 15.0.22 - 2026-04-04
+### Added
+- **Desktop: InfluxDB & Prometheus settings UI** – New settings sections for InfluxDB export (URL, token, org, bucket, version, interval) and Prometheus endpoint. InfluxDB exporter starts/stops automatically on settings save.
+- **Web: language selector populated** – Language dropdown in web settings now shows all 9 languages (was empty). Current language pre-selected on page load.
+### Fixed
+- **Web: /metrics Prometheus endpoint** – Fixed broken import (was `metrics.render`, now correctly calls `generate_metrics` from `prometheus_export.py`).
+
 ## 15.0.21 - 2026-04-04
 ### Added
 - **i18n: ~940 new translations for ES/FR/PT** – Spanish now has 1328/1329 keys (near-complete), French and Portuguese 1284/1329. All remaining gaps fall back to English. Covers forecast, standby, weather, Sankey, MQTT, solar amortization, tenant billing, smart scheduling, EV log, tariff, battery, advisor, goals, and web dashboard sections.
