@@ -1,5 +1,9 @@
 # Changelog
 
+## 15.0.20 - 2026-04-04
+### Changed
+- **Desktop: remove refresh buttons from new tabs** – Tariff, Battery, Advisor, and Goals tabs no longer have manual "Aktualisieren" buttons. Data refreshes automatically on tab switch via `_on_tab_changed()`.
+
 ## 15.0.19 - 2026-04-04
 ### Fixed
 - **Cross-platform: 7 compatibility fixes for Windows/Linux**

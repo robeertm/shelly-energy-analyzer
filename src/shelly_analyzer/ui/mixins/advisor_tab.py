@@ -45,7 +45,6 @@ class AdvisorMixin:
         self._advisor_tips_frame = ttk.Frame(inner)
         self._advisor_tips_frame.pack(fill="both", expand=True, padx=12, pady=8)
 
-        ttk.Button(inner, text=self.t("advisor.refresh_btn"), command=self._advisor_refresh).pack(padx=12, pady=8)
         self._advisor_refresh()
 
     def _advisor_refresh(self) -> None:

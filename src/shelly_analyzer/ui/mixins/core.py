@@ -611,6 +611,14 @@ class CoreMixin:
                     self.after(50, self._refresh_sankey_tab)
                 elif sel == str(getattr(self, 'tab_tenant', None)):
                     self.after(50, self._refresh_tenant_tab)
+                elif sel == str(getattr(self, 'tab_tariff', None)):
+                    self.after(50, self._tariff_refresh)
+                elif sel == str(getattr(self, 'tab_battery', None)):
+                    self.after(50, self._bat_refresh)
+                elif sel == str(getattr(self, 'tab_advisor', None)):
+                    self.after(50, self._advisor_refresh)
+                elif sel == str(getattr(self, 'tab_goals', None)):
+                    self.after(50, self._goals_refresh)
             except Exception:
                 pass
 
