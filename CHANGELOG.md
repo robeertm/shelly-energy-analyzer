@@ -1,5 +1,18 @@
 # Changelog
 
+## 16.0.0 - 2026-04-04
+### Changed
+- **BREAKING: Migrated from tkinter desktop app to Flask web-only** – The entire application is now a Flask web server. No more desktop GUI. All 19 feature panes (Live, Costs, Heatmap, Solar, Weather, Compare, CO2, Anomalies, Forecast, Standby, Sankey, EV Chargers, Export, Smart Schedule, EV Log, Tariff, Battery, Advisor, Goals) are served via the web dashboard.
+- **New `web/` package replaces `ui/` and `services/webdash.py`** – Clean Flask blueprint architecture: `dashboard`, `api_state`, `api_data`, `api_actions`, `static_assets`, `metrics`. ~28,500 lines of desktop UI code removed.
+- **Background services run alongside Flask** – `BackgroundServiceManager` starts live polling, scheduler, MQTT, InfluxDB export, and auto-sync in daemon threads.
+- **Action dispatch extracted to standalone module** – `web/action_dispatch.py` handles all web actions (sync, export, switch control, widget data, costs, etc.) without any tkinter dependency.
+- **Entry point now boots Flask** – `shelly-analyzer` CLI starts the Flask server. New flags: `--config`, `--host`, `--port`, `--no-ssl`, `--debug`.
+### Added
+- **Flask + Waitress dependencies** – Added `flask>=3.0` and `waitress>=3.0` for cross-platform web serving.
+### Removed
+- **pywebview dependency** – No longer needed (was for desktop webview).
+- **matplotlib moved to optional** – Only needed for Telegram chart PNGs. Web uses Plotly.js. Install via `pip install shelly-energy-analyzer[charts]`.
+
 ## 15.0.23 - 2026-04-04
 ### Fixed
 - **Startup crash: 'AppConfig' has no attribute 'web'** – Prometheus hint label used `self.cfg.web.port` but `web` config doesn't exist. Fixed with safe `getattr` chain.
