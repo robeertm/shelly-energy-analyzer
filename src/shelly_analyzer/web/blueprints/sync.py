@@ -141,10 +141,12 @@ def sync_status():
     try:
         devices = []
         for d in state.cfg.devices:
-            meta = state.storage.db.get_device_meta(d.key) if hasattr(state.storage, 'db') else None
             last_ts = None
-            if meta and isinstance(meta, dict):
-                last_ts = meta.get("last_end_ts")
+            try:
+                meta = state.storage.load_meta(d.key)
+                last_ts = getattr(meta, "last_end_ts", None)
+            except Exception:
+                pass
             devices.append({
                 "key": d.key,
                 "name": d.name,
