@@ -5482,11 +5482,12 @@ function initExport() {{
 _loadLsSettings();
 
   /* ── Smart Schedule ── */
+  window._ssDuration = 3;
   async function loadSmartSched() {{
     const el = document.getElementById('ss-content');
     el.innerHTML = '<p class="loading-msg">Lade…</p>';
     try {{
-      const r = await fetch('/api/smart_schedule');
+      const r = await fetch('/api/smart_schedule?duration=' + window._ssDuration);
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
@@ -5495,21 +5496,96 @@ _loadLsSettings();
       el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>';
     }}
   }}
+  function _ssFmtDateTime(ts) {{
+    const d = new Date(ts*1000);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today.getTime() + 86400000);
+    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const wday = d.toLocaleDateString(document.documentElement.lang || 'de', {{weekday:'long'}});
+    const dateStr = d.toLocaleDateString([], {{day:'2-digit', month:'2-digit', year:'numeric'}});
+    const timeStr = d.toLocaleTimeString([], {{hour:'2-digit', minute:'2-digit'}});
+    let prefix = wday + ', ' + dateStr;
+    if (dayStart.getTime() === today.getTime()) prefix = 'Heute · ' + wday;
+    else if (dayStart.getTime() === tomorrow.getTime()) prefix = 'Morgen · ' + wday;
+    return {{ prefix: prefix, date: dateStr, time: timeStr }};
+  }}
   function renderSmartSched(data, el) {{
-    const rec = data.recommendation;
-    if (!rec) {{
-      el.innerHTML = '<div class="card" style="padding:14px"><p class="info-msg">Keine Spot-Preisdaten verfügbar. Spot-Preise in den Einstellungen aktivieren.</p></div>';
+    const durOpts = [1,2,3,4,6,8];
+    let durSel = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">' +
+      '<span style="font-size:12px;color:var(--muted)">Dauer:</span>';
+    durOpts.forEach(function(h){{
+      const active = h === Number(window._ssDuration);
+      durSel += '<button onclick="window._ssDuration=' + h + ';loadSmartSched()" style="padding:4px 10px;border-radius:6px;border:1px solid ' + (active?'#ff9800':'var(--border)') + ';background:' + (active?'#ff9800':'transparent') + ';color:' + (active?'#fff':'var(--fg)') + ';cursor:pointer;font-size:12px;font-weight:' + (active?'600':'400') + '">' + h + ' h</button>';
+    }});
+    durSel += '</div>';
+
+    const blocks = data.blocks || [];
+    if (!blocks.length) {{
+      el.innerHTML = durSel + '<div class="card" style="padding:14px"><p class="info-msg">Keine Spot-Preisdaten für die nächsten 24h. Spot-Preise in den Einstellungen aktivieren oder warten bis die Daten gefetched wurden.</p></div>';
       return;
     }}
-    const start = new Date(rec.start_ts*1000).toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}});
-    const end = new Date(rec.end_ts*1000).toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}});
-    el.innerHTML = '<div class="card" style="margin-bottom:10px"><div class="card-title">⏱ Günstigster Zeitblock</div>' +
-      '<div class="metric-grid">' +
-      metricCardHtml('Zeitfenster', start + ' – ' + end) +
-      metricCardHtml('Ø Preis', rec.avg_price_ct.toFixed(1) + ' ct/kWh') +
-      metricCardHtml('Ersparnis', rec.savings_vs_avg_ct.toFixed(1) + ' ct/kWh') +
-      metricCardHtml('Dauer', rec.block_hours + ' h') +
-      '</div></div>';
+    const fixed = data.fixed_ct || 0;
+    const avg24 = data.avg_24h_ct || 0;
+    const cheap = data.cheapest_hour_ct || 0;
+    const exp = data.most_expensive_hour_ct || 0;
+
+    // Context card – what does this tab do?
+    let html = durSel;
+    html += '<div class="card" style="margin-bottom:10px;padding:12px;background:linear-gradient(135deg,rgba(255,152,0,0.08),rgba(255,152,0,0.02));border-left:3px solid #ff9800">' +
+      '<div style="font-size:13px;font-weight:650;color:#ff9800;margin-bottom:4px">⏱ Günstigste Zeitfenster in den nächsten 24h</div>' +
+      '<div style="font-size:12px;color:var(--muted);line-height:1.5">Startet deine <b>energieintensiven Geräte</b> (Waschmaschine, Spülmaschine, Trockner, E-Auto, Wärmepumpe) in einem der Zeitfenster unten – dort ist der Spot-Strom am billigsten. Die Ersparnis gilt gegenüber deinem Festpreis.</div>' +
+      '</div>';
+
+    // 24h context tiles
+    html += '<div class="metric-grid" style="margin-bottom:10px">' +
+      metricCardHtml('Ø 24h Spot', avg24.toFixed(1) + ' ct/kWh', 'Durchschnitt') +
+      metricCardHtml('Festpreis', fixed.toFixed(1) + ' ct/kWh', 'Dein Tarif') +
+      metricCardHtml('Billigste Stunde', cheap.toFixed(1) + ' ct/kWh', '') +
+      metricCardHtml('Teuerste Stunde', exp.toFixed(1) + ' ct/kWh', '') +
+      '</div>';
+
+    // Top-3 blocks
+    blocks.forEach(function(b, idx) {{
+      const st = _ssFmtDateTime(b.start_ts);
+      const en = _ssFmtDateTime(b.end_ts);
+      const saveCtKwh = b.savings_vs_fixed_ct_per_kwh || 0;
+      const saveTotalCt = saveCtKwh * (b.block_hours || 1); // ct saved per kWh × duration (rough multiplier)
+      const saveColor = saveCtKwh > 0 ? '#4caf50' : (saveCtKwh < 0 ? '#e53935' : 'var(--muted)');
+      const rank = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : '🥉');
+      const borderColor = idx === 0 ? '#ff9800' : 'var(--border)';
+      const borderWidth = idx === 0 ? '2px' : '1px';
+      const vsFixedText = saveCtKwh > 0
+        ? 'Spare <b style="color:#4caf50">' + saveCtKwh.toFixed(1) + ' ct/kWh</b> ggü. Festpreis'
+        : (saveCtKwh < 0 ? '<b style="color:#e53935">' + Math.abs(saveCtKwh).toFixed(1) + ' ct/kWh teurer</b> als Festpreis' : 'Gleicher Preis wie Festpreis');
+
+      html += '<div class="card" style="margin-bottom:8px;border:' + borderWidth + ' solid ' + borderColor + ';padding:12px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:10px">' +
+        '<div style="flex:1;min-width:200px">' +
+          '<div style="font-size:18px;font-weight:700">' + rank + ' ' + st.time + ' – ' + en.time + '</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + st.prefix + ' · ' + b.block_hours + ' h Zeitblock</div>' +
+          '<div style="font-size:12px;margin-top:6px">' + vsFixedText + '</div>' +
+        '</div>' +
+        '<div style="text-align:right;min-width:120px">' +
+          '<div style="font-size:22px;font-weight:700;color:' + saveColor + '">' + b.avg_price_ct.toFixed(1) + '</div>' +
+          '<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">ct/kWh Ø</div>' +
+        '</div>' +
+        '</div>' +
+        '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;color:var(--muted)">' +
+          '💡 Bei 2 kWh Verbrauch (z.B. Waschmaschine): ' +
+          '<b style="color:' + saveColor + '">' + (saveCtKwh >= 0 ? '-' : '+') + Math.abs(saveCtKwh * 2).toFixed(0) + ' ct</b> ggü. Festpreis · ' +
+          '<b>' + (b.avg_price_ct * 2).toFixed(0) + ' ct</b> total' +
+        '</div>' +
+        '</div>';
+    }});
+
+    // Footer hint
+    html += '<div style="margin-top:10px;font-size:11px;color:var(--muted);text-align:center;line-height:1.5">' +
+      'Preise inkl. Netzentgelt, Stromsteuer, KWK/§19/Offshore, Anbieter-Marge und MwSt. aus deinen Spot-Preis-Einstellungen. ' +
+      'Zone: ' + (data.zone || '?') + ' · Update stündlich.' +
+      '</div>';
+
+    el.innerHTML = html;
   }}
 
   /* ── EV Log ── */
