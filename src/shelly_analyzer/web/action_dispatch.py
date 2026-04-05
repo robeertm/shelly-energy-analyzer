@@ -1052,6 +1052,9 @@ class ActionDispatcher:
             fq_col = first_col(["freq_hz", "avg_freq_hz", "frequency", "freq", "hz"])
             if fq_col:
                 y = pd.to_numeric(df[fq_col], errors="coerce")
+                # Grid frequency is never 0 – treat 0 as missing (NaN) so old
+                # rows without Hz data appear as gaps instead of a 0-line.
+                y = y.where(y > 1.0)
                 mapping_text = f"Hz: {fq_col}"
             else:
                 y = pd.Series([float("nan")] * len(df), index=df.index)
