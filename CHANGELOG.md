@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.9.2 - 2026-04-05
+### Fixed
+- **Plots: "Fetch is aborted" beim Phasen-Umschalten** – jeder Control-Change (Phasen/Metric/Zeitbereich) startete sofort einen neuen `/api/plots_data` Request, ohne den vorigen abzubrechen; bei großen Zeiträumen lief der alte Request in das 12 s Timeout und zeigte die `AbortError` als Nutzer-Fehler. Jetzt: vorherige in-flight Fetch wird sauber ersetzt (`superseded`, nicht als Fehler angezeigt), echtes Timeout auf 60 s erhöht mit deutscher Meldung "Zeitüberschreitung – Zeitbereich verkleinern".
+
 ## 16.9.1 - 2026-04-05
 ### Fixed
 - **Settings page stuck in dark mode** – `settings.html` had hard-coded dark CSS variables with no light-mode fallback. Added `:root[data-theme="light"]` override and theme bootstrapping from `sea_theme` localStorage key, so the settings page now follows the same light/dark theme as the dashboard.
