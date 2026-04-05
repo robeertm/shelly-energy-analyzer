@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.6.6 - 2026-04-05
+### Fixed
+- **Blank dashboard (only nav + header visible)** – duplicate `cb` variable declaration (var + const) in `pollSyncLogs()` threw a SyntaxError that aborted the whole inline script. Renamed to `httpCb`. All tabs render again.
+
 ## 16.6.5 - 2026-04-05
 ### Changed
 - **Sync/Log tab: HTTP access logs filtered by default** – werkzeug request lines (every poll, every GET) no longer flood the log window. New "HTTP-Logs" checkbox in the Sync pane enables them on demand. New endpoint `POST /api/logs/config` with `{include_http: bool}`.
