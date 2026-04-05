@@ -6459,24 +6459,35 @@ async function loadData() {
     const surchInfo = data.price_surcharges_included
       ? ' · inkl. ' + (data.price_surcharge_ct || 0) + ' ct/kWh Zusatzkosten' + (data.price_vat_pct ? ' + ' + data.price_vat_pct + '% MwSt' : '')
       : ' · reiner Spotpreis (ohne Zusatzkosten)';
+    const fixedCt = data.price_fixed_ct_kwh;
     function renderPriceCard(idx, devData) {
       const cardEl = document.getElementById('card_price_' + idx);
       const titleEl = document.getElementById('plot_price_' + idx + '_title');
       const plotId = 'plot_price_' + idx;
       if (!devData || !(devData.eur||[]).some(v => v != null)) { cardEl.style.display = 'none'; return; }
       cardEl.style.display = '';
+      const fixInfo = (fixedCt != null) ? ' · Fixpreis ' + fixedCt.toFixed(2) + ' ct/kWh (grau)' : '';
       titleEl.textContent = 'Strompreis · ' + (devData.name || devData.key || '') +
         (data.price_zone ? ' (' + data.price_zone + ')' : '') +
-        ' – € pro Bucket · Ampel: grün <' + gThrP.toFixed(1) + ' / rot ≥' + rThrP.toFixed(1) + ' ct/kWh' + surchInfo;
+        ' – € pro Bucket · Ampel: grün <' + gThrP.toFixed(1) + ' / rot ≥' + rThrP.toFixed(1) + ' ct/kWh' + surchInfo + fixInfo;
       const yArr = (devData.eur || []).map(v => (v==null ? 0 : v));
       const colorsP = priceCt.map(v => tlColor(v, gThrP, rThrP));
       const custom = priceCt.map((v,i) => [v==null?'—':v, yArr[i]]);
+      const traces = [
+        {type:'bar', name:'Dynamisch', x: xsLab, y: yArr, marker:{color:colorsP},
+          customdata: custom,
+          hovertemplate:'%{x}<br>%{customdata[0]} ct/kWh · Σ %{customdata[1]} €<extra>Dynamisch</extra>'}
+      ];
+      const fxArr = (devData.eur_fixed || []).map(v => (v==null ? 0 : v));
+      const hasFixed = (devData.eur_fixed || []).some(v => v != null && v > 0);
+      if (hasFixed) {
+        traces.push({type:'bar', name:'Fixpreis', x: xsLab, y: fxArr, marker:{color:'#9ca3af'},
+          hovertemplate:'%{x}<br>' + (fixedCt != null ? fixedCt.toFixed(2) : '?') + ' ct/kWh · Σ %{y} €<extra>Fixpreis</extra>'});
+      }
       Plotly.newPlot(
         plotId,
-        [{type:'bar', name:'€', x: xsLab, y: yArr, marker:{color:colorsP},
-          customdata: custom,
-          hovertemplate:'%{x}<br>%{customdata[0]} ct/kWh · Σ %{customdata[1]} €<extra></extra>'}],
-        kwhLayout('EUR'),
+        traces,
+        kwhLayout('EUR', {barmode:'group'}),
         {responsive:true, displaylogo:false}
       );
     }
