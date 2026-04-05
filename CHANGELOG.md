@@ -1,5 +1,20 @@
 # Changelog
 
+## 16.3.0 - 2026-04-05
+### Added
+- **Comprehensive settings UI** – Complete rewrite of `/settings` page covering ALL 30+ config sections (was: only 7 tabs). Organized in 6 groups: Grundeinstellungen, Benachrichtigungen, Integrationen, Energie, Features, Erweitert.
+- **Settings link in dashboard header** – New 🔧 button next to ☀ theme toggle links directly to `/settings`. No more hidden settings.
+- **Device management UI** – mDNS discovery button, IP-probe add, delete devices, online status indicators.
+- **Connection test buttons** – Test MQTT, InfluxDB, Telegram connections directly from the settings UI.
+
+Sections covered (all editable via web browser):
+- Grundeinstellungen: Geräte, Anzeige, Web-Server, Preise & Tarif, TOU, Auto-Sync
+- Benachrichtigungen: Telegram, E-Mail, Webhook, Anomalien
+- Integrationen: MQTT, InfluxDB, Prometheus, REST API, Updates
+- Energie: Solar, Batterie, PV-Überschuss, Spot-Preise, CO₂, Wetter, Prognose
+- Features: Smart Schedule, EV Charging, Tarifvergleich, KI-Berater, Gamification
+- Erweitert: Rechnung, Mieter, Multi-Location, Download/CSV, Demo, Über
+
 ## 16.2.2 - 2026-04-05
 ### Fixed
 - **Blank web page** – Dashboard HTML rendered with Unicode escape sequences (e.g. `\u2265` instead of `≥`) because the extracted HTML template files were saved with JSON-escaped unicode. Reverted to importing `_HTML_TEMPLATE`, `_PLOTS_TEMPLATE`, `_CONTROL_TEMPLATE` directly from `services/webdash.py` (where strings are native UTF-8). Removed broken template files.

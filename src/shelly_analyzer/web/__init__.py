@@ -115,6 +115,18 @@ def _render_dashboard_html(state: "AppState") -> bytes:
         "i18n_json": json.dumps(web_i18n, ensure_ascii=False),
     }
     rendered = _render_template(tpl, values)
+    # Inject link to full settings page: add "🔧" button that opens /settings
+    nav_link = (
+        '<a href="/settings" class="icon-btn" '
+        'style="text-decoration:none;color:var(--fg);display:inline-flex;'
+        'align-items:center;justify-content:center" '
+        'title="Full Settings">🔧</a>'
+    )
+    rendered = rendered.replace(
+        '<button id="btn-theme"',
+        nav_link + '<button id="btn-theme"',
+        1,
+    )
     return rendered.encode("utf-8")
 
 
