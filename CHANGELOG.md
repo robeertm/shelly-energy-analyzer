@@ -1,5 +1,14 @@
 # Changelog
 
+## 16.13.1 - 2026-04-05
+### Fixed
+- **Mieter-Abrechnung: MwSt doppelt berechnet** – der `/api/tenants/bill` Endpoint gab BRUTTO-Preise an den Service und der Service addierte dann erneut 19% MwSt. Jetzt wird mit NETTO-Preisen gerechnet; die MwSt wird nur einmal am Ende zum Subtotal addiert. Beeinflusst auch die `Grundpreis`-Zeile: die Grundgebühr wurde als Brutto an den Service übergeben und dann nochmal um 19% erhöht.
+
+### Added
+- **Mieter-Abrechnung: Tarif-Auswahl je Abrechnung** – neuer Dropdown "Tarif" neben Von/Bis mit Optionen *Auto (Settings)* / *Fix* / *Dynamisch*. "Auto" nimmt den in `spot_price.tariff_type` hinterlegten Modus, "Dynamisch" berechnet einen volumen-gewichteten Durchschnitts-Spot-Preis aus der `spot_prices`-DB-Tabelle (inkl. Netzentgelte, Stromsteuer, KWK, §19, Offshore, Anbieter-Marge aus `spot_price`-Config).
+- **Summenzeile Mieter zeigt Tarif-Modus + effektiven Preis + Grundgebühr-Info**: z.B. "⚡ Dynamischer Tarif · 24.87 ct/kWh netto · Grundgebühr: 107.15 €/Jahr netto · MwSt. 19%".
+- **Grundpreis-Zeilen zeigen `–`** statt "0.0" bzw. "0.0000" für kWh/Preis-Spalten (nur Betrag ist sinnvoll).
+
 ## 16.13.0 - 2026-04-05
 ### Changed
 - **Plots-Tab merkt sich letzte Einstellungen** – jeder Control-Change (View, Metric, Phasen, Zeitbereich, Geräte, Filter) wird in `localStorage['sea_plots_qp']` persistiert und beim nächsten Seitenaufruf automatisch wiederhergestellt. Funktioniert sowohl im Dashboard-Plots-Tab (iframe) als auch bei direktem `/plots`-Aufruf.

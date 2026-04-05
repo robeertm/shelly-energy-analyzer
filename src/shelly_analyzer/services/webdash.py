@@ -2160,6 +2160,7 @@ function renderTenants() {{
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">';
   h += '<label style="font-size:12px">Von: <input type="date" id="t-start"></label>';
   h += '<label style="font-size:12px">Bis: <input type="date" id="t-end"></label>';
+  h += '<label style="font-size:12px">Tarif: <select id="t-tariff"><option value="">Auto (Settings)</option><option value="fixed">Fix</option><option value="dynamic">Dynamisch</option></select></label>';
   h += '<button class="btn btn-accent" onclick="computeBills()">📊 Abrechnung berechnen</button>';
   h += '</div>';
   h += '<div id="t-bills"></div>';
@@ -2228,22 +2229,32 @@ function saveTenants() {{
 function computeBills() {{
   const s = (document.getElementById('t-start')||{{}}).value || '';
   const e = (document.getElementById('t-end')||{{}}).value || '';
+  const tm = (document.getElementById('t-tariff')||{{}}).value || '';
   const q = new URLSearchParams();
   if (s) q.set('period_start', s);
   if (e) q.set('period_end', e);
+  if (tm) q.set('tariff_mode', tm);
   const el = document.getElementById('t-bills');
   if (el) el.innerHTML = '<p class="loading-msg">Berechne…</p>';
   fetch('/api/tenants/bill?' + q.toString()).then(function(r) {{ return r.json(); }}).then(function(d) {{
     if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||'Keine Daten') + '</p>'; return; }}
     const rep = d.report;
-    let h = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Periode: ' + esc(rep.period_start) + ' bis ' + esc(rep.period_end) + ' · Gesamt: ' + rep.total_kwh.toFixed(1) + ' kWh · ' + rep.total_cost.toFixed(2) + ' €</div>';
+    const tariffLabel = rep.tariff_mode === 'dynamic' ? '⚡ Dynamischer Tarif' : '💲 Fixtarif';
+    let h = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Periode: ' + esc(rep.period_start) + ' bis ' + esc(rep.period_end)
+      + ' · ' + tariffLabel + ' · ' + (rep.price_eur_per_kwh_net*100).toFixed(2) + ' ct/kWh netto'
+      + ' · Grundgebühr: ' + (rep.base_fee_eur_per_year_net||0).toFixed(2) + ' €/Jahr netto'
+      + ' · MwSt. ' + (rep.vat_rate_percent||19).toFixed(0) + '%'
+      + ' · Gesamt: ' + rep.total_kwh.toFixed(1) + ' kWh · ' + rep.total_cost.toFixed(2) + ' €</div>';
     (rep.bills || []).forEach(function(b) {{
       h += '<div class="card" style="margin-bottom:6px">';
       h += '<div style="font-weight:650;margin-bottom:4px">' + esc(b.tenant.name) + (b.tenant.unit ? ' (' + esc(b.tenant.unit) + ')' : '') + ' · ' + b.tenant.persons + ' Pers.</div>';
       h += '<table style="width:100%;font-size:11px;border-collapse:collapse">';
       h += '<tr style="border-bottom:1px solid var(--border);color:var(--muted)"><th style="text-align:left;padding:3px">Position</th><th style="text-align:right">kWh</th><th style="text-align:right">€/kWh</th><th style="text-align:right">€</th></tr>';
       (b.line_items || []).forEach(function(li) {{
-        h += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px">' + esc(li.description) + '</td><td style="text-align:right">' + li.kwh.toFixed(1) + '</td><td style="text-align:right">' + li.unit_price.toFixed(4) + '</td><td style="text-align:right">' + li.amount.toFixed(2) + '</td></tr>';
+        // Grundpreis / base-fee lines have kwh=0 and unit_price=0 — show them as "–"
+        var kwhCell = (li.kwh && li.kwh > 0) ? li.kwh.toFixed(1) : '–';
+        var priceCell = (li.unit_price && li.unit_price > 0) ? li.unit_price.toFixed(4) : '–';
+        h += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px">' + esc(li.description) + '</td><td style="text-align:right">' + kwhCell + '</td><td style="text-align:right">' + priceCell + '</td><td style="text-align:right">' + li.amount.toFixed(2) + '</td></tr>';
       }});
       h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">Netto</td><td style="text-align:right">' + b.subtotal_net.toFixed(2) + '</td></tr>';
       h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">MwSt.</td><td style="text-align:right">' + b.vat_amount.toFixed(2) + '</td></tr>';
