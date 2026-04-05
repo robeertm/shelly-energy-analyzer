@@ -3551,13 +3551,19 @@ class ActionDispatcher:
                         return None, None
 
                 co2_g: List[Optional[float]] = [None] * len(labels)
+                co2_intensity: List[Optional[float]] = [None] * len(labels)
                 price_eur: List[Optional[float]] = [None] * len(labels)
+                price_ct_kwh: List[Optional[float]] = [None] * len(labels)
                 co2_zone = None
                 price_zone = None
+                co2_green_thr = 150.0
+                co2_dirty_thr = 400.0
                 try:
                     co2_cfg = getattr(self.cfg, "co2", None)
                     if co2_cfg and getattr(co2_cfg, "enabled", False):
                         co2_zone = str(getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU")
+                        co2_green_thr = float(getattr(co2_cfg, "green_threshold_g_per_kwh", 150.0))
+                        co2_dirty_thr = float(getattr(co2_cfg, "dirty_threshold_g_per_kwh", 400.0))
                 except Exception:
                     co2_zone = None
                 try:
@@ -3606,12 +3612,15 @@ class ActionDispatcher:
                             if co2_df is not None:
                                 avg_g = _avg_in_range(co2_df, "intensity_g_per_kwh", "hour_ts", a, b)
                                 if avg_g is not None:
+                                    co2_intensity[i] = round(avg_g, 1)
                                     co2_g[i] = round(avg_g * kwh_i, 1)
                             if price_df is not None:
                                 avg_eur_mwh = _avg_in_range(price_df, "price_eur_mwh", "slot_ts", a, b)
                                 if avg_eur_mwh is not None:
                                     # €/MWh × kWh / 1000 = € for the bucket
                                     price_eur[i] = round(avg_eur_mwh * kwh_i / 1000.0, 2)
+                                    # €/MWh → ct/kWh: ×0.1
+                                    price_ct_kwh[i] = round(avg_eur_mwh * 0.1, 2)
                 except Exception:
                     pass
 
@@ -3620,7 +3629,9 @@ class ActionDispatcher:
                     "ok": True, "view": "kwh",
                     "labels": labels, "traces": out_traces,
                     "total_kwh": total_per_label,
-                    "co2_g": co2_g, "price_eur": price_eur,
+                    "co2_g": co2_g, "co2_intensity_g_per_kwh": co2_intensity,
+                    "co2_green_thr": co2_green_thr, "co2_dirty_thr": co2_dirty_thr,
+                    "price_eur": price_eur, "price_ct_kwh": price_ct_kwh,
                     "co2_zone": co2_zone, "price_zone": price_zone,
                     "unit": unit, "title": title, "diag": diag,
                 }

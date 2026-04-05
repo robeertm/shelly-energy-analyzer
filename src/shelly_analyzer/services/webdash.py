@@ -6358,14 +6358,30 @@ async function loadData() {
     function drawKwhForDevice(divId, titleDivId, tr) {
       try {
         const te = document.getElementById(titleDivId);
-        if (te) { te.textContent = (tr && tr.name) ? tr.name + ' – kWh' : 'kWh'; te.style.display = 'block'; }
+        if (te) { te.textContent = (tr && tr.name) ? tr.name : ''; te.style.display = (tr && tr.name) ? 'block' : 'none'; }
       } catch(e) {}
       Plotly.newPlot(
         divId,
-        [{type:'bar', name: tr.name, x: xsLab, y: tr.y}],
+        [{type:'bar', name: tr.name, x: xsLab, y: tr.y, marker:{color:'#6aa7ff'}}],
         kwhLayout('kWh'),
         {responsive:true, displaylogo:false}
       );
+    }
+
+    // Traffic-light helper (green/yellow/red) by value with thresholds
+    function tlColor(v, green_lt, red_ge) {
+      if (v == null) return '#9ca3af';
+      if (v < green_lt) return '#22c55e';   // green
+      if (v >= red_ge) return '#ef4444';    // red
+      return '#eab308';                       // yellow
+    }
+    // Percentile-based thresholds for arrays with no absolute scale (prices)
+    function autoThresholds(arr) {
+      const nums = arr.filter(v => v != null && !isNaN(v)).slice().sort((a,b)=>a-b);
+      if (nums.length < 2) return [null, null];
+      const p33 = nums[Math.floor(nums.length * 0.33)];
+      const p66 = nums[Math.floor(nums.length * 0.66)];
+      return [p33, p66];
     }
 
     // Plot 1: first device
@@ -6383,17 +6399,24 @@ async function loadData() {
       document.getElementById('card2').style.display = 'none';
     }
 
-    // CO2 bar chart (grams per bucket, aggregated across devices)
+    // CO2 bar chart (grams per bucket) – colour by g/kWh intensity (green < thr, red >= dirty)
     const co2Arr = (data.co2_g || []).map(v => (v==null ? 0 : v));
+    const co2Int = data.co2_intensity_g_per_kwh || [];
     const hasCo2 = (data.co2_g || []).some(v => v != null);
     const cardCo2 = document.getElementById('card_co2');
     if (hasCo2) {
       cardCo2.style.display = '';
       const te = document.getElementById('plot_co2_title');
-      te.textContent = 'CO₂' + (data.co2_zone ? ' (' + data.co2_zone + ')' : '') + ' – g pro Bucket';
+      const gThr = (data.co2_green_thr != null) ? data.co2_green_thr : 150;
+      const dThr = (data.co2_dirty_thr != null) ? data.co2_dirty_thr : 400;
+      te.textContent = 'CO₂' + (data.co2_zone ? ' (' + data.co2_zone + ')' : '')
+        + ' – g pro Bucket · Ampel: grün <' + gThr + ' / rot ≥' + dThr + ' g/kWh';
+      const colors = co2Int.map(v => tlColor(v, gThr, dThr));
+      const hover = co2Int.map((v,i) => (v!=null ? (v + ' g/kWh · Σ ' + co2Arr[i] + ' g') : '—'));
       Plotly.newPlot(
         'plot_co2',
-        [{type:'bar', name:'CO₂', x: xsLab, y: co2Arr, marker:{color:'#6b7280'}}],
+        [{type:'bar', name:'CO₂', x: xsLab, y: co2Arr, marker:{color:colors},
+          text: hover, hovertemplate:'%{x}<br>%{text}<extra></extra>'}],
         kwhLayout('g CO₂'),
         {responsive:true, displaylogo:false}
       );
@@ -6401,17 +6424,25 @@ async function loadData() {
       cardCo2.style.display = 'none';
     }
 
-    // Price bar chart (EUR per bucket, aggregated across devices)
+    // Price bar chart (EUR per bucket) – colour by ct/kWh (percentile thresholds over displayed range)
     const priceArr = (data.price_eur || []).map(v => (v==null ? 0 : v));
+    const priceCt = data.price_ct_kwh || [];
     const hasPrice = (data.price_eur || []).some(v => v != null);
     const cardPrice = document.getElementById('card_price');
     if (hasPrice) {
       cardPrice.style.display = '';
       const te = document.getElementById('plot_price_title');
-      te.textContent = 'Dynamischer Strompreis' + (data.price_zone ? ' (' + data.price_zone + ')' : '') + ' – € pro Bucket';
+      const [p33, p66] = autoThresholds(priceCt);
+      const gThrP = (p33 != null) ? p33 : 10;
+      const rThrP = (p66 != null) ? p66 : 25;
+      te.textContent = 'Dynamischer Strompreis' + (data.price_zone ? ' (' + data.price_zone + ')' : '')
+        + ' – € pro Bucket · Ampel: grün <' + gThrP.toFixed(1) + ' / rot ≥' + rThrP.toFixed(1) + ' ct/kWh';
+      const colorsP = priceCt.map(v => tlColor(v, gThrP, rThrP));
+      const hoverP = priceCt.map((v,i) => (v!=null ? (v + ' ct/kWh · Σ ' + priceArr[i] + ' €') : '—'));
       Plotly.newPlot(
         'plot_price',
-        [{type:'bar', name:'€', x: xsLab, y: priceArr, marker:{color:'#22c55e'}}],
+        [{type:'bar', name:'€', x: xsLab, y: priceArr, marker:{color:colorsP},
+          text: hoverP, hovertemplate:'%{x}<br>%{text}<extra></extra>'}],
         kwhLayout('EUR'),
         {responsive:true, displaylogo:false}
       );
