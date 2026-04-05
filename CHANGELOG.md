@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.4.2 - 2026-04-05
+### Fixed
+- **Firmware-Update: "bad or missing url parameter"** – Update-Endpunkt schickte immer `stage=stable`, auch wenn nur `beta` verfügbar war. Jetzt wird `available_updates` aus `Shelly.GetStatus` gelesen, Stage dynamisch gewählt (stable bevorzugt, sonst beta). Handhabt auch "Already in progress" (Code -106) als Erfolg.
+
 ## 16.4.1 - 2026-04-05
 ### Added
 - **Firmware-Update direkt aus Health Check** – Pro Gerät mit verfügbarem Update erscheint ein gelber "⬆ Update starten"-Button. Zusätzlich "⬆ Alle updaten"-Button für Batch-Update aller Shellys mit pending Updates. Unterstützt Gen1 (/ota?update=1) und Gen2+ (RPC Shelly.Update).

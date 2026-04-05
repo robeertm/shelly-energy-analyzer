@@ -99,34 +99,60 @@ def trigger_firmware_update(device_key: str):
 
     import requests as req
     try:
-        # Try Gen2+ RPC endpoint first
+        # Try Gen2+ first: check what's available, then trigger
         try:
-            r = req.post(
-                f"http://{d.host}/rpc/Shelly.Update",
-                json={"stage": "stable"},
-                timeout=10,
-            )
-            if r.status_code == 200:
-                return jsonify({"ok": True, "gen": 2, "message": "Update gestartet",
-                                "response": r.json() if r.text else {}})
+            info_r = req.get(f"http://{d.host}/rpc/Shelly.GetStatus", timeout=5)
+            if info_r.status_code == 200:
+                info = info_r.json() or {}
+                available = (info.get("sys", {}) or {}).get("available_updates", {}) or {}
+                # Prefer stable over beta
+                stage = None
+                if available.get("stable"):
+                    stage = "stable"
+                elif available.get("beta"):
+                    stage = "beta"
+
+                if stage is None:
+                    return jsonify({"ok": False, "error": "Kein Firmware-Update verfügbar"})
+
+                ver = available[stage].get("version", "?")
+                r = req.post(
+                    f"http://{d.host}/rpc/Shelly.Update",
+                    json={"stage": stage},
+                    timeout=15,
+                )
+                if r.status_code == 200:
+                    return jsonify({"ok": True, "gen": 2, "stage": stage,
+                                    "message": f"Update auf {stage} {ver} gestartet"})
+                # Fall back to GET style
+                r = req.get(f"http://{d.host}/rpc/Shelly.Update?stage={stage}", timeout=15)
+                if r.status_code == 200:
+                    rj = r.json() if r.text else {}
+                    # Shelly returns {"code":-106,"message":"Already in progress"} when update already running
+                    if rj.get("code") == -106:
+                        return jsonify({"ok": True, "gen": 2, "stage": stage,
+                                        "message": "Update läuft bereits"})
+                    return jsonify({"ok": True, "gen": 2, "stage": stage,
+                                    "message": f"Update auf {stage} {ver} gestartet"})
+                return jsonify({"ok": False, "error": f"Gen2 Update HTTP {r.status_code}: {r.text[:200]}"})
         except Exception:
             pass
 
-        # Fallback: Gen2+ GET
+        # Gen1 fallback (no Gen1 devices in current setup but keep for completeness)
         try:
-            r = req.get(f"http://{d.host}/rpc/Shelly.Update?stage=stable", timeout=10)
-            if r.status_code == 200:
-                return jsonify({"ok": True, "gen": 2, "message": "Update gestartet",
-                                "response": r.json() if r.text else {}})
-        except Exception:
-            pass
-
-        # Fallback: Gen1 OTA endpoint
-        r = req.get(f"http://{d.host}/ota?update=1", timeout=10)
-        if r.status_code == 200:
-            return jsonify({"ok": True, "gen": 1, "message": "Update gestartet",
-                            "response": r.text[:200]})
-        return jsonify({"ok": False, "error": f"HTTP {r.status_code}: {r.text[:200]}"})
+            info = req.get(f"http://{d.host}/status", timeout=5)
+            if info.status_code == 200:
+                upd = (info.json() or {}).get("update", {})
+                new_ver = upd.get("new_version") or ""
+                if new_ver:
+                    r = req.get(f"http://{d.host}/ota", params={"update": "true"}, timeout=15)
+                    if r.status_code == 200:
+                        return jsonify({"ok": True, "gen": 1, "message": f"Update auf {new_ver} gestartet"})
+                    return jsonify({"ok": False, "error": f"Gen1 OTA HTTP {r.status_code}: {r.text[:200]}"})
+                return jsonify({"ok": False, "error": "Kein Firmware-Update verfügbar"})
+        except Exception as e_gen1:
+            return jsonify({"ok": False, "error": f"Update fehlgeschlagen: {e_gen1}"})
+        return jsonify({"ok": False, "error": "Gerät nicht erreichbar"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 
