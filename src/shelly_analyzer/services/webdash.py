@@ -2024,6 +2024,10 @@ function onPaneActivated(name) {{
       const fr = document.getElementById('plots-frame');
       if (fr && (!fr.src || fr.src === 'about:blank' || fr.src.endsWith('about:blank'))) {{
         fr.src = '/plots';
+      }} else if (fr) {{
+        // Iframe is already loaded → ask it to re-fetch fresh data
+        // (e.g. after initial sync or when user returns to the tab).
+        try {{ if (fr.contentWindow && fr.contentWindow.__scheduleApplyPlots) fr.contentWindow.__scheduleApplyPlots(50); }} catch(e) {{}}
       }}
     }}
     else if (name === 'costs') loadCosts();

@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.13.2 - 2026-04-05
+### Changed
+- **Initial-Sync beim App-Start** – unabhängig davon ob Auto-Sync aktiviert ist, wird 3 s nach Server-Start einmal `sync_all()` im Hintergrund ausgeführt, damit beim ersten Dashboard-Öffnen direkt aktuelle Daten in der DB stehen. Wenn Auto-Sync aktiviert ist, läuft danach zusätzlich der periodische Zyklus.
+- **Plots-Tab aktualisiert bei Tab-Wechsel** – beim Wechsel zum Plots-Tab wird die iframe-Plotly-Ansicht jetzt immer neu gezeichnet (via `__scheduleApplyPlots()` auf dem iframe window). Damit siehst du nach dem Initial-Sync automatisch die frischen Daten, wenn du zum Plots-Tab wechselst.
+
 ## 16.13.1 - 2026-04-05
 ### Fixed
 - **Mieter-Abrechnung: MwSt doppelt berechnet** – der `/api/tenants/bill` Endpoint gab BRUTTO-Preise an den Service und der Service addierte dann erneut 19% MwSt. Jetzt wird mit NETTO-Preisen gerechnet; die MwSt wird nur einmal am Ende zum Subtotal addiert. Beeinflusst auch die `Grundpreis`-Zeile: die Grundgebühr wurde als Brutto an den Service übergeben und dann nochmal um 19% erhöht.
