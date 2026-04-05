@@ -986,6 +986,40 @@ _HTML_TEMPLATE = """<!doctype html>
       z-index: 100;
     }}
     #bottom-nav::-webkit-scrollbar {{ display: none; }}
+    /* ── Hamburger (hidden on desktop, shown on mobile) ── */
+    #btn-hamburger {{ display: none; }}
+    #nav-drawer-overlay {{
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 200; display: none;
+    }}
+    #nav-drawer {{
+      position: fixed; top: 0; left: 0; bottom: 0;
+      width: min(78vw, 280px);
+      background: var(--card);
+      border-right: 1px solid var(--border);
+      z-index: 201; display: none;
+      overflow-y: auto;
+      padding: 12px 0;
+      box-shadow: 2px 0 10px rgba(0,0,0,0.25);
+    }}
+    body.nav-open #nav-drawer,
+    body.nav-open #nav-drawer-overlay {{ display: block; }}
+    .drawer-item {{
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px; color: var(--fg);
+      text-decoration: none; font-size: 14px;
+      border: none; background: none; width: 100%;
+      text-align: left; cursor: pointer;
+      border-bottom: 1px solid var(--border);
+    }}
+    .drawer-item.active {{ color: var(--accent); font-weight: 600; }}
+    .drawer-item .drawer-ico {{ font-size: 18px; width: 22px; text-align: center; }}
+    @media (max-width: 600px) {{
+      #btn-hamburger {{ display: inline-flex; }}
+      #bottom-nav {{ display: none; }}
+      #panes {{ padding-bottom: 10px; }}
+    }}
     .nav-btn {{
       display: flex;
       flex-direction: column;
@@ -1041,6 +1075,8 @@ _HTML_TEMPLATE = """<!doctype html>
     @media (min-width: 700px) {{
       .card-grid {{ grid-template-columns: 1fr 1fr; }}
     }}
+    /* Live view always single column, even on wide monitors */
+    #live-grid.card-grid {{ grid-template-columns: 1fr !important; }}
     /* ── Metric grid ── */
     .metric-grid {{
       display: grid;
@@ -1466,7 +1502,8 @@ _HTML_TEMPLATE = """<!doctype html>
     <span id="hdr-title" style="font-weight:700;font-size:15px">⚡ Shelly Analyzer</span>
     <div id="hdr-actions" style="display:flex;gap:8px;align-items:center">
       <span id="live-stamp" style="font-size:11px;color:var(--muted)"></span>
-      <button id="btn-freeze" class="icon-btn" title="{web_btn_freeze_title}">▶</button>
+      <button id="btn-hamburger" class="icon-btn" title="Menü" onclick="toggleNavDrawer()">☰</button>
+      <button id="btn-freeze" class="icon-btn" title="{web_btn_freeze_title}" style="display:none">▶</button>
       <button id="btn-live-settings" class="icon-btn" title="{web_btn_settings_title}" onclick="openLiveSettings()">⚙</button>
       <button id="btn-theme" class="icon-btn" title="{web_btn_theme_title}">☀</button>
     </div>
@@ -1748,6 +1785,30 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-label">Goals</span>
     </button>
   </nav>
+
+  <!-- Mobile hamburger drawer (mirrors bottom-nav) -->
+  <div id="nav-drawer-overlay" onclick="toggleNavDrawer()"></div>
+  <aside id="nav-drawer">
+    <button class="drawer-item active" onclick="switchPaneFromDrawer('live',this)"><span class="drawer-ico">📡</span>{web_tab_live}</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('costs',this)"><span class="drawer-ico">💰</span>{web_tab_costs}</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('heatmap',this)"><span class="drawer-ico">🔥</span>{web_tab_heatmap}</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('solar',this)"><span class="drawer-ico">☀️</span>{web_tab_solar}</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('weather',this)"><span class="drawer-ico">🌡️</span>{web_tab_weather}</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('compare',this)"><span class="drawer-ico">🔀</span>{web_tab_compare}</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('co2',this)"><span class="drawer-ico">🌍</span>{web_tab_co2}</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('anomalies',this)"><span class="drawer-ico">🔍</span>{web_tab_anomalies}</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('forecast',this)"><span class="drawer-ico">📈</span>{web_tab_forecast}</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('standby',this)"><span class="drawer-ico">🔌</span>{web_tab_standby}</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('sankey',this)"><span class="drawer-ico">⚡</span>{web_tab_sankey}</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('ev',this)"><span class="drawer-ico">🔌</span>{web_tab_ev}</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('export',this)"><span class="drawer-ico">📥</span>{web_tab_export}</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('smart_sched',this)"><span class="drawer-ico">⏱</span>Schedule</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('ev_log',this)"><span class="drawer-ico">🚗</span>EV Log</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('tariff',this)"><span class="drawer-ico">💱</span>Tariff</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('battery',this)"><span class="drawer-ico">🔋</span>Battery</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('advisor',this)"><span class="drawer-ico">🤖</span>Advisor</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('goals',this)"><span class="drawer-ico">🏆</span>Goals</button>
+  </aside>
 </div>
 
 <div id="hm-tooltip"></div>
@@ -1855,12 +1916,25 @@ document.getElementById('btn-theme').addEventListener('click', function() {{
 }})();
 
 /* ── Tab switching ── */
+function toggleNavDrawer() {{
+  document.body.classList.toggle('nav-open');
+}}
+function switchPaneFromDrawer(name, el) {{
+  // Mirror the selection to a bottom-nav button so switchPane highlights it
+  document.body.classList.remove('nav-open');
+  const btn = document.querySelector('.nav-btn[onclick*="\\'' + name + '\\'"]');
+  switchPane(name, btn || null);
+}}
 function switchPane(name, btn) {{
   document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.drawer-item').forEach(b => b.classList.remove('active'));
   const pane = document.getElementById('pane-' + name);
   if (pane) pane.classList.add('active');
   if (btn) btn.classList.add('active');
+  // Highlight matching drawer item
+  const drawerItem = document.querySelector('.drawer-item[onclick*="\\'' + name + '\\'"]');
+  if (drawerItem) drawerItem.classList.add('active');
   currentPane = name;
   localStorage.setItem('sea_pane', name);
   // Scroll to top when switching tabs so content starts at the top
@@ -3378,7 +3452,10 @@ function renderCo2(data, el) {{
 
   // ── Fuel mix ──
   const mix = data.fuel_mix || {{}};
-  const mixKeys = Object.keys(mix);
+  // Sort fuels by share_pct descending (largest generators first)
+  const mixKeys = Object.keys(mix).sort(function(a,b) {{
+    return (mix[b].share_pct || 0) - (mix[a].share_pct || 0);
+  }});
   if (mixKeys.length > 0) {{
     html += '<div class="card" style="margin-top:8px">';
     html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">' + t('web.co2.fuel_mix', 'Generation Mix') + (data.fuel_mix_hour ? ' (' + esc(data.fuel_mix_hour) + ')' : '') + '</div>';

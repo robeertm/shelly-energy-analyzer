@@ -48,7 +48,8 @@ def health_all():
                     sys = data.get("sys", {}) or {}
                     entry["uptime_s"] = sys.get("uptime")
                     av = sys.get("available_updates") or {}
-                    entry["firmware_update_available"] = bool(av.get("stable") or av.get("beta"))
+                    # Only flag stable updates as "available" (we skip beta)
+                    entry["firmware_update_available"] = bool(av.get("stable"))
             except Exception:
                 pass
 
@@ -105,14 +106,12 @@ def trigger_firmware_update(device_key: str):
             if info_r.status_code == 200:
                 info = info_r.json() or {}
                 available = (info.get("sys", {}) or {}).get("available_updates", {}) or {}
-                # Prefer stable over beta
-                stage = None
-                if available.get("stable"):
-                    stage = "stable"
-                elif available.get("beta"):
-                    stage = "beta"
+                # Only install stable releases (no beta auto-updates)
+                stage = "stable" if available.get("stable") else None
 
                 if stage is None:
+                    if available.get("beta"):
+                        return jsonify({"ok": False, "error": "Nur Beta-Update verfügbar – wird nicht automatisch installiert"})
                     return jsonify({"ok": False, "error": "Kein Firmware-Update verfügbar"})
 
                 ver = available[stage].get("version", "?")

@@ -44,8 +44,9 @@ class BackgroundServiceManager:
         self._stop_event = threading.Event()
         self._autosync_thread: Optional[threading.Thread] = None
 
-        # Today kWh tracking per device (for live cost calculation)
-        self._today_kwh: Dict[str, float] = {}
+        # Today kWh tracking per device (trapezoid integration of power samples)
+        # state[device_key] = {"date": date, "kwh": float, "last_ts": int, "last_p": float}
+        self._today_state: Dict[str, Dict[str, Any]] = {}
         self._today_kwh_lock = threading.Lock()
 
     def start_all(self) -> None:
@@ -119,6 +120,7 @@ class BackgroundServiceManager:
     def _feed_loop(self) -> None:
         """Drain live samples from poller queue into LiveStateStore."""
         import queue
+        from datetime import datetime
 
         unit_price = float(self.cfg.pricing.unit_price_gross())
 
@@ -139,15 +141,11 @@ class BackgroundServiceManager:
                 f = sample.freq_hz or {}
                 raw = sample.raw or {}
 
-                # kWh-today: cumulative energy from device if available
-                kwh_today = 0.0
-                for k in ("total_energy_wh", "energy_wh", "total_act_energy"):
-                    if k in raw and raw[k] is not None:
-                        try:
-                            kwh_today = float(raw[k]) / 1000.0
-                        except Exception:
-                            pass
-                        break
+                # kWh-today: trapezoidal integration of power_w.total since start
+                # of local day. Reset accumulator at midnight.
+                ts_i = int(sample.ts or time.time())
+                power_total = float(p.get("total", 0) or 0)
+                kwh_today = self._accumulate_today_kwh(sample.device_key, ts_i, power_total)
                 cost_today = kwh_today * unit_price
 
                 point = LivePoint(
@@ -179,6 +177,33 @@ class BackgroundServiceManager:
                 self.live_store.update(sample.device_key, point)
             except Exception as e:
                 logger.debug("Feed loop error: %s", e)
+
+    def _accumulate_today_kwh(self, device_key: str, ts: int, power_w: float) -> float:
+        """Trapezoid-integrate power (W) samples into kWh for the current local day.
+
+        Resets automatically at local midnight. Returns current kWh total for today.
+        """
+        from datetime import datetime
+
+        day = datetime.fromtimestamp(int(ts)).date()
+        with self._today_kwh_lock:
+            st = self._today_state.get(device_key)
+            if not st or st.get("date") != day:
+                st = {"date": day, "kwh": 0.0, "last_ts": None, "last_p": None}
+                self._today_state[device_key] = st
+
+            last_ts = st.get("last_ts")
+            last_p = st.get("last_p")
+            if last_ts is not None and last_p is not None:
+                dt = float(int(ts) - int(last_ts))
+                # Ignore gaps larger than 5 minutes (device was offline)
+                if 0 < dt <= 300:
+                    wh = (float(last_p) + float(power_w)) / 2.0 * (dt / 3600.0)
+                    st["kwh"] = float(st.get("kwh", 0.0) or 0.0) + (wh / 1000.0)
+
+            st["last_ts"] = int(ts)
+            st["last_p"] = float(power_w)
+            return float(st.get("kwh", 0.0) or 0.0)
 
     # ── Scheduler ──────────────────────────────────────────────────────
 
@@ -241,8 +266,12 @@ class BackgroundServiceManager:
         if not getattr(self.cfg.ui, "autosync_enabled", False):
             return
 
+        interval_m = int(getattr(self.cfg.ui, "autosync_interval_minutes", 0) or 0)
         interval_h = int(getattr(self.cfg.ui, "autosync_interval_hours", 12) or 12)
-        interval_s = max(300, interval_h * 3600)  # minimum 5 minutes
+        if interval_m > 0:
+            interval_s = max(60, interval_m * 60)  # minimum 1 minute
+        else:
+            interval_s = max(300, interval_h * 3600)  # minimum 5 minutes
 
         def _sync_loop():
             while not self._stop_event.is_set():
@@ -267,7 +296,7 @@ class BackgroundServiceManager:
 
         self._autosync_thread = threading.Thread(target=_sync_loop, daemon=True)
         self._autosync_thread.start()
-        logger.info("Auto-sync enabled (interval: %d hours)", interval_h)
+        logger.info("Auto-sync enabled (interval: %d s)", interval_s)
 
     # ── Runtime metadata ───────────────────────────────────────────────
 
