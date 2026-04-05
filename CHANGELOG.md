@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.5 - 2026-04-05
+### Fixed
+- **Plots-Tab: Stunden-Labels um 2h verschoben (UTC statt Lokalzeit)** – kWh-Balken und W/V/A-Timeseries zeigten die Stunde in UTC an. Bei einem Sync um 21:00 Uhr lokal (Europe/Berlin DST = UTC+2) wurde die zuletzt gefüllte Stunde als "18:00" beschriftet statt "20:00". Behoben in `_stats_series()` und `_wva_series()`: die aus der DB gelesenen UTC-Timestamps werden jetzt nach Europe/Berlin konvertiert, bevor Stunden-/Tag-/Wochen-Labels generiert werden. `_label_to_ts_range()` interpretiert Labels konsistent als Lokalzeit, damit CO₂- und Preis-Lookups pro Bucket die richtigen DB-Zeitfenster abfragen.
+
 ## 16.13.4 - 2026-04-05
 ### Changed
 - **iOS-Widget: CO₂-Chart zeigt volle 24h + aktuellen Wert robust** – die `/api/widget` Endpoint query für `co2_chart` deckt jetzt die letzten 24 Stunden ab (vorher -12h/+12h, Hälfte war leer da es für CO₂ keine Forecasts gibt). `co2_current` nimmt jetzt den **letzten verfügbaren Wert** aus den 24h (statt nur der aktuellen Stunde) – so wird auch bei kurzen Lücken im Fetch der aktuellste Wert angezeigt.
