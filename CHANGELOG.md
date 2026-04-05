@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.11.5 - 2026-04-05
+### Fixed
+- **Settings: Dropdown springt nach Auswahl zurück** – nach "Speichern" wurde der Client-`cfg` Cache nicht aktualisiert; beim nächsten Re-Render (z. B. von einem anderen Tab) zeigte das Select wieder den alten Wert. Jetzt holt `saveSection()` direkt nach PUT die frischen Settings vom Server, schreibt sie in `cfg` und zeichnet die betroffene Section neu. Damit ist sichtbar verifiziert, dass der Server den Wert tatsächlich persistiert hat.
+- **no-cache Header auf /settings + /api/settings** – stellt sicher, dass Browser und Proxies immer den aktuellen State holen, nicht den vor-Save-Snapshot.
+
 ## 16.11.4 - 2026-04-05
 ### Changed
 - **Plots auf Mobile: kein Zoom/Pan mehr** – auf Touch-Geräten mit Viewport ≤760px sind Plotly-Charts jetzt statisch: `fixedrange:true` auf beiden Achsen, `dragmode:false`, keine Mode-Bar, kein Scroll-Zoom, kein Doppelklick. Hover bleibt aktiv. Der Browser kann wieder normal durch den Plots-Tab scrollen ohne dass Pinch/Swipe vom Chart abgefangen werden. Desktop unverändert (voll interaktiv).
