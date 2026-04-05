@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.6.2 - 2026-04-05
+### Changed
+- **Reverted mobile hamburger** – bottom navigation stays visible and horizontally scrollable on mobile as before. Hamburger button hidden on all viewports.
+
 ## 16.6.1 - 2026-04-05
 ### Added
 - **Version badge on every page** – small `v<X.Y.Z>` badge fixed at bottom-right of Dashboard, Plots, Control and Settings pages so the running version is always visible.
