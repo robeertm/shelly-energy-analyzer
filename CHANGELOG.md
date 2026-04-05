@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.3 - 2026-04-05
+### Changed
+- **Plots-Tab immer statisch (kein Zoom)** – der Plots-Tab verwendet jetzt überall die einfachen mobilen Plots ohne Zoom/Pan/Scroll-Zoom, unabhängig von der Viewport-Breite. `isMobileView()` innerhalb der Plots-Seite gibt immer `true` zurück, d. h. `fixedrange`, `dragmode: false`, `displayModeBar: false` und `doubleClick: false` für alle Plotly-Charts.
+
 ## 16.13.2 - 2026-04-05
 ### Changed
 - **Initial-Sync beim App-Start** – unabhängig davon ob Auto-Sync aktiviert ist, wird 3 s nach Server-Start einmal `sync_all()` im Hintergrund ausgeführt, damit beim ersten Dashboard-Öffnen direkt aktuelle Daten in der DB stehen. Wenn Auto-Sync aktiviert ist, läuft danach zusätzlich der periodische Zyklus.
