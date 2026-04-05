@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.13.0 - 2026-04-05
+### Changed
+- **Plots-Tab merkt sich letzte Einstellungen** – jeder Control-Change (View, Metric, Phasen, Zeitbereich, Geräte, Filter) wird in `localStorage['sea_plots_qp']` persistiert und beim nächsten Seitenaufruf automatisch wiederhergestellt. Funktioniert sowohl im Dashboard-Plots-Tab (iframe) als auch bei direktem `/plots`-Aufruf.
+- **Erster Besuch zeigt kWh-Balken der letzten 24h** – neue Default-Ansicht statt Timeseries/W/1h: `view=kwh` / `mode=hours` / `len=24 hours`. Zeigt Energieverbrauch pro Stunde + CO₂/Preis-Balken für die letzten 24 Stunden.
+
 ## 16.12.5 - 2026-04-05
 ### Changed
 - **Kosten-Kachel-Label "Prognose (Monat)" → "Prognose"** – das (Monat) Suffix umbrach in der schmalen 4-Spalten-Gitteransicht auf zwei Zeilen und machte die Kachel höher als die anderen. Monat ist aus dem Kontext klar (vierte Spalte nach Heute/Woche/Monat). Gilt für alle Sprachen: Prognose / Forecast / Pronóstico / Prévision / Previsão / Previsione / Prognoza / Předpověď / Прогноз.
