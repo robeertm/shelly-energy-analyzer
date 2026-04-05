@@ -142,7 +142,23 @@ async function saveSection(sectionId) {
     const r = await fetch("/api/settings",{method:"PUT",
       headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
     const j = await r.json();
-    if (j.ok) toast("✓ Gespeichert");
+    if (j.ok) {
+      toast("✓ Gespeichert");
+      // Re-fetch server-side config + re-render the section so the UI matches
+      // what the server actually persisted (verifies the write round-trip
+      // visually; if a value "jumps back", you know the server rejected it).
+      try {
+        const fresh = await fetch("/api/settings").then(x=>x.json());
+        cfg = fresh;
+        const secEl = document.getElementById("sec-" + sectionId);
+        const s = SECTIONS.find(x => x.id === sectionId);
+        if (secEl && s && !s.custom) {
+          const fieldsHtml = (s.fields||[]).map(renderField).join("");
+          const grid = secEl.querySelector(".grid2");
+          if (grid) grid.innerHTML = fieldsHtml;
+        }
+      } catch(e) {}
+    }
     else toast("Fehler: " + j.error, "error");
   } catch(e) { toast("Fehler: " + e.message, "error"); }
 }
