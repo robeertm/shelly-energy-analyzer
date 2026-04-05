@@ -1521,6 +1521,12 @@ _HTML_TEMPLATE = """<!doctype html>
       <div id="live-grid" class="card-grid"></div>
     </div>
 
+    <!-- Plots (historical W/V/A/VAR/cos φ, phases + totals, time ranges, kWh) -->
+    <div id="pane-plots" class="pane">
+      <iframe id="plots-frame" src="about:blank" loading="lazy"
+        style="width:100%;height:calc(100vh - 110px);border:0;border-radius:12px;background:var(--card)"></iframe>
+    </div>
+
     <!-- Costs -->
     <div id="pane-costs" class="pane">
       <div id="costs-content"><p class="loading-msg">{web_loading}</p></div>
@@ -1737,6 +1743,10 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">📡</span>
       <span class="nav-label">{web_tab_live}</span>
     </button>
+    <button class="nav-btn" onclick="switchPane('plots',this)">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">Plots</span>
+    </button>
     <button class="nav-btn" onclick="switchPane('costs',this)">
       <span class="nav-icon">💰</span>
       <span class="nav-label">{web_tab_costs}</span>
@@ -1823,6 +1833,7 @@ _HTML_TEMPLATE = """<!doctype html>
   <div id="nav-drawer-overlay" onclick="toggleNavDrawer()"></div>
   <aside id="nav-drawer">
     <button class="drawer-item active" onclick="switchPaneFromDrawer('live',this)"><span class="drawer-ico">📡</span>{web_tab_live}</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('plots',this)"><span class="drawer-ico">📊</span>Plots</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('costs',this)"><span class="drawer-ico">💰</span>{web_tab_costs}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('heatmap',this)"><span class="drawer-ico">🔥</span>{web_tab_heatmap}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('solar',this)"><span class="drawer-ico">☀️</span>{web_tab_solar}</button>
@@ -1986,7 +1997,13 @@ function onPaneActivated(name) {{
     startLive();
   }} else {{
     stopLive();
-    if (name === 'costs') loadCosts();
+    if (name === 'plots') {{
+      const fr = document.getElementById('plots-frame');
+      if (fr && (!fr.src || fr.src === 'about:blank' || fr.src.endsWith('about:blank'))) {{
+        fr.src = '/plots';
+      }}
+    }}
+    else if (name === 'costs') loadCosts();
     else if (name === 'heatmap') initHeatmap();
     else if (name === 'solar') initSolar();
     else if (name === 'weather') initWeather();
