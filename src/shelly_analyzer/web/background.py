@@ -178,32 +178,92 @@ class BackgroundServiceManager:
             except Exception as e:
                 logger.debug("Feed loop error: %s", e)
 
-    def _accumulate_today_kwh(self, device_key: str, ts: int, power_w: float) -> float:
-        """Trapezoid-integrate power (W) samples into kWh for the current local day.
+    def _load_today_baseline(self, device_key: str, day_start_ts: int) -> tuple:
+        """Read already-imported kWh for *today* from DB.
 
-        Resets automatically at local midnight. Returns current kWh total for today.
+        Returns (baseline_kwh, baseline_last_ts) where baseline_last_ts is the
+        end of the latest hour_ts we already have, so live accumulation only
+        starts after it (no double counting after a sync).
+        """
+        try:
+            db = getattr(self.storage, "db", None)
+            if db is None:
+                return 0.0, 0
+            df = db.query_hourly(device_key, start_ts=int(day_start_ts), end_ts=int(time.time()))
+            if df is None or df.empty:
+                return 0.0, int(day_start_ts)
+            total = float(df["kwh"].fillna(0).sum())
+            # End of latest completed hour we have data for
+            last_hour = int(df["hour_ts"].max())
+            last_end = last_hour + 3600
+            return total, last_end
+        except Exception as e:
+            logger.debug("Baseline lookup failed for %s: %s", device_key, e)
+            return 0.0, int(day_start_ts)
+
+    def _accumulate_today_kwh(self, device_key: str, ts: int, power_w: float) -> float:
+        """Trapezoid-integrate power (W) samples into kWh for the current local day,
+        starting from the DB baseline (already-synced hours of today).
+
+        Resets automatically at local midnight. Returns total kWh for today.
         """
         from datetime import datetime
 
-        day = datetime.fromtimestamp(int(ts)).date()
+        ts_dt = datetime.fromtimestamp(int(ts))
+        day = ts_dt.date()
+        day_start = int(datetime(day.year, day.month, day.day).timestamp())
+
         with self._today_kwh_lock:
             st = self._today_state.get(device_key)
             if not st or st.get("date") != day:
-                st = {"date": day, "kwh": 0.0, "last_ts": None, "last_p": None}
+                base_kwh, base_last_ts = self._load_today_baseline(device_key, day_start)
+                st = {
+                    "date": day,
+                    "base_kwh": float(base_kwh),
+                    "base_last_ts": int(base_last_ts),
+                    "live_kwh": 0.0,
+                    "last_ts": None,
+                    "last_p": None,
+                    "baseline_refreshed_at": int(time.time()),
+                }
                 self._today_state[device_key] = st
 
-            last_ts = st.get("last_ts")
-            last_p = st.get("last_p")
-            if last_ts is not None and last_p is not None:
-                dt = float(int(ts) - int(last_ts))
-                # Ignore gaps larger than 5 minutes (device was offline)
-                if 0 < dt <= 300:
-                    wh = (float(last_p) + float(power_w)) / 2.0 * (dt / 3600.0)
-                    st["kwh"] = float(st.get("kwh", 0.0) or 0.0) + (wh / 1000.0)
+            # Periodically refresh baseline from DB (after each auto-sync the DB has
+            # grown; we must pick that up and reset live accumulator to avoid double counting).
+            if int(time.time()) - int(st.get("baseline_refreshed_at", 0)) > 600:
+                base_kwh, base_last_ts = self._load_today_baseline(device_key, day_start)
+                old_last = int(st.get("base_last_ts", 0))
+                if int(base_last_ts) > old_last:
+                    # DB advanced beyond where we were accumulating → drop overlapping live portion
+                    st["base_kwh"] = float(base_kwh)
+                    st["base_last_ts"] = int(base_last_ts)
+                    st["live_kwh"] = 0.0
+                    st["last_ts"] = None
+                    st["last_p"] = None
+                st["baseline_refreshed_at"] = int(time.time())
 
-            st["last_ts"] = int(ts)
-            st["last_p"] = float(power_w)
-            return float(st.get("kwh", 0.0) or 0.0)
+            base_last_ts = int(st.get("base_last_ts", day_start))
+
+            # Only accumulate samples after the DB baseline end
+            if int(ts) <= base_last_ts:
+                st["last_ts"] = int(ts)
+                st["last_p"] = float(power_w)
+            else:
+                last_ts = st.get("last_ts")
+                last_p = st.get("last_p")
+                # If previous sample was within the baseline window, restart from here
+                if last_ts is None or last_p is None or int(last_ts) <= base_last_ts:
+                    st["last_ts"] = int(ts)
+                    st["last_p"] = float(power_w)
+                else:
+                    dt = float(int(ts) - int(last_ts))
+                    if 0 < dt <= 300:
+                        wh = (float(last_p) + float(power_w)) / 2.0 * (dt / 3600.0)
+                        st["live_kwh"] = float(st.get("live_kwh", 0.0) or 0.0) + (wh / 1000.0)
+                    st["last_ts"] = int(ts)
+                    st["last_p"] = float(power_w)
+
+            return float(st.get("base_kwh", 0.0) or 0.0) + float(st.get("live_kwh", 0.0) or 0.0)
 
     # ── Scheduler ──────────────────────────────────────────────────────
 
