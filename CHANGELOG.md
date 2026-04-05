@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.7.1 - 2026-04-05
+### Fixed
+- **Mieter-Abrechnung: "float() argument must be a string or a real number, not 'method'"** – `pricing.vat_rate` is a method on PricingConfig, not an attribute. Wrapped call in try/except with fallback to `vat_rate_percent / 100`. Also switched `base_fee_gross` lookup to `base_fee_eur_per_year`.
+
 ## 16.7.0 - 2026-04-05
 ### Added
 - **Mieter tab (Nebenkostenabrechnung)** – new 🏘 Mieter pane:
