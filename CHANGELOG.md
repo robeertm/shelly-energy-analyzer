@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.11.1 - 2026-04-05
+### Added
+- **Fixpreis-Vergleichsbalken im Preis-Plot** – zweiter (grauer) Balken pro Bucket zeigt die Kosten beim Fixtarif aus `pricing.electricity_price_eur_per_kwh` (brutto), direkt neben den farbigen Dynamisch-Balken gruppiert. Sofort vergleichbar wie viel man mit/ohne Dynamic-Tariff zahlt.
+
 ## 16.11.0 - 2026-04-05
 ### Added
 - **CO₂ & Preis-Balken pro Gerät** – eigene Karte je Gerät für CO₂ (g) und Strompreis (€), je Bucket – parallel zu den kWh-Balken.
