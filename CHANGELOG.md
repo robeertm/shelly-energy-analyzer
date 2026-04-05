@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.12.5 - 2026-04-05
+### Changed
+- **Kosten-Kachel-Label "Prognose (Monat)" → "Prognose"** – das (Monat) Suffix umbrach in der schmalen 4-Spalten-Gitteransicht auf zwei Zeilen und machte die Kachel höher als die anderen. Monat ist aus dem Kontext klar (vierte Spalte nach Heute/Woche/Monat). Gilt für alle Sprachen: Prognose / Forecast / Pronóstico / Prévision / Previsão / Previsione / Prognoza / Předpověď / Прогноз.
+
 ## 16.12.4 - 2026-04-05
 ### Fixed
 - **Kosten-Kacheln: Werte auf gleiche Höhe** – Metric-Cards in den "Heute/Woche/Monat/Prognose" Reihen hatten unterschiedliche Höhen, weil manche Karten eine Sub-Zeile (z. B. "-1.55 €", "8.260 kWh") hatten und manche nicht (z. B. Dyn.-Tarif-Prognose). `metricCardHtml()` rendert jetzt **immer** ein `.metric-sub` div (mit `&nbsp;` Platzhalter bei leerem Sub), damit alle Kacheln identische 3-Zeilen-Struktur haben und die €-Werte horizontal auf gleicher Höhe stehen.
