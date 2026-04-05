@@ -373,17 +373,21 @@ def _compute_i_n(measured: float, ia: float, ib: float, ic: float,
     try:
         if measured and abs(measured) > 0.01:
             return float(measured)
-        active = sum(1 for v in (va, vb, vc) if v > 0)
+        # Decide active phases by either voltage OR current being present
+        # (some devices report only a single phase-voltage but all currents).
+        a_on = (va > 0) or (abs(ia) > 0.01)
+        b_on = (vb > 0) or (abs(ib) > 0.01)
+        c_on = (vc > 0) or (abs(ic) > 0.01)
+        active = sum(1 for x in (a_on, b_on, c_on) if x)
         if active >= 3:
             val = ia * ia + ib * ib + ic * ic - ia * ib - ib * ic - ia * ic
             return round(math.sqrt(val) if val > 0 else 0.0, 3)
         if active == 2:
-            # Determine which two phases are active
-            if va > 0 and vb > 0:
+            if a_on and b_on:
                 return round(abs(ia - ib), 3)
-            if va > 0 and vc > 0:
+            if a_on and c_on:
                 return round(abs(ia - ic), 3)
-            if vb > 0 and vc > 0:
+            if b_on and c_on:
                 return round(abs(ib - ic), 3)
         return 0.0
     except Exception:
