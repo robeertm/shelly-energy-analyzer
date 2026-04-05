@@ -89,6 +89,12 @@ class BackgroundServiceManager:
                 self._influxdb_exporter.stop()
             except Exception:
                 pass
+        # Flush NILM state so nothing learned is lost on shutdown/reload
+        for lrn in self._nilm_learners.values():
+            try:
+                lrn.flush()
+            except Exception:
+                pass
         logger.info("All background services stopped")
 
     def reload(self, cfg: AppConfig) -> None:
@@ -287,6 +293,12 @@ class BackgroundServiceManager:
             runtime_dir.mkdir(parents=True, exist_ok=True)
         except Exception:
             pass
+        # Flush existing learners before replacing (e.g. after config reload)
+        for lrn in list(self._nilm_learners.values()):
+            try:
+                lrn.flush()
+            except Exception:
+                pass
         self._nilm_learners = {}
         for d in self.cfg.devices:
             # Only track 3-phase EM devices (switches have no meaningful NILM)
@@ -328,6 +340,9 @@ class BackgroundServiceManager:
             for dk, lrn in self._nilm_learners.items():
                 try:
                     cls = lrn.cluster()
+                    # cluster() already persists via _save when persist_path is set,
+                    # but call flush() too so latest transitions are always on disk.
+                    lrn.flush()
                     total_trans += int(lrn.get_transition_count())
                     for c in cls:
                         all_clusters.append({
