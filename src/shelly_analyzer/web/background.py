@@ -100,24 +100,13 @@ class BackgroundServiceManager:
             return
 
         try:
-            from shelly_analyzer.services.live import MultiLivePoller, DemoMultiLivePoller
+            from shelly_analyzer.services.live import MultiLivePoller
 
-            demo_cfg = getattr(self.cfg, "demo", None)
-            if demo_cfg and getattr(demo_cfg, "enabled", False):
-                from shelly_analyzer.services.demo import default_demo_devices, ensure_demo_csv
-                demo_devs = default_demo_devices(getattr(demo_cfg, "scenario", "household"))
-                for dd in demo_devs:
-                    ensure_demo_csv(self.storage, dd, seed=getattr(demo_cfg, "seed", 1234))
-                self._live_poller = DemoMultiLivePoller(
-                    devices=[(dd.key, dd.host) for dd in demo_devs],
-                    poll_seconds=float(self.cfg.ui.live_poll_seconds),
-                )
-            else:
-                self._live_poller = MultiLivePoller(
-                    devices=[(d.key, d.host) for d in self.cfg.devices],
-                    poll_seconds=float(self.cfg.ui.live_poll_seconds),
-                )
-
+            self._live_poller = MultiLivePoller(
+                devices=list(self.cfg.devices),
+                download_cfg=self.cfg.download,
+                poll_seconds=float(self.cfg.ui.live_poll_seconds),
+            )
             self._live_poller.start()
 
             # Start feed thread: reads from poller queue and feeds LiveStateStore
@@ -135,48 +124,57 @@ class BackgroundServiceManager:
 
         while not self._stop_event.is_set():
             try:
-                sample = self._live_poller.queue.get(timeout=1.0)
+                sample = self._live_poller.samples.get(timeout=1.0)
             except queue.Empty:
                 continue
             except Exception:
                 break
 
             try:
-                # Calculate today kWh/cost
+                p = sample.power_w or {}
+                v = sample.voltage_v or {}
+                c = sample.current_a or {}
+                r = sample.reactive_var or {}
+                cp = sample.cosphi or {}
+                f = sample.freq_hz or {}
+                raw = sample.raw or {}
+
+                # kWh-today: cumulative energy from device if available
                 kwh_today = 0.0
-                cost_today = 0.0
-                with self._today_kwh_lock:
-                    prev = self._today_kwh.get(sample.device_key, 0.0)
-                    if sample.energy_wh is not None and sample.energy_wh > 0:
-                        kwh_today = sample.energy_wh / 1000.0
-                    self._today_kwh[sample.device_key] = kwh_today
+                for k in ("total_energy_wh", "energy_wh", "total_act_energy"):
+                    if k in raw and raw[k] is not None:
+                        try:
+                            kwh_today = float(raw[k]) / 1000.0
+                        except Exception:
+                            pass
+                        break
                 cost_today = kwh_today * unit_price
 
                 point = LivePoint(
                     ts=int(sample.ts or time.time()),
-                    power_total_w=float(sample.total_power or 0),
-                    va=float(sample.voltage_a or 0),
-                    vb=float(sample.voltage_b or 0),
-                    vc=float(sample.voltage_c or 0),
-                    ia=float(sample.current_a or 0),
-                    ib=float(sample.current_b or 0),
-                    ic=float(sample.current_c or 0),
-                    pa=float(sample.power_a or 0),
-                    pb=float(sample.power_b or 0),
-                    pc=float(sample.power_c or 0),
-                    q_total_var=float(getattr(sample, "q_total_var", 0) or 0),
-                    qa=float(getattr(sample, "qa", 0) or 0),
-                    qb=float(getattr(sample, "qb", 0) or 0),
-                    qc=float(getattr(sample, "qc", 0) or 0),
-                    cosphi_total=float(getattr(sample, "cosphi_total", 0) or 0),
-                    pfa=float(getattr(sample, "pfa", 0) or 0),
-                    pfb=float(getattr(sample, "pfb", 0) or 0),
-                    pfc=float(getattr(sample, "pfc", 0) or 0),
+                    power_total_w=float(p.get("total", 0) or 0),
+                    va=float(v.get("a", 0) or 0),
+                    vb=float(v.get("b", 0) or 0),
+                    vc=float(v.get("c", 0) or 0),
+                    ia=float(c.get("a", 0) or 0),
+                    ib=float(c.get("b", 0) or 0),
+                    ic=float(c.get("c", 0) or 0),
+                    pa=float(p.get("a", 0) or 0),
+                    pb=float(p.get("b", 0) or 0),
+                    pc=float(p.get("c", 0) or 0),
+                    q_total_var=float(r.get("total", 0) or 0),
+                    qa=float(r.get("a", 0) or 0),
+                    qb=float(r.get("b", 0) or 0),
+                    qc=float(r.get("c", 0) or 0),
+                    cosphi_total=float(cp.get("total", 0) or 0),
+                    pfa=float(cp.get("a", 0) or 0),
+                    pfb=float(cp.get("b", 0) or 0),
+                    pfc=float(cp.get("c", 0) or 0),
                     kwh_today=kwh_today,
                     cost_today=cost_today,
-                    freq_hz=float(getattr(sample, "freq_hz", 50) or 50),
-                    i_n=float(getattr(sample, "i_n", 0) or 0),
-                    raw=getattr(sample, "raw", {}),
+                    freq_hz=float(f.get("total", 50) or 50),
+                    i_n=float(raw.get("i_n", 0) or 0),
+                    raw=raw,
                 )
                 self.live_store.update(sample.device_key, point)
             except Exception as e:
@@ -188,19 +186,18 @@ class BackgroundServiceManager:
         """Start the local device scheduler."""
         try:
             from shelly_analyzer.services.scheduler import LocalScheduler
+            from shelly_analyzer.io.http import ShellyHttp, HttpConfig
 
-            def get_schedules():
-                return getattr(self.cfg, "schedules", []) or []
-
-            def get_devices():
-                return self.cfg.devices
-
+            http_client = ShellyHttp(HttpConfig(
+                timeout_seconds=float(self.cfg.download.timeout_seconds),
+                retries=int(self.cfg.download.retries),
+                backoff_base_seconds=float(self.cfg.download.backoff_base_seconds),
+            ))
             self._scheduler = LocalScheduler(
-                get_schedules=get_schedules,
-                get_devices=get_devices,
+                get_config=lambda: self.cfg,
+                get_http=lambda: http_client,
             )
             self._scheduler.start()
-            logger.info("Local scheduler started")
         except Exception as e:
             logger.debug("Scheduler not started: %s", e)
 
@@ -213,22 +210,8 @@ class BackgroundServiceManager:
             return
         try:
             from shelly_analyzer.services.mqtt_ha import MqttPublisher
-
-            self._mqtt_publisher = MqttPublisher(
-                broker=str(getattr(mqtt_cfg, "broker", "127.0.0.1") or "127.0.0.1"),
-                port=int(getattr(mqtt_cfg, "port", 1883) or 1883),
-                username=str(getattr(mqtt_cfg, "username", "") or ""),
-                password=str(getattr(mqtt_cfg, "password", "") or ""),
-                topic_prefix=str(getattr(mqtt_cfg, "topic_prefix", "shelly_analyzer") or "shelly_analyzer"),
-                ha_discovery=bool(getattr(mqtt_cfg, "ha_discovery", True)),
-                live_store=self.live_store,
-                devices_meta=[
-                    {"key": d.key, "name": d.name}
-                    for d in self.cfg.devices
-                ],
-            )
+            self._mqtt_publisher = MqttPublisher(config=mqtt_cfg)
             self._mqtt_publisher.start()
-            logger.info("MQTT publisher started")
         except Exception as e:
             logger.debug("MQTT not started: %s", e)
 
@@ -241,19 +224,13 @@ class BackgroundServiceManager:
             return
         try:
             from shelly_analyzer.services.influxdb_export import InfluxDBExporter
-
-            self._influxdb_exporter = InfluxDBExporter(
-                url=str(getattr(influx_cfg, "url", "http://127.0.0.1:8086") or "http://127.0.0.1:8086"),
-                version=str(getattr(influx_cfg, "version", "2") or "2"),
-                token=str(getattr(influx_cfg, "token", "") or ""),
-                org=str(getattr(influx_cfg, "org", "") or ""),
-                bucket=str(getattr(influx_cfg, "bucket", "shelly") or "shelly"),
-                interval_seconds=int(getattr(influx_cfg, "interval_seconds", 10) or 10),
-                live_store=self.live_store,
-                devices_meta=[{"key": d.key, "name": d.name} for d in self.cfg.devices],
-            )
+            # Attach devices to storage for InfluxDBExporter
+            try:
+                self.storage.devices = list(self.cfg.devices)
+            except Exception:
+                pass
+            self._influxdb_exporter = InfluxDBExporter(cfg=influx_cfg, storage=self.storage)
             self._influxdb_exporter.start()
-            logger.info("InfluxDB exporter started")
         except Exception as e:
             logger.debug("InfluxDB exporter not started: %s", e)
 

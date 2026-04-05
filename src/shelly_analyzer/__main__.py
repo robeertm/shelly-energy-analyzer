@@ -91,8 +91,30 @@ def main(argv: list[str] | None = None) -> int:
     scheme = "https" if ssl_context else "http"
     from shelly_analyzer.web.ssl_utils import _local_ip_guess
     ip = _local_ip_guess()
-    logger.info("Starting Shelly Energy Analyzer on %s://%s:%d/", scheme, ip, port)
+
+    # Try the configured port, fall back to next 19 ports if busy (same as webdash.py)
+    import socket as _socket
+    actual_port = None
+    for try_port in range(port, port + 20):
+        try:
+            s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+            s.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+            s.bind((args.host, try_port))
+            s.close()
+            actual_port = try_port
+            break
+        except OSError:
+            continue
+    if actual_port is None:
+        logger.error("Could not find a free port in range %d-%d", port, port + 19)
+        bg.stop_all()
+        return 1
+    if actual_port != port:
+        logger.warning("Port %d is in use, using port %d instead", port, actual_port)
+    port = actual_port
     state.port = port
+
+    logger.info("Starting Shelly Energy Analyzer on %s://%s:%d/", scheme, ip, port)
 
     try:
         app.run(

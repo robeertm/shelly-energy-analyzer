@@ -1,5 +1,12 @@
 # Changelog
 
+## 16.2.1 - 2026-04-05
+### Fixed
+- **Background services startup** – `MultiLivePoller` was called with wrong signature (missing `download_cfg`, wrong `devices` format). Fixed to pass `DeviceConfig` list and `DownloadConfig`.
+- **LiveSample field mapping** – `_feed_loop` now correctly reads `power_w['total']`, `voltage_v['a']`, `current_a['a']` etc. (LiveSample uses Dict fields per phase, not flat attributes).
+- **MQTT/InfluxDB/Scheduler signatures** – `MqttPublisher(config=...)`, `InfluxDBExporter(cfg=..., storage=...)`, `LocalScheduler(get_config=..., get_http=...)` — corrected to match actual constructors.
+- **Port fallback** – If configured port is in use, auto-try next 19 ports (same behavior as old webdash.py). No more "Address already in use" crash.
+
 ## 16.2.0 - 2026-04-05
 ### Removed
 - **Deleted entire `ui/` directory** – 27,896 lines of tkinter desktop code removed (27 files). The app is now 100% web-only.
