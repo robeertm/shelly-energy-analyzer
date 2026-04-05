@@ -1078,11 +1078,25 @@ _HTML_TEMPLATE = """<!doctype html>
        Mobile keeps fixed heights + full width. */
     @media (min-width: 900px) {{
       .pane.active {{ max-width: 66%; margin-left: auto; margin-right: auto; }}
-      /* Plots tab: iframe owns the scrolling, outer panes container must not scroll */
-      #pane-plots.active {{ max-width: 100%; height: calc(100vh - 96px); padding: 0; margin: 0; }}
-      #panes:has(#pane-plots.active) {{ overflow: hidden; }}
       canvas.sparkline {{ height: clamp(56px, 11vh, 180px); }}
       canvas.sparkline-sm {{ height: clamp(40px, 8vh, 130px); }}
+    }}
+    /* Plots tab: iframe owns the scrolling, outer panes container must not scroll
+       (applies on both desktop and mobile so iframe has a defined height everywhere) */
+    #pane-plots.active {{
+      max-width: 100%;
+      width: 100%;
+      height: calc(100dvh - 140px);   /* header + bottom-nav safe area */
+      padding: 0;
+      margin: 0;
+    }}
+    #panes:has(#pane-plots.active) {{
+      overflow: hidden;
+      padding: 0 !important;
+      padding-bottom: 0 !important;
+    }}
+    @media (min-width: 900px) {{
+      #pane-plots.active {{ height: calc(100vh - 96px); }}
     }}
     /* ── Metric grid ── */
     .metric-grid {{
