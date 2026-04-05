@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.15 - 2026-04-05
+### Fixed
+- **Plots-Tab Hz: historische Werte = 0** – alte DB-Zeilen hatten `freq_hz = 0` (oder NULL) weil frühere Sync-Runs das Feld nicht befüllten. Jetzt werden 0-Werte als `NaN` behandelt → erscheinen als Lücken im Plot statt als 0-Linie. Netzfrequenz ist nie 0, daher ist diese Filterung korrekt.
+
 ## 16.13.14 - 2026-04-05
 ### Fixed
 - **Plots-Tab Hz: "Length of values (0) does not match length of index (1441)"** – `_wva_series()` initialisierte bei fehlender Frequenz-Spalte `y = pd.Series(dtype=float)` (Länge 0), was beim Index-Assign mit `pd.Series(y.to_numpy(), index=ts, ...)` kollidierte. Jetzt: `y = [NaN] * len(df)`. Zusätzlich Defensiv-Check am Ende, der `y` auf `len(ts)` ausrichtet, falls andere Branches 0-Längen-Serie hinterlassen. Außerdem `avg_freq_hz` als Fallback-Spalten-Alias ergänzt (für aus Monats-Aggregaten stammende DataFrames).
