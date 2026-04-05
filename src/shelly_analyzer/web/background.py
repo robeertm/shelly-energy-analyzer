@@ -49,9 +49,15 @@ class BackgroundServiceManager:
         self._today_state: Dict[str, Dict[str, Any]] = {}
         self._today_kwh_lock = threading.Lock()
 
+        # NILM (non-intrusive load monitoring) transition learners per device
+        self._nilm_learners: Dict[str, Any] = {}
+        self._nilm_last_cluster_ts: float = 0.0
+        self._nilm_cluster_interval: float = 300.0  # re-cluster every 5 min
+
     def start_all(self) -> None:
         """Start all enabled background services."""
         self._stop_event.clear()
+        self._init_nilm_learners()
         self._start_live_poller()
         self._start_scheduler()
         self._start_mqtt()
@@ -147,6 +153,8 @@ class BackgroundServiceManager:
                 power_total = float(p.get("total", 0) or 0)
                 kwh_today = self._accumulate_today_kwh(sample.device_key, ts_i, power_total)
                 cost_today = kwh_today * unit_price
+                # Feed NILM learner
+                self._observe_nilm(sample.device_key, ts_i, power_total)
 
                 point = LivePoint(
                     ts=int(sample.ts or time.time()),
@@ -264,6 +272,80 @@ class BackgroundServiceManager:
                     st["last_p"] = float(power_w)
 
             return float(st.get("base_kwh", 0.0) or 0.0) + float(st.get("live_kwh", 0.0) or 0.0)
+
+    # ── NILM ───────────────────────────────────────────────────────────
+
+    def _init_nilm_learners(self) -> None:
+        """Create one TransitionLearner per 3-phase EM device; load persisted clusters."""
+        try:
+            from shelly_analyzer.services.appliance_detector import TransitionLearner
+        except Exception as e:
+            logger.debug("NILM disabled: %s", e)
+            return
+        runtime_dir = self.out_dir / "data" / "runtime" / "nilm"
+        try:
+            runtime_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        self._nilm_learners = {}
+        for d in self.cfg.devices:
+            # Only track 3-phase EM devices (switches have no meaningful NILM)
+            if int(getattr(d, "phases", 3) or 3) < 3:
+                continue
+            if str(getattr(d, "kind", "em")) == "switch":
+                continue
+            try:
+                persist = runtime_dir / f"{d.key}.json"
+                self._nilm_learners[d.key] = TransitionLearner(
+                    min_step_w=50.0,
+                    max_clusters=20,
+                    persist_path=persist,
+                )
+            except Exception as e:
+                logger.debug("NILM learner init failed for %s: %s", d.key, e)
+        # Seed store with persisted clusters immediately (so UI doesn't say "waiting")
+        self._push_nilm_to_store()
+        logger.info("NILM learners initialized for %d devices", len(self._nilm_learners))
+
+    def _observe_nilm(self, device_key: str, ts: int, power_w: float) -> None:
+        learner = self._nilm_learners.get(device_key)
+        if learner is None:
+            return
+        try:
+            learner.observe(device_key, float(ts), float(power_w))
+        except Exception:
+            pass
+        # Periodically re-cluster and push to store
+        now = time.time()
+        if (now - self._nilm_last_cluster_ts) >= self._nilm_cluster_interval:
+            self._nilm_last_cluster_ts = now
+            self._push_nilm_to_store()
+
+    def _push_nilm_to_store(self) -> None:
+        try:
+            all_clusters = []
+            total_trans = 0
+            for dk, lrn in self._nilm_learners.items():
+                try:
+                    cls = lrn.cluster()
+                    total_trans += int(lrn.get_transition_count())
+                    for c in cls:
+                        all_clusters.append({
+                            "matched_appliance": getattr(c, "matched_appliance", "") or "",
+                            "count": int(getattr(c, "count", 0)),
+                            "centroid_w": float(getattr(c, "centroid_w", 0.0)),
+                            "icon": getattr(c, "icon", "") or "🔌",
+                            "label": getattr(c, "label", "") or "",
+                            "device_key": dk,
+                        })
+                except Exception:
+                    continue
+            store = self.live_store
+            if store is not None:
+                store._nilm_clusters = all_clusters  # type: ignore[attr-defined]
+                store._nilm_transition_count = total_trans  # type: ignore[attr-defined]
+        except Exception as e:
+            logger.debug("NILM push failed: %s", e)
 
     # ── Scheduler ──────────────────────────────────────────────────────
 

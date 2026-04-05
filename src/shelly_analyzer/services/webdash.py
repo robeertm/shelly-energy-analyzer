@@ -1706,6 +1706,25 @@ _HTML_TEMPLATE = """<!doctype html>
     <div id="pane-goals" class="pane">
       <div id="goals-content"><p class="loading-msg">Lade…</p></div>
     </div>
+    <div id="pane-sync" class="pane">
+      <div class="card" style="margin-bottom:8px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="btn" onclick="syncAll('incremental')">🔄 Inkrement-Sync</button>
+          <button class="btn" onclick="syncAll('all')">📥 Vollständiger Sync</button>
+          <button class="btn" onclick="syncAll('day')">Heute</button>
+          <button class="btn" onclick="syncAll('week')">Woche</button>
+          <button class="btn" onclick="syncAll('month')">Monat</button>
+          <span style="flex:1"></span>
+          <button class="btn" onclick="refreshSyncStatus()">⟳ Status</button>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px"><input type="checkbox" id="log-autoscroll" checked> Auto-Scroll</label>
+        </div>
+        <div id="sync-status-panel" style="font-size:12px;color:var(--muted);margin-bottom:6px">Lade Status…</div>
+      </div>
+      <div class="card">
+        <div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Log</div>
+        <div id="sync-log" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;background:var(--bg);border-radius:6px;padding:8px;height:60vh;overflow-y:auto;white-space:pre-wrap;line-height:1.4"></div>
+      </div>
+    </div>
 
   <nav id="bottom-nav">
     <button class="nav-btn active" onclick="switchPane('live',this)">
@@ -1784,6 +1803,10 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">🏆</span>
       <span class="nav-label">Goals</span>
     </button>
+    <button class="nav-btn" onclick="switchPane('sync',this)">
+      <span class="nav-icon">🔄</span>
+      <span class="nav-label">Sync</span>
+    </button>
   </nav>
 
   <!-- Mobile hamburger drawer (mirrors bottom-nav) -->
@@ -1808,6 +1831,7 @@ _HTML_TEMPLATE = """<!doctype html>
     <button class="drawer-item" onclick="switchPaneFromDrawer('battery',this)"><span class="drawer-ico">🔋</span>Battery</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('advisor',this)"><span class="drawer-ico">🤖</span>Advisor</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('goals',this)"><span class="drawer-ico">🏆</span>Goals</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('sync',this)"><span class="drawer-ico">🔄</span>Sync</button>
   </aside>
 </div>
 
@@ -1969,7 +1993,63 @@ function onPaneActivated(name) {{
     else if (name === 'battery') loadBattery();
     else if (name === 'advisor') loadAdvisor();
     else if (name === 'goals') loadGoals();
+    else if (name === 'sync') {{ initSync(); }}
+    else {{ stopSyncPolling(); }}
   }}
+  if (name !== 'sync') stopSyncPolling();
+}}
+
+/* ──────────────────────────────────────────────
+   SYNC PANE (trigger + live log)
+────────────────────────────────────────────── */
+let _syncTimer = null;
+let _syncLogSince = 0;
+function initSync() {{
+  refreshSyncStatus();
+  _syncLogSince = 0;
+  const el = document.getElementById('sync-log');
+  if (el) el.textContent = '';
+  pollSyncLogs();
+  if (!_syncTimer) _syncTimer = setInterval(pollSyncLogs, 2000);
+}}
+function stopSyncPolling() {{
+  if (_syncTimer) {{ clearInterval(_syncTimer); _syncTimer = null; }}
+}}
+function pollSyncLogs() {{
+  fetch('/api/logs?since=' + _syncLogSince + '&limit=200').then(function(r) {{ return r.json(); }}).then(function(d) {{
+    const el = document.getElementById('sync-log');
+    if (!el || !d.entries || !d.entries.length) return;
+    const frag = d.entries.map(function(e) {{
+      const ts = new Date(e.ts*1000).toLocaleTimeString();
+      return ts + '  ' + e.level.padEnd(7) + ' ' + e.msg;
+    }}).join('\\n') + '\\n';
+    el.textContent += frag;
+    _syncLogSince = d.entries[d.entries.length-1].ts;
+    const cb = document.getElementById('log-autoscroll');
+    if (!cb || cb.checked) el.scrollTop = el.scrollHeight;
+    // Truncate buffer if very long
+    if (el.textContent.length > 200000) el.textContent = el.textContent.slice(-150000);
+  }}).catch(function() {{}});
+}}
+function syncAll(mode) {{
+  fetch('/api/sync', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{mode:mode}})}})
+    .then(function(r) {{ return r.json(); }})
+    .then(function(d) {{
+      const el = document.getElementById('sync-status-panel');
+      if (el) el.textContent = d.ok ? ('Sync gestartet (mode=' + mode + ', job=' + (d.job_id||'?') + ')') : ('Fehler: ' + (d.error||'?'));
+      refreshSyncStatus();
+    }}).catch(function(e) {{}});
+}}
+function refreshSyncStatus() {{
+  fetch('/api/sync/status').then(function(r) {{ return r.json(); }}).then(function(d) {{
+    const el = document.getElementById('sync-status-panel');
+    if (!el || !d.ok) return;
+    const parts = (d.devices||[]).map(function(x) {{
+      const ts = x.last_sync_ts ? new Date(x.last_sync_ts*1000).toLocaleString() : 'nie';
+      return x.name + ': ' + ts;
+    }});
+    el.textContent = 'Letzte Sync-Zeiten: ' + parts.join('  ·  ');
+  }}).catch(function() {{}});
 }}
 
 /* ──────────────────────────────────────────────
