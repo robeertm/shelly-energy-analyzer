@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.6.4 - 2026-04-05
+### Changed
+- **Version badge moved to top-left** – previously top-right.
+
 ## 16.6.3 - 2026-04-05
 ### Changed
 - **Version badge moved to top-right** – was covering the bottom navigation bar; now sits discreetly in the top-right corner of every page.
