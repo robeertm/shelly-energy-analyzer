@@ -433,9 +433,11 @@ class BackgroundServiceManager:
     # ── Auto-sync ──────────────────────────────────────────────────────
 
     def _start_autosync(self) -> None:
-        """Start periodic auto-sync if enabled."""
-        if not getattr(self.cfg.ui, "autosync_enabled", False):
-            return
+        """Start periodic auto-sync. An immediate one-shot sync is triggered
+        on startup regardless of whether periodic auto-sync is enabled, so the
+        Plots tab has fresh data as soon as the user opens the dashboard.
+        """
+        periodic_enabled = bool(getattr(self.cfg.ui, "autosync_enabled", False))
 
         interval_m = int(getattr(self.cfg.ui, "autosync_interval_minutes", 0) or 0)
         interval_h = int(getattr(self.cfg.ui, "autosync_interval_hours", 12) or 12)
@@ -444,30 +446,45 @@ class BackgroundServiceManager:
         else:
             interval_s = max(300, interval_h * 3600)  # minimum 5 minutes
 
+        mode_cfg = str(getattr(self.cfg.ui, "autosync_mode", "incremental") or "incremental")
+
+        def _run_sync(label: str) -> None:
+            try:
+                from shelly_analyzer.services.sync import sync_all
+                now = int(time.time())
+                range_override = None
+                if mode_cfg == "day":
+                    range_override = (max(0, now - 86400), now)
+                elif mode_cfg == "week":
+                    range_override = (max(0, now - 7 * 86400), now)
+                elif mode_cfg == "month":
+                    range_override = (max(0, now - 30 * 86400), now)
+                sync_all(self.cfg, self.storage, range_override=range_override, fallback_last_days=7)
+                logger.info("%s completed", label)
+            except Exception as e:
+                logger.warning("%s failed: %s", label, e)
+
         def _sync_loop():
+            # Immediate initial sync after a short warm-up (3 s) so the web
+            # server is already accepting requests while sync runs.
+            self._stop_event.wait(3.0)
+            if self._stop_event.is_set():
+                return
+            _run_sync("Initial sync on startup")
+            if not periodic_enabled:
+                return
             while not self._stop_event.is_set():
                 self._stop_event.wait(interval_s)
                 if self._stop_event.is_set():
                     break
-                try:
-                    from shelly_analyzer.services.sync import sync_all
-                    mode = str(getattr(self.cfg.ui, "autosync_mode", "incremental") or "incremental")
-                    now = int(time.time())
-                    range_override = None
-                    if mode == "day":
-                        range_override = (max(0, now - 86400), now)
-                    elif mode == "week":
-                        range_override = (max(0, now - 7 * 86400), now)
-                    elif mode == "month":
-                        range_override = (max(0, now - 30 * 86400), now)
-                    sync_all(self.cfg, self.storage, range_override=range_override, fallback_last_days=7)
-                    logger.info("Auto-sync completed")
-                except Exception as e:
-                    logger.warning("Auto-sync failed: %s", e)
+                _run_sync("Auto-sync")
 
         self._autosync_thread = threading.Thread(target=_sync_loop, daemon=True)
         self._autosync_thread.start()
-        logger.info("Auto-sync enabled (interval: %d s)", interval_s)
+        if periodic_enabled:
+            logger.info("Auto-sync enabled (interval: %d s) + initial sync on startup", interval_s)
+        else:
+            logger.info("Auto-sync disabled, but running one-shot initial sync on startup")
 
     # ── CO2 / Spot fetchers ────────────────────────────────────────────
 
