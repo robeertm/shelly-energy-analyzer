@@ -253,6 +253,63 @@ def create_app(config_path: Optional[str] = None) -> Flask:
     # Store state in app extensions
     app.extensions["state"] = state
 
+    # ── Authentication ─────────────────────────────────────────────────
+    token = str(getattr(cfg.ui, "live_web_token", "") or "").strip()
+    if token:
+        from functools import wraps
+        from flask import request as flask_request, abort, session, redirect, url_for
+
+        @app.before_request
+        def _check_auth():
+            # Public endpoints (no auth required)
+            public = {"/api/widget", "/widget.js", "/metrics", "/static/plotly.min.js"}
+            path = flask_request.path
+            if path in public or path.startswith("/static/"):
+                return None
+            # Login page
+            if path == "/login":
+                return None
+            # Check token in query param, header, or session
+            t = (flask_request.args.get("t")
+                 or flask_request.headers.get("X-API-Key")
+                 or session.get("auth_token"))
+            if t == token:
+                session["auth_token"] = token
+                return None
+            # Not authenticated — show login for pages, 401 for API
+            if path.startswith("/api/"):
+                abort(401)
+            return redirect(f"/login?next={path}")
+
+        @app.route("/login", methods=["GET", "POST"])
+        def login():
+            from flask import request as req
+            if req.method == "POST":
+                t = req.form.get("token", "").strip()
+                if t == token:
+                    session["auth_token"] = token
+                    next_url = req.args.get("next", "/")
+                    return redirect(next_url)
+                return _login_html(error="Invalid token"), 403
+            return _login_html()
+
+        def _login_html(error: str = "") -> str:
+            err_div = f'<div style="color:#ff6b6b;margin:8px 0">{error}</div>' if error else ""
+            return f"""<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Login – Shelly Energy Analyzer</title>
+<style>body{{font-family:-apple-system,system-ui,sans-serif;background:#0b0f14;color:#e8eef6;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}}
+.card{{background:#121821;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:24px;max-width:400px;width:90%}}
+input{{width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);color:#e8eef6;font-size:16px;margin:8px 0}}
+button{{width:100%;padding:10px;border-radius:12px;border:none;background:#6aa7ff;color:#fff;font-size:16px;cursor:pointer;margin-top:8px}}</style></head>
+<body><div class="card"><h2 style="margin:0 0 12px">Shelly Energy Analyzer</h2>
+{err_div}<form method="post"><input name="token" type="password" placeholder="Token" autofocus>
+<button type="submit">Login</button></form></div></body></html>"""
+
+        logger.info("Authentication enabled (token required)")
+    else:
+        logger.info("Authentication disabled (no token configured)")
+
     # Pre-render HTML pages (same approach as webdash.py — render once at startup)
     state._dashboard_html = _render_dashboard_html(state)
     state._dashboard_html_gz = gzip.compress(state._dashboard_html, compresslevel=6)

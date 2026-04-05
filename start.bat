@@ -42,8 +42,8 @@ if %errorlevel% NEQ 0 goto :err
 python -m pip install -e .
 if %errorlevel% NEQ 0 goto :err
 
-echo [i] Starting GUI ...
-python -m shelly_analyzer
+echo [i] Starting Shelly Energy Analyzer (Flask web server) ...
+python -m shelly_analyzer %*
 exit /b 0
 
 :err
