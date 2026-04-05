@@ -340,6 +340,8 @@ button{{width:100%;padding:10px;border-radius:12px;border:none;background:#6aa7f
     from shelly_analyzer.web.blueprints.settings import bp as settings_bp
     from shelly_analyzer.web.blueprints.devices import bp as devices_bp
     from shelly_analyzer.web.blueprints.sync import bp as sync_bp
+    from shelly_analyzer.web.blueprints.health import bp as health_bp
+    from shelly_analyzer.web.blueprints.alerts import bp as alerts_bp
 
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(api_state_bp)
@@ -350,6 +352,8 @@ button{{width:100%;padding:10px;border-radius:12px;border:none;background:#6aa7f
     app.register_blueprint(settings_bp)
     app.register_blueprint(devices_bp)
     app.register_blueprint(sync_bp)
+    app.register_blueprint(health_bp)
+    app.register_blueprint(alerts_bp)
 
     logger.info("Flask app created, %d devices configured", len(cfg.devices))
     return app

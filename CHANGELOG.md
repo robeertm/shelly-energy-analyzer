@@ -1,5 +1,13 @@
 # Changelog
 
+## 16.4.0 - 2026-04-05
+### Added
+- **Alarm-Regeln Editor** (`/api/alerts` CRUD) – List, Create, Update, Delete AlertRule entries. Each rule with device_key, metric, operator, threshold, duration, cooldown, actions (telegram/webhook/email/popup/beep), message. New "Alarm-Regeln" section in settings with inline editor for each rule.
+- **Health Check** (`/api/health`) – Ping all Shellys, show online status, latency, uptime, firmware version, firmware update availability. New "Health Check" section with "Jetzt prüfen" button.
+- **`/api/version`** – Returns actual app `__version__` (not stale config.json version).
+### Fixed
+- **Version in "Über" section** – Was showing stale config.json version (15.0.23). Now fetches real app version from `/api/version`. Config version shown separately.
+
 ## 16.3.0 - 2026-04-05
 ### Added
 - **Comprehensive settings UI** – Complete rewrite of `/settings` page covering ALL 30+ config sections (was: only 7 tabs). Organized in 6 groups: Grundeinstellungen, Benachrichtigungen, Integrationen, Energie, Features, Erweitert.
