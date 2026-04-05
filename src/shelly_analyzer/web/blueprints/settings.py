@@ -91,6 +91,17 @@ def put_settings():
         state.cfg = new_cfg
         state.reload_config(new_cfg)
 
+        # Debug: log key effective fields so we can verify the round-trip
+        try:
+            logger.info(
+                "Settings updated: ui.language=%s  ui.theme=%s  state.lang=%s",
+                getattr(new_cfg.ui, "language", None),
+                getattr(new_cfg.ui, "theme", None),
+                getattr(state, "lang", None),
+            )
+        except Exception:
+            pass
+
         # Reload action dispatcher if available (pass new lang so PDF exports + plots
         # translations pick up language switch immediately)
         new_lang = getattr(state, "lang", None)

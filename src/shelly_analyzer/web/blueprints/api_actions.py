@@ -31,9 +31,26 @@ def api_run():
                 import dataclasses
                 from shelly_analyzer.io.config import save_config
                 new_ui = dataclasses.replace(state.cfg.ui, language=lang)
-                state.cfg = dataclasses.replace(state.cfg, ui=new_ui)
-                save_config(state.cfg)
-                state.lang = lang
+                new_cfg = dataclasses.replace(state.cfg, ui=new_ui)
+                save_config(new_cfg)
+                # Full reload so cached HTML templates get re-rendered with new lang
+                state.cfg = new_cfg
+                state.reload_config(new_cfg)
+                # Also propagate to action dispatcher if it supports it
+                try:
+                    dispatcher = state.on_action
+                    if hasattr(dispatcher, "reload"):
+                        try:
+                            dispatcher.reload(new_cfg, lang=state.lang)
+                        except TypeError:
+                            dispatcher.reload(new_cfg)
+                    elif hasattr(dispatcher, "__self__") and hasattr(dispatcher.__self__, "reload"):
+                        try:
+                            dispatcher.__self__.reload(new_cfg, lang=state.lang)
+                        except TypeError:
+                            dispatcher.__self__.reload(new_cfg)
+                except Exception:
+                    pass
             except Exception as e:
                 return jsonify({"ok": False, "error": f"Failed to persist language: {e}"}), 500
             return jsonify({"ok": True, "language": lang})
