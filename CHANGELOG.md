@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.13 - 2026-04-05
+### Added
+- **Plots-Tab: Metrik "Hz" auswählbar** – neue Option "Hz" im Metric-Dropdown zwischen A und VAR. Die DB speichert `freq_hz` seit v6.x, also sind historische Werte ab Aufzeichnungsbeginn verfügbar. Backend-Handler `_wva_series` kannte HZ/FREQ/FREQUENCY bereits, es fehlte nur der Eintrag im Frontend-Dropdown.
+
 ## 16.13.12 - 2026-04-05
 ### Fixed
 - **Live-Tab: Sparklines fangen nach Tab-Wechsel wieder von vorne an** – Ursachen:
