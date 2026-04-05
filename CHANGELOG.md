@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.8.3 - 2026-04-05
+### Changed
+- **NILM status in header** – "NILM ML: lerne/…" badge moved from inside the Live tab to the top-right header next to the clock, visible on every tab.
+- **All tabs centered + 66% width on desktop** – same layout rule as Live now applies to every pane (Costs, Heatmap, Solar, Weather, CO₂, …) on screens ≥900px. Mobile unchanged.
+
 ## 16.8.2 - 2026-04-05
 ### Changed
 - **Live view centered + plots fill vertical space (desktop)** – live grid centered horizontally and sparklines now scale with viewport height (`clamp(56px, 11vh, 180px)` / `clamp(40px, 8vh, 130px)`) so plots use the full window height on desktop. Mobile view unchanged.
