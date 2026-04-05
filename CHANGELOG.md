@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.13.25 - 2026-04-05
+### Changed
+- **README rewritten for web-only architecture** – removed the "Desktop App" screenshots section (17 images) and all desktop-app wording. The app is now described as a cross-platform **web application** with a browser UI. "Setup Wizard" section points to the new `/setup` web wizard. Removed references to `config.json`, matplotlib plots, treeviews, and other desktop-only concepts.
+- **Deleted 17 desktop screenshot files** from `docs/screenshots/` (`desktop_*.png`). Web, Plots and iOS Widget screenshots kept.
+
 ## 16.13.24 - 2026-04-05
 ### Added
 - **First-run setup wizard (Web)** – the old desktop onboarding flow returns as a web page at **`/setup`**. 5 steps:
