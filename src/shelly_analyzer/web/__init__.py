@@ -268,6 +268,9 @@ def create_app(config_path: Optional[str] = None) -> Flask:
     from shelly_analyzer.web.blueprints.api_actions import bp as api_actions_bp
     from shelly_analyzer.web.blueprints.static_assets import bp as static_assets_bp
     from shelly_analyzer.web.blueprints.metrics import bp as metrics_bp
+    from shelly_analyzer.web.blueprints.settings import bp as settings_bp
+    from shelly_analyzer.web.blueprints.devices import bp as devices_bp
+    from shelly_analyzer.web.blueprints.sync import bp as sync_bp
 
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(api_state_bp)
@@ -275,6 +278,9 @@ def create_app(config_path: Optional[str] = None) -> Flask:
     app.register_blueprint(api_actions_bp)
     app.register_blueprint(static_assets_bp)
     app.register_blueprint(metrics_bp)
+    app.register_blueprint(settings_bp)
+    app.register_blueprint(devices_bp)
+    app.register_blueprint(sync_bp)
 
     logger.info("Flask app created, %d devices configured", len(cfg.devices))
     return app

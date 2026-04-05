@@ -1,5 +1,14 @@
 # Changelog
 
+## 16.1.0 - 2026-04-05
+### Added
+- **Settings API** – `GET/PUT /api/settings` for full config CRUD, with secret masking and partial update support. Test endpoints for Telegram, MQTT, and InfluxDB connections.
+- **Device Management API** – `GET/POST/PUT/DELETE /api/devices`, `POST /api/devices/discover` (mDNS scan), `POST /api/devices/probe` (IP probe), `POST /api/devices/<key>/firmware` (OTA update).
+- **Sync & Data API** – `POST /api/sync` (trigger sync), `GET /api/sync/status`, `GET /api/data/stats` (DB size, row counts), `POST /api/data/cleanup` (retention).
+- **Schedule API** – `GET/POST/DELETE /api/schedules` for device schedule CRUD.
+- **Settings web page** – `/settings` route serving the settings management UI.
+- **Total: 62 routes** (was 41 in v16.0.0).
+
 ## 16.0.0 - 2026-04-04
 ### Changed
 - **BREAKING: Migrated from tkinter desktop app to Flask web-only** – The entire application is now a Flask web server. No more desktop GUI. All 19 feature panes (Live, Costs, Heatmap, Solar, Weather, Compare, CO2, Anomalies, Forecast, Standby, Sankey, EV Chargers, Export, Smart Schedule, EV Log, Tariff, Battery, Advisor, Goals) are served via the web dashboard.
