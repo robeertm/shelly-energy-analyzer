@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.4.1 - 2026-04-05
+### Added
+- **Firmware-Update direkt aus Health Check** – Pro Gerät mit verfügbarem Update erscheint ein gelber "⬆ Update starten"-Button. Zusätzlich "⬆ Alle updaten"-Button für Batch-Update aller Shellys mit pending Updates. Unterstützt Gen1 (/ota?update=1) und Gen2+ (RPC Shelly.Update).
+
 ## 16.4.0 - 2026-04-05
 ### Added
 - **Alarm-Regeln Editor** (`/api/alerts` CRUD) – List, Create, Update, Delete AlertRule entries. Each rule with device_key, metric, operator, threshold, duration, cooldown, actions (telegram/webhook/email/popup/beep), message. New "Alarm-Regeln" section in settings with inline editor for each rule.
