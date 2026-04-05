@@ -113,11 +113,11 @@ def compute_bills():
 
         # Pricing
         unit_price = float(state.cfg.pricing.unit_price_gross())
-        base_fee = float(getattr(state.cfg.pricing, "base_fee_gross", 0.0) or 0.0)
-        if base_fee <= 0:
-            # fall back to yearly fee from invoice config if present
-            base_fee = float(getattr(getattr(state.cfg, "invoice", None), "base_fee_eur_per_year", 0.0) or 0.0)
-        vat_rate = float(getattr(state.cfg.pricing, "vat_rate", 0.19) or 0.19)
+        base_fee = float(getattr(state.cfg.pricing, "base_fee_eur_per_year", 0.0) or 0.0)
+        try:
+            vat_rate = float(state.cfg.pricing.vat_rate())
+        except Exception:
+            vat_rate = float(getattr(state.cfg.pricing, "vat_rate_percent", 19.0) or 19.0) / 100.0
 
         period_start = request.args.get("period_start") or None
         period_end = request.args.get("period_end") or None
