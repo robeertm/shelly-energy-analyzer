@@ -15,6 +15,62 @@ def _get_state():
     return current_app.extensions["state"]
 
 
+@bp.route("/api/co2/refresh", methods=["POST"])
+def co2_refresh():
+    """Trigger immediate CO2 fetch."""
+    state = _get_state()
+    bg = getattr(state, "_bg", None)
+    if bg is None or bg._co2_fetcher is None:
+        return jsonify({"ok": False, "error": "CO2 fetcher nicht aktiv (ENTSO-E Token & enabled prüfen)"}), 400
+    try:
+        bg._co2_fetcher.trigger_now()
+        return jsonify({"ok": True, "message": "CO2 Abruf gestartet"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/co2/status", methods=["GET"])
+def co2_status():
+    """Return CO2 fetcher status."""
+    state = _get_state()
+    bg = getattr(state, "_bg", None)
+    co2_cfg = getattr(state.cfg, "co2", None)
+    enabled = bool(getattr(co2_cfg, "enabled", False)) if co2_cfg else False
+    token_set = bool(getattr(co2_cfg, "entso_e_api_token", "") or "") if co2_cfg else False
+    zone = getattr(co2_cfg, "bidding_zone", "") if co2_cfg else ""
+    active = bool(bg and bg._co2_fetcher is not None)
+    last_err = None
+    last_fetch = None
+    if active:
+        try:
+            last_err = bg._co2_fetcher.last_error
+            last_fetch = float(getattr(bg._co2_fetcher, "_last_fetch_ts", 0) or 0)
+        except Exception:
+            pass
+    return jsonify({
+        "ok": True,
+        "config_enabled": enabled,
+        "token_set": token_set,
+        "zone": zone,
+        "service_active": active,
+        "last_error": last_err,
+        "last_fetch_ts": last_fetch,
+    })
+
+
+@bp.route("/api/spot/refresh", methods=["POST"])
+def spot_refresh():
+    state = _get_state()
+    bg = getattr(state, "_bg", None)
+    if bg is None or bg._spot_fetcher is None:
+        return jsonify({"ok": False, "error": "Spot-Preis Fetcher nicht aktiv"}), 400
+    try:
+        bg._spot_fetcher.trigger_now()
+        return jsonify({"ok": True, "message": "Spot-Preis Abruf gestartet"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @bp.route("/api/logs", methods=["GET"])
 def get_logs():
     """Return captured log lines (for the web Sync/Log tab)."""
