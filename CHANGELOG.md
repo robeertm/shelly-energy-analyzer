@@ -1,5 +1,14 @@
 # Changelog
 
+## 16.2.0 - 2026-04-05
+### Removed
+- **Deleted entire `ui/` directory** – 27,896 lines of tkinter desktop code removed (27 files). The app is now 100% web-only.
+### Added
+- **Token-based authentication** – If `ui.live_web_token` is set in config, all pages/APIs require authentication. Login page at `/login`. Public endpoints: `/api/widget`, `/widget.js`, `/metrics`. Token can be passed via query param `?t=`, header `X-API-Key`, or session cookie.
+### Changed
+- **Launch scripts updated** – `start.sh`, `start.bat`, `start.command` no longer check for tkinter. They now start the Flask web server directly. Support `--port`, `--no-ssl`, `--debug` flags via pass-through.
+- **action_dispatch.py** – Import path changed from `ui._shared` to `web.utils` (no tkinter dependency).
+
 ## 16.1.0 - 2026-04-05
 ### Added
 - **Settings API** – `GET/PUT /api/settings` for full config CRUD, with secret masking and partial update support. Test endpoints for Telegram, MQTT, and InfluxDB connections.

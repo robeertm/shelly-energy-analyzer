@@ -3,7 +3,7 @@ set -e
 # Ensure we run from this folder (even when launched via Finder)
 cd "$(dirname "$0")"
 
-# Prefer python.org Python (Frameworks) and ensure Tkinter works.
+# Prefer python.org Python (Frameworks)
 choose_py () {
   local CANDIDATES=(
     "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3"
@@ -14,15 +14,15 @@ choose_py () {
   )
   for py in "${CANDIDATES[@]}"; do
     if [[ -x "$py" ]] || command -v "$py" >/dev/null 2>&1; then
-      "$py" -c "import tkinter" >/dev/null 2>&1 && { echo "$py"; return 0; }
+      echo "$py"
+      return 0
     fi
   done
   return 1
 }
 
 PY=$(choose_py) || {
-  echo "No Python with Tkinter found."
-  echo "Please install Python from python.org (includes Tkinter on macOS) or use a Tk-enabled Python."
+  echo "No Python 3 found. Please install Python from python.org."
   exit 1
 }
 
@@ -40,4 +40,5 @@ VENV_PY="$(pwd)/.venv/bin/python"
 "$VENV_PY" -m pip install -r requirements.txt >/dev/null
 "$VENV_PY" -m pip install -e . >/dev/null
 
-"$VENV_PY" -m shelly_analyzer
+echo "Starting Shelly Energy Analyzer (Flask web server)..."
+"$VENV_PY" -m shelly_analyzer "$@"

@@ -8,19 +8,15 @@ choose_py() {
   local candidates=(python3 python)
   for py in "${candidates[@]}"; do
     if command -v "$py" >/dev/null 2>&1; then
-      if "$py" -c "import tkinter" >/dev/null 2>&1; then
-        echo "$py"
-        return 0
-      fi
+      echo "$py"
+      return 0
     fi
   done
   return 1
 }
 
 PY=$(choose_py) || {
-  echo "No Python with Tkinter found."
-  echo "On Debian/Ubuntu you may need: sudo apt-get install python3-tk"
-  echo "On Fedora: sudo dnf install python3-tkinter"
+  echo "No Python 3 found. Please install Python 3.10+."
   exit 1
 }
 
@@ -38,4 +34,5 @@ VENV_PY="$(pwd)/.venv/bin/python"
 "$VENV_PY" -m pip install -r requirements.txt >/dev/null
 "$VENV_PY" -m pip install -e . >/dev/null
 
-"$VENV_PY" -m shelly_analyzer
+echo "Starting Shelly Energy Analyzer (Flask web server)..."
+"$VENV_PY" -m shelly_analyzer "$@"
