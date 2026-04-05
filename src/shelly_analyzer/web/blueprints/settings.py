@@ -89,12 +89,20 @@ def put_settings():
         state.cfg = new_cfg
         state.reload_config(new_cfg)
 
-        # Reload action dispatcher if available
+        # Reload action dispatcher if available (pass new lang so PDF exports + plots
+        # translations pick up language switch immediately)
+        new_lang = getattr(state, "lang", None)
         dispatcher = state.on_action
         if hasattr(dispatcher, "reload"):
-            dispatcher.reload(new_cfg)  # type: ignore[union-attr]
+            try:
+                dispatcher.reload(new_cfg, lang=new_lang)  # type: ignore[union-attr]
+            except TypeError:
+                dispatcher.reload(new_cfg)  # type: ignore[union-attr]
         elif hasattr(dispatcher, "__self__") and hasattr(dispatcher.__self__, "reload"):
-            dispatcher.__self__.reload(new_cfg)
+            try:
+                dispatcher.__self__.reload(new_cfg, lang=new_lang)
+            except TypeError:
+                dispatcher.__self__.reload(new_cfg)
 
         logger.info("Settings updated and saved")
         return jsonify({"ok": True})

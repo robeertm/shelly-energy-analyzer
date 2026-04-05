@@ -1,5 +1,12 @@
 # Changelog
 
+## 16.11.4 - 2026-04-05
+### Changed
+- **Plots auf Mobile: kein Zoom/Pan mehr** – auf Touch-Geräten mit Viewport ≤760px sind Plotly-Charts jetzt statisch: `fixedrange:true` auf beiden Achsen, `dragmode:false`, keine Mode-Bar, kein Scroll-Zoom, kein Doppelklick. Hover bleibt aktiv. Der Browser kann wieder normal durch den Plots-Tab scrollen ohne dass Pinch/Swipe vom Chart abgefangen werden. Desktop unverändert (voll interaktiv).
+
+### Fixed
+- **Sprachwechsel: ActionDispatcher bekam neue Sprache nicht** – `settings.py` rief `dispatcher.reload(new_cfg)` ohne `lang=` auf, dadurch blieben PDF-Exporte und `/api/plots_data` Texte in der alten Sprache. Jetzt wird `state.lang` an den Dispatcher weitergegeben (mit Fallback für ältere Dispatcher-Signaturen).
+
 ## 16.11.3 - 2026-04-05
 ### Fixed
 - **Plots-Tab auf Mobile winzig** – die `#pane-plots.active { height: … }` Regel stand nur im Desktop-Media-Query (≥900px), auf dem Handy hatte der Pane keine Höhe → iframe mit `height:100%` kollabierte auf wenige Pixel. Jetzt greift die Höhe auf allen Bildschirmen (`calc(100dvh - 140px)` Mobile, `calc(100vh - 96px)` Desktop) und das `#panes` Padding wird im Plots-Tab auf 0 gesetzt, damit der Iframe die volle Breite bekommt.

@@ -6100,18 +6100,46 @@ async function fetchJsonWithTimeout(url, timeoutMs=60000){
 function cssVar(name){
   try { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch (e) { return ''; }
 }
+// On mobile (touch screens with narrow viewport) disable zoom/pan so the page
+// can scroll normally. Desktop keeps full interactivity.
+function isMobileView(){
+  try { return window.matchMedia && window.matchMedia('(max-width: 760px)').matches; }
+  catch(e) { return false; }
+}
 function plotlyBaseLayout(extra){
   const fg = cssVar('--fg') || '#111827';
   const border = cssVar('--border') || 'rgba(0,0,0,0.12)';
   const grid = border;
+  const mobile = isMobileView();
   const base = {
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(0,0,0,0)',
     font: { color: fg },
     margin: { l:55, r:20, t:30, b:50 },
-    xaxis: { gridcolor: grid, zerolinecolor: grid },
-    yaxis: { gridcolor: grid, zerolinecolor: grid },
+    xaxis: { gridcolor: grid, zerolinecolor: grid, fixedrange: mobile },
+    yaxis: { gridcolor: grid, zerolinecolor: grid, fixedrange: mobile },
     legend: { orientation: 'h', font: { color: fg } },
+    dragmode: mobile ? false : 'zoom',
+  };
+  const merged = Object.assign(base, extra || {});
+  // Ensure fixedrange/dragmode propagate even when xaxis/yaxis are overridden by caller
+  if (mobile) {
+    if (merged.xaxis) merged.xaxis.fixedrange = true;
+    if (merged.yaxis) merged.yaxis.fixedrange = true;
+    merged.dragmode = false;
+  }
+  return merged;
+}
+// Unified config: no mode bar / no scroll zoom / no double-click on mobile.
+function plotlyConfig(extra){
+  const mobile = isMobileView();
+  const base = {
+    responsive: true,
+    displaylogo: false,
+    displayModeBar: mobile ? false : 'hover',
+    scrollZoom: !mobile,
+    doubleClick: mobile ? false : 'reset+autosize',
+    staticPlot: false,  // keep hover on mobile
   };
   return Object.assign(base, extra || {});
 }
@@ -6400,7 +6428,7 @@ async function loadData() {
         divId,
         [{type:'bar', name: tr.name, x: xsLab, y: tr.y, marker:{color:'#6aa7ff'}}],
         kwhLayout('kWh'),
-        {responsive:true, displaylogo:false}
+        plotlyConfig()
       );
     }
 
@@ -6424,7 +6452,7 @@ async function loadData() {
     if (kwhTraces.length >= 1) {
       drawKwhForDevice('plot1', 'plot1_title', kwhTraces[0]);
     } else {
-      Plotly.newPlot('plot1', [], kwhLayout('kWh'), {responsive:true, displaylogo:false});
+      Plotly.newPlot('plot1', [], kwhLayout('kWh'), plotlyConfig());
     }
 
     // Plot 2: second device (own card, separate, not grouped)
@@ -6458,7 +6486,7 @@ async function loadData() {
           customdata: custom,
           hovertemplate:'%{x}<br>%{customdata[0]} g/kWh · Σ %{customdata[1]} g<extra></extra>'}],
         kwhLayout('g CO₂'),
-        {responsive:true, displaylogo:false}
+        plotlyConfig()
       );
     }
     renderCo2Card(1, co2Devs[0]);
@@ -6502,7 +6530,7 @@ async function loadData() {
         plotId,
         traces,
         kwhLayout('EUR', {barmode:'group'}),
-        {responsive:true, displaylogo:false}
+        plotlyConfig()
       );
     }
     renderPriceCard(1, priceDevs[0]);
@@ -6592,7 +6620,7 @@ async function loadData() {
       div,
       traces,
       plotlyBaseLayout({xaxis:{title:t('web.axis.time')}, yaxis:{title: metric}}),
-      {responsive:true, displaylogo:false}
+      plotlyConfig()
     );
   }
 
