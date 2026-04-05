@@ -3632,6 +3632,22 @@ class ActionDispatcher:
                     pass
 
                 title = f"kWh \u2022 {mode}"
+                # Fixed tariff price (€/kWh, gross) from PricingConfig
+                fixed_ct_kwh: Optional[float] = None
+                try:
+                    pricing_cfg = getattr(self.cfg, "pricing", None)
+                    if pricing_cfg is not None:
+                        p_eur = float(getattr(pricing_cfg, "electricity_price_eur_per_kwh", 0.0) or 0.0)
+                        incl_vat = bool(getattr(pricing_cfg, "price_includes_vat", True))
+                        vat_enabled = bool(getattr(pricing_cfg, "vat_enabled", True))
+                        vat_pct = float(getattr(pricing_cfg, "vat_rate_percent", 19.0) or 19.0)
+                        # Normalize to gross ct/kWh
+                        if not incl_vat and vat_enabled:
+                            p_eur = p_eur * (1.0 + vat_pct / 100.0)
+                        fixed_ct_kwh = round(p_eur * 100.0, 3) if p_eur > 0 else None
+                except Exception:
+                    fixed_ct_kwh = None
+
                 # Per-device CO2 (g) and price (EUR) aggregations
                 co2_per_device: List[Dict[str, Any]] = []
                 price_per_device: List[Dict[str, Any]] = []
@@ -3649,8 +3665,19 @@ class ActionDispatcher:
                         g_arr.append(round(gi * kwh_dev, 1) if gi is not None else None)
                         # ct/kWh × kWh / 100 = €
                         eur_arr.append(round(ci * kwh_dev / 100.0, 2) if ci is not None else None)
+                    # Fixed-tariff EUR per bucket for this device (ct_fix × kWh / 100)
+                    fixed_eur_arr: List[Optional[float]] = []
+                    if fixed_ct_kwh is not None:
+                        for i in range(len(labels)):
+                            try:
+                                kwh_dev = float(y_dev[i]) if i < len(y_dev) else 0.0
+                            except Exception:
+                                kwh_dev = 0.0
+                            fixed_eur_arr.append(round(fixed_ct_kwh * kwh_dev / 100.0, 2))
+                    else:
+                        fixed_eur_arr = [None] * len(labels)
                     co2_per_device.append({"key": tr["key"], "name": tr["name"], "g": g_arr})
-                    price_per_device.append({"key": tr["key"], "name": tr["name"], "eur": eur_arr})
+                    price_per_device.append({"key": tr["key"], "name": tr["name"], "eur": eur_arr, "eur_fixed": fixed_eur_arr})
 
                 return {
                     "ok": True, "view": "kwh",
@@ -3660,6 +3687,7 @@ class ActionDispatcher:
                     "co2_green_thr": co2_green_thr, "co2_dirty_thr": co2_dirty_thr,
                     "co2_per_device": co2_per_device,
                     "price_ct_kwh": price_ct_kwh,
+                    "price_fixed_ct_kwh": fixed_ct_kwh,
                     "price_per_device": price_per_device,
                     "price_surcharges_included": include_surcharges and (surcharge_markup_ct > 0 or vat_factor != 1.0),
                     "price_surcharge_ct": round(surcharge_markup_ct, 3),
