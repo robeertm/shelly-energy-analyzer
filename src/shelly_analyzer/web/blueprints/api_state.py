@@ -18,6 +18,35 @@ def _safe_f(v: float) -> float:
     return v if math.isfinite(v) else 0.0
 
 
+def _compute_i_n(measured: float, ia: float, ib: float, ic: float,
+                 va: float = 0.0, vb: float = 0.0, vc: float = 0.0) -> float:
+    """Return neutral current: measured if > 0.01 A, else estimated from phase
+    currents assuming 120°/180° phase offsets.
+    3-phase: |I_N| = sqrt(I1² + I2² + I3² − I1·I2 − I2·I3 − I1·I3)
+    2-phase: |I_N| = |I1 − I2|
+    """
+    try:
+        if measured and abs(measured) > 0.01:
+            return float(measured)
+        a_on = (va > 0) or (abs(ia) > 0.01)
+        b_on = (vb > 0) or (abs(ib) > 0.01)
+        c_on = (vc > 0) or (abs(ic) > 0.01)
+        active = sum(1 for x in (a_on, b_on, c_on) if x)
+        if active >= 3:
+            val = ia * ia + ib * ib + ic * ic - ia * ib - ib * ic - ia * ic
+            return round(math.sqrt(val) if val > 0 else 0.0, 3)
+        if active == 2:
+            if a_on and b_on:
+                return round(abs(ia - ib), 3)
+            if a_on and c_on:
+                return round(abs(ia - ic), 3)
+            if b_on and c_on:
+                return round(abs(ib - ic), 3)
+        return 0.0
+    except Exception:
+        return float(measured or 0.0)
+
+
 @bp.route("/api/state")
 def api_state():
     state = _get_state()
@@ -96,7 +125,7 @@ def api_state():
             "phases": phases,
             "q_phases": q_phases,
             "appliances": appl_objs,
-            "i_n": float(latest.get("i_n") or 0),
+            "i_n": _compute_i_n(float(latest.get("i_n") or 0), ia, ib, ic, va, vb, vc),
             "q_total_var": float(latest.get("q_total_var") or 0),
             "switch_on": switch_on,
         })
@@ -155,7 +184,7 @@ def api_history():
                 "v": voltage_v,
                 "a": current_a,
                 "phases": phases,
-                "i_n": float(p.get("i_n") or 0),
+                "i_n": _compute_i_n(float(p.get("i_n") or 0), ia, ib, ic, va, vb, vc),
                 "q": float(p.get("q_total_var") or 0),
                 "q_phases": h_q_phases,
             })
