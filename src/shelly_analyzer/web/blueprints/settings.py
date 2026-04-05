@@ -36,6 +36,25 @@ def _cfg_to_json(cfg: AppConfig) -> Dict[str, Any]:
             pass
 
 
+@bp.route("/api/i18n", methods=["GET"])
+def get_i18n():
+    """Return the effective i18n map + language for the current user session.
+    Only keys starting with the given prefix (default "web.") are returned
+    to keep the payload small. Used by the Settings page for client-side
+    translation of its many hard-coded labels.
+    """
+    from shelly_analyzer.i18n import get_lang_map
+    state = _get_state()
+    lang = getattr(state, "lang", "de")
+    prefix = request.args.get("prefix", "web.")
+    full = get_lang_map(lang)
+    # Filter to keys starting with prefix (saves bandwidth)
+    filtered = {k: v for k, v in full.items() if k.startswith(prefix) or k.startswith("settings.") or k.startswith("toast.")}
+    resp = jsonify({"lang": lang, "map": filtered})
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
+
+
 @bp.route("/api/settings", methods=["GET"])
 def get_settings():
     """Return full config as JSON."""

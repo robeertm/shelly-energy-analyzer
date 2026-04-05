@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.12.1 - 2026-04-05
+### Changed
+- **i18n Pass 2: Settings-Seite** – Seitentitel, Sidebar-Gruppen (Grundeinstellungen / Benachrichtigungen / Integrationen / Energie / Features / Erweitert), **alle 34 Section-Titel** (Geräte, Anzeige, Web-Server, Preise & Tarif, Telegram, E-Mail, MQTT, InfluxDB, Solar, Batterie, Spot-Preise, CO₂, Wetter, etc.) sowie die häufigsten Buttons (Speichern, Test) + Toast-Messages (Gespeichert, Fehler, Gerät hinzugefügt/entfernt, Regel erstellt/gelöscht) + Health-Check Status laufen jetzt durch i18n mit DE + EN Fallback. Field-Labels der einzelnen Settings-Felder bleiben vorerst deutsch (~200 Strings, Pass 3).
+- **Neue /api/i18n Endpoint** – liefert den aktiven Sprach-Map mit `?prefix=` Filter. Wird vom Settings-Template beim Laden abgerufen, damit Client-seitig `T(key, fallback_de)` funktioniert.
+
 ## 16.12.0 - 2026-04-05
 ### Changed
 - **i18n-Audit Pass 1: Plots & Sync Tab** – alle kürzlich hinzugefügten deutsch-hartcodierten Strings jetzt über das i18n-System (`t('web.xxx', {vars})`) mit DE + EN Übersetzungen. Betrifft:
