@@ -6008,15 +6008,28 @@ async function waitPlotly(timeoutMs=12000){
   }
 }
 
-async function fetchJsonWithTimeout(url, timeoutMs=12000){
+let __plots_fetch_ctrl = null;
+async function fetchJsonWithTimeout(url, timeoutMs=60000){
+  // Abort any previous in-flight plots fetch so that the newest selection wins
+  try { if (__plots_fetch_ctrl) __plots_fetch_ctrl.abort('superseded'); } catch(e) {}
   const ctrl = new AbortController();
-  const to = setTimeout(()=>ctrl.abort(), timeoutMs);
+  __plots_fetch_ctrl = ctrl;
+  const to = setTimeout(()=>ctrl.abort('timeout'), timeoutMs);
   try {
     const res = await fetch(url, {signal: ctrl.signal, cache: 'no-store'});
     if (!res.ok) throw new Error('HTTP ' + res.status);
     return await res.json();
+  } catch(e) {
+    if (e && e.name === 'AbortError') {
+      // Distinguish user-triggered supersede from real timeout
+      const reason = (ctrl.signal && ctrl.signal.reason) || '';
+      if (reason === 'superseded') { const err = new Error('__superseded__'); err.superseded = true; throw err; }
+      throw new Error('Zeitüberschreitung (' + Math.round(timeoutMs/1000) + 's) – Zeitbereich verkleinern');
+    }
+    throw e;
   } finally {
     clearTimeout(to);
+    if (__plots_fetch_ctrl === ctrl) __plots_fetch_ctrl = null;
   }
 }
 
@@ -6523,6 +6536,7 @@ async function init() {
   function scheduleApply(delayMs=180){
     try { if (__apply_timer) clearTimeout(__apply_timer); } catch (e) {}
     __apply_timer = setTimeout(()=>{ applyNow().catch(e=>{
+      if (e && e.superseded) return;
       document.getElementById('meta').innerHTML = t('web.error') + ': ' + esc(e && e.message ? e.message : String(e));
     }); }, delayMs);
   }
