@@ -69,6 +69,22 @@ def _install_web_log_handler() -> None:
     root.addHandler(h)
 
 
+def _inject_version_badge(html: str) -> str:
+    """Inject a small fixed version badge into the bottom-right of any page."""
+    from shelly_analyzer import __version__
+    badge = (
+        '<div id="app-version-badge" style="position:fixed;'
+        'bottom:4px;right:6px;z-index:9999;font-size:10px;'
+        'color:rgba(128,128,128,0.7);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;'
+        'pointer-events:none;user-select:none;background:rgba(0,0,0,0.08);'
+        'padding:1px 5px;border-radius:3px;backdrop-filter:blur(2px)">'
+        f'v{__version__}</div>'
+    )
+    if "</body>" in html:
+        return html.replace("</body>", badge + "</body>", 1)
+    return html + badge
+
+
 def _render_dashboard_html(state: "AppState") -> bytes:
     """Render the main dashboard HTML using the existing template engine."""
     from shelly_analyzer.web.app_context import AppState  # noqa: F811
@@ -171,7 +187,7 @@ def _render_dashboard_html(state: "AppState") -> bytes:
         nav_link + '<button id="btn-theme"',
         1,
     )
-    return rendered.encode("utf-8")
+    return _inject_version_badge(rendered).encode("utf-8")
 
 
 def _render_control_html(state: "AppState") -> bytes:
@@ -224,7 +240,7 @@ def _render_control_html(state: "AppState") -> bytes:
         "t_job_started": _t(lang, "web.job_started"),
     }
     rendered = _render_template(tpl, values)
-    return rendered.encode("utf-8")
+    return _inject_version_badge(rendered).encode("utf-8")
 
 
 def _render_plots_html(state: "AppState") -> bytes:
@@ -275,7 +291,7 @@ def _render_plots_html(state: "AppState") -> bytes:
         "devices_json": json.dumps(devs, ensure_ascii=False),
     }
     rendered = _render_template_tokens(tpl, values)
-    return rendered.encode("utf-8")
+    return _inject_version_badge(rendered).encode("utf-8")
 
 
 def create_app(config_path: Optional[str] = None) -> Flask:
