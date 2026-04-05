@@ -796,10 +796,12 @@ function drawCo2Chart(chart, greenThr, dirtyThr, W, H) {
 
   const now = Date.now() / 1000;
 
-  // Label
+  // Label (includes latest value if present)
   dc.setFont(Font.boldSystemFont(7));
   dc.setTextColor(DARK ? new Color("#888888") : new Color("#999999"));
-  dc.drawTextInRect("CO₂ g/kWh", new Rect(pad.l, 0, W, 10));
+  const _last = chart.length > 0 ? chart[chart.length-1][1] : null;
+  const _lbl = "CO₂ g/kWh · 24h" + (_last != null ? " · " + _last.toFixed(0) : "");
+  dc.drawTextInRect(_lbl, new Rect(pad.l, 0, W, 10));
 
   // Bars
   for (let i = 0; i < chart.length; i++) {
