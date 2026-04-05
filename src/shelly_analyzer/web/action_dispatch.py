@@ -3513,6 +3513,10 @@ class ActionDispatcher:
                             y.append(0.0)
                     out_traces.append({"key": tr["key"], "name": tr["name"], "y": y})
 
+                # Parse bucket unit from mode ("hours" / "days" / "weeks" / "months" / "hours:24" …)
+                _mode_s = str(mode or "days").lower().strip()
+                unit = _mode_s.split(":", 1)[0].strip() if ":" in _mode_s else _mode_s
+
                 # Total kWh per label bucket (sum across all devices)
                 total_per_label: List[float] = []
                 for i, _ in enumerate(labels):
