@@ -1,5 +1,16 @@
 # Changelog
 
+## 16.13.24 - 2026-04-05
+### Added
+- **First-run setup wizard (Web)** – the old desktop onboarding flow returns as a web page at **`/setup`**. 5 steps:
+  1. Welcome
+  2. Devices: mDNS scan + manual IP add, with inline "added" list
+  3. Pricing: electricity price, base fee, VAT toggle
+  4. Spot prices (optional): enable + bidding zone (DE-LU, AT, CH, FR, NL, BE)
+  5. Done → link to dashboard
+- **Auto-redirect from `/` to `/setup`** when no devices are configured. Append `?skip_wizard=1` to bypass.
+- **"🪄 Einrichtungs-Assistent" button** in Settings → Devices to re-enter the wizard any time.
+
 ## 16.13.23 - 2026-04-05
 ### Fixed
 - **Device auto-detection on Add-by-IP and Probe didn't work** – `probe_device()` returns a `DiscoveredDevice` dataclass (attributes: `gen`, `model`, `kind`, `component_id`, `phases`, `supports_emdata`) and raises `ValueError` when the host is not a Shelly. Both blueprint endpoints treated it as a dict and called `.get()` on it, so detection always silently fell through to "host.replace('.', '_')" as key and defaulted `kind=em`, `phases=3`. Now:
