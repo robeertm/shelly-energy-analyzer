@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.8.5 - 2026-04-05
+### Fixed
+- **"Inkrement-Sync" button appeared to do nothing** – `services/sync.py` had **zero** logging, so the Sync tab's log pane stayed empty while sync ran silently in a background thread. Added INFO logs for range, per-chunk progress, and final summary. Also the status panel no longer gets overwritten 50ms later by `refreshSyncStatus()` – now shows "Sync läuft …" until the job actually touches the DB (3s debounce).
+
 ## 16.8.4 - 2026-04-05
 ### Fixed
 - **Sync tab "Lade Status…" stuck forever** – `/api/sync/status` called a non-existent `db.get_device_meta()` method and failed silently; the JS swallowed the `ok:false` response. Endpoint now uses `storage.load_meta()` and the UI shows real status text / errors instead of the permanent loading placeholder.
