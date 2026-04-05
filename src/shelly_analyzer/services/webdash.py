@@ -1078,6 +1078,9 @@ _HTML_TEMPLATE = """<!doctype html>
        Mobile keeps fixed heights + full width. */
     @media (min-width: 900px) {{
       .pane.active {{ max-width: 66%; margin-left: auto; margin-right: auto; }}
+      /* Plots tab: iframe owns the scrolling, outer panes container must not scroll */
+      #pane-plots.active {{ max-width: 100%; height: calc(100vh - 96px); padding: 0; margin: 0; }}
+      #panes:has(#pane-plots.active) {{ overflow: hidden; }}
       canvas.sparkline {{ height: clamp(56px, 11vh, 180px); }}
       canvas.sparkline-sm {{ height: clamp(40px, 8vh, 130px); }}
     }}
@@ -1524,7 +1527,7 @@ _HTML_TEMPLATE = """<!doctype html>
     <!-- Plots (historical W/V/A/VAR/cos φ, phases + totals, time ranges, kWh) -->
     <div id="pane-plots" class="pane">
       <iframe id="plots-frame" src="about:blank" loading="lazy"
-        style="width:100%;height:calc(100vh - 110px);border:0;border-radius:12px;background:var(--card)"></iframe>
+        style="width:100%;height:100%;border:0;border-radius:0;background:var(--card);display:block"></iframe>
     </div>
 
     <!-- Costs -->
@@ -5797,14 +5800,25 @@ _PLOTS_TEMPLATE = """<!doctype html>
 </script>
 
   <div class="wrap">
-    <div class="topbar">
+    <!-- Topbar (Live/Control links + theme toggle) is hidden when embedded as a Plots tab iframe -->
+    <div class="topbar" id="topbar_std" style="display:none">
       <div class="title">@@plots_title@@</div>
       <div class="nav">
         <a id="nav_live" href="/"><span class="ico">🏠</span> <span class="lab">@@web_nav_live@@</span></a>
-        <a id="nav_control" href="/control"><span class="ico">⚙︎</span> <span class="lab">@@web_nav_control@@</span></a>
         <button id="btn_theme" type="button" title="@@web_btn_theme@@">@@web_btn_theme@@</button>
       </div>
     </div>
+    <script>
+    (function(){
+      try {
+        // When NOT embedded (opened directly at /plots), show the topbar.
+        if (window.top === window.self) {
+          var tb = document.getElementById('topbar_std');
+          if (tb) tb.style.display = '';
+        }
+      } catch(e){}
+    })();
+    </script>
 
     <div class="card">
       <div class="controls">
@@ -5891,8 +5905,14 @@ _PLOTS_TEMPLATE = """<!doctype html>
     </div>
 
     <div class="meta" id="meta"></div>
-    <div class="card"><div id="plot1" class="plot"></div></div>
-    <div class="card" id="card2" style="display:none"><div id="plot2" class="plot"></div></div>
+    <div class="card">
+      <div id="plot1_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px;display:none"></div>
+      <div id="plot1" class="plot"></div>
+    </div>
+    <div class="card" id="card2" style="display:none">
+      <div id="plot2_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px;display:none"></div>
+      <div id="plot2" class="plot"></div>
+    </div>
   </div>
 
 <!-- JSON payloads are injected as inert text to avoid JS parse errors even if placeholders aren't replaced -->
@@ -6340,6 +6360,15 @@ async function loadData() {
 
   function plotInto(div, dev) {
     if (!dev) return;
+    // Per-plot device title (show device name above each plot)
+    try {
+      const titleEl = document.getElementById(div + '_title');
+      if (titleEl) {
+        const devName = (dev && (dev.name || dev.key)) ? String(dev.name || dev.key) : '';
+        titleEl.textContent = devName;
+        titleEl.style.display = devName ? 'block' : 'none';
+      }
+    } catch(e) {}
     const metric = (data.metric_label || data.metric || 'W');
     const metricKey = String((data.metric || '') || metric || 'W').toUpperCase();
     const params = qp();
@@ -6367,11 +6396,28 @@ async function loadData() {
     const phasesOk = hasPhases();
 
     if (wantSeries === 'phases' && phasesOk) {
-      // Plot phases only (L1/L2/L3). No extra 'total' line -> clearer.
-      Object.keys(dev.phases).forEach(k=>{
+      // Plot phases (L1/L2/L3, and N for neutral current in "A" metric).
+      // Ensure stable order L1 → L2 → L3 → N so Plotly assigns matching colours.
+      const order = ['L1','L2','L3','N'];
+      const keys = Object.keys(dev.phases).sort((a,b)=>{
+        const ia = order.indexOf(a), ib = order.indexOf(b);
+        return (ia<0?99:ia) - (ib<0?99:ib);
+      });
+      keys.forEach(k=>{
         const p = dev.phases[k];
         if (!p) return;
-        traces.push({type:'scatter', mode:'lines', name: k, x: p.x || xs, y: applyVarCosphiFilters((p.x || xs), (p.y || []), metricKey, opts)});
+        const isN = (String(k).toUpperCase() === 'N');
+        const label = isN ? (t('web.plots.phase.n') || 'I_N (Neutralleiter)') : k;
+        const tr = {
+          type:'scatter', mode:'lines',
+          name: label,
+          x: p.x || xs,
+          y: applyVarCosphiFilters((p.x || xs), (p.y || []), metricKey, opts)
+        };
+        if (isN) {
+          tr.line = { color: '#9ca3af', width: 1.5, dash: 'dash' };
+        }
+        traces.push(tr);
       });
     } else {
       // Total only (default). If phases selected but unavailable, fall back silently.
