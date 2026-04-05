@@ -43,3 +43,12 @@ def plots(subpath=None):
 def control(subpath=None):
     state = _get_state()
     return _gzip_response(state._control_html, state._control_html_gz)
+
+
+@bp.route("/settings")
+def settings_page():
+    from pathlib import Path
+    tpl = Path(__file__).parent.parent / "templates" / "settings.html"
+    if tpl.exists():
+        return Response(tpl.read_bytes(), content_type="text/html; charset=utf-8")
+    return Response(b"<h1>Settings page not yet available</h1>", content_type="text/html")
