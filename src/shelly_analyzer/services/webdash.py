@@ -2484,8 +2484,12 @@ async function loadHistory() {{
     const hist = data.history || {{}};
     for (const key in hist) {{
       if (!sparkData[key]) sparkData[key] = [];
-      // Prepend server-side history; keep within MAX_HIST_PTS
-      const merged = hist[key].concat(sparkData[key]);
+      // Merge server history with client buffer, dedupe by timestamp,
+      // keep within MAX_HIST_PTS.
+      const byTs = {{}};
+      hist[key].forEach(function(p) {{ if (p && p.ts) byTs[p.ts] = p; }});
+      sparkData[key].forEach(function(p) {{ if (p && p.ts) byTs[p.ts] = p; }});
+      const merged = Object.values(byTs).sort(function(a,b) {{ return a.ts - b.ts; }});
       sparkData[key] = merged.slice(-MAX_HIST_PTS);
     }}
     // Redraw sparklines if cards are already in the DOM
@@ -2502,6 +2506,10 @@ async function loadHistory() {{
         if (spa) drawSparkline(spa, wndVals(buf, 'a'), '#10b981', true);
         const spq = document.getElementById('sp-q-' + key);
         if (spq) drawSparkline(spq, wndVals(buf, 'q'), '#ef4444', true);
+        const spin = document.getElementById('sp-in-' + key);
+        if (spin) drawSparkline(spin, wndVals(buf, 'i_n'), '#a855f7', true);
+        const sphz = document.getElementById('sp-hz-' + key);
+        if (sphz) drawSparkline(sphz, wndVals(buf, 'hz'), '#06b6d4', true);
       }}
     }}
   }} catch(e) {{ /* silent */ }}
@@ -2539,6 +2547,9 @@ function _updateNilmStatus() {{
 }}
 function stopLive() {{
   if (liveTimer) {{ clearInterval(liveTimer); liveTimer = null; }}
+  // Invalidate history cache so coming back to Live refetches the server
+  // window – otherwise sparklines look "reset" after leaving for >liveWindowSec.
+  _historyLoaded = false;
 }}
 function toggleFreeze() {{
   frozen = !frozen;
