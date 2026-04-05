@@ -3312,18 +3312,72 @@ class ActionDispatcher:
         # -- New feature action handlers --
         if action == "smart_schedule":
             try:
-                from shelly_analyzer.services.smart_schedule import get_schedule_recommendations
+                from shelly_analyzer.services.smart_schedule import find_cheapest_block
                 zone = str(getattr(self.cfg.spot_price, "bidding_zone", "DE-LU") or "DE-LU")
                 duration = float(params.get("duration", getattr(self.cfg.smart_schedule, "default_duration_hours", 3.0)))
-                rec = get_schedule_recommendations(self.storage.db, zone, duration)
-                if rec:
-                    return {"ok": True, "data": {"recommendation": {
-                        "start_ts": rec.start_ts, "end_ts": rec.end_ts,
-                        "avg_price_ct": rec.avg_price_ct,
-                        "savings_vs_avg_ct": rec.savings_vs_avg_ct,
+                # Surcharges + VAT → real price the user will pay
+                _sp_cfg = getattr(self.cfg, "spot_price", None)
+                _markup_ct = 0.0
+                _vat_f = 1.0
+                try:
+                    if _sp_cfg is not None:
+                        _markup_ct = float(_sp_cfg.total_markup_ct() if hasattr(_sp_cfg, "total_markup_ct") else getattr(_sp_cfg, "markup_ct_per_kwh", 0.0))
+                        if bool(getattr(_sp_cfg, "include_vat", True)):
+                            _vat_f = 1.0 + float(self.cfg.pricing.vat_rate())
+                except Exception:
+                    pass
+                _fixed_ct = round(float(self.cfg.pricing.electricity_price_eur_per_kwh) * 100.0, 2)
+
+                _now_ts = int(time.time())
+                _win_start = (_now_ts // 3600) * 3600
+                _win_end = _win_start + 24 * 3600
+                _df_sp = self.storage.db.query_spot_prices(zone, _win_start, _win_end)
+                if _df_sp is None or _df_sp.empty:
+                    return {"ok": True, "data": {"blocks": [], "duration_h": duration, "fixed_ct": _fixed_ct}}
+                _prices_raw = list(zip(_df_sp["slot_ts"].astype(int), _df_sp["price_eur_mwh"].astype(float)))
+                _prices_raw.sort(key=lambda x: x[0])
+
+                def _to_real_ct(eur_mwh: float) -> float:
+                    return ((eur_mwh / 10.0) + _markup_ct) * _vat_f
+
+                # Find top-3 non-overlapping cheapest blocks
+                blocks_out: List[Dict[str, Any]] = []
+                remaining = list(_prices_raw)
+                _all_avg_raw = sum(p for _, p in _prices_raw) / max(1, len(_prices_raw))
+                _all_avg_ct = round(_to_real_ct(_all_avg_raw), 2)
+                _min_p = min(p for _, p in _prices_raw)
+                _max_p = max(p for _, p in _prices_raw)
+                _cheapest_ct = round(_to_real_ct(_min_p), 2)
+                _mostexp_ct = round(_to_real_ct(_max_p), 2)
+
+                for _ in range(3):
+                    rec = find_cheapest_block(remaining, duration, earliest_ts=_win_start, latest_ts=_win_end)
+                    if rec is None:
+                        break
+                    _real_avg_ct = round(_to_real_ct(rec.avg_price_ct * 10.0), 2)  # rec.avg_price_ct is ct (raw), convert back to eur/MWh for helper
+                    _save_vs_fixed = round((_fixed_ct - _real_avg_ct) * float(duration), 1)  # ct/kWh diff × hours (= ct saved for a 1 kW load over the block)
+                    blocks_out.append({
+                        "start_ts": rec.start_ts,
+                        "end_ts": rec.end_ts,
+                        "avg_price_ct": _real_avg_ct,
+                        "savings_vs_avg_ct": round(_all_avg_ct - _real_avg_ct, 2),
+                        "savings_vs_fixed_ct_per_kwh": round(_fixed_ct - _real_avg_ct, 2),
                         "block_hours": rec.block_hours,
-                    }}}
-                return {"ok": True, "data": {"recommendation": None}}
+                    })
+                    # Remove block from remaining for next iteration (non-overlapping top-N)
+                    remaining = [(ts, p) for (ts, p) in remaining if not (rec.start_ts <= ts < rec.end_ts)]
+
+                return {"ok": True, "data": {
+                    "blocks": blocks_out,
+                    "duration_h": duration,
+                    "fixed_ct": _fixed_ct,
+                    "avg_24h_ct": _all_avg_ct,
+                    "cheapest_hour_ct": _cheapest_ct,
+                    "most_expensive_hour_ct": _mostexp_ct,
+                    "window_start_ts": _win_start,
+                    "window_end_ts": _win_end,
+                    "zone": zone,
+                }}
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 
