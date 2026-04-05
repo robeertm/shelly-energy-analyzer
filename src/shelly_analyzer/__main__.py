@@ -65,6 +65,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     bg.start_all()
 
+    # Persist NILM state on normal exit (Ctrl-C / kill -TERM)
+    import atexit
+    import signal
+    def _graceful_stop(*_args):
+        try:
+            bg.stop_all()
+        except Exception:
+            pass
+    atexit.register(_graceful_stop)
+    try:
+        signal.signal(signal.SIGTERM, lambda *a: (_graceful_stop(), sys.exit(0)))
+    except Exception:
+        pass
+
     # SSL setup
     ssl_context = None
     if not args.no_ssl:
