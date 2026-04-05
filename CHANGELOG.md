@@ -1,5 +1,16 @@
 # Changelog
 
+## 16.7.0 - 2026-04-05
+### Added
+- **Mieter tab (Nebenkostenabrechnung)** – new 🏘 Mieter pane:
+  - List and edit tenants (name, Wohnung, persons, move-in/out dates, assigned devices)
+  - Configure common-area devices (Allgemeinstrom) split per person
+  - Compute per-tenant bills for any period with line items (per-device kWh, unit price, amount) + net/VAT/gross totals
+- **New API endpoints**:
+  - `GET /api/tenants` – list tenants + config
+  - `PUT /api/tenants` – upsert entire tenant config
+  - `GET /api/tenants/bill?period_start=...&period_end=...` – compute bills via existing `services/tenant.generate_tenant_bills()`
+
 ## 16.6.6 - 2026-04-05
 ### Fixed
 - **Blank dashboard (only nav + header visible)** – duplicate `cb` variable declaration (var + const) in `pollSyncLogs()` threw a SyntaxError that aborted the whole inline script. Renamed to `httpCb`. All tabs render again.

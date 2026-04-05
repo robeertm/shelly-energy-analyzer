@@ -1702,6 +1702,9 @@ _HTML_TEMPLATE = """<!doctype html>
     <div id="pane-goals" class="pane">
       <div id="goals-content"><p class="loading-msg">Lade…</p></div>
     </div>
+    <div id="pane-tenants" class="pane">
+      <div id="tenants-content"><p class="loading-msg">Lade…</p></div>
+    </div>
     <div id="pane-sync" class="pane">
       <div class="card" style="margin-bottom:8px">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
@@ -1800,6 +1803,10 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">🏆</span>
       <span class="nav-label">Goals</span>
     </button>
+    <button class="nav-btn" onclick="switchPane('tenants',this)">
+      <span class="nav-icon">🏘</span>
+      <span class="nav-label">Mieter</span>
+    </button>
     <button class="nav-btn" onclick="switchPane('sync',this)">
       <span class="nav-icon">🔄</span>
       <span class="nav-label">Sync</span>
@@ -1828,6 +1835,7 @@ _HTML_TEMPLATE = """<!doctype html>
     <button class="drawer-item" onclick="switchPaneFromDrawer('battery',this)"><span class="drawer-ico">🔋</span>Battery</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('advisor',this)"><span class="drawer-ico">🤖</span>Advisor</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('goals',this)"><span class="drawer-ico">🏆</span>Goals</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('tenants',this)"><span class="drawer-ico">🏘</span>Mieter</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('sync',this)"><span class="drawer-ico">🔄</span>Sync</button>
   </aside>
 </div>
@@ -1990,6 +1998,7 @@ function onPaneActivated(name) {{
     else if (name === 'battery') loadBattery();
     else if (name === 'advisor') loadAdvisor();
     else if (name === 'goals') loadGoals();
+    else if (name === 'tenants') loadTenants();
     else if (name === 'sync') {{ initSync(); }}
     else {{ stopSyncPolling(); }}
   }}
@@ -2043,6 +2052,159 @@ function syncAll(mode) {{
       refreshSyncStatus();
     }}).catch(function(e) {{}});
 }}
+/* ──────────────────────────────────────────────
+   TENANTS (Mieter / Nebenkostenabrechnung)
+────────────────────────────────────────────── */
+let _tenantsCache = null;
+let _tenantsDevices = [];
+function loadTenants() {{
+  const el = document.getElementById('tenants-content');
+  if (!el) return;
+  el.innerHTML = '<p class="loading-msg">Lade…</p>';
+  Promise.all([
+    fetch('/api/tenants').then(function(r) {{ return r.json(); }}),
+    fetch('/api/config').then(function(r) {{ return r.json(); }})
+  ]).then(function(results) {{
+    const td = results[0] || {{}};
+    const cfg = results[1] || {{}};
+    _tenantsCache = td;
+    _tenantsDevices = (cfg.devices_meta || cfg.devices || []).map(function(d) {{ return {{key:d.key, name:d.name||d.key}}; }});
+    renderTenants();
+  }}).catch(function(e) {{
+    el.innerHTML = '<p style="color:var(--red)">Fehler: ' + (e && e.message || '?') + '</p>';
+  }});
+}}
+function _tenantsDeviceOptions(selectedKeys) {{
+  const sel = new Set(selectedKeys || []);
+  return _tenantsDevices.map(function(d) {{
+    return '<label style="display:inline-flex;gap:4px;align-items:center;margin:2px 6px 2px 0;font-size:11px">' +
+      '<input type="checkbox" class="t-dev" value="' + esc(d.key) + '"' + (sel.has(d.key)?' checked':'') + '> ' + esc(d.name) + '</label>';
+  }}).join('');
+}}
+function renderTenants() {{
+  const el = document.getElementById('tenants-content');
+  if (!el || !_tenantsCache) return;
+  const td = _tenantsCache;
+  let h = '';
+  // Config card
+  h += '<div class="card" style="margin-bottom:8px">';
+  h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px">';
+  h += '<label style="display:flex;gap:4px;align-items:center;font-size:12px"><input type="checkbox" id="t-enabled"' + (td.enabled?' checked':'') + '> Mieter-Abrechnung aktiv</label>';
+  h += '<label style="font-size:12px">Abrechnungsperiode (Monate): <input type="number" id="t-period" value="' + (td.billing_period_months||12) + '" style="width:60px"></label>';
+  h += '<span style="flex:1"></span>';
+  h += '<button class="btn" onclick="addTenantRow()">+ Mieter</button>';
+  h += '<button class="btn btn-accent" onclick="saveTenants()">💾 Speichern</button>';
+  h += '</div>';
+  h += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Gemeinschaftsflächen (Allgemeinstrom)</div>';
+  h += '<div id="t-common" style="display:flex;flex-wrap:wrap">' + _tenantsDeviceOptions(td.common_device_keys) + '</div>';
+  h += '</div>';
+  // Tenants list
+  h += '<div id="t-list">';
+  (td.tenants || []).forEach(function(t, i) {{ h += _tenantRowHtml(t, i); }});
+  if (!td.tenants || !td.tenants.length) {{
+    h += '<div class="card" style="color:var(--muted);font-size:12px">Noch keine Mieter angelegt. Mit "+ Mieter" hinzufügen.</div>';
+  }}
+  h += '</div>';
+  // Billing computation
+  h += '<div class="card" style="margin-top:8px">';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">';
+  h += '<label style="font-size:12px">Von: <input type="date" id="t-start"></label>';
+  h += '<label style="font-size:12px">Bis: <input type="date" id="t-end"></label>';
+  h += '<button class="btn btn-accent" onclick="computeBills()">📊 Abrechnung berechnen</button>';
+  h += '</div>';
+  h += '<div id="t-bills"></div>';
+  h += '</div>';
+  el.innerHTML = h;
+}}
+function _tenantRowHtml(t, i) {{
+  const tid = esc(t.tenant_id || '');
+  return '<div class="card" data-idx="' + i + '" style="margin-bottom:6px">' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' +
+    '<input class="t-name" placeholder="Name" value="' + esc(t.name||'') + '" style="flex:2;min-width:120px">' +
+    '<input class="t-unit" placeholder="Wohnung" value="' + esc(t.unit||'') + '" style="flex:1;min-width:80px">' +
+    '<input class="t-id" placeholder="ID" value="' + tid + '" style="width:80px">' +
+    '<input class="t-persons" type="number" min="1" placeholder="Pers." value="' + (t.persons||1) + '" style="width:60px">' +
+    '<input class="t-in" type="date" value="' + esc(t.move_in||'') + '" style="width:140px" title="Einzug">' +
+    '<input class="t-out" type="date" value="' + esc(t.move_out||'') + '" style="width:140px" title="Auszug">' +
+    '<button class="btn" onclick="removeTenantRow(' + i + ')" title="Löschen">🗑</button>' +
+    '</div>' +
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:2px">Zugeordnete Geräte:</div>' +
+    '<div class="t-devs" style="display:flex;flex-wrap:wrap">' + _tenantsDeviceOptions(t.device_keys) + '</div>' +
+    '</div>';
+}}
+function addTenantRow() {{
+  if (!_tenantsCache) return;
+  _tenantsCache.tenants = _tenantsCache.tenants || [];
+  _tenantsCache.tenants.push({{tenant_id:'t' + (_tenantsCache.tenants.length+1), name:'', persons:1, device_keys:[]}});
+  renderTenants();
+}}
+function removeTenantRow(idx) {{
+  if (!_tenantsCache || !_tenantsCache.tenants) return;
+  _tenantsCache.tenants.splice(idx, 1);
+  renderTenants();
+}}
+function _collectTenantsFromDom() {{
+  const list = document.querySelectorAll('#t-list > [data-idx]');
+  const tenants = [];
+  list.forEach(function(row) {{
+    const dk = Array.from(row.querySelectorAll('.t-devs .t-dev:checked')).map(function(x) {{ return x.value; }});
+    tenants.push({{
+      tenant_id: (row.querySelector('.t-id')||{{}}).value || '',
+      name: (row.querySelector('.t-name')||{{}}).value || '',
+      unit: (row.querySelector('.t-unit')||{{}}).value || '',
+      persons: parseInt((row.querySelector('.t-persons')||{{}}).value || '1', 10),
+      move_in: (row.querySelector('.t-in')||{{}}).value || '',
+      move_out: (row.querySelector('.t-out')||{{}}).value || '',
+      device_keys: dk,
+    }});
+  }});
+  const common = Array.from(document.querySelectorAll('#t-common .t-dev:checked')).map(function(x) {{ return x.value; }});
+  return {{
+    enabled: !!(document.getElementById('t-enabled')||{{}}).checked,
+    billing_period_months: parseInt((document.getElementById('t-period')||{{}}).value || '12', 10),
+    tenants: tenants,
+    common_device_keys: common,
+  }};
+}}
+function saveTenants() {{
+  const body = _collectTenantsFromDom();
+  fetch('/api/tenants', {{method:'PUT',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}})
+    .then(function(r) {{ return r.json(); }})
+    .then(function(d) {{
+      if (d.ok) {{ _tenantsCache = Object.assign(_tenantsCache||{{}}, body); renderTenants(); alert('Gespeichert'); }}
+      else alert('Fehler: ' + (d.error||'?'));
+    }}).catch(function(e) {{ alert('Fehler: ' + e); }});
+}}
+function computeBills() {{
+  const s = (document.getElementById('t-start')||{{}}).value || '';
+  const e = (document.getElementById('t-end')||{{}}).value || '';
+  const q = new URLSearchParams();
+  if (s) q.set('period_start', s);
+  if (e) q.set('period_end', e);
+  const el = document.getElementById('t-bills');
+  if (el) el.innerHTML = '<p class="loading-msg">Berechne…</p>';
+  fetch('/api/tenants/bill?' + q.toString()).then(function(r) {{ return r.json(); }}).then(function(d) {{
+    if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||'Keine Daten') + '</p>'; return; }}
+    const rep = d.report;
+    let h = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Periode: ' + esc(rep.period_start) + ' bis ' + esc(rep.period_end) + ' · Gesamt: ' + rep.total_kwh.toFixed(1) + ' kWh · ' + rep.total_cost.toFixed(2) + ' €</div>';
+    (rep.bills || []).forEach(function(b) {{
+      h += '<div class="card" style="margin-bottom:6px">';
+      h += '<div style="font-weight:650;margin-bottom:4px">' + esc(b.tenant.name) + (b.tenant.unit ? ' (' + esc(b.tenant.unit) + ')' : '') + ' · ' + b.tenant.persons + ' Pers.</div>';
+      h += '<table style="width:100%;font-size:11px;border-collapse:collapse">';
+      h += '<tr style="border-bottom:1px solid var(--border);color:var(--muted)"><th style="text-align:left;padding:3px">Position</th><th style="text-align:right">kWh</th><th style="text-align:right">€/kWh</th><th style="text-align:right">€</th></tr>';
+      (b.line_items || []).forEach(function(li) {{
+        h += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px">' + esc(li.description) + '</td><td style="text-align:right">' + li.kwh.toFixed(1) + '</td><td style="text-align:right">' + li.unit_price.toFixed(4) + '</td><td style="text-align:right">' + li.amount.toFixed(2) + '</td></tr>';
+      }});
+      h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">Netto</td><td style="text-align:right">' + b.subtotal_net.toFixed(2) + '</td></tr>';
+      h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">MwSt.</td><td style="text-align:right">' + b.vat_amount.toFixed(2) + '</td></tr>';
+      h += '<tr style="font-weight:700"><td colspan="3" style="padding:3px;text-align:right">Gesamt brutto</td><td style="text-align:right">' + b.total_gross.toFixed(2) + ' €</td></tr>';
+      h += '</table>';
+      h += '</div>';
+    }});
+    el.innerHTML = h;
+  }}).catch(function(e) {{ el.innerHTML = '<p style="color:var(--red)">Fehler: ' + e + '</p>'; }});
+}}
+
 function refreshSyncStatus() {{
   fetch('/api/sync/status').then(function(r) {{ return r.json(); }}).then(function(d) {{
     const el = document.getElementById('sync-status-panel');
