@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.7.2 - 2026-04-05
+### Fixed
+- **NILM forgetting learned state** – transitions were only auto-saved every 10 samples and on shutdown nothing was flushed. Now: flush on every re-cluster (every 5 min), flush on `BackgroundServiceManager.stop_all()`, flush existing learners before replacing on config reload, and register `atexit`/SIGTERM hooks in `__main__` so Ctrl-C persists state.
+
 ## 16.7.1 - 2026-04-05
 ### Fixed
 - **Mieter-Abrechnung: "float() argument must be a string or a real number, not 'method'"** – `pricing.vat_rate` is a method on PricingConfig, not an attribute. Wrapped call in try/except with fallback to `vat_rate_percent / 100`. Also switched `base_fee_gross` lookup to `base_fee_eur_per_year`.
