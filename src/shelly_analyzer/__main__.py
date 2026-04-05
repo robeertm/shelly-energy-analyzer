@@ -64,6 +64,8 @@ def main(argv: list[str] | None = None) -> int:
         on_action=dispatcher.dispatch,
     )
     bg.start_all()
+    # Expose for API access (status / trigger)
+    state._bg = bg  # type: ignore[attr-defined]
 
     # Persist NILM state on normal exit (Ctrl-C / kill -TERM)
     import atexit

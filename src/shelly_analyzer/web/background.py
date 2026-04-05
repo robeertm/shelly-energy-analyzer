@@ -40,6 +40,8 @@ class BackgroundServiceManager:
         self._scheduler = None
         self._mqtt_publisher = None
         self._influxdb_exporter = None
+        self._co2_fetcher = None
+        self._spot_fetcher = None
         self._feed_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._autosync_thread: Optional[threading.Thread] = None
@@ -63,6 +65,8 @@ class BackgroundServiceManager:
         self._start_mqtt()
         self._start_influxdb()
         self._start_autosync()
+        self._start_co2_fetcher()
+        self._start_spot_fetcher()
         self._write_runtime_devices_meta()
         logger.info("All background services started")
 
@@ -87,6 +91,16 @@ class BackgroundServiceManager:
         if self._influxdb_exporter:
             try:
                 self._influxdb_exporter.stop()
+            except Exception:
+                pass
+        if self._co2_fetcher:
+            try:
+                self._co2_fetcher.stop()
+            except Exception:
+                pass
+        if self._spot_fetcher:
+            try:
+                self._spot_fetcher.stop()
             except Exception:
                 pass
         # Flush NILM state so nothing learned is lost on shutdown/reload
@@ -454,6 +468,51 @@ class BackgroundServiceManager:
         self._autosync_thread = threading.Thread(target=_sync_loop, daemon=True)
         self._autosync_thread.start()
         logger.info("Auto-sync enabled (interval: %d s)", interval_s)
+
+    # ── CO2 / Spot fetchers ────────────────────────────────────────────
+
+    def _start_co2_fetcher(self) -> None:
+        """Start periodic ENTSO-E CO₂ intensity fetch if enabled."""
+        co2_cfg = getattr(self.cfg, "co2", None)
+        if co2_cfg is None or not getattr(co2_cfg, "enabled", False):
+            logger.debug("CO2 fetcher disabled")
+            return
+        if not (getattr(co2_cfg, "entso_e_api_token", "") or ""):
+            logger.warning("CO2 enabled but no ENTSO-E token configured")
+            return
+        try:
+            from shelly_analyzer.services.entsoe import Co2FetchService
+            self._co2_fetcher = Co2FetchService(
+                db=self.storage.db,
+                get_config=lambda: self.cfg,
+            )
+            self._co2_fetcher.start()
+            # Trigger immediately so we have data shortly after startup
+            self._co2_fetcher.trigger_now()
+            logger.info("CO2 fetcher started (zone=%s, interval=%sh)",
+                        getattr(co2_cfg, "bidding_zone", "?"),
+                        getattr(co2_cfg, "fetch_interval_hours", 1))
+        except Exception as e:
+            logger.exception("CO2 fetcher failed to start: %s", e)
+
+    def _start_spot_fetcher(self) -> None:
+        """Start periodic spot-price fetch if enabled."""
+        spot_cfg = getattr(self.cfg, "spot_price", None)
+        if spot_cfg is None or not getattr(spot_cfg, "enabled", False):
+            logger.debug("Spot-price fetcher disabled")
+            return
+        try:
+            from shelly_analyzer.services.spot_price import SpotPriceFetchService
+            self._spot_fetcher = SpotPriceFetchService(
+                db=self.storage.db,
+                get_config=lambda: self.cfg,
+            )
+            self._spot_fetcher.start()
+            self._spot_fetcher.trigger_now()
+            logger.info("Spot-price fetcher started (zone=%s)",
+                        getattr(spot_cfg, "bidding_zone", "?"))
+        except Exception as e:
+            logger.exception("Spot-price fetcher failed to start: %s", e)
 
     # ── Runtime metadata ───────────────────────────────────────────────
 

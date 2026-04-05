@@ -1,5 +1,12 @@
 # Changelog
 
+## 16.8.0 - 2026-04-05
+### Fixed
+- **CO₂ & spot-price fetchers never started in Flask app** – `Co2FetchService` (ENTSO-E) and `SpotPriceFetchService` existed but `BackgroundServiceManager.start_all()` didn't instantiate them. So `/api/co2` / `/api/plots_data` returned empty data for fresh installs. Both are now started on app boot (honours `co2.enabled` + `entso_e_api_token` and `spot_price.enabled`) and triggered immediately so data is available within ~1 min.
+
+### Added
+- **Manual refresh endpoints**: `POST /api/co2/refresh`, `POST /api/spot/refresh`, `GET /api/co2/status` – trigger an immediate fetch and check service status (enabled, token, last_error, last_fetch_ts).
+
 ## 16.7.3 - 2026-04-05
 ### Added
 - **"Now" marker in spot-price and CO₂ charts** – red dashed vertical line with "jetzt" label marks the current hour in both the 24h Dynamic Price chart (Costs tab) and the CO₂ intensity chart (CO₂ tab).
