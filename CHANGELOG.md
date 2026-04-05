@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.11 - 2026-04-05
+### Fixed
+- **I_N-Fallback griff nicht, weil falscher Endpoint gepatcht wurde** – v16.13.10 hat `_compute_i_n()` nur in `services/webdash.py` eingebaut, aber die aktive Flask-App bedient `/api/state` und `/api/history` über das Blueprint `web/blueprints/api_state.py`. Der dort zurückgegebene `i_n` war weiterhin der rohe (oft 0) Messwert. Jetzt ist `_compute_i_n()` auch in der Blueprint-Version vorhanden und wird für beide Endpoints verwendet. Zusätzlich erkennt die Funktion aktive Phasen jetzt an Spannung **oder** Strom (manche Shelly-Modelle melden nur eine Phasenspannung, aber alle Ströme).
+
 ## 16.13.10 - 2026-04-05
 ### Added
 - **Neutralleiterstrom-Fallback: Berechnung aus Phasenströmen** – wenn das Gerät keinen echten I_N-Wert meldet (kein Neutralleiter-Stromwandler angeschlossen), wird I_N jetzt berechnet:
