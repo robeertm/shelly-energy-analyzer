@@ -1,5 +1,11 @@
 # Changelog
 
+## 16.13.23 - 2026-04-05
+### Fixed
+- **Device auto-detection on Add-by-IP and Probe didn't work** – `probe_device()` returns a `DiscoveredDevice` dataclass (attributes: `gen`, `model`, `kind`, `component_id`, `phases`, `supports_emdata`) and raises `ValueError` when the host is not a Shelly. Both blueprint endpoints treated it as a dict and called `.get()` on it, so detection always silently fell through to "host.replace('.', '_')" as key and defaulted `kind=em`, `phases=3`. Now:
+  - `/api/devices/probe` converts the dataclass to a JSON dict (`gen`, `model`, `kind`, `phases`, `supports_emdata`, `component_id`).
+  - `POST /api/devices` correctly reads the dataclass attributes, picks up the real `kind`, `gen`, `model`, `phases`, `component_id` (→ `em_id`) and `supports_emdata`.
+
 ## 16.13.22 - 2026-04-05
 ### Changed
 - **Settings → Devices: full editor per device** (matching the old desktop tkinter form):
