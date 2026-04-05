@@ -6071,6 +6071,36 @@ function setQP(newParams) {
     else u.searchParams.set(k, String(v));
   });
   history.replaceState(null, '', u.toString());
+  // Persist params so user returns to the same view next session (localStorage
+  // is shared between /plots standalone and the embedded iframe in the Plots tab).
+  try {
+    const obj = {};
+    u.searchParams.forEach((v,k)=>{ obj[k]=v; });
+    localStorage.setItem('sea_plots_qp', JSON.stringify(obj));
+  } catch(e){}
+}
+// First-visit default: kWh view for the last 24 hours.
+// If the URL has no plots-relevant params AND localStorage has something saved
+// from a previous session, restore those. Otherwise fall back to the default.
+function restorePlotsDefaults() {
+  const u = new URL(window.location.href);
+  const has = u.searchParams.has('view') || u.searchParams.has('metric') || u.searchParams.has('preset') || u.searchParams.has('mode') || u.searchParams.has('start');
+  if (has) return;
+  // Try last-session params from localStorage
+  try {
+    const saved = JSON.parse(localStorage.getItem('sea_plots_qp') || 'null');
+    if (saved && typeof saved === 'object' && Object.keys(saved).length > 0) {
+      Object.keys(saved).forEach(k => u.searchParams.set(k, String(saved[k])));
+      history.replaceState(null, '', u.toString());
+      return;
+    }
+  } catch(e){}
+  // First-ever visit: default to kWh · hourly buckets · last 24 h
+  u.searchParams.set('view', 'kwh');
+  u.searchParams.set('mode', 'hours');
+  u.searchParams.set('len', '24');
+  u.searchParams.set('unit', 'hours');
+  history.replaceState(null, '', u.toString());
 }
 function esc(s){
   return String(s||"").replace(/[&<>"']/g, function(c){
@@ -6660,6 +6690,9 @@ async function loadData() {
 }
 
 async function init() {
+  // Restore last session's plots params (view/metric/range/etc.), or
+  // default to kWh · hours · last 24 h on first-ever visit.
+  try { restorePlotsDefaults(); } catch(e){}
   // Theme toggle
   try {
     const b = document.getElementById('btn_theme');
