@@ -28,7 +28,27 @@ def _gzip_response(raw: bytes, gz: bytes, content_type: str = "text/html; charse
 @bp.route("/index.html")
 def index():
     state = _get_state()
+    # First-run: no devices configured AND wizard not explicitly dismissed
+    try:
+        if not list(getattr(state.cfg, "devices", []) or []) and request.args.get("skip_wizard") != "1":
+            from flask import redirect
+            return redirect("/setup")
+    except Exception:
+        pass
     return _gzip_response(state._dashboard_html, state._dashboard_html_gz)
+
+
+@bp.route("/setup")
+def setup_page():
+    from pathlib import Path
+    from shelly_analyzer.web import _inject_version_badge
+    tpl = Path(__file__).parent.parent / "templates" / "setup.html"
+    if tpl.exists():
+        html = _inject_version_badge(tpl.read_text(encoding="utf-8"))
+        resp = Response(html.encode("utf-8"), content_type="text/html; charset=utf-8")
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        return resp
+    return Response(b"<h1>Setup wizard not available</h1>", content_type="text/html")
 
 
 @bp.route("/plots")
