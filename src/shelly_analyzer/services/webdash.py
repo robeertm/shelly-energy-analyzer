@@ -360,6 +360,36 @@ def _plotly_min_js_bytes() -> bytes:
         return b""
 
 
+def _compute_i_n(measured: float, ia: float, ib: float, ic: float,
+                 va: float = 0.0, vb: float = 0.0, vc: float = 0.0) -> float:
+    """Return neutral-line current. Uses measured value if > 0.01 A, else
+    falls back to a computed estimate from phase currents (assumes 120° phase
+    offsets for 3-phase, 180° for split-phase).
+
+    3-phase: |I_N| = sqrt(I1² + I2² + I3² − I1·I2 − I2·I3 − I1·I3)
+    2-phase: |I_N| = |I1 − I2|
+    1-phase: 0 (no meaningful neutral imbalance)
+    """
+    try:
+        if measured and abs(measured) > 0.01:
+            return float(measured)
+        active = sum(1 for v in (va, vb, vc) if v > 0)
+        if active >= 3:
+            val = ia * ia + ib * ib + ic * ic - ia * ib - ib * ic - ia * ic
+            return round(math.sqrt(val) if val > 0 else 0.0, 3)
+        if active == 2:
+            # Determine which two phases are active
+            if va > 0 and vb > 0:
+                return round(abs(ia - ib), 3)
+            if va > 0 and vc > 0:
+                return round(abs(ia - ic), 3)
+            if vb > 0 and vc > 0:
+                return round(abs(ib - ic), 3)
+        return 0.0
+    except Exception:
+        return float(measured or 0.0)
+
+
 # ── Scriptable Widget JS (served via /widget.js) ───────────────────────────
 _SCRIPTABLE_WIDGET_JS = r"""
 // Shelly Energy Analyzer – iOS Scriptable Widget
@@ -7925,7 +7955,7 @@ class _Handler(BaseHTTPRequestHandler):
                         "phases": phases,
                         "q_phases": q_phases,
                         "appliances": appl_objs,
-                        "i_n": float(latest.get("i_n") or 0),
+                        "i_n": _compute_i_n(float(latest.get("i_n") or 0), ia, ib, ic, va, vb, vc),
                         "q_total_var": float(latest.get("q_total_var") or 0),
                         "switch_on": switch_on,
                     })
@@ -7988,7 +8018,7 @@ class _Handler(BaseHTTPRequestHandler):
                             "v": voltage_v,
                             "a": current_a,
                             "phases": phases,
-                            "i_n": float(p.get("i_n") or 0),
+                            "i_n": _compute_i_n(float(p.get("i_n") or 0), ia, ib, ic, va, vb, vc),
                             "q": float(p.get("q_total_var") or 0),
                             "q_phases": h_q_phases,
                         })
