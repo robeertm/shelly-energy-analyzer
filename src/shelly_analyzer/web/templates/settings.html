@@ -482,8 +482,9 @@ function renderAbout() {
 function renderHealth() {
   return `<section id="sec-health"><h2>Health Check</h2>
     <p class="hint">Ping aller Shellys + Firmware-Status</p>
-    <div class="section-actions" style="justify-content:flex-start;margin-top:0;border-top:none;padding-top:0">
+    <div class="section-actions" style="justify-content:flex-start;margin-top:0;border-top:none;padding-top:0;flex-wrap:wrap">
       <button class="secondary" onclick="runHealthCheck()">🩺 Jetzt prüfen</button>
+      <button class="secondary" onclick="updateAllWithPendingFirmware()">⬆ Alle updaten</button>
     </div>
     <div id="health-results" style="margin-top:12px"><p class="hint">Klick "Jetzt prüfen" für aktuellen Status</p></div>
   </section>`;
@@ -613,6 +614,38 @@ async function deleteAlertRow(ruleId) {
   else toast("Fehler: "+j.error, "error");
 }
 
+async function triggerFirmwareUpdate(key, name) {
+  if (!confirm(`Firmware-Update für "${name}" starten?\n\nDas Gerät wird automatisch neu gestartet.`)) return;
+  toast("⏳ Starte Update für " + name + "…");
+  try {
+    const r = await fetch("/api/health/" + encodeURIComponent(key) + "/update", {method:"POST"});
+    const j = await r.json();
+    if (j.ok) {
+      toast("✓ Update gestartet für " + name);
+      setTimeout(runHealthCheck, 30000); // Re-check after 30s
+    } else {
+      toast("Fehler: " + j.error, "error");
+    }
+  } catch(e) { toast("Fehler: " + e.message, "error"); }
+}
+
+async function updateAllWithPendingFirmware() {
+  const el = $("#health-results");
+  const r = await fetch("/api/health");
+  const j = await r.json();
+  if (!j.ok) return;
+  const pending = j.devices.filter(d => d.online && d.firmware_update_available);
+  if (!pending.length) { toast("Keine Updates verfügbar"); return; }
+  if (!confirm(`${pending.length} Gerät(e) haben Updates. Alle jetzt aktualisieren?`)) return;
+  for (const d of pending) {
+    toast("⏳ Update " + d.name + "…");
+    await fetch("/api/health/" + encodeURIComponent(d.key) + "/update", {method:"POST"});
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  toast("✓ " + pending.length + " Update(s) gestartet");
+  setTimeout(runHealthCheck, 30000);
+}
+
 async function runHealthCheck() {
   const el = $("#health-results");
   el.innerHTML = '<p class="hint">⏳ Pinge Geräte…</p>';
@@ -627,12 +660,16 @@ async function runHealthCheck() {
       const lat = d.latency_ms != null ? `${d.latency_ms} ms` : '-';
       const upt = d.uptime_s != null ? Math.floor(d.uptime_s/3600)+' h' : '-';
       const err = d.error ? `<div class="hint" style="color:var(--danger)">${d.error}</div>` : '';
+      const updBtn = (d.online && d.firmware_update_available)
+        ? `<button class="small" style="background:#eab308" onclick="triggerFirmwareUpdate('${d.key}','${d.name.replace(/'/g,"&#39;")}')">⬆ Update starten</button>`
+        : '';
       return `<div class="devcard">
         <div class="info">
           <h4>${d.name} <span class="hint" style="font-weight:400">(${d.host})</span></h4>
           <p>${status} · Latenz: ${lat} · Uptime: ${upt} · FW: ${fw}${upd}</p>
           ${err}
         </div>
+        <div>${updBtn}</div>
       </div>`;
     }).join("");
     el.innerHTML = rows + `<p class="hint" style="margin-top:8px">Aktualisiert: ${new Date(j.ts*1000).toLocaleTimeString()}</p>`;

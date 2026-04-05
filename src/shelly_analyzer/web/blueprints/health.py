@@ -89,6 +89,48 @@ def health_all():
     return jsonify({"ok": True, "devices": results, "ts": int(time.time())})
 
 
+@bp.route("/api/health/<device_key>/update", methods=["POST"])
+def trigger_firmware_update(device_key: str):
+    """Trigger OTA firmware update for a Shelly device."""
+    state = _get_state()
+    d = next((d for d in state.cfg.devices if d.key == device_key), None)
+    if not d:
+        return jsonify({"ok": False, "error": "Device not found"}), 404
+
+    import requests as req
+    try:
+        # Try Gen2+ RPC endpoint first
+        try:
+            r = req.post(
+                f"http://{d.host}/rpc/Shelly.Update",
+                json={"stage": "stable"},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                return jsonify({"ok": True, "gen": 2, "message": "Update gestartet",
+                                "response": r.json() if r.text else {}})
+        except Exception:
+            pass
+
+        # Fallback: Gen2+ GET
+        try:
+            r = req.get(f"http://{d.host}/rpc/Shelly.Update?stage=stable", timeout=10)
+            if r.status_code == 200:
+                return jsonify({"ok": True, "gen": 2, "message": "Update gestartet",
+                                "response": r.json() if r.text else {}})
+        except Exception:
+            pass
+
+        # Fallback: Gen1 OTA endpoint
+        r = req.get(f"http://{d.host}/ota?update=1", timeout=10)
+        if r.status_code == 200:
+            return jsonify({"ok": True, "gen": 1, "message": "Update gestartet",
+                            "response": r.text[:200]})
+        return jsonify({"ok": False, "error": f"HTTP {r.status_code}: {r.text[:200]}"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
 @bp.route("/api/health/<device_key>", methods=["GET"])
 def health_device(device_key: str):
     """Ping a single device."""
