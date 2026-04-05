@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.9 - 2026-04-05
+### Fixed
+- **Live-Tab: Klick auf Hz-Sparkline öffnete I_N-Neutralleiter-Detail-Chart** – der Click-Handler und das Detail-Chart-Rendering hatten `metric='hz'` nicht behandelt; der `else`-Zweig fiel auf "Neutral" zurück und plottete zusätzlich Phasen-Ströme, was "komisch verschoben" aussah. Jetzt: eigener `hz`-Case mit korrektem Titel "Frequency (Hz)", cyan (#06b6d4) Linie, nur eine Serie ohne Phasen.
+
 ## 16.13.8 - 2026-04-05
 ### Added
 - **Live-Tab: Frequenz-Sparkline (Hz) unter Neutralleiterstrom** – neue Mini-Timeseries pro Gerätekarte, zeigt die Netzfrequenz (meist ~50 Hz) in relativer Skalierung, damit Abweichungen (49.9 / 50.1) sichtbar werden. Farbe: cyan (#06b6d4).
