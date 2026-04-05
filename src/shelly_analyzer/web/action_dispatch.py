@@ -3513,8 +3513,113 @@ class ActionDispatcher:
                             y.append(0.0)
                     out_traces.append({"key": tr["key"], "name": tr["name"], "y": y})
 
+                # Total kWh per label bucket (sum across all devices)
+                total_per_label: List[float] = []
+                for i, _ in enumerate(labels):
+                    s_tot = 0.0
+                    for tr in out_traces:
+                        try:
+                            s_tot += float(tr["y"][i])
+                        except Exception:
+                            pass
+                    total_per_label.append(s_tot)
+
+                # CO2 (g) and price (EUR) aggregated per bucket, using db tables
+                def _label_to_ts_range(lab: str, u: str):
+                    """Return (start_ts, end_ts) seconds for a bucket label."""
+                    try:
+                        if u == "hours":
+                            t0 = pd.Timestamp(lab + ":00")
+                            t1 = t0 + pd.Timedelta(hours=1)
+                        elif u == "weeks":
+                            # "YYYY-Wxx" → Monday of ISO week
+                            yr, wk = lab.split("-W")
+                            t0 = pd.Timestamp.fromisocalendar(int(yr), int(wk), 1)
+                            t1 = t0 + pd.Timedelta(days=7)
+                        elif u == "months":
+                            t0 = pd.Timestamp(lab + "-01")
+                            t1 = (t0 + pd.offsets.MonthBegin(1)).normalize() if False else (t0 + pd.DateOffset(months=1))
+                        else:  # days
+                            t0 = pd.Timestamp(lab).normalize()
+                            t1 = t0 + pd.Timedelta(days=1)
+                        return int(t0.timestamp()), int(t1.timestamp())
+                    except Exception:
+                        return None, None
+
+                co2_g: List[Optional[float]] = [None] * len(labels)
+                price_eur: List[Optional[float]] = [None] * len(labels)
+                co2_zone = None
+                price_zone = None
+                try:
+                    co2_cfg = getattr(self.cfg, "co2", None)
+                    if co2_cfg and getattr(co2_cfg, "enabled", False):
+                        co2_zone = str(getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU")
+                except Exception:
+                    co2_zone = None
+                try:
+                    spot_cfg = getattr(self.cfg, "spot_price", None)
+                    if spot_cfg and getattr(spot_cfg, "enabled", False):
+                        price_zone = str(getattr(spot_cfg, "bidding_zone", "DE-LU") or "DE-LU")
+                except Exception:
+                    price_zone = None
+
+                try:
+                    ranges = [_label_to_ts_range(lab, unit) for lab in labels]
+                    valid = [r for r in ranges if r[0] is not None]
+                    if valid and (co2_zone or price_zone):
+                        rng_start = min(r[0] for r in valid)
+                        rng_end = max(r[1] for r in valid)
+                        co2_df = None
+                        price_df = None
+                        try:
+                            if co2_zone:
+                                co2_df = self.storage.db.query_co2_intensity(co2_zone, rng_start, rng_end)
+                        except Exception:
+                            co2_df = None
+                        try:
+                            if price_zone:
+                                price_df = self.storage.db.query_spot_prices(price_zone, rng_start, rng_end)
+                        except Exception:
+                            price_df = None
+
+                        def _avg_in_range(df: "pd.DataFrame", col: str, ts_col: str, a: int, b: int):
+                            if df is None or df.empty:
+                                return None
+                            try:
+                                m = (df[ts_col] >= a) & (df[ts_col] < b)
+                                sub = df.loc[m, col]
+                                if sub.empty:
+                                    return None
+                                v = float(sub.mean())
+                                return v if v == v else None
+                            except Exception:
+                                return None
+
+                        for i, (a, b) in enumerate(ranges):
+                            if a is None:
+                                continue
+                            kwh_i = float(total_per_label[i] or 0.0)
+                            if co2_df is not None:
+                                avg_g = _avg_in_range(co2_df, "intensity_g_per_kwh", "hour_ts", a, b)
+                                if avg_g is not None:
+                                    co2_g[i] = round(avg_g * kwh_i, 1)
+                            if price_df is not None:
+                                avg_eur_mwh = _avg_in_range(price_df, "price_eur_mwh", "slot_ts", a, b)
+                                if avg_eur_mwh is not None:
+                                    # €/MWh × kWh / 1000 = € for the bucket
+                                    price_eur[i] = round(avg_eur_mwh * kwh_i / 1000.0, 2)
+                except Exception:
+                    pass
+
                 title = f"kWh \u2022 {mode}"
-                return {"ok": True, "view": "kwh", "labels": labels, "traces": out_traces, "title": title, "diag": diag}
+                return {
+                    "ok": True, "view": "kwh",
+                    "labels": labels, "traces": out_traces,
+                    "total_kwh": total_per_label,
+                    "co2_g": co2_g, "price_eur": price_eur,
+                    "co2_zone": co2_zone, "price_zone": price_zone,
+                    "unit": unit, "title": title, "diag": diag,
+                }
 
             # timeseries
             metric = str(params.get("metric") or "W").upper().strip()

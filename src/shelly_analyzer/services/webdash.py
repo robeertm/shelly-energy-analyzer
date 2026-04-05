@@ -5913,6 +5913,14 @@ _PLOTS_TEMPLATE = """<!doctype html>
       <div id="plot2_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px;display:none"></div>
       <div id="plot2" class="plot"></div>
     </div>
+    <div class="card" id="card_co2" style="display:none">
+      <div id="plot_co2_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px"></div>
+      <div id="plot_co2" class="plot"></div>
+    </div>
+    <div class="card" id="card_price" style="display:none">
+      <div id="plot_price_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px"></div>
+      <div id="plot_price" class="plot"></div>
+    </div>
   </div>
 
 <!-- JSON payloads are injected as inert text to avoid JS parse errors even if placeholders aren't replaced -->
@@ -6338,18 +6346,84 @@ async function loadData() {
   document.getElementById('meta').textContent = title;
 
   if ((data.view || view) === 'kwh') {
-    const traces = [];
-    (data.traces || []).forEach(tr=>{
-      traces.push({type:'bar', name: tr.name, x: data.labels, y: tr.y});
-    });
-    Plotly.newPlot(
-      'plot1',
-      traces,
-      plotlyBaseLayout({margin:{l:55,r:20,t:30,b:90}, barmode:'group', xaxis:{tickangle:45}, yaxis:{title:'kWh'}}),
-      {responsive:true, displaylogo:false}
-    );
-    document.getElementById('card2').style.display = 'none';
+    const xsLab = data.labels || [];
+    const kwhTraces = data.traces || [];
+    // Nicer x-axis: no fixed 45°, let Plotly auto-rotate + reserve bottom margin
+    const kwhLayout = (yTitle, extra) => plotlyBaseLayout(Object.assign({
+      margin:{l:60,r:20,t:30,b:70},
+      xaxis:{ automargin:true, tickangle:'auto', nticks: Math.min(12, xsLab.length) },
+      yaxis:{title: yTitle, automargin:true}
+    }, extra || {}));
+
+    function drawKwhForDevice(divId, titleDivId, tr) {
+      try {
+        const te = document.getElementById(titleDivId);
+        if (te) { te.textContent = (tr && tr.name) ? tr.name + ' – kWh' : 'kWh'; te.style.display = 'block'; }
+      } catch(e) {}
+      Plotly.newPlot(
+        divId,
+        [{type:'bar', name: tr.name, x: xsLab, y: tr.y}],
+        kwhLayout('kWh'),
+        {responsive:true, displaylogo:false}
+      );
+    }
+
+    // Plot 1: first device
+    if (kwhTraces.length >= 1) {
+      drawKwhForDevice('plot1', 'plot1_title', kwhTraces[0]);
+    } else {
+      Plotly.newPlot('plot1', [], kwhLayout('kWh'), {responsive:true, displaylogo:false});
+    }
+
+    // Plot 2: second device (own card, separate, not grouped)
+    if (kwhTraces.length >= 2) {
+      document.getElementById('card2').style.display = '';
+      drawKwhForDevice('plot2', 'plot2_title', kwhTraces[1]);
+    } else {
+      document.getElementById('card2').style.display = 'none';
+    }
+
+    // CO2 bar chart (grams per bucket, aggregated across devices)
+    const co2Arr = (data.co2_g || []).map(v => (v==null ? 0 : v));
+    const hasCo2 = (data.co2_g || []).some(v => v != null);
+    const cardCo2 = document.getElementById('card_co2');
+    if (hasCo2) {
+      cardCo2.style.display = '';
+      const te = document.getElementById('plot_co2_title');
+      te.textContent = 'CO₂' + (data.co2_zone ? ' (' + data.co2_zone + ')' : '') + ' – g pro Bucket';
+      Plotly.newPlot(
+        'plot_co2',
+        [{type:'bar', name:'CO₂', x: xsLab, y: co2Arr, marker:{color:'#6b7280'}}],
+        kwhLayout('g CO₂'),
+        {responsive:true, displaylogo:false}
+      );
+    } else {
+      cardCo2.style.display = 'none';
+    }
+
+    // Price bar chart (EUR per bucket, aggregated across devices)
+    const priceArr = (data.price_eur || []).map(v => (v==null ? 0 : v));
+    const hasPrice = (data.price_eur || []).some(v => v != null);
+    const cardPrice = document.getElementById('card_price');
+    if (hasPrice) {
+      cardPrice.style.display = '';
+      const te = document.getElementById('plot_price_title');
+      te.textContent = 'Dynamischer Strompreis' + (data.price_zone ? ' (' + data.price_zone + ')' : '') + ' – € pro Bucket';
+      Plotly.newPlot(
+        'plot_price',
+        [{type:'bar', name:'€', x: xsLab, y: priceArr, marker:{color:'#22c55e'}}],
+        kwhLayout('EUR'),
+        {responsive:true, displaylogo:false}
+      );
+    } else {
+      cardPrice.style.display = 'none';
+    }
+
     return;
+  } else {
+    // Hide kWh-only cards when not in kwh view
+    var _cCo2 = document.getElementById('card_co2'); if (_cCo2) _cCo2.style.display = 'none';
+    var _cPr  = document.getElementById('card_price'); if (_cPr) _cPr.style.display = 'none';
   }
 
   const devs = data.devices || [];
