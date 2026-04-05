@@ -66,20 +66,23 @@ def add_device():
     model = str(body.get("model", "") or "")
     phases = int(body.get("phases", 3) or 3)
 
+    supports_emdata = True
     if not key:
-        # Try to auto-detect
+        # Try to auto-detect – probe_device returns a DiscoveredDevice dataclass
+        # and raises ValueError when the host is not a Shelly.
         try:
             from shelly_analyzer.services.discovery import probe_device
             result = probe_device(host)
-            if result:
-                key = result.get("key") or host.replace(".", "_")
-                name = name or result.get("name") or key
-                kind = result.get("kind") or kind
-                gen = result.get("gen") or gen
-                model = result.get("model") or model
-                phases = result.get("phases") or phases
-            else:
-                key = host.replace(".", "_")
+            key = host.replace(".", "_")
+            name = name or (result.model or key)
+            kind = result.kind or kind
+            gen = int(result.gen or gen or 0)
+            model = result.model or model
+            phases = int(result.phases or phases or 3)
+            em_id = int(result.component_id or em_id or 0)
+            supports_emdata = bool(result.supports_emdata)
+        except ValueError:
+            key = host.replace(".", "_")
         except Exception:
             key = host.replace(".", "_")
 
@@ -93,6 +96,7 @@ def add_device():
     new_device = DeviceConfig(
         key=key, name=name, host=host, em_id=em_id,
         kind=kind, gen=gen, model=model, phases=phases,
+        supports_emdata=supports_emdata,
     )
 
     # Add to config and save
@@ -232,11 +236,20 @@ def probe_device_endpoint():
             return jsonify({"ok": False, "error": "host is required"}), 400
 
         from shelly_analyzer.services.discovery import probe_device
-        result = probe_device(host)
-        if result:
-            return jsonify({"ok": True, "device": result})
-        else:
-            return jsonify({"ok": False, "error": f"No Shelly device found at {host}"})
+        try:
+            result = probe_device(host)
+        except ValueError as ve:
+            return jsonify({"ok": False, "error": f"No Shelly at {host}: {ve}"})
+        # DiscoveredDevice is a dataclass → expose as dict for the JSON response
+        return jsonify({"ok": True, "device": {
+            "host": result.host,
+            "gen": int(result.gen),
+            "model": result.model,
+            "kind": result.kind,
+            "component_id": int(result.component_id),
+            "phases": int(result.phases),
+            "supports_emdata": bool(result.supports_emdata),
+        }})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 
