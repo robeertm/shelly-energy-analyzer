@@ -1737,20 +1737,20 @@ _HTML_TEMPLATE = """<!doctype html>
     <div id="pane-sync" class="pane">
       <div class="card" style="margin-bottom:8px">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-          <button class="btn" onclick="syncAll('incremental')">🔄 Inkrement-Sync</button>
-          <button class="btn" onclick="syncAll('all')">📥 Vollständiger Sync</button>
-          <button class="btn" onclick="syncAll('day')">Heute</button>
-          <button class="btn" onclick="syncAll('week')">Woche</button>
-          <button class="btn" onclick="syncAll('month')">Monat</button>
+          <button class="btn" onclick="syncAll('incremental')">{sync_btn_incremental}</button>
+          <button class="btn" onclick="syncAll('all')">{sync_btn_full}</button>
+          <button class="btn" onclick="syncAll('day')">{sync_btn_day}</button>
+          <button class="btn" onclick="syncAll('week')">{sync_btn_week}</button>
+          <button class="btn" onclick="syncAll('month')">{sync_btn_month}</button>
           <span style="flex:1"></span>
-          <button class="btn" onclick="refreshSyncStatus()">⟳ Status</button>
-          <label style="display:flex;align-items:center;gap:4px;font-size:11px"><input type="checkbox" id="log-autoscroll" checked> Auto-Scroll</label>
-          <label style="display:flex;align-items:center;gap:4px;font-size:11px"><input type="checkbox" id="log-include-http" onchange="toggleLogHttp(this.checked)"> HTTP-Logs</label>
+          <button class="btn" onclick="refreshSyncStatus()">{sync_btn_status}</button>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px"><input type="checkbox" id="log-autoscroll" checked> {sync_opt_autoscroll}</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px"><input type="checkbox" id="log-include-http" onchange="toggleLogHttp(this.checked)"> {sync_opt_http_logs}</label>
         </div>
-        <div id="sync-status-panel" style="font-size:12px;color:var(--muted);margin-bottom:6px">Lade Status…</div>
+        <div id="sync-status-panel" style="font-size:12px;color:var(--muted);margin-bottom:6px">{sync_status_loading}</div>
       </div>
       <div class="card">
-        <div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Log</div>
+        <div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;margin-bottom:6px">{sync_log}</div>
         <div id="sync-log" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;background:var(--bg);border-radius:6px;padding:8px;height:60vh;overflow-y:auto;white-space:pre-wrap;line-height:1.4"></div>
       </div>
     </div>
@@ -1950,7 +1950,13 @@ const WINDOW_MIN = {window_min};
 const WINDOW_OPTIONS = {window_options_json};
 const DEVICES = {devices_json};
 const I18N = {i18n_json};
-function t(k, fb) {{ return (I18N && I18N[k]) ? I18N[k] : (fb || k); }}
+function t(k, fbOrVars, maybeVars) {{
+  let fb = (typeof fbOrVars === 'string') ? fbOrVars : undefined;
+  let vars = (typeof fbOrVars === 'object') ? fbOrVars : maybeVars;
+  let s = (I18N && I18N[k]) ? I18N[k] : (fb || k);
+  if (vars) Object.keys(vars).forEach(function(kk){{ s = s.split('{{'+kk+'}}').join(String(vars[kk])); }});
+  return s;
+}}
 
 /* ── State ── */
 let frozen = false;
@@ -2085,14 +2091,16 @@ function pollSyncLogs() {{
 }}
 function syncAll(mode) {{
   const el = document.getElementById('sync-status-panel');
-  if (el) el.textContent = 'Starte Sync (' + mode + ') …';
+  if (el) el.textContent = t('web.sync.status.starting', {{mode: mode}});
   fetch('/api/sync', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{mode:mode}})}})
     .then(function(r) {{ return r.json(); }})
     .then(function(d) {{
-      if (el) el.textContent = d.ok ? ('Sync läuft (mode=' + mode + ', job=' + (d.job_id||'?') + ') – Logs siehe unten') : ('Fehler: ' + (d.error||'?'));
+      if (el) el.textContent = d.ok
+        ? t('web.sync.status.running', {{mode: mode, job: (d.job_id||'?')}})
+        : t('web.sync.status.error', {{err: (d.error||'?')}});
       // Refresh device status after 3s so the sync thread has time to write last_end_ts
       setTimeout(refreshSyncStatus, 3000);
-    }}).catch(function(e) {{ if (el) el.textContent = 'Netzwerkfehler: ' + e; }});
+    }}).catch(function(e) {{ if (el) el.textContent = t('web.sync.status.net_error', {{err: e}}); }});
 }}
 /* ──────────────────────────────────────────────
    TENANTS (Mieter / Nebenkostenabrechnung)
@@ -5991,7 +5999,13 @@ function renderDevicesFromBoot(){
     host.appendChild(lab);
   });
 }
-function t(k){ return (I18N && I18N[k]) ? I18N[k] : k; }
+function t(k, vars){
+  let s = (I18N && I18N[k]) ? I18N[k] : k;
+  if (vars) {
+    Object.keys(vars).forEach(function(kk){ s = s.split('{'+kk+'}').join(String(vars[kk])); });
+  }
+  return s;
+}
 
 // Theme (shared with Live/Control)
 try {
@@ -6474,9 +6488,11 @@ async function loadData() {
       const plotId = 'plot_co2_' + idx;
       if (!devData || !(devData.g||[]).some(v => v != null)) { cardEl.style.display = 'none'; return; }
       cardEl.style.display = '';
-      titleEl.textContent = 'CO₂ · ' + (devData.name || devData.key || '') +
-        (data.co2_zone ? ' (' + data.co2_zone + ')' : '') +
-        ' – g pro Bucket · Ampel: grün <' + gThr + ' / rot ≥' + dThr + ' g/kWh';
+      titleEl.textContent = t('web.plots.co2.title', {
+        name: (devData.name || devData.key || ''),
+        zone: (data.co2_zone ? ' (' + data.co2_zone + ')' : ''),
+        green: gThr, dirty: dThr
+      });
       const yArr = (devData.g || []).map(v => (v==null ? 0 : v));
       const colors = co2Int.map(v => tlColor(v, gThr, dThr));
       const custom = co2Int.map((v,i) => [v==null?'—':v, yArr[i]]);
@@ -6499,8 +6515,11 @@ async function loadData() {
     const rThrP = (p66 != null) ? p66 : 25;
     const priceDevs = data.price_per_device || [];
     const surchInfo = data.price_surcharges_included
-      ? ' · inkl. ' + (data.price_surcharge_ct || 0) + ' ct/kWh Zusatzkosten' + (data.price_vat_pct ? ' + ' + data.price_vat_pct + '% MwSt' : '')
-      : ' · reiner Spotpreis (ohne Zusatzkosten)';
+      ? t('web.plots.price.surcharges.on', {
+          ct: (data.price_surcharge_ct || 0),
+          vat: (data.price_vat_pct ? t('web.plots.price.surcharges.vat', {pct: data.price_vat_pct}) : '')
+        })
+      : t('web.plots.price.surcharges.off');
     const fixedCt = data.price_fixed_ct_kwh;
     function renderPriceCard(idx, devData) {
       const cardEl = document.getElementById('card_price_' + idx);
@@ -6508,23 +6527,27 @@ async function loadData() {
       const plotId = 'plot_price_' + idx;
       if (!devData || !(devData.eur||[]).some(v => v != null)) { cardEl.style.display = 'none'; return; }
       cardEl.style.display = '';
-      const fixInfo = (fixedCt != null) ? ' · Fixpreis ' + fixedCt.toFixed(2) + ' ct/kWh (grau)' : '';
-      titleEl.textContent = 'Strompreis · ' + (devData.name || devData.key || '') +
-        (data.price_zone ? ' (' + data.price_zone + ')' : '') +
-        ' – € pro Bucket · Ampel: grün <' + gThrP.toFixed(1) + ' / rot ≥' + rThrP.toFixed(1) + ' ct/kWh' + surchInfo + fixInfo;
+      const fixInfo = (fixedCt != null) ? t('web.plots.price.fixed.info', {ct: fixedCt.toFixed(2)}) : '';
+      titleEl.textContent = t('web.plots.price.title', {
+        name: (devData.name || devData.key || ''),
+        zone: (data.price_zone ? ' (' + data.price_zone + ')' : ''),
+        green: gThrP.toFixed(1), red: rThrP.toFixed(1)
+      }) + surchInfo + fixInfo;
       const yArr = (devData.eur || []).map(v => (v==null ? 0 : v));
       const colorsP = priceCt.map(v => tlColor(v, gThrP, rThrP));
       const custom = priceCt.map((v,i) => [v==null?'—':v, yArr[i]]);
+      const dynName = t('web.plots.trace.dynamic');
+      const fixName = t('web.plots.trace.fixed');
       const traces = [
-        {type:'bar', name:'Dynamisch', x: xsLab, y: yArr, marker:{color:colorsP},
+        {type:'bar', name: dynName, x: xsLab, y: yArr, marker:{color:colorsP},
           customdata: custom,
-          hovertemplate:'%{x}<br>%{customdata[0]} ct/kWh · Σ %{customdata[1]} €<extra>Dynamisch</extra>'}
+          hovertemplate:'%{x}<br>%{customdata[0]} ct/kWh · Σ %{customdata[1]} €<extra>' + dynName + '</extra>'}
       ];
       const fxArr = (devData.eur_fixed || []).map(v => (v==null ? 0 : v));
       const hasFixed = (devData.eur_fixed || []).some(v => v != null && v > 0);
       if (hasFixed) {
-        traces.push({type:'bar', name:'Fixpreis', x: xsLab, y: fxArr, marker:{color:'#9ca3af'},
-          hovertemplate:'%{x}<br>' + (fixedCt != null ? fixedCt.toFixed(2) : '?') + ' ct/kWh · Σ %{y} €<extra>Fixpreis</extra>'});
+        traces.push({type:'bar', name: fixName, x: xsLab, y: fxArr, marker:{color:'#9ca3af'},
+          hovertemplate:'%{x}<br>' + (fixedCt != null ? fixedCt.toFixed(2) : '?') + ' ct/kWh · Σ %{y} €<extra>' + fixName + '</extra>'});
       }
       Plotly.newPlot(
         plotId,
@@ -6599,7 +6622,7 @@ async function loadData() {
         const p = dev.phases[k];
         if (!p) return;
         const isN = (String(k).toUpperCase() === 'N');
-        const label = isN ? (t('web.plots.phase.n') || 'I_N (Neutralleiter)') : k;
+        const label = isN ? t('web.plots.phase.n') : k;
         const tr = {
           type:'scatter', mode:'lines',
           name: label,
