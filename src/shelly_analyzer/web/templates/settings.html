@@ -55,6 +55,15 @@ button.small{padding:4px 8px;font-size:.78rem}
 .section-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;
 padding-top:12px;border-top:1px solid var(--border)}
 .hint{font-size:.75rem;color:var(--muted);margin-top:2px}
+.list-field{display:flex;flex-direction:column;gap:8px;min-height:0!important}
+.list-container{display:flex;flex-direction:column;gap:8px}
+.list-item{background:var(--card-inset);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.list-item-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px}
+.list-item-title{font-size:.85rem;font-weight:600;color:var(--fg)}
+.list-item-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
+.list-item-grid .field{min-height:0;margin:0}
+.list-item-grid .field label{font-size:.72rem}
+@media(max-width:760px){.list-item-grid{grid-template-columns:1fr}}
 .devcard{background:var(--card-inset);border:1px solid var(--border);border-radius:8px;
 padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px}
 .devcard .info{flex:1}
@@ -138,19 +147,41 @@ function setPath(obj, path, val) {
   o[last] = val;
 }
 
+function gatherListField(container) {
+  const items = [];
+  $$('.list-item', container).forEach(itemEl => {
+    const obj = {};
+    $$('[data-k]', itemEl).forEach(inp => {
+      const k = inp.dataset.k;
+      let v;
+      if (inp.type === "checkbox") v = inp.checked;
+      else if (inp.type === "number") v = inp.value === "" ? 0 : Number(inp.value);
+      else if (inp.dataset.csv === "1") {
+        v = String(inp.value||"").split(",").map(s=>s.trim()).filter(Boolean);
+      }
+      else v = inp.value;
+      obj[k] = v;
+    });
+    items.push(obj);
+  });
+  return items;
+}
 function gatherSection(sectionId) {
   const sec = $("#sec-"+sectionId);
   if (!sec) return {};
   const data = {};
+  // First: collect list fields (they wrap multiple inputs)
+  $$('.list-field[data-list="1"]', sec).forEach(fld => {
+    const key = fld.dataset.key;
+    setPath(data, key, gatherListField(fld));
+  });
+  // Then: simple fields with data-key (skip those inside lists)
   $$('[data-key]',sec).forEach(inp=>{
+    if (inp.closest('.list-field[data-list="1"]')) return;
     const key = inp.dataset.key;
     let val;
     if (inp.type === "checkbox") val = inp.checked;
     else if (inp.type === "number") val = inp.value === "" ? 0 : Number(inp.value);
-    else if (inp.dataset.type === "json") {
-      try { val = JSON.parse(inp.value || "[]"); }
-      catch(e) { throw new Error("JSON in '"+key+"': "+e.message); }
-    }
     else val = inp.value;
     setPath(data, key, val);
   });
@@ -178,7 +209,7 @@ async function saveSection(sectionId) {
         if (secEl && s && !s.custom) {
           const fieldsHtml = (s.fields||[]).map(renderField).join("");
           const grid = secEl.querySelector(".grid2");
-          if (grid) grid.innerHTML = fieldsHtml;
+          if (grid) { grid.innerHTML = fieldsHtml; wireListEvents(grid); }
         }
       } catch(e) {}
     }
@@ -227,7 +258,13 @@ const SECTIONS = [
   ]},
   {id:"tou", title:"TOU (Zeittarife)", group:"Grundeinstellungen", fields:[
     {key:"tou.enabled", label:"TOU-Tarif aktiv", type:"checkbox"},
-    {key:"tou.periods", label:"Zeitperioden (JSON)", type:"json", hint:'Liste von Perioden: [{"name":"Peak","start":"18:00","end":"22:00","rate_eur_per_kwh":0.42,"weekdays":[1,2,3,4,5]}, ...]'},
+    {key:"tou.rates", label:"Zeitperioden", type:"list", itemLabel:"Tarif", schema:[
+      {key:"name", label:"Name", type:"text", placeholder:"HT / NT"},
+      {key:"price_eur_per_kwh", label:"Preis €/kWh", type:"number", step:"0.0001"},
+      {key:"start_hour", label:"Start (Std)", type:"number", min:0, max:23},
+      {key:"end_hour", label:"Ende (Std)", type:"number", min:0, max:23},
+      {key:"weekdays_only", label:"Nur Werktags", type:"checkbox"},
+    ], defaults:{name:"HT",price_eur_per_kwh:0.30,start_hour:6,end_hour:22,weekdays_only:false}},
   ]},
   {id:"autosync", title:"Auto-Sync", group:"Grundeinstellungen", fields:[
     {key:"ui.autosync_enabled", label:"Auto-Sync aktiv", type:"checkbox"},
@@ -352,7 +389,13 @@ const SECTIONS = [
     {key:"pv_surplus.on_threshold_w", label:"Ein-Schwelle (W)", type:"number"},
     {key:"pv_surplus.off_threshold_w", label:"Aus-Schwelle (W)", type:"number"},
     {key:"pv_surplus.debounce_seconds", label:"Debounce (Sek)", type:"number"},
-    {key:"pv_surplus.consumers", label:"Verbraucher (JSON)", type:"json", hint:'Liste: [{"device_key":"shelly1","min_power_w":1000,"priority":1}, ...]'},
+    {key:"pv_surplus.consumers", label:"Verbraucher", type:"list", itemLabel:"Verbraucher", schema:[
+      {key:"name", label:"Name", type:"text", placeholder:"Warmwasser / Pool"},
+      {key:"device_key", label:"Gerät", type:"select-device"},
+      {key:"switch_id", label:"Switch-ID", type:"number", min:0},
+      {key:"priority", label:"Priorität", type:"number", min:1, hint:"1 = höchste"},
+      {key:"min_power_w", label:"Min. Leistung (W)", type:"number"},
+    ], defaults:{name:"",device_key:"",switch_id:0,priority:1,min_power_w:500}},
   ]},
   {id:"spot_price", title:"Spot-Preise", group:"Energie", fields:[
     {key:"spot_price.enabled", label:"Spot-Preise aktiv", type:"checkbox"},
@@ -408,7 +451,18 @@ const SECTIONS = [
   ]},
   {id:"tariff_compare", title:"Tarifvergleich", group:"Features", fields:[
     {key:"tariff_compare.enabled", label:"Tarifvergleich aktiv", type:"checkbox"},
-    {key:"tariff_compare.custom_tariffs", label:"Custom Tarife (JSON)", type:"json", hint:'Liste: [{"name":"Tibber","provider":"Tibber","tariff_type":"dynamic","price_eur_per_kwh":0.28,"base_fee_eur_per_month":5.99}, ...]'},
+    {key:"tariff_compare.custom_tariffs", label:"Custom Tarife", type:"list", itemLabel:"Tarif", schema:[
+      {key:"name", label:"Name", type:"text"},
+      {key:"provider", label:"Anbieter", type:"text"},
+      {key:"tariff_type", label:"Typ", type:"select", opts:[["fixed","Fix"],["tou","TOU"],["spot","Spot"]]},
+      {key:"price_eur_per_kwh", label:"Preis €/kWh", type:"number", step:"0.0001"},
+      {key:"base_fee_eur_per_year", label:"Grundgebühr €/Jahr", type:"number", step:"0.01"},
+      {key:"ht_price", label:"HT-Preis (TOU)", type:"number", step:"0.0001"},
+      {key:"nt_price", label:"NT-Preis (TOU)", type:"number", step:"0.0001"},
+      {key:"ht_start", label:"HT-Start (Std)", type:"number", min:0, max:23},
+      {key:"ht_end", label:"HT-Ende (Std)", type:"number", min:0, max:23},
+      {key:"spot_markup_ct", label:"Spot-Aufschlag (ct)", type:"number", step:"0.01"},
+    ], defaults:{name:"",provider:"",tariff_type:"fixed",price_eur_per_kwh:0.30,base_fee_eur_per_year:100,ht_price:0.35,nt_price:0.22,ht_start:6,ht_end:22,spot_markup_ct:15}},
   ]},
   {id:"advisor", title:"KI-Berater", group:"Features", fields:[
     {key:"advisor.enabled", label:"KI-Berater aktiv", type:"checkbox"},
@@ -444,7 +498,15 @@ const SECTIONS = [
   {id:"tenant", title:"Mieter", group:"Erweitert", fields:[
     {key:"tenant.enabled", label:"Mieter-Abrechnung aktiv", type:"checkbox"},
     {key:"tenant.billing_period_months", label:"Abrechnungszeitraum (Monate)", type:"number"},
-    {key:"tenant.tenants", label:"Mieter-Liste (JSON)", type:"json", hint:'Liste: [{"id":"t1","name":"Müller","device_keys":["shelly1"],"base_fee_share":0.25,"address":"Musterstr. 1\\n12345 Berlin"}, ...]'},
+    {key:"tenant.tenants", label:"Mieter-Liste", type:"list", itemLabel:"Mieter", schema:[
+      {key:"tenant_id", label:"Mieter-ID", type:"text", placeholder:"t1"},
+      {key:"name", label:"Name", type:"text"},
+      {key:"unit", label:"Wohnung/Einheit", type:"text"},
+      {key:"persons", label:"Personen", type:"number", min:1},
+      {key:"move_in", label:"Einzug (YYYY-MM-DD)", type:"text", placeholder:"2024-01-01"},
+      {key:"move_out", label:"Auszug (YYYY-MM-DD)", type:"text", placeholder:"leer = aktuell"},
+      {key:"device_keys", label:"Geräte (Komma-getrennt)", type:"csv-list"},
+    ], defaults:{tenant_id:"",name:"",unit:"",persons:1,move_in:"",move_out:"",device_keys:[]}},
   ]},
   {id:"multi_location", title:"Multi-Location", group:"Erweitert", fields:[
     {key:"multi_location.enabled", label:"Multi-Location aktiv", type:"checkbox"},
@@ -468,6 +530,55 @@ const SECTIONS = [
   {id:"about", title:"Über", group:"Erweitert", custom:true},
 ];
 
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function renderListField(f, val) {
+  const items = Array.isArray(val) ? val : [];
+  const listId = "list-" + f.key.replace(/\./g,"_");
+  function renderSubInput(sf, itemVal) {
+    const v = itemVal == null ? "" : itemVal;
+    if (sf.type === "checkbox") {
+      return `<label class="field row" style="min-height:38px;padding:6px 10px"><span>${esc(sf.label)}</span><input type="checkbox" data-k="${sf.key}" ${v?"checked":""}></label>`;
+    }
+    if (sf.type === "select") {
+      const options = (sf.opts||[]).map(([k,lbl])=>`<option value="${esc(k)}" ${String(k)===String(v)?"selected":""}>${esc(lbl)}</option>`).join("");
+      return `<div class="field"><label>${esc(sf.label)}</label><select data-k="${sf.key}">${options}</select></div>`;
+    }
+    if (sf.type === "select-device") {
+      const opts = [["","(keine)"]].concat(devices.map(d=>[d.key, d.name+" ("+d.key+")"]));
+      const options = opts.map(([k,lbl])=>`<option value="${esc(k)}" ${String(k)===String(v)?"selected":""}>${esc(lbl)}</option>`).join("");
+      return `<div class="field"><label>${esc(sf.label)}</label><select data-k="${sf.key}">${options}</select></div>`;
+    }
+    if (sf.type === "csv-list") {
+      const s = Array.isArray(v) ? v.join(", ") : String(v||"");
+      return `<div class="field"><label>${esc(sf.label)}</label><input type="text" data-k="${sf.key}" data-csv="1" value="${esc(s)}"></div>`;
+    }
+    const step = sf.step ? `step="${sf.step}"` : "";
+    const minA = sf.min!=null ? `min="${sf.min}"` : "";
+    const maxA = sf.max!=null ? `max="${sf.max}"` : "";
+    const ph = sf.placeholder ? `placeholder="${esc(sf.placeholder)}"` : "";
+    const tp = sf.type === "number" ? "number" : "text";
+    return `<div class="field"><label>${esc(sf.label)}</label><input type="${tp}" ${step} ${minA} ${maxA} ${ph} data-k="${sf.key}" value="${esc(v)}"></div>`;
+  }
+  function renderItem(item, idx) {
+    const title = (item && (item.name || item.tenant_id || item.tenant_id)) || (f.itemLabel||"Eintrag") + " " + (idx+1);
+    const rows = f.schema.map(sf => renderSubInput(sf, item ? item[sf.key] : undefined)).join("");
+    return `<div class="list-item" data-idx="${idx}">
+      <div class="list-item-hdr">
+        <span class="list-item-title">${esc(title)}</span>
+        <button type="button" class="small danger list-item-del" title="Entfernen">✕</button>
+      </div>
+      <div class="list-item-grid">${rows}</div>
+    </div>`;
+  }
+  const itemsHtml = items.map(renderItem).join("") || `<p class="hint" style="margin:6px 0">Keine Einträge – ➕ Hinzufügen drücken.</p>`;
+  return `<div class="field list-field" style="grid-column:1/-1" data-key="${f.key}" data-list="1">
+    <label>${esc(tField(f))}</label>
+    <div id="${listId}" class="list-container">${itemsHtml}</div>
+    <div><button type="button" class="secondary small list-add">➕ Hinzufügen</button></div>
+    ${f.hint ? `<div class="hint">${esc(f.hint)}</div>`:""}
+    <template class="list-schema">${encodeURIComponent(JSON.stringify({schema:f.schema, defaults:f.defaults||{}, itemLabel:f.itemLabel||"Eintrag"}))}</template>
+  </div>`;
+}
 function tField(f) { return T("settings.field."+f.key, f.label); }
 function renderField(f) {
   const val = get(cfg, f.key, "");
@@ -486,9 +597,8 @@ function renderField(f) {
     input = `<select data-key="${f.key}">${options}</select>`;
   } else if (f.type === "textarea") {
     input = `<textarea data-key="${f.key}">${(val===null||val===undefined)?"":String(val)}</textarea>`;
-  } else if (f.type === "json") {
-    const jsonStr = (val==null) ? "[]" : (typeof val === "string" ? val : JSON.stringify(val, null, 2));
-    input = `<textarea data-key="${f.key}" data-type="json" style="min-height:120px;font-family:ui-monospace,monospace;font-size:.78rem">${jsonStr.replace(/</g,"&lt;")}</textarea>`;
+  } else if (f.type === "list") {
+    return renderListField(f, val);
   } else {
     const step = f.step ? `step="${f.step}"` : "";
     const tp = f.type === "password" ? "password" : f.type === "number" ? "number" : (f.type === "email"?"email":(f.type==="url"?"url":"text"));
@@ -762,9 +872,43 @@ function renderNav() {
   $("#nav").innerHTML = html;
 }
 
+function wireListEvents(root) {
+  (root || document).querySelectorAll('.list-field[data-list="1"]').forEach(fld => {
+    if (fld.dataset.wired) return;
+    fld.dataset.wired = "1";
+    const schemaTpl = fld.querySelector('.list-schema');
+    let meta = {schema:[], defaults:{}, itemLabel:"Eintrag"};
+    try { meta = JSON.parse(decodeURIComponent(schemaTpl.innerHTML)); } catch(e){}
+    fld.addEventListener('click', ev => {
+      const del = ev.target.closest('.list-item-del');
+      if (del) {
+        ev.preventDefault();
+        del.closest('.list-item').remove();
+        return;
+      }
+      const add = ev.target.closest('.list-add');
+      if (add) {
+        ev.preventDefault();
+        const container = fld.querySelector('.list-container');
+        const emptyHint = container.querySelector('.hint'); if (emptyHint) emptyHint.remove();
+        const idx = container.querySelectorAll('.list-item').length;
+        // Render a new item by calling renderListField with a single-item array, then extract
+        const fakeVal = [Object.assign({}, meta.defaults)];
+        const tmp = document.createElement('div');
+        tmp.innerHTML = renderListField({key:"_tmp",label:"",itemLabel:meta.itemLabel,schema:meta.schema,defaults:meta.defaults}, fakeVal);
+        const newItem = tmp.querySelector('.list-item');
+        if (newItem) {
+          newItem.dataset.idx = idx;
+          container.appendChild(newItem);
+        }
+      }
+    });
+  });
+}
 function renderAll() {
   $("#main").innerHTML = SECTIONS.map(renderSection).join("");
   renderNav();
+  wireListEvents($("#main"));
   // Fetch real app version
   fetch("/api/version").then(r=>r.json()).then(v=>{
     const el = $("#about-version");

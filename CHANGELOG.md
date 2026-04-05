@@ -1,5 +1,12 @@
 # Changelog
 
+## 16.13.18 - 2026-04-05
+### Changed
+- **Settings: list editors replace JSON textareas** – TOU periods, PV-Surplus consumers, Tariff Compare entries and Tenants are now edited via proper per-item cards with labelled input fields, add/delete buttons and a device dropdown where applicable. No JSON knowledge required.
+  - Each list item is a card with an auto-laying-out grid of real inputs (text, number, select, checkbox, select-device, comma-separated list).
+  - **➕ Hinzufügen** button appends a new item pre-filled with sensible defaults; **✕** removes an item; changes are saved with the rest of the section.
+  - Works responsively: the item grid collapses to one column on mobile.
+
 ## 16.13.17 - 2026-04-05
 ### Changed
 - **Settings: all config now editable via UI; no more references to config.json**:
