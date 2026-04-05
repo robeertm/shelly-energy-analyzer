@@ -1049,17 +1049,21 @@ class ActionDispatcher:
 
         elif metric_u in {"HZ", "FREQ", "FREQUENCY"}:
             ylab = "Hz"
-            fq_col = first_col(["freq_hz", "frequency", "freq", "hz"])
+            fq_col = first_col(["freq_hz", "avg_freq_hz", "frequency", "freq", "hz"])
             if fq_col:
                 y = pd.to_numeric(df[fq_col], errors="coerce")
                 mapping_text = f"Hz: {fq_col}"
             else:
-                y = pd.Series(dtype=float)
+                y = pd.Series([float("nan")] * len(df), index=df.index)
                 mapping_text = "Hz(no cols)"
 
         else:
             y = pd.Series([0.0] * len(df), index=df.index)
 
+        # Ensure y length matches index ts (defensive – early returns may leave
+        # y empty while ts has df-length)
+        if len(y) != len(ts):
+            y = pd.Series([float("nan")] * len(ts), index=range(len(ts)))
         out = pd.Series(y.to_numpy(), index=ts, name=metric_u)
         try:
             out.index = pd.to_datetime(out.index, errors='coerce')
