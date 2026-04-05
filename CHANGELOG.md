@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.6.1 - 2026-04-05
+### Added
+- **Version badge on every page** – small `v<X.Y.Z>` badge fixed at bottom-right of Dashboard, Plots, Control and Settings pages so the running version is always visible.
+
 ## 16.6.0 - 2026-04-05
 ### Added
 - **NILM (appliance detection) wired into web app** – `TransitionLearner` instantiated per 3-phase EM device on startup, fed from the live sample loop, re-clusters every 5 min. Persisted clusters seeded immediately so the live-view NILM badge no longer stays stuck on "waiting for data". Persisted to `data/runtime/nilm/<device>.json`.
