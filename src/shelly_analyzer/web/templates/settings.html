@@ -1,643 +1,565 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Settings – Shelly Energy Analyzer</title>
-  <style>
-    :root{--bg:#0b0f14;--card:#121821;--fg:#e8eef6;--muted:#9fb0c3;--accent:#6aa7ff;
-      --border:rgba(255,255,255,0.08);--danger:#ef4444;--ok:#22c55e;--warn:#eab308}
-    *,*::before,*::after{box-sizing:border-box}
-    body{margin:0;font-family:-apple-system,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-      background:var(--bg);color:var(--fg);line-height:1.5}
-    a{color:var(--accent);text-decoration:none}
-    /* header */
-    .hdr{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--card);
-      border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50}
-    .hdr h1{font-size:1.1rem;margin:0;flex:1}
-    .hdr a{font-size:.85rem}
-    /* tabs */
-    .tabs{display:flex;overflow-x:auto;background:var(--card);border-bottom:1px solid var(--border);
-      scrollbar-width:none;-webkit-overflow-scrolling:touch;position:sticky;top:49px;z-index:40}
-    .tabs::-webkit-scrollbar{display:none}
-    .tab{padding:10px 16px;cursor:pointer;white-space:nowrap;font-size:.85rem;color:var(--muted);
-      border-bottom:2px solid transparent;transition:color .2s,border-color .2s;flex-shrink:0}
-    .tab:hover{color:var(--fg)}
-    .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
-    /* panels */
-    .panel{display:none;padding:16px;max-width:720px;margin:0 auto}
-    .panel.active{display:block;animation:fadeIn .2s ease}
-    @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
-    /* cards & form */
-    .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
-    .card h3{margin:0 0 12px;font-size:.95rem}
-    .row{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px}
-    .field{flex:1 1 200px;display:flex;flex-direction:column;gap:4px}
-    .field label{font-size:.78rem;color:var(--muted)}
-    input[type="text"],input[type="number"],input[type="password"],input[type="url"],select,textarea{
-      background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;
-      padding:8px 10px;font-size:.88rem;font-family:inherit;width:100%}
-    input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
-    textarea{resize:vertical;min-height:60px}
-    /* checkbox row */
-    .check{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-    .check input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent)}
-    .check label{font-size:.88rem;cursor:pointer}
-    /* buttons */
-    .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:none;border-radius:6px;
-      font-size:.85rem;font-family:inherit;cursor:pointer;transition:opacity .2s}
-    .btn:hover{opacity:.85}
-    .btn-primary{background:var(--accent);color:#000}
-    .btn-danger{background:var(--danger);color:#fff}
-    .btn-outline{background:transparent;border:1px solid var(--border);color:var(--fg)}
-    .btn-sm{padding:5px 10px;font-size:.8rem}
-    .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-    /* device cards */
-    .dev-card{display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg);
-      border-radius:8px;margin-bottom:8px}
-    .dev-card .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-    .dev-card .dot.on{background:var(--ok)}.dev-card .dot.off{background:var(--danger)}
-    .dev-card .info{flex:1;min-width:0}
-    .dev-card .info .name{font-weight:600;font-size:.9rem}
-    .dev-card .info .meta{font-size:.78rem;color:var(--muted)}
-    /* modal overlay */
-    .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;
-      align-items:center;justify-content:center}
-    .modal-bg.open{display:flex}
-    .modal{background:var(--card);border:1px solid var(--border);border-radius:12px;
-      padding:20px;width:90%;max-width:440px;max-height:85vh;overflow-y:auto}
-    .modal h3{margin:0 0 14px}
-    /* toast */
-    #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;
-      border-radius:8px;font-size:.85rem;z-index:300;opacity:0;transition:opacity .3s;pointer-events:none}
-    #toast.show{opacity:1}
-    #toast.ok{background:var(--ok);color:#000}
-    #toast.err{background:var(--danger);color:#fff}
-    /* status badge */
-    .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.75rem;font-weight:600}
-    .badge-ok{background:rgba(34,197,94,.15);color:var(--ok)}
-    .badge-err{background:rgba(239,68,68,.15);color:var(--danger)}
-    /* responsive */
-    @media(max-width:480px){.row{flex-direction:column}.field{flex-basis:auto}.panel{padding:12px}}
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Einstellungen – Shelly Energy Analyzer</title>
+<style>
+:root{--bg:#0b0f14;--card:#121821;--fg:#e8eef6;--muted:#9fb0c3;--accent:#6aa7ff;
+--border:rgba(255,255,255,0.08);--danger:#ef4444;--ok:#22c55e}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
+background:var(--bg);color:var(--fg);line-height:1.45;font-size:14px}
+a{color:var(--accent);text-decoration:none}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--card);
+border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50}
+header h1{font-size:1rem;margin:0;flex:1;font-weight:600}
+.layout{display:flex;min-height:calc(100vh - 50px)}
+.sidebar{width:240px;background:var(--card);border-right:1px solid var(--border);
+padding:12px 0;overflow-y:auto;position:sticky;top:50px;max-height:calc(100vh - 50px);flex-shrink:0}
+.sidebar h3{font-size:.7rem;text-transform:uppercase;color:var(--muted);
+padding:8px 16px 4px;margin:0;letter-spacing:.05em}
+.sidebar a{display:block;padding:7px 16px;color:var(--fg);font-size:.88rem;border-left:3px solid transparent}
+.sidebar a:hover{background:rgba(106,167,255,.08)}
+.sidebar a.active{background:rgba(106,167,255,.15);border-left-color:var(--accent);color:var(--accent)}
+main{flex:1;padding:20px;max-width:900px;min-width:0}
+section{margin-bottom:30px;background:var(--card);border:1px solid var(--border);
+border-radius:12px;padding:16px 20px;scroll-margin-top:60px}
+section h2{margin:0 0 14px;font-size:1.05rem;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px}
+.field{margin-bottom:12px;display:flex;flex-direction:column;gap:4px}
+.field.row{flex-direction:row;align-items:center;gap:10px}
+.field label{font-size:.82rem;color:var(--muted);font-weight:500}
+.field.row label{flex:1}
+input[type="text"],input[type="password"],input[type="number"],input[type="email"],input[type="url"],select,textarea{
+padding:8px 10px;border:1px solid var(--border);background:rgba(255,255,255,.03);
+color:var(--fg);border-radius:6px;font-size:.88rem;font-family:inherit;width:100%}
+textarea{resize:vertical;min-height:60px;font-family:ui-monospace,monospace}
+input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
+select{cursor:pointer}
+button{padding:8px 14px;border:none;background:var(--accent);color:#fff;border-radius:6px;
+cursor:pointer;font-size:.88rem;font-weight:500}
+button:hover{opacity:.9}
+button.secondary{background:rgba(255,255,255,.08);color:var(--fg)}
+button.danger{background:var(--danger)}
+button.small{padding:4px 8px;font-size:.78rem}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+.section-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;
+padding-top:12px;border-top:1px solid var(--border)}
+.hint{font-size:.75rem;color:var(--muted);margin-top:2px}
+.devcard{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;
+padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.devcard .info{flex:1}
+.devcard h4{margin:0 0 2px;font-size:.95rem}
+.devcard p{margin:0;font-size:.78rem;color:var(--muted)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;margin-right:4px}
+.dot.online{background:var(--ok)}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--border);
+padding:10px 14px;border-radius:8px;font-size:.85rem;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,.4);
+opacity:0;transform:translateY(10px);transition:all .2s}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.error{border-color:var(--danger)}
+.toast.success{border-color:var(--ok)}
+@media(max-width:760px){
+.layout{flex-direction:column}
+.sidebar{width:100%;position:static;max-height:none;display:flex;flex-wrap:wrap;padding:8px}
+.sidebar h3{width:100%;padding:4px 8px 2px}
+.sidebar a{border-left:none;padding:6px 10px}
+.grid2{grid-template-columns:1fr}
+main{padding:12px}
+}
+</style>
 </head>
 <body>
-
-<div class="hdr">
-  <a href="/">&#8592; Live Dashboard</a>
-  <h1>Settings</h1>
+<header>
+  <h1>⚙ Einstellungen</h1>
+  <a href="/">← Dashboard</a>
+</header>
+<div class="layout">
+<nav class="sidebar" id="nav"></nav>
+<main id="main"></main>
 </div>
-
-<div class="tabs" id="tabs">
-  <div class="tab active" data-tab="devices">Devices</div>
-  <div class="tab" data-tab="pricing">Pricing</div>
-  <div class="tab" data-tab="solar">Solar</div>
-  <div class="tab" data-tab="integrations">Integrations</div>
-  <div class="tab" data-tab="spot">Spot Price</div>
-  <div class="tab" data-tab="advanced">Advanced</div>
-  <div class="tab" data-tab="about">About</div>
-</div>
-
-<!-- ── Devices ── -->
-<div class="panel active" id="p-devices">
-  <div class="card">
-    <h3>Registered Devices</h3>
-    <div id="dev-list"><em style="color:var(--muted)">Loading...</em></div>
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="openAddDevice()">+ Add Device</button>
-      <button class="btn btn-outline" onclick="discoverDevices()">Discover (mDNS)</button>
-    </div>
-  </div>
-  <div id="discover-results"></div>
-</div>
-
-<!-- ── Pricing ── -->
-<div class="panel" id="p-pricing">
-  <div class="card">
-    <h3>Electricity Pricing</h3>
-    <div class="row">
-      <div class="field"><label>Price (EUR/kWh)</label>
-        <input type="number" step="0.0001" id="s-price" data-key="pricing.electricity_price_eur_per_kwh"></div>
-      <div class="field"><label>Base fee (EUR/month)</label>
-        <input type="number" step="0.01" id="s-basefee" data-key="pricing.base_fee_eur_per_month"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>VAT (%)</label>
-        <input type="number" step="0.1" id="s-vat" data-key="pricing.vat_percent"></div>
-      <div class="field"><label>CO2 intensity (g/kWh)</label>
-        <input type="number" step="1" id="s-co2" data-key="pricing.co2_g_per_kwh"></div>
-    </div>
-  </div>
-  <div class="card">
-    <h3>Tariff Schedule</h3>
-    <div class="row">
-      <div class="field"><label>High tariff price (EUR/kWh)</label>
-        <input type="number" step="0.0001" id="s-ht-price" data-key="pricing.high_tariff_price"></div>
-      <div class="field"><label>Low tariff price (EUR/kWh)</label>
-        <input type="number" step="0.0001" id="s-lt-price" data-key="pricing.low_tariff_price"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>High tariff hours (e.g. 6-22)</label>
-        <input type="text" id="s-ht-hours" data-key="pricing.high_tariff_hours"></div>
-    </div>
-  </div>
-  <div class="btn-row"><button class="btn btn-primary" onclick="saveSection('pricing')">Save Pricing</button></div>
-</div>
-
-<!-- ── Solar ── -->
-<div class="panel" id="p-solar">
-  <div class="card">
-    <h3>PV / Solar Settings</h3>
-    <div class="check"><input type="checkbox" id="s-pv-en" data-key="solar.enabled"><label for="s-pv-en">Enable solar tracking</label></div>
-    <div class="row">
-      <div class="field"><label>PV meter device key</label>
-        <input type="text" id="s-pv-meter" data-key="solar.meter_device_key"></div>
-      <div class="field"><label>Feed-in tariff (EUR/kWh)</label>
-        <input type="number" step="0.0001" id="s-feedin" data-key="solar.feed_in_tariff_eur_per_kwh"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>Installed kWp</label>
-        <input type="number" step="0.1" id="s-kwp" data-key="solar.kwp"></div>
-      <div class="field"><label>Battery capacity (kWh)</label>
-        <input type="number" step="0.1" id="s-bat" data-key="solar.battery_kwh"></div>
-    </div>
-  </div>
-  <div class="btn-row"><button class="btn btn-primary" onclick="saveSection('solar')">Save Solar</button></div>
-</div>
-
-<!-- ── Integrations ── -->
-<div class="panel" id="p-integrations">
-  <div class="card">
-    <h3>MQTT</h3>
-    <div class="check"><input type="checkbox" id="s-mqtt-en" data-key="mqtt.enabled"><label for="s-mqtt-en">Enable MQTT</label></div>
-    <div class="row">
-      <div class="field"><label>Broker</label><input type="text" id="s-mqtt-broker" data-key="mqtt.broker"></div>
-      <div class="field"><label>Port</label><input type="number" id="s-mqtt-port" data-key="mqtt.port"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>Username</label><input type="text" id="s-mqtt-user" data-key="mqtt.username"></div>
-      <div class="field"><label>Password</label><input type="password" id="s-mqtt-pass" data-key="mqtt.password"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>Topic prefix</label><input type="text" id="s-mqtt-topic" data-key="mqtt.topic_prefix"></div>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="saveSection('mqtt')">Save</button>
-      <button class="btn btn-outline" onclick="testIntegration('mqtt')">Test Connection</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h3>InfluxDB</h3>
-    <div class="check"><input type="checkbox" id="s-influx-en" data-key="influxdb.enabled"><label for="s-influx-en">Enable InfluxDB</label></div>
-    <div class="row">
-      <div class="field"><label>URL</label><input type="url" id="s-influx-url" data-key="influxdb.url"></div>
-      <div class="field"><label>Bucket / DB</label><input type="text" id="s-influx-bucket" data-key="influxdb.bucket"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>Org</label><input type="text" id="s-influx-org" data-key="influxdb.org"></div>
-      <div class="field"><label>Token</label><input type="password" id="s-influx-token" data-key="influxdb.token"></div>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="saveSection('influxdb')">Save</button>
-      <button class="btn btn-outline" onclick="testIntegration('influxdb')">Test Connection</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h3>Prometheus</h3>
-    <div class="check"><input type="checkbox" id="s-prom-en" data-key="prometheus.enabled"><label for="s-prom-en">Enable /metrics endpoint</label></div>
-    <div class="row">
-      <div class="field"><label>Metrics path</label><input type="text" id="s-prom-path" data-key="prometheus.path" placeholder="/metrics"></div>
-    </div>
-    <div class="btn-row"><button class="btn btn-primary" onclick="saveSection('prometheus')">Save</button></div>
-  </div>
-
-  <div class="card">
-    <h3>Telegram</h3>
-    <div class="check"><input type="checkbox" id="s-tg-en" data-key="telegram.enabled"><label for="s-tg-en">Enable Telegram notifications</label></div>
-    <div class="row">
-      <div class="field"><label>Bot token</label><input type="password" id="s-tg-token" data-key="telegram.bot_token"></div>
-      <div class="field"><label>Chat ID</label><input type="text" id="s-tg-chat" data-key="telegram.chat_id"></div>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="saveSection('telegram')">Save</button>
-      <button class="btn btn-outline" onclick="testIntegration('telegram')">Send Test Message</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h3>Webhook</h3>
-    <div class="check"><input type="checkbox" id="s-wh-en" data-key="webhook.enabled"><label for="s-wh-en">Enable webhook</label></div>
-    <div class="row">
-      <div class="field"><label>URL</label><input type="url" id="s-wh-url" data-key="webhook.url"></div>
-    </div>
-    <div class="btn-row"><button class="btn btn-primary" onclick="saveSection('webhook')">Save</button></div>
-  </div>
-
-  <div class="card">
-    <h3>Email Alerts</h3>
-    <div class="check"><input type="checkbox" id="s-em-en" data-key="email.enabled"><label for="s-em-en">Enable email alerts</label></div>
-    <div class="row">
-      <div class="field"><label>SMTP server</label><input type="text" id="s-em-smtp" data-key="email.smtp_server"></div>
-      <div class="field"><label>Port</label><input type="number" id="s-em-port" data-key="email.smtp_port"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>Username</label><input type="text" id="s-em-user" data-key="email.username"></div>
-      <div class="field"><label>Password</label><input type="password" id="s-em-pass" data-key="email.password"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>Recipient</label><input type="text" id="s-em-to" data-key="email.recipient"></div>
-    </div>
-    <div class="btn-row"><button class="btn btn-primary" onclick="saveSection('email')">Save</button></div>
-  </div>
-</div>
-
-<!-- ── Spot Price ── -->
-<div class="panel" id="p-spot">
-  <div class="card">
-    <h3>Dynamic Tariff / Spot Price</h3>
-    <div class="check"><input type="checkbox" id="s-spot-en" data-key="spot_price.enabled"><label for="s-spot-en">Enable spot price tracking</label></div>
-    <div class="row">
-      <div class="field"><label>Provider</label>
-        <select id="s-spot-prov" data-key="spot_price.provider">
-          <option value="awattar">aWATTar</option><option value="tibber">Tibber</option>
-          <option value="entsoe">ENTSO-E</option><option value="custom">Custom</option>
-        </select></div>
-      <div class="field"><label>Bidding zone</label><input type="text" id="s-spot-zone" data-key="spot_price.bidding_zone" placeholder="DE-LU"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>API key (if required)</label><input type="password" id="s-spot-key" data-key="spot_price.api_key"></div>
-    </div>
-  </div>
-  <div class="card">
-    <h3>Markup Breakdown</h3>
-    <div class="row">
-      <div class="field"><label>Grid fee (EUR/kWh)</label><input type="number" step="0.0001" id="s-spot-grid" data-key="spot_price.grid_fee"></div>
-      <div class="field"><label>Tax/levy (EUR/kWh)</label><input type="number" step="0.0001" id="s-spot-tax" data-key="spot_price.tax_levy"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>Supplier markup (EUR/kWh)</label><input type="number" step="0.0001" id="s-spot-markup" data-key="spot_price.supplier_markup"></div>
-    </div>
-  </div>
-  <div class="btn-row"><button class="btn btn-primary" onclick="saveSection('spot_price')">Save Spot Price</button></div>
-</div>
-
-<!-- ── Advanced ── -->
-<div class="panel" id="p-advanced">
-  <div class="card">
-    <h3>UI / Language</h3>
-    <div class="row">
-      <div class="field"><label>Language</label>
-        <select id="s-lang" data-key="ui.language">
-          <option value="de">Deutsch</option><option value="en">English</option>
-          <option value="es">Espa&#241;ol</option><option value="fr">Fran&#231;ais</option>
-          <option value="pt">Portugu&#234;s</option><option value="it">Italiano</option>
-          <option value="pl">Polski</option><option value="cs">&#268;e&#353;tina</option>
-          <option value="ru">&#1056;&#1091;&#1089;&#1089;&#1082;&#1080;&#1081;</option>
-        </select></div>
-      <div class="field"><label>Theme</label>
-        <select id="s-theme" data-key="ui.theme">
-          <option value="dark">Dark</option><option value="light">Light</option><option value="auto">Auto</option>
-        </select></div>
-    </div>
-  </div>
-  <div class="card">
-    <h3>SSL / HTTPS</h3>
-    <div class="check"><input type="checkbox" id="s-ssl-en" data-key="ssl.enabled"><label for="s-ssl-en">Enable SSL</label></div>
-    <div class="row">
-      <div class="field"><label>Cert file</label><input type="text" id="s-ssl-cert" data-key="ssl.cert_file"></div>
-      <div class="field"><label>Key file</label><input type="text" id="s-ssl-key" data-key="ssl.key_file"></div>
-    </div>
-  </div>
-  <div class="card">
-    <h3>Auto-Sync &amp; Alerts</h3>
-    <div class="check"><input type="checkbox" id="s-sync-en" data-key="sync.auto_sync"><label for="s-sync-en">Auto-sync on startup</label></div>
-    <div class="row">
-      <div class="field"><label>Sync interval (seconds)</label><input type="number" id="s-sync-int" data-key="sync.interval_seconds"></div>
-      <div class="field"><label>Alert threshold (W)</label><input type="number" id="s-alert-w" data-key="alerts.power_threshold_w"></div>
-    </div>
-  </div>
-  <div class="card">
-    <h3>CO2 / ENTSO-E</h3>
-    <div class="row">
-      <div class="field"><label>ENTSO-E API key</label><input type="password" id="s-entsoe-key" data-key="entsoe.api_key"></div>
-      <div class="field"><label>CO2 signal API key</label><input type="password" id="s-co2-key" data-key="co2signal.api_key"></div>
-    </div>
-  </div>
-  <div class="card">
-    <h3>Weather / Forecast</h3>
-    <div class="check"><input type="checkbox" id="s-wx-en" data-key="weather.enabled"><label for="s-wx-en">Enable weather overlay</label></div>
-    <div class="row">
-      <div class="field"><label>Latitude</label><input type="number" step="0.0001" id="s-wx-lat" data-key="weather.latitude"></div>
-      <div class="field"><label>Longitude</label><input type="number" step="0.0001" id="s-wx-lon" data-key="weather.longitude"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>OpenWeatherMap API key</label><input type="password" id="s-wx-key" data-key="weather.api_key"></div>
-    </div>
-  </div>
-  <div class="btn-row"><button class="btn btn-primary" onclick="saveAdvanced()">Save Advanced</button></div>
-</div>
-
-<!-- ── About ── -->
-<div class="panel" id="p-about">
-  <div class="card">
-    <h3>Shelly Energy Analyzer</h3>
-    <p>Version: <strong id="about-ver">—</strong></p>
-    <p style="font-size:.85rem;color:var(--muted)">LAN-only energy monitoring for Shelly devices.</p>
-  </div>
-  <div class="card">
-    <h3>Database Statistics</h3>
-    <div id="db-stats"><em style="color:var(--muted)">Loading...</em></div>
-  </div>
-</div>
-
-<!-- ── Add/Edit Device Modal ── -->
-<div class="modal-bg" id="dev-modal">
-  <div class="modal">
-    <h3 id="dev-modal-title">Add Device</h3>
-    <input type="hidden" id="dm-key">
-    <div class="row">
-      <div class="field"><label>Name</label><input type="text" id="dm-name"></div>
-    </div>
-    <div class="row">
-      <div class="field"><label>Host / IP</label><input type="text" id="dm-host" placeholder="192.168.1.x"></div>
-      <div class="field"><label>Kind</label>
-        <select id="dm-kind">
-          <option value="em">EM (Energy Meter)</option>
-          <option value="pro">Pro</option>
-          <option value="plug">Plug S</option>
-          <option value="plus">Plus</option>
-          <option value="gen1">Gen1</option>
-        </select>
-      </div>
-    </div>
-    <div class="row">
-      <div class="field"><label>Username (optional)</label><input type="text" id="dm-user"></div>
-      <div class="field"><label>Password (optional)</label><input type="password" id="dm-pass"></div>
-    </div>
-    <div class="btn-row" style="margin-top:14px">
-      <button class="btn btn-primary" onclick="saveDevice()">Save</button>
-      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-outline btn-sm" onclick="probeDevice()" title="Probe this IP">Probe</button>
-    </div>
-    <div id="dm-probe" style="margin-top:8px;font-size:.83rem;color:var(--muted)"></div>
-  </div>
-</div>
-
-<div id="toast"></div>
+<div class="toast" id="toast"></div>
 
 <script>
-/* ── helpers ── */
-function toast(msg, ok) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'show ' + (ok ? 'ok' : 'err');
-  clearTimeout(t._t);
-  t._t = setTimeout(() => t.className = '', 2500);
+const $ = (s,p=document)=>p.querySelector(s);
+const $$ = (s,p=document)=>p.querySelectorAll(s);
+const LANGS = {de:"Deutsch",en:"English",es:"Español",fr:"Français",pt:"Português",it:"Italiano",pl:"Polski",cs:"Čeština",ru:"Русский"};
+
+let cfg = {};
+let devices = [];
+
+function toast(msg, kind="success") {
+  const el = $("#toast");
+  el.textContent = msg;
+  el.className = "toast show " + kind;
+  setTimeout(()=>el.className="toast",2500);
 }
 
-async function api(method, url, body) {
-  const opts = { method, headers: {} };
-  if (body !== undefined) {
-    opts.headers['Content-Type'] = 'application/json';
-    opts.body = JSON.stringify(body);
-  }
-  const r = await fetch(url, opts);
-  if (!r.ok) throw new Error(await r.text() || r.statusText);
-  return r.status === 204 ? null : r.json();
+function get(obj, path, def="") {
+  return path.split(".").reduce((o,k)=> (o && o[k]!==undefined) ? o[k] : def, obj);
+}
+function setPath(obj, path, val) {
+  const parts = path.split(".");
+  const last = parts.pop();
+  let o = obj;
+  for (const k of parts) { if (!o[k]) o[k]={}; o=o[k]; }
+  o[last] = val;
 }
 
-/* ── Tabs ── */
-document.getElementById('tabs').addEventListener('click', e => {
-  const tab = e.target.closest('.tab');
-  if (!tab) return;
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  tab.classList.add('active');
-  document.getElementById('p-' + tab.dataset.tab).classList.add('active');
-});
-
-/* ── Settings load/save ── */
-let CFG = {};
-
-function setNested(obj, path, val) {
-  const keys = path.split('.');
-  let cur = obj;
-  for (let i = 0; i < keys.length - 1; i++) {
-    if (!(keys[i] in cur)) cur[keys[i]] = {};
-    cur = cur[keys[i]];
-  }
-  cur[keys[keys.length - 1]] = val;
-}
-
-function getNested(obj, path) {
-  return path.split('.').reduce((o, k) => (o && o[k] !== undefined ? o[k] : ''), obj);
-}
-
-function populateFields() {
-  document.querySelectorAll('[data-key]').forEach(el => {
-    const val = getNested(CFG, el.dataset.key);
-    if (el.type === 'checkbox') el.checked = !!val;
-    else el.value = val ?? '';
-  });
-}
-
-function gatherSection(prefix) {
-  const out = {};
-  document.querySelectorAll('[data-key^="' + prefix + '."]').forEach(el => {
-    const key = el.dataset.key;
-    let val;
-    if (el.type === 'checkbox') val = el.checked;
-    else if (el.type === 'number') val = el.value === '' ? null : Number(el.value);
-    else val = el.value;
-    setNested(out, key, val);
-  });
-  return out;
-}
-
-async function saveSection(prefix) {
-  try {
-    const data = gatherSection(prefix);
-    await api('PUT', '/api/settings', data);
-    Object.assign(CFG, data);
-    toast('Saved', true);
-  } catch (e) { toast('Error: ' + e.message, false); }
-}
-
-async function saveAdvanced() {
-  // gather multiple sections
+function gatherSection(sectionId) {
+  const sec = $("#sec-"+sectionId);
+  if (!sec) return {};
   const data = {};
-  ['ui', 'ssl', 'sync', 'alerts', 'entsoe', 'co2signal', 'weather'].forEach(s => {
-    Object.assign(data, gatherSection(s));
+  $$('[data-key]',sec).forEach(inp=>{
+    const key = inp.dataset.key;
+    let val;
+    if (inp.type === "checkbox") val = inp.checked;
+    else if (inp.type === "number") val = inp.value === "" ? 0 : Number(inp.value);
+    else val = inp.value;
+    setPath(data, key, val);
   });
-  try {
-    await api('PUT', '/api/settings', data);
-    Object.assign(CFG, data);
-    toast('Saved', true);
-  } catch (e) { toast('Error: ' + e.message, false); }
+  return data;
 }
 
-/* ── Devices ── */
-let DEVICES = [];
+async function saveSection(sectionId) {
+  const data = gatherSection(sectionId);
+  try {
+    const r = await fetch("/api/settings",{method:"PUT",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+    const j = await r.json();
+    if (j.ok) toast("✓ Gespeichert");
+    else toast("Fehler: " + j.error, "error");
+  } catch(e) { toast("Fehler: " + e.message, "error"); }
+}
+
+const SECTIONS = [
+  {id:"devices", title:"Geräte", group:"Grundeinstellungen", custom:true},
+  {id:"ui", title:"Anzeige", group:"Grundeinstellungen", fields:[
+    {key:"ui.language", label:"Sprache", type:"select", opts:Object.entries(LANGS)},
+    {key:"ui.theme", label:"Theme", type:"select", opts:[["auto","Auto"],["light","Hell"],["dark","Dunkel"]]},
+    {key:"ui.plot_theme_mode", label:"Plot-Theme", type:"select", opts:[["auto","Auto"],["day","Tag"],["night","Nacht"]]},
+    {key:"ui.live_poll_seconds", label:"Live Polling (Sek)", type:"number", step:"0.1"},
+    {key:"ui.plot_redraw_seconds", label:"Plot Refresh (Sek)", type:"number", step:"0.1"},
+    {key:"ui.live_window_minutes", label:"Live-Fenster (Min)", type:"number"},
+    {key:"ui.live_retention_minutes", label:"Live Retention (Min)", type:"number"},
+    {key:"ui.live_smoothing_enabled", label:"Glättung aktiv", type:"checkbox"},
+    {key:"ui.live_smoothing_seconds", label:"Glättung (Sek)", type:"number"},
+    {key:"ui.live_day_start", label:"Tag-Start (HH:MM)", type:"text"},
+    {key:"ui.live_night_start", label:"Nacht-Start (HH:MM)", type:"text"},
+    {key:"ui.live_daynight_mode", label:"Tag/Nacht-Modus", type:"select", opts:[["all","Alle"],["day","Tag"],["night","Nacht"]]},
+  ]},
+  {id:"web", title:"Web-Server", group:"Grundeinstellungen", fields:[
+    {key:"ui.live_web_enabled", label:"Web-Dashboard aktiv", type:"checkbox"},
+    {key:"ui.live_web_port", label:"Port", type:"number"},
+    {key:"ui.live_web_refresh_seconds", label:"Refresh (Sek)", type:"number", step:"0.1"},
+    {key:"ui.live_web_token", label:"Zugriffs-Token", type:"password", hint:"Leer = kein Login nötig"},
+    {key:"ui.live_web_ssl_mode", label:"SSL-Modus", type:"select", opts:[["auto","Auto (self-signed)"],["custom","Custom Cert"],["off","HTTP (kein SSL)"]]},
+    {key:"ui.live_web_ssl_cert", label:"SSL Cert (Pfad)", type:"text"},
+    {key:"ui.live_web_ssl_key", label:"SSL Key (Pfad)", type:"text"},
+    {key:"ui.live_web_ssl_auto_renew", label:"Auto-Renew", type:"checkbox"},
+    {key:"ui.live_web_ssl_renew_days", label:"Renew vor (Tage)", type:"number"},
+    {key:"ui.widget_domain", label:"Widget Domain", type:"text", hint:"Für iOS Widget"},
+    {key:"ui.widget_devices", label:"Widget Geräte", type:"text", hint:"Komma-separiert"},
+  ]},
+  {id:"pricing", title:"Preise & Tarif", group:"Grundeinstellungen", fields:[
+    {key:"pricing.electricity_price_eur_per_kwh", label:"Strompreis €/kWh", type:"number", step:"0.0001"},
+    {key:"pricing.base_fee_eur_per_year", label:"Grundgebühr €/Jahr", type:"number", step:"0.01"},
+    {key:"pricing.price_includes_vat", label:"Preis inkl. MwSt.", type:"checkbox"},
+    {key:"pricing.base_fee_includes_vat", label:"Grundgebühr inkl. MwSt.", type:"checkbox"},
+    {key:"pricing.vat_enabled", label:"MwSt. aktiv", type:"checkbox"},
+    {key:"pricing.vat_rate_percent", label:"MwSt.-Satz (%)", type:"number", step:"0.1"},
+    {key:"pricing.co2_intensity_g_per_kwh", label:"CO₂-Intensität (g/kWh)", type:"number"},
+  ]},
+  {id:"tou", title:"TOU (Zeittarife)", group:"Grundeinstellungen", fields:[
+    {key:"tou.enabled", label:"TOU-Tarif aktiv", type:"checkbox"},
+  ], hint:"Details über config.json"},
+  {id:"autosync", title:"Auto-Sync", group:"Grundeinstellungen", fields:[
+    {key:"ui.autosync_enabled", label:"Auto-Sync aktiv", type:"checkbox"},
+    {key:"ui.autosync_interval_hours", label:"Intervall (Std)", type:"number"},
+    {key:"ui.autosync_mode", label:"Modus", type:"select", opts:[["incremental","Inkrementell"],["all","Alle"],["day","Tag"],["week","Woche"],["month","Monat"]]},
+  ]},
+
+  {id:"telegram", title:"Telegram", group:"Benachrichtigungen", testBtn:"telegram", fields:[
+    {key:"ui.telegram_enabled", label:"Telegram aktiv", type:"checkbox"},
+    {key:"ui.telegram_bot_token", label:"Bot Token", type:"password"},
+    {key:"ui.telegram_chat_id", label:"Chat ID", type:"text"},
+    {key:"ui.telegram_verify_ssl", label:"SSL verifizieren", type:"checkbox"},
+    {key:"ui.telegram_detail_level", label:"Detail", type:"select", opts:[["simple","Kurz"],["detailed","Ausführlich"]]},
+    {key:"ui.telegram_alarm_plots_enabled", label:"Alarm-Plots", type:"checkbox"},
+    {key:"ui.telegram_daily_summary_enabled", label:"Tages-Report", type:"checkbox"},
+    {key:"ui.telegram_daily_summary_time", label:"Tages-Zeit", type:"text"},
+    {key:"ui.telegram_monthly_summary_enabled", label:"Monats-Report", type:"checkbox"},
+    {key:"ui.telegram_monthly_summary_time", label:"Monats-Zeit", type:"text"},
+    {key:"ui.telegram_summary_load_w", label:"Load-Schwelle (W)", type:"number"},
+  ]},
+  {id:"email", title:"E-Mail", group:"Benachrichtigungen", fields:[
+    {key:"ui.email_enabled", label:"E-Mail aktiv", type:"checkbox"},
+    {key:"ui.email_smtp_server", label:"SMTP Server", type:"text"},
+    {key:"ui.email_smtp_port", label:"SMTP Port", type:"number"},
+    {key:"ui.email_smtp_user", label:"SMTP User", type:"text"},
+    {key:"ui.email_smtp_password", label:"SMTP Passwort", type:"password"},
+    {key:"ui.email_from_address", label:"Absender", type:"email"},
+    {key:"ui.email_use_tls", label:"TLS verwenden", type:"checkbox"},
+    {key:"ui.email_recipients", label:"Empfänger", type:"text", hint:"Komma-separiert"},
+    {key:"ui.email_alarm_enabled", label:"Alarm-E-Mails", type:"checkbox"},
+    {key:"ui.email_daily_summary_enabled", label:"Tages-Report", type:"checkbox"},
+    {key:"ui.email_daily_summary_time", label:"Tages-Zeit", type:"text"},
+    {key:"ui.email_monthly_summary_enabled", label:"Monats-Report", type:"checkbox"},
+    {key:"ui.email_monthly_summary_time", label:"Monats-Zeit", type:"text"},
+    {key:"ui.email_monthly_invoice_enabled", label:"Monats-Rechnung", type:"checkbox"},
+  ]},
+  {id:"webhook", title:"Webhook", group:"Benachrichtigungen", fields:[
+    {key:"ui.webhook_enabled", label:"Webhook aktiv", type:"checkbox"},
+    {key:"ui.webhook_url", label:"URL", type:"url"},
+    {key:"ui.webhook_custom_headers", label:"Custom Headers (JSON)", type:"textarea"},
+    {key:"ui.webhook_alarm_enabled", label:"Alarm", type:"checkbox"},
+    {key:"ui.webhook_daily_summary_enabled", label:"Tages-Report", type:"checkbox"},
+    {key:"ui.webhook_monthly_summary_enabled", label:"Monats-Report", type:"checkbox"},
+  ]},
+  {id:"anomaly", title:"Anomalien", group:"Benachrichtigungen", fields:[
+    {key:"anomaly.enabled", label:"Anomalie-Erkennung aktiv", type:"checkbox"},
+    {key:"anomaly.sigma_threshold", label:"Sigma-Schwelle", type:"number", step:"0.1"},
+    {key:"anomaly.min_deviation_kwh", label:"Min Abweichung (kWh)", type:"number", step:"0.01"},
+    {key:"anomaly.window_days", label:"Fenster (Tage)", type:"number"},
+    {key:"anomaly.check_unusual_daily", label:"Tages-Check", type:"checkbox"},
+    {key:"anomaly.check_night_consumption", label:"Nacht-Check", type:"checkbox"},
+    {key:"anomaly.check_power_peak_time", label:"Peak-Zeit-Check", type:"checkbox"},
+    {key:"anomaly.auto_interval_minutes", label:"Auto-Intervall (Min)", type:"number"},
+    {key:"anomaly.max_history", label:"Max Historie", type:"number"},
+    {key:"anomaly.action_telegram", label:"→ Telegram", type:"checkbox"},
+    {key:"anomaly.action_webhook", label:"→ Webhook", type:"checkbox"},
+    {key:"anomaly.action_email", label:"→ E-Mail", type:"checkbox"},
+  ]},
+
+  {id:"mqtt", title:"MQTT (Home Assistant)", group:"Integrationen", testBtn:"mqtt", fields:[
+    {key:"mqtt.enabled", label:"MQTT aktiv", type:"checkbox"},
+    {key:"mqtt.broker", label:"Broker", type:"text"},
+    {key:"mqtt.port", label:"Port", type:"number"},
+    {key:"mqtt.username", label:"User", type:"text"},
+    {key:"mqtt.password", label:"Passwort", type:"password"},
+    {key:"mqtt.topic_prefix", label:"Topic Prefix", type:"text"},
+    {key:"mqtt.ha_discovery", label:"HA Auto-Discovery", type:"checkbox"},
+    {key:"mqtt.ha_discovery_prefix", label:"HA Discovery Prefix", type:"text"},
+    {key:"mqtt.publish_interval_seconds", label:"Intervall (Sek)", type:"number", step:"0.1"},
+    {key:"mqtt.use_tls", label:"TLS verwenden", type:"checkbox"},
+  ]},
+  {id:"influxdb", title:"InfluxDB", group:"Integrationen", testBtn:"influxdb", fields:[
+    {key:"influxdb.enabled", label:"InfluxDB aktiv", type:"checkbox"},
+    {key:"influxdb.url", label:"URL", type:"url"},
+    {key:"influxdb.version", label:"Version", type:"select", opts:[[1,"1.x"],[2,"2.x"]]},
+    {key:"influxdb.token", label:"Token (v2)", type:"password"},
+    {key:"influxdb.org", label:"Org (v2)", type:"text"},
+    {key:"influxdb.bucket", label:"Bucket/DB", type:"text"},
+    {key:"influxdb.measurement", label:"Measurement", type:"text"},
+    {key:"influxdb.push_interval_seconds", label:"Intervall (Sek)", type:"number"},
+  ]},
+  {id:"prometheus", title:"Prometheus", group:"Integrationen", hint:"Metrics unter /metrics", fields:[
+    {key:"prometheus.enabled", label:"Prometheus aktiv", type:"checkbox"},
+    {key:"prometheus.port", label:"Port", type:"number"},
+    {key:"prometheus.path", label:"Path", type:"text"},
+  ]},
+  {id:"api", title:"REST API v1", group:"Integrationen", fields:[
+    {key:"api.enabled", label:"API aktiv", type:"checkbox"},
+    {key:"api.api_key", label:"API Key", type:"password"},
+    {key:"api.cors_allowed_origins", label:"CORS Origins", type:"text"},
+    {key:"api.rate_limit_per_minute", label:"Rate Limit / Min", type:"number"},
+  ]},
+  {id:"updates", title:"Updates", group:"Integrationen", fields:[
+    {key:"updates.repo", label:"GitHub Repo", type:"text"},
+    {key:"updates.check_on_start", label:"Check beim Start", type:"checkbox"},
+    {key:"updates.auto_install", label:"Auto-Install", type:"checkbox"},
+  ]},
+
+  {id:"solar", title:"Solar / PV", group:"Energie", fields:[
+    {key:"solar.enabled", label:"Solar aktiv", type:"checkbox"},
+    {key:"solar.pv_meter_device_key", label:"PV-Meter Gerät", type:"select-device"},
+    {key:"solar.feed_in_tariff_eur_per_kwh", label:"Einspeisevergütung €/kWh", type:"number", step:"0.001"},
+    {key:"solar.kw_peak", label:"kWp", type:"number", step:"0.1"},
+    {key:"solar.battery_kwh", label:"Batterie kWh", type:"number", step:"0.1"},
+    {key:"solar.co2_production_kg_per_kwp", label:"CO₂ Produktion (kg/kWp)", type:"number"},
+    {key:"solar.investment_eur", label:"Investition (€)", type:"number", step:"0.01"},
+    {key:"solar.installation_year", label:"Installationsjahr", type:"number"},
+    {key:"solar.degradation_pct", label:"Degradation (%/Jahr)", type:"number", step:"0.1"},
+  ]},
+  {id:"battery", title:"Batterie", group:"Energie", fields:[
+    {key:"battery.enabled", label:"Batterie-Monitoring aktiv", type:"checkbox"},
+    {key:"battery.device_key", label:"Gerät", type:"select-device"},
+    {key:"battery.capacity_kwh", label:"Kapazität (kWh)", type:"number", step:"0.1"},
+    {key:"battery.max_charge_rate_kw", label:"Max Ladeleistung (kW)", type:"number", step:"0.1"},
+    {key:"battery.max_discharge_rate_kw", label:"Max Entladeleistung (kW)", type:"number", step:"0.1"},
+    {key:"battery.efficiency_pct", label:"Effizienz (%)", type:"number", step:"0.1"},
+  ]},
+  {id:"pv_surplus", title:"PV-Überschuss", group:"Energie", hint:"Consumers über config.json editieren", fields:[
+    {key:"pv_surplus.enabled", label:"PV-Überschuss aktiv", type:"checkbox"},
+    {key:"pv_surplus.on_threshold_w", label:"Ein-Schwelle (W)", type:"number"},
+    {key:"pv_surplus.off_threshold_w", label:"Aus-Schwelle (W)", type:"number"},
+    {key:"pv_surplus.debounce_seconds", label:"Debounce (Sek)", type:"number"},
+  ]},
+  {id:"spot_price", title:"Spot-Preise", group:"Energie", fields:[
+    {key:"spot_price.enabled", label:"Spot-Preise aktiv", type:"checkbox"},
+    {key:"spot_price.primary_api", label:"API", type:"select", opts:[["energy_charts","Energy-Charts"],["awattar","aWATTar"]]},
+    {key:"spot_price.bidding_zone", label:"Gebotszone", type:"text"},
+    {key:"spot_price.fetch_interval_hours", label:"Intervall (Std)", type:"number"},
+    {key:"spot_price.tariff_type", label:"Tarif-Typ", type:"select", opts:[["fixed","Fix"],["dynamic","Dynamisch"]]},
+    {key:"spot_price.include_vat", label:"MwSt. aufschlagen", type:"checkbox"},
+    {key:"spot_price.show_as_comparison", label:"Als Vergleich zeigen", type:"checkbox"},
+    {key:"spot_price.grid_fee_ct", label:"Netzentgelt (ct)", type:"number", step:"0.01"},
+    {key:"spot_price.electricity_tax_ct", label:"Stromsteuer (ct)", type:"number", step:"0.01"},
+    {key:"spot_price.concession_fee_ct", label:"Konzession (ct)", type:"number", step:"0.01"},
+    {key:"spot_price.kwk_surcharge_ct", label:"KWK (ct)", type:"number", step:"0.01"},
+    {key:"spot_price.sec19_surcharge_ct", label:"§19 StromNEV (ct)", type:"number", step:"0.01"},
+    {key:"spot_price.offshore_surcharge_ct", label:"Offshore (ct)", type:"number", step:"0.01"},
+    {key:"spot_price.supplier_margin_ct", label:"Anbieter-Marge (ct)", type:"number", step:"0.01"},
+  ]},
+  {id:"co2", title:"CO₂ / ENTSO-E", group:"Energie", fields:[
+    {key:"co2.enabled", label:"CO₂-Tracking aktiv", type:"checkbox"},
+    {key:"co2.entso_e_api_token", label:"ENTSO-E Token", type:"password"},
+    {key:"co2.bidding_zone", label:"Zone", type:"text"},
+    {key:"co2.fetch_interval_hours", label:"Intervall (Std)", type:"number"},
+    {key:"co2.backfill_days", label:"Backfill (Tage)", type:"number"},
+    {key:"co2.show_green_dirty_hours", label:"Grün/Dirty Stunden zeigen", type:"checkbox"},
+    {key:"co2.green_threshold_g_per_kwh", label:"Grün-Schwelle (g/kWh)", type:"number"},
+    {key:"co2.dirty_threshold_g_per_kwh", label:"Dirty-Schwelle (g/kWh)", type:"number"},
+    {key:"co2.cross_border_flows", label:"Cross-Border-Flows", type:"checkbox"},
+  ]},
+  {id:"weather", title:"Wetter", group:"Energie", fields:[
+    {key:"weather.enabled", label:"Wetter aktiv", type:"checkbox"},
+    {key:"weather.api_key", label:"OpenWeatherMap API Key", type:"password"},
+    {key:"weather.city", label:"Stadt", type:"text"},
+    {key:"weather.lat", label:"Breitengrad", type:"number", step:"0.0001"},
+    {key:"weather.lon", label:"Längengrad", type:"number", step:"0.0001"},
+    {key:"weather.fetch_interval_minutes", label:"Intervall (Min)", type:"number"},
+  ]},
+  {id:"forecast", title:"Prognose", group:"Energie", fields:[
+    {key:"forecast.enabled", label:"Prognose aktiv", type:"checkbox"},
+    {key:"forecast.horizon_days", label:"Horizont (Tage)", type:"number"},
+    {key:"forecast.history_days", label:"Historie (Tage)", type:"number"},
+  ]},
+
+  {id:"smart_schedule", title:"Smart Schedule", group:"Features", fields:[
+    {key:"smart_schedule.enabled", label:"Smart Schedule aktiv", type:"checkbox"},
+    {key:"smart_schedule.default_duration_hours", label:"Standard-Dauer (Std)", type:"number", step:"0.5"},
+    {key:"smart_schedule.auto_schedule_enabled", label:"Auto-Schedule", type:"checkbox"},
+  ]},
+  {id:"ev_charging", title:"EV Charging", group:"Features", fields:[
+    {key:"ev_charging.enabled", label:"EV-Erkennung aktiv", type:"checkbox"},
+    {key:"ev_charging.wallbox_device_key", label:"Wallbox-Gerät", type:"select-device"},
+    {key:"ev_charging.detection_threshold_w", label:"Erkennungs-Schwelle (W)", type:"number"},
+    {key:"ev_charging.min_session_minutes", label:"Min Session (Min)", type:"number"},
+  ]},
+  {id:"tariff_compare", title:"Tarifvergleich", group:"Features", hint:"Custom Tarife über config.json", fields:[
+    {key:"tariff_compare.enabled", label:"Tarifvergleich aktiv", type:"checkbox"},
+  ]},
+  {id:"advisor", title:"KI-Berater", group:"Features", fields:[
+    {key:"advisor.enabled", label:"KI-Berater aktiv", type:"checkbox"},
+    {key:"advisor.use_llm", label:"LLM verwenden", type:"checkbox"},
+    {key:"advisor.llm_provider", label:"LLM Provider", type:"select", opts:[["ollama","Ollama (lokal)"],["openai","OpenAI"],["anthropic","Anthropic"]]},
+    {key:"advisor.llm_model", label:"Modell", type:"text"},
+    {key:"advisor.ollama_url", label:"Ollama URL", type:"url"},
+    {key:"advisor.openai_api_key", label:"OpenAI API Key", type:"password"},
+    {key:"advisor.anthropic_api_key", label:"Anthropic API Key", type:"password"},
+  ]},
+  {id:"gamification", title:"Ziele & Badges", group:"Features", fields:[
+    {key:"gamification.enabled", label:"Gamification aktiv", type:"checkbox"},
+    {key:"gamification.weekly_goal_kwh", label:"Wochen-Ziel (kWh)", type:"number", step:"0.1"},
+    {key:"gamification.monthly_goal_kwh", label:"Monats-Ziel (kWh)", type:"number", step:"0.1"},
+  ]},
+
+  {id:"billing", title:"Rechnung", group:"Erweitert", hint:"Adressen mehrzeilig über config.json", fields:[
+    {key:"billing.invoice_prefix", label:"Rechnungsnummer-Prefix", type:"text"},
+    {key:"billing.payment_terms_days", label:"Zahlungsziel (Tage)", type:"number"},
+    {key:"billing.invoice_logo_path", label:"Logo-Pfad", type:"text"},
+    {key:"billing.issuer.name", label:"Aussteller Name", type:"text"},
+    {key:"billing.issuer.vat_id", label:"Aussteller USt-ID", type:"text"},
+    {key:"billing.issuer.email", label:"Aussteller E-Mail", type:"email"},
+    {key:"billing.issuer.phone", label:"Aussteller Telefon", type:"text"},
+    {key:"billing.issuer.iban", label:"Aussteller IBAN", type:"text"},
+    {key:"billing.issuer.bic", label:"Aussteller BIC", type:"text"},
+    {key:"billing.customer.name", label:"Kunde Name", type:"text"},
+  ]},
+  {id:"tenant", title:"Mieter", group:"Erweitert", hint:"Mieter-Liste über config.json", fields:[
+    {key:"tenant.enabled", label:"Mieter-Abrechnung aktiv", type:"checkbox"},
+    {key:"tenant.billing_period_months", label:"Abrechnungszeitraum (Monate)", type:"number"},
+  ]},
+  {id:"multi_location", title:"Multi-Location", group:"Erweitert", fields:[
+    {key:"multi_location.enabled", label:"Multi-Location aktiv", type:"checkbox"},
+    {key:"multi_location.active_location_id", label:"Aktive Location ID", type:"text"},
+  ]},
+  {id:"download", title:"Download / CSV", group:"Erweitert", fields:[
+    {key:"download.chunk_seconds", label:"Chunk (Sek)", type:"number"},
+    {key:"download.overlap_seconds", label:"Overlap (Sek)", type:"number"},
+    {key:"download.timeout_seconds", label:"Timeout (Sek)", type:"number", step:"0.1"},
+    {key:"download.retries", label:"Retries", type:"number"},
+    {key:"download.backoff_base_seconds", label:"Backoff Base (Sek)", type:"number", step:"0.1"},
+    {key:"csv_pack.threshold_count", label:"CSV Pack Schwelle", type:"number"},
+    {key:"csv_pack.max_megabytes", label:"CSV Pack Max (MB)", type:"number"},
+    {key:"csv_pack.remove_merged", label:"Gemergte entfernen", type:"checkbox"},
+  ]},
+  {id:"demo", title:"Demo-Modus", group:"Erweitert", fields:[
+    {key:"demo.enabled", label:"Demo aktiv", type:"checkbox"},
+    {key:"demo.seed", label:"Seed", type:"number"},
+    {key:"demo.scenario", label:"Szenario", type:"select", opts:[["household","Haushalt"],["pv-home","PV-Haus"],["heatpump","Wärmepumpe"],["tenant-metering","Mieter"]]},
+  ]},
+  {id:"about", title:"Über", group:"Erweitert", custom:true},
+];
+
+function renderField(f) {
+  const val = get(cfg, f.key, "");
+  let input;
+  if (f.type === "checkbox") {
+    input = `<input type="checkbox" data-key="${f.key}" ${val?"checked":""}>`;
+    return `<div class="field row"><label>${f.label}</label>${input}</div>`;
+  }
+  if (f.type === "select" || f.type === "select-device") {
+    let opts = f.opts || [];
+    if (f.type === "select-device") {
+      opts = [["","(keine)"]].concat(devices.map(d=>[d.key, d.name+" ("+d.key+")"]));
+    }
+    const options = opts.map(([k,v])=>`<option value="${k}" ${String(k)===String(val)?"selected":""}>${v}</option>`).join("");
+    input = `<select data-key="${f.key}">${options}</select>`;
+  } else if (f.type === "textarea") {
+    input = `<textarea data-key="${f.key}">${val||""}</textarea>`;
+  } else {
+    const step = f.step ? `step="${f.step}"` : "";
+    const tp = f.type === "password" ? "password" : f.type === "number" ? "number" : (f.type === "email"?"email":(f.type==="url"?"url":"text"));
+    input = `<input type="${tp}" ${step} data-key="${f.key}" value="${val===null||val===undefined?"":String(val).replace(/"/g,"&quot;")}">`;
+  }
+  const hint = f.hint ? `<div class="hint">${f.hint}</div>` : "";
+  return `<div class="field"><label>${f.label}</label>${input}${hint}</div>`;
+}
+
+function renderSection(s) {
+  if (s.custom) {
+    if (s.id === "devices") return renderDevices();
+    if (s.id === "about") return renderAbout();
+  }
+  const fieldsHtml = (s.fields||[]).map(renderField).join("");
+  const hint = s.hint ? `<div class="hint" style="margin-bottom:10px">${s.hint}</div>` : "";
+  const testBtn = s.testBtn ? `<button class="secondary" onclick="testConnection('${s.testBtn}')">🔌 Test</button>` : "";
+  return `<section id="sec-${s.id}"><h2>${s.title}</h2>${hint}
+    <div class="grid2">${fieldsHtml}</div>
+    <div class="section-actions">${testBtn}
+      <button onclick="saveSection('${s.id}')">💾 Speichern</button>
+    </div></section>`;
+}
 
 function renderDevices() {
-  const c = document.getElementById('dev-list');
-  if (!DEVICES.length) { c.innerHTML = '<em style="color:var(--muted)">No devices configured.</em>'; return; }
-  c.innerHTML = DEVICES.map(d => `
-    <div class="dev-card">
-      <div class="dot ${d.online ? 'on' : 'off'}"></div>
+  const rows = devices.map(d=>`
+    <div class="devcard">
       <div class="info">
-        <div class="name">${esc(d.name || d.key)}</div>
-        <div class="meta">${esc(d.host || '?')} &middot; ${esc(d.kind || '?')}
-          ${d.online ? '<span class="badge badge-ok">online</span>' : '<span class="badge badge-err">offline</span>'}
-        </div>
+        <h4><span class="dot ${d.online?"online":""}"></span>${d.name}</h4>
+        <p>${d.host} · ${d.kind} · ${d.phases}P · ${d.key}</p>
       </div>
-      <button class="btn btn-outline btn-sm" onclick="editDevice('${esc(d.key)}')">Edit</button>
-      <button class="btn btn-danger btn-sm" onclick="removeDevice('${esc(d.key)}')">Del</button>
-    </div>`).join('');
+      <div>
+        <button class="small danger" onclick="deleteDevice('${d.key}')">✕</button>
+      </div>
+    </div>`).join("");
+  return `<section id="sec-devices"><h2>Geräte</h2>
+    ${rows || "<p class='hint'>Keine Geräte konfiguriert</p>"}
+    <div class="section-actions" style="justify-content:space-between;flex-wrap:wrap">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="secondary" onclick="discoverDevices()">🔍 mDNS Scan</button>
+        <input id="probe-ip" type="text" placeholder="IP-Adresse" style="width:160px">
+        <button class="secondary" onclick="addByIp()">➕ Hinzufügen</button>
+      </div>
+    </div>
+    <div id="discover-results"></div>
+  </section>`;
 }
 
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
-function openAddDevice() {
-  document.getElementById('dev-modal-title').textContent = 'Add Device';
-  ['dm-key', 'dm-name', 'dm-host', 'dm-user', 'dm-pass'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('dm-kind').value = 'em';
-  document.getElementById('dm-probe').textContent = '';
-  document.getElementById('dev-modal').classList.add('open');
+function renderAbout() {
+  return `<section id="sec-about"><h2>Über</h2>
+    <p>Version: <strong id="about-version">${cfg.version||"?"}</strong></p>
+    <div id="about-stats" class="hint">Lade DB-Statistik…</div>
+  </section>`;
 }
 
-function editDevice(key) {
-  const d = DEVICES.find(x => x.key === key);
-  if (!d) return;
-  document.getElementById('dev-modal-title').textContent = 'Edit Device';
-  document.getElementById('dm-key').value = d.key;
-  document.getElementById('dm-name').value = d.name || '';
-  document.getElementById('dm-host').value = d.host || '';
-  document.getElementById('dm-kind').value = d.kind || 'em';
-  document.getElementById('dm-user').value = d.username || '';
-  document.getElementById('dm-pass').value = '';
-  document.getElementById('dm-probe').textContent = '';
-  document.getElementById('dev-modal').classList.add('open');
+function renderNav() {
+  const groups = {};
+  SECTIONS.forEach(s=>{(groups[s.group]=groups[s.group]||[]).push(s)});
+  let html = "";
+  for (const [grp, secs] of Object.entries(groups)) {
+    html += `<h3>${grp}</h3>`;
+    html += secs.map(s=>`<a href="#sec-${s.id}">${s.title}</a>`).join("");
+  }
+  $("#nav").innerHTML = html;
 }
 
-function closeModal() { document.getElementById('dev-modal').classList.remove('open'); }
-
-async function saveDevice() {
-  const key = document.getElementById('dm-key').value;
-  const body = {
-    name: document.getElementById('dm-name').value,
-    host: document.getElementById('dm-host').value,
-    kind: document.getElementById('dm-kind').value,
-    username: document.getElementById('dm-user').value || undefined,
-    password: document.getElementById('dm-pass').value || undefined
-  };
-  try {
-    if (key) await api('PUT', '/api/devices/' + encodeURIComponent(key), body);
-    else await api('POST', '/api/devices', body);
-    closeModal();
-    toast(key ? 'Device updated' : 'Device added', true);
-    await loadDevices();
-  } catch (e) { toast('Error: ' + e.message, false); }
-}
-
-async function removeDevice(key) {
-  if (!confirm('Remove device "' + key + '"?')) return;
-  try {
-    await api('DELETE', '/api/devices/' + encodeURIComponent(key));
-    toast('Removed', true);
-    await loadDevices();
-  } catch (e) { toast('Error: ' + e.message, false); }
+function renderAll() {
+  $("#main").innerHTML = SECTIONS.map(renderSection).join("");
+  renderNav();
+  fetch("/api/data/stats").then(r=>r.json()).then(s=>{
+    if (!s.ok) return;
+    const el = $("#about-stats");
+    if (el) el.innerHTML = `Datenbank: ${s.db_size_mb} MB · Samples: ${(s.samples_rows||0).toLocaleString()} · Stunden: ${(s.hourly_energy_rows||0).toLocaleString()}`;
+  }).catch(()=>{});
 }
 
 async function discoverDevices() {
-  const el = document.getElementById('discover-results');
-  el.innerHTML = '<div class="card"><em style="color:var(--muted)">Scanning network...</em></div>';
+  const results = $("#discover-results");
+  results.innerHTML = '<p class="hint">🔍 Scanne lokales Netzwerk…</p>';
   try {
-    const res = await api('POST', '/api/devices/discover');
-    const list = res.devices || res || [];
-    if (!list.length) { el.innerHTML = '<div class="card"><em style="color:var(--muted)">No new devices found.</em></div>'; return; }
-    el.innerHTML = '<div class="card"><h3>Discovered Devices</h3>' + list.map(d =>
-      `<div class="dev-card">
-        <div class="dot on"></div>
-        <div class="info"><div class="name">${esc(d.name || d.host)}</div>
-          <div class="meta">${esc(d.host)} &middot; ${esc(d.kind || '?')}</div></div>
-        <button class="btn btn-primary btn-sm" onclick="quickAdd('${esc(d.host)}','${esc(d.name || '')}','${esc(d.kind || 'em')}')">Add</button>
-      </div>`).join('') + '</div>';
-  } catch (e) { el.innerHTML = '<div class="card" style="color:var(--danger)">Discovery failed: ' + esc(e.message) + '</div>'; }
+    const r = await fetch("/api/devices/discover?timeout=5",{method:"POST"});
+    const j = await r.json();
+    if (!j.ok) { results.innerHTML = `<p class="hint">Fehler: ${j.error}</p>`; return; }
+    if (!j.devices.length) { results.innerHTML = '<p class="hint">Keine Geräte gefunden</p>'; return; }
+    results.innerHTML = j.devices.map(d=>`
+      <div class="devcard">
+        <div class="info"><h4>${d.name||d.host}</h4><p>${d.host} · ${d.kind} · ${d.model||""}</p></div>
+        <button class="small" ${d.already_added?"disabled":""} onclick='addDiscovered(${JSON.stringify(d).replace(/'/g,"&#39;")})'>${d.already_added?"✓":"➕"}</button>
+      </div>`).join("");
+  } catch(e) { results.innerHTML = `<p class="hint">Fehler: ${e.message}</p>`; }
 }
 
-function quickAdd(host, name, kind) {
-  document.getElementById('dm-key').value = '';
-  document.getElementById('dm-name').value = name;
-  document.getElementById('dm-host').value = host;
-  document.getElementById('dm-kind').value = kind;
-  document.getElementById('dm-user').value = '';
-  document.getElementById('dm-pass').value = '';
-  document.getElementById('dev-modal-title').textContent = 'Add Device';
-  document.getElementById('dev-modal').classList.add('open');
+async function addDiscovered(dev) {
+  const r = await fetch("/api/devices",{method:"POST",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify(dev)});
+  const j = await r.json();
+  if (j.ok) { toast("✓ Gerät hinzugefügt"); reload(); }
+  else toast("Fehler: " + j.error, "error");
 }
 
-async function probeDevice() {
-  const host = document.getElementById('dm-host').value.trim();
-  if (!host) return;
-  const el = document.getElementById('dm-probe');
-  el.textContent = 'Probing...';
-  try {
-    const res = await api('POST', '/api/devices/probe', { host });
-    el.textContent = 'Found: ' + (res.name || res.type || 'Shelly device') + ' (' + (res.kind || '?') + ')';
-    if (res.kind) document.getElementById('dm-kind').value = res.kind;
-    if (res.name && !document.getElementById('dm-name').value) document.getElementById('dm-name').value = res.name;
-  } catch (e) { el.textContent = 'Probe failed: ' + e.message; }
+async function addByIp() {
+  const ip = $("#probe-ip").value.trim();
+  if (!ip) return;
+  const r = await fetch("/api/devices",{method:"POST",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify({host:ip})});
+  const j = await r.json();
+  if (j.ok) { toast("✓ Gerät hinzugefügt"); $("#probe-ip").value=""; reload(); }
+  else toast("Fehler: " + j.error, "error");
 }
 
-/* ── Integration tests ── */
-async function testIntegration(name) {
-  try {
-    const res = await api('POST', '/api/settings/test-' + name);
-    toast((res && res.message) || name + ' OK', true);
-  } catch (e) { toast(name + ' test failed: ' + e.message, false); }
+async function deleteDevice(key) {
+  if (!confirm("Gerät "+key+" wirklich entfernen?")) return;
+  const r = await fetch("/api/devices/"+encodeURIComponent(key),{method:"DELETE"});
+  const j = await r.json();
+  if (j.ok) { toast("✓ Gerät entfernt"); reload(); }
+  else toast("Fehler: " + j.error, "error");
 }
 
-/* ── About ── */
-async function loadAbout() {
-  document.getElementById('about-ver').textContent = CFG.version || CFG._version || '—';
-  try {
-    const stats = await api('GET', '/api/data/stats');
-    const el = document.getElementById('db-stats');
-    if (stats && typeof stats === 'object') {
-      el.innerHTML = Object.entries(stats).map(([k, v]) =>
-        `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)">
-          <span style="color:var(--muted)">${esc(k)}</span><span>${esc(String(v))}</span></div>`
-      ).join('');
-    } else { el.innerHTML = '<em style="color:var(--muted)">No stats available.</em>'; }
-  } catch { document.getElementById('db-stats').innerHTML = '<em style="color:var(--muted)">Stats endpoint not available.</em>'; }
+async function testConnection(which) {
+  toast("Teste " + which + "…");
+  const r = await fetch("/api/settings/test-"+which,{method:"POST"});
+  const j = await r.json();
+  if (j.ok) toast("✓ " + (j.message||"OK"));
+  else toast("Fehler: " + j.error, "error");
 }
 
-/* ── Load devices ── */
-async function loadDevices() {
+async function reload() {
   try {
-    const res = await api('GET', '/api/devices');
-    DEVICES = Array.isArray(res) ? res : (res.devices || []);
-    renderDevices();
-  } catch { document.getElementById('dev-list').innerHTML = '<em style="color:var(--muted)">Could not load devices.</em>'; }
+    const [cfgR, devR] = await Promise.all([
+      fetch("/api/settings").then(r=>r.json()),
+      fetch("/api/devices").then(r=>r.json()),
+    ]);
+    cfg = cfgR;
+    devices = devR.devices || [];
+    renderAll();
+  } catch(e) {
+    $("#main").innerHTML = '<p style="color:var(--danger)">Fehler beim Laden: '+e.message+'</p>';
+  }
 }
 
-/* ── Init ── */
-(async function init() {
-  try {
-    CFG = await api('GET', '/api/settings') || {};
-    populateFields();
-    loadAbout();
-  } catch (e) { toast('Failed to load settings: ' + e.message, false); }
-  loadDevices();
-})();
-
-/* close modal on backdrop click */
-document.getElementById('dev-modal').addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeModal();
-});
+reload();
 </script>
 </body>
 </html>
