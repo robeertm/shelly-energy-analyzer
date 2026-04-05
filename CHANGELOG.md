@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.9.1 - 2026-04-05
+### Fixed
+- **Settings page stuck in dark mode** – `settings.html` had hard-coded dark CSS variables with no light-mode fallback. Added `:root[data-theme="light"]` override and theme bootstrapping from `sea_theme` localStorage key, so the settings page now follows the same light/dark theme as the dashboard.
+
 ## 16.9.0 - 2026-04-05
 ### Added
 - **Plots tab in dashboard** – dedicated tab (📊 Plots) embedding the full-featured `/plots` page: historical time series for W / V / A / VAR / cos φ across all three phases (total or per-phase view) with flexible time ranges (minutes / hours / days) plus the kWh aggregation view (hours / days / weeks / months). Shares the dashboard theme. Lazy-loaded on first activation.
