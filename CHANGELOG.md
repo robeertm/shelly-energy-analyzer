@@ -1,5 +1,13 @@
 # Changelog
 
+## 16.13.16 - 2026-04-05
+### Changed
+- **Settings-Tab: Layout überarbeitet**
+  - **Checkbox-Felder als Toggle-Pillen**: Label + Checkbox sitzen jetzt in einer farblich abgesetzten, abgerundeten Zeile mit Hover-Effekt (statt flüchtig irgendwo zu hängen). Klick auf die ganze Zeile togglet die Checkbox.
+  - **Konsistente Feld-Höhen**: alle Grid-Felder haben `min-height:58px`, damit 2-Spalten-Grid nicht mehr versetzt aussieht.
+  - **Mobile Sidebar**: Links-Treeview wird jetzt horizontaler Scroll-Strip (sticky unter Header) statt wrap'd Pills die den halben Screen blockieren. Aktive Tab mit Unterstrich statt Left-Border.
+  - **Alarm-Regeln**: die 4 Notification-Checkboxes (Telegram/Webhook/E-Mail/Popup+Beep) nutzen das neue Toggle-Style, konsistent mit allen anderen Booleans.
+
 ## 16.13.15 - 2026-04-05
 ### Fixed
 - **Plots-Tab Hz: historische Werte = 0** – alte DB-Zeilen hatten `freq_hz = 0` (oder NULL) weil frühere Sync-Runs das Feld nicht befüllten. Jetzt werden 0-Werte als `NaN` behandelt → erscheinen als Lücken im Plot statt als 0-Linie. Netzfrequenz ist nie 0, daher ist diese Filterung korrekt.

@@ -32,15 +32,18 @@ main{flex:1;padding:20px;max-width:900px;min-width:0}
 section{margin-bottom:30px;background:var(--card);border:1px solid var(--border);
 border-radius:12px;padding:16px 20px;scroll-margin-top:60px}
 section h2{margin:0 0 14px;font-size:1.05rem;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px}
-.field{margin-bottom:12px;display:flex;flex-direction:column;gap:4px}
-.field.row{flex-direction:row;align-items:center;gap:10px}
+.field{margin-bottom:0;display:flex;flex-direction:column;gap:4px;min-height:58px;justify-content:flex-start}
+.field.row{flex-direction:row;align-items:center;justify-content:space-between;gap:10px;
+padding:8px 12px;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;
+min-height:42px;cursor:pointer;transition:background .1s}
+.field.row:hover{background:var(--hover-bg)}
 .field label{font-size:.82rem;color:var(--muted);font-weight:500}
-.field.row label{flex:1}
+.field.row label,.field.row>span{flex:1;margin:0;cursor:pointer;color:var(--fg);font-size:.88rem;font-weight:400}
 input[type="text"],input[type="password"],input[type="number"],input[type="email"],input[type="url"],select,textarea{
 padding:8px 10px;border:1px solid var(--border);background:var(--input-bg);
 color:var(--fg);border-radius:6px;font-size:.88rem;font-family:inherit;width:100%}
 textarea{resize:vertical;min-height:60px;font-family:ui-monospace,monospace}
-input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
+input[type="checkbox"]{width:18px;height:18px;cursor:pointer;accent-color:var(--accent);flex-shrink:0;margin:0}
 select{cursor:pointer}
 button{padding:8px 14px;border:none;background:var(--accent);color:#fff;border-radius:6px;
 cursor:pointer;font-size:.88rem;font-weight:500}
@@ -48,7 +51,7 @@ button:hover{opacity:.9}
 button.secondary{background:var(--btn-sec-bg);color:var(--fg)}
 button.danger{background:var(--danger)}
 button.small{padding:4px 8px;font-size:.78rem}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;align-items:start}
 .section-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;
 padding-top:12px;border-top:1px solid var(--border)}
 .hint{font-size:.75rem;color:var(--muted);margin-top:2px}
@@ -67,11 +70,17 @@ opacity:0;transform:translateY(10px);transition:all .2s}
 .toast.success{border-color:var(--ok)}
 @media(max-width:760px){
 .layout{flex-direction:column}
-.sidebar{width:100%;position:static;max-height:none;display:flex;flex-wrap:wrap;padding:8px}
-.sidebar h3{width:100%;padding:4px 8px 2px}
-.sidebar a{border-left:none;padding:6px 10px}
+.sidebar{width:100%;position:sticky;top:50px;max-height:none;display:flex;flex-wrap:nowrap;
+padding:6px 8px;overflow-x:auto;overflow-y:hidden;gap:4px;z-index:40;scrollbar-width:thin;
+border-right:none;border-bottom:1px solid var(--border)}
+.sidebar::-webkit-scrollbar{height:4px}
+.sidebar h3{display:none}
+.sidebar a{border-left:none;border-bottom:2px solid transparent;padding:6px 12px;
+white-space:nowrap;font-size:.82rem;flex-shrink:0;border-radius:4px}
+.sidebar a.active{border-left:none;border-bottom-color:var(--accent);background:var(--active-bg)}
 .grid2{grid-template-columns:1fr}
 main{padding:12px}
+section{padding:14px}
 }
 </style>
 </head>
@@ -452,7 +461,7 @@ function renderField(f) {
   let input;
   if (f.type === "checkbox") {
     input = `<input type="checkbox" data-key="${f.key}" ${val?"checked":""}>`;
-    return `<div class="field row"><label>${label}</label>${input}</div>`;
+    return `<label class="field row"><span>${label}</span>${input}</label>`;
   }
   if (f.type === "select" || f.type === "select-device") {
     let opts = f.opts || [];
@@ -549,7 +558,7 @@ function renderAlerts() {
       <div class="devcard" style="flex-direction:column;align-items:stretch">
         <div class="grid2" style="width:100%">
           <div class="field"><label>Name / ID</label><input class="a-id" type="text"></div>
-          <div class="field row"><label>Aktiv</label><input class="a-enabled" type="checkbox"></div>
+          <label class="field row"><span>Aktiv</span><input class="a-enabled" type="checkbox"></label>
           <div class="field"><label>Gerät</label><select class="a-device">${devOpts}</select></div>
           <div class="field"><label>Metrik</label><select class="a-metric">${METRICS.map(m=>`<option>${m}</option>`).join("")}</select></div>
           <div class="field"><label>Operator</label><select class="a-op">${OPS.map(o=>`<option>${o}</option>`).join("")}</select></div>
@@ -558,10 +567,10 @@ function renderAlerts() {
           <div class="field"><label>Cooldown (Sek)</label><input class="a-cooldown" type="number"></div>
         </div>
         <div class="grid2" style="width:100%">
-          <div class="field row"><label>→ Telegram</label><input class="a-telegram" type="checkbox"></div>
-          <div class="field row"><label>→ Webhook</label><input class="a-webhook" type="checkbox"></div>
-          <div class="field row"><label>→ E-Mail</label><input class="a-email" type="checkbox"></div>
-          <div class="field row"><label>Popup/Beep</label><span><input class="a-popup" type="checkbox" title="Popup"> <input class="a-beep" type="checkbox" title="Beep"></span></div>
+          <label class="field row"><span>→ Telegram</span><input class="a-telegram" type="checkbox"></label>
+          <label class="field row"><span>→ Webhook</span><input class="a-webhook" type="checkbox"></label>
+          <label class="field row"><span>→ E-Mail</span><input class="a-email" type="checkbox"></label>
+          <div class="field row"><span style="flex:1">Popup/Beep</span><span style="display:flex;gap:8px"><label style="display:flex;align-items:center;gap:4px;font-size:.78rem;color:var(--muted);cursor:pointer"><input class="a-popup" type="checkbox" title="Popup">Popup</label><label style="display:flex;align-items:center;gap:4px;font-size:.78rem;color:var(--muted);cursor:pointer"><input class="a-beep" type="checkbox" title="Beep">Beep</label></span></div>
         </div>
         <div class="field"><label>Nachricht</label><input class="a-message" type="text"></div>
         <div class="section-actions" style="margin-top:8px">
