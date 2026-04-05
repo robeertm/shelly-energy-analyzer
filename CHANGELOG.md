@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.7 - 2026-04-05
+### Changed
+- **Kosten-Tab: Prognose-Kachel zeigt jetzt auch die Dyn./Fix-Differenz** – wie bei Heute/Woche/Monat wird nun auch in der Prognose-Kachel der Dyn.-Tarif-Sektion der Pfeil ↑/↓ mit der €-Differenz ggü. Festpreis angezeigt (grün wenn günstiger, rot wenn teurer).
+
 ## 16.13.6 - 2026-04-05
 ### Changed
 - **Schedule-Tab komplett überarbeitet – zeigt jetzt Datum, Kontext und Handlungsempfehlung**:
