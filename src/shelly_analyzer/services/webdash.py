@@ -6009,6 +6009,7 @@ _PLOTS_TEMPLATE = """<!doctype html>
             <option value="W">W</option>
             <option value="V">V</option>
             <option value="A">A</option>
+            <option value="HZ">Hz</option>
             <option value="VAR">VAR</option>
             <option value="COSPHI">cos φ</option>
           </select>
