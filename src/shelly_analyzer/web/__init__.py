@@ -74,7 +74,7 @@ def _inject_version_badge(html: str) -> str:
     from shelly_analyzer import __version__
     badge = (
         '<div id="app-version-badge" style="position:fixed;'
-        'top:2px;right:4px;z-index:9999;font-size:9px;'
+        'top:2px;left:4px;z-index:9999;font-size:9px;'
         'color:rgba(128,128,128,0.6);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;'
         'pointer-events:none;user-select:none;padding:0 3px">'
         f'v{__version__}</div>'
