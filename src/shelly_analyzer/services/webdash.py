@@ -2018,8 +2018,8 @@ function toggleLogHttp(v) {{
 function pollSyncLogs() {{
   fetch('/api/logs?since=' + _syncLogSince + '&limit=200').then(function(r) {{ return r.json(); }}).then(function(d) {{
     // Sync checkbox with server state on first poll
-    var cb = document.getElementById('log-include-http');
-    if (cb && typeof d.include_http === 'boolean' && cb.checked !== d.include_http) cb.checked = d.include_http;
+    var httpCb = document.getElementById('log-include-http');
+    if (httpCb && typeof d.include_http === 'boolean' && httpCb.checked !== d.include_http) httpCb.checked = d.include_http;
     const el = document.getElementById('sync-log');
     if (!el || !d.entries || !d.entries.length) return;
     const frag = d.entries.map(function(e) {{
