@@ -3366,10 +3366,13 @@ function _drawSpotChart(hourly, fixedCt) {{
 }}
 
 function metricCardHtml(label, value, sub, rawSub) {{
+  // Always render .metric-sub (with non-breaking space placeholder if empty)
+  // so every card has the same height and values across cards align horizontally.
+  var subHtml = sub ? (rawSub ? sub : esc(sub)) : '&nbsp;';
   return '<div class="metric-card">' +
     '<div class="metric-label">' + esc(label) + '</div>' +
     '<div class="metric-value">' + esc(value) + '</div>' +
-    (sub ? '<div class="metric-sub">' + (rawSub ? sub : esc(sub)) + '</div>' : '') +
+    '<div class="metric-sub">' + subHtml + '</div>' +
     '</div>';
 }}
 
