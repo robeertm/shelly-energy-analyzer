@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.11.3 - 2026-04-05
+### Fixed
+- **Plots-Tab auf Mobile winzig** – die `#pane-plots.active { height: … }` Regel stand nur im Desktop-Media-Query (≥900px), auf dem Handy hatte der Pane keine Höhe → iframe mit `height:100%` kollabierte auf wenige Pixel. Jetzt greift die Höhe auf allen Bildschirmen (`calc(100dvh - 140px)` Mobile, `calc(100vh - 96px)` Desktop) und das `#panes` Padding wird im Plots-Tab auf 0 gesetzt, damit der Iframe die volle Breite bekommt.
+
 ## 16.11.2 - 2026-04-05
 ### Fixed
 - **Sprachänderung in Settings wirkte erst nach Server-Neustart** – die HTML-Templates für Dashboard, Plots und Control werden beim Serverstart einmal gerendert und gecached (mit aufgelösten `{t('…')}` Übersetzungen). `reload_config()` aktualisierte `state.lang`, aber nicht die gecachten Bytes. Jetzt werden alle drei HTML-Templates bei jeder Config-Änderung neu gerendert + gzip-komprimiert. Sprachwechsel greift sofort nach Reload.
