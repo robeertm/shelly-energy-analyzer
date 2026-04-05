@@ -170,6 +170,12 @@ def api_config():
     return jsonify(state.get_config_response())
 
 
+@bp.route("/api/version")
+def api_version():
+    from shelly_analyzer import __version__
+    return jsonify({"version": __version__})
+
+
 @bp.route("/api/jobs")
 def api_jobs():
     state = _get_state()

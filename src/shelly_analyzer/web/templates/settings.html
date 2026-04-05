@@ -134,6 +134,7 @@ async function saveSection(sectionId) {
 
 const SECTIONS = [
   {id:"devices", title:"Geräte", group:"Grundeinstellungen", custom:true},
+  {id:"health", title:"Health Check", group:"Grundeinstellungen", custom:true},
   {id:"ui", title:"Anzeige", group:"Grundeinstellungen", fields:[
     {key:"ui.language", label:"Sprache", type:"select", opts:Object.entries(LANGS)},
     {key:"ui.theme", label:"Theme", type:"select", opts:[["auto","Auto"],["light","Hell"],["dark","Dunkel"]]},
@@ -216,6 +217,7 @@ const SECTIONS = [
     {key:"ui.webhook_daily_summary_enabled", label:"Tages-Report", type:"checkbox"},
     {key:"ui.webhook_monthly_summary_enabled", label:"Monats-Report", type:"checkbox"},
   ]},
+  {id:"alerts", title:"Alarm-Regeln", group:"Benachrichtigungen", custom:true},
   {id:"anomaly", title:"Anomalien", group:"Benachrichtigungen", fields:[
     {key:"anomaly.enabled", label:"Anomalie-Erkennung aktiv", type:"checkbox"},
     {key:"anomaly.sigma_threshold", label:"Sigma-Schwelle", type:"number", step:"0.1"},
@@ -432,6 +434,8 @@ function renderSection(s) {
   if (s.custom) {
     if (s.id === "devices") return renderDevices();
     if (s.id === "about") return renderAbout();
+    if (s.id === "health") return renderHealth();
+    if (s.id === "alerts") return renderAlerts();
   }
   const fieldsHtml = (s.fields||[]).map(renderField).join("");
   const hint = s.hint ? `<div class="hint" style="margin-bottom:10px">${s.hint}</div>` : "";
@@ -469,9 +473,170 @@ function renderDevices() {
 
 function renderAbout() {
   return `<section id="sec-about"><h2>Über</h2>
-    <p>Version: <strong id="about-version">${cfg.version||"?"}</strong></p>
+    <p>App-Version: <strong id="about-version">Lade…</strong></p>
+    <p>Config-Version: <span class="hint">${cfg.version||"?"}</span></p>
     <div id="about-stats" class="hint">Lade DB-Statistik…</div>
   </section>`;
+}
+
+function renderHealth() {
+  return `<section id="sec-health"><h2>Health Check</h2>
+    <p class="hint">Ping aller Shellys + Firmware-Status</p>
+    <div class="section-actions" style="justify-content:flex-start;margin-top:0;border-top:none;padding-top:0">
+      <button class="secondary" onclick="runHealthCheck()">🩺 Jetzt prüfen</button>
+    </div>
+    <div id="health-results" style="margin-top:12px"><p class="hint">Klick "Jetzt prüfen" für aktuellen Status</p></div>
+  </section>`;
+}
+
+let alertRules = [];
+const METRICS = ["W","V","A","VAR","COSPHI","W_L1","W_L2","W_L3","V_L1","V_L2","V_L3","A_L1","A_L2","A_L3"];
+const OPS = [">","<",">=","<=","="];
+
+function renderAlerts() {
+  const devOpts = '<option value="*">Alle Geräte</option>' +
+    devices.map(d=>`<option value="${d.key}">${d.name}</option>`).join("");
+  return `<section id="sec-alerts"><h2>Alarm-Regeln</h2>
+    <div id="alerts-list"><p class="hint">Lade…</p></div>
+    <div class="section-actions" style="justify-content:flex-start">
+      <button onclick="addAlertRule()">➕ Neue Regel</button>
+      <button class="secondary" onclick="loadAlerts()">↻ Aktualisieren</button>
+    </div>
+    <template id="alert-tmpl">
+      <div class="devcard" style="flex-direction:column;align-items:stretch">
+        <div class="grid2" style="width:100%">
+          <div class="field"><label>Name / ID</label><input class="a-id" type="text"></div>
+          <div class="field row"><label>Aktiv</label><input class="a-enabled" type="checkbox"></div>
+          <div class="field"><label>Gerät</label><select class="a-device">${devOpts}</select></div>
+          <div class="field"><label>Metrik</label><select class="a-metric">${METRICS.map(m=>`<option>${m}</option>`).join("")}</select></div>
+          <div class="field"><label>Operator</label><select class="a-op">${OPS.map(o=>`<option>${o}</option>`).join("")}</select></div>
+          <div class="field"><label>Schwelle</label><input class="a-threshold" type="number" step="0.1"></div>
+          <div class="field"><label>Dauer (Sek)</label><input class="a-duration" type="number"></div>
+          <div class="field"><label>Cooldown (Sek)</label><input class="a-cooldown" type="number"></div>
+        </div>
+        <div class="grid2" style="width:100%">
+          <div class="field row"><label>→ Telegram</label><input class="a-telegram" type="checkbox"></div>
+          <div class="field row"><label>→ Webhook</label><input class="a-webhook" type="checkbox"></div>
+          <div class="field row"><label>→ E-Mail</label><input class="a-email" type="checkbox"></div>
+          <div class="field row"><label>Popup/Beep</label><span><input class="a-popup" type="checkbox" title="Popup"> <input class="a-beep" type="checkbox" title="Beep"></span></div>
+        </div>
+        <div class="field"><label>Nachricht</label><input class="a-message" type="text"></div>
+        <div class="section-actions" style="margin-top:8px">
+          <button class="secondary small save-btn">💾 Speichern</button>
+          <button class="danger small del-btn">✕ Löschen</button>
+        </div>
+      </div>
+    </template>
+  </section>`;
+}
+
+async function loadAlerts() {
+  try {
+    const r = await fetch("/api/alerts");
+    const j = await r.json();
+    alertRules = j.alerts || [];
+    renderAlertList();
+  } catch(e) { $("#alerts-list").innerHTML = `<p class="hint">Fehler: ${e.message}</p>`; }
+}
+
+function renderAlertList() {
+  const list = $("#alerts-list");
+  if (!alertRules.length) { list.innerHTML = '<p class="hint">Keine Regeln konfiguriert</p>'; return; }
+  list.innerHTML = "";
+  const tmpl = $("#alert-tmpl");
+  alertRules.forEach((rule, idx) => {
+    const node = tmpl.content.cloneNode(true);
+    node.querySelector(".a-id").value = rule.rule_id || "";
+    node.querySelector(".a-enabled").checked = !!rule.enabled;
+    node.querySelector(".a-device").value = rule.device_key || "*";
+    node.querySelector(".a-metric").value = rule.metric || "W";
+    node.querySelector(".a-op").value = rule.op || ">";
+    node.querySelector(".a-threshold").value = rule.threshold || 0;
+    node.querySelector(".a-duration").value = rule.duration_seconds || 10;
+    node.querySelector(".a-cooldown").value = rule.cooldown_seconds || 120;
+    node.querySelector(".a-telegram").checked = !!rule.action_telegram;
+    node.querySelector(".a-webhook").checked = !!rule.action_webhook;
+    node.querySelector(".a-email").checked = !!rule.action_email;
+    node.querySelector(".a-popup").checked = !!rule.action_popup;
+    node.querySelector(".a-beep").checked = !!rule.action_beep;
+    node.querySelector(".a-message").value = rule.message || "";
+    const savBtn = node.querySelector(".save-btn");
+    const delBtn = node.querySelector(".del-btn");
+    savBtn.onclick = () => saveAlertRow(savBtn.closest(".devcard"), rule.rule_id);
+    delBtn.onclick = () => deleteAlertRow(rule.rule_id);
+    list.appendChild(node);
+  });
+}
+
+function gatherAlertRow(row) {
+  return {
+    rule_id: row.querySelector(".a-id").value.trim(),
+    enabled: row.querySelector(".a-enabled").checked,
+    device_key: row.querySelector(".a-device").value,
+    metric: row.querySelector(".a-metric").value,
+    op: row.querySelector(".a-op").value,
+    threshold: Number(row.querySelector(".a-threshold").value) || 0,
+    duration_seconds: Number(row.querySelector(".a-duration").value) || 10,
+    cooldown_seconds: Number(row.querySelector(".a-cooldown").value) || 120,
+    action_telegram: row.querySelector(".a-telegram").checked,
+    action_webhook: row.querySelector(".a-webhook").checked,
+    action_email: row.querySelector(".a-email").checked,
+    action_popup: row.querySelector(".a-popup").checked,
+    action_beep: row.querySelector(".a-beep").checked,
+    message: row.querySelector(".a-message").value,
+  };
+}
+
+async function saveAlertRow(row, rowId) {
+  const data = gatherAlertRow(row);
+  const r = await fetch("/api/alerts/" + encodeURIComponent(rowId),
+    {method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
+  const j = await r.json();
+  if (j.ok) { toast("✓ Gespeichert"); loadAlerts(); }
+  else toast("Fehler: "+j.error, "error");
+}
+
+async function addAlertRule() {
+  const r = await fetch("/api/alerts",{method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({enabled:true,device_key:"*",metric:"W",op:">",threshold:1000,duration_seconds:10,message:"Hohe Last"})});
+  const j = await r.json();
+  if (j.ok) { toast("✓ Regel erstellt"); loadAlerts(); }
+  else toast("Fehler: "+j.error, "error");
+}
+
+async function deleteAlertRow(ruleId) {
+  if (!confirm("Regel \""+ruleId+"\" löschen?")) return;
+  const r = await fetch("/api/alerts/" + encodeURIComponent(ruleId), {method:"DELETE"});
+  const j = await r.json();
+  if (j.ok) { toast("✓ Gelöscht"); loadAlerts(); }
+  else toast("Fehler: "+j.error, "error");
+}
+
+async function runHealthCheck() {
+  const el = $("#health-results");
+  el.innerHTML = '<p class="hint">⏳ Pinge Geräte…</p>';
+  try {
+    const r = await fetch("/api/health");
+    const j = await r.json();
+    if (!j.ok) { el.innerHTML = `<p class="hint">Fehler</p>`; return; }
+    const rows = j.devices.map(d => {
+      const status = d.online ? '<span style="color:var(--ok)">● Online</span>' : '<span style="color:var(--danger)">● Offline</span>';
+      const fw = d.firmware ? `<code style="font-size:.75rem">${d.firmware}</code>` : '<span class="hint">?</span>';
+      const upd = d.firmware_update_available ? '<span style="color:var(--warn,#eab308);margin-left:6px">⬆ Update verfügbar</span>' : '';
+      const lat = d.latency_ms != null ? `${d.latency_ms} ms` : '-';
+      const upt = d.uptime_s != null ? Math.floor(d.uptime_s/3600)+' h' : '-';
+      const err = d.error ? `<div class="hint" style="color:var(--danger)">${d.error}</div>` : '';
+      return `<div class="devcard">
+        <div class="info">
+          <h4>${d.name} <span class="hint" style="font-weight:400">(${d.host})</span></h4>
+          <p>${status} · Latenz: ${lat} · Uptime: ${upt} · FW: ${fw}${upd}</p>
+          ${err}
+        </div>
+      </div>`;
+    }).join("");
+    el.innerHTML = rows + `<p class="hint" style="margin-top:8px">Aktualisiert: ${new Date(j.ts*1000).toLocaleTimeString()}</p>`;
+  } catch(e) { el.innerHTML = `<p class="hint">Fehler: ${e.message}</p>`; }
 }
 
 function renderNav() {
@@ -488,11 +653,19 @@ function renderNav() {
 function renderAll() {
   $("#main").innerHTML = SECTIONS.map(renderSection).join("");
   renderNav();
+  // Fetch real app version
+  fetch("/api/version").then(r=>r.json()).then(v=>{
+    const el = $("#about-version");
+    if (el) el.textContent = v.version || "?";
+  }).catch(()=>{});
+  // Load DB stats
   fetch("/api/data/stats").then(r=>r.json()).then(s=>{
     if (!s.ok) return;
     const el = $("#about-stats");
     if (el) el.innerHTML = `Datenbank: ${s.db_size_mb} MB · Samples: ${(s.samples_rows||0).toLocaleString()} · Stunden: ${(s.hourly_energy_rows||0).toLocaleString()}`;
   }).catch(()=>{});
+  // Load alert rules
+  loadAlerts();
 }
 
 async function discoverDevices() {
