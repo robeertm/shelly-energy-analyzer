@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.12.3 - 2026-04-05
+### Added
+- **Settings-Seite: Übersetzungen für alle 9 Sprachen** – Section-Titel, Gruppen-Überschriften, Buttons (Speichern/Test/Scan/…), Toast-Messages und Page-Title jetzt in **DE, EN, ES, FR, PT, IT, PL, CS, RU** mit nativen Übersetzungen (statt englischem Fallback). 59 UI-Strings × 7 neue Sprachen = 413 neue Übersetzungseinträge.
+- Die 200 einzelnen **Feld-Labels** (settings.field.*) bleiben in nicht-DE/EN-Sprachen auf Englisch — für Detail-Settings ist das üblich.
+
 ## 16.12.2 - 2026-04-05
 ### Changed
 - **i18n Pass 3: Settings field labels** – alle **200 Feld-Labels** in der Settings-Seite laufen jetzt durch i18n mit DE + EN. Betrifft jede Einstellung in jeder Sektion: Anzeige, Web-Server, Preise & Tarif, Auto-Sync, Telegram, E-Mail, Webhook, Anomalien, MQTT, InfluxDB, Prometheus, API, Updates, Solar, Batterie, PV-Überschuss, Spot-Preise, CO₂, Wetter, Prognose, Smart Schedule, EV Charging, KI-Berater, Gamification, Rechnung, Mieter, Multi-Location, Download, Demo.
