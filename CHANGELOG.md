@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.5.1 - 2026-04-05
+### Fixed
+- **Live kWh today: include already-synced history** – live accumulator previously only summed energy since app start. Now reads baseline from `hourly_energy` (all kWh of today up to the latest synced hour) and only adds live-integrated samples *after* that point. Refreshes every 10 min to pick up new auto-sync data without double counting.
+
 ## 16.5.0 - 2026-04-05
 ### Fixed
 - **Live view per-device kWh/cost stuck at 0** – Feed loop now trapezoid-integrates `power_w.total` samples into kWh per device with automatic midnight reset. Previously tried to read a non-existent cumulative sensor field from `raw`. Cost = kWh × gross unit price.
