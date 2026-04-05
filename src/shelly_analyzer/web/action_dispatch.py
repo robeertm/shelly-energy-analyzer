@@ -456,6 +456,18 @@ class ActionDispatcher:
 
         s = pd.to_numeric(df2.get("energy_kwh"), errors="coerce").fillna(0.0)
         ts = pd.to_datetime(df2.get("timestamp"), errors="coerce")
+        # Stored timestamps are UTC (tz-stripped by query_samples). Convert to
+        # local tz (Europe/Berlin) so hour/day/week/month buckets line up with
+        # what the user sees on their clock.
+        try:
+            _tz_local = "Europe/Berlin"
+            if getattr(ts, "dt", None) is not None:
+                if ts.dt.tz is None:
+                    ts = ts.dt.tz_localize("UTC").dt.tz_convert(_tz_local).dt.tz_localize(None)
+                else:
+                    ts = ts.dt.tz_convert(_tz_local).dt.tz_localize(None)
+        except Exception:
+            pass
         tmp = pd.DataFrame({"timestamp": ts, "energy_kwh": s}).dropna(subset=["timestamp"]).sort_values("timestamp")
         if tmp.empty:
             return ([], [])
@@ -1051,6 +1063,17 @@ class ActionDispatcher:
         out = pd.Series(y.to_numpy(), index=ts, name=metric_u)
         try:
             out.index = pd.to_datetime(out.index, errors='coerce')
+        except Exception:
+            pass
+        # Convert stored UTC index → local time (Europe/Berlin) so timeseries
+        # x-axis shows user-clock hours.
+        try:
+            idx = out.index
+            if isinstance(idx, pd.DatetimeIndex):
+                if idx.tz is None:
+                    out.index = idx.tz_localize("UTC").tz_convert("Europe/Berlin").tz_localize(None)
+                else:
+                    out.index = idx.tz_convert("Europe/Berlin").tz_localize(None)
         except Exception:
             pass
         try:
@@ -3529,7 +3552,9 @@ class ActionDispatcher:
 
                 # CO2 (g) and price (EUR) aggregated per bucket, using db tables
                 def _label_to_ts_range(lab: str, u: str):
-                    """Return (start_ts, end_ts) seconds for a bucket label."""
+                    """Return (start_ts, end_ts) seconds for a bucket label.
+                    Labels are local time (Europe/Berlin) – localize before
+                    getting the UTC POSIX timestamp."""
                     try:
                         if u == "hours":
                             t0 = pd.Timestamp(lab + ":00")
@@ -3545,6 +3570,11 @@ class ActionDispatcher:
                         else:  # days
                             t0 = pd.Timestamp(lab).normalize()
                             t1 = t0 + pd.Timedelta(days=1)
+                        try:
+                            t0 = t0.tz_localize("Europe/Berlin", nonexistent="shift_forward", ambiguous="NaT")
+                            t1 = t1.tz_localize("Europe/Berlin", nonexistent="shift_forward", ambiguous="NaT")
+                        except Exception:
+                            pass
                         return int(t0.timestamp()), int(t1.timestamp())
                     except Exception:
                         return None, None
