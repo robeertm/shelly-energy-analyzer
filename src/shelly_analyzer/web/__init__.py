@@ -17,6 +17,9 @@ from shelly_analyzer.services.webdash import (
     _render_template,
     _render_template_tokens,
     _plotly_min_js_bytes,
+    _HTML_TEMPLATE,
+    _PLOTS_TEMPLATE,
+    _CONTROL_TEMPLATE,
 )
 
 logger = logging.getLogger(__name__)
@@ -26,8 +29,7 @@ def _render_dashboard_html(state: "AppState") -> bytes:
     """Render the main dashboard HTML using the existing template engine."""
     from shelly_analyzer.web.app_context import AppState  # noqa: F811
 
-    tpl_path = Path(__file__).parent / "templates" / "dashboard.html"
-    tpl = tpl_path.read_text(encoding="utf-8")
+    tpl = _HTML_TEMPLATE
     lang = state.lang
     web_i18n = get_lang_map(lang)
 
@@ -120,8 +122,7 @@ def _render_control_html(state: "AppState") -> bytes:
     """Render the control page HTML."""
     from shelly_analyzer.web.app_context import AppState  # noqa: F811
 
-    tpl_path = Path(__file__).parent / "templates" / "control.html"
-    tpl = tpl_path.read_text(encoding="utf-8")
+    tpl = _CONTROL_TEMPLATE
     lang = state.lang
 
     values: Dict[str, str] = {
@@ -175,8 +176,7 @@ def _render_plots_html(state: "AppState") -> bytes:
     from shelly_analyzer.web.app_context import AppState  # noqa: F811
     import html as html_mod
 
-    tpl_path = Path(__file__).parent / "templates" / "plots.html"
-    tpl = tpl_path.read_text(encoding="utf-8")
+    tpl = _PLOTS_TEMPLATE
     lang = state.lang
     web_i18n = get_lang_map(lang)
 
