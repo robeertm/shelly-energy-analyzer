@@ -111,23 +111,65 @@ def compute_bills():
             for t in tc.tenants
         ]
 
-        # Pricing
-        unit_price = float(state.cfg.pricing.unit_price_gross())
-        base_fee = float(getattr(state.cfg.pricing, "base_fee_eur_per_year", 0.0) or 0.0)
+        # Pricing — always pass NET values to the service; VAT is applied once
+        # at subtotal_net → gross inside the service. Previous versions passed
+        # GROSS and then applied VAT again, double-counting 19% on the bill.
         try:
             vat_rate = float(state.cfg.pricing.vat_rate())
         except Exception:
             vat_rate = float(getattr(state.cfg.pricing, "vat_rate_percent", 19.0) or 19.0) / 100.0
+        try:
+            unit_price_net = float(state.cfg.pricing.unit_price_net())
+        except Exception:
+            unit_price_net = float(getattr(state.cfg.pricing, "electricity_price_eur_per_kwh", 0.0) or 0.0)
+        try:
+            base_fee_net = float(state.cfg.pricing.base_fee_year_net())
+        except Exception:
+            base_fee_net = float(getattr(state.cfg.pricing, "base_fee_eur_per_year", 0.0) or 0.0)
 
+        # Tariff mode: "fixed" (default, uses PricingConfig) or "dynamic" (uses spot_prices DB)
+        tariff_mode = request.args.get("tariff_mode") or ""
+        if not tariff_mode:
+            try:
+                tariff_mode = str(getattr(state.cfg.spot_price, "tariff_type", "fixed") or "fixed")
+            except Exception:
+                tariff_mode = "fixed"
+        tariff_mode = tariff_mode.lower().strip()
+
+        # For dynamic tariff: compute volume-weighted avg spot price (ct/kWh → €/kWh net)
+        price_eur_per_kwh = unit_price_net
         period_start = request.args.get("period_start") or None
         period_end = request.args.get("period_end") or None
+        if tariff_mode == "dynamic":
+            try:
+                import datetime as _dt
+                from shelly_analyzer.io.config import SpotPriceConfig
+                spot_cfg = getattr(state.cfg, "spot_price", None)
+                if spot_cfg is not None:
+                    zone = str(getattr(spot_cfg, "bidding_zone", "DE-LU") or "DE-LU")
+                    # Determine period bounds
+                    _now = _dt.datetime.now()
+                    _end = _dt.datetime.strptime(period_end, "%Y-%m-%d") if period_end else _now
+                    _start = _dt.datetime.strptime(period_start, "%Y-%m-%d") if period_start else (_end - _dt.timedelta(days=365))
+                    df_sp = state.storage.db.query_spot_prices(zone, int(_start.timestamp()), int(_end.timestamp()))
+                    if df_sp is not None and not df_sp.empty:
+                        avg_eur_mwh = float(df_sp["price_eur_mwh"].mean())
+                        # Convert to €/kWh NET, then add surcharges (all net)
+                        base_ct = avg_eur_mwh * 0.1  # ct/kWh gross-spot
+                        surcharge_ct = float(spot_cfg.total_markup_ct())
+                        final_ct_net = base_ct + surcharge_ct
+                        price_eur_per_kwh = final_ct_net / 100.0  # €/kWh NET
+            except Exception:
+                logger.exception("Dynamic tariff lookup failed; falling back to fixed")
+                price_eur_per_kwh = unit_price_net
+                tariff_mode = "fixed"
 
         report = generate_tenant_bills(
             db=state.storage.db,
             tenants=svc_tenants,
             devices=list(state.cfg.devices),
-            price_eur_per_kwh=unit_price,
-            base_fee_eur_per_year=base_fee,
+            price_eur_per_kwh=price_eur_per_kwh,
+            base_fee_eur_per_year=base_fee_net,
             vat_rate=vat_rate,
             period_start=period_start,
             period_end=period_end,
@@ -175,6 +217,10 @@ def compute_bills():
                 "common_area_kwh": round(report.common_area_kwh, 3),
                 "generated_at": report.generated_at,
                 "bills": bills,
+                "tariff_mode": tariff_mode,
+                "price_eur_per_kwh_net": round(price_eur_per_kwh, 4),
+                "base_fee_eur_per_year_net": round(base_fee_net, 2),
+                "vat_rate_percent": round(vat_rate * 100, 1),
             },
         })
     except Exception as e:
