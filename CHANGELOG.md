@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.8.1 - 2026-04-05
+### Changed
+- **Live view width on desktop** – `#live-grid` now capped at 66% viewport width on screens ≥900px so device cards/sparklines don't stretch edge-to-edge on wide monitors. Mobile view unchanged (full width).
+
 ## 16.8.0 - 2026-04-05
 ### Fixed
 - **CO₂ & spot-price fetchers never started in Flask app** – `Co2FetchService` (ENTSO-E) and `SpotPriceFetchService` existed but `BackgroundServiceManager.start_all()` didn't instantiate them. So `/api/co2` / `/api/plots_data` returned empty data for fresh installs. Both are now started on app boot (honours `co2.enabled` + `entso_e_api_token` and `spot_price.enabled`) and triggered immediately so data is available within ~1 min.
