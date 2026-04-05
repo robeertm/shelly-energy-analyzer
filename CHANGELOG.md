@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.9.0 - 2026-04-05
+### Added
+- **Plots tab in dashboard** – dedicated tab (📊 Plots) embedding the full-featured `/plots` page: historical time series for W / V / A / VAR / cos φ across all three phases (total or per-phase view) with flexible time ranges (minutes / hours / days) plus the kWh aggregation view (hours / days / weeks / months). Shares the dashboard theme. Lazy-loaded on first activation.
+
 ## 16.8.5 - 2026-04-05
 ### Fixed
 - **"Inkrement-Sync" button appeared to do nothing** – `services/sync.py` had **zero** logging, so the Sync tab's log pane stayed empty while sync ran silently in a background thread. Added INFO logs for range, per-chunk progress, and final summary. Also the status panel no longer gets overwritten 50ms later by `refreshSyncStatus()` – now shows "Sync läuft …" until the job actually touches the DB (3s debounce).
