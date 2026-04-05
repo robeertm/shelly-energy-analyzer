@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.13.4 - 2026-04-05
+### Changed
+- **iOS-Widget: CO₂-Chart zeigt volle 24h + aktuellen Wert robust** – die `/api/widget` Endpoint query für `co2_chart` deckt jetzt die letzten 24 Stunden ab (vorher -12h/+12h, Hälfte war leer da es für CO₂ keine Forecasts gibt). `co2_current` nimmt jetzt den **letzten verfügbaren Wert** aus den 24h (statt nur der aktuellen Stunde) – so wird auch bei kurzen Lücken im Fetch der aktuellste Wert angezeigt.
+- **CO₂-Chart-Label im Widget zeigt den aktuellen Wert** – das Label über dem Mini-Balkendiagramm lautet jetzt z. B. "CO₂ g/kWh · 24h · 187" statt nur "CO₂ g/kWh".
+
 ## 16.13.3 - 2026-04-05
 ### Changed
 - **Plots-Tab immer statisch (kein Zoom)** – der Plots-Tab verwendet jetzt überall die einfachen mobilen Plots ohne Zoom/Pan/Scroll-Zoom, unabhängig von der Viewport-Breite. `isMobileView()` innerhalb der Plots-Seite gibt immer `true` zurück, d. h. `fixedrange`, `dragmode: false`, `displayModeBar: false` und `doubleClick: false` für alle Plotly-Charts.
