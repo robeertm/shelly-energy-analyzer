@@ -5913,13 +5913,21 @@ _PLOTS_TEMPLATE = """<!doctype html>
       <div id="plot2_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px;display:none"></div>
       <div id="plot2" class="plot"></div>
     </div>
-    <div class="card" id="card_co2" style="display:none">
-      <div id="plot_co2_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px"></div>
-      <div id="plot_co2" class="plot"></div>
+    <div class="card" id="card_co2_1" style="display:none">
+      <div id="plot_co2_1_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px"></div>
+      <div id="plot_co2_1" class="plot"></div>
     </div>
-    <div class="card" id="card_price" style="display:none">
-      <div id="plot_price_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px"></div>
-      <div id="plot_price" class="plot"></div>
+    <div class="card" id="card_co2_2" style="display:none">
+      <div id="plot_co2_2_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px"></div>
+      <div id="plot_co2_2" class="plot"></div>
+    </div>
+    <div class="card" id="card_price_1" style="display:none">
+      <div id="plot_price_1_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px"></div>
+      <div id="plot_price_1" class="plot"></div>
+    </div>
+    <div class="card" id="card_price_2" style="display:none">
+      <div id="plot_price_2_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px"></div>
+      <div id="plot_price_2" class="plot"></div>
     </div>
   </div>
 
@@ -5979,6 +5987,20 @@ try {
     theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
   }
   document.documentElement.dataset.theme = theme;
+} catch (e) {}
+
+// Listen for theme changes made in the parent dashboard (when /plots is embedded
+// as iframe in the Plots tab). The parent writes localStorage 'sea_theme' on toggle,
+// which fires a storage event in this iframe since they share origin.
+try {
+  window.addEventListener('storage', function(ev){
+    if (ev && ev.key === 'sea_theme' && ev.newValue) {
+      document.documentElement.dataset.theme = ev.newValue;
+      try { if (typeof updateThemeButton === 'function') updateThemeButton(); } catch(e){}
+      // Re-render plots so line/grid/font colours match the new theme
+      try { if (window.__scheduleApplyPlots) window.__scheduleApplyPlots(50); } catch(e){}
+    }
+  });
 } catch (e) {}
 
 function toggleTheme(){
@@ -6399,62 +6421,74 @@ async function loadData() {
       document.getElementById('card2').style.display = 'none';
     }
 
-    // CO2 bar chart (grams per bucket) – colour by g/kWh intensity (green < thr, red >= dirty)
-    const co2Arr = (data.co2_g || []).map(v => (v==null ? 0 : v));
+    // CO2 bar charts (per device) – colour by g/kWh intensity (green < thr, red >= dirty)
     const co2Int = data.co2_intensity_g_per_kwh || [];
-    const hasCo2 = (data.co2_g || []).some(v => v != null);
-    const cardCo2 = document.getElementById('card_co2');
-    if (hasCo2) {
-      cardCo2.style.display = '';
-      const te = document.getElementById('plot_co2_title');
-      const gThr = (data.co2_green_thr != null) ? data.co2_green_thr : 150;
-      const dThr = (data.co2_dirty_thr != null) ? data.co2_dirty_thr : 400;
-      te.textContent = 'CO₂' + (data.co2_zone ? ' (' + data.co2_zone + ')' : '')
-        + ' – g pro Bucket · Ampel: grün <' + gThr + ' / rot ≥' + dThr + ' g/kWh';
+    const gThr = (data.co2_green_thr != null) ? data.co2_green_thr : 150;
+    const dThr = (data.co2_dirty_thr != null) ? data.co2_dirty_thr : 400;
+    const co2Devs = data.co2_per_device || [];
+    function renderCo2Card(idx, devData) {
+      const cardEl = document.getElementById('card_co2_' + idx);
+      const titleEl = document.getElementById('plot_co2_' + idx + '_title');
+      const plotId = 'plot_co2_' + idx;
+      if (!devData || !(devData.g||[]).some(v => v != null)) { cardEl.style.display = 'none'; return; }
+      cardEl.style.display = '';
+      titleEl.textContent = 'CO₂ · ' + (devData.name || devData.key || '') +
+        (data.co2_zone ? ' (' + data.co2_zone + ')' : '') +
+        ' – g pro Bucket · Ampel: grün <' + gThr + ' / rot ≥' + dThr + ' g/kWh';
+      const yArr = (devData.g || []).map(v => (v==null ? 0 : v));
       const colors = co2Int.map(v => tlColor(v, gThr, dThr));
-      const hover = co2Int.map((v,i) => (v!=null ? (v + ' g/kWh · Σ ' + co2Arr[i] + ' g') : '—'));
+      const custom = co2Int.map((v,i) => [v==null?'—':v, yArr[i]]);
       Plotly.newPlot(
-        'plot_co2',
-        [{type:'bar', name:'CO₂', x: xsLab, y: co2Arr, marker:{color:colors},
-          text: hover, hovertemplate:'%{x}<br>%{text}<extra></extra>'}],
+        plotId,
+        [{type:'bar', name:'CO₂', x: xsLab, y: yArr, marker:{color:colors},
+          customdata: custom,
+          hovertemplate:'%{x}<br>%{customdata[0]} g/kWh · Σ %{customdata[1]} g<extra></extra>'}],
         kwhLayout('g CO₂'),
         {responsive:true, displaylogo:false}
       );
-    } else {
-      cardCo2.style.display = 'none';
     }
+    renderCo2Card(1, co2Devs[0]);
+    renderCo2Card(2, co2Devs[1]);
 
-    // Price bar chart (EUR per bucket) – colour by ct/kWh (percentile thresholds over displayed range)
-    const priceArr = (data.price_eur || []).map(v => (v==null ? 0 : v));
+    // Price bar charts (per device) – colour by ct/kWh (percentile thresholds)
     const priceCt = data.price_ct_kwh || [];
-    const hasPrice = (data.price_eur || []).some(v => v != null);
-    const cardPrice = document.getElementById('card_price');
-    if (hasPrice) {
-      cardPrice.style.display = '';
-      const te = document.getElementById('plot_price_title');
-      const [p33, p66] = autoThresholds(priceCt);
-      const gThrP = (p33 != null) ? p33 : 10;
-      const rThrP = (p66 != null) ? p66 : 25;
-      te.textContent = 'Dynamischer Strompreis' + (data.price_zone ? ' (' + data.price_zone + ')' : '')
-        + ' – € pro Bucket · Ampel: grün <' + gThrP.toFixed(1) + ' / rot ≥' + rThrP.toFixed(1) + ' ct/kWh';
+    const [p33, p66] = autoThresholds(priceCt);
+    const gThrP = (p33 != null) ? p33 : 10;
+    const rThrP = (p66 != null) ? p66 : 25;
+    const priceDevs = data.price_per_device || [];
+    const surchInfo = data.price_surcharges_included
+      ? ' · inkl. ' + (data.price_surcharge_ct || 0) + ' ct/kWh Zusatzkosten' + (data.price_vat_pct ? ' + ' + data.price_vat_pct + '% MwSt' : '')
+      : ' · reiner Spotpreis (ohne Zusatzkosten)';
+    function renderPriceCard(idx, devData) {
+      const cardEl = document.getElementById('card_price_' + idx);
+      const titleEl = document.getElementById('plot_price_' + idx + '_title');
+      const plotId = 'plot_price_' + idx;
+      if (!devData || !(devData.eur||[]).some(v => v != null)) { cardEl.style.display = 'none'; return; }
+      cardEl.style.display = '';
+      titleEl.textContent = 'Strompreis · ' + (devData.name || devData.key || '') +
+        (data.price_zone ? ' (' + data.price_zone + ')' : '') +
+        ' – € pro Bucket · Ampel: grün <' + gThrP.toFixed(1) + ' / rot ≥' + rThrP.toFixed(1) + ' ct/kWh' + surchInfo;
+      const yArr = (devData.eur || []).map(v => (v==null ? 0 : v));
       const colorsP = priceCt.map(v => tlColor(v, gThrP, rThrP));
-      const hoverP = priceCt.map((v,i) => (v!=null ? (v + ' ct/kWh · Σ ' + priceArr[i] + ' €') : '—'));
+      const custom = priceCt.map((v,i) => [v==null?'—':v, yArr[i]]);
       Plotly.newPlot(
-        'plot_price',
-        [{type:'bar', name:'€', x: xsLab, y: priceArr, marker:{color:colorsP},
-          text: hoverP, hovertemplate:'%{x}<br>%{text}<extra></extra>'}],
+        plotId,
+        [{type:'bar', name:'€', x: xsLab, y: yArr, marker:{color:colorsP},
+          customdata: custom,
+          hovertemplate:'%{x}<br>%{customdata[0]} ct/kWh · Σ %{customdata[1]} €<extra></extra>'}],
         kwhLayout('EUR'),
         {responsive:true, displaylogo:false}
       );
-    } else {
-      cardPrice.style.display = 'none';
     }
+    renderPriceCard(1, priceDevs[0]);
+    renderPriceCard(2, priceDevs[1]);
 
     return;
   } else {
     // Hide kWh-only cards when not in kwh view
-    var _cCo2 = document.getElementById('card_co2'); if (_cCo2) _cCo2.style.display = 'none';
-    var _cPr  = document.getElementById('card_price'); if (_cPr) _cPr.style.display = 'none';
+    ['card_co2_1','card_co2_2','card_price_1','card_price_2'].forEach(function(id) {
+      var el = document.getElementById(id); if (el) el.style.display = 'none';
+    });
   }
 
   const devs = data.devices || [];
