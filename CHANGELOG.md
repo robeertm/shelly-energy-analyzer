@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.6.3 - 2026-04-05
+### Changed
+- **Version badge moved to top-right** – was covering the bottom navigation bar; now sits discreetly in the top-right corner of every page.
+
 ## 16.6.2 - 2026-04-05
 ### Changed
 - **Reverted mobile hamburger** – bottom navigation stays visible and horizontally scrollable on mobile as before. Hamburger button hidden on all viewports.

@@ -74,10 +74,9 @@ def _inject_version_badge(html: str) -> str:
     from shelly_analyzer import __version__
     badge = (
         '<div id="app-version-badge" style="position:fixed;'
-        'bottom:4px;right:6px;z-index:9999;font-size:10px;'
-        'color:rgba(128,128,128,0.7);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;'
-        'pointer-events:none;user-select:none;background:rgba(0,0,0,0.08);'
-        'padding:1px 5px;border-radius:3px;backdrop-filter:blur(2px)">'
+        'top:2px;right:4px;z-index:9999;font-size:9px;'
+        'color:rgba(128,128,128,0.6);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;'
+        'pointer-events:none;user-select:none;padding:0 3px">'
         f'v{__version__}</div>'
     )
     if "</body>" in html:
