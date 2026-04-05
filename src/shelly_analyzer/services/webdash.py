@@ -1073,6 +1073,10 @@ _HTML_TEMPLATE = """<!doctype html>
     }}
     /* Live view always single column, even on wide monitors */
     #live-grid.card-grid {{ grid-template-columns: 1fr !important; }}
+    /* Desktop: limit live grid to ~2/3 of viewport width (mobile keeps full width) */
+    @media (min-width: 900px) {{
+      #live-grid.card-grid {{ max-width: 66%; }}
+    }}
     /* ── Metric grid ── */
     .metric-grid {{
       display: grid;
