@@ -1,5 +1,13 @@
 # Changelog
 
+## 16.13.10 - 2026-04-05
+### Added
+- **Neutralleiterstrom-Fallback: Berechnung aus Phasenströmen** – wenn das Gerät keinen echten I_N-Wert meldet (kein Neutralleiter-Stromwandler angeschlossen), wird I_N jetzt berechnet:
+  - 3-phasig: `|I_N| = √(I₁² + I₂² + I₃² − I₁·I₂ − I₂·I₃ − I₁·I₃)` (Annahme: 120°-Phasenversatz)
+  - 2-phasig: `|I_N| = |I₁ − I₂|` (split-phase)
+  - 1-phasig: 0
+  - Bei symmetrischer Last ergibt das 0 A, bei unsymmetrischer Last den Betrag des Stroms im N-Leiter. Betrifft sowohl `/api/live_state` als auch `/api/history`, d.h. Sparkline + Detail-Chart + Geräte-Karte zeigen jetzt sinnvolle Werte auch ohne N-Klemme.
+
 ## 16.13.9 - 2026-04-05
 ### Fixed
 - **Live-Tab: Klick auf Hz-Sparkline öffnete I_N-Neutralleiter-Detail-Chart** – der Click-Handler und das Detail-Chart-Rendering hatten `metric='hz'` nicht behandelt; der `else`-Zweig fiel auf "Neutral" zurück und plottete zusätzlich Phasen-Ströme, was "komisch verschoben" aussah. Jetzt: eigener `hz`-Case mit korrektem Titel "Frequency (Hz)", cyan (#06b6d4) Linie, nur eine Serie ohne Phasen.
