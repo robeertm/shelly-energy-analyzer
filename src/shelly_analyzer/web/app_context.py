@@ -91,6 +91,8 @@ class AppState:
 
     def reload_config(self, cfg: AppConfig) -> None:
         """Hot-reload configuration."""
+        import gzip
+        old_lang = getattr(self, "lang", None)
         self.cfg = cfg
         self.lang = normalize_lang(cfg.ui.language)
         self.devices_meta = [
@@ -102,6 +104,20 @@ class AppState:
             }
             for d in cfg.devices
         ]
+        # Language or device list changed: re-render cached HTML templates
+        # (dashboard/plots/control pages embed translations + device chips at startup).
+        try:
+            from shelly_analyzer.web import _render_dashboard_html, _render_plots_html, _render_control_html
+            self._dashboard_html = _render_dashboard_html(self)
+            self._dashboard_html_gz = gzip.compress(self._dashboard_html, compresslevel=6)
+            self._plots_html = _render_plots_html(self)
+            self._plots_html_gz = gzip.compress(self._plots_html, compresslevel=6)
+            self._control_html = _render_control_html(self)
+            self._control_html_gz = gzip.compress(self._control_html, compresslevel=6)
+            if old_lang != self.lang:
+                logger.info("Language switched: %s → %s – HTML templates re-rendered", old_lang, self.lang)
+        except Exception as e:
+            logger.warning("HTML re-render after config reload failed: %s", e)
 
     # ── Job management (same as LiveWebDashboard) ──────────────────────
 

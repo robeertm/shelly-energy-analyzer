@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.11.2 - 2026-04-05
+### Fixed
+- **Sprachänderung in Settings wirkte erst nach Server-Neustart** – die HTML-Templates für Dashboard, Plots und Control werden beim Serverstart einmal gerendert und gecached (mit aufgelösten `{t('…')}` Übersetzungen). `reload_config()` aktualisierte `state.lang`, aber nicht die gecachten Bytes. Jetzt werden alle drei HTML-Templates bei jeder Config-Änderung neu gerendert + gzip-komprimiert. Sprachwechsel greift sofort nach Reload.
+
 ## 16.11.1 - 2026-04-05
 ### Added
 - **Fixpreis-Vergleichsbalken im Preis-Plot** – zweiter (grauer) Balken pro Bucket zeigt die Kosten beim Fixtarif aus `pricing.electricity_price_eur_per_kwh` (brutto), direkt neben den farbigen Dynamisch-Balken gruppiert. Sofort vergleichbar wie viel man mit/ohne Dynamic-Tariff zahlt.
