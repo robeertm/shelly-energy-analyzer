@@ -147,6 +147,10 @@ function gatherSection(sectionId) {
     let val;
     if (inp.type === "checkbox") val = inp.checked;
     else if (inp.type === "number") val = inp.value === "" ? 0 : Number(inp.value);
+    else if (inp.dataset.type === "json") {
+      try { val = JSON.parse(inp.value || "[]"); }
+      catch(e) { throw new Error("JSON in '"+key+"': "+e.message); }
+    }
     else val = inp.value;
     setPath(data, key, val);
   });
@@ -154,7 +158,9 @@ function gatherSection(sectionId) {
 }
 
 async function saveSection(sectionId) {
-  const data = gatherSection(sectionId);
+  let data;
+  try { data = gatherSection(sectionId); }
+  catch(e) { toast(T("settings.toast.error","Fehler: {err}",{err:e.message}), "error"); return; }
   try {
     const r = await fetch("/api/settings",{method:"PUT",
       headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
@@ -221,7 +227,8 @@ const SECTIONS = [
   ]},
   {id:"tou", title:"TOU (Zeittarife)", group:"Grundeinstellungen", fields:[
     {key:"tou.enabled", label:"TOU-Tarif aktiv", type:"checkbox"},
-  ], hint:"Details über config.json"},
+    {key:"tou.periods", label:"Zeitperioden (JSON)", type:"json", hint:'Liste von Perioden: [{"name":"Peak","start":"18:00","end":"22:00","rate_eur_per_kwh":0.42,"weekdays":[1,2,3,4,5]}, ...]'},
+  ]},
   {id:"autosync", title:"Auto-Sync", group:"Grundeinstellungen", fields:[
     {key:"ui.autosync_enabled", label:"Auto-Sync aktiv", type:"checkbox"},
     {key:"ui.autosync_interval_hours", label:"Intervall (Std)", type:"number"},
@@ -340,11 +347,12 @@ const SECTIONS = [
     {key:"battery.max_discharge_rate_kw", label:"Max Entladeleistung (kW)", type:"number", step:"0.1"},
     {key:"battery.efficiency_pct", label:"Effizienz (%)", type:"number", step:"0.1"},
   ]},
-  {id:"pv_surplus", title:"PV-Überschuss", group:"Energie", hint:"Consumers über config.json editieren", fields:[
+  {id:"pv_surplus", title:"PV-Überschuss", group:"Energie", fields:[
     {key:"pv_surplus.enabled", label:"PV-Überschuss aktiv", type:"checkbox"},
     {key:"pv_surplus.on_threshold_w", label:"Ein-Schwelle (W)", type:"number"},
     {key:"pv_surplus.off_threshold_w", label:"Aus-Schwelle (W)", type:"number"},
     {key:"pv_surplus.debounce_seconds", label:"Debounce (Sek)", type:"number"},
+    {key:"pv_surplus.consumers", label:"Verbraucher (JSON)", type:"json", hint:'Liste: [{"device_key":"shelly1","min_power_w":1000,"priority":1}, ...]'},
   ]},
   {id:"spot_price", title:"Spot-Preise", group:"Energie", fields:[
     {key:"spot_price.enabled", label:"Spot-Preise aktiv", type:"checkbox"},
@@ -398,8 +406,9 @@ const SECTIONS = [
     {key:"ev_charging.detection_threshold_w", label:"Erkennungs-Schwelle (W)", type:"number"},
     {key:"ev_charging.min_session_minutes", label:"Min Session (Min)", type:"number"},
   ]},
-  {id:"tariff_compare", title:"Tarifvergleich", group:"Features", hint:"Custom Tarife über config.json", fields:[
+  {id:"tariff_compare", title:"Tarifvergleich", group:"Features", fields:[
     {key:"tariff_compare.enabled", label:"Tarifvergleich aktiv", type:"checkbox"},
+    {key:"tariff_compare.custom_tariffs", label:"Custom Tarife (JSON)", type:"json", hint:'Liste: [{"name":"Tibber","provider":"Tibber","tariff_type":"dynamic","price_eur_per_kwh":0.28,"base_fee_eur_per_month":5.99}, ...]'},
   ]},
   {id:"advisor", title:"KI-Berater", group:"Features", fields:[
     {key:"advisor.enabled", label:"KI-Berater aktiv", type:"checkbox"},
@@ -416,21 +425,26 @@ const SECTIONS = [
     {key:"gamification.monthly_goal_kwh", label:"Monats-Ziel (kWh)", type:"number", step:"0.1"},
   ]},
 
-  {id:"billing", title:"Rechnung", group:"Erweitert", hint:"Adressen mehrzeilig über config.json", fields:[
+  {id:"billing", title:"Rechnung", group:"Erweitert", fields:[
     {key:"billing.invoice_prefix", label:"Rechnungsnummer-Prefix", type:"text"},
     {key:"billing.payment_terms_days", label:"Zahlungsziel (Tage)", type:"number"},
     {key:"billing.invoice_logo_path", label:"Logo-Pfad", type:"text"},
     {key:"billing.issuer.name", label:"Aussteller Name", type:"text"},
+    {key:"billing.issuer.address", label:"Aussteller Adresse", type:"textarea", hint:"Straße, PLZ Ort, Land – mehrzeilig"},
     {key:"billing.issuer.vat_id", label:"Aussteller USt-ID", type:"text"},
     {key:"billing.issuer.email", label:"Aussteller E-Mail", type:"email"},
     {key:"billing.issuer.phone", label:"Aussteller Telefon", type:"text"},
     {key:"billing.issuer.iban", label:"Aussteller IBAN", type:"text"},
     {key:"billing.issuer.bic", label:"Aussteller BIC", type:"text"},
     {key:"billing.customer.name", label:"Kunde Name", type:"text"},
+    {key:"billing.customer.address", label:"Kunde Adresse", type:"textarea", hint:"Straße, PLZ Ort, Land – mehrzeilig"},
+    {key:"billing.customer.email", label:"Kunde E-Mail", type:"email"},
+    {key:"billing.customer.vat_id", label:"Kunde USt-ID", type:"text"},
   ]},
-  {id:"tenant", title:"Mieter", group:"Erweitert", hint:"Mieter-Liste über config.json", fields:[
+  {id:"tenant", title:"Mieter", group:"Erweitert", fields:[
     {key:"tenant.enabled", label:"Mieter-Abrechnung aktiv", type:"checkbox"},
     {key:"tenant.billing_period_months", label:"Abrechnungszeitraum (Monate)", type:"number"},
+    {key:"tenant.tenants", label:"Mieter-Liste (JSON)", type:"json", hint:'Liste: [{"id":"t1","name":"Müller","device_keys":["shelly1"],"base_fee_share":0.25,"address":"Musterstr. 1\\n12345 Berlin"}, ...]'},
   ]},
   {id:"multi_location", title:"Multi-Location", group:"Erweitert", fields:[
     {key:"multi_location.enabled", label:"Multi-Location aktiv", type:"checkbox"},
@@ -471,7 +485,10 @@ function renderField(f) {
     const options = opts.map(([k,v])=>`<option value="${k}" ${String(k)===String(val)?"selected":""}>${v}</option>`).join("");
     input = `<select data-key="${f.key}">${options}</select>`;
   } else if (f.type === "textarea") {
-    input = `<textarea data-key="${f.key}">${val||""}</textarea>`;
+    input = `<textarea data-key="${f.key}">${(val===null||val===undefined)?"":String(val)}</textarea>`;
+  } else if (f.type === "json") {
+    const jsonStr = (val==null) ? "[]" : (typeof val === "string" ? val : JSON.stringify(val, null, 2));
+    input = `<textarea data-key="${f.key}" data-type="json" style="min-height:120px;font-family:ui-monospace,monospace;font-size:.78rem">${jsonStr.replace(/</g,"&lt;")}</textarea>`;
   } else {
     const step = f.step ? `step="${f.step}"` : "";
     const tp = f.type === "password" ? "password" : f.type === "number" ? "number" : (f.type === "email"?"email":(f.type==="url"?"url":"text"));
