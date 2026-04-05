@@ -1713,6 +1713,7 @@ _HTML_TEMPLATE = """<!doctype html>
           <span style="flex:1"></span>
           <button class="btn" onclick="refreshSyncStatus()">⟳ Status</button>
           <label style="display:flex;align-items:center;gap:4px;font-size:11px"><input type="checkbox" id="log-autoscroll" checked> Auto-Scroll</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px"><input type="checkbox" id="log-include-http" onchange="toggleLogHttp(this.checked)"> HTTP-Logs</label>
         </div>
         <div id="sync-status-panel" style="font-size:12px;color:var(--muted);margin-bottom:6px">Lade Status…</div>
       </div>
@@ -2011,8 +2012,14 @@ function initSync() {{
 function stopSyncPolling() {{
   if (_syncTimer) {{ clearInterval(_syncTimer); _syncTimer = null; }}
 }}
+function toggleLogHttp(v) {{
+  fetch('/api/logs/config', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{include_http: !!v}})}}).catch(function() {{}});
+}}
 function pollSyncLogs() {{
   fetch('/api/logs?since=' + _syncLogSince + '&limit=200').then(function(r) {{ return r.json(); }}).then(function(d) {{
+    // Sync checkbox with server state on first poll
+    var cb = document.getElementById('log-include-http');
+    if (cb && typeof d.include_http === 'boolean' && cb.checked !== d.include_http) cb.checked = d.include_http;
     const el = document.getElementById('sync-log');
     if (!el || !d.entries || !d.entries.length) return;
     const frag = d.entries.map(function(e) {{
