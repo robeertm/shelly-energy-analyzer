@@ -1,5 +1,13 @@
 # Changelog
 
+## 16.10.0 - 2026-04-05
+### Added
+- **Plots → kWh view: CO₂ & dynamische Preise** – neue Balkendiagramme für CO₂-Emissionen (g pro Bucket) und Strompreis (€ pro Bucket), aggregiert aus `co2_intensity`/`spot_prices` × Summen-kWh aller Geräte pro Bucket. Zeigen nur wenn CO₂/Spot-Price-Module aktiv und Daten vorhanden.
+
+### Changed
+- **kWh-Balken pro Gerät getrennt** – je Gerät eigener Plot (statt gruppierter Balken in einem Chart). Erleichtert Lesen bei unterschiedlichen Größenordnungen.
+- **X-Achsen-Labels lesbarer** – `tickangle: 'auto'` + `automargin` statt fixem 45°, sodass Plotly abhängig von Bucket-Anzahl automatisch rotiert und nie abgeschnitten wird.
+
 ## 16.9.3 - 2026-04-05
 ### Changed
 - **Plots tab polish** – five fixes on the embedded `/plots` page:
