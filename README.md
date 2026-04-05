@@ -1,40 +1,14 @@
 # Shelly Energy Analyzer
 
-A cross-platform desktop application to analyze, visualize and export energy data from Shelly devices (1-phase and 3-phase) — including live dashboards, cost tracking, historical plots, CSV/PDF exports, Telegram alerts, solar/PV monitoring, anomaly detection, NILM appliance detection, device scheduling, consumption forecasting, weather correlation, tenant billing, smart scheduling, EV charging logs, tariff comparison, battery monitoring, AI energy advisor, gamification, InfluxDB/Prometheus export, REST API, multi-location support, and much more.
+A cross-platform **web application** to analyze, visualize and export energy data from Shelly devices (1-phase and 3-phase) — including live dashboards, cost tracking, historical plots, CSV/PDF exports, Telegram alerts, solar/PV monitoring, anomaly detection, NILM appliance detection, device scheduling, consumption forecasting, weather correlation, tenant billing, smart scheduling, EV charging logs, tariff comparison, battery monitoring, AI energy advisor, gamification, InfluxDB/Prometheus export, REST API, multi-location support, and much more.
 
-This repository is **GitHub-ready** (MIT license, clean structure, no secrets). Releases are published via **GitHub Releases** so the built-in updater can find and download new versions.
+Runs as a local Flask web server — access the dashboard from any browser on your network (desktop or mobile). No desktop GUI required. This repository is **GitHub-ready** (MIT license, clean structure, no secrets). Releases are published via **GitHub Releases** so the built-in updater can find and download new versions.
 
-> **Current version: v15.0.0** — 12 new features: smart scheduling, PV surplus control, EV charging log, tariff comparison, battery monitoring, InfluxDB/Prometheus export, REST API v1, AI energy advisor, gamification, multi-location support, desktop dark mode, and web language selector.
+> **Current version: v16.13.x** — web-only architecture with full-featured browser UI, first-run setup wizard, complete in-browser settings & device management, and all prior features from the former desktop app.
 
 ---
 
 ## Screenshots
-
-### Desktop App
-
-| Sync | Live (3-Phase) | Costs |
-|------|----------------|-------|
-| ![Sync](docs/screenshots/desktop_01_sync.png) | ![Live](docs/screenshots/desktop_03_live.png) | ![Costs](docs/screenshots/desktop_04_costs.png) |
-
-| Heatmap | Solar | Compare |
-|---------|-------|---------|
-| ![Heatmap](docs/screenshots/desktop_05_heatmap.png) | ![Solar](docs/screenshots/desktop_06_solar.png) | ![Compare](docs/screenshots/desktop_07_compare.png) |
-
-| CO₂ Intensity | Forecast | Standby |
-|---------------|----------|---------|
-| ![CO2](docs/screenshots/desktop_10_co2.png) | ![Forecast](docs/screenshots/desktop_11_forecast.png) | ![Standby](docs/screenshots/desktop_12_standby.png) |
-
-| Weather | Energy Flow | Tenants |
-|---------|-------------|---------|
-| ![Weather](docs/screenshots/desktop_13_weather.png) | ![Energy Flow](docs/screenshots/desktop_14_energy_flow.png) | ![Tenants](docs/screenshots/desktop_15_tenants.png) |
-
-| Anomalies | Schedules | Export |
-|-----------|-----------|--------|
-| ![Anomalies](docs/screenshots/desktop_08_anomalies.png) | ![Schedules](docs/screenshots/desktop_09_schedules.png) | ![Export](docs/screenshots/desktop_16_export.png) |
-
-| Updates |
-|---------|
-| ![Updates](docs/screenshots/desktop_17_updates.png) |
 
 ### Plots
 
@@ -50,7 +24,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 |----------------|---------------|---------------|
 | ![Hz](docs/screenshots/plots_hz_haus.png) | ![CO2](docs/screenshots/plots_co2_haus.png) | ![Dyn Price](docs/screenshots/plots_dynprice_haus.png) |
 
-### Web Dashboard (Mobile)
+### Web Dashboard
 
 | Live | Costs | Heatmap |
 |------|-------|---------|
@@ -89,7 +63,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Live cost display (kWh x configured price)
 - Phase balance indicator for 3-phase devices (detects imbalance)
 - Interactive legend toggle on live plots (click L1/L2/L3/N to show/hide)
-- Day / Night / Auto theme switching — all tabs and charts respect the selected theme; switching theme refreshes all charts immediately
+- Day / Night / Auto theme switching — all tabs and charts respect the selected theme
 - **Tariff schedule** — define future price changes with start dates; the app automatically uses the correct price for any date range
 
 ### 💰 Cost Dashboard
@@ -120,7 +94,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 ### 📈 Historical Analysis & Consumption Forecast
 - Plots for W / V / A / kWh / VAR / cos phi / Hz (grid frequency) / CO2 emissions / **dynamic prices**
 - CO2 emissions plot tab — hourly energy x real grid CO2 intensity (ENTSO-E), colour-coded bars by intensity level
-- **Dynamic price plot tab** — grouped bar chart comparing fixed tariff cost (blue) vs. spot market cost (orange) per period, with totals and delta display
+- **Dynamic price plot tab** — grouped bar chart comparing fixed tariff cost vs. spot market cost per period, with totals and delta display
 - Per-device and per-phase views
 - SQLite-based storage (fast range queries, WAL mode)
 - **Consumption forecasting** — linear regression with weekday/hourly seasonality on historical daily data; trend analysis (rising/falling/stable in %/month); projected costs for next month and next year; confidence bands; weekday and hourly profile charts with color-coded patterns (red = above average, green = below average)
@@ -130,7 +104,6 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Hourly heatmap view — spot usage patterns by hour-of-day vs. day-of-week
 - **Two unit modes**: kWh and g CO2 — CO2 mode uses real ENTSO-E hourly grid intensity data with distinct colour scheme
 - Colour intensity scales automatically to the selected period
-- Available in both the desktop app and the web dashboard
 
 ### 🔍 Comparison Mode
 - Compare two arbitrary date ranges side-by-side (e.g. this week vs. last week)
@@ -162,7 +135,6 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Risk classification (high / medium / low) based on annual standby cost
 - 24h load profile per device with standby threshold line
 - Cost comparison bar chart sorted by savings potential
-- Available in both desktop app and web dashboard
 
 ### 🌡️ Weather Correlation
 - Integration with **OpenWeatherMap API** — current weather display (temperature, humidity, wind, clouds)
@@ -177,7 +149,6 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Visual energy flow: Grid -> House -> Devices and PV -> Self-consumption / Feed-in
 - Per-device consumption breakdown with percentage shares
 - Period selector (Today / Week / Month / Year)
-- Available in both desktop app and web dashboard
 
 ### 📡 Home Assistant MQTT Integration
 - **MQTT publisher** for any MQTT broker (Mosquitto, HiveMQ, etc.)
@@ -204,7 +175,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - **ML learning engine** — k-means clustering on power transitions (step changes) to discover recurring appliance patterns automatically
 - Learned clusters matched against built-in database with confidence scoring
 - Cluster data persisted across sessions
-- Top-3 matches shown in desktop app and web dashboard
+- Top-3 matches shown on the live dashboard
 
 ### 📤 Exports & E-mail Reports
 
@@ -244,10 +215,12 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Sync progress bar with real-time status (e.g. "Device 2/3 - Chunk 5/12")
 - Retention policy: raw data compressed to monthly aggregates after 2 years
 
-### 🧙 Setup Wizard
-- Automatic discovery (mDNS / IP scan)
+### 🧙 First-Run Setup Wizard (Web)
+- Browser-based 5-step wizard at `/setup` (auto-redirected on first launch when no devices are configured)
+- Automatic discovery (mDNS)
 - Manual IP/host entry
-- Quiet first-run experience (no error spam)
+- Pricing / base fee / VAT setup
+- Optional spot-price bidding zone selection
 
 ### 🎭 Demo Mode
 - No Shelly devices required
@@ -255,8 +228,8 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 - Great for testing and screenshots
 
 ### 🌐 Web Dashboard (Mobile-Friendly SPA)
-- Full single-page app (SPA) accessible from any device on the local network
-- **11 tabs** matching the desktop application:
+- Full single-page app (SPA) accessible from any device on the local network — the **sole UI** of the application
+- **11 tabs**:
   - **Live** — real-time device cards with colour-coded power, sparkline charts, collapsible detail rows, NILM appliance chips, freeze button, time-scale selector
   - **Costs** — per-device cost overview with ENTSO-E CO2 tracking, dynamic spot price comparison, and 24h spot market price chart; current spot price prominently displayed with color-coded delta
   - **Heatmap** — interactive yearly calendar heatmap and weekday x hour heatmap; horizontally scrollable on mobile with readable 3-char month labels
@@ -269,7 +242,7 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
   - **Energy Flow** — summary cards + per-device consumption breakdown chart with period selector
   - **Export** — PDF summaries, reports, invoices, Excel, ZIP bundles; inline preview
 - **Dark / Light mode** toggle with auto-detection and localStorage persistence
-- **Full i18n** — renders in the same language as the desktop app (all 9 supported languages)
+- **Full i18n** — all 9 supported languages
 - Device order & visibility settings via gear icon modal
 - Gzip-compressed HTML (~75% smaller payload) for fast mobile page loads
 - **Single-row horizontal scrolling nav bar** — all tabs accessible without wrapping
@@ -342,15 +315,11 @@ This repository is **GitHub-ready** (MIT license, clean structure, no secrets). 
 ### 🏠 Multi-Location Support
 - Manage **multiple sites** (home, office, vacation home) with separate device sets
 - Optional **separate databases** per location
-- Location switcher in desktop UI and web dashboard; aggregate view across all locations
-
-### 🌙 Desktop Dark/Light Mode
-- **Theme toggle** in Settings: Auto (detects macOS appearance), Light, Dark
-- Affects all matplotlib plots, treeviews, and UI elements
+- Location switcher in the web dashboard; aggregate view across all locations
 
 ### 🖥 Cross-Platform
 - macOS / Windows / Linux
-- One-click start scripts
+- One-click start scripts — opens dashboard at `https://localhost:8765` in your default browser
 
 ---
 
@@ -377,19 +346,7 @@ chmod +x start.sh
 
 ## Demo Mode
 
-Demo Mode lets you test the full application **without any Shelly devices**.
-
-### Enable Demo Mode
-- On first start, choose **"Demo mode"** in the setup wizard
-  **or**
-- Set in `config.json`:
-```json
-{
-  "demo": { "enabled": true }
-}
-```
-
-Demo Mode generates realistic live data (with jitter + load spikes) and CSV history for plots and exports.
+Demo Mode lets you test the full application **without any Shelly devices** — enable it in Settings → Advanced. It generates realistic live data (with jitter + load spikes) and CSV history for plots and exports.
 
 ---
 
