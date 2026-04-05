@@ -626,27 +626,104 @@ function renderSection(s) {
 }
 
 function renderDevices() {
-  const rows = devices.map(d=>`
-    <div class="devcard">
-      <div class="info">
-        <h4><span class="dot ${d.online?"online":""}"></span>${d.name}</h4>
-        <p>${d.host} · ${d.kind} · ${d.phases}P · ${d.key}</p>
+  const rows = devices.map(d=>{
+    const esckey = esc(d.key);
+    return `
+    <div class="list-item" data-devkey="${esckey}">
+      <div class="list-item-hdr">
+        <span class="list-item-title"><span class="dot ${d.online?"online":""}"></span>${esc(d.name||d.key)}</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button type="button" class="secondary small" onclick="probeDevice('${esckey}')" title="Verbindung prüfen">🔌</button>
+          <button type="button" class="small" onclick="saveDevice('${esckey}')">💾 Speichern</button>
+          <button type="button" class="small danger" onclick="deleteDevice('${esckey}')">✕</button>
+        </div>
       </div>
-      <div>
-        <button class="small danger" onclick="deleteDevice('${d.key}')">✕</button>
+      <div class="list-item-grid">
+        <div class="field"><label>Name</label><input type="text" data-df="name" value="${esc(d.name||"")}"></div>
+        <div class="field"><label>Host / IP</label><input type="text" data-df="host" value="${esc(d.host||"")}"></div>
+        <div class="field"><label>Schlüssel (read-only)</label><input type="text" value="${esckey}" readonly></div>
+        <div class="field"><label>EM-ID</label><input type="number" data-df="em_id" min="0" value="${Number(d.em_id||0)}"></div>
+        <div class="field"><label>Typ</label><select data-df="kind">
+          <option value="em" ${d.kind==="em"?"selected":""}>Energy Meter</option>
+          <option value="switch" ${d.kind==="switch"?"selected":""}>Switch / Relay</option>
+          <option value="unknown" ${d.kind==="unknown"?"selected":""}>Unbekannt</option>
+        </select></div>
+        <div class="field"><label>Generation</label><select data-df="gen">
+          <option value="0" ${Number(d.gen||0)===0?"selected":""}>Auto</option>
+          <option value="1" ${Number(d.gen)===1?"selected":""}>Gen 1</option>
+          <option value="2" ${Number(d.gen)===2?"selected":""}>Gen 2</option>
+          <option value="3" ${Number(d.gen)===3?"selected":""}>Gen 3</option>
+        </select></div>
+        <div class="field"><label>Phasen</label><select data-df="phases">
+          <option value="1" ${Number(d.phases)===1?"selected":""}>1-phasig</option>
+          <option value="2" ${Number(d.phases)===2?"selected":""}>2-phasig</option>
+          <option value="3" ${Number(d.phases)===3?"selected":""}>3-phasig</option>
+        </select></div>
+        <div class="field"><label>Modell</label><input type="text" data-df="model" value="${esc(d.model||"")}" placeholder="z. B. SHEM-3"></div>
+        <label class="field row" style="grid-column:1/-1"><span>EMData / historische Daten unterstützt</span><input type="checkbox" data-df="supports_emdata" ${d.supports_emdata!==false?"checked":""}></label>
       </div>
-    </div>`).join("");
+      <div class="hint" style="margin-top:6px;font-size:.72rem">Status: ${d.online?'<span style="color:var(--ok)">● Online</span>':'<span style="color:var(--muted)">○ Offline / keine Daten</span>'}</div>
+    </div>`;
+  }).join("");
   return `<section id="sec-devices"><h2>Geräte</h2>
-    ${rows || `<p class='hint'>${T("settings.health.no_devices","Keine Geräte konfiguriert")}</p>`}
+    <div style="display:flex;flex-direction:column;gap:8px">${rows || `<p class='hint'>${T("settings.health.no_devices","Keine Geräte konfiguriert")}</p>`}</div>
     <div class="section-actions" style="justify-content:space-between;flex-wrap:wrap">
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="secondary" onclick="discoverDevices()">🔍 mDNS Scan</button>
         <input id="probe-ip" type="text" placeholder="IP-Adresse" style="width:160px">
         <button class="secondary" onclick="addByIp()">➕ Hinzufügen</button>
+        <button class="secondary" onclick="probeAllDevices()">🔌 Alle prüfen</button>
       </div>
     </div>
     <div id="discover-results"></div>
   </section>`;
+}
+
+async function saveDevice(key) {
+  const card = document.querySelector(`.list-item[data-devkey="${CSS.escape(key)}"]`);
+  if (!card) return;
+  const body = {};
+  card.querySelectorAll('[data-df]').forEach(inp=>{
+    const k = inp.dataset.df;
+    if (inp.type === "checkbox") body[k] = inp.checked;
+    else if (inp.type === "number") body[k] = inp.value === "" ? 0 : Number(inp.value);
+    else body[k] = inp.value;
+  });
+  try {
+    const r = await fetch("/api/devices/"+encodeURIComponent(key),{method:"PUT",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const j = await r.json();
+    if (j.ok) { toast("✓ Gerät aktualisiert"); reload(); }
+    else toast("Fehler: " + j.error, "error");
+  } catch(e) { toast("Fehler: " + e.message, "error"); }
+}
+
+async function probeDevice(key) {
+  const card = document.querySelector(`.list-item[data-devkey="${CSS.escape(key)}"]`);
+  const host = card ? card.querySelector('[data-df="host"]').value : "";
+  if (!host) { toast("Host/IP fehlt", "error"); return; }
+  try {
+    const r = await fetch("/api/devices/probe",{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify({host})});
+    const j = await r.json();
+    if (j.ok) toast("✓ Erreichbar: " + (j.device.model||j.device.kind||"Shelly"));
+    else toast("Nicht erreichbar: " + j.error, "error");
+  } catch(e) { toast("Fehler: " + e.message, "error"); }
+}
+
+async function probeAllDevices() {
+  toast("🔌 Prüfe alle Geräte…");
+  let ok=0, fail=0;
+  for (const d of devices) {
+    try {
+      const r = await fetch("/api/devices/probe",{method:"POST",
+        headers:{"Content-Type":"application/json"},body:JSON.stringify({host:d.host})});
+      const j = await r.json();
+      if (j.ok) ok++; else fail++;
+    } catch(e) { fail++; }
+  }
+  toast(`Geprüft: ${ok} ok, ${fail} Fehler`, fail?"error":"success");
+  reload();
 }
 
 function renderAbout() {

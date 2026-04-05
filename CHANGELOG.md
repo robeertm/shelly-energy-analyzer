@@ -1,5 +1,14 @@
 # Changelog
 
+## 16.13.22 - 2026-04-05
+### Changed
+- **Settings → Devices: full editor per device** (matching the old desktop tkinter form):
+  - Editable inline fields: **Name**, **Host / IP**, **EM-ID**, **Type** (em / switch / unknown), **Generation** (auto / 1 / 2 / 3), **Phases** (1 / 2 / 3), **Model**, **supports_emdata** toggle.
+  - **💾 Save** button per card writes directly via `PUT /api/devices/<key>`.
+  - **🔌 Probe** button per card tests connectivity via `/api/devices/probe`.
+  - **🔌 Alle prüfen** button probes every configured device.
+  - Online/offline indicator shown explicitly in each card.
+
 ## 16.13.21 - 2026-04-05
 ### Fixed
 - **New devices invisible in Live until first sample arrives** – `/api/state` only returned devices that were already present in the live-state snapshot, so a freshly added device (via IP) stayed invisible in the Live tab until the very first successful poll landed in the store (or indefinitely if the device was unreachable). `/api/state` now also returns configured devices that have no snapshot yet, with zeroed values and `pending:true`. The device card becomes visible immediately; real values fill in as soon as the poller receives the first sample.
