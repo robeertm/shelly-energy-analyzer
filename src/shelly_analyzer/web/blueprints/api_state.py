@@ -187,6 +187,7 @@ def api_history():
                 "i_n": _compute_i_n(float(p.get("i_n") or 0), ia, ib, ic, va, vb, vc),
                 "q": float(p.get("q_total_var") or 0),
                 "q_phases": h_q_phases,
+                "hz": float(p.get("freq_hz") or 0),
             })
         hist[dkey] = pts_out
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 16.13.12 - 2026-04-05
+### Fixed
+- **Live-Tab: Sparklines fangen nach Tab-Wechsel wieder von vorne an** – Ursachen:
+  1. `/api/history` gab `hz` gar nicht zurück → Hz-Sparkline hatte nie Server-Historie zum Zurückfallen.
+  2. `loadHistory()` wurde nur beim ersten Seitenaufruf ausgeführt (`_historyLoaded` Flag), bei Rückkehr zum Live-Tab wurde der Server-Puffer nicht aktualisiert. Nach >60 s Abwesenheit sind alle alten Client-Puffer-Einträge durch `liveWindowSec`-Filter abgelaufen → Plot fängt mit 1 Punkt neu an.
+- **Fixes**:
+  - `/api/history` liefert jetzt `hz` mit.
+  - `stopLive()` setzt `_historyLoaded=false`, damit `startLive()` bei Rückkehr die Server-Historie frisch holt.
+  - `loadHistory()`-Merge dedupliziert nach Timestamp + sortiert chronologisch (statt nur blind zu prepend'en), was auch Duplikate bei mehrfachen Refreshes verhindert.
+  - Redraw-Block in `loadHistory()` aktualisiert jetzt auch `sp-in-*` (Neutralleiterstrom) und `sp-hz-*` (Frequenz) Sparklines.
+
 ## 16.13.11 - 2026-04-05
 ### Fixed
 - **I_N-Fallback griff nicht, weil falscher Endpoint gepatcht wurde** – v16.13.10 hat `_compute_i_n()` nur in `services/webdash.py` eingebaut, aber die aktive Flask-App bedient `/api/state` und `/api/history` über das Blueprint `web/blueprints/api_state.py`. Der dort zurückgegebene `i_n` war weiterhin der rohe (oft 0) Messwert. Jetzt ist `_compute_i_n()` auch in der Blueprint-Version vorhanden und wird für beide Endpoints verwendet. Zusätzlich erkennt die Funktion aktive Phasen jetzt an Spannung **oder** Strom (manche Shelly-Modelle melden nur eine Phasenspannung, aber alle Ströme).
