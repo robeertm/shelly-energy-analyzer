@@ -445,12 +445,14 @@ const SECTIONS = [
   {id:"about", title:"Über", group:"Erweitert", custom:true},
 ];
 
+function tField(f) { return T("settings.field."+f.key, f.label); }
 function renderField(f) {
   const val = get(cfg, f.key, "");
+  const label = tField(f);
   let input;
   if (f.type === "checkbox") {
     input = `<input type="checkbox" data-key="${f.key}" ${val?"checked":""}>`;
-    return `<div class="field row"><label>${f.label}</label>${input}</div>`;
+    return `<div class="field row"><label>${label}</label>${input}</div>`;
   }
   if (f.type === "select" || f.type === "select-device") {
     let opts = f.opts || [];
@@ -467,7 +469,7 @@ function renderField(f) {
     input = `<input type="${tp}" ${step} data-key="${f.key}" value="${val===null||val===undefined?"":String(val).replace(/"/g,"&quot;")}">`;
   }
   const hint = f.hint ? `<div class="hint">${f.hint}</div>` : "";
-  return `<div class="field"><label>${f.label}</label>${input}${hint}</div>`;
+  return `<div class="field"><label>${label}</label>${input}${hint}</div>`;
 }
 
 function renderSection(s) {
