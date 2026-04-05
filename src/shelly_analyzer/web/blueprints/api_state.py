@@ -130,6 +130,36 @@ def api_state():
             "switch_on": switch_on,
         })
 
+    # Include configured devices that have not produced a sample yet
+    # (newly added devices show up immediately as placeholder cards instead
+    # of disappearing until the first poll succeeds).
+    seen_keys = {d["key"] for d in devices_list}
+    for m in (state.devices_meta or []):
+        if not isinstance(m, dict):
+            continue
+        k = m.get("key") or ""
+        if not k or k in seen_keys:
+            continue
+        devices_list.append({
+            "key": k,
+            "name": str(m.get("name") or k),
+            "kind": str(m.get("kind") or "em"),
+            "power_w": 0.0,
+            "today_kwh": 0.0,
+            "cost_today": 0.0,
+            "voltage_v": 0.0,
+            "current_a": 0.0,
+            "pf": 0.0,
+            "freq_hz": 0.0,
+            "phases": [],
+            "q_phases": [],
+            "appliances": [],
+            "i_n": 0.0,
+            "q_total_var": 0.0,
+            "switch_on": None,
+            "pending": True,
+        })
+
     return jsonify({"devices": devices_list})
 
 
