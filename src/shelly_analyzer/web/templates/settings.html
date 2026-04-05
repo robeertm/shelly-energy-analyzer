@@ -6,7 +6,13 @@
 <title>Einstellungen – Shelly Energy Analyzer</title>
 <style>
 :root{--bg:#0b0f14;--card:#121821;--fg:#e8eef6;--muted:#9fb0c3;--accent:#6aa7ff;
---border:rgba(255,255,255,0.08);--danger:#ef4444;--ok:#22c55e}
+--border:rgba(255,255,255,0.08);--danger:#ef4444;--ok:#22c55e;
+--input-bg:rgba(255,255,255,.03);--hover-bg:rgba(106,167,255,.08);--active-bg:rgba(106,167,255,.15);
+--card-inset:rgba(255,255,255,.03);--btn-sec-bg:rgba(255,255,255,.08)}
+:root[data-theme="light"]{--bg:#f6f7fb;--card:#ffffff;--fg:#111827;--muted:#4b5563;--accent:#2563eb;
+--border:rgba(17,24,39,0.12);--danger:#dc2626;--ok:#16a34a;
+--input-bg:rgba(17,24,39,.03);--hover-bg:rgba(37,99,235,.08);--active-bg:rgba(37,99,235,.12);
+--card-inset:rgba(17,24,39,.03);--btn-sec-bg:rgba(17,24,39,.06)}
 *,*::before,*::after{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
 background:var(--bg);color:var(--fg);line-height:1.45;font-size:14px}
@@ -20,8 +26,8 @@ padding:12px 0;overflow-y:auto;position:sticky;top:50px;max-height:calc(100vh - 
 .sidebar h3{font-size:.7rem;text-transform:uppercase;color:var(--muted);
 padding:8px 16px 4px;margin:0;letter-spacing:.05em}
 .sidebar a{display:block;padding:7px 16px;color:var(--fg);font-size:.88rem;border-left:3px solid transparent}
-.sidebar a:hover{background:rgba(106,167,255,.08)}
-.sidebar a.active{background:rgba(106,167,255,.15);border-left-color:var(--accent);color:var(--accent)}
+.sidebar a:hover{background:var(--hover-bg)}
+.sidebar a.active{background:var(--active-bg);border-left-color:var(--accent);color:var(--accent)}
 main{flex:1;padding:20px;max-width:900px;min-width:0}
 section{margin-bottom:30px;background:var(--card);border:1px solid var(--border);
 border-radius:12px;padding:16px 20px;scroll-margin-top:60px}
@@ -31,7 +37,7 @@ section h2{margin:0 0 14px;font-size:1.05rem;color:var(--accent);border-bottom:1
 .field label{font-size:.82rem;color:var(--muted);font-weight:500}
 .field.row label{flex:1}
 input[type="text"],input[type="password"],input[type="number"],input[type="email"],input[type="url"],select,textarea{
-padding:8px 10px;border:1px solid var(--border);background:rgba(255,255,255,.03);
+padding:8px 10px;border:1px solid var(--border);background:var(--input-bg);
 color:var(--fg);border-radius:6px;font-size:.88rem;font-family:inherit;width:100%}
 textarea{resize:vertical;min-height:60px;font-family:ui-monospace,monospace}
 input[type="checkbox"]{width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
@@ -39,14 +45,14 @@ select{cursor:pointer}
 button{padding:8px 14px;border:none;background:var(--accent);color:#fff;border-radius:6px;
 cursor:pointer;font-size:.88rem;font-weight:500}
 button:hover{opacity:.9}
-button.secondary{background:rgba(255,255,255,.08);color:var(--fg)}
+button.secondary{background:var(--btn-sec-bg);color:var(--fg)}
 button.danger{background:var(--danger)}
 button.small{padding:4px 8px;font-size:.78rem}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
 .section-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;
 padding-top:12px;border-top:1px solid var(--border)}
 .hint{font-size:.75rem;color:var(--muted);margin-top:2px}
-.devcard{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;
+.devcard{background:var(--card-inset);border:1px solid var(--border);border-radius:8px;
 padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px}
 .devcard .info{flex:1}
 .devcard h4{margin:0 0 2px;font-size:.95rem}
@@ -70,6 +76,15 @@ main{padding:12px}
 </style>
 </head>
 <body>
+<script>
+(function(){
+  try {
+    var th = localStorage.getItem('sea_theme');
+    if (!th) th = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    document.documentElement.dataset.theme = th;
+  } catch(e) {}
+})();
+</script>
 <header>
   <h1>⚙ Einstellungen</h1>
   <a href="/">← Dashboard</a>
