@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.8 - 2026-04-05
+### Added
+- **Live-Tab: Frequenz-Sparkline (Hz) unter Neutralleiterstrom** – neue Mini-Timeseries pro Gerätekarte, zeigt die Netzfrequenz (meist ~50 Hz) in relativer Skalierung, damit Abweichungen (49.9 / 50.1) sichtbar werden. Farbe: cyan (#06b6d4).
+
 ## 16.13.7 - 2026-04-05
 ### Changed
 - **Kosten-Tab: Prognose-Kachel zeigt jetzt auch die Dyn./Fix-Differenz** – wie bei Heute/Woche/Monat wird nun auch in der Prognose-Kachel der Dyn.-Tarif-Sektion der Pfeil ↑/↓ mit der €-Differenz ggü. Festpreis angezeigt (grün wenn günstiger, rot wenn teurer).
