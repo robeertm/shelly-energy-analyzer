@@ -86,8 +86,8 @@ main{padding:12px}
 })();
 </script>
 <header>
-  <h1>⚙ Einstellungen</h1>
-  <a href="/">← Dashboard</a>
+  <h1 id="page-title">⚙ Einstellungen</h1>
+  <a href="/" id="nav-back">← Dashboard</a>
 </header>
 <div class="layout">
 <nav class="sidebar" id="nav"></nav>
@@ -102,6 +102,14 @@ const LANGS = {de:"Deutsch",en:"English",es:"Español",fr:"Français",pt:"Portug
 
 let cfg = {};
 let devices = [];
+let I18N = {};
+// t(key, fallback) – looks up in I18N, falls back to the German literal if missing.
+// This lets the page stay fully German-out-of-the-box and progressively add translations.
+function T(key, fallback, vars) {
+  let s = (I18N && I18N[key]) ? I18N[key] : fallback;
+  if (vars) Object.keys(vars).forEach(function(k){ s = s.split('{'+k+'}').join(String(vars[k])); });
+  return s;
+}
 
 function toast(msg, kind="success") {
   const el = $("#toast");
@@ -143,7 +151,7 @@ async function saveSection(sectionId) {
       headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
     const j = await r.json();
     if (j.ok) {
-      toast("✓ Gespeichert");
+      toast(T("settings.toast.saved","✓ Gespeichert"));
       // Re-fetch server-side config + re-render the section so the UI matches
       // what the server actually persisted (verifies the write round-trip
       // visually; if a value "jumps back", you know the server rejected it).
@@ -159,8 +167,8 @@ async function saveSection(sectionId) {
         }
       } catch(e) {}
     }
-    else toast("Fehler: " + j.error, "error");
-  } catch(e) { toast("Fehler: " + e.message, "error"); }
+    else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
+  } catch(e) { toast(T("settings.toast.error","Fehler: {err}",{err:e.message}), "error"); }
 }
 
 const SECTIONS = [
@@ -471,11 +479,11 @@ function renderSection(s) {
   }
   const fieldsHtml = (s.fields||[]).map(renderField).join("");
   const hint = s.hint ? `<div class="hint" style="margin-bottom:10px">${s.hint}</div>` : "";
-  const testBtn = s.testBtn ? `<button class="secondary" onclick="testConnection('${s.testBtn}')">🔌 Test</button>` : "";
-  return `<section id="sec-${s.id}"><h2>${s.title}</h2>${hint}
+  const testBtn = s.testBtn ? `<button class="secondary" onclick="testConnection('${s.testBtn}')">${T("settings.btn.test","🔌 Test")}</button>` : "";
+  return `<section id="sec-${s.id}"><h2>${tSection(s)}</h2>${hint}
     <div class="grid2">${fieldsHtml}</div>
     <div class="section-actions">${testBtn}
-      <button onclick="saveSection('${s.id}')">💾 Speichern</button>
+      <button onclick="saveSection('${s.id}')">${T("settings.btn.save","💾 Speichern")}</button>
     </div></section>`;
 }
 
@@ -491,7 +499,7 @@ function renderDevices() {
       </div>
     </div>`).join("");
   return `<section id="sec-devices"><h2>Geräte</h2>
-    ${rows || "<p class='hint'>Keine Geräte konfiguriert</p>"}
+    ${rows || `<p class='hint'>${T("settings.health.no_devices","Keine Geräte konfiguriert")}</p>`}
     <div class="section-actions" style="justify-content:space-between;flex-wrap:wrap">
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="secondary" onclick="discoverDevices()">🔍 mDNS Scan</button>
@@ -634,7 +642,7 @@ async function addAlertRule() {
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({enabled:true,device_key:"*",metric:"W",op:">",threshold:1000,duration_seconds:10,message:"Hohe Last"})});
   const j = await r.json();
-  if (j.ok) { toast("✓ Regel erstellt"); loadAlerts(); }
+  if (j.ok) { toast(T("settings.toast.rule_added","✓ Regel erstellt")); loadAlerts(); }
   else toast("Fehler: "+j.error, "error");
 }
 
@@ -642,7 +650,7 @@ async function deleteAlertRow(ruleId) {
   if (!confirm("Regel \""+ruleId+"\" löschen?")) return;
   const r = await fetch("/api/alerts/" + encodeURIComponent(ruleId), {method:"DELETE"});
   const j = await r.json();
-  if (j.ok) { toast("✓ Gelöscht"); loadAlerts(); }
+  if (j.ok) { toast(T("settings.toast.rule_deleted","✓ Gelöscht")); loadAlerts(); }
   else toast("Fehler: "+j.error, "error");
 }
 
@@ -680,11 +688,11 @@ async function updateAllWithPendingFirmware() {
 
 async function runHealthCheck() {
   const el = $("#health-results");
-  el.innerHTML = '<p class="hint">⏳ Pinge Geräte…</p>';
+  el.innerHTML = '<p class="hint">'+T("settings.health.pinging","⏳ Pinge Geräte…")+'</p>';
   try {
     const r = await fetch("/api/health");
     const j = await r.json();
-    if (!j.ok) { el.innerHTML = `<p class="hint">Fehler</p>`; return; }
+    if (!j.ok) { el.innerHTML = `<p class="hint">${T("settings.health.error","Fehler")}</p>`; return; }
     const rows = j.devices.map(d => {
       const status = d.online ? '<span style="color:var(--ok)">● Online</span>' : '<span style="color:var(--danger)">● Offline</span>';
       const fw = d.firmware ? `<code style="font-size:.75rem">${d.firmware}</code>` : '<span class="hint">?</span>';
@@ -708,13 +716,20 @@ async function runHealthCheck() {
   } catch(e) { el.innerHTML = `<p class="hint">Fehler: ${e.message}</p>`; }
 }
 
+const GROUP_KEYS = {
+  "Grundeinstellungen":"basic", "Benachrichtigungen":"notify", "Integrationen":"integrations",
+  "Energie":"energy", "Features":"features", "Erweitert":"advanced"
+};
+function tSection(s) { return T("settings.section."+s.id, s.title); }
+function tGroup(g) { return T("settings.group."+(GROUP_KEYS[g]||g), g); }
+
 function renderNav() {
   const groups = {};
   SECTIONS.forEach(s=>{(groups[s.group]=groups[s.group]||[]).push(s)});
   let html = "";
   for (const [grp, secs] of Object.entries(groups)) {
-    html += `<h3>${grp}</h3>`;
-    html += secs.map(s=>`<a href="#sec-${s.id}">${s.title}</a>`).join("");
+    html += `<h3>${tGroup(grp)}</h3>`;
+    html += secs.map(s=>`<a href="#sec-${s.id}">${tSection(s)}</a>`).join("");
   }
   $("#nav").innerHTML = html;
 }
@@ -744,7 +759,7 @@ async function discoverDevices() {
     const r = await fetch("/api/devices/discover?timeout=5",{method:"POST"});
     const j = await r.json();
     if (!j.ok) { results.innerHTML = `<p class="hint">Fehler: ${j.error}</p>`; return; }
-    if (!j.devices.length) { results.innerHTML = '<p class="hint">Keine Geräte gefunden</p>'; return; }
+    if (!j.devices.length) { results.innerHTML = `<p class="hint">${T("settings.devices.none","Keine Geräte gefunden")}</p>`; return; }
     results.innerHTML = j.devices.map(d=>`
       <div class="devcard">
         <div class="info"><h4>${d.name||d.host}</h4><p>${d.host} · ${d.kind} · ${d.model||""}</p></div>
@@ -757,7 +772,7 @@ async function addDiscovered(dev) {
   const r = await fetch("/api/devices",{method:"POST",
     headers:{"Content-Type":"application/json"},body:JSON.stringify(dev)});
   const j = await r.json();
-  if (j.ok) { toast("✓ Gerät hinzugefügt"); reload(); }
+  if (j.ok) { toast(T("settings.toast.device_added","✓ Gerät hinzugefügt")); reload(); }
   else toast("Fehler: " + j.error, "error");
 }
 
@@ -767,7 +782,7 @@ async function addByIp() {
   const r = await fetch("/api/devices",{method:"POST",
     headers:{"Content-Type":"application/json"},body:JSON.stringify({host:ip})});
   const j = await r.json();
-  if (j.ok) { toast("✓ Gerät hinzugefügt"); $("#probe-ip").value=""; reload(); }
+  if (j.ok) { toast(T("settings.toast.device_added","✓ Gerät hinzugefügt")); $("#probe-ip").value=""; reload(); }
   else toast("Fehler: " + j.error, "error");
 }
 
@@ -775,7 +790,7 @@ async function deleteDevice(key) {
   if (!confirm("Gerät "+key+" wirklich entfernen?")) return;
   const r = await fetch("/api/devices/"+encodeURIComponent(key),{method:"DELETE"});
   const j = await r.json();
-  if (j.ok) { toast("✓ Gerät entfernt"); reload(); }
+  if (j.ok) { toast(T("settings.toast.device_removed","✓ Gerät entfernt")); reload(); }
   else toast("Fehler: " + j.error, "error");
 }
 
@@ -784,20 +799,29 @@ async function testConnection(which) {
   const r = await fetch("/api/settings/test-"+which,{method:"POST"});
   const j = await r.json();
   if (j.ok) toast("✓ " + (j.message||"OK"));
-  else toast("Fehler: " + j.error, "error");
+  else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
 }
 
 async function reload() {
   try {
-    const [cfgR, devR] = await Promise.all([
+    const [cfgR, devR, i18nR] = await Promise.all([
       fetch("/api/settings").then(r=>r.json()),
       fetch("/api/devices").then(r=>r.json()),
+      fetch("/api/i18n?prefix=settings.").then(r=>r.json()).catch(_=>({map:{}})),
     ]);
     cfg = cfgR;
     devices = devR.devices || [];
+    I18N = (i18nR && i18nR.map) || {};
+    // Apply i18n to header + title
+    try {
+      document.title = T("settings.page.title", "Einstellungen") + " – Shelly Energy Analyzer";
+      var pt = document.getElementById("page-title"); if (pt) pt.textContent = "⚙ " + T("settings.page.title", "Einstellungen");
+      var nb = document.getElementById("nav-back"); if (nb) nb.textContent = T("settings.nav.back", "← Dashboard");
+      document.documentElement.lang = (i18nR && i18nR.lang) || "de";
+    } catch(e){}
     renderAll();
   } catch(e) {
-    $("#main").innerHTML = '<p style="color:var(--danger)">Fehler beim Laden: '+e.message+'</p>';
+    $("#main").innerHTML = '<p style="color:var(--danger)">'+T("settings.toast.error","Fehler: {err}",{err:e.message})+'</p>';
   }
 }
 
