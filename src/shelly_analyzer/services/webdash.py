@@ -1073,11 +1073,11 @@ _HTML_TEMPLATE = """<!doctype html>
     }}
     /* Live view always single column, even on wide monitors */
     #live-grid.card-grid {{ grid-template-columns: 1fr !important; }}
-    /* Desktop: limit live grid to ~2/3 of viewport width, centered.
-       Sparklines grow with viewport height so cards fill the window vertically.
+    /* Desktop: limit all tab content to ~2/3 viewport width, centered.
+       Live sparklines grow with viewport height so cards fill the window vertically.
        Mobile keeps fixed heights + full width. */
     @media (min-width: 900px) {{
-      #live-grid.card-grid {{ max-width: 66%; margin-left: auto; margin-right: auto; }}
+      .pane.active {{ max-width: 66%; margin-left: auto; margin-right: auto; }}
       canvas.sparkline {{ height: clamp(56px, 11vh, 180px); }}
       canvas.sparkline-sm {{ height: clamp(40px, 8vh, 130px); }}
     }}
@@ -1505,6 +1505,7 @@ _HTML_TEMPLATE = """<!doctype html>
   <header id="hdr">
     <span id="hdr-title" style="font-weight:700;font-size:15px">⚡ Shelly Analyzer</span>
     <div id="hdr-actions" style="display:flex;gap:8px;align-items:center">
+      <span id="nilm-badge-hdr" style="font-size:10px;color:var(--muted);background:var(--chipbg);border-radius:8px;padding:3px 8px;display:none"></span>
       <span id="live-stamp" style="font-size:11px;color:var(--muted)"></span>
       <button id="btn-hamburger" class="icon-btn" title="Menü" onclick="toggleNavDrawer()">☰</button>
       <button id="btn-freeze" class="icon-btn" title="{web_btn_freeze_title}" style="display:none">▶</button>
@@ -1518,9 +1519,6 @@ _HTML_TEMPLATE = """<!doctype html>
     <div id="pane-live" class="pane active">
       <div id="live-timescale" style="display:flex;gap:6px;flex-wrap:wrap;padding:0 0 8px 0"></div>
       <div id="live-grid" class="card-grid"></div>
-      <div id="nilm-status" style="padding:8px 12px;font-size:11px;color:var(--muted);display:none">
-        <span id="nilm-badge" style="background:var(--chipbg);border-radius:8px;padding:3px 8px;font-size:10px"></span>
-      </div>
     </div>
 
     <!-- Costs -->
@@ -2425,10 +2423,9 @@ function startLive() {{
 }}
 function _updateNilmStatus() {{
   fetch('/api/nilm_status').then(function(r) {{ return r.json(); }}).then(function(d) {{
-    var el = document.getElementById('nilm-status');
-    var badge = document.getElementById('nilm-badge');
-    if (!el || !badge) return;
-    el.style.display = 'block';
+    var badge = document.getElementById('nilm-badge-hdr');
+    if (!badge) return;
+    badge.style.display = 'inline-block';
     if (d.cluster_count > 0) {{
       var top = (d.clusters || []).slice(0, 3).map(function(c) {{
         return (c.icon || '') + ' ' + Math.round(c.centroid_w || 0) + 'W x' + (c.count || 0);
