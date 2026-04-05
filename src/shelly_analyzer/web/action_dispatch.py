@@ -42,7 +42,7 @@ from shelly_analyzer.services.export import (
     export_pdf_invoice,
     export_figure_png,
 )
-from shelly_analyzer.ui._shared import _parse_date_flexible, _period_bounds
+from shelly_analyzer.web.utils import _parse_date_flexible, _period_bounds
 
 logger = logging.getLogger(__name__)
 
