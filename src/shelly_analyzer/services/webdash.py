@@ -2613,6 +2613,7 @@ function buildDeviceCard(d) {{
       else if (metric === 'v') title = t('web.chart.voltage', 'Voltage (V)');
       else if (metric === 'a') title = t('web.chart.current', 'Current (A)');
       else if (metric === 'q') title = t('web.chart.reactive', 'Reactive Power (VAR)');
+      else if (metric === 'hz') title = t('web.kv.freq', 'Frequency') + ' (Hz)';
       else title = t('web.chart.neutral_current', 'I\u2099 Neutral (A)');
       openDetailChart(devKey, metric, title);
     }});
@@ -2913,6 +2914,8 @@ function _buildDetailLegend(devKey, metric) {{
     for (let i = 0; i < maxPh; i++) items.push({{ label: 'L'+(i+1), color: _PHASE_COLORS[i]||'#888' }});
   }} else if (metric === 'in') {{
     items.push({{ label: t('web.chart.neutral_current', 'I\u2099 Neutral (A)'), color: '#a855f7' }});
+  }} else if (metric === 'hz') {{
+    items.push({{ label: t('web.kv.freq', 'Frequency') + ' (Hz)', color: '#06b6d4' }});
   }} else if (metric === 'q') {{
     items.push({{ label: t('web.plots.series.total','Total'), color: '#ef4444' }});
     for (let i = 0; i < maxPh; i++) items.push({{ label: 'L'+(i+1), color: _PHASE_COLORS[i]||'#888' }});
@@ -2967,6 +2970,9 @@ function _drawDetailChart() {{
   }} else if (metric === 'in') {{
     series.push(visPts.map(function(p) {{ return p.i_n||0; }}));
     colors.push('#a855f7');
+  }} else if (metric === 'hz') {{
+    series.push(visPts.map(function(p) {{ return p.hz||0; }}));
+    colors.push('#06b6d4');
   }} else if (metric === 'q') {{
     series.push(visPts.map(function(p) {{ return p.q||0; }}));
     colors.push('#ef4444');
