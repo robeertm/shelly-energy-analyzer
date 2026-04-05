@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ersteinrichtung – Shelly Energy Analyzer</title>
+<style>
+:root{--bg:#0b0f14;--card:#121821;--fg:#e8eef6;--muted:#9fb0c3;--accent:#6aa7ff;
+--border:rgba(255,255,255,0.08);--danger:#ef4444;--ok:#22c55e;
+--input-bg:rgba(255,255,255,.03);--hover-bg:rgba(106,167,255,.08);--active-bg:rgba(106,167,255,.15)}
+:root[data-theme="light"]{--bg:#f6f7fb;--card:#ffffff;--fg:#111827;--muted:#4b5563;--accent:#2563eb;
+--border:rgba(17,24,39,0.12);--danger:#dc2626;--ok:#16a34a;
+--input-bg:rgba(17,24,39,.03);--hover-bg:rgba(37,99,235,.08);--active-bg:rgba(37,99,235,.12)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
+background:var(--bg);color:var(--fg);line-height:1.5;font-size:14px;min-height:100vh;
+display:flex;flex-direction:column;align-items:center;padding:20px}
+.wrap{max-width:720px;width:100%}
+.hero{text-align:center;margin-bottom:20px}
+.hero h1{margin:0 0 8px;font-size:1.6rem}
+.hero p{margin:0;color:var(--muted)}
+.steps{display:flex;gap:6px;margin-bottom:20px;justify-content:center;flex-wrap:wrap}
+.step-dot{width:28px;height:28px;border-radius:50%;background:var(--input-bg);border:1px solid var(--border);
+display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:600;color:var(--muted)}
+.step-dot.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.step-dot.done{background:var(--ok);color:#fff;border-color:var(--ok)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:16px;
+box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.card h2{margin:0 0 10px;font-size:1.15rem;color:var(--accent)}
+.card p{color:var(--muted);margin:0 0 14px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:.82rem;color:var(--muted);font-weight:500;margin-bottom:4px}
+input[type="text"],input[type="number"],input[type="password"],select{
+padding:10px 12px;border:1px solid var(--border);background:var(--input-bg);color:var(--fg);
+border-radius:8px;font-size:.9rem;width:100%;font-family:inherit}
+input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent)}
+.row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--input-bg);
+border:1px solid var(--border);border-radius:8px;cursor:pointer;margin-bottom:8px}
+.row:hover{background:var(--hover-bg)}
+.row label{flex:1;cursor:pointer;margin:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
+@media(max-width:600px){.grid2{grid-template-columns:1fr}}
+button{padding:10px 18px;border:none;background:var(--accent);color:#fff;border-radius:8px;
+cursor:pointer;font-size:.9rem;font-weight:500}
+button:hover{opacity:.9}
+button.secondary{background:var(--input-bg);color:var(--fg);border:1px solid var(--border)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.actions{display:flex;justify-content:space-between;gap:8px;margin-top:16px}
+.hint{font-size:.78rem;color:var(--muted)}
+.devlist{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.devrow{display:flex;justify-content:space-between;align-items:center;gap:10px;
+padding:10px 12px;background:var(--input-bg);border:1px solid var(--border);border-radius:8px}
+.devrow .meta{flex:1;min-width:0}
+.devrow .name{font-weight:600;font-size:.9rem}
+.devrow .sub{font-size:.75rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.devrow button{padding:6px 12px;font-size:.78rem}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;margin-right:6px}
+.dot.added{background:var(--ok)}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--border);
+padding:10px 14px;border-radius:8px;font-size:.85rem;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,.4);
+opacity:0;transform:translateY(10px);transition:all .2s}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.error{border-color:var(--danger)}
+.toast.success{border-color:var(--ok)}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);
+border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<script>
+(function(){try{var th=localStorage.getItem('sea_theme');
+if(!th)th=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+document.documentElement.dataset.theme=th;}catch(e){}})();
+</script>
+<div class="wrap">
+<div class="hero">
+  <h1>⚡ Shelly Energy Analyzer</h1>
+  <p>Ersteinrichtung – richte deine Shellys und deinen Tarif ein</p>
+</div>
+<div class="steps" id="steps"></div>
+<div id="stage"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const STEPS = [
+  {id:"welcome", title:"Willkommen"},
+  {id:"devices", title:"Shellys hinzufügen"},
+  {id:"pricing", title:"Strompreis"},
+  {id:"spot", title:"Spot-Preise (optional)"},
+  {id:"done", title:"Fertig"},
+];
+let stepIdx = 0;
+let addedDevices = [];
+let pricing = {price:0.32, base:120, vat:true};
+let spot = {enabled:false, zone:"DE-LU"};
+
+function toast(msg, type){
+  const el=document.getElementById('toast');
+  el.className='toast show '+(type||'');
+  el.textContent=msg;
+  setTimeout(()=>{el.className='toast';},2600);
+}
+function renderSteps(){
+  const el=document.getElementById('steps');
+  el.innerHTML=STEPS.map((s,i)=>{
+    const cls=i<stepIdx?'done':(i===stepIdx?'active':'');
+    return `<div class="step-dot ${cls}" title="${s.title}">${i<stepIdx?'✓':(i+1)}</div>`;
+  }).join('<span style="color:var(--muted);font-size:.78rem;align-self:center">›</span>');
+}
+function render(){
+  renderSteps();
+  const s=STEPS[stepIdx];
+  const stage=document.getElementById('stage');
+  if(s.id==="welcome"){
+    stage.innerHTML = `<div class="card">
+      <h2>👋 Willkommen!</h2>
+      <p>Dieser Assistent hilft dir, deine Shelly-Geräte zu verbinden und deinen Stromtarif einzugeben.
+      Du kannst später jederzeit weitere Geräte in den Einstellungen ergänzen.</p>
+      <p>Stelle sicher, dass deine Shellys im gleichen WLAN-Netzwerk sind wie dieser Rechner.</p>
+      <div class="actions">
+        <span></span>
+        <button onclick="next()">Los geht's →</button>
+      </div>
+    </div>`;
+  }
+  else if(s.id==="devices") renderDevices(stage);
+  else if(s.id==="pricing") renderPricing(stage);
+  else if(s.id==="spot") renderSpot(stage);
+  else if(s.id==="done") renderDone(stage);
+}
+
+function renderDevices(stage){
+  const added = addedDevices.map(d=>`<div class="devrow">
+    <div class="meta"><div class="name"><span class="dot added"></span>${escape(d.name||d.key)}</div>
+    <div class="sub">${escape(d.host)} · ${escape(d.kind||'em')}${d.model?' · '+escape(d.model):''}</div></div>
+    <button class="secondary" onclick="removeDevice('${escape(d.key)}')">✕</button>
+  </div>`).join('');
+  stage.innerHTML = `<div class="card">
+    <h2>📡 Shelly-Geräte hinzufügen</h2>
+    <p>Scanne dein Netzwerk automatisch oder gib eine IP-Adresse manuell ein.</p>
+    <div class="grid2">
+      <div class="field">
+        <label>Automatisch per mDNS scannen</label>
+        <button class="secondary" style="width:100%" id="btn-scan" onclick="scanMdns()">🔍 Netzwerk scannen</button>
+      </div>
+      <div class="field">
+        <label>Oder IP/Hostname eingeben</label>
+        <div style="display:flex;gap:8px"><input type="text" id="ip-input" placeholder="192.168.1.50">
+        <button onclick="addByIp()">➕</button></div>
+      </div>
+    </div>
+    <div id="scan-results"></div>
+    ${addedDevices.length?`<h3 style="font-size:.95rem;margin:14px 0 6px">Hinzugefügt (${addedDevices.length})</h3><div class="devlist">${added}</div>`:''}
+    <div class="actions">
+      <button class="secondary" onclick="back()">← Zurück</button>
+      <button onclick="next()" ${addedDevices.length===0?'disabled title="Mindestens ein Gerät hinzufügen"':''}>Weiter →</button>
+    </div>
+  </div>`;
+  setTimeout(()=>{const ip=document.getElementById('ip-input');if(ip){ip.addEventListener('keydown',e=>{if(e.key==='Enter')addByIp();});}},50);
+}
+
+function renderPricing(stage){
+  stage.innerHTML = `<div class="card">
+    <h2>💰 Strompreis</h2>
+    <p>Dein aktueller Tarif. Du kannst diese Werte später in den Einstellungen anpassen.</p>
+    <div class="grid2">
+      <div class="field"><label>Strompreis €/kWh (brutto)</label>
+        <input type="number" step="0.0001" id="p-price" value="${pricing.price}"></div>
+      <div class="field"><label>Grundgebühr €/Jahr</label>
+        <input type="number" step="0.01" id="p-base" value="${pricing.base}"></div>
+    </div>
+    <label class="row"><span>Preise enthalten MwSt. (brutto)</span>
+      <input type="checkbox" id="p-vat" ${pricing.vat?'checked':''}></label>
+    <div class="actions">
+      <button class="secondary" onclick="back()">← Zurück</button>
+      <button onclick="savePricingAndNext()">Weiter →</button>
+    </div>
+  </div>`;
+}
+
+function renderSpot(stage){
+  stage.innerHTML = `<div class="card">
+    <h2>⚡ Spot-Preise (optional)</h2>
+    <p>Empfohlen für dynamische Tarife (z. B. Tibber, aWATTar). Kostenlose Daten von Energy-Charts / aWATTar.
+    Überspringbar wenn du einen Festpreis hast.</p>
+    <label class="row"><span>Spot-Preise aktivieren</span>
+      <input type="checkbox" id="s-enabled" ${spot.enabled?'checked':''}></label>
+    <div class="field"><label>Gebotszone</label>
+      <select id="s-zone">
+        <option value="DE-LU" ${spot.zone==="DE-LU"?"selected":""}>Deutschland / Luxemburg (DE-LU)</option>
+        <option value="AT" ${spot.zone==="AT"?"selected":""}>Österreich (AT)</option>
+        <option value="CH" ${spot.zone==="CH"?"selected":""}>Schweiz (CH)</option>
+        <option value="FR" ${spot.zone==="FR"?"selected":""}>Frankreich (FR)</option>
+        <option value="NL" ${spot.zone==="NL"?"selected":""}>Niederlande (NL)</option>
+        <option value="BE" ${spot.zone==="BE"?"selected":""}>Belgien (BE)</option>
+      </select></div>
+    <div class="actions">
+      <button class="secondary" onclick="back()">← Zurück</button>
+      <button onclick="saveSpotAndNext()">Weiter →</button>
+    </div>
+  </div>`;
+}
+
+function renderDone(stage){
+  stage.innerHTML = `<div class="card">
+    <h2>✅ Fertig!</h2>
+    <p>Du hast <strong>${addedDevices.length}</strong> Shelly${addedDevices.length!==1?"s":""} hinzugefügt.
+    Deine Einstellungen wurden gespeichert.</p>
+    <p>Du kannst jederzeit in den <a href="/settings">Einstellungen</a> weitere Geräte hinzufügen oder den Tarif anpassen.</p>
+    <div class="actions">
+      <span></span>
+      <button onclick="window.location.href='/'">🚀 Zum Dashboard</button>
+    </div>
+  </div>`;
+}
+
+function escape(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function next(){stepIdx=Math.min(STEPS.length-1,stepIdx+1);render();}
+function back(){stepIdx=Math.max(0,stepIdx-1);render();}
+
+async function scanMdns(){
+  const btn=document.getElementById('btn-scan');
+  const results=document.getElementById('scan-results');
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Scanne…';
+  results.innerHTML='';
+  try{
+    const r=await fetch('/api/devices/discover?timeout=5',{method:'POST'});
+    const j=await r.json();
+    btn.disabled=false;btn.textContent='🔍 Netzwerk scannen';
+    if(!j.ok){toast('Scan-Fehler: '+j.error,'error');return;}
+    if(!j.devices.length){results.innerHTML='<p class="hint" style="margin-top:10px">Keine Shellys im Netzwerk gefunden. Probier eine IP-Adresse manuell einzugeben.</p>';return;}
+    results.innerHTML='<h3 style="font-size:.9rem;margin:12px 0 6px">Gefunden: '+j.devices.length+'</h3><div class="devlist">'+
+      j.devices.map(d=>`<div class="devrow">
+        <div class="meta"><div class="name">${escape(d.name||d.host)}</div>
+        <div class="sub">${escape(d.host)} · ${escape(d.model||d.kind||'Shelly')}</div></div>
+        <button ${d.already_added?'disabled':''} onclick='addDiscovered(${JSON.stringify(d).replace(/'/g,"&#39;")})'>${d.already_added?'✓':'➕'}</button>
+      </div>`).join('')+'</div>';
+  }catch(e){btn.disabled=false;btn.textContent='🔍 Netzwerk scannen';toast('Fehler: '+e.message,'error');}
+}
+
+async function addByIp(){
+  const ip=document.getElementById('ip-input').value.trim();
+  if(!ip){toast('IP-Adresse leer','error');return;}
+  try{
+    const r=await fetch('/api/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:ip})});
+    const j=await r.json();
+    if(j.ok){addedDevices.push(j.device);toast('✓ Hinzugefügt: '+(j.device.name||ip),'success');document.getElementById('ip-input').value='';render();}
+    else toast('Fehler: '+j.error,'error');
+  }catch(e){toast('Fehler: '+e.message,'error');}
+}
+
+async function addDiscovered(d){
+  try{
+    const r=await fetch('/api/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+    const j=await r.json();
+    if(j.ok){addedDevices.push(j.device);toast('✓ Hinzugefügt: '+(j.device.name||d.host),'success');render();scanMdns();}
+    else toast('Fehler: '+j.error,'error');
+  }catch(e){toast('Fehler: '+e.message,'error');}
+}
+
+async function removeDevice(key){
+  try{
+    const r=await fetch('/api/devices/'+encodeURIComponent(key),{method:'DELETE'});
+    const j=await r.json();
+    if(j.ok){addedDevices=addedDevices.filter(d=>d.key!==key);render();}
+  }catch(e){}
+}
+
+async function savePricingAndNext(){
+  pricing.price=Number(document.getElementById('p-price').value)||0.32;
+  pricing.base=Number(document.getElementById('p-base').value)||120;
+  pricing.vat=document.getElementById('p-vat').checked;
+  try{
+    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({pricing:{electricity_price_eur_per_kwh:pricing.price,base_fee_eur_per_year:pricing.base,price_includes_vat:pricing.vat,base_fee_includes_vat:pricing.vat}})});
+    next();
+  }catch(e){toast('Fehler: '+e.message,'error');}
+}
+
+async function saveSpotAndNext(){
+  spot.enabled=document.getElementById('s-enabled').checked;
+  spot.zone=document.getElementById('s-zone').value;
+  try{
+    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({spot_price:{enabled:spot.enabled,bidding_zone:spot.zone}})});
+    next();
+  }catch(e){toast('Fehler: '+e.message,'error');}
+}
+
+// Load existing devices if any (e.g. user re-enters wizard)
+async function init(){
+  try{
+    const r=await fetch('/api/devices').then(x=>x.json());
+    addedDevices=(r.devices||[]).map(d=>({key:d.key,name:d.name,host:d.host,kind:d.kind,model:d.model}));
+  }catch(e){}
+  render();
+}
+init();
+</script>
+</body>
+</html>
