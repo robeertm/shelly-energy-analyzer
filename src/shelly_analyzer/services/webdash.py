@@ -6162,11 +6162,10 @@ async function fetchJsonWithTimeout(url, timeoutMs=60000){
 function cssVar(name){
   try { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch (e) { return ''; }
 }
-// On mobile (touch screens with narrow viewport) disable zoom/pan so the page
-// can scroll normally. Desktop keeps full interactivity.
+// Plots tab always uses the simple static view (no zoom/pan) regardless of
+// viewport – per user preference, identical to the mobile experience.
 function isMobileView(){
-  try { return window.matchMedia && window.matchMedia('(max-width: 760px)').matches; }
-  catch(e) { return false; }
+  return true;
 }
 function plotlyBaseLayout(extra){
   const fg = cssVar('--fg') || '#111827';
