@@ -166,6 +166,8 @@ class UiConfig:
     # Auto-sync in the background (triggered from the GUI).
     autosync_enabled: bool = False
     autosync_interval_hours: int = 12
+    # Optional: sub-hour granularity. When > 0, overrides autosync_interval_hours.
+    autosync_interval_minutes: int = 0
     # One of: incremental|all|day|week|month
     autosync_mode: str = "incremental"
 
@@ -867,6 +869,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         selected_view_group=str(ui_raw.get("selected_view_group", UiConfig.selected_view_group) or ""),
         autosync_enabled=bool(ui_raw.get("autosync_enabled", UiConfig.autosync_enabled)),
         autosync_interval_hours=_coerce_int(ui_raw.get("autosync_interval_hours", UiConfig.autosync_interval_hours), UiConfig.autosync_interval_hours),
+        autosync_interval_minutes=_coerce_int(ui_raw.get("autosync_interval_minutes", UiConfig.autosync_interval_minutes), UiConfig.autosync_interval_minutes),
         autosync_mode=str(ui_raw.get("autosync_mode", UiConfig.autosync_mode)),
         telegram_enabled=bool(ui_raw.get("telegram_enabled", UiConfig.telegram_enabled)),
         telegram_bot_token=str(ui_raw.get("telegram_bot_token", UiConfig.telegram_bot_token) or ""),
@@ -1438,6 +1441,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "selected_view_group": getattr(cfg.ui, "selected_view_group", ""),
             "autosync_enabled": cfg.ui.autosync_enabled,
             "autosync_interval_hours": cfg.ui.autosync_interval_hours,
+            "autosync_interval_minutes": cfg.ui.autosync_interval_minutes,
             "autosync_mode": cfg.ui.autosync_mode,
             "live_web_enabled": cfg.ui.live_web_enabled,
             "live_web_port": cfg.ui.live_web_port,

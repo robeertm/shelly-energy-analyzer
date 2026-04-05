@@ -26,8 +26,17 @@ def api_run():
     try:
         if action == "set_language":
             lang = str(params.get("language", "de") or "de")
-            payload = {"ok": True, "language": lang}
-            return jsonify(payload)
+            # Persist language to config.json so it survives page reloads
+            try:
+                import dataclasses
+                from shelly_analyzer.io.config import save_config
+                new_ui = dataclasses.replace(state.cfg.ui, language=lang)
+                state.cfg = dataclasses.replace(state.cfg, ui=new_ui)
+                save_config(state.cfg)
+                state.lang = lang
+            except Exception as e:
+                return jsonify({"ok": False, "error": f"Failed to persist language: {e}"}), 500
+            return jsonify({"ok": True, "language": lang})
 
         if action in {"get_switch", "set_switch", "toggle_switch",
                        "get_freeze", "set_freeze", "toggle_freeze"}:
