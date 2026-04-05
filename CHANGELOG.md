@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.11.6 - 2026-04-05
+### Fixed
+- **Dashboard Quick-Language-Switcher triggerte kein HTML-Re-Render** – der Sprach-Selector im Live-Settings-Modal rief `/api/run` mit `action:set_language` auf. Der Handler speicherte zwar die Sprache nach `config.json`, aber rief `state.reload_config()` **nicht** auf – das gecachte HTML blieb in der alten Sprache, so dass die Seite nach `window.location.reload()` wieder deutsch/alt aussah. Genau der Bug, der "springt zurück" auslöste. Jetzt ruft `set_language` vollständig `state.reload_config(new_cfg)` + `dispatcher.reload(new_cfg, lang=…)` auf.
+- Debug-Log für Sprachwechsel in `/api/settings PUT` hinzugefügt, damit sich der Round-Trip im Server-Log verifizieren lässt.
+
 ## 16.11.5 - 2026-04-05
 ### Fixed
 - **Settings: Dropdown springt nach Auswahl zurück** – nach "Speichern" wurde der Client-`cfg` Cache nicht aktualisiert; beim nächsten Re-Render (z. B. von einem anderen Tab) zeigte das Select wieder den alten Wert. Jetzt holt `saveSection()` direkt nach PUT die frischen Settings vom Server, schreibt sie in `cfg` und zeichnet die betroffene Section neu. Damit ist sichtbar verifiziert, dass der Server den Wert tatsächlich persistiert hat.
