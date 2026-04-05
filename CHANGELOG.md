@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.2.2 - 2026-04-05
+### Fixed
+- **Blank web page** – Dashboard HTML rendered with Unicode escape sequences (e.g. `\u2265` instead of `≥`) because the extracted HTML template files were saved with JSON-escaped unicode. Reverted to importing `_HTML_TEMPLATE`, `_PLOTS_TEMPLATE`, `_CONTROL_TEMPLATE` directly from `services/webdash.py` (where strings are native UTF-8). Removed broken template files.
+
 ## 16.2.1 - 2026-04-05
 ### Fixed
 - **Background services startup** – `MultiLivePoller` was called with wrong signature (missing `download_cfg`, wrong `devices` format). Fixed to pass `DeviceConfig` list and `DownloadConfig`.
