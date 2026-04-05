@@ -177,6 +177,7 @@ const SECTIONS = [
   {id:"autosync", title:"Auto-Sync", group:"Grundeinstellungen", fields:[
     {key:"ui.autosync_enabled", label:"Auto-Sync aktiv", type:"checkbox"},
     {key:"ui.autosync_interval_hours", label:"Intervall (Std)", type:"number"},
+    {key:"ui.autosync_interval_minutes", label:"Intervall (Min, überschreibt Std wenn > 0)", type:"number"},
     {key:"ui.autosync_mode", label:"Modus", type:"select", opts:[["incremental","Inkrementell"],["all","Alle"],["day","Tag"],["week","Woche"],["month","Monat"]]},
   ]},
 

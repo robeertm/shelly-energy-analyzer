@@ -1,5 +1,18 @@
 # Changelog
 
+## 16.5.0 - 2026-04-05
+### Fixed
+- **Live view per-device kWh/cost stuck at 0** – Feed loop now trapezoid-integrates `power_w.total` samples into kWh per device with automatic midnight reset. Previously tried to read a non-existent cumulative sensor field from `raw`. Cost = kWh × gross unit price.
+- **Live view: devices now always stacked vertically** (single column) – removes 2-column layout on wide monitors for easier scanning.
+- **Live view: Play/Pause button removed** – live updates now always run, no pause control.
+- **Language selector reverting to German after reload** – `set_language` action only returned `{ok:true}` without persisting. Now writes `ui.language` into config.json and updates AppState.
+- **Shelly firmware updates: only stable, no beta** – `/api/health/<key>/update` now installs only the stable stage; beta-only updates return a clear error. Health check no longer flags beta-only availability as "update available".
+
+### Added
+- **Auto-sync: sub-hour granularity** – new `ui.autosync_interval_minutes` config field (0 = use hours). Editable in the Auto-Sync settings section. Minimum interval: 1 minute when minutes > 0.
+- **Mobile hamburger menu** – on screens ≤600px the bottom navigation is replaced by a left-side drawer opened via a ☰ header button. Desktop layout unchanged.
+- **CO₂ Erzeugermix sorted by share descending** – largest generators appear first in the stacked bar and the table.
+
 ## 16.4.2 - 2026-04-05
 ### Fixed
 - **Firmware-Update: "bad or missing url parameter"** – Update-Endpunkt schickte immer `stage=stable`, auch wenn nur `beta` verfügbar war. Jetzt wird `available_updates` aus `Shelly.GetStatus` gelesen, Stage dynamisch gewählt (stable bevorzugt, sonst beta). Handhabt auch "Already in progress" (Code -106) als Erfolg.
