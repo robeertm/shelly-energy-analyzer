@@ -1942,17 +1942,16 @@ class ActionDispatcher:
                         _co2_green_thr = float(getattr(_co2_cfg_w, "green_threshold_g_per_kwh", 150.0))
                         _co2_dirty_thr = float(getattr(_co2_cfg_w, "dirty_threshold_g_per_kwh", 400.0))
                         _now_ts_co2 = int(time.time())
-                        _cur_h_co2 = (_now_ts_co2 // 3600) * 3600
-                        _df_co2_cur = self.storage.db.query_co2_intensity(_co2_zone_w, _cur_h_co2, _cur_h_co2 + 3600)
-                        if _df_co2_cur is not None and not _df_co2_cur.empty:
-                            _co2_current = round(float(_df_co2_cur["intensity_g_per_kwh"].mean()), 0)
-                        _co2_chart_s = int((_now - timedelta(hours=12)).timestamp())
-                        _co2_chart_e = int((_now + timedelta(hours=12)).timestamp())
+                        # Query last 24h of CO2 data (historical only – no forecasts)
+                        _co2_chart_s = int((_now - timedelta(hours=24)).timestamp())
+                        _co2_chart_e = _now_ts_co2 + 3600
                         _df_co2_ch = self.storage.db.query_co2_intensity(_co2_zone_w, _co2_chart_s, _co2_chart_e)
                         if _df_co2_ch is not None and not _df_co2_ch.empty:
                             _df_co2_ch = _df_co2_ch.sort_values("hour_ts")
                             for _, _r_co2 in _df_co2_ch.iterrows():
                                 _co2_chart_mini.append([int(_r_co2["hour_ts"]), round(float(_r_co2["intensity_g_per_kwh"]), 0)])
+                            # Current = most recent available value in last 24h (handles missed fetches)
+                            _co2_current = _co2_chart_mini[-1][1]
                 except Exception:
                     pass
 
