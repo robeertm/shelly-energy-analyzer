@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.19 - 2026-04-05
+### Fixed
+- **mDNS scan: "discover_shelly_mdns() got an unexpected keyword argument 'timeout'"** – the blueprint passed `timeout=` while the service function expects `timeout_seconds=`. Also: the blueprint treated the returned `MdnsShelly` dataclass like a dict and called `.get()` on it. Fixed both: now using `timeout_seconds=` and attribute access (`getattr(r, "host", "")` etc.). "Already added" now compares by host IP against the configured device hosts.
+
 ## 16.13.18 - 2026-04-05
 ### Changed
 - **Settings: list editors replace JSON textareas** – TOU periods, PV-Surplus consumers, Tariff Compare entries and Tenants are now edited via proper per-item cards with labelled input fields, add/delete buttons and a device dropdown where applicable. No JSON knowledge required.
