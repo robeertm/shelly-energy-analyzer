@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.14 - 2026-04-05
+### Fixed
+- **Plots-Tab Hz: "Length of values (0) does not match length of index (1441)"** – `_wva_series()` initialisierte bei fehlender Frequenz-Spalte `y = pd.Series(dtype=float)` (Länge 0), was beim Index-Assign mit `pd.Series(y.to_numpy(), index=ts, ...)` kollidierte. Jetzt: `y = [NaN] * len(df)`. Zusätzlich Defensiv-Check am Ende, der `y` auf `len(ts)` ausrichtet, falls andere Branches 0-Längen-Serie hinterlassen. Außerdem `avg_freq_hz` als Fallback-Spalten-Alias ergänzt (für aus Monats-Aggregaten stammende DataFrames).
+
 ## 16.13.13 - 2026-04-05
 ### Added
 - **Plots-Tab: Metrik "Hz" auswählbar** – neue Option "Hz" im Metric-Dropdown zwischen A und VAR. Die DB speichert `freq_hz` seit v6.x, also sind historische Werte ab Aufzeichnungsbeginn verfügbar. Backend-Handler `_wva_series` kannte HZ/FREQ/FREQUENCY bereits, es fehlte nur der Eintrag im Frontend-Dropdown.
