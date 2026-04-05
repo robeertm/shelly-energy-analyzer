@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.12.4 - 2026-04-05
+### Fixed
+- **Kosten-Kacheln: Werte auf gleiche Höhe** – Metric-Cards in den "Heute/Woche/Monat/Prognose" Reihen hatten unterschiedliche Höhen, weil manche Karten eine Sub-Zeile (z. B. "-1.55 €", "8.260 kWh") hatten und manche nicht (z. B. Dyn.-Tarif-Prognose). `metricCardHtml()` rendert jetzt **immer** ein `.metric-sub` div (mit `&nbsp;` Platzhalter bei leerem Sub), damit alle Kacheln identische 3-Zeilen-Struktur haben und die €-Werte horizontal auf gleicher Höhe stehen.
+
 ## 16.12.3 - 2026-04-05
 ### Added
 - **Settings-Seite: Übersetzungen für alle 9 Sprachen** – Section-Titel, Gruppen-Überschriften, Buttons (Speichern/Test/Scan/…), Toast-Messages und Page-Title jetzt in **DE, EN, ES, FR, PT, IT, PL, CS, RU** mit nativen Übersetzungen (statt englischem Fallback). 59 UI-Strings × 7 neue Sprachen = 413 neue Übersetzungseinträge.
