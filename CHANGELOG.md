@@ -1,5 +1,11 @@
 # Changelog
 
+## 16.6.0 - 2026-04-05
+### Added
+- **NILM (appliance detection) wired into web app** – `TransitionLearner` instantiated per 3-phase EM device on startup, fed from the live sample loop, re-clusters every 5 min. Persisted clusters seeded immediately so the live-view NILM badge no longer stays stuck on "waiting for data". Persisted to `data/runtime/nilm/<device>.json`.
+- **Sync tab with live log window** – new 🔄 Sync pane (bottom-nav + hamburger drawer) with buttons for Incremental/Full/Day/Week/Month sync, per-device last-sync status and a streaming log window that tails server logs via `/api/logs` (2 s polling, auto-scroll toggle).
+- **In-memory log ring buffer** – web app installs a log handler capturing up to 2 000 records; exposed via `GET /api/logs?since=<ts>&limit=<n>`.
+
 ## 16.5.1 - 2026-04-05
 ### Fixed
 - **Live kWh today: include already-synced history** – live accumulator previously only summed energy since app start. Now reads baseline from `hourly_energy` (all kWh of today up to the latest synced hour) and only adds live-integrated samples *after* that point. Refreshes every 10 min to pick up new auto-sync data without double counting.
