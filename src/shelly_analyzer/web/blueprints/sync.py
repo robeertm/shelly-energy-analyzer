@@ -18,7 +18,7 @@ def _get_state():
 @bp.route("/api/logs", methods=["GET"])
 def get_logs():
     """Return captured log lines (for the web Sync/Log tab)."""
-    from shelly_analyzer.web import get_log_entries
+    from shelly_analyzer.web import get_log_entries, get_log_include_http
     try:
         since = int(request.args.get("since", "0") or "0")
     except Exception:
@@ -28,7 +28,25 @@ def get_logs():
     except Exception:
         limit = 500
     entries = get_log_entries(since_ts=since, limit=min(2000, max(1, limit)))
-    return jsonify({"ok": True, "entries": entries, "now": __import__("time").time()})
+    return jsonify({
+        "ok": True,
+        "entries": entries,
+        "include_http": get_log_include_http(),
+        "now": __import__("time").time(),
+    })
+
+
+@bp.route("/api/logs/config", methods=["POST"])
+def set_logs_config():
+    """Toggle whether HTTP access logs are captured."""
+    from shelly_analyzer.web import set_log_include_http, get_log_include_http
+    try:
+        body = request.get_json(silent=True) or {}
+        if "include_http" in body:
+            set_log_include_http(bool(body["include_http"]))
+        return jsonify({"ok": True, "include_http": get_log_include_http()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @bp.route("/api/sync", methods=["POST"])
