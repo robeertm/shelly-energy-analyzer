@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.21 - 2026-04-05
+### Fixed
+- **New devices invisible in Live until first sample arrives** – `/api/state` only returned devices that were already present in the live-state snapshot, so a freshly added device (via IP) stayed invisible in the Live tab until the very first successful poll landed in the store (or indefinitely if the device was unreachable). `/api/state` now also returns configured devices that have no snapshot yet, with zeroed values and `pending:true`. The device card becomes visible immediately; real values fill in as soon as the poller receives the first sample.
+
 ## 16.13.20 - 2026-04-05
 ### Fixed
 - **Newly added devices stayed "offline" (grey dot) until app restart** – adding or removing a device through the Settings UI updated the config but did **not** restart the live poller, so the new device never appeared in the live-state snapshot. `/api/devices` (POST / PUT / DELETE) now calls `BackgroundServiceManager.reload(new_cfg)` after the config save, which restarts the live poller with the new device list. A device added via IP goes green within one poll interval (≈ 1 s).
