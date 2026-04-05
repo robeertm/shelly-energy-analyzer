@@ -2212,15 +2212,18 @@ function computeBills() {{
 }}
 
 function refreshSyncStatus() {{
+  const el = document.getElementById('sync-status-panel');
+  if (!el) return;
   fetch('/api/sync/status').then(function(r) {{ return r.json(); }}).then(function(d) {{
-    const el = document.getElementById('sync-status-panel');
-    if (!el || !d.ok) return;
-    const parts = (d.devices||[]).map(function(x) {{
+    if (!d.ok) {{ el.textContent = 'Status nicht verfügbar: ' + (d.error || '?'); return; }}
+    const devs = d.devices || [];
+    if (!devs.length) {{ el.textContent = 'Keine Geräte konfiguriert'; return; }}
+    const parts = devs.map(function(x) {{
       const ts = x.last_sync_ts ? new Date(x.last_sync_ts*1000).toLocaleString() : 'nie';
       return x.name + ': ' + ts;
     }});
     el.textContent = 'Letzte Sync-Zeiten: ' + parts.join('  ·  ');
-  }}).catch(function() {{}});
+  }}).catch(function(e) {{ el.textContent = 'Status-Abruf fehlgeschlagen'; }});
 }}
 
 /* ──────────────────────────────────────────────
