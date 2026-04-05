@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.8.4 - 2026-04-05
+### Fixed
+- **Sync tab "Lade Status…" stuck forever** – `/api/sync/status` called a non-existent `db.get_device_meta()` method and failed silently; the JS swallowed the `ok:false` response. Endpoint now uses `storage.load_meta()` and the UI shows real status text / errors instead of the permanent loading placeholder.
+
 ## 16.8.3 - 2026-04-05
 ### Changed
 - **NILM status in header** – "NILM ML: lerne/…" badge moved from inside the Live tab to the top-right header next to the clock, visible on every tab.
