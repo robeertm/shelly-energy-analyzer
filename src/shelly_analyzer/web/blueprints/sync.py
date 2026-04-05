@@ -15,6 +15,22 @@ def _get_state():
     return current_app.extensions["state"]
 
 
+@bp.route("/api/logs", methods=["GET"])
+def get_logs():
+    """Return captured log lines (for the web Sync/Log tab)."""
+    from shelly_analyzer.web import get_log_entries
+    try:
+        since = int(request.args.get("since", "0") or "0")
+    except Exception:
+        since = 0
+    try:
+        limit = int(request.args.get("limit", "500") or "500")
+    except Exception:
+        limit = 500
+    entries = get_log_entries(since_ts=since, limit=min(2000, max(1, limit)))
+    return jsonify({"ok": True, "entries": entries, "now": __import__("time").time()})
+
+
 @bp.route("/api/sync", methods=["POST"])
 def trigger_sync():
     """Trigger a full sync (progress via /api/jobs)."""

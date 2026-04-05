@@ -25,6 +25,50 @@ from shelly_analyzer.services.webdash import (
 logger = logging.getLogger(__name__)
 
 
+# ── In-memory log ring buffer (for the web Sync/Log tab) ──
+from collections import deque
+import threading
+
+_LOG_BUFFER: "deque" = deque(maxlen=2000)
+_LOG_LOCK = threading.Lock()
+
+
+class _WebLogHandler(logging.Handler):
+    """Capture log records into an in-memory ring buffer for the web UI."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+            with _LOG_LOCK:
+                _LOG_BUFFER.append({
+                    "ts": int(record.created),
+                    "level": record.levelname,
+                    "name": record.name,
+                    "msg": msg,
+                })
+        except Exception:
+            pass
+
+
+def get_log_entries(since_ts: int = 0, limit: int = 500) -> list:
+    """Return log entries newer than since_ts (up to limit most recent)."""
+    with _LOG_LOCK:
+        arr = [e for e in _LOG_BUFFER if e["ts"] > int(since_ts)]
+    return arr[-int(limit):]
+
+
+def _install_web_log_handler() -> None:
+    root = logging.getLogger()
+    # Install only once
+    for h in root.handlers:
+        if isinstance(h, _WebLogHandler):
+            return
+    h = _WebLogHandler()
+    h.setFormatter(logging.Formatter("%(message)s"))
+    h.setLevel(logging.INFO)
+    root.addHandler(h)
+
+
 def _render_dashboard_html(state: "AppState") -> bytes:
     """Render the main dashboard HTML using the existing template engine."""
     from shelly_analyzer.web.app_context import AppState  # noqa: F811
@@ -237,6 +281,9 @@ def _render_plots_html(state: "AppState") -> bytes:
 def create_app(config_path: Optional[str] = None) -> Flask:
     """Flask application factory."""
     from shelly_analyzer.web.app_context import AppState
+
+    # Capture logs into ring buffer so the web Sync/Log tab can display them
+    _install_web_log_handler()
 
     # Determine config path
     if config_path is None:
