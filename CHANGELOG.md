@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.7.3 - 2026-04-05
+### Added
+- **"Now" marker in spot-price and CO₂ charts** – red dashed vertical line with "jetzt" label marks the current hour in both the 24h Dynamic Price chart (Costs tab) and the CO₂ intensity chart (CO₂ tab).
+
 ## 16.7.2 - 2026-04-05
 ### Fixed
 - **NILM forgetting learned state** – transitions were only auto-saved every 10 samples and on shutdown nothing was flushed. Now: flush on every re-cluster (every 5 min), flush on `BackgroundServiceManager.stop_all()`, flush existing learners before replacing on config reload, and register `atexit`/SIGTERM hooks in `__main__` so Ctrl-C persists state.
