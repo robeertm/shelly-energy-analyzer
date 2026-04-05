@@ -169,20 +169,26 @@ def discover_devices():
     try:
         from shelly_analyzer.services.mdns import discover_shelly_mdns
         timeout = float(request.args.get("timeout", 5))
-        results = discover_shelly_mdns(timeout=min(30, max(1, timeout)))
-        existing_keys = {d.key for d in _get_state().cfg.devices}
+        results = discover_shelly_mdns(timeout_seconds=min(30, max(1, timeout)))
+        existing_hosts = {(d.host or "").strip().lower() for d in _get_state().cfg.devices}
         devices = []
         for r in results:
+            host = getattr(r, "host", "") or ""
+            name = getattr(r, "name", "") or ""
+            # Derive a stable key from the mDNS instance name (e.g. shellyem-84CCA8C1...)
+            key = name.lower()
+            gen = int(getattr(r, "gen", 0) or 0)
+            model = getattr(r, "model", "") or ""
             d = {
-                "host": r.get("host") or r.get("ip", ""),
-                "name": r.get("name", ""),
-                "key": r.get("key", ""),
-                "kind": r.get("kind", "em"),
-                "gen": r.get("gen", 0),
-                "model": r.get("model", ""),
-                "already_added": r.get("key", "") in existing_keys,
+                "host": host,
+                "name": name,
+                "key": key,
+                "kind": "em",
+                "gen": gen,
+                "model": model,
+                "already_added": host.strip().lower() in existing_hosts,
             }
-            if d["host"]:
+            if host:
                 devices.append(d)
         return jsonify({"ok": True, "devices": devices})
     except Exception as e:
