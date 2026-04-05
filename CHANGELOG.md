@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.20 - 2026-04-05
+### Fixed
+- **Newly added devices stayed "offline" (grey dot) until app restart** – adding or removing a device through the Settings UI updated the config but did **not** restart the live poller, so the new device never appeared in the live-state snapshot. `/api/devices` (POST / PUT / DELETE) now calls `BackgroundServiceManager.reload(new_cfg)` after the config save, which restarts the live poller with the new device list. A device added via IP goes green within one poll interval (≈ 1 s).
+
 ## 16.13.19 - 2026-04-05
 ### Fixed
 - **mDNS scan: "discover_shelly_mdns() got an unexpected keyword argument 'timeout'"** – the blueprint passed `timeout=` while the service function expects `timeout_seconds=`. Also: the blueprint treated the returned `MdnsShelly` dataclass like a dict and called `.get()` on it. Fixed both: now using `timeout_seconds=` and attribute access (`getattr(r, "host", "")` etc.). "Already added" now compares by host IP against the configured device hosts.
