@@ -1015,11 +1015,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }}
     .drawer-item.active {{ color: var(--accent); font-weight: 600; }}
     .drawer-item .drawer-ico {{ font-size: 18px; width: 22px; text-align: center; }}
-    @media (max-width: 600px) {{
-      #btn-hamburger {{ display: inline-flex; }}
-      #bottom-nav {{ display: none; }}
-      #panes {{ padding-bottom: 10px; }}
-    }}
+    /* Hamburger disabled on mobile — bottom-nav stays visible & scrollable */
     .nav-btn {{
       display: flex;
       flex-direction: column;
