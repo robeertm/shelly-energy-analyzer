@@ -1073,9 +1073,13 @@ _HTML_TEMPLATE = """<!doctype html>
     }}
     /* Live view always single column, even on wide monitors */
     #live-grid.card-grid {{ grid-template-columns: 1fr !important; }}
-    /* Desktop: limit live grid to ~2/3 of viewport width (mobile keeps full width) */
+    /* Desktop: limit live grid to ~2/3 of viewport width, centered.
+       Sparklines grow with viewport height so cards fill the window vertically.
+       Mobile keeps fixed heights + full width. */
     @media (min-width: 900px) {{
-      #live-grid.card-grid {{ max-width: 66%; }}
+      #live-grid.card-grid {{ max-width: 66%; margin-left: auto; margin-right: auto; }}
+      canvas.sparkline {{ height: clamp(56px, 11vh, 180px); }}
+      canvas.sparkline-sm {{ height: clamp(40px, 8vh, 130px); }}
     }}
     /* ── Metric grid ── */
     .metric-grid {{

@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.8.2 - 2026-04-05
+### Changed
+- **Live view centered + plots fill vertical space (desktop)** – live grid centered horizontally and sparklines now scale with viewport height (`clamp(56px, 11vh, 180px)` / `clamp(40px, 8vh, 130px)`) so plots use the full window height on desktop. Mobile view unchanged.
+
 ## 16.8.1 - 2026-04-05
 ### Changed
 - **Live view width on desktop** – `#live-grid` now capped at 66% viewport width on screens ≥900px so device cards/sparklines don't stretch edge-to-edge on wide monitors. Mobile view unchanged (full width).
