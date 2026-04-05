@@ -1,5 +1,13 @@
 # Changelog
 
+## 16.10.2 - 2026-04-05
+### Changed
+- **Plots kWh: Ampel-Farben für CO₂ & Preis** – jeder Balken wird nach seiner **Intensität pro kWh** grün/gelb/rot eingefärbt:
+  - CO₂: grün < `green_threshold_g_per_kwh` (Default 150 g/kWh), rot ≥ `dirty_threshold_g_per_kwh` (Default 400 g/kWh), gelb dazwischen
+  - Preis: grün/gelb/rot nach Perzentilen (33% / 66%) des angezeigten Zeitraums in ct/kWh
+  - Hover zeigt Intensität + absolute Summe des Buckets.
+- **Duplikate "kWh" in Plot-Titeln entfernt** – Per-Plot-Titel zeigt nur noch den Gerätenamen, nicht mehr "Gerät – kWh" (Meta-Zeile hat bereits "kWh • days").
+
 ## 16.10.1 - 2026-04-05
 ### Fixed
 - **Plots kWh: `name 'unit' is not defined`** – v16.10.0 nutzte `unit` im neuen CO₂/Preis-Aggregationsblock, die Variable wird aber erst in `_stats_series` lokal gebildet. Jetzt im `view=kwh` Zweig lokal aus `mode` geparst (inkl. Suffix-Stripping wie `hours:24`).
