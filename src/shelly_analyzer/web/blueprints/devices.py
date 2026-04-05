@@ -102,6 +102,15 @@ def add_device():
     save_config(new_cfg, cfg_path)
     state.cfg = new_cfg
     state.reload_config(new_cfg)
+    # Restart background services (live poller etc.) so the new device list
+    # takes effect – otherwise newly added devices stay "offline" until a
+    # full app restart.
+    try:
+        bg = getattr(state, "_bg", None)
+        if bg is not None:
+            bg.reload(new_cfg)
+    except Exception as e:
+        logger.warning("Background reload after device change failed: %s", e)
 
     logger.info("Device added: %s (%s)", key, host)
     return jsonify({"ok": True, "device": {"key": key, "name": name, "host": host, "kind": kind}})
@@ -140,6 +149,15 @@ def update_device(key: str):
     save_config(new_cfg, cfg_path)
     state.cfg = new_cfg
     state.reload_config(new_cfg)
+    # Restart background services (live poller etc.) so the new device list
+    # takes effect – otherwise newly added devices stay "offline" until a
+    # full app restart.
+    try:
+        bg = getattr(state, "_bg", None)
+        if bg is not None:
+            bg.reload(new_cfg)
+    except Exception as e:
+        logger.warning("Background reload after device change failed: %s", e)
 
     logger.info("Device updated: %s", key)
     return jsonify({"ok": True})
@@ -158,6 +176,15 @@ def delete_device(key: str):
     save_config(new_cfg, cfg_path)
     state.cfg = new_cfg
     state.reload_config(new_cfg)
+    # Restart background services (live poller etc.) so the new device list
+    # takes effect – otherwise newly added devices stay "offline" until a
+    # full app restart.
+    try:
+        bg = getattr(state, "_bg", None)
+        if bg is not None:
+            bg.reload(new_cfg)
+    except Exception as e:
+        logger.warning("Background reload after device change failed: %s", e)
 
     logger.info("Device removed: %s", key)
     return jsonify({"ok": True})
