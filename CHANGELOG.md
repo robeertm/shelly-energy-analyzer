@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.6.5 - 2026-04-05
+### Changed
+- **Sync/Log tab: HTTP access logs filtered by default** – werkzeug request lines (every poll, every GET) no longer flood the log window. New "HTTP-Logs" checkbox in the Sync pane enables them on demand. New endpoint `POST /api/logs/config` with `{include_http: bool}`.
+
 ## 16.6.4 - 2026-04-05
 ### Changed
 - **Version badge moved to top-left** – previously top-right.

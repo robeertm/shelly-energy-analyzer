@@ -31,6 +31,18 @@ import threading
 
 _LOG_BUFFER: "deque" = deque(maxlen=2000)
 _LOG_LOCK = threading.Lock()
+# Whether to capture werkzeug HTTP access logs in the ring buffer.
+# Off by default to keep the Sync/Log tab focused on app events.
+_LOG_INCLUDE_HTTP: bool = False
+
+
+def set_log_include_http(flag: bool) -> None:
+    global _LOG_INCLUDE_HTTP
+    _LOG_INCLUDE_HTTP = bool(flag)
+
+
+def get_log_include_http() -> bool:
+    return _LOG_INCLUDE_HTTP
 
 
 class _WebLogHandler(logging.Handler):
@@ -38,6 +50,11 @@ class _WebLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
+            # Skip werkzeug/http access logs unless explicitly enabled
+            if not _LOG_INCLUDE_HTTP:
+                name = record.name or ""
+                if name.startswith("werkzeug") or name == "waitress.queue":
+                    return
             msg = self.format(record)
             with _LOG_LOCK:
                 _LOG_BUFFER.append({
