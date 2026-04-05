@@ -2548,7 +2548,7 @@ function renderLive(data, first) {{
   devices.forEach(function(d) {{
     if (!sparkData[d.key]) sparkData[d.key] = [];
     const buf = sparkData[d.key];
-    buf.push({{ ts: Date.now(), w: d.power_w || 0, v: d.voltage_v || 0, a: d.current_a || 0, phases: d.phases ? d.phases.slice() : [], i_n: d.i_n || 0, q: d.q_total_var || 0, q_phases: d.q_phases ? d.q_phases.slice() : [] }});
+    buf.push({{ ts: Date.now(), w: d.power_w || 0, v: d.voltage_v || 0, a: d.current_a || 0, phases: d.phases ? d.phases.slice() : [], i_n: d.i_n || 0, q: d.q_total_var || 0, q_phases: d.q_phases ? d.q_phases.slice() : [], hz: d.freq_hz || 0 }});
     if (buf.length > MAX_HIST_PTS) buf.shift();
   }});
 
@@ -2672,6 +2672,7 @@ function devCardHTML(d) {{
       '<div class="sparkline-wrap" style="margin-top:6px" data-metric="a" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.i', 'Current') + '</div><canvas class="sparkline-sm" id="sp-a-' + d.key + '"></canvas></div>' +
       '<div class="sparkline-wrap" style="margin-top:6px" data-metric="q" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.var', 'Reactive power') + ' (VAR)</div><canvas class="sparkline-sm" id="sp-q-' + d.key + '"></canvas></div>' +
       (phases ? '<div class="sparkline-wrap" style="margin-top:6px" data-metric="in" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.chart.neutral_current', 'I\u2099 Neutral (A)') + '</div><canvas class="sparkline-sm" id="sp-in-' + d.key + '"></canvas></div>' : '') +
+      '<div class="sparkline-wrap" style="margin-top:6px" data-metric="hz" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.freq', 'Frequency') + ' (Hz)</div><canvas class="sparkline-sm" id="sp-hz-' + d.key + '"></canvas></div>' +
     '</div>' +
     nilm
   );
@@ -2723,6 +2724,9 @@ function updateDeviceCard(card, d) {{
   // Neutral current sparkline
   const spin = document.getElementById('sp-in-' + d.key);
   if (spin && buf) drawSparkline(spin, wndVals(buf, 'i_n'), '#a855f7', true);
+  // Frequency (Hz) sparkline – relative scale (grid freq varies narrowly)
+  const sphz = document.getElementById('sp-hz-' + d.key);
+  if (sphz && buf) drawSparkline(sphz, wndVals(buf, 'hz'), '#06b6d4', true);
   // Update expand section detail values (voltage, current, cos φ, freq, phases)
   const exp = card.querySelector('.dev-expand');
   if (exp) {{
