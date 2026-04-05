@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
@@ -8,6 +9,8 @@ from shelly_analyzer.io.config import AppConfig, DeviceConfig
 from shelly_analyzer.io.http import HttpConfig, ShellyHttp, download_csv, get_emdata_records, get_earliest_emdata_ts
 from shelly_analyzer.io.storage import MetaState, Storage
 from shelly_analyzer.services.demo import ensure_demo_csv
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -86,6 +89,7 @@ def sync_one_device(
 
     if not supports_emdata:
         end_ts = int(time.time())
+        logger.info("Sync %s: Gerät unterstützt kein EMData-CSV – übersprungen", device.name)
         return SyncResult(
             device_key=device.key,
             device_name=device.name,
@@ -167,6 +171,14 @@ def sync_one_device(
             except Exception:
                 pass
 
+    logger.info(
+        "Sync %s: Bereich %s → %s (%d Chunks, host=%s)",
+        device.name,
+        time.strftime("%Y-%m-%d %H:%M", time.localtime(ts_start)),
+        time.strftime("%Y-%m-%d %H:%M", time.localtime(ts_end)),
+        total_chunks,
+        device.host,
+    )
     for a, b in iter_time_chunks(ts_start, ts_end, cfg.download.chunk_seconds):
         _progress(f"Lade {a}-{b} …")
         try:
@@ -183,10 +195,19 @@ def sync_one_device(
             last_success_end = b
             done_chunks += 1
             _progress("OK")
+            logger.info("Sync %s: Chunk %d/%d OK (%d Zeilen)", device.name, done_chunks, total_chunks, len(lines) - 1)
         except Exception as e:
             chunks.append(ChunkResult(ts=a, end_ts=b, ok=False, error=str(e)))
             _progress(f"Fehler: {e}")
+            logger.warning("Sync %s: Chunk fehlgeschlagen: %s", device.name, e)
             break
+
+    ok_count = sum(1 for c in chunks if c.ok)
+    logger.info(
+        "Sync %s: fertig – %d/%d Chunks OK (last_end=%s)",
+        device.name, ok_count, len(chunks),
+        time.strftime("%Y-%m-%d %H:%M", time.localtime(last_success_end)) if last_success_end else "unverändert",
+    )
 
     ended_at = int(time.time())
 
