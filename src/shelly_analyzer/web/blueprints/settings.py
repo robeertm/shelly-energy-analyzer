@@ -52,7 +52,9 @@ def get_settings():
         advisor["openai_api_key"] = "***"
     if "anthropic_api_key" in advisor and advisor["anthropic_api_key"]:
         advisor["anthropic_api_key"] = "***"
-    return jsonify(data)
+    resp = jsonify(data)
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
 
 
 @bp.route("/api/settings", methods=["PUT"])
