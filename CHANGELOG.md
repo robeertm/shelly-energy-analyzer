@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.10.1 - 2026-04-05
+### Fixed
+- **Plots kWh: `name 'unit' is not defined`** – v16.10.0 nutzte `unit` im neuen CO₂/Preis-Aggregationsblock, die Variable wird aber erst in `_stats_series` lokal gebildet. Jetzt im `view=kwh` Zweig lokal aus `mode` geparst (inkl. Suffix-Stripping wie `hours:24`).
+
 ## 16.10.0 - 2026-04-05
 ### Added
 - **Plots → kWh view: CO₂ & dynamische Preise** – neue Balkendiagramme für CO₂-Emissionen (g pro Bucket) und Strompreis (€ pro Bucket), aggregiert aus `co2_intensity`/`spot_prices` × Summen-kWh aller Geräte pro Bucket. Zeigen nur wenn CO₂/Spot-Price-Module aktiv und Daten vorhanden.
