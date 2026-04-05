@@ -3550,14 +3550,16 @@ class ActionDispatcher:
                     except Exception:
                         return None, None
 
-                co2_g: List[Optional[float]] = [None] * len(labels)
                 co2_intensity: List[Optional[float]] = [None] * len(labels)
-                price_eur: List[Optional[float]] = [None] * len(labels)
                 price_ct_kwh: List[Optional[float]] = [None] * len(labels)
                 co2_zone = None
                 price_zone = None
                 co2_green_thr = 150.0
                 co2_dirty_thr = 400.0
+                # Include spot-price surcharges (grid fee, tax, VAT) – default on
+                include_surcharges = str(params.get("include_surcharges", "1")).lower() not in {"0", "false", "no"}
+                surcharge_markup_ct = 0.0
+                vat_factor = 1.0
                 try:
                     co2_cfg = getattr(self.cfg, "co2", None)
                     if co2_cfg and getattr(co2_cfg, "enabled", False):
@@ -3570,6 +3572,13 @@ class ActionDispatcher:
                     spot_cfg = getattr(self.cfg, "spot_price", None)
                     if spot_cfg and getattr(spot_cfg, "enabled", False):
                         price_zone = str(getattr(spot_cfg, "bidding_zone", "DE-LU") or "DE-LU")
+                        if include_surcharges:
+                            try:
+                                surcharge_markup_ct = float(spot_cfg.total_markup_ct())
+                            except Exception:
+                                surcharge_markup_ct = 0.0
+                            if bool(getattr(spot_cfg, "include_vat", True)):
+                                vat_factor = 1.19
                 except Exception:
                     price_zone = None
 
@@ -3608,30 +3617,53 @@ class ActionDispatcher:
                         for i, (a, b) in enumerate(ranges):
                             if a is None:
                                 continue
-                            kwh_i = float(total_per_label[i] or 0.0)
                             if co2_df is not None:
                                 avg_g = _avg_in_range(co2_df, "intensity_g_per_kwh", "hour_ts", a, b)
                                 if avg_g is not None:
                                     co2_intensity[i] = round(avg_g, 1)
-                                    co2_g[i] = round(avg_g * kwh_i, 1)
                             if price_df is not None:
                                 avg_eur_mwh = _avg_in_range(price_df, "price_eur_mwh", "slot_ts", a, b)
                                 if avg_eur_mwh is not None:
-                                    # €/MWh × kWh / 1000 = € for the bucket
-                                    price_eur[i] = round(avg_eur_mwh * kwh_i / 1000.0, 2)
-                                    # €/MWh → ct/kWh: ×0.1
-                                    price_ct_kwh[i] = round(avg_eur_mwh * 0.1, 2)
+                                    # Spot wholesale ct/kWh (gross) incl. surcharges + VAT if configured
+                                    base_ct = avg_eur_mwh * 0.1  # €/MWh → ct/kWh
+                                    final_ct = (base_ct + surcharge_markup_ct) * vat_factor
+                                    price_ct_kwh[i] = round(final_ct, 2)
                 except Exception:
                     pass
 
                 title = f"kWh \u2022 {mode}"
+                # Per-device CO2 (g) and price (EUR) aggregations
+                co2_per_device: List[Dict[str, Any]] = []
+                price_per_device: List[Dict[str, Any]] = []
+                for tr in out_traces:
+                    y_dev = tr.get("y") or []
+                    g_arr: List[Optional[float]] = []
+                    eur_arr: List[Optional[float]] = []
+                    for i in range(len(labels)):
+                        try:
+                            kwh_dev = float(y_dev[i]) if i < len(y_dev) else 0.0
+                        except Exception:
+                            kwh_dev = 0.0
+                        gi = co2_intensity[i] if i < len(co2_intensity) else None
+                        ci = price_ct_kwh[i] if i < len(price_ct_kwh) else None
+                        g_arr.append(round(gi * kwh_dev, 1) if gi is not None else None)
+                        # ct/kWh × kWh / 100 = €
+                        eur_arr.append(round(ci * kwh_dev / 100.0, 2) if ci is not None else None)
+                    co2_per_device.append({"key": tr["key"], "name": tr["name"], "g": g_arr})
+                    price_per_device.append({"key": tr["key"], "name": tr["name"], "eur": eur_arr})
+
                 return {
                     "ok": True, "view": "kwh",
                     "labels": labels, "traces": out_traces,
                     "total_kwh": total_per_label,
-                    "co2_g": co2_g, "co2_intensity_g_per_kwh": co2_intensity,
+                    "co2_intensity_g_per_kwh": co2_intensity,
                     "co2_green_thr": co2_green_thr, "co2_dirty_thr": co2_dirty_thr,
-                    "price_eur": price_eur, "price_ct_kwh": price_ct_kwh,
+                    "co2_per_device": co2_per_device,
+                    "price_ct_kwh": price_ct_kwh,
+                    "price_per_device": price_per_device,
+                    "price_surcharges_included": include_surcharges and (surcharge_markup_ct > 0 or vat_factor != 1.0),
+                    "price_surcharge_ct": round(surcharge_markup_ct, 3),
+                    "price_vat_pct": round((vat_factor - 1.0) * 100, 0),
                     "co2_zone": co2_zone, "price_zone": price_zone,
                     "unit": unit, "title": title, "diag": diag,
                 }

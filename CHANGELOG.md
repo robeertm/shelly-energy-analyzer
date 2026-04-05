@@ -1,5 +1,14 @@
 # Changelog
 
+## 16.11.0 - 2026-04-05
+### Added
+- **CO₂ & Preis-Balken pro Gerät** – eigene Karte je Gerät für CO₂ (g) und Strompreis (€), je Bucket – parallel zu den kWh-Balken.
+- **Spotpreis inkl. Zusatzkosten & MwSt** – Strompreis verwendet jetzt den Endkundenpreis: Spot-Wholesale + Netzentgelte + Stromsteuer + KWK/§19/Offshore-Umlagen + Lieferanten-Marge + 19 % MwSt (aus `spot_price` Config, Komponenten via `total_markup_ct()`). Titel zeigt z. B. "inkl. 13.45 ct/kWh Zusatzkosten + 19 % MwSt".
+- **Dark-Mode-Synchronisation** – der Plots-Iframe reagiert jetzt auf Theme-Wechsel im Dashboard (storage-Event Listener auf `sea_theme`) und zeichnet Plotly-Charts mit den neuen Farben neu.
+
+### Changed
+- **Balken-Beschriftung entfernt** – CO₂/Preis-Balken haben keine aufgedruckten Werte mehr, nur noch Mouseover-Tooltip (Intensität · Σ Bucket-Summe).
+
 ## 16.10.2 - 2026-04-05
 ### Changed
 - **Plots kWh: Ampel-Farben für CO₂ & Preis** – jeder Balken wird nach seiner **Intensität pro kWh** grün/gelb/rot eingefärbt:
