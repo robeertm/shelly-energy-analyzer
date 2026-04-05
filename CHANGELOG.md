@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.9.3 - 2026-04-05
+### Changed
+- **Plots tab polish** – five fixes on the embedded `/plots` page:
+  - Double scrollbars removed: only the iframe scrolls, outer pane fills the viewport.
+  - Own day/night toggle removed (inherits from dashboard theme toggle).
+  - Obsolete link to `/control` removed (Export is its own dashboard tab).
+  - Each plot now shows the device name as a title above the chart.
+  - Neutral conductor current (I_N) rendered in grey + dashed when viewing per-phase current (A).
+- When `/plots` is opened standalone (not embedded), the topbar with home link + theme toggle still shows.
+
 ## 16.9.2 - 2026-04-05
 ### Fixed
 - **Plots: "Fetch is aborted" beim Phasen-Umschalten** – jeder Control-Change (Phasen/Metric/Zeitbereich) startete sofort einen neuen `/api/plots_data` Request, ohne den vorigen abzubrechen; bei großen Zeiträumen lief der alte Request in das 12 s Timeout und zeigte die `AbortError` als Nutzer-Fehler. Jetzt: vorherige in-flight Fetch wird sauber ersetzt (`superseded`, nicht als Fehler angezeigt), echtes Timeout auf 60 s erhöht mit deutscher Meldung "Zeitüberschreitung – Zeitbereich verkleinern".
