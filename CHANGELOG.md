@@ -1,104 +1,111 @@
 # Changelog
 
+## 16.13.17 - 2026-04-05
+### Changed
+- **Settings: all config now editable via UI; no more references to config.json**:
+  - Removed all "edit via config.json" hints from TOU, PV-Surplus, Tariff Compare, Billing and Tenant sections.
+  - Added a **JSON editor** field type for list-typed settings: TOU periods, PV-Surplus consumers, custom tariff lists, tenant list. Uses a monospace textarea with placeholder examples, parsed back into real arrays on save with a clear error toast if JSON is invalid.
+  - **Billing** section now includes multi-line `address` textareas for both issuer and customer, plus customer `email` and `vat_id`.
+
 ## 16.13.16 - 2026-04-05
 ### Changed
-- **Settings-Tab: Layout überarbeitet**
-  - **Checkbox-Felder als Toggle-Pillen**: Label + Checkbox sitzen jetzt in einer farblich abgesetzten, abgerundeten Zeile mit Hover-Effekt (statt flüchtig irgendwo zu hängen). Klick auf die ganze Zeile togglet die Checkbox.
-  - **Konsistente Feld-Höhen**: alle Grid-Felder haben `min-height:58px`, damit 2-Spalten-Grid nicht mehr versetzt aussieht.
-  - **Mobile Sidebar**: Links-Treeview wird jetzt horizontaler Scroll-Strip (sticky unter Header) statt wrap'd Pills die den halben Screen blockieren. Aktive Tab mit Unterstrich statt Left-Border.
-  - **Alarm-Regeln**: die 4 Notification-Checkboxes (Telegram/Webhook/E-Mail/Popup+Beep) nutzen das neue Toggle-Style, konsistent mit allen anderen Booleans.
+- **Settings tab: layout overhauled**
+  - **Checkbox fields as toggle pills**: label + checkbox now sit inside a tinted, rounded row with a hover effect. Clicking anywhere on the row toggles the checkbox.
+  - **Consistent field heights**: every grid cell has `min-height:58px` so the two-column grid no longer looks staggered.
+  - **Mobile sidebar**: the left tree view becomes a horizontal scroll strip (sticky under the header) instead of a wrapped pill block eating half the screen. Active tab uses an underline instead of a left border.
+  - **Alarm rules**: the four notification checkboxes (Telegram / Webhook / E-Mail / Popup+Beep) now use the new toggle style, consistent with the rest of the boolean fields.
 
 ## 16.13.15 - 2026-04-05
 ### Fixed
-- **Plots-Tab Hz: historische Werte = 0** – alte DB-Zeilen hatten `freq_hz = 0` (oder NULL) weil frühere Sync-Runs das Feld nicht befüllten. Jetzt werden 0-Werte als `NaN` behandelt → erscheinen als Lücken im Plot statt als 0-Linie. Netzfrequenz ist nie 0, daher ist diese Filterung korrekt.
+- **Plots tab Hz: historical values = 0** – old DB rows had `freq_hz = 0` (or NULL) because earlier sync runs did not populate the field. 0-values are now treated as `NaN` and appear as gaps in the plot instead of a 0-line. Grid frequency is never 0, so this filter is physically correct.
 
 ## 16.13.14 - 2026-04-05
 ### Fixed
-- **Plots-Tab Hz: "Length of values (0) does not match length of index (1441)"** – `_wva_series()` initialisierte bei fehlender Frequenz-Spalte `y = pd.Series(dtype=float)` (Länge 0), was beim Index-Assign mit `pd.Series(y.to_numpy(), index=ts, ...)` kollidierte. Jetzt: `y = [NaN] * len(df)`. Zusätzlich Defensiv-Check am Ende, der `y` auf `len(ts)` ausrichtet, falls andere Branches 0-Längen-Serie hinterlassen. Außerdem `avg_freq_hz` als Fallback-Spalten-Alias ergänzt (für aus Monats-Aggregaten stammende DataFrames).
+- **Plots tab Hz: "Length of values (0) does not match length of index (1441)"** – `_wva_series()` initialised `y = pd.Series(dtype=float)` (length 0) when the frequency column was missing, which clashed with the index assignment `pd.Series(y.to_numpy(), index=ts, ...)`. It now uses `y = [NaN] * len(df)`, plus a defensive length-check at the end that re-shapes `y` to `len(ts)` if any branch leaves it short. Also added `avg_freq_hz` as a fallback column alias for DataFrames coming from monthly aggregates.
 
 ## 16.13.13 - 2026-04-05
 ### Added
-- **Plots-Tab: Metrik "Hz" auswählbar** – neue Option "Hz" im Metric-Dropdown zwischen A und VAR. Die DB speichert `freq_hz` seit v6.x, also sind historische Werte ab Aufzeichnungsbeginn verfügbar. Backend-Handler `_wva_series` kannte HZ/FREQ/FREQUENCY bereits, es fehlte nur der Eintrag im Frontend-Dropdown.
+- **Plots tab: "Hz" available as metric** – new "Hz" option in the metric dropdown between A and VAR. The DB has stored `freq_hz` since v6.x, so historical values are available from the start of recording. Backend handler `_wva_series` already understood HZ/FREQ/FREQUENCY, only the frontend dropdown entry was missing.
 
 ## 16.13.12 - 2026-04-05
 ### Fixed
-- **Live-Tab: Sparklines fangen nach Tab-Wechsel wieder von vorne an** – Ursachen:
-  1. `/api/history` gab `hz` gar nicht zurück → Hz-Sparkline hatte nie Server-Historie zum Zurückfallen.
-  2. `loadHistory()` wurde nur beim ersten Seitenaufruf ausgeführt (`_historyLoaded` Flag), bei Rückkehr zum Live-Tab wurde der Server-Puffer nicht aktualisiert. Nach >60 s Abwesenheit sind alle alten Client-Puffer-Einträge durch `liveWindowSec`-Filter abgelaufen → Plot fängt mit 1 Punkt neu an.
+- **Live tab: sparklines reset after tab switch** – two causes:
+  1. `/api/history` did not include `hz` at all → the Hz sparkline had no server history to fall back on.
+  2. `loadHistory()` only ran on the first page load (`_historyLoaded` flag); on returning to the Live tab the server buffer was not refreshed. After >60 s away, all client-side buffer entries were filtered out by `liveWindowSec`, so the plot started again with a single point.
 - **Fixes**:
-  - `/api/history` liefert jetzt `hz` mit.
-  - `stopLive()` setzt `_historyLoaded=false`, damit `startLive()` bei Rückkehr die Server-Historie frisch holt.
-  - `loadHistory()`-Merge dedupliziert nach Timestamp + sortiert chronologisch (statt nur blind zu prepend'en), was auch Duplikate bei mehrfachen Refreshes verhindert.
-  - Redraw-Block in `loadHistory()` aktualisiert jetzt auch `sp-in-*` (Neutralleiterstrom) und `sp-hz-*` (Frequenz) Sparklines.
+  - `/api/history` now returns `hz`.
+  - `stopLive()` resets `_historyLoaded=false`, so `startLive()` re-fetches server history on return.
+  - `loadHistory()` merge now dedupes by timestamp and sorts chronologically (instead of blindly prepending), which also prevents duplicates on repeated refreshes.
+  - Redraw block in `loadHistory()` now also updates `sp-in-*` (neutral current) and `sp-hz-*` (frequency) sparklines.
 
 ## 16.13.11 - 2026-04-05
 ### Fixed
-- **I_N-Fallback griff nicht, weil falscher Endpoint gepatcht wurde** – v16.13.10 hat `_compute_i_n()` nur in `services/webdash.py` eingebaut, aber die aktive Flask-App bedient `/api/state` und `/api/history` über das Blueprint `web/blueprints/api_state.py`. Der dort zurückgegebene `i_n` war weiterhin der rohe (oft 0) Messwert. Jetzt ist `_compute_i_n()` auch in der Blueprint-Version vorhanden und wird für beide Endpoints verwendet. Zusätzlich erkennt die Funktion aktive Phasen jetzt an Spannung **oder** Strom (manche Shelly-Modelle melden nur eine Phasenspannung, aber alle Ströme).
+- **I_N fallback did not take effect because the wrong endpoint was patched** – v16.13.10 added `_compute_i_n()` to `services/webdash.py` only, but the active Flask app serves `/api/state` and `/api/history` via the `web/blueprints/api_state.py` blueprint. The `i_n` returned from there was still the raw (often 0) measured value. `_compute_i_n()` is now also present in the blueprint and is used by both endpoints. The function additionally detects active phases by voltage **or** current (some Shelly models report only one phase voltage but all phase currents).
 
 ## 16.13.10 - 2026-04-05
 ### Added
-- **Neutralleiterstrom-Fallback: Berechnung aus Phasenströmen** – wenn das Gerät keinen echten I_N-Wert meldet (kein Neutralleiter-Stromwandler angeschlossen), wird I_N jetzt berechnet:
-  - 3-phasig: `|I_N| = √(I₁² + I₂² + I₃² − I₁·I₂ − I₂·I₃ − I₁·I₃)` (Annahme: 120°-Phasenversatz)
-  - 2-phasig: `|I_N| = |I₁ − I₂|` (split-phase)
-  - 1-phasig: 0
-  - Bei symmetrischer Last ergibt das 0 A, bei unsymmetrischer Last den Betrag des Stroms im N-Leiter. Betrifft sowohl `/api/live_state` als auch `/api/history`, d.h. Sparkline + Detail-Chart + Geräte-Karte zeigen jetzt sinnvolle Werte auch ohne N-Klemme.
+- **Neutral-line current fallback: compute from phase currents** – if the device does not report a real I_N (no neutral CT attached), I_N is now estimated:
+  - 3-phase: `|I_N| = √(I₁² + I₂² + I₃² − I₁·I₂ − I₂·I₃ − I₁·I₃)` (assuming 120° phase offsets)
+  - 2-phase: `|I_N| = |I₁ − I₂|` (split-phase)
+  - 1-phase: 0
+  - A balanced load yields 0 A; an unbalanced load yields the magnitude of the neutral-conductor current. Applied to both `/api/live_state` and `/api/history`, so sparkline, detail chart and device card show meaningful values even without an N clamp.
 
 ## 16.13.9 - 2026-04-05
 ### Fixed
-- **Live-Tab: Klick auf Hz-Sparkline öffnete I_N-Neutralleiter-Detail-Chart** – der Click-Handler und das Detail-Chart-Rendering hatten `metric='hz'` nicht behandelt; der `else`-Zweig fiel auf "Neutral" zurück und plottete zusätzlich Phasen-Ströme, was "komisch verschoben" aussah. Jetzt: eigener `hz`-Case mit korrektem Titel "Frequency (Hz)", cyan (#06b6d4) Linie, nur eine Serie ohne Phasen.
+- **Live tab: clicking the Hz sparkline opened the I_N neutral-current detail chart** – the click handler and detail-chart renderer did not handle `metric='hz'`; the `else` branch fell through to "neutral" and also plotted the phase currents on top, which looked "weirdly shifted". Now there is a dedicated `hz` case with the correct title "Frequency (Hz)", a cyan line (#06b6d4) and a single series without phases.
 
 ## 16.13.8 - 2026-04-05
 ### Added
-- **Live-Tab: Frequenz-Sparkline (Hz) unter Neutralleiterstrom** – neue Mini-Timeseries pro Gerätekarte, zeigt die Netzfrequenz (meist ~50 Hz) in relativer Skalierung, damit Abweichungen (49.9 / 50.1) sichtbar werden. Farbe: cyan (#06b6d4).
+- **Live tab: frequency sparkline (Hz) under neutral current** – new mini-timeseries per device card, shows the grid frequency (around 50 Hz) with relative scaling so deviations (49.9 / 50.1) become visible. Colour: cyan (#06b6d4).
 
 ## 16.13.7 - 2026-04-05
 ### Changed
-- **Kosten-Tab: Prognose-Kachel zeigt jetzt auch die Dyn./Fix-Differenz** – wie bei Heute/Woche/Monat wird nun auch in der Prognose-Kachel der Dyn.-Tarif-Sektion der Pfeil ↑/↓ mit der €-Differenz ggü. Festpreis angezeigt (grün wenn günstiger, rot wenn teurer).
+- **Costs tab: forecast tile now shows the dyn./fixed difference** – like the Today/Week/Month tiles, the forecast tile in the dynamic-tariff section now shows the arrow ↑/↓ with the €-difference vs. the fixed tariff (green if cheaper, red if more expensive).
 
 ## 16.13.6 - 2026-04-05
 ### Changed
-- **Schedule-Tab komplett überarbeitet – zeigt jetzt Datum, Kontext und Handlungsempfehlung**:
-  - **Dauer-Auswahl** (1h/2h/3h/4h/6h/8h) – Buttons zum Umschalten der Block-Länge
-  - **Top-3 günstigste Zeitfenster** in den nächsten 24h (statt nur 1), nicht-überlappend, mit 🥇🥈🥉 Ranking
-  - **Datum + Wochentag** ("Heute · Montag" / "Morgen · Dienstag" / "Dienstag, 07.04.2026") statt nur Uhrzeit
-  - **Kontext-Karten**: Ø 24h Spot, Festpreis, Billigste Stunde, Teuerste Stunde
-  - **Ersparnis-Berechnung ggü. Festpreis** (nicht nur ggü. 24h-Ø): grün/rot mit ct/kWh-Differenz
-  - **Beispiel-Rechnung** je Block: "Bei 2 kWh Verbrauch (z.B. Waschmaschine): −X ct ggü. Festpreis"
-  - **Handlungshinweis oben**: "Starte Waschmaschine/Spülmaschine/Trockner/E-Auto/Wärmepumpe in einem der Fenster"
-  - **Preise inkl. Netzentgelt, Stromsteuer, KWK/§19/Offshore, Anbieter-Marge und MwSt.** aus den Spot-Preis-Einstellungen (vorher nur Rohpreis)
-- Backend `/api/smart_schedule?duration=H` gibt `blocks[]`, `avg_24h_ct`, `cheapest_hour_ct`, `most_expensive_hour_ct`, `fixed_ct`, `zone` zurück.
+- **Schedule tab: complete rewrite – now shows date, context and a clear action**:
+  - **Duration picker** (1h/2h/3h/4h/6h/8h) – buttons to switch the block length
+  - **Top-3 cheapest time windows** in the next 24 h (instead of just one), non-overlapping, with 🥇🥈🥉 ranking
+  - **Date + weekday** ("Today · Monday" / "Tomorrow · Tuesday" / "Tuesday, 07.04.2026") instead of bare time
+  - **Context tiles**: avg. 24 h spot, fixed tariff, cheapest hour, most expensive hour
+  - **Savings vs. fixed tariff** (not just vs. 24 h average): green/red ct/kWh delta
+  - **Example calculation per block**: "For 2 kWh of load (e.g. washing machine): −X ct vs. fixed tariff"
+  - **Top action hint**: "Start washing machine / dishwasher / dryer / EV / heat pump during one of these windows"
+  - **Prices including grid fees, electricity tax, KWK/§19/offshore surcharges, supplier margin and VAT** from the spot-price settings (previously raw price only)
+- Backend `/api/smart_schedule?duration=H` now returns `blocks[]`, `avg_24h_ct`, `cheapest_hour_ct`, `most_expensive_hour_ct`, `fixed_ct`, `zone`.
 
 ## 16.13.5 - 2026-04-05
 ### Fixed
-- **Plots-Tab: Stunden-Labels um 2h verschoben (UTC statt Lokalzeit)** – kWh-Balken und W/V/A-Timeseries zeigten die Stunde in UTC an. Bei einem Sync um 21:00 Uhr lokal (Europe/Berlin DST = UTC+2) wurde die zuletzt gefüllte Stunde als "18:00" beschriftet statt "20:00". Behoben in `_stats_series()` und `_wva_series()`: die aus der DB gelesenen UTC-Timestamps werden jetzt nach Europe/Berlin konvertiert, bevor Stunden-/Tag-/Wochen-Labels generiert werden. `_label_to_ts_range()` interpretiert Labels konsistent als Lokalzeit, damit CO₂- und Preis-Lookups pro Bucket die richtigen DB-Zeitfenster abfragen.
+- **Plots tab: hour labels shifted by 2 h (UTC instead of local time)** – kWh bars and W/V/A time-series showed hours in UTC. During a sync at 21:00 local (Europe/Berlin DST = UTC+2) the most recently filled hour was labelled "18:00" instead of "20:00". Fixed in `_stats_series()` and `_wva_series()`: UTC timestamps read from the DB are now converted to Europe/Berlin before hour / day / week labels are generated. `_label_to_ts_range()` interprets labels as local time consistently, so the CO₂ and price lookups per bucket query the correct DB time ranges.
 
 ## 16.13.4 - 2026-04-05
 ### Changed
-- **iOS-Widget: CO₂-Chart zeigt volle 24h + aktuellen Wert robust** – die `/api/widget` Endpoint query für `co2_chart` deckt jetzt die letzten 24 Stunden ab (vorher -12h/+12h, Hälfte war leer da es für CO₂ keine Forecasts gibt). `co2_current` nimmt jetzt den **letzten verfügbaren Wert** aus den 24h (statt nur der aktuellen Stunde) – so wird auch bei kurzen Lücken im Fetch der aktuellste Wert angezeigt.
-- **CO₂-Chart-Label im Widget zeigt den aktuellen Wert** – das Label über dem Mini-Balkendiagramm lautet jetzt z. B. "CO₂ g/kWh · 24h · 187" statt nur "CO₂ g/kWh".
+- **iOS widget: CO₂ chart shows full 24 h + current value robustly** – the `/api/widget` query for `co2_chart` now covers the last 24 h (previously -12h/+12h, which left half the window empty since CO₂ has no forecasts). `co2_current` now uses the **most recent available value** from those 24 h (instead of just the current hour), so the latest figure still shows even if a fetch went missing.
+- **CO₂ chart label in the widget shows the current value** – the label above the mini bar chart now reads, for example, "CO₂ g/kWh · 24h · 187" instead of just "CO₂ g/kWh".
 
 ## 16.13.3 - 2026-04-05
 ### Changed
-- **Plots-Tab immer statisch (kein Zoom)** – der Plots-Tab verwendet jetzt überall die einfachen mobilen Plots ohne Zoom/Pan/Scroll-Zoom, unabhängig von der Viewport-Breite. `isMobileView()` innerhalb der Plots-Seite gibt immer `true` zurück, d. h. `fixedrange`, `dragmode: false`, `displayModeBar: false` und `doubleClick: false` für alle Plotly-Charts.
+- **Plots tab always static (no zoom)** – the Plots tab now uses the simple mobile plots everywhere, without zoom/pan/scroll-zoom, regardless of viewport width. `isMobileView()` inside the Plots page always returns `true`, i.e. `fixedrange`, `dragmode: false`, `displayModeBar: false` and `doubleClick: false` for every Plotly chart.
 
 ## 16.13.2 - 2026-04-05
 ### Changed
-- **Initial-Sync beim App-Start** – unabhängig davon ob Auto-Sync aktiviert ist, wird 3 s nach Server-Start einmal `sync_all()` im Hintergrund ausgeführt, damit beim ersten Dashboard-Öffnen direkt aktuelle Daten in der DB stehen. Wenn Auto-Sync aktiviert ist, läuft danach zusätzlich der periodische Zyklus.
-- **Plots-Tab aktualisiert bei Tab-Wechsel** – beim Wechsel zum Plots-Tab wird die iframe-Plotly-Ansicht jetzt immer neu gezeichnet (via `__scheduleApplyPlots()` auf dem iframe window). Damit siehst du nach dem Initial-Sync automatisch die frischen Daten, wenn du zum Plots-Tab wechselst.
+- **Initial sync on app start** – regardless of whether auto-sync is enabled, `sync_all()` runs once in the background 3 s after server start, so the first dashboard load has fresh data in the DB. If auto-sync is enabled the periodic cycle still runs afterwards.
+- **Plots tab refreshes on tab switch** – when switching to the Plots tab, the iframe Plotly view is always redrawn (via `__scheduleApplyPlots()` on the iframe window). So after the initial sync you automatically see the fresh data when switching to the Plots tab.
 
 ## 16.13.1 - 2026-04-05
 ### Fixed
-- **Mieter-Abrechnung: MwSt doppelt berechnet** – der `/api/tenants/bill` Endpoint gab BRUTTO-Preise an den Service und der Service addierte dann erneut 19% MwSt. Jetzt wird mit NETTO-Preisen gerechnet; die MwSt wird nur einmal am Ende zum Subtotal addiert. Beeinflusst auch die `Grundpreis`-Zeile: die Grundgebühr wurde als Brutto an den Service übergeben und dann nochmal um 19% erhöht.
+- **Tenant billing: VAT double-counted** – the `/api/tenants/bill` endpoint passed gross prices to the service, and the service added 19 % VAT on top. Net prices are now used; VAT is applied once at the end against the subtotal. Also affects the `base fee` line: the base fee was passed in gross and then increased by 19 % again.
 
 ### Added
-- **Mieter-Abrechnung: Tarif-Auswahl je Abrechnung** – neuer Dropdown "Tarif" neben Von/Bis mit Optionen *Auto (Settings)* / *Fix* / *Dynamisch*. "Auto" nimmt den in `spot_price.tariff_type` hinterlegten Modus, "Dynamisch" berechnet einen volumen-gewichteten Durchschnitts-Spot-Preis aus der `spot_prices`-DB-Tabelle (inkl. Netzentgelte, Stromsteuer, KWK, §19, Offshore, Anbieter-Marge aus `spot_price`-Config).
-- **Summenzeile Mieter zeigt Tarif-Modus + effektiven Preis + Grundgebühr-Info**: z.B. "⚡ Dynamischer Tarif · 24.87 ct/kWh netto · Grundgebühr: 107.15 €/Jahr netto · MwSt. 19%".
-- **Grundpreis-Zeilen zeigen `–`** statt "0.0" bzw. "0.0000" für kWh/Preis-Spalten (nur Betrag ist sinnvoll).
+- **Tenant billing: tariff picker per bill** – new "Tariff" dropdown next to From/To with options *Auto (settings)* / *Fixed* / *Dynamic*. "Auto" uses the mode stored in `spot_price.tariff_type`; "Dynamic" computes a volume-weighted average spot price from the `spot_prices` DB table (including grid fees, electricity tax, KWK, §19, offshore, supplier margin from the `spot_price` config).
+- **Tenant summary row shows tariff mode + effective price + base-fee info**: e.g. "⚡ Dynamic tariff · 24.87 ct/kWh net · base fee: 107.15 €/year net · VAT 19 %".
+- **Base-fee rows show `–`** instead of "0.0" / "0.0000" for the kWh / price columns (only the amount is meaningful).
 
 ## 16.13.0 - 2026-04-05
 ### Changed
-- **Plots-Tab merkt sich letzte Einstellungen** – jeder Control-Change (View, Metric, Phasen, Zeitbereich, Geräte, Filter) wird in `localStorage['sea_plots_qp']` persistiert und beim nächsten Seitenaufruf automatisch wiederhergestellt. Funktioniert sowohl im Dashboard-Plots-Tab (iframe) als auch bei direktem `/plots`-Aufruf.
-- **Erster Besuch zeigt kWh-Balken der letzten 24h** – neue Default-Ansicht statt Timeseries/W/1h: `view=kwh` / `mode=hours` / `len=24 hours`. Zeigt Energieverbrauch pro Stunde + CO₂/Preis-Balken für die letzten 24 Stunden.
+- **Plots tab remembers last settings** – every control change (view, metric, phases, time range, devices, filters) is persisted in `localStorage['sea_plots_qp']` and restored on the next page load. Works both in the dashboard Plots tab (iframe) and on a direct `/plots` call.
+- **First visit shows kWh bars for the last 24 h** – new default view instead of timeseries/W/1h: `view=kwh` / `mode=hours` / `len=24 hours`. Shows hourly energy use plus CO₂ / price bars for the last 24 hours.
 
 ## 16.12.5 - 2026-04-05
 ### Changed
