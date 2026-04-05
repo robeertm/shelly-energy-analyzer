@@ -1,5 +1,18 @@
 # Changelog
 
+## 16.13.6 - 2026-04-05
+### Changed
+- **Schedule-Tab komplett überarbeitet – zeigt jetzt Datum, Kontext und Handlungsempfehlung**:
+  - **Dauer-Auswahl** (1h/2h/3h/4h/6h/8h) – Buttons zum Umschalten der Block-Länge
+  - **Top-3 günstigste Zeitfenster** in den nächsten 24h (statt nur 1), nicht-überlappend, mit 🥇🥈🥉 Ranking
+  - **Datum + Wochentag** ("Heute · Montag" / "Morgen · Dienstag" / "Dienstag, 07.04.2026") statt nur Uhrzeit
+  - **Kontext-Karten**: Ø 24h Spot, Festpreis, Billigste Stunde, Teuerste Stunde
+  - **Ersparnis-Berechnung ggü. Festpreis** (nicht nur ggü. 24h-Ø): grün/rot mit ct/kWh-Differenz
+  - **Beispiel-Rechnung** je Block: "Bei 2 kWh Verbrauch (z.B. Waschmaschine): −X ct ggü. Festpreis"
+  - **Handlungshinweis oben**: "Starte Waschmaschine/Spülmaschine/Trockner/E-Auto/Wärmepumpe in einem der Fenster"
+  - **Preise inkl. Netzentgelt, Stromsteuer, KWK/§19/Offshore, Anbieter-Marge und MwSt.** aus den Spot-Preis-Einstellungen (vorher nur Rohpreis)
+- Backend `/api/smart_schedule?duration=H` gibt `blocks[]`, `avg_24h_ct`, `cheapest_hour_ct`, `most_expensive_hour_ct`, `fixed_ct`, `zone` zurück.
+
 ## 16.13.5 - 2026-04-05
 ### Fixed
 - **Plots-Tab: Stunden-Labels um 2h verschoben (UTC statt Lokalzeit)** – kWh-Balken und W/V/A-Timeseries zeigten die Stunde in UTC an. Bei einem Sync um 21:00 Uhr lokal (Europe/Berlin DST = UTC+2) wurde die zuletzt gefüllte Stunde als "18:00" beschriftet statt "20:00". Behoben in `_stats_series()` und `_wva_series()`: die aus der DB gelesenen UTC-Timestamps werden jetzt nach Europe/Berlin konvertiert, bevor Stunden-/Tag-/Wochen-Labels generiert werden. `_label_to_ts_range()` interpretiert Labels konsistent als Lokalzeit, damit CO₂- und Preis-Lookups pro Bucket die richtigen DB-Zeitfenster abfragen.
