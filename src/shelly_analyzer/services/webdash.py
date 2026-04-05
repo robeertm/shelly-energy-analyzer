@@ -3247,6 +3247,26 @@ function _drawSpotChart(hourly, fixedCt) {{
     ctx.globalAlpha = 1.0;
   }}
 
+  // "Now" vertical marker line + label
+  if (hourly.length > 1) {{
+    var tFirst = hourly[0].ts;
+    var tStep = (hourly.length > 1 ? (hourly[1].ts - hourly[0].ts) : 3600) || 3600;
+    var tLast = hourly[hourly.length - 1].ts + tStep;
+    if (now >= tFirst && now <= tLast) {{
+      var frac = (now - tFirst) / (tLast - tFirst);
+      var nowX = pad.left + frac * plotW;
+      ctx.strokeStyle = '#ff1744';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(nowX, pad.top); ctx.lineTo(nowX, pad.top + plotH); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#ff1744';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('jetzt', nowX, pad.top - 2);
+    }}
+  }}
+
   // X-axis labels
   var lblEl = document.getElementById('spot-chart-labels');
   if (lblEl && hourly.length > 0) {{
@@ -3829,6 +3849,27 @@ function _drawCo2Chart(hourly, green, dirty) {{
         ctx.lineWidth = 2.5;
         ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
       }});
+
+      // "Now" vertical marker
+      const nowTs = Date.now() / 1000;
+      if (hourly.length > 1 && hourly[0].ts && hourly[hourly.length-1].ts) {{
+        const tFirst = hourly[0].ts;
+        const tStepCo2 = hourly[1].ts - hourly[0].ts || 3600;
+        const tLast = hourly[hourly.length - 1].ts + tStepCo2;
+        if (nowTs >= tFirst && nowTs <= tLast) {{
+          const fracN = (nowTs - tFirst) / (tLast - tFirst);
+          const nowX = pad.left + fracN * cW;
+          ctx.strokeStyle = '#ff1744';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath(); ctx.moveTo(nowX, pad.top); ctx.lineTo(nowX, pad.top + cH); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#ff1744';
+          ctx.font = '10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('jetzt', nowX, pad.top - 2);
+        }}
+      }}
 
       // X-axis labels
       ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
