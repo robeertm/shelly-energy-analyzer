@@ -52,5 +52,7 @@ def settings_page():
     tpl = Path(__file__).parent.parent / "templates" / "settings.html"
     if tpl.exists():
         html = _inject_version_badge(tpl.read_text(encoding="utf-8"))
-        return Response(html.encode("utf-8"), content_type="text/html; charset=utf-8")
+        resp = Response(html.encode("utf-8"), content_type="text/html; charset=utf-8")
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        return resp
     return Response(b"<h1>Settings page not yet available</h1>", content_type="text/html")
