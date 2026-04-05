@@ -1,5 +1,13 @@
 # Changelog
 
+## 16.12.0 - 2026-04-05
+### Changed
+- **i18n-Audit Pass 1: Plots & Sync Tab** – alle kürzlich hinzugefügten deutsch-hartcodierten Strings jetzt über das i18n-System (`t('web.xxx', {vars})`) mit DE + EN Übersetzungen. Betrifft:
+  - **Plots Tab**: CO₂-/Strompreis-Titel (inkl. Ampel-Schwellen), Zusatzkosten/MwSt-Info, Fixpreis-Info, Trace-Namen ("Dynamisch"/"Fixpreis"), "I_N (Neutralleiter)"
+  - **Sync Tab**: alle Buttons (Inkrement-Sync / Vollständiger Sync / Heute / Woche / Monat / Status), Labels (Auto-Scroll, HTTP-Logs, Log), Status-Nachrichten ("Lade Status…", "Starte Sync…", "Sync läuft…", "Netzwerkfehler…")
+- **t() Helper in Dashboard + Plots JS**: unterstützt jetzt `{var}` Interpolation (`t('key', {mode:'day', job:42})` → "Sync läuft (mode=day, job=42) …").
+- **Noch hartcodiert (Pass 2 folgt):** Settings-Seite (`/settings`) ist weiterhin komplett deutsch (~80 Labels/Section-Titel), sowie Export- und Control-Tab-Details. Fallback: fehlende Keys in anderen Sprachen zeigen Englisch.
+
 ## 16.11.6 - 2026-04-05
 ### Fixed
 - **Dashboard Quick-Language-Switcher triggerte kein HTML-Re-Render** – der Sprach-Selector im Live-Settings-Modal rief `/api/run` mit `action:set_language` auf. Der Handler speicherte zwar die Sprache nach `config.json`, aber rief `state.reload_config()` **nicht** auf – das gecachte HTML blieb in der alten Sprache, so dass die Seite nach `window.location.reload()` wieder deutsch/alt aussah. Genau der Bug, der "springt zurück" auslöste. Jetzt ruft `set_language` vollständig `state.reload_config(new_cfg)` + `dispatcher.reload(new_cfg, lang=…)` auf.
