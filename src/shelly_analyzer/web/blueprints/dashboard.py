@@ -48,7 +48,9 @@ def control(subpath=None):
 @bp.route("/settings")
 def settings_page():
     from pathlib import Path
+    from shelly_analyzer.web import _inject_version_badge
     tpl = Path(__file__).parent.parent / "templates" / "settings.html"
     if tpl.exists():
-        return Response(tpl.read_bytes(), content_type="text/html; charset=utf-8")
+        html = _inject_version_badge(tpl.read_text(encoding="utf-8"))
+        return Response(html.encode("utf-8"), content_type="text/html; charset=utf-8")
     return Response(b"<h1>Settings page not yet available</h1>", content_type="text/html")
