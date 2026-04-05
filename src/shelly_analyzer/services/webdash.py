@@ -2050,13 +2050,15 @@ function pollSyncLogs() {{
   }}).catch(function() {{}});
 }}
 function syncAll(mode) {{
+  const el = document.getElementById('sync-status-panel');
+  if (el) el.textContent = 'Starte Sync (' + mode + ') …';
   fetch('/api/sync', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{mode:mode}})}})
     .then(function(r) {{ return r.json(); }})
     .then(function(d) {{
-      const el = document.getElementById('sync-status-panel');
-      if (el) el.textContent = d.ok ? ('Sync gestartet (mode=' + mode + ', job=' + (d.job_id||'?') + ')') : ('Fehler: ' + (d.error||'?'));
-      refreshSyncStatus();
-    }}).catch(function(e) {{}});
+      if (el) el.textContent = d.ok ? ('Sync läuft (mode=' + mode + ', job=' + (d.job_id||'?') + ') – Logs siehe unten') : ('Fehler: ' + (d.error||'?'));
+      // Refresh device status after 3s so the sync thread has time to write last_end_ts
+      setTimeout(refreshSyncStatus, 3000);
+    }}).catch(function(e) {{ if (el) el.textContent = 'Netzwerkfehler: ' + e; }});
 }}
 /* ──────────────────────────────────────────────
    TENANTS (Mieter / Nebenkostenabrechnung)
