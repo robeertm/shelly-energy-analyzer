@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.12.2 - 2026-04-05
+### Changed
+- **i18n Pass 3: Settings field labels** – alle **200 Feld-Labels** in der Settings-Seite laufen jetzt durch i18n mit DE + EN. Betrifft jede Einstellung in jeder Sektion: Anzeige, Web-Server, Preise & Tarif, Auto-Sync, Telegram, E-Mail, Webhook, Anomalien, MQTT, InfluxDB, Prometheus, API, Updates, Solar, Batterie, PV-Überschuss, Spot-Preise, CO₂, Wetter, Prognose, Smart Schedule, EV Charging, KI-Berater, Gamification, Rechnung, Mieter, Multi-Location, Download, Demo.
+- i18n-Keys folgen dem Schema `settings.field.<config_path>` (z. B. `settings.field.pricing.electricity_price_eur_per_kwh` → "Electricity price €/kWh"). renderField() nutzt `T("settings.field."+f.key, f.label)` mit automatischem DE-Fallback.
+
 ## 16.12.1 - 2026-04-05
 ### Changed
 - **i18n Pass 2: Settings-Seite** – Seitentitel, Sidebar-Gruppen (Grundeinstellungen / Benachrichtigungen / Integrationen / Energie / Features / Erweitert), **alle 34 Section-Titel** (Geräte, Anzeige, Web-Server, Preise & Tarif, Telegram, E-Mail, MQTT, InfluxDB, Solar, Batterie, Spot-Preise, CO₂, Wetter, etc.) sowie die häufigsten Buttons (Speichern, Test) + Toast-Messages (Gespeichert, Fehler, Gerät hinzugefügt/entfernt, Regel erstellt/gelöscht) + Health-Check Status laufen jetzt durch i18n mit DE + EN Fallback. Field-Labels der einzelnen Settings-Felder bleiben vorerst deutsch (~200 Strings, Pass 3).
