@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.36 - 2026-04-06
+### Fixed
+- **Settings page failed to load** – typographic quotation marks (`„"`) in a JavaScript string hint caused rendering issues on some browsers. Replaced with plain text.
+
 ## 16.13.35 - 2026-04-06
 ### Added
 - **Tariff type selector in "Preise & Tarif" settings** – prominent "Tarif-Modell" dropdown (Fester Tarif / Dynamischer Tarif) directly in the pricing section so users don't have to navigate to the Spot-Preise section to switch. Selecting "Dynamisch" automatically enables `spot_price.enabled`. Spot-Preise section now shows hints that tariff type is configured in Preise & Tarif.
