@@ -94,7 +94,7 @@ def _inject_version_badge(html: str) -> str:
         'top:2px;left:4px;z-index:9999;font-size:9px;'
         'color:rgba(128,128,128,0.6);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;'
         'pointer-events:none;user-select:none;padding:0 3px">'
-        f'v{__version__}</div>'
+        f'v{__version__} \u00a9 Robert Manuwald</div>'
     )
     if "</body>" in html:
         return html.replace("</body>", badge + "</body>", 1)
