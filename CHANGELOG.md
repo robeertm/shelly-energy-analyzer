@@ -1,5 +1,20 @@
 # Changelog
 
+## 16.13.29 - 2026-04-06
+### Added
+- **Dedicated NILM statistics tab** – new "NILM" tab (brain icon) with rich, colorful statistics for Non-Intrusive Load Monitoring:
+  - **Overview metric cards** – pattern count, transitions detected, devices monitored, appliance categories
+  - **Top 10 detected patterns** – each with icon, power centroid (W), event count, percentage share, standard deviation, peak hour, mini power-profile sparkline canvas, and color-coded power bar
+  - **Hourly activity heatmap** – bar chart showing transition frequency by hour of day with blue→red gradient
+  - **Category donut chart** – visual breakdown of detected appliance categories (kitchen, laundry, cooling, heating, etc.)
+  - **Per-device breakdown** – cluster count, total events, and top matched appliances per monitored device
+  - **Recent transitions timeline** – last 30 power transitions with timestamp, device, power before/after, and on/off indicator
+  - **Appliance signature database** – expandable reference of all 25 built-in appliance signatures with power ranges and pattern types
+  - **Learning progress** – when < 10 transitions detected, shows progress bar and status
+- **`/api/nilm_detail` endpoint** – returns rich NILM data: clusters with std_w/typical_hour, raw transitions with timestamps, hourly distribution, per-device stats, category breakdown, and appliance signature reference
+- **Responsive layout** – pattern grid scales from 1→2→3 columns, two-column layout for categories + devices on desktop, full-width on mobile
+- **Legacy HTTP server** – `/api/nilm_detail` also available via the standalone webdash HTTP server
+
 ## 16.13.28 - 2026-04-06
 ### Fixed
 - **Daily summary fired on every restart** – `_summary_last_daily` initialized as empty string, so `"" != "2026-04-06"` was always true and the summary sent immediately on startup. Now initializes to today's date, and restores the last-sent date from the persisted config field `telegram_daily_summary_last_sent` / `telegram_monthly_summary_last_sent`.

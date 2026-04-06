@@ -1420,6 +1420,107 @@ _HTML_TEMPLATE = """<!doctype html>
     .badge-green {{ background: rgba(22,163,74,0.15); color: #16a34a; }}
     .badge-red {{ background: rgba(220,38,38,0.12); color: #dc2626; }}
     .badge-yellow {{ background: rgba(217,119,6,0.12); color: #d97706; }}
+    /* ── NILM Tab ── */
+    .nilm-metrics {{
+      display: grid;
+      grid-template-columns: repeat(2,1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }}
+    @media (min-width: 600px) {{
+      .nilm-metrics {{ grid-template-columns: repeat(4,1fr); }}
+    }}
+    .nilm-metric-card {{
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 10px;
+      text-align: center;
+    }}
+    .nilm-pattern-grid {{
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }}
+    @media (min-width: 560px) {{
+      .nilm-pattern-grid {{ grid-template-columns: 1fr 1fr; }}
+    }}
+    @media (min-width: 960px) {{
+      .nilm-pattern-grid {{ grid-template-columns: repeat(3, 1fr); }}
+    }}
+    .nilm-pattern-card {{
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }}
+    .nilm-stat {{
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }}
+    .nilm-stat-val {{
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.2;
+    }}
+    .nilm-stat-lbl {{
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .3px;
+    }}
+    .nilm-two-col {{
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }}
+    @media (min-width: 700px) {{
+      .nilm-two-col {{ grid-template-columns: 1fr 1fr; }}
+    }}
+    .nilm-timeline {{
+      position: relative;
+      padding-left: 20px;
+    }}
+    .nilm-tl-item {{
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+    }}
+    .nilm-tl-item:last-child {{ border-bottom: none; }}
+    .nilm-tl-dot {{
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 4px;
+    }}
+    .nilm-tl-body {{ flex: 1; min-width: 0; }}
+    .nilm-sig-grid {{
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }}
+    @media (min-width: 560px) {{
+      .nilm-sig-grid {{ grid-template-columns: 1fr 1fr; }}
+    }}
+    @media (min-width: 960px) {{
+      .nilm-sig-grid {{ grid-template-columns: repeat(3, 1fr); }}
+    }}
+    .nilm-sig-item {{
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 6px 8px;
+      background: var(--bg);
+      border-radius: 8px;
+    }}
+    /* Override pane max-width for NILM to use more space on desktop */
+    @media (min-width: 900px) {{
+      #pane-nilm.active {{ max-width: 80%; }}
+    }}
     /* ── Chart canvas ── */
     canvas.bar-chart {{
       width: 100%;
@@ -1770,6 +1871,11 @@ _HTML_TEMPLATE = """<!doctype html>
     <div id="pane-tenants" class="pane">
       <div id="tenants-content"><p class="loading-msg">Lade…</p></div>
     </div>
+    <!-- NILM Statistics -->
+    <div id="pane-nilm" class="pane">
+      <div id="nilm-content"><p class="loading-msg">{web_loading}</p></div>
+    </div>
+
     <div id="pane-sync" class="pane">
       <div class="card" style="margin-bottom:8px">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
@@ -1876,6 +1982,10 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">🏘</span>
       <span class="nav-label">Mieter</span>
     </button>
+    <button class="nav-btn" onclick="switchPane('nilm',this)">
+      <span class="nav-icon">🧠</span>
+      <span class="nav-label">NILM</span>
+    </button>
     <button class="nav-btn" onclick="switchPane('sync',this)">
       <span class="nav-icon">🔄</span>
       <span class="nav-label">Sync</span>
@@ -1906,6 +2016,7 @@ _HTML_TEMPLATE = """<!doctype html>
     <button class="drawer-item" onclick="switchPaneFromDrawer('advisor',this)"><span class="drawer-ico">🤖</span>Advisor</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('goals',this)"><span class="drawer-ico">🏆</span>Goals</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('tenants',this)"><span class="drawer-ico">🏘</span>Mieter</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('nilm',this)"><span class="drawer-ico">🧠</span>NILM</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('sync',this)"><span class="drawer-ico">🔄</span>Sync</button>
   </aside>
 </div>
@@ -2085,10 +2196,432 @@ function onPaneActivated(name) {{
     else if (name === 'advisor') loadAdvisor();
     else if (name === 'goals') loadGoals();
     else if (name === 'tenants') loadTenants();
+    else if (name === 'nilm') loadNilm();
     else if (name === 'sync') {{ initSync(); }}
     else {{ stopSyncPolling(); }}
   }}
   if (name !== 'sync') stopSyncPolling();
+}}
+
+/* ──────────────────────────────────────────────
+   NILM STATISTICS TAB
+────────────────────────────────────────────── */
+let _nilmData = null;
+async function loadNilm() {{
+  const el = document.getElementById('nilm-content');
+  if (!el) return;
+  el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  try {{
+    const r = await fetch('/api/nilm_detail');
+    if (!r.ok) throw new Error(r.status);
+    _nilmData = await r.json();
+    renderNilm(_nilmData, el);
+  }} catch(e) {{
+    el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+  }}
+}}
+
+function renderNilm(data, el) {{
+  if (!data.ok) {{
+    el.innerHTML = '<p class="error-msg">' + esc(data.error || 'Unknown error') + '</p>';
+    return;
+  }}
+  let html = '';
+
+  /* ── Status Badge Row ── */
+  const learning = data.transition_count < 10;
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">';
+  html += '<span class="badge ' + (data.cluster_count > 0 ? 'badge-green' : learning ? 'badge-yellow' : 'badge-red') + '">' +
+    (data.cluster_count > 0 ? 'NILM Active' : learning ? 'Learning\u2026' : 'Waiting for data') + '</span>';
+  html += '<span class="badge badge-yellow">' + data.cluster_count + ' Patterns</span>';
+  html += '<span class="badge badge-yellow">' + data.transition_count + ' Transitions</span>';
+  html += '<span class="badge badge-yellow">' + data.device_count + ' Devices</span>';
+  html += '</div>';
+
+  /* ── Overview Metric Cards ── */
+  html += '<div class="nilm-metrics">';
+  html += _nilmMetricCard('🧠', 'Erkannte Muster', data.cluster_count, 'Cluster aus ML k-means');
+  html += _nilmMetricCard('⚡', 'Transitionen', data.transition_count, 'Leistungssprünge erkannt');
+  html += _nilmMetricCard('📡', 'Geräte überwacht', data.device_count, '3-Phasen EM Geräte');
+  const cats = Object.keys(data.categories || {{}}).length;
+  html += _nilmMetricCard('📊', 'Kategorien', cats, 'Verschiedene Gerätekategorien');
+  html += '</div>';
+
+  /* ── Top 10 Patterns with mini power-profile canvas ── */
+  const clusters = (data.clusters || []).slice(0, 10);
+  if (clusters.length > 0) {{
+    html += '<div class="card" style="margin-bottom:12px">';
+    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">Top 10 erkannte Muster</div>';
+    html += '<div class="nilm-pattern-grid">';
+    clusters.forEach(function(c, idx) {{
+      const devName = (data.device_names || {{}})[c.device_key] || c.device_key || '?';
+      const pct = data.transition_count > 0 ? Math.round(c.count / data.transition_count * 100) : 0;
+      const colHue = _nilmPowerHue(c.centroid_w);
+      html += '<div class="nilm-pattern-card" style="border-left:4px solid hsl(' + colHue + ',70%,50%)">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+      html += '<span style="font-size:20px">' + (c.icon || '🔌') + '</span>';
+      html += '<span class="badge" style="background:hsl(' + colHue + ',70%,90%);color:hsl(' + colHue + ',70%,30%);font-size:11px">#' + (idx+1) + '</span>';
+      html += '</div>';
+      html += '<div style="font-weight:700;font-size:14px;margin-bottom:2px">' + esc(c.label || c.matched_appliance || 'Unbekannt') + '</div>';
+      html += '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">' + esc(devName) + '</div>';
+      html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">';
+      html += '<div class="nilm-stat"><span class="nilm-stat-val">' + Math.round(c.centroid_w) + '</span><span class="nilm-stat-lbl">Watt</span></div>';
+      html += '<div class="nilm-stat"><span class="nilm-stat-val">' + c.count + '</span><span class="nilm-stat-lbl">Events</span></div>';
+      html += '<div class="nilm-stat"><span class="nilm-stat-val">' + pct + '%</span><span class="nilm-stat-lbl">Anteil</span></div>';
+      if (c.std_w) html += '<div class="nilm-stat"><span class="nilm-stat-val">\u00b1' + Math.round(c.std_w) + '</span><span class="nilm-stat-lbl">Std W</span></div>';
+      if (c.typical_hour !== undefined) html += '<div class="nilm-stat"><span class="nilm-stat-val">' + String(c.typical_hour).padStart(2,'0') + ':00</span><span class="nilm-stat-lbl">Peak</span></div>';
+      html += '</div>';
+      // Mini power bar (visual representation of centroid_w relative to max)
+      const maxW = Math.max.apply(null, clusters.map(function(x){{ return x.centroid_w; }})) || 1;
+      const barPct = Math.round(c.centroid_w / maxW * 100);
+      html += '<div style="background:var(--bg);border-radius:4px;height:8px;overflow:hidden">';
+      html += '<div style="width:' + barPct + '%;height:100%;background:hsl(' + colHue + ',70%,55%);border-radius:4px;transition:width .3s"></div>';
+      html += '</div>';
+      // Mini canvas for power profile (will be drawn after DOM insertion)
+      html += '<canvas class="nilm-spark" data-idx="' + idx + '" style="width:100%;height:50px;margin-top:8px"></canvas>';
+      html += '</div>';
+    }});
+    html += '</div></div>';
+  }} else {{
+    html += '<div class="card" style="margin-bottom:12px;text-align:center;padding:30px">';
+    html += '<div style="font-size:40px;margin-bottom:10px">🧠</div>';
+    html += '<div style="font-size:16px;font-weight:600;margin-bottom:6px">NILM lernt noch\u2026</div>';
+    html += '<div style="color:var(--muted);font-size:13px">Mindestens 10 Leistungssprünge nötig. Aktuell: ' + data.transition_count + '</div>';
+    html += '<div style="margin-top:12px;background:var(--bg);border-radius:6px;height:8px;overflow:hidden;max-width:300px;margin-left:auto;margin-right:auto">';
+    const prog = Math.min(100, Math.round(data.transition_count / 10 * 100));
+    html += '<div style="width:' + prog + '%;height:100%;background:var(--accent);border-radius:6px;transition:width .5s"></div>';
+    html += '</div></div>';
+  }}
+
+  /* ── Hourly Activity Heatmap ── */
+  const hourly = data.hourly_distribution || [];
+  if (hourly.some(function(v){{ return v > 0; }})) {{
+    html += '<div class="card" style="margin-bottom:12px">';
+    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">Aktivität nach Tageszeit</div>';
+    html += '<canvas id="nilm-hourly-canvas" style="width:100%;height:120px"></canvas>';
+    html += '</div>';
+  }}
+
+  /* ── Category Breakdown Donut ── */
+  const catEntries = Object.entries(data.categories || {{}}).sort(function(a,b){{ return b[1]-a[1]; }});
+  if (catEntries.length > 0) {{
+    html += '<div class="nilm-two-col">';
+    html += '<div class="card">';
+    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">Kategorien</div>';
+    html += '<canvas id="nilm-cat-canvas" style="width:100%;height:200px"></canvas>';
+    html += '<div id="nilm-cat-legend" style="margin-top:8px"></div>';
+    html += '</div>';
+
+    /* ── Per-Device Breakdown ── */
+    html += '<div class="card">';
+    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">Geräte-Übersicht</div>';
+    const devEntries = Object.entries(data.device_stats || {{}});
+    if (devEntries.length === 0) {{
+      html += '<p style="color:var(--muted);font-size:13px">Keine Gerätedaten vorhanden.</p>';
+    }} else {{
+      devEntries.sort(function(a,b){{ return b[1].total_events - a[1].total_events; }});
+      devEntries.forEach(function(de) {{
+        const dk = de[0], ds = de[1];
+        const dn = (data.device_names || {{}})[dk] || dk;
+        html += '<div style="margin-bottom:10px;padding:8px;background:var(--bg);border-radius:8px">';
+        html += '<div style="font-weight:600;font-size:13px;margin-bottom:4px">' + esc(dn) + '</div>';
+        html += '<div style="display:flex;gap:12px;font-size:12px;color:var(--muted);flex-wrap:wrap">';
+        html += '<span>' + ds.cluster_count + ' Muster</span>';
+        html += '<span>' + ds.total_events + ' Events</span>';
+        html += '</div>';
+        if (ds.top_appliances && ds.top_appliances.length > 0) {{
+          html += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">';
+          ds.top_appliances.forEach(function(a) {{
+            html += '<span class="appl-chip">' + (a.icon||'') + ' ' + esc(a.appliance) + ' ' + Math.round(a.centroid_w) + 'W</span>';
+          }});
+          html += '</div>';
+        }}
+        html += '</div>';
+      }});
+    }}
+    html += '</div></div>';
+  }}
+
+  /* ── Recent Transitions Timeline ── */
+  const trans = (data.transitions || []).slice(0, 30);
+  if (trans.length > 0) {{
+    html += '<div class="card" style="margin-bottom:12px">';
+    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">Letzte Transitionen</div>';
+    html += '<div class="nilm-timeline">';
+    trans.forEach(function(tr) {{
+      const dt = new Date(tr.ts * 1000);
+      const timeStr = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString();
+      const devName = (data.device_names || {{}})[tr.device_key] || tr.device_key || '?';
+      const isOn = tr.delta_w > 0;
+      const col = isOn ? '#22c55e' : '#ef4444';
+      const arrow = isOn ? '▲' : '▼';
+      html += '<div class="nilm-tl-item">';
+      html += '<div class="nilm-tl-dot" style="background:' + col + '"></div>';
+      html += '<div class="nilm-tl-body">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+      html += '<span style="font-weight:600;font-size:13px">' + arrow + ' ' + (isOn ? '+' : '') + Math.round(tr.delta_w) + ' W</span>';
+      html += '<span style="font-size:11px;color:var(--muted)">' + timeStr + '</span>';
+      html += '</div>';
+      html += '<div style="font-size:12px;color:var(--muted)">' + esc(devName) + ' · ' + Math.round(tr.power_before) + ' W → ' + Math.round(tr.power_after) + ' W</div>';
+      html += '</div></div>';
+    }});
+    html += '</div></div>';
+  }}
+
+  /* ── Appliance Signature Reference ── */
+  const sigs = data.signatures || [];
+  if (sigs.length > 0) {{
+    html += '<div class="card" style="margin-bottom:12px">';
+    html += '<details><summary style="font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px">Geräte-Datenbank (' + sigs.length + ' Signaturen)</summary>';
+    html += '<div class="nilm-sig-grid">';
+    sigs.forEach(function(s) {{
+      html += '<div class="nilm-sig-item">';
+      html += '<span style="font-size:18px">' + s.icon + '</span>';
+      html += '<div style="flex:1;min-width:0">';
+      html += '<div style="font-weight:600;font-size:12px">' + esc(s.id) + '</div>';
+      html += '<div style="font-size:11px;color:var(--muted)">' + s.power_min + '–' + s.power_max + ' W · ' + esc(s.pattern_type) + ' · ' + s.typical_duration_min + ' min</div>';
+      html += '</div></div>';
+    }});
+    html += '</div></details></div>';
+  }}
+
+  el.innerHTML = html;
+
+  /* ── Draw canvases after DOM insertion ── */
+  requestAnimationFrame(function() {{
+    _drawNilmSparklines(clusters, data.transitions || []);
+    _drawNilmHourlyChart(hourly);
+    _drawNilmCategoryDonut(catEntries);
+  }});
+}}
+
+function _nilmMetricCard(icon, title, value, sub) {{
+  return '<div class="nilm-metric-card">' +
+    '<div style="font-size:22px;margin-bottom:4px">' + icon + '</div>' +
+    '<div style="font-size:24px;font-weight:800;line-height:1.1">' + value + '</div>' +
+    '<div style="font-size:12px;font-weight:600;color:var(--fg)">' + esc(title) + '</div>' +
+    '<div style="font-size:11px;color:var(--muted)">' + esc(sub) + '</div>' +
+    '</div>';
+}}
+
+function _nilmPowerHue(watts) {{
+  // Green (120) for low power → yellow (60) → red (0) for high
+  const norm = Math.min(1, watts / 5000);
+  return Math.round(120 * (1 - norm));
+}}
+
+function _drawNilmSparklines(clusters, transitions) {{
+  clusters.forEach(function(c, idx) {{
+    const canvas = document.querySelector('.nilm-spark[data-idx="' + idx + '"]');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+    const W = rect.width, H = rect.height;
+
+    // Filter transitions matching this cluster's device + approximate power
+    const cw = c.centroid_w;
+    const stdW = c.std_w || cw * 0.3;
+    const matching = transitions.filter(function(tr) {{
+      return tr.device_key === c.device_key && Math.abs(Math.abs(tr.delta_w) - cw) <= stdW * 2;
+    }}).slice(0, 50);
+
+    if (matching.length < 2) {{
+      // Draw a representative power step profile
+      _drawNilmStepProfile(ctx, W, H, c);
+      return;
+    }}
+
+    // Draw timeline of matching transitions
+    const times = matching.map(function(tr) {{ return tr.ts; }});
+    const minT = Math.min.apply(null, times);
+    const maxT = Math.max.apply(null, times);
+    const range = maxT - minT || 1;
+
+    const fg = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
+    const hue = _nilmPowerHue(cw);
+    ctx.strokeStyle = 'hsl(' + hue + ',70%,55%)';
+    ctx.lineWidth = 1.5;
+    ctx.fillStyle = 'hsl(' + hue + ',70%,55%,0.15)';
+
+    // Draw area
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    matching.forEach(function(tr) {{
+      const x = ((tr.ts - minT) / range) * W;
+      const y = H - (Math.abs(tr.delta_w) / (cw * 2 || 1)) * H * 0.85;
+      ctx.lineTo(x, Math.max(2, y));
+    }});
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    ctx.fill();
+
+    // Draw line
+    ctx.beginPath();
+    matching.forEach(function(tr, i) {{
+      const x = ((tr.ts - minT) / range) * W;
+      const y = H - (Math.abs(tr.delta_w) / (cw * 2 || 1)) * H * 0.85;
+      if (i === 0) ctx.moveTo(x, Math.max(2, y));
+      else ctx.lineTo(x, Math.max(2, y));
+    }});
+    ctx.stroke();
+
+    // Draw dots
+    ctx.fillStyle = 'hsl(' + hue + ',70%,50%)';
+    matching.forEach(function(tr) {{
+      const x = ((tr.ts - minT) / range) * W;
+      const y = H - (Math.abs(tr.delta_w) / (cw * 2 || 1)) * H * 0.85;
+      ctx.beginPath();
+      ctx.arc(x, Math.max(2, y), 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }});
+  }});
+}}
+
+function _drawNilmStepProfile(ctx, W, H, cluster) {{
+  // Draw a stylized power step to represent this pattern
+  const hue = _nilmPowerHue(cluster.centroid_w);
+  const pad = 4;
+  const midY = H * 0.8;
+  const topY = H * 0.15;
+
+  ctx.fillStyle = 'hsl(' + hue + ',70%,55%,0.1)';
+  ctx.strokeStyle = 'hsl(' + hue + ',70%,55%)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([]);
+
+  // Step up → hold → step down
+  ctx.beginPath();
+  ctx.moveTo(pad, midY);
+  ctx.lineTo(W * 0.2, midY);
+  ctx.lineTo(W * 0.2, topY);
+  ctx.lineTo(W * 0.8, topY);
+  ctx.lineTo(W * 0.8, midY);
+  ctx.lineTo(W - pad, midY);
+  ctx.stroke();
+
+  // Fill area under step
+  ctx.beginPath();
+  ctx.moveTo(pad, midY);
+  ctx.lineTo(W * 0.2, midY);
+  ctx.lineTo(W * 0.2, topY);
+  ctx.lineTo(W * 0.8, topY);
+  ctx.lineTo(W * 0.8, midY);
+  ctx.lineTo(W - pad, midY);
+  ctx.lineTo(W - pad, H);
+  ctx.lineTo(pad, H);
+  ctx.closePath();
+  ctx.fill();
+
+  // Power label
+  ctx.fillStyle = 'hsl(' + hue + ',70%,40%)';
+  ctx.font = 'bold 10px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(Math.round(cluster.centroid_w) + ' W', W / 2, topY - 3);
+}}
+
+function _drawNilmHourlyChart(hourly) {{
+  const canvas = document.getElementById('nilm-hourly-canvas');
+  if (!canvas || !hourly || hourly.length !== 24) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  const pad = {{top: 10, right: 8, bottom: 22, left: 32}};
+  const cW = W - pad.left - pad.right;
+  const cH = H - pad.top - pad.bottom;
+  const maxV = Math.max.apply(null, hourly.concat([1])) * 1.15;
+  const barW = Math.max(2, (cW / 24) - 2);
+  const fg = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
+  const border = getComputedStyle(document.body).getPropertyValue('--border') || '#e0e0e0';
+
+  // Grid lines
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {{
+    const y = pad.top + cH - (cH * i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cW, y); ctx.stroke();
+    ctx.fillStyle = fg; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(Math.round(maxV * i / 4), pad.left - 4, y + 3);
+  }}
+
+  // Bars with gradient colors based on activity
+  hourly.forEach(function(v, i) {{
+    const x = pad.left + (i / 24) * cW + 1;
+    const h = (v / maxV) * cH;
+    const y = pad.top + cH - h;
+    const hue = 200 - Math.round((v / maxV) * 160); // Blue → Red
+    ctx.fillStyle = 'hsl(' + hue + ',70%,55%)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, barW, h, [2, 2, 0, 0]);
+    ctx.fill();
+
+    // Hour labels (every 3 hours)
+    if (i % 3 === 0) {{
+      ctx.fillStyle = fg; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(String(i).padStart(2, '0'), x + barW / 2, pad.top + cH + 14);
+    }}
+  }});
+}}
+
+function _drawNilmCategoryDonut(catEntries) {{
+  const canvas = document.getElementById('nilm-cat-canvas');
+  const legend = document.getElementById('nilm-cat-legend');
+  if (!canvas || !catEntries || catEntries.length === 0) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  const cx = W / 2, cy = H / 2;
+  const R = Math.min(cx, cy) - 10;
+  const r = R * 0.55; // inner radius for donut
+
+  const total = catEntries.reduce(function(s, e) {{ return s + e[1]; }}, 0);
+  const catColors = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#06b6d4'];
+  let startAngle = -Math.PI / 2;
+  let legendHtml = '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+
+  catEntries.forEach(function(e, i) {{
+    const name = e[0], count = e[1];
+    const slice = (count / total) * Math.PI * 2;
+    const col = catColors[i % catColors.length];
+
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, startAngle, startAngle + slice);
+    ctx.arc(cx, cy, r, startAngle + slice, startAngle, true);
+    ctx.closePath();
+    ctx.fill();
+
+    startAngle += slice;
+    const pct = Math.round(count / total * 100);
+    legendHtml += '<span style="font-size:11px;display:flex;align-items:center;gap:3px">' +
+      '<span style="width:10px;height:10px;border-radius:50%;background:' + col + ';display:inline-block"></span>' +
+      esc(name) + ' (' + pct + '%)' +
+      '</span>';
+  }});
+
+  // Center text
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#111';
+  ctx.font = 'bold 18px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(total, cx, cy - 8);
+  ctx.font = '11px sans-serif';
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted') || '#666';
+  ctx.fillText('Events', cx, cy + 10);
+
+  legendHtml += '</div>';
+  if (legend) legend.innerHTML = legendHtml;
 }}
 
 /* ──────────────────────────────────────────────
@@ -8193,6 +8726,59 @@ class _Handler(BaseHTTPRequestHandler):
             if path_only.startswith("/api/anomalies"):
                 try:
                     payload = self.dashboard.on_action("anomalies", {})
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if path_only.startswith("/api/nilm_detail"):
+                try:
+                    store = self.dashboard.store
+                    clusters = list(getattr(store, "_nilm_clusters", []))
+                    trans_count = int(getattr(store, "_nilm_transition_count", 0))
+                    transitions = list(getattr(store, "_nilm_transitions", []))
+                    device_count = int(getattr(store, "_nilm_device_count", 0))
+                    hourly = [0] * 24
+                    import datetime as _dt
+                    for tr in transitions:
+                        try:
+                            hourly[_dt.datetime.fromtimestamp(tr["ts"]).hour] += 1
+                        except Exception:
+                            pass
+                    from shelly_analyzer.services.appliance_detector import APPLIANCES as _APPL
+                    _cat_map = {a.id: a.category for a in _APPL}
+                    categories = {}
+                    for c in clusters:
+                        cat = _cat_map.get(c.get("matched_appliance", ""), "unknown")
+                        categories[cat] = categories.get(cat, 0) + c.get("count", 0)
+                    device_stats = {}
+                    for c in clusters:
+                        dk = c.get("device_key", "")
+                        if dk not in device_stats:
+                            device_stats[dk] = {"cluster_count": 0, "total_events": 0, "top_appliances": []}
+                        device_stats[dk]["cluster_count"] += 1
+                        device_stats[dk]["total_events"] += c.get("count", 0)
+                        if c.get("matched_appliance"):
+                            device_stats[dk]["top_appliances"].append({
+                                "appliance": c["matched_appliance"], "icon": c.get("icon", ""),
+                                "centroid_w": c.get("centroid_w", 0), "count": c.get("count", 0),
+                            })
+                    sigs = [{"id": a.id, "icon": a.icon, "category": a.category,
+                             "power_min": a.power_min, "power_max": a.power_max,
+                             "pattern_type": a.pattern_type, "typical_duration_min": a.typical_duration_min}
+                            for a in _APPL]
+                    payload = {
+                        "ok": True, "cluster_count": len(clusters), "transition_count": trans_count,
+                        "device_count": device_count, "clusters": clusters, "transitions": transitions[:200],
+                        "hourly_distribution": hourly, "device_stats": device_stats, "device_names": {},
+                        "categories": categories, "signatures": sigs,
+                    }
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
