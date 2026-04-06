@@ -176,6 +176,8 @@ class ActionDispatcher:
         # Cache of computed devices (loaded on demand)
         self._computed: Dict[str, ComputedDevice] = {}
         self._computed_lock = threading.Lock()
+        self._computed_ts: float = 0.0  # time.time() when cache was populated
+        self._computed_ttl: float = 120.0  # auto-refresh every 2 min
         # Mapping text from last _wva_series call (debug aid)
         self._last_wva_mapping_text = ""
 
@@ -185,14 +187,18 @@ class ActionDispatcher:
 
     @property
     def computed(self) -> Dict[str, ComputedDevice]:
-        """Lazy-load computed devices from storage."""
+        """Lazy-load computed devices from storage, auto-refresh after TTL."""
+        import time as _time
         with self._computed_lock:
-            if not self._computed:
+            now = _time.time()
+            if not self._computed or (now - self._computed_ts) > self._computed_ttl:
+                self._computed.clear()
                 for d in self.cfg.devices:
                     try:
                         self._computed[d.key] = load_device(self.storage, d)
                     except Exception:
                         pass
+                self._computed_ts = now
             return self._computed
 
     def reload(self, cfg: AppConfig, lang: Optional[str] = None) -> None:
@@ -2068,9 +2074,8 @@ class ActionDispatcher:
                     "last_month": (_last_month_start, _month_start),
                 }
 
-                _three_phase = [d for d in (self.cfg.devices or [])
-                                if int(getattr(d, "phases", 3) or 3) >= 3
-                                and str(getattr(d, "kind", "em")) != "switch"]
+                _cost_devices = [d for d in (self.cfg.devices or [])
+                                if str(getattr(d, "kind", "em")) != "switch"]
 
                 _spot_cfg = getattr(self.cfg, "spot_price", None)
                 _use_dynamic_web = (
@@ -2078,7 +2083,7 @@ class ActionDispatcher:
                 ) and str(getattr(_spot_cfg, "tariff_type", "fixed") or "fixed") == "dynamic"
 
                 devices_out = []
-                for d in _three_phase:
+                for d in _cost_devices:
                     dev_data: Dict[str, Any] = {"key": d.key, "name": d.name, "host": d.host}
                     for rng_key, (rng_start, rng_end) in _ranges.items():
                         kwh = 0.0

@@ -1,13 +1,20 @@
 """Background service manager for the Flask web app.
 
 Starts and manages all background services (live polling, scheduler, MQTT,
-InfluxDB export, auto-sync) alongside the Flask server.
+InfluxDB export, auto-sync, alert notifications) alongside the Flask server.
 """
 from __future__ import annotations
 
+import json
 import logging
+import math
+import re
 import threading
 import time
+import urllib.parse
+import urllib.request
+import urllib.error
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -56,6 +63,13 @@ class BackgroundServiceManager:
         self._nilm_last_cluster_ts: float = 0.0
         self._nilm_cluster_interval: float = 300.0  # re-cluster every 5 min
 
+        # Alert rule evaluation state: {rule_id: {start_ts, triggered, last_trigger_ts}}
+        self._alert_state: Dict[str, Dict[str, Any]] = {}
+        # Summary scheduling thread
+        self._summary_thread: Optional[threading.Thread] = None
+        self._summary_last_daily: str = ""   # YYYY-MM-DD
+        self._summary_last_monthly: str = ""  # YYYY-MM
+
     def start_all(self) -> None:
         """Start all enabled background services."""
         self._stop_event.clear()
@@ -67,6 +81,7 @@ class BackgroundServiceManager:
         self._start_autosync()
         self._start_co2_fetcher()
         self._start_spot_fetcher()
+        self._start_summary_scheduler()
         self._write_runtime_devices_meta()
         logger.info("All background services started")
 
@@ -203,6 +218,12 @@ class BackgroundServiceManager:
                     raw=raw,
                 )
                 self.live_store.update(sample.device_key, point)
+
+                # Evaluate alert rules against this sample
+                try:
+                    self._alerts_process_sample(sample)
+                except Exception:
+                    pass
             except Exception as e:
                 logger.debug("Feed loop error: %s", e)
 
@@ -549,6 +570,463 @@ class BackgroundServiceManager:
         except Exception as e:
             logger.debug("Failed to write devices_meta.json: %s", e)
 
+    # ── Alert Evaluation ──────────────────────────────────────────────
 
-# Need json import at module level
-import json
+    def _alerts_value(self, s: Any, metric: str) -> float:
+        """Extract a numeric metric value from a live sample."""
+        m0 = (metric or "W").strip().upper()
+        m = m0.replace(" ", "").replace("Φ", "PHI")
+
+        phase = None
+        if m.endswith("_L1"):
+            phase = "a"; base = m[:-3]
+        elif m.endswith("_L2"):
+            phase = "b"; base = m[:-3]
+        elif m.endswith("_L3"):
+            phase = "c"; base = m[:-3]
+        else:
+            base = m
+
+        def _mean_abc(d: dict) -> float:
+            vals = [float(d.get(k, 0) or 0) for k in ("a", "b", "c") if float(d.get(k, 0) or 0) != 0]
+            if vals:
+                return sum(vals) / len(vals)
+            return float(d.get("total", 0) or 0)
+
+        def _sum_abc(d: dict) -> float:
+            s = sum(float(d.get(k, 0) or 0) for k in ("a", "b", "c"))
+            return s if s != 0 else float(d.get("total", 0) or 0)
+
+        if base in {"W", "P", "POWER"}:
+            d = getattr(s, "power_w", {}) or {}
+            return float(d.get(phase, 0) or 0) if phase else float(d.get("total", 0) or 0)
+        if base in {"V", "VOLT", "VOLTAGE"}:
+            d = getattr(s, "voltage_v", {}) or {}
+            return float(d.get(phase, 0) or 0) if phase else _mean_abc(d)
+        if base in {"A", "AMP", "CURRENT"}:
+            d = getattr(s, "current_a", {}) or {}
+            if m0 == "A_N":
+                try:
+                    ia = float(d.get("a", 0) or 0)
+                    ib = float(d.get("b", 0) or 0)
+                    ic = float(d.get("c", 0) or 0)
+                    if ia > 0 or ib > 0 or ic > 0:
+                        inner = ia**2 + ib**2 + ic**2 - ia*ib - ib*ic - ia*ic
+                        return math.sqrt(max(0, inner))
+                except Exception:
+                    pass
+                return 0.0
+            return float(d.get(phase, 0) or 0) if phase else _sum_abc(d)
+        if base in {"VAR", "Q", "REACTIVE"}:
+            d = getattr(s, "reactive_var", {}) or {}
+            return float(d.get(phase, 0) or 0) if phase else float(d.get("total", 0) or 0)
+        if base in {"COSPHI", "PF", "POWERFACTOR"}:
+            d = getattr(s, "cosphi", {}) or {}
+            return float(d.get(phase, 0) or 0) if phase else float(d.get("total", 0) or 0)
+        if base in {"HZ", "FREQ", "FREQUENCY"}:
+            return float((getattr(s, "freq_hz", {}) or {}).get("total", 0) or 0)
+        return float((getattr(s, "power_w", {}) or {}).get("total", 0) or 0)
+
+    def _alerts_process_sample(self, s: Any) -> None:
+        """Evaluate all configured alert rules against a live sample."""
+        rules = list(getattr(self.cfg, "alerts", []) or [])
+        if not rules:
+            return
+
+        for r in rules:
+            try:
+                if not getattr(r, "enabled", True):
+                    continue
+                devk = str(getattr(r, "device_key", "*") or "*").strip()
+                if devk not in {"*", getattr(s, "device_key", "")}:
+                    continue
+
+                rid = str(getattr(r, "rule_id", "") or "") or f"{devk}:{getattr(r, 'metric', 'W')}"
+                op = str(getattr(r, "op", ">") or ">").strip()
+                thr = float(getattr(r, "threshold", 0) or 0)
+                dur = int(getattr(r, "duration_seconds", 10) or 0)
+                cd = int(getattr(r, "cooldown_seconds", 120) or 0)
+                metric = str(getattr(r, "metric", "W") or "W")
+                val = self._alerts_value(s, metric)
+
+                cond = (
+                    (val > thr) if op == ">" else
+                    (val < thr) if op == "<" else
+                    (val >= thr) if op in {">=", "=>"} else
+                    (val <= thr) if op in {"<=", "=<"} else
+                    (val == thr) if op in {"=", "=="} else
+                    (val > thr)
+                )
+
+                st = self._alert_state.setdefault(rid, {"start_ts": None, "triggered": False, "last_trigger_ts": 0})
+                if not cond:
+                    st["start_ts"] = None
+                    st["triggered"] = False
+                    continue
+                if st["start_ts"] is None:
+                    st["start_ts"] = int(getattr(s, "ts", 0) or 0)
+                if st.get("triggered"):
+                    continue
+                now_ts = int(getattr(s, "ts", 0) or 0)
+                if dur > 0 and (now_ts - int(st["start_ts"] or now_ts)) < dur:
+                    continue
+                if cd > 0 and (now_ts - int(st.get("last_trigger_ts", 0) or 0)) < cd:
+                    continue
+
+                st["triggered"] = True
+                st["last_trigger_ts"] = now_ts
+
+                devname = str(getattr(s, "device_name", getattr(s, "device_key", "")) or getattr(s, "device_key", ""))
+                msg_custom = str(getattr(r, "message", "") or "").strip()
+                msg = msg_custom or f"Alert: {devname} – {metric} {op} {thr} (value: {round(val, 2)})"
+
+                # Build detailed message
+                ts_str = datetime.fromtimestamp(now_ts).strftime("%Y-%m-%d %H:%M:%S")
+                detail_msg = (
+                    f"🚨 Shelly Alert\n"
+                    f"Time: {ts_str}\n"
+                    f"Device: {devname} ({getattr(s, 'device_key', devk)})\n"
+                    f"Rule: {metric} {op} {thr} (duration {dur}s, cooldown {cd}s)\n"
+                    f"Value: {round(val, 4)}"
+                )
+                if msg_custom:
+                    detail_msg += f"\nInfo: {msg_custom}"
+
+                if bool(getattr(r, "action_telegram", False)):
+                    threading.Thread(
+                        target=self._telegram_send, args=(detail_msg,), daemon=True
+                    ).start()
+
+                if bool(getattr(r, "action_webhook", False)):
+                    payload = {
+                        "type": "alarm", "timestamp": ts_str, "rule_id": rid,
+                        "device_key": str(getattr(s, "device_key", "") or devk),
+                        "device_name": devname, "metric": metric,
+                        "value": round(val, 4), "op": op, "threshold": round(thr, 4),
+                        "message": msg, "source": "shelly-energy-analyzer",
+                    }
+                    threading.Thread(
+                        target=self._webhook_send, args=(payload,), daemon=True
+                    ).start()
+
+                if bool(getattr(r, "action_email", False)):
+                    subj = f"[Shelly Alert] {metric} {op} {thr} – {devname}"
+                    threading.Thread(
+                        target=self._email_send, args=(subj, detail_msg), daemon=True
+                    ).start()
+
+            except Exception as e:
+                logger.debug("Alert rule evaluation error: %s", e)
+
+    # ── Telegram ──────────────────────────────────────────────────────
+
+    def _telegram_send(self, text: str) -> bool:
+        """Send a Telegram message. Returns True on success."""
+        try:
+            ui = self.cfg.ui
+            if not getattr(ui, "telegram_enabled", False):
+                return False
+            token = str(getattr(ui, "telegram_bot_token", "") or "").strip()
+            chat_id = str(getattr(ui, "telegram_chat_id", "") or "").strip()
+            if not token or not chat_id:
+                return False
+        except Exception:
+            return False
+
+        try:
+            import requests as req
+            resp = req.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": text},
+                timeout=10,
+                verify=bool(getattr(ui, "telegram_verify_ssl", True)),
+            )
+            ok = resp.status_code == 200
+            if not ok:
+                logger.warning("Telegram send failed: %s %s", resp.status_code, resp.text[:200])
+            return ok
+        except Exception as e:
+            logger.warning("Telegram send error: %s", e)
+            return False
+
+    # ── Webhook ───────────────────────────────────────────────────────
+
+    def _webhook_send(self, payload: dict) -> bool:
+        """Send a JSON webhook POST. Returns True on success."""
+        try:
+            ui = self.cfg.ui
+            if not getattr(ui, "webhook_enabled", False):
+                return False
+            url = str(getattr(ui, "webhook_url", "") or "").strip()
+            if not url:
+                return False
+        except Exception:
+            return False
+
+        try:
+            body = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
+            r = urllib.request.Request(url, data=body, method="POST")
+            r.add_header("Content-Type", "application/json")
+            r.add_header("User-Agent", "ShellyEnergyAnalyzer")
+            # Custom headers
+            headers_str = str(getattr(ui, "webhook_custom_headers", "") or "").strip()
+            if headers_str:
+                try:
+                    for k, v in json.loads(headers_str).items():
+                        r.add_header(str(k), str(v))
+                except Exception:
+                    pass
+            with urllib.request.urlopen(r, timeout=10) as resp:
+                resp.read()
+            return True
+        except Exception as e:
+            logger.warning("Webhook send error: %s", e)
+            return False
+
+    # ── Email ─────────────────────────────────────────────────────────
+
+    def _email_send(self, subject: str, body: str, attachments: Optional[List[Path]] = None) -> bool:
+        """Send an email via SMTP. Returns True on success."""
+        try:
+            ui = self.cfg.ui
+            if not getattr(ui, "email_enabled", False):
+                return False
+            server = str(getattr(ui, "email_smtp_server", "") or "").strip()
+            if not server:
+                return False
+            port = int(getattr(ui, "email_smtp_port", 587))
+            user = str(getattr(ui, "email_smtp_user", "") or "").strip()
+            password = str(getattr(ui, "email_smtp_password", "") or "").strip()
+            from_addr = str(getattr(ui, "email_from_address", "") or "").strip() or user
+            if not from_addr:
+                return False
+            recipients = [a.strip() for a in str(getattr(ui, "email_recipients", "") or "").split(",") if a.strip()]
+            if not recipients:
+                return False
+            use_tls = bool(getattr(ui, "email_use_tls", True))
+        except Exception:
+            return False
+
+        try:
+            import smtplib
+            import ssl as _ssl
+            from email.mime.multipart import MIMEMultipart
+            from email.mime.text import MIMEText
+            from email.mime.base import MIMEBase
+            from email import encoders
+
+            msg = MIMEMultipart()
+            msg["From"] = from_addr
+            msg["To"] = ", ".join(recipients)
+            msg["Subject"] = subject
+            msg.attach(MIMEText(body, "plain", "utf-8"))
+
+            for att_path in (attachments or []):
+                try:
+                    p = Path(att_path)
+                    if p.exists() and p.is_file():
+                        part = MIMEBase("application", "octet-stream")
+                        part.set_payload(p.read_bytes())
+                        encoders.encode_base64(part)
+                        part.add_header("Content-Disposition", f'attachment; filename="{p.name}"')
+                        msg.attach(part)
+                except Exception:
+                    pass
+
+            if use_tls:
+                ctx = _ssl.create_default_context()
+                if port == 465:
+                    with smtplib.SMTP_SSL(server, port, context=ctx, timeout=15) as smtp:
+                        if user and password:
+                            smtp.login(user, password)
+                        smtp.sendmail(from_addr, recipients, msg.as_string())
+                else:
+                    with smtplib.SMTP(server, port, timeout=15) as smtp:
+                        smtp.ehlo()
+                        smtp.starttls(context=ctx)
+                        smtp.ehlo()
+                        if user and password:
+                            smtp.login(user, password)
+                        smtp.sendmail(from_addr, recipients, msg.as_string())
+            else:
+                with smtplib.SMTP(server, port, timeout=15) as smtp:
+                    smtp.ehlo()
+                    if user and password:
+                        smtp.login(user, password)
+                    smtp.sendmail(from_addr, recipients, msg.as_string())
+            return True
+        except Exception as e:
+            logger.warning("Email send error: %s", e)
+            return False
+
+    # ── Scheduled Summaries (Telegram + Email + Webhook) ──────────────
+
+    def _start_summary_scheduler(self) -> None:
+        """Start a background thread that checks for scheduled summaries."""
+        self._summary_thread = threading.Thread(target=self._summary_loop, daemon=True)
+        self._summary_thread.start()
+        logger.info("Summary scheduler started")
+
+    def _parse_hhmm(self, s: str) -> tuple:
+        """Parse 'HH:MM' string into (hour, minute)."""
+        try:
+            m = re.match(r"^(\d{1,2})\s*:\s*(\d{1,2})$", (s or "").strip())
+            if not m:
+                return 0, 0
+            return max(0, min(23, int(m.group(1)))), max(0, min(59, int(m.group(2))))
+        except Exception:
+            return 0, 0
+
+    def _build_daily_summary(self) -> str:
+        """Build a daily summary text."""
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Europe/Berlin")
+        now = datetime.now(tz)
+        yesterday = now - timedelta(days=1)
+        day_label = yesterday.strftime("%Y-%m-%d")
+
+        unit_price = 0.30
+        try:
+            unit_price = float(self.cfg.pricing.unit_price_gross())
+        except Exception:
+            pass
+
+        lines = [f"📊 Daily Summary – {day_label}", ""]
+        total_kwh = 0.0
+        total_cost = 0.0
+
+        try:
+            day_start_ts = int(yesterday.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+            day_end_ts = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+
+            for d in (self.cfg.devices or []):
+                if str(getattr(d, "kind", "em")) == "switch":
+                    continue
+                try:
+                    db = self.storage.db
+                    df = db.query_hourly(d.key, start_ts=day_start_ts, end_ts=day_end_ts)
+                    if df is not None and not df.empty and "kwh" in df.columns:
+                        import pandas as pd
+                        kwh = float(pd.to_numeric(df["kwh"], errors="coerce").fillna(0).sum())
+                        cost = kwh * unit_price
+                        total_kwh += kwh
+                        total_cost += cost
+                        lines.append(f"  {d.name}: {kwh:.2f} kWh ({cost:.2f} €)")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        lines.append("")
+        lines.append(f"Total: {total_kwh:.2f} kWh | {total_cost:.2f} €")
+        return "\n".join(lines)
+
+    def _build_monthly_summary(self) -> str:
+        """Build a monthly summary text."""
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Europe/Berlin")
+        now = datetime.now(tz)
+        last_month = (now.replace(day=1) - timedelta(days=1))
+        month_label = last_month.strftime("%Y-%m")
+
+        unit_price = 0.30
+        try:
+            unit_price = float(self.cfg.pricing.unit_price_gross())
+        except Exception:
+            pass
+
+        lines = [f"📊 Monthly Summary – {month_label}", ""]
+        total_kwh = 0.0
+        total_cost = 0.0
+
+        try:
+            month_start = last_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            month_end = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            ms_ts = int(month_start.timestamp())
+            me_ts = int(month_end.timestamp())
+
+            for d in (self.cfg.devices or []):
+                if str(getattr(d, "kind", "em")) == "switch":
+                    continue
+                try:
+                    db = self.storage.db
+                    df = db.query_hourly(d.key, start_ts=ms_ts, end_ts=me_ts)
+                    if df is not None and not df.empty and "kwh" in df.columns:
+                        import pandas as pd
+                        kwh = float(pd.to_numeric(df["kwh"], errors="coerce").fillna(0).sum())
+                        cost = kwh * unit_price
+                        total_kwh += kwh
+                        total_cost += cost
+                        lines.append(f"  {d.name}: {kwh:.2f} kWh ({cost:.2f} €)")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        lines.append("")
+        lines.append(f"Total: {total_kwh:.2f} kWh | {total_cost:.2f} €")
+        return "\n".join(lines)
+
+    def _summary_loop(self) -> None:
+        """Periodically check if daily/monthly summaries are due."""
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Europe/Berlin")
+
+        # Wait for services to be ready
+        self._stop_event.wait(10.0)
+
+        while not self._stop_event.is_set():
+            try:
+                now = datetime.now(tz)
+                ui = self.cfg.ui
+
+                # ── Daily summary ──
+                today_str = now.strftime("%Y-%m-%d")
+                if today_str != self._summary_last_daily:
+                    # Check if it's past the scheduled time
+                    d_hh, d_mm = self._parse_hhmm(getattr(ui, "telegram_daily_summary_time", "00:00"))
+                    if now.hour > d_hh or (now.hour == d_hh and now.minute >= d_mm):
+                        summary = self._build_daily_summary()
+
+                        if getattr(ui, "telegram_daily_summary_enabled", False):
+                            self._telegram_send(summary)
+                        if getattr(ui, "email_daily_summary_enabled", False):
+                            self._email_send("Shelly Energy – Daily Summary", summary)
+                        if getattr(ui, "webhook_daily_summary_enabled", False):
+                            self._webhook_send({
+                                "type": "daily_summary",
+                                "timestamp": now.isoformat(),
+                                "text": summary,
+                                "source": "shelly-energy-analyzer",
+                            })
+
+                        self._summary_last_daily = today_str
+                        logger.info("Daily summary sent")
+
+                # ── Monthly summary (on 1st of each month) ──
+                month_str = now.strftime("%Y-%m")
+                if now.day <= 2 and month_str != self._summary_last_monthly:
+                    m_hh, m_mm = self._parse_hhmm(getattr(ui, "telegram_monthly_summary_time", "00:00"))
+                    if now.hour > m_hh or (now.hour == m_hh and now.minute >= m_mm):
+                        summary = self._build_monthly_summary()
+
+                        if getattr(ui, "telegram_monthly_summary_enabled", False):
+                            self._telegram_send(summary)
+                        if getattr(ui, "email_monthly_summary_enabled", False):
+                            self._email_send("Shelly Energy – Monthly Summary", summary)
+                        if getattr(ui, "webhook_monthly_summary_enabled", False):
+                            self._webhook_send({
+                                "type": "monthly_summary",
+                                "timestamp": now.isoformat(),
+                                "text": summary,
+                                "source": "shelly-energy-analyzer",
+                            })
+
+                        self._summary_last_monthly = month_str
+                        logger.info("Monthly summary sent")
+
+            except Exception as e:
+                logger.debug("Summary loop error: %s", e)
+
+            # Check every 60 seconds
+            self._stop_event.wait(60.0)
