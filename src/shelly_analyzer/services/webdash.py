@@ -5564,44 +5564,185 @@ async function loadForecast() {{
   }}
 }}
 function renderForecast(d) {{
-  const trendStr = d.trend_pct_per_month > 0.5 ? '\u2197 +' + d.trend_pct_per_month.toFixed(1) + '%/M' : d.trend_pct_per_month < -0.5 ? '\u2198 ' + d.trend_pct_per_month.toFixed(1) + '%/M' : '\u2192 stable';
-  let html = '<div class="card" style="margin-bottom:10px"><div class="card-title">' + esc(d.device_name || '') + '</div><div class="metric-grid">' +
-    metricCardHtml('\u2300 Daily', (d.avg_daily_kwh||0).toFixed(1) + ' kWh', '') +
-    metricCardHtml('Trend', trendStr, '') +
-    metricCardHtml('Next Month', (d.forecast_next_month_kwh||0).toFixed(0) + ' kWh', fmt(d.forecast_next_month_cost||0, 2, '\u20ac')) +
-    metricCardHtml('Next Year', (d.forecast_year_kwh||0).toFixed(0) + ' kWh', fmt(d.forecast_year_cost||0, 0, '\u20ac')) +
-    '</div></div>';
-  // Main chart canvas
-  html += '<div class="card"><canvas id="fc-main-chart" height="180" style="width:100%"></canvas></div>';
-  // Profile charts
-  html += '<div class="card-grid">' +
-    '<div class="card"><canvas id="fc-weekday-chart" height="140" style="width:100%"></canvas></div>' +
-    '<div class="card"><canvas id="fc-hourly-chart" height="140" style="width:100%"></canvas></div>' +
-    '</div>';
+  const trendPct = d.trend_pct_per_month || 0;
+  const trendIcon = trendPct > 0.5 ? '📈' : trendPct < -0.5 ? '📉' : '➡️';
+  const trendColor = trendPct > 0.5 ? '#dc2626' : trendPct < -0.5 ? '#16a34a' : 'var(--muted)';
+  const histKwh = (d.history_kwh || []);
+  const totalHistKwh = histKwh.reduce(function(s,v){{ return s+v; }}, 0);
+  const histDays = histKwh.length;
+
+  let html = '';
+
+  /* ── Overview metrics ── */
+  html += '<div class="nilm-metrics" style="margin-bottom:12px">';
+  html += _nilmMetricCard('📊', t('web.fc.avg_daily','Tagesschnitt'), (d.avg_daily_kwh||0).toFixed(1) + ' kWh', esc(d.device_name||''));
+  html += _nilmMetricCard(trendIcon, t('web.fc.trend','Trend'), '<span style="color:' + trendColor + '">' + (trendPct > 0 ? '+' : '') + trendPct.toFixed(1) + '%</span>', t('web.fc.per_month','pro Monat'));
+  html += _nilmMetricCard('📅', t('web.fc.next_month','Nächster Monat'), (d.forecast_next_month_kwh||0).toFixed(0) + ' kWh', fmt(d.forecast_next_month_cost||0, 2) + ' \u20ac');
+  html += _nilmMetricCard('📆', t('web.fc.next_year','Nächstes Jahr'), (d.forecast_year_kwh||0).toFixed(0) + ' kWh', fmt(d.forecast_year_cost||0, 0) + ' \u20ac');
+  html += '</div>';
+
+  /* ── Trend + cost comparison ── */
+  html += '<div class="nilm-two-col" style="margin-bottom:12px">';
+  // Trend card
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.trend_analysis','Trend-Analyse') + '</div>';
+  html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">';
+  html += '<span style="font-size:36px">' + trendIcon + '</span>';
+  html += '<div><div style="font-size:20px;font-weight:800;color:' + trendColor + '">' + (trendPct > 0 ? '+' : '') + trendPct.toFixed(1) + '% / ' + t('web.fc.month','Monat') + '</div>';
+  html += '<div style="font-size:12px;color:var(--muted)">' + t('web.fc.based_on','Basierend auf') + ' ' + histDays + ' ' + t('web.fc.days_data','Tagen Daten') + '</div></div></div>';
+  // History summary
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  html += '<div style="background:var(--bg);border-radius:8px;padding:8px;text-align:center"><div style="font-size:18px;font-weight:700">' + totalHistKwh.toFixed(0) + '</div><div style="font-size:10px;color:var(--muted)">kWh (' + histDays + 'd)</div></div>';
+  const avgW = d.avg_daily_kwh ? (d.avg_daily_kwh * 1000 / 24).toFixed(0) : '0';
+  html += '<div style="background:var(--bg);border-radius:8px;padding:8px;text-align:center"><div style="font-size:18px;font-weight:700">' + avgW + '</div><div style="font-size:10px;color:var(--muted)">' + t('web.fc.avg_w','Schnitt W') + '</div></div>';
+  html += '</div></div>';
+
+  // Cost projection card
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.cost_projection','Kostenprognose') + '</div>';
+  html += '<canvas id="fc-cost-bars" style="width:100%;height:160px"></canvas>';
+  html += '</div></div>';
+
+  /* ── Main chart with confidence band ── */
+  html += '<div class="card" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.history_forecast','Verlauf + Prognose') + '</div>';
+  html += '<div style="display:flex;gap:12px;font-size:11px;color:var(--muted);margin-bottom:6px">';
+  html += '<span><span style="display:inline-block;width:12px;height:4px;background:#3b82f6;border-radius:2px;vertical-align:middle;margin-right:3px"></span>' + t('web.fc.history','Verlauf') + '</span>';
+  html += '<span><span style="display:inline-block;width:12px;height:4px;background:#ef4444;border-radius:2px;vertical-align:middle;margin-right:3px"></span>' + t('web.fc.forecast','Prognose') + '</span>';
+  if (d.forecast_upper && d.forecast_upper.length) html += '<span><span style="display:inline-block;width:12px;height:8px;background:rgba(239,68,68,0.15);border-radius:2px;vertical-align:middle;margin-right:3px"></span>' + t('web.fc.confidence','Konfidenz') + '</span>';
+  html += '</div>';
+  html += '<canvas id="fc-main-chart" style="width:100%;height:200px"></canvas></div>';
+
+  /* ── Weekday + Hourly profiles ── */
+  html += '<div class="nilm-two-col" style="margin-bottom:12px">';
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.weekday','Wochentags-Profil') + '</div>';
+  html += '<canvas id="fc-weekday-chart" style="width:100%;height:150px"></canvas>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center">' + t('web.fc.weekday_hint','Faktor relativ zum Durchschnitt (1.0 = normal)') + '</div></div>';
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.hourly','Stunden-Profil') + '</div>';
+  html += '<canvas id="fc-hourly-chart" style="width:100%;height:150px"></canvas>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center">' + t('web.fc.hourly_hint','Faktor relativ zum Tagesschnitt') + '</div></div>';
+  html += '</div>';
+
   document.getElementById('forecast-cards').innerHTML = html;
-  // Draw main chart (history + forecast bars)
+
   requestAnimationFrame(function() {{
-    const allDates = (d.history_dates || []).concat(d.forecast_dates || []);
-    const allVals = (d.history_kwh || []).concat(d.forecast_kwh || []);
-    const hLen = (d.history_dates || []).length;
-    const colors = allVals.map(function(_, i) {{ return i < hLen ? '#3498db' : 'rgba(231,76,60,0.7)'; }});
-    const labels = allDates.map(function(dt) {{ return dt.substring(5); }});
-    _drawBarChart('fc-main-chart', labels, allVals, {{ colors: colors, title: 'kWh/day \u2013 History + Forecast', decimals: 1 }});
+    // Main chart with confidence band
+    _fcDrawMainChart(d);
+    // Cost projection bars
+    _fcDrawCostBars(d);
     // Weekday profile
     if (d.weekday_profile) {{
-      const days = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+      const days = [t('web.fc.mon','Mo'),t('web.fc.tue','Di'),t('web.fc.wed','Mi'),t('web.fc.thu','Do'),t('web.fc.fri','Fr'),t('web.fc.sat','Sa'),t('web.fc.sun','So')];
       const vals = days.map(function(_, i) {{ return d.weekday_profile[String(i)] || d.weekday_profile[i] || 1.0; }});
       const wdColors = vals.map(function(v) {{ return v > 1.1 ? '#e74c3c' : v < 0.9 ? '#27ae60' : '#3498db'; }});
-      _drawBarChart('fc-weekday-chart', days, vals, {{ colors: wdColors, title: 'Weekday Profile', threshold: 1.0, thresholdColor: 'rgba(128,128,128,0.4)', thresholdLabel: '1.0', decimals: 2 }});
+      _drawBarChart('fc-weekday-chart', days, vals, {{ colors: wdColors, threshold: 1.0, thresholdColor: 'rgba(128,128,128,0.4)', thresholdLabel: '1.0', decimals: 2 }});
     }}
     // Hourly profile
     if (d.hourly_profile) {{
-      const hrs = Array.from({{ length: 24 }}, function(_, i) {{ return String(i); }});
-      const vals = hrs.map(function(h) {{ return d.hourly_profile[h] || d.hourly_profile[parseInt(h)] || 1.0; }});
+      const hrs = Array.from({{ length: 24 }}, function(_, i) {{ return String(i).padStart(2,'0'); }});
+      const vals = hrs.map(function(h) {{ return d.hourly_profile[String(parseInt(h))] || d.hourly_profile[parseInt(h)] || 1.0; }});
       const hColors = vals.map(function(v) {{ return v > 1.3 ? '#e74c3c' : v > 1.1 ? '#f39c12' : v < 0.7 ? '#27ae60' : '#3498db'; }});
-      _drawBarChart('fc-hourly-chart', hrs, vals, {{ colors: hColors, title: '24h Profile', threshold: 1.0, thresholdColor: 'rgba(128,128,128,0.4)', thresholdLabel: '1.0', decimals: 2 }});
+      _drawBarChart('fc-hourly-chart', hrs, vals, {{ colors: hColors, threshold: 1.0, thresholdColor: 'rgba(128,128,128,0.4)', thresholdLabel: '1.0', decimals: 2 }});
     }}
   }});
+}}
+
+function _fcDrawMainChart(d) {{
+  const canvas = document.getElementById('fc-main-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  const pad = {{top:10,right:10,bottom:24,left:40}};
+  const cW = W-pad.left-pad.right, cH = H-pad.top-pad.bottom;
+
+  const hDates = d.history_dates || [];
+  const hVals = d.history_kwh || [];
+  const fDates = d.forecast_dates || [];
+  const fVals = d.forecast_kwh || [];
+  const fUp = d.forecast_upper || [];
+  const fLo = d.forecast_lower || [];
+  const allVals = hVals.concat(fVals).concat(fUp);
+  const n = hDates.length + fDates.length;
+  if (n === 0) return;
+  const maxV = Math.max.apply(null, allVals.concat([0.1])) * 1.15;
+  const barW = Math.max(2, (cW / n) - 1.5);
+  const fg = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
+  const border = getComputedStyle(document.body).getPropertyValue('--border') || '#e0e0e0';
+
+  // Grid
+  ctx.strokeStyle = border; ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {{
+    const y = pad.top + cH - (cH * i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cW, y); ctx.stroke();
+    ctx.fillStyle = fg; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText((maxV * i / 4).toFixed(1), pad.left - 4, y + 3);
+  }}
+
+  // Confidence band (draw first, behind bars)
+  if (fUp.length && fLo.length) {{
+    ctx.fillStyle = 'rgba(239,68,68,0.12)';
+    ctx.beginPath();
+    for (let i = 0; i < fUp.length; i++) {{
+      const x = pad.left + ((hDates.length + i) / n) * cW + barW / 2;
+      const y = pad.top + cH - (fUp[i] / maxV) * cH;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }}
+    for (let i = fLo.length - 1; i >= 0; i--) {{
+      const x = pad.left + ((hDates.length + i) / n) * cW + barW / 2;
+      const y = pad.top + cH - (Math.max(0, fLo[i]) / maxV) * cH;
+      ctx.lineTo(x, y);
+    }}
+    ctx.closePath(); ctx.fill();
+  }}
+
+  // History bars
+  hVals.forEach(function(v, i) {{
+    const x = pad.left + (i / n) * cW + 0.5;
+    const h = (v / maxV) * cH;
+    ctx.fillStyle = '#3b82f6';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, pad.top + cH - h, barW, h, [2,2,0,0]);
+    else ctx.rect(x, pad.top + cH - h, barW, h);
+    ctx.fill();
+  }});
+
+  // Forecast bars
+  fVals.forEach(function(v, i) {{
+    const x = pad.left + ((hDates.length + i) / n) * cW + 0.5;
+    const h = (v / maxV) * cH;
+    ctx.fillStyle = 'rgba(239,68,68,0.75)';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, pad.top + cH - h, barW, h, [2,2,0,0]);
+    else ctx.rect(x, pad.top + cH - h, barW, h);
+    ctx.fill();
+  }});
+
+  // Divider line between history and forecast
+  if (hDates.length > 0 && fDates.length > 0) {{
+    const dx = pad.left + (hDates.length / n) * cW;
+    ctx.strokeStyle = 'rgba(128,128,128,0.5)'; ctx.lineWidth = 1; ctx.setLineDash([4,3]);
+    ctx.beginPath(); ctx.moveTo(dx, pad.top); ctx.lineTo(dx, pad.top + cH); ctx.stroke();
+    ctx.setLineDash([]);
+  }}
+
+  // X labels (sparse)
+  const allDates = hDates.concat(fDates);
+  const step = Math.max(1, Math.floor(n / 10));
+  ctx.fillStyle = fg; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+  allDates.forEach(function(dt, i) {{
+    if (i % step === 0) {{
+      const x = pad.left + (i / n) * cW + barW / 2;
+      ctx.fillText(dt.substring(5), x, pad.top + cH + 14);
+    }}
+  }});
+}}
+
+function _fcDrawCostBars(d) {{
+  const labels = [t('web.fc.month_short','Monat'), t('web.fc.year_short','Jahr')];
+  const vals = [d.forecast_next_month_cost || 0, d.forecast_year_cost || 0];
+  const colors = ['#f59e0b', '#ef4444'];
+  _drawBarChart('fc-cost-bars', labels, vals, {{ colors: colors, decimals: 0 }});
 }}
 
 /* ──────────────────────────────────────────────
