@@ -140,6 +140,85 @@ def api_nilm_status():
     return jsonify(payload)
 
 
+@bp.route("/api/nilm_detail")
+def api_nilm_detail():
+    """Rich NILM data for the dedicated NILM statistics tab."""
+    state = _get_state()
+    try:
+        store = state.live_store
+        clusters = list(getattr(store, "_nilm_clusters", []))
+        trans_count = int(getattr(store, "_nilm_transition_count", 0))
+        transitions = list(getattr(store, "_nilm_transitions", []))
+        device_count = int(getattr(store, "_nilm_device_count", 0))
+
+        # Hourly distribution from transitions
+        hourly = [0] * 24
+        for tr in transitions:
+            try:
+                import datetime
+                h = datetime.datetime.fromtimestamp(tr["ts"]).hour
+                hourly[h] += 1
+            except Exception:
+                pass
+
+        # Per-device stats
+        device_stats: Dict[str, Any] = {}
+        for c in clusters:
+            dk = c.get("device_key", "")
+            if dk not in device_stats:
+                device_stats[dk] = {"cluster_count": 0, "total_events": 0, "top_appliances": []}
+            device_stats[dk]["cluster_count"] += 1
+            device_stats[dk]["total_events"] += c.get("count", 0)
+            if c.get("matched_appliance"):
+                device_stats[dk]["top_appliances"].append({
+                    "appliance": c["matched_appliance"],
+                    "icon": c.get("icon", ""),
+                    "centroid_w": c.get("centroid_w", 0),
+                    "count": c.get("count", 0),
+                })
+
+        # Category breakdown from clusters
+        from shelly_analyzer.services.appliance_detector import APPLIANCES
+        cat_map = {a.id: a.category for a in APPLIANCES}
+        categories: Dict[str, int] = {}
+        for c in clusters:
+            cat = cat_map.get(c.get("matched_appliance", ""), "unknown")
+            categories[cat] = categories.get(cat, 0) + c.get("count", 0)
+
+        # Appliance signatures reference
+        signatures = [
+            {"id": a.id, "icon": a.icon, "category": a.category,
+             "power_min": a.power_min, "power_max": a.power_max,
+             "pattern_type": a.pattern_type, "typical_duration_min": a.typical_duration_min}
+            for a in APPLIANCES
+        ]
+
+        # Device name mapping
+        device_names: Dict[str, str] = {}
+        try:
+            for d in state.cfg.devices:
+                device_names[d.key] = getattr(d, "name", "") or d.key
+        except Exception:
+            pass
+
+        payload = {
+            "ok": True,
+            "cluster_count": len(clusters),
+            "transition_count": trans_count,
+            "device_count": device_count,
+            "clusters": clusters,
+            "transitions": transitions[:200],
+            "hourly_distribution": hourly,
+            "device_stats": device_stats,
+            "device_names": device_names,
+            "categories": categories,
+            "signatures": signatures,
+        }
+    except Exception as e:
+        payload = {"ok": False, "error": str(e)}
+    return jsonify(payload)
+
+
 @bp.route("/api/ev_chargers")
 def api_ev_chargers():
     try:
