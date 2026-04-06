@@ -632,6 +632,7 @@ class BackgroundServiceManager:
         rules = list(getattr(self.cfg, "alerts", []) or [])
         if not rules:
             return
+        logger.debug("Evaluating %d alert rules for %s", len(rules), getattr(s, "device_key", "?"))
 
         for r in rules:
             try:
@@ -675,6 +676,7 @@ class BackgroundServiceManager:
 
                 st["triggered"] = True
                 st["last_trigger_ts"] = now_ts
+                logger.info("Alert FIRED: rule=%s metric=%s val=%s %s %s", rid, metric, round(val, 2), op, thr)
 
                 devname = str(getattr(s, "device_name", getattr(s, "device_key", "")) or getattr(s, "device_key", ""))
                 msg_custom = str(getattr(r, "message", "") or "").strip()
@@ -725,10 +727,12 @@ class BackgroundServiceManager:
         try:
             ui = self.cfg.ui
             if not getattr(ui, "telegram_enabled", False):
+                logger.debug("Telegram disabled in config")
                 return False
             token = str(getattr(ui, "telegram_bot_token", "") or "").strip()
             chat_id = str(getattr(ui, "telegram_chat_id", "") or "").strip()
             if not token or not chat_id:
+                logger.warning("Telegram token or chat_id missing")
                 return False
         except Exception:
             return False
