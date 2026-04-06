@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.32 - 2026-04-06
+### Fixed
+- **Navigation bar centered on desktop** – bottom nav uses `justify-content: center` on viewports ≥ 900px so tabs sit in the middle of the screen. Mobile remains horizontally scrollable as before.
+
 ## 16.13.31 - 2026-04-06
 ### Changed
 - **License changed from MIT to proprietary** – software remains free to use, but copyright belongs to Robert Manuwald. Modification, redistribution, and sublicensing require written permission. Updated LICENSE, pyproject.toml, README.md, and version badge now shows `© Robert Manuwald`.
