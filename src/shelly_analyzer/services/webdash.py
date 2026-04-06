@@ -5317,37 +5317,161 @@ async function loadAnomalies() {{
 
 function renderAnomalies(data, el) {{
   let html = '';
-  // Status badge
   const enabled = data.enabled !== false;
-  html += '<div style="margin-bottom:10px">' +
-    '<span class="badge ' + (enabled ? 'badge-green' : 'badge-red') + '">' +
-    (enabled ? t('web.dash.anomaly_enabled', 'Enabled') : t('web.dash.anomaly_disabled', 'Disabled')) + '</span>' +
-    (data.model ? ' <span class="badge badge-yellow">' + esc(data.model) + '</span>' : '') +
-    '</div>';
-
   const events = data.events || [];
+  const tc = data.type_counts || {{}};
+  const dc = data.device_counts || {{}};
+  const typeIcons = {{unusual_daily:'📊', night_consumption:'🌙', power_peak_time:'⚡'}};
+  const typeColors = {{unusual_daily:'#3b82f6', night_consumption:'#8b5cf6', power_peak_time:'#f59e0b'}};
+  const typeLabels = {{unusual_daily: t('anomaly.type.unusual_daily','Unusual daily consumption'), night_consumption: t('anomaly.type.night_consumption','Elevated night consumption'), power_peak_time: t('anomaly.type.power_peak_time','Peak at unusual time')}};
+
+  /* ── Status badges ── */
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">';
+  html += '<span class="badge ' + (enabled ? 'badge-green' : 'badge-red') + '">' +
+    (enabled ? t('web.dash.anomaly_enabled', 'Enabled') : t('web.dash.anomaly_disabled', 'Disabled')) + '</span>';
+  if (data.model) html += '<span class="badge badge-yellow">' + esc(data.model) + '</span>';
+  if (data.sigma_threshold) html += '<span class="badge badge-yellow">\u03c3 \u2265 ' + data.sigma_threshold + '</span>';
+  html += '<span class="badge badge-yellow">' + (data.total_count||0) + ' Events</span>';
+  html += '</div>';
+
   if (events.length === 0) {{
-    html += '<p class="info-msg">' + t('web.dash.no_anomalies', 'No anomaly events found.') + '</p>';
+    html += '<div class="card" style="text-align:center;padding:30px">';
+    html += '<div style="font-size:40px;margin-bottom:10px">✅</div>';
+    html += '<div style="font-size:16px;font-weight:600;margin-bottom:6px">' + t('web.dash.no_anomalies_title','Keine Anomalien erkannt') + '</div>';
+    html += '<div style="color:var(--muted);font-size:13px">' + t('web.dash.no_anomalies', 'Alle Geräte verhalten sich normal.') + '</div></div>';
     el.innerHTML = html;
     return;
   }}
-  events.forEach(function(ev) {{
-    const ts = ev.timestamp ? new Date(ev.timestamp).toLocaleString() : '';
-    const sigma = ev.sigma !== undefined ? ' · σ=' + fmt(ev.sigma, 2) : '';
-    const val = ev.value !== undefined ? ' · ' + fmt(ev.value, 1) + ' W' : '';
-    html += '<div class="event-card">' +
-      '<div class="event-dot"></div>' +
-      '<div class="event-body">' +
-        '<div class="event-type">' + t('anomaly.type.' + (ev.anomaly_type || ev.type || ''), (ev.anomaly_type || ev.type || 'Anomaly')) + '</div>' +
-        '<div class="event-meta">' +
-          esc(ev.device_name || ev.device || '') +
-          (ts ? ' · ' + ts : '') +
-          val + sigma +
-        '</div>' +
-        (ev.description ? '<div style="font-size:12px;margin-top:4px;color:var(--muted)">' + esc(ev.description) + '</div>' : '') +
-      '</div></div>';
+
+  /* ── Overview metrics ── */
+  html += '<div class="nilm-metrics" style="margin-bottom:12px">';
+  html += _nilmMetricCard('🔍', t('web.anom.total','Anomalien gesamt'), data.total_count || events.length, t('web.anom.last_days','Letzte 7 Tage'));
+  html += _nilmMetricCard('📊', t('web.anom.types','Typen erkannt'), Object.keys(tc).length, Object.keys(tc).map(function(k){{ return (typeIcons[k]||'') + ' ' + (tc[k]||0); }}).join('  '));
+  html += _nilmMetricCard('📡', t('web.anom.devices','Geräte betroffen'), Object.keys(dc).length, t('web.anom.of_total','von allen Geräten'));
+  html += _nilmMetricCard('⚠️', t('web.anom.max_sigma','Max Abweichung'), (data.max_sigma||0) + '\u03c3', t('web.anom.avg','Schnitt') + ': ' + (data.avg_sigma||0) + '\u03c3');
+  html += '</div>';
+
+  /* ── Type breakdown + Device breakdown (side by side) ── */
+  html += '<div class="nilm-two-col" style="margin-bottom:12px">';
+
+  // Type donut
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.anom.by_type','Nach Typ') + '</div>';
+  html += '<canvas id="anom-type-donut" style="width:100%;height:180px"></canvas>';
+  html += '<div id="anom-type-legend" style="margin-top:6px"></div></div>';
+
+  // Device breakdown
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.anom.by_device','Nach Gerät') + '</div>';
+  const devKeys = Object.keys(dc).sort(function(a,b){{ return dc[b].count - dc[a].count; }});
+  if (devKeys.length === 0) {{
+    html += '<p style="color:var(--muted);font-size:13px">—</p>';
+  }} else {{
+    const maxDc = Math.max.apply(null, devKeys.map(function(k){{ return dc[k].count; }})) || 1;
+    devKeys.forEach(function(dk) {{
+      const d = dc[dk];
+      const pct = Math.round(d.count / maxDc * 100);
+      html += '<div style="margin-bottom:8px">';
+      html += '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:2px"><span style="font-weight:600">' + esc(d.name) + '</span><span style="color:var(--muted)">' + d.count + ' Events</span></div>';
+      html += '<div style="background:var(--bg);border-radius:4px;height:8px;overflow:hidden">';
+      html += '<div style="width:' + pct + '%;height:100%;background:var(--accent);border-radius:4px;transition:width .3s"></div>';
+      html += '</div>';
+      // Type chips
+      html += '<div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap">';
+      Object.keys(d.types||{{}}).forEach(function(t2) {{
+        html += '<span style="font-size:10px;background:' + (typeColors[t2]||'var(--chipbg)') + '22;color:' + (typeColors[t2]||'var(--fg)') + ';padding:1px 6px;border-radius:6px">' + (typeIcons[t2]||'') + ' ' + d.types[t2] + '</span>';
+      }});
+      html += '</div></div>';
+    }});
+  }}
+  html += '</div></div>';
+
+  /* ── Sigma distribution chart ── */
+  html += '<div class="card" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.anom.sigma_dist','Sigma-Verteilung') + '</div>';
+  html += '<canvas id="anom-sigma-chart" style="width:100%;height:120px"></canvas></div>';
+
+  /* ── Event timeline ── */
+  html += '<div class="card" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.anom.timeline','Event-Timeline') + '</div>';
+  html += '<div class="nilm-timeline">';
+  events.slice(0, 50).forEach(function(ev) {{
+    const ts = ev.timestamp ? new Date(ev.timestamp) : null;
+    const timeStr = ts ? ts.toLocaleDateString() + ' ' + ts.toLocaleTimeString() : '';
+    const at = ev.anomaly_type || ev.type || 'unknown';
+    const icon = typeIcons[at] || '❓';
+    const col = typeColors[at] || 'var(--accent)';
+    const sigmaBar = ev.sigma ? Math.min(100, Math.round(ev.sigma / 5 * 100)) : 0;
+    html += '<div class="nilm-tl-item">';
+    html += '<div class="nilm-tl-dot" style="background:' + col + '"></div>';
+    html += '<div class="nilm-tl-body">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+    html += '<span style="font-weight:600;font-size:13px">' + icon + ' ' + esc(typeLabels[at] || at) + '</span>';
+    html += '<span style="font-size:11px;color:var(--muted)">' + timeStr + '</span>';
+    html += '</div>';
+    html += '<div style="font-size:12px;color:var(--muted)">' + esc(ev.device_name || '') + (ev.value !== undefined ? ' · ' + fmt(ev.value, 1) + (at === 'unusual_daily' || at === 'night_consumption' ? ' kWh' : ' W') : '') + ' · <strong>\u03c3=' + fmt(ev.sigma||0, 1) + '</strong></div>';
+    if (ev.description) html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(ev.description) + '</div>';
+    // Sigma bar
+    html += '<div style="display:flex;gap:4px;align-items:center;margin-top:3px"><div style="flex:1;height:4px;background:var(--bg);border-radius:2px;overflow:hidden"><div style="width:' + sigmaBar + '%;height:100%;background:' + col + ';border-radius:2px"></div></div><span style="font-size:9px;color:var(--muted)">' + fmt(ev.sigma||0,1) + '\u03c3</span></div>';
+    html += '</div></div>';
   }});
+  html += '</div></div>';
+
   el.innerHTML = html;
+
+  /* ── Draw canvases ── */
+  requestAnimationFrame(function() {{
+    _anomDrawTypeDonut(tc, typeColors, typeLabels, typeIcons);
+    _anomDrawSigmaChart(events);
+  }});
+}}
+
+function _anomDrawTypeDonut(tc, typeColors, typeLabels, typeIcons) {{
+  const canvas = document.getElementById('anom-type-donut');
+  const legend = document.getElementById('anom-type-legend');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio||1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+  ctx.scale(dpr,dpr);
+  const W = rect.width, H = rect.height;
+  const cx = W/2, cy = H/2, R = Math.min(cx,cy)-8, r = R*0.55;
+  const keys = Object.keys(tc);
+  const total = keys.reduce(function(s,k){{ return s+tc[k]; }},0)||1;
+  let angle = -Math.PI/2;
+  let legHtml = '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  keys.forEach(function(k) {{
+    const count = tc[k];
+    const slice = (count/total)*Math.PI*2;
+    const col = typeColors[k]||'#999';
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(cx,cy,R,angle,angle+slice); ctx.arc(cx,cy,r,angle+slice,angle,true); ctx.closePath(); ctx.fill();
+    angle += slice;
+    legHtml += '<span style="font-size:10px;display:flex;align-items:center;gap:2px"><span style="width:8px;height:8px;border-radius:50%;background:'+col+';display:inline-block"></span>'+(typeIcons[k]||'')+' '+esc(typeLabels[k]||k)+' ('+count+')</span>';
+  }});
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg')||'#111';
+  ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(total, cx, cy-6);
+  ctx.font = '10px sans-serif'; ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted')||'#666';
+  ctx.fillText('Events', cx, cy+10);
+  legHtml += '</div>';
+  if (legend) legend.innerHTML = legHtml;
+}}
+
+function _anomDrawSigmaChart(events) {{
+  const canvas = document.getElementById('anom-sigma-chart');
+  if (!canvas) return;
+  // Bucket sigmas into bins: 2-3, 3-4, 4-5, 5+
+  const bins = [0,0,0,0,0];
+  const binLabels = ['2-3\u03c3','3-4\u03c3','4-5\u03c3','5-6\u03c3','6+\u03c3'];
+  events.forEach(function(ev) {{
+    const s = ev.sigma || ev.sigma_count || 0;
+    if (s < 2) return;
+    else if (s < 3) bins[0]++;
+    else if (s < 4) bins[1]++;
+    else if (s < 5) bins[2]++;
+    else if (s < 6) bins[3]++;
+    else bins[4]++;
+  }});
+  const colors = bins.map(function(_,i){{ return ['#3b82f6','#f59e0b','#f97316','#ef4444','#dc2626'][i]; }});
+  _drawBarChart('anom-sigma-chart', binLabels, bins, {{colors:colors, decimals:0}});
 }}
 
 /* ──────────────────────────────────────────────

@@ -2954,10 +2954,37 @@ class ActionDispatcher:
                         pass
 
                 all_events.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+
+                # Compute statistics for rich UI
+                type_counts: Dict[str, int] = {}
+                device_counts: Dict[str, Dict[str, Any]] = {}
+                sigma_values: list = []
+                for ev in all_events:
+                    at = ev.get("anomaly_type", "unknown")
+                    type_counts[at] = type_counts.get(at, 0) + 1
+                    dk = ev.get("device_key", "")
+                    dn = ev.get("device_name", dk)
+                    if dk not in device_counts:
+                        device_counts[dk] = {"name": dn, "count": 0, "types": {}}
+                    device_counts[dk]["count"] += 1
+                    device_counts[dk]["types"][at] = device_counts[dk]["types"].get(at, 0) + 1
+                    sc = ev.get("sigma_count", 0)
+                    if sc:
+                        sigma_values.append(round(sc, 1))
+                max_sigma = max(sigma_values) if sigma_values else 0
+                avg_sigma = round(sum(sigma_values) / len(sigma_values), 1) if sigma_values else 0
+
                 return {
                     "ok": True,
                     "enabled": enabled,
+                    "model": str(getattr(anom_cfg, "model", "rolling_zscore") or "rolling_zscore") if anom_cfg else "rolling_zscore",
+                    "sigma_threshold": float(getattr(anom_cfg, "sigma_threshold", 2.0)) if anom_cfg else 2.0,
                     "events": all_events[:200],
+                    "total_count": len(all_events),
+                    "type_counts": type_counts,
+                    "device_counts": device_counts,
+                    "max_sigma": max_sigma,
+                    "avg_sigma": avg_sigma,
                 }
             except Exception as e:
                 return {"ok": False, "error": str(e)}
