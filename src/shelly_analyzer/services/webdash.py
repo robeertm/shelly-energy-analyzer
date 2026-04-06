@@ -5367,8 +5367,8 @@ function renderStandby(d) {{
   let html = '<div class="nilm-metrics" style="margin-bottom:12px">';
   html += _nilmMetricCard('\u26a0\ufe0f', t('web.standby.annual_cost','Standby-Kosten/Jahr'), (d.total_annual_standby_cost||0).toFixed(0) + ' \u20ac', t('web.standby.all_devices','Alle Geräte'));
   html += _nilmMetricCard('\u26a1', t('web.standby.annual_kwh','Standby kWh/Jahr'), (d.total_annual_standby_kwh||0).toFixed(0) + ' kWh', t('web.standby.wasted','Verlorene Energie'));
-  html += _nilmMetricCard('\ud83d\udcca', t('web.standby.avg_base','Mittlere Grundlast'), avgBase + ' W', nDev + ' ' + t('web.standby.devices','Geräte'));
-  html += _nilmMetricCard('\ud83d\udea8', t('web.standby.risk_overview','Risiko-Übersicht'),
+  html += _nilmMetricCard('📊', t('web.standby.avg_base','Mittlere Grundlast'), avgBase + ' W', nDev + ' ' + t('web.standby.devices','Geräte'));
+  html += _nilmMetricCard('🚨', t('web.standby.risk_overview','Risiko-Übersicht'),
     '<span style="color:#dc2626">' + highCount + '</span> / <span style="color:#d97706">' + medCount + '</span> / <span style="color:#16a34a">' + lowCount + '</span>',
     t('web.standby.high_med_low','Hoch / Mittel / Niedrig'));
   html += '</div>';
@@ -5377,7 +5377,7 @@ function renderStandby(d) {{
 
   if (!nDev) {{
     wrap.innerHTML = '<div class="card" style="text-align:center;padding:30px">' +
-      '<div style="font-size:40px;margin-bottom:10px">\ud83d\udd0c</div>' +
+      '<div style="font-size:40px;margin-bottom:10px">🔌</div>' +
       '<div style="font-size:16px;font-weight:600;margin-bottom:6px">' + t('web.standby.no_data_title','Keine Standby-Daten') + '</div>' +
       '<div style="color:var(--muted);font-size:13px">' + t('web.standby.no_data_hint','Mindestens 6 Stunden Daten in den letzten {days} Tagen nötig.').replace('{{days}}', d.analysis_days||30) + '</div></div>';
     return;
@@ -5442,7 +5442,7 @@ function renderStandby(d) {{
     if (dev.annual_standby_cost < 5) return;
     const rc = dev.risk === 'high' ? '#dc2626' : dev.risk === 'medium' ? '#d97706' : '#16a34a';
     cards += '<div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--bg);border-radius:8px">';
-    cards += '<span style="font-size:16px">\ud83d\udca1</span>';
+    cards += '<span style="font-size:16px">💡</span>';
     cards += '<div style="flex:1;min-width:0">';
     cards += '<div style="font-weight:600;font-size:13px">' + esc(dev.device_name) + '</div>';
     cards += '<div style="font-size:12px;color:var(--muted)">' + t('web.standby.savings_tip','Standby-Stecker oder Zeitschaltuhr spart') + ' <strong style="color:' + rc + '">' + dev.annual_standby_cost + ' \u20ac/' + t('web.standby.year','Jahr') + '</strong></div>';
