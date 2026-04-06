@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.13.27 - 2026-04-06
+### Fixed
+- **Alert rules never triggered Telegram/Email/Webhook** – root cause: the `BackgroundServiceManager` kept its own copy of `AppConfig` from startup. When alert rules were created/updated via the Settings or Alerts API, the new config was written to `state.cfg` and `state.reload_config()` was called, but the background manager's `self.cfg` was never updated. Result: `self.cfg.alerts` was always the empty list from startup. Fix: `reload_config()` now propagates the config to `state._bg.cfg` so alert rules, Telegram credentials, and all notification settings are immediately visible to the background feed loop.
+- Added debug + info logging to alert evaluation and Telegram sending for diagnostics.
+
 ## 16.13.26 - 2026-04-06
 ### Fixed
 - **Costs tab showed no data for 1-phase devices** – the costs action filtered for `phases >= 3` only, excluding all single-phase Shelly devices. Now includes all non-switch devices regardless of phase count.
