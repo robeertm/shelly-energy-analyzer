@@ -1021,6 +1021,9 @@ _HTML_TEMPLATE = """<!doctype html>
       padding-bottom: env(safe-area-inset-bottom, 0);
       z-index: 100;
     }}
+    @media (min-width: 900px) {{
+      #bottom-nav {{ justify-content: center; }}
+    }}
     #bottom-nav::-webkit-scrollbar {{ display: none; }}
     /* ── Hamburger (hidden on desktop, shown on mobile) ── */
     #btn-hamburger {{ display: none; }}
