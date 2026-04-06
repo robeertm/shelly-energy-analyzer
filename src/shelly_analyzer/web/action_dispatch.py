@@ -3056,22 +3056,36 @@ class ActionDispatcher:
 
         if action == "standby":
             try:
-                from shelly_analyzer.services.standby import generate_standby_report
+                from shelly_analyzer.services.standby import generate_standby_report, analyze_standby_from_df
                 price = self._get_effective_unit_price()
                 report = generate_standby_report(self.storage.db, self.cfg.devices, price)
 
-                diag = {}
+                # Fallback: if DB-based analysis found nothing, use computed
+                # DataFrames (CSV-based, same source as Costs tab).
                 if not report.devices:
-                    now_ts = int(time.time())
-                    start_ts = now_ts - report.analysis_days * 86400
+                    from shelly_analyzer.services.standby import StandbyReport
+                    results = []
                     for dev in self.cfg.devices:
-                        h = self.storage.db.query_hourly(dev.key, start_ts=start_ts, end_ts=now_ts)
-                        s = self.storage.db.query_samples(dev.key, start_ts=start_ts, end_ts=now_ts)
-                        diag[dev.key] = {
-                            "name": dev.name,
-                            "hourly_rows": len(h),
-                            "sample_rows": 0 if s is None else len(s),
-                        }
+                        if str(getattr(dev, "kind", "em")) == "switch":
+                            continue
+                        try:
+                            cd = self.computed.get(dev.key)
+                            if cd is None or cd.df is None or cd.df.empty:
+                                continue
+                            r = analyze_standby_from_df(cd.df, dev.key, dev.name, price)
+                            if r is not None:
+                                results.append(r)
+                        except Exception:
+                            pass
+                    if results:
+                        results.sort(key=lambda x: x.annual_standby_cost, reverse=True)
+                        report = StandbyReport(
+                            devices=results,
+                            total_annual_standby_kwh=round(sum(r.annual_standby_kwh for r in results), 1),
+                            total_annual_standby_cost=round(sum(r.annual_standby_cost for r in results), 2),
+                            analysis_days=30,
+                            generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        )
 
                 return {
                     "ok": True,
@@ -3091,7 +3105,6 @@ class ActionDispatcher:
                         }
                         for d in report.devices
                     ],
-                    "diagnostic": diag if diag else None,
                 }
             except Exception as e:
                 return {"ok": False, "error": str(e)}
