@@ -2,7 +2,7 @@
 
 A cross-platform **web application** to analyze, visualize and export energy data from Shelly devices (1-phase and 3-phase) — including live dashboards, cost tracking, historical plots, CSV/PDF exports, Telegram alerts, solar/PV monitoring, anomaly detection, NILM appliance detection, device scheduling, consumption forecasting, weather correlation, tenant billing, smart scheduling, EV charging logs, tariff comparison, battery monitoring, AI energy advisor, gamification, InfluxDB/Prometheus export, REST API, multi-location support, and much more.
 
-Runs as a local Flask web server — access the dashboard from any browser on your network (desktop or mobile). No desktop GUI required. This repository is **GitHub-ready** (MIT license, clean structure, no secrets). Releases are published via **GitHub Releases** so the built-in updater can find and download new versions.
+Runs as a local Flask web server — access the dashboard from any browser on your network (desktop or mobile). No desktop GUI required. This repository is **GitHub-ready** (free to use, (c) Robert Manuwald, clean structure, no secrets). Releases are published via **GitHub Releases** so the built-in updater can find and download new versions.
 
 > **Current version: v16.13.x** — web-only architecture with full-featured browser UI, first-run setup wizard, complete in-browser settings & device management, and all prior features from the former desktop app.
 
@@ -421,4 +421,4 @@ See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
 ---
 
-License: MIT (see `LICENSE`).
+Copyright (c) 2026 Robert Manuwald. Free to use. See `LICENSE` for details.
