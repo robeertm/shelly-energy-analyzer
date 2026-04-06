@@ -175,7 +175,7 @@ Runs as a local Flask web server — access the dashboard from any browser on yo
 - **ML learning engine** — k-means clustering on power transitions (step changes) to discover recurring appliance patterns automatically
 - Learned clusters matched against built-in database with confidence scoring
 - Cluster data persisted across sessions
-- Top-3 matches shown on the live dashboard
+- **Dedicated NILM statistics tab** — top-10 pattern cards with sparkline plots, hourly activity heatmap, category donut chart, per-device breakdown, recent transitions timeline, appliance signature database reference
 
 ### 📤 Exports & E-mail Reports
 
@@ -229,7 +229,7 @@ Runs as a local Flask web server — access the dashboard from any browser on yo
 
 ### 🌐 Web Dashboard (Mobile-Friendly SPA)
 - Full single-page app (SPA) accessible from any device on the local network — the **sole UI** of the application
-- **11 tabs**:
+- **12 tabs**:
   - **Live** — real-time device cards with colour-coded power, sparkline charts, collapsible detail rows, NILM appliance chips, freeze button, time-scale selector
   - **Costs** — per-device cost overview with ENTSO-E CO2 tracking, dynamic spot price comparison, and 24h spot market price chart; current spot price prominently displayed with color-coded delta
   - **Heatmap** — interactive yearly calendar heatmap and weekday x hour heatmap; horizontally scrollable on mobile with readable 3-char month labels
@@ -240,6 +240,7 @@ Runs as a local Flask web server — access the dashboard from any browser on yo
   - **Forecast** — consumption forecast with history + prediction bar chart, weekday and hourly profile charts (Canvas-based, matching CO2 tab style)
   - **Standby** — standby cost summary, per-device cards with risk badges, cost bar chart and 24h load profile (Canvas-based)
   - **Energy Flow** — summary cards + per-device consumption breakdown chart with period selector
+  - **NILM** — ML pattern statistics: top-10 patterns with sparkline plots, hourly activity heatmap, category donut, per-device breakdown, transitions timeline, appliance signature database
   - **Export** — PDF summaries, reports, invoices, Excel, ZIP bundles; inline preview
 - **Dark / Light mode** toggle with auto-detection and localStorage persistence
 - **Full i18n** — all 9 supported languages
