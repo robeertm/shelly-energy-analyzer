@@ -4329,8 +4329,69 @@ function renderCo2(data, el) {{
   html += metricCardHtml(t('web.co2.car', 'Car km avoided'), (data.car_km||0).toFixed(0) + ' km', '🚗');
   html += '</div></div>';
 
-  // ── Intensity chart with range selector ──
+  // ── Trend + Best/Worst + Renewables row ──
   const hourly = data.hourly || [];
+  if (hourly.length > 1) {{
+    const vals = hourly.map(function(h){{ return h.intensity; }});
+    const avgI = vals.reduce(function(s,v){{ return s+v; }},0) / vals.length;
+    const minI = Math.min.apply(null, vals);
+    const maxI = Math.max.apply(null, vals);
+    const minH = hourly[vals.indexOf(minI)];
+    const maxH = hourly[vals.indexOf(maxI)];
+    // Trend: compare last 6h vs previous 6h
+    const recent = vals.slice(-6);
+    const prev = vals.slice(-12, -6);
+    const recentAvg = recent.length ? recent.reduce(function(s,v){{return s+v;}},0)/recent.length : 0;
+    const prevAvg = prev.length ? prev.reduce(function(s,v){{return s+v;}},0)/prev.length : recentAvg;
+    const trendPct = prevAvg > 0 ? Math.round((recentAvg - prevAvg) / prevAvg * 100) : 0;
+    const trendIcon = trendPct < -5 ? '📉' : trendPct > 5 ? '📈' : '➡️';
+    const trendColor = trendPct < -5 ? '#16a34a' : trendPct > 5 ? '#dc2626' : 'var(--muted)';
+    // Renewables share from fuel mix
+    const mixObj = data.fuel_mix || {{}};
+    const renewKeys = ['biomass','solar','wind_onshore','wind_offshore','hydro_run','hydro_reservoir','hydro_pumped','geothermal','marine','other_renewable'];
+    let renewMW = 0, totalMW = 0;
+    Object.keys(mixObj).forEach(function(k){{ totalMW += (mixObj[k].mw||0); if (renewKeys.indexOf(k)>=0) renewMW += (mixObj[k].mw||0); }});
+    const renewPct = totalMW > 0 ? Math.round(renewMW / totalMW * 100) : 0;
+
+    html += '<div class="nilm-two-col" style="margin-top:8px">';
+    // Analytics card
+    html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">' + t('web.co2.analytics','CO₂ Analyse') + '</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
+    html += '<div class="nilm-stat"><span class="nilm-stat-val" style="color:' + _co2Color(avgI,green,dirty) + '">' + avgI.toFixed(0) + '</span><span class="nilm-stat-lbl">' + t('web.co2.avg','Durchschnitt') + ' g/kWh</span></div>';
+    html += '<div class="nilm-stat"><span class="nilm-stat-val" style="color:' + _co2Color(minI,green,dirty) + '">' + minI.toFixed(0) + '</span><span class="nilm-stat-lbl">' + t('web.co2.min','Minimum') + ' (' + esc(minH.hour) + ')</span></div>';
+    html += '<div class="nilm-stat"><span class="nilm-stat-val" style="color:' + _co2Color(maxI,green,dirty) + '">' + maxI.toFixed(0) + '</span><span class="nilm-stat-lbl">' + t('web.co2.max','Maximum') + ' (' + esc(maxH.hour) + ')</span></div>';
+    html += '</div>';
+    html += '<div style="margin-top:10px;display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg);border-radius:8px">';
+    html += '<span style="font-size:20px">' + trendIcon + '</span>';
+    html += '<div><div style="font-weight:600;font-size:13px;color:' + trendColor + '">' + t('web.co2.trend','Trend') + ': ' + (trendPct > 0 ? '+' : '') + trendPct + '%</div>';
+    html += '<div style="font-size:11px;color:var(--muted)">' + t('web.co2.trend_hint','Letzte 6h vs. vorherige 6h') + '</div></div>';
+    html += '</div></div>';
+
+    // Renewables + score card
+    html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">' + t('web.co2.green_score','Grünstrom-Score') + '</div>';
+    // Score ring
+    const scoreColor = renewPct >= 70 ? '#16a34a' : renewPct >= 40 ? '#d97706' : '#dc2626';
+    html += '<div style="text-align:center">';
+    html += '<canvas id="co2-renew-ring" style="width:120px;height:120px"></canvas>';
+    html += '<div style="font-size:24px;font-weight:800;margin-top:-76px;position:relative;color:' + scoreColor + '">' + renewPct + '%</div>';
+    html += '<div style="font-size:11px;color:var(--muted);position:relative;margin-top:2px">' + t('web.co2.renewables','Erneuerbare') + '</div>';
+    html += '<div style="margin-top:28px"></div>';
+    html += '</div>';
+    // Current intensity score
+    const score = ci <= green ? 'A' : ci <= (green + dirty) / 3 ? 'B' : ci <= (green + dirty) * 2 / 3 ? 'C' : ci <= dirty ? 'D' : 'E';
+    const scoreBg = {{'A':'#16a34a','B':'#65a30d','C':'#d97706','D':'#ea580c','E':'#dc2626'}}[score];
+    html += '<div style="display:flex;justify-content:center;gap:4px;margin-top:8px">';
+    ['A','B','C','D','E'].forEach(function(s) {{
+      const bg = s === score ? (scoreBg + '') : 'var(--bg)';
+      const fg = s === score ? '#fff' : 'var(--muted)';
+      html += '<div style="width:28px;height:28px;border-radius:6px;background:' + bg + ';color:' + fg + ';display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">' + s + '</div>';
+    }});
+    html += '</div>';
+    html += '<div style="text-align:center;font-size:11px;color:var(--muted);margin-top:4px">' + t('web.co2.rating','Bewertung') + ': ' + score + '</div>';
+    html += '</div></div>';
+  }}
+
+  // ── Intensity chart with range selector ──
   if (hourly.length > 0) {{
     html += '<div class="card" style="margin-top:8px">';
     const curRange = data._range || '24h';
@@ -4371,34 +4432,41 @@ function renderCo2(data, el) {{
 
   // ── Fuel mix ──
   const mix = data.fuel_mix || {{}};
-  // Sort fuels by share_pct descending (largest generators first)
   const mixKeys = Object.keys(mix).sort(function(a,b) {{
     return (mix[b].share_pct || 0) - (mix[a].share_pct || 0);
   }});
+  const fuelColors = {{biomass:'#8bc34a',lignite:'#795548',coal_gas:'#9e9e9e',gas:'#ff9800',hard_coal:'#616161',oil:'#212121',oil_shale:'#424242',peat:'#a1887f',geothermal:'#ff5722',hydro_pumped:'#29b6f6',hydro_run:'#0288d1',hydro_reservoir:'#01579b',marine:'#00bcd4',nuclear:'#7c4dff',other_renewable:'#66bb6a',solar:'#fdd835',waste:'#bdbdbd',wind_offshore:'#26c6da',wind_onshore:'#4dd0e1',other:'#e0e0e0'}};
   if (mixKeys.length > 0) {{
-    html += '<div class="card" style="margin-top:8px">';
+    html += '<div class="nilm-two-col" style="margin-top:8px">';
+    // Donut chart
+    html += '<div class="card">';
     html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">' + t('web.co2.fuel_mix', 'Generation Mix') + (data.fuel_mix_hour ? ' (' + esc(data.fuel_mix_hour) + ')' : '') + '</div>';
-
-    // Stacked bar
-    html += '<div style="display:flex;border-radius:6px;overflow:hidden;height:20px;margin-bottom:8px">';
-    const fuelColors = {{biomass:'#8bc34a',lignite:'#795548',coal_gas:'#9e9e9e',gas:'#ff9800',hard_coal:'#616161',oil:'#212121',oil_shale:'#424242',peat:'#a1887f',geothermal:'#ff5722',hydro_pumped:'#29b6f6',hydro_run:'#0288d1',hydro_reservoir:'#01579b',marine:'#00bcd4',nuclear:'#7c4dff',other_renewable:'#66bb6a',solar:'#fdd835',waste:'#bdbdbd',wind_offshore:'#26c6da',wind_onshore:'#4dd0e1',other:'#e0e0e0'}};
-    mixKeys.forEach(function(k) {{
-      const m = mix[k];
-      if (m.share_pct > 0.5) {{
-        const bgc = fuelColors[k] || '#999';
-        html += '<div style="flex:' + m.share_pct + ';background:' + bgc + '" title="' + esc(m.name) + ': ' + m.share_pct.toFixed(1) + '%"></div>';
-      }}
-    }});
+    html += '<canvas id="co2-fuel-donut" style="width:100%;height:200px"></canvas>';
+    html += '<div id="co2-fuel-legend" style="margin-top:6px"></div>';
     html += '</div>';
 
     // Table
+    html += '<div class="card">';
+    html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">' + t('web.co2.fuel_detail', 'Erzeugung Detail') + '</div>';
+    // Stacked bar on top
+    html += '<div style="display:flex;border-radius:6px;overflow:hidden;height:16px;margin-bottom:8px">';
+    mixKeys.forEach(function(k) {{
+      const m = mix[k];
+      if (m.share_pct > 0.5) {{
+        html += '<div style="flex:' + m.share_pct + ';background:' + (fuelColors[k]||'#999') + '" title="' + esc(m.name) + ': ' + m.share_pct.toFixed(1) + '%"></div>';
+      }}
+    }});
+    html += '</div>';
+    html += '<div style="max-height:240px;overflow-y:auto">';
     html += '<table style="width:100%;font-size:12px;border-collapse:collapse">';
     html += '<tr style="border-bottom:1px solid var(--border)"><th style="text-align:left;padding:3px">' + t('web.co2.fuel', 'Fuel') + '</th><th style="text-align:right;padding:3px">MW</th><th style="text-align:right;padding:3px">%</th><th style="text-align:right;padding:3px">g/kWh</th></tr>';
     mixKeys.forEach(function(k) {{
       const m = mix[k];
-      html += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px;font-size:11px">' + esc(m.name) + '</td><td style="text-align:right;padding:3px">' + m.mw.toFixed(0) + '</td><td style="text-align:right;padding:3px">' + m.share_pct.toFixed(1) + '</td><td style="text-align:right;padding:3px">' + m.factor.toFixed(0) + '</td></tr>';
+      const barW = Math.max(2, Math.round(m.share_pct));
+      html += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px;font-size:11px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + (fuelColors[k]||'#999') + ';margin-right:4px;vertical-align:middle"></span>' + esc(m.name) + '</td><td style="text-align:right;padding:3px">' + m.mw.toFixed(0) + '</td><td style="text-align:right;padding:3px">' + m.share_pct.toFixed(1) + '</td><td style="text-align:right;padding:3px">' + m.factor.toFixed(0) + '</td></tr>';
     }});
-    html += '</table></div>';
+    html += '</table></div></div>';
+    html += '</div>';
   }}
 
   // ── 24h CO₂ per device (bar charts) ──
@@ -4427,10 +4495,71 @@ function renderCo2(data, el) {{
 
   el.innerHTML = html;
 
-  // ── Draw 24h chart on canvas (deferred to ensure layout) ──
+  // ── Draw canvases (deferred to ensure layout) ──
   if (hourly.length > 1) {{
-    requestAnimationFrame(function() {{ _drawCo2Chart(hourly, green, dirty); }});
+    requestAnimationFrame(function() {{
+      _drawCo2Chart(hourly, green, dirty);
+      _drawCo2RenewRing();
+      _drawCo2FuelDonut(mixKeys, mix, fuelColors);
+    }});
   }}
+}}
+
+function _drawCo2FuelDonut(mixKeys, mix, fuelColors) {{
+  const canvas = document.getElementById('co2-fuel-donut');
+  const legend = document.getElementById('co2-fuel-legend');
+  if (!canvas || !mixKeys || !mixKeys.length) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  const cx = W/2, cy = H/2, R = Math.min(cx,cy)-8, r = R*0.55;
+  const total = mixKeys.reduce(function(s,k){{ return s + (mix[k].mw||0); }}, 0) || 1;
+  let angle = -Math.PI/2;
+  let legHtml = '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+  mixKeys.forEach(function(k) {{
+    const m = mix[k];
+    if (m.share_pct < 0.5) return;
+    const slice = (m.mw / total) * Math.PI * 2;
+    const col = fuelColors[k] || '#999';
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(cx,cy,R,angle,angle+slice); ctx.arc(cx,cy,r,angle+slice,angle,true); ctx.closePath(); ctx.fill();
+    angle += slice;
+    legHtml += '<span style="font-size:10px;display:flex;align-items:center;gap:2px"><span style="width:8px;height:8px;border-radius:50%;background:'+col+';display:inline-block"></span>'+esc(m.name)+' '+m.share_pct.toFixed(1)+'%</span>';
+  }});
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg')||'#111';
+  ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(Math.round(total) + ' MW', cx, cy-6);
+  ctx.font = '10px sans-serif'; ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted')||'#666';
+  ctx.fillText('Total', cx, cy+8);
+  legHtml += '</div>';
+  if (legend) legend.innerHTML = legHtml;
+}}
+
+function _drawCo2RenewRing() {{
+  const canvas = document.getElementById('co2-renew-ring');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  const cx = W/2, cy = H/2, R = Math.min(cx,cy)-4, lw = 10;
+  // Get renewable percentage from the rendered text
+  const valEl = canvas.parentElement && canvas.parentElement.querySelector('div[style*="font-weight:800"]');
+  const pct = valEl ? parseInt(valEl.textContent) || 0 : 0;
+  const angle = (pct / 100) * Math.PI * 2;
+  // Background ring
+  ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--border') || '#333';
+  ctx.lineWidth = lw;
+  ctx.beginPath(); ctx.arc(cx, cy, R - lw/2, 0, Math.PI * 2); ctx.stroke();
+  // Filled ring
+  const col = pct >= 70 ? '#16a34a' : pct >= 40 ? '#d97706' : '#dc2626';
+  ctx.strokeStyle = col; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(cx, cy, R - lw/2, -Math.PI/2, -Math.PI/2 + angle); ctx.stroke();
 }}
 
 function _drawCo2Chart(hourly, green, dirty) {{
