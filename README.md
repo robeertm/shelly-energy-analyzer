@@ -229,19 +229,30 @@ Runs as a local Flask web server — access the dashboard from any browser on yo
 
 ### 🌐 Web Dashboard (Mobile-Friendly SPA)
 - Full single-page app (SPA) accessible from any device on the local network — the **sole UI** of the application
-- **12 tabs**:
+- **23 tabs**:
   - **Live** — real-time device cards with colour-coded power, sparkline charts, collapsible detail rows, NILM appliance chips, freeze button, time-scale selector
+  - **Plots** — interactive historical charts (W/V/A/VAR/cos φ) with phase selection, time ranges, and kWh totals (Plotly.js)
   - **Costs** — per-device cost overview with ENTSO-E CO2 tracking, dynamic spot price comparison, and 24h spot market price chart; current spot price prominently displayed with color-coded delta
   - **Heatmap** — interactive yearly calendar heatmap and weekday x hour heatmap; horizontally scrollable on mobile with readable 3-char month labels
   - **Solar** — PV dashboard with feed-in, self-consumption, autarky %, CO2 savings, inline settings
+  - **Weather** — weather correlation analysis: consumption vs. temperature timeline
   - **Comparison** — period-over-period comparison with device selectors, grouped bar chart, delta display
   - **CO2** — live grid intensity, 24h chart, fuel mix, per-device CO2 rates, summary cards
   - **Anomalies** — detected events with type, timestamp, sigma, description
   - **Forecast** — consumption forecast with history + prediction bar chart, weekday and hourly profile charts (Canvas-based, matching CO2 tab style)
   - **Standby** — standby cost summary, per-device cards with risk badges, cost bar chart and 24h load profile (Canvas-based)
   - **Energy Flow** — summary cards + per-device consumption breakdown chart with period selector
+  - **EV Chargers** — nearby EV charging stations via OpenChargeMap API with radius, power, and plug filters
   - **NILM** — ML pattern statistics: top-10 patterns with sparkline plots, hourly activity heatmap, category donut, per-device breakdown, transitions timeline, appliance signature database
   - **Export** — PDF summaries, reports, invoices, Excel, ZIP bundles; inline preview
+  - **Schedule** — smart time-based scheduling for Shelly switches
+  - **EV Log** — electric vehicle charging session history
+  - **Tariff** — electricity tariff comparison
+  - **Battery** — home battery / storage simulation
+  - **Advisor** — AI energy advisor with personalised tips
+  - **Goals** — energy saving goals with progress tracking
+  - **Tenants** — multi-tenant sub-metering and utility cost allocation
+  - **Sync** — live data synchronisation log with status panel
 - **Dark / Light mode** toggle with auto-detection and localStorage persistence
 - **Full i18n** — all 9 supported languages
 - Device order & visibility settings via gear icon modal
