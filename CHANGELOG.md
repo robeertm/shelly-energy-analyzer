@@ -1,5 +1,17 @@
 # Changelog
 
+## 16.13.42 - 2026-04-06
+### Changed
+- **Forecast tab completely redesigned** with rich visualizations:
+  - **Overview metrics** – daily average, trend with color-coded arrow, next month + next year kWh and cost
+  - **Trend analysis card** – large trend indicator with percentage, history summary (total kWh, average W), days of data used
+  - **Cost projection bar chart** – month vs. year cost comparison
+  - **Main chart with confidence band** – history bars (blue) + forecast bars (red) with shaded upper/lower confidence interval, dashed divider line, legend
+  - **Weekday profile** – Mon–Sun relative factors with color coding (green = below average, red = above), threshold line at 1.0
+  - **Hourly profile** – 00–23h with same color coding, hint text explaining the factor
+  - **Two-column layouts** – trend + cost side by side, weekday + hourly side by side
+  - **German weekday names** – localized via t() calls
+
 ## 16.13.41 - 2026-04-06
 ### Changed
 - **Anomaly tab completely redesigned** with rich statistics and visualizations:
