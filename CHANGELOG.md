@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.13.28 - 2026-04-06
+### Fixed
+- **Daily summary fired on every restart** – `_summary_last_daily` initialized as empty string, so `"" != "2026-04-06"` was always true and the summary sent immediately on startup. Now initializes to today's date, and restores the last-sent date from the persisted config field `telegram_daily_summary_last_sent` / `telegram_monthly_summary_last_sent`.
+- **Summary dates now persisted to config.json** – survive restarts without re-sending.
+- **Summary only sent when at least one channel is enabled** – skips building the summary entirely if none of Telegram/Email/Webhook summaries are enabled.
+
+### Changed
+- **Daily summary much more informative** – per-device kWh + cost, comparison vs. day before (📈/📉/➡️ with % delta), monthly projection based on this month's average, sorted output.
+- **Monthly summary improved** – per-device breakdown sorted by consumption, comparison vs. previous month, daily average calculation.
+
 ## 16.13.27 - 2026-04-06
 ### Fixed
 - **Alert rules never triggered Telegram/Email/Webhook** – root cause: the `BackgroundServiceManager` kept its own copy of `AppConfig` from startup. When alert rules were created/updated via the Settings or Alerts API, the new config was written to `state.cfg` and `state.reload_config()` was called, but the background manager's `self.cfg` was never updated. Result: `self.cfg.alerts` was always the empty list from startup. Fix: `reload_config()` now propagates the config to `state._bg.cfg` so alert rules, Telegram credentials, and all notification settings are immediately visible to the background feed loop.

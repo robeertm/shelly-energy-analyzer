@@ -867,9 +867,29 @@ class BackgroundServiceManager:
 
     def _start_summary_scheduler(self) -> None:
         """Start a background thread that checks for scheduled summaries."""
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Europe/Berlin")
+        now = datetime.now(tz)
+        # Initialise to today so we don't immediately fire on startup.
+        # The summary will only be sent once per day, *after* the scheduled time,
+        # on the *next* day boundary that hasn't been sent yet.
+        self._summary_last_daily = now.strftime("%Y-%m-%d")
+        self._summary_last_monthly = now.strftime("%Y-%m")
+        # Restore persisted last-sent dates from config (survives restarts)
+        try:
+            ui = self.cfg.ui
+            saved_d = str(getattr(ui, "telegram_daily_summary_last_sent", "") or "").strip()
+            saved_m = str(getattr(ui, "telegram_monthly_summary_last_sent", "") or "").strip()
+            if saved_d:
+                self._summary_last_daily = saved_d
+            if saved_m:
+                self._summary_last_monthly = saved_m
+        except Exception:
+            pass
         self._summary_thread = threading.Thread(target=self._summary_loop, daemon=True)
         self._summary_thread.start()
-        logger.info("Summary scheduler started")
+        logger.info("Summary scheduler started (last_daily=%s, last_monthly=%s)",
+                     self._summary_last_daily, self._summary_last_monthly)
 
     def _parse_hhmm(self, s: str) -> tuple:
         """Parse 'HH:MM' string into (hour, minute)."""
@@ -881,13 +901,24 @@ class BackgroundServiceManager:
         except Exception:
             return 0, 0
 
+    def _query_device_kwh(self, device_key: str, start_ts: int, end_ts: int) -> float:
+        """Query hourly kWh for a device in a time range."""
+        try:
+            import pandas as pd
+            df = self.storage.db.query_hourly(device_key, start_ts=start_ts, end_ts=end_ts)
+            if df is not None and not df.empty and "kwh" in df.columns:
+                return float(pd.to_numeric(df["kwh"], errors="coerce").fillna(0).sum())
+        except Exception:
+            pass
+        return 0.0
+
     def _build_daily_summary(self) -> str:
-        """Build a daily summary text."""
+        """Build a daily summary text with yesterday's data + comparison."""
         from zoneinfo import ZoneInfo
         tz = ZoneInfo("Europe/Berlin")
         now = datetime.now(tz)
         yesterday = now - timedelta(days=1)
-        day_label = yesterday.strftime("%Y-%m-%d")
+        day_before = now - timedelta(days=2)
 
         unit_price = 0.30
         try:
@@ -895,43 +926,72 @@ class BackgroundServiceManager:
         except Exception:
             pass
 
-        lines = [f"📊 Daily Summary – {day_label}", ""]
+        y_start = int(yesterday.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+        y_end = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+        db_start = int(day_before.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+
+        lines = [f"📊 Daily Summary – {yesterday.strftime('%A, %d.%m.%Y')}", ""]
+
         total_kwh = 0.0
-        total_cost = 0.0
+        total_prev = 0.0
+        dev_lines = []
 
+        for d in (self.cfg.devices or []):
+            if str(getattr(d, "kind", "em")) == "switch":
+                continue
+            kwh = self._query_device_kwh(d.key, y_start, y_end)
+            prev = self._query_device_kwh(d.key, db_start, y_start)
+            total_kwh += kwh
+            total_prev += prev
+            cost = kwh * unit_price
+            delta = ""
+            if prev > 0:
+                pct = ((kwh - prev) / prev) * 100
+                arrow = "📈" if pct > 5 else "📉" if pct < -5 else "➡️"
+                delta = f" {arrow} {pct:+.0f}%"
+            if kwh > 0:
+                dev_lines.append(f"  ⚡ {d.name}: {kwh:.2f} kWh | {cost:.2f} €{delta}")
+
+        if dev_lines:
+            lines.extend(dev_lines)
+        else:
+            lines.append("  No data for yesterday.")
+
+        total_cost = total_kwh * unit_price
+        lines.append("")
+        lines.append(f"🔋 Total: {total_kwh:.2f} kWh | 💰 {total_cost:.2f} €")
+
+        if total_prev > 0:
+            pct = ((total_kwh - total_prev) / total_prev) * 100
+            lines.append(f"📊 vs. day before: {pct:+.1f}%")
+
+        # Monthly projection
         try:
-            day_start_ts = int(yesterday.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
-            day_end_ts = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
-
-            for d in (self.cfg.devices or []):
-                if str(getattr(d, "kind", "em")) == "switch":
-                    continue
-                try:
-                    db = self.storage.db
-                    df = db.query_hourly(d.key, start_ts=day_start_ts, end_ts=day_end_ts)
-                    if df is not None and not df.empty and "kwh" in df.columns:
-                        import pandas as pd
-                        kwh = float(pd.to_numeric(df["kwh"], errors="coerce").fillna(0).sum())
-                        cost = kwh * unit_price
-                        total_kwh += kwh
-                        total_cost += cost
-                        lines.append(f"  {d.name}: {kwh:.2f} kWh ({cost:.2f} €)")
-                except Exception:
-                    pass
+            import calendar
+            days_in_month = calendar.monthrange(now.year, now.month)[1]
+            day_of_month = now.day
+            if day_of_month > 1:
+                # Use this month's average daily consumption so far
+                m_start = int(now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp())
+                m_kwh = sum(self._query_device_kwh(d.key, m_start, y_end) for d in (self.cfg.devices or []) if str(getattr(d, "kind", "em")) != "switch")
+                if m_kwh > 0:
+                    proj = m_kwh / (day_of_month - 1) * days_in_month
+                    proj_cost = proj * unit_price
+                    lines.append(f"📅 Month projection: ~{proj:.0f} kWh | ~{proj_cost:.0f} €")
         except Exception:
             pass
 
-        lines.append("")
-        lines.append(f"Total: {total_kwh:.2f} kWh | {total_cost:.2f} €")
         return "\n".join(lines)
 
     def _build_monthly_summary(self) -> str:
-        """Build a monthly summary text."""
+        """Build a monthly summary text with comparison to previous month."""
         from zoneinfo import ZoneInfo
         tz = ZoneInfo("Europe/Berlin")
         now = datetime.now(tz)
-        last_month = (now.replace(day=1) - timedelta(days=1))
-        month_label = last_month.strftime("%Y-%m")
+        last_month_end = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        last_month_start = (last_month_end - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        prev_month_start = (last_month_start - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        month_label = last_month_start.strftime("%B %Y")
 
         unit_price = 0.30
         try:
@@ -939,36 +999,54 @@ class BackgroundServiceManager:
         except Exception:
             pass
 
+        ms_ts = int(last_month_start.timestamp())
+        me_ts = int(last_month_end.timestamp())
+        ps_ts = int(prev_month_start.timestamp())
+
         lines = [f"📊 Monthly Summary – {month_label}", ""]
         total_kwh = 0.0
-        total_cost = 0.0
+        total_prev = 0.0
+        dev_data = []
 
+        for d in (self.cfg.devices or []):
+            if str(getattr(d, "kind", "em")) == "switch":
+                continue
+            kwh = self._query_device_kwh(d.key, ms_ts, me_ts)
+            prev = self._query_device_kwh(d.key, ps_ts, ms_ts)
+            total_kwh += kwh
+            total_prev += prev
+            if kwh > 0:
+                dev_data.append((d.name, kwh, prev))
+
+        # Sort by consumption descending
+        dev_data.sort(key=lambda x: x[1], reverse=True)
+
+        for name, kwh, prev in dev_data:
+            cost = kwh * unit_price
+            delta = ""
+            if prev > 0:
+                pct = ((kwh - prev) / prev) * 100
+                arrow = "📈" if pct > 5 else "📉" if pct < -5 else "➡️"
+                delta = f" {arrow} {pct:+.0f}%"
+            lines.append(f"  ⚡ {name}: {kwh:.1f} kWh | {cost:.2f} €{delta}")
+
+        total_cost = total_kwh * unit_price
+        lines.append("")
+        lines.append(f"🔋 Total: {total_kwh:.1f} kWh | 💰 {total_cost:.2f} €")
+
+        if total_prev > 0:
+            pct = ((total_kwh - total_prev) / total_prev) * 100
+            lines.append(f"📊 vs. previous month: {pct:+.1f}%")
+
+        # Daily average
         try:
-            month_start = last_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            month_end = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            ms_ts = int(month_start.timestamp())
-            me_ts = int(month_end.timestamp())
-
-            for d in (self.cfg.devices or []):
-                if str(getattr(d, "kind", "em")) == "switch":
-                    continue
-                try:
-                    db = self.storage.db
-                    df = db.query_hourly(d.key, start_ts=ms_ts, end_ts=me_ts)
-                    if df is not None and not df.empty and "kwh" in df.columns:
-                        import pandas as pd
-                        kwh = float(pd.to_numeric(df["kwh"], errors="coerce").fillna(0).sum())
-                        cost = kwh * unit_price
-                        total_kwh += kwh
-                        total_cost += cost
-                        lines.append(f"  {d.name}: {kwh:.2f} kWh ({cost:.2f} €)")
-                except Exception:
-                    pass
+            import calendar
+            days = calendar.monthrange(last_month_start.year, last_month_start.month)[1]
+            avg_daily = total_kwh / days
+            lines.append(f"📅 Daily average: {avg_daily:.1f} kWh | {avg_daily * unit_price:.2f} €")
         except Exception:
             pass
 
-        lines.append("")
-        lines.append(f"Total: {total_kwh:.2f} kWh | {total_cost:.2f} €")
         return "\n".join(lines)
 
     def _summary_loop(self) -> None:
@@ -986,47 +1064,50 @@ class BackgroundServiceManager:
 
                 # ── Daily summary ──
                 today_str = now.strftime("%Y-%m-%d")
-                if today_str != self._summary_last_daily:
-                    # Check if it's past the scheduled time
+                tg_daily = bool(getattr(ui, "telegram_daily_summary_enabled", False))
+                em_daily = bool(getattr(ui, "email_daily_summary_enabled", False))
+                wh_daily = bool(getattr(ui, "webhook_daily_summary_enabled", False))
+                if (tg_daily or em_daily or wh_daily) and today_str != self._summary_last_daily:
                     d_hh, d_mm = self._parse_hhmm(getattr(ui, "telegram_daily_summary_time", "00:00"))
                     if now.hour > d_hh or (now.hour == d_hh and now.minute >= d_mm):
                         summary = self._build_daily_summary()
-
-                        if getattr(ui, "telegram_daily_summary_enabled", False):
+                        if tg_daily:
                             self._telegram_send(summary)
-                        if getattr(ui, "email_daily_summary_enabled", False):
+                        if em_daily:
                             self._email_send("Shelly Energy – Daily Summary", summary)
-                        if getattr(ui, "webhook_daily_summary_enabled", False):
+                        if wh_daily:
                             self._webhook_send({
                                 "type": "daily_summary",
                                 "timestamp": now.isoformat(),
                                 "text": summary,
                                 "source": "shelly-energy-analyzer",
                             })
-
                         self._summary_last_daily = today_str
+                        self._persist_summary_dates()
                         logger.info("Daily summary sent")
 
                 # ── Monthly summary (on 1st of each month) ──
                 month_str = now.strftime("%Y-%m")
-                if now.day <= 2 and month_str != self._summary_last_monthly:
+                tg_monthly = bool(getattr(ui, "telegram_monthly_summary_enabled", False))
+                em_monthly = bool(getattr(ui, "email_monthly_summary_enabled", False))
+                wh_monthly = bool(getattr(ui, "webhook_monthly_summary_enabled", False))
+                if (tg_monthly or em_monthly or wh_monthly) and now.day <= 2 and month_str != self._summary_last_monthly:
                     m_hh, m_mm = self._parse_hhmm(getattr(ui, "telegram_monthly_summary_time", "00:00"))
                     if now.hour > m_hh or (now.hour == m_hh and now.minute >= m_mm):
                         summary = self._build_monthly_summary()
-
-                        if getattr(ui, "telegram_monthly_summary_enabled", False):
+                        if tg_monthly:
                             self._telegram_send(summary)
-                        if getattr(ui, "email_monthly_summary_enabled", False):
+                        if em_monthly:
                             self._email_send("Shelly Energy – Monthly Summary", summary)
-                        if getattr(ui, "webhook_monthly_summary_enabled", False):
+                        if wh_monthly:
                             self._webhook_send({
                                 "type": "monthly_summary",
                                 "timestamp": now.isoformat(),
                                 "text": summary,
                                 "source": "shelly-energy-analyzer",
                             })
-
                         self._summary_last_monthly = month_str
+                        self._persist_summary_dates()
                         logger.info("Monthly summary sent")
 
             except Exception as e:
@@ -1034,3 +1115,20 @@ class BackgroundServiceManager:
 
             # Check every 60 seconds
             self._stop_event.wait(60.0)
+
+    def _persist_summary_dates(self) -> None:
+        """Write last-sent dates to config so they survive restarts."""
+        try:
+            from dataclasses import replace as _replace
+            from shelly_analyzer.io.config import save_config
+            new_ui = _replace(
+                self.cfg.ui,
+                telegram_daily_summary_last_sent=self._summary_last_daily,
+                telegram_monthly_summary_last_sent=self._summary_last_monthly,
+            )
+            new_cfg = _replace(self.cfg, ui=new_ui)
+            cfg_path = self.out_dir / "config.json"
+            save_config(new_cfg, cfg_path)
+            self.cfg = new_cfg
+        except Exception as e:
+            logger.debug("Failed to persist summary dates: %s", e)
