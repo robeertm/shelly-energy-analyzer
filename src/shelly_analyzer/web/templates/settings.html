@@ -403,7 +403,7 @@ const SECTIONS = [
       {key:"min_power_w", label:"Min. Leistung (W)", type:"number"},
     ], defaults:{name:"",device_key:"",switch_id:0,priority:1,min_power_w:500}},
   ]},
-  {id:"spot_price", title:"Spot-Preise (Details)", group:"Energie", hint:"Tarif-Modell (Fix/Dynamisch) wird unter „Preise & Tarif" eingestellt.", fields:[
+  {id:"spot_price", title:"Spot-Preise (Details)", group:"Energie", hint:"Tarif-Modell (Fix/Dynamisch) wird unter Preise und Tarif eingestellt.", fields:[
     {key:"spot_price.enabled", label:"Spot-Preise aktiv", type:"checkbox", hint:"Wird automatisch gesetzt wenn Tarif-Modell = Dynamisch"},
     {key:"spot_price.primary_api", label:"API", type:"select", opts:[["energy_charts","Energy-Charts"],["awattar","aWATTar"]]},
     {key:"spot_price.bidding_zone", label:"Gebotszone", type:"text"},
