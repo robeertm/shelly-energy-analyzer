@@ -1,14 +1,6 @@
 # Changelog
 
-## 16.13.31 - 2026-04-06
-### Removed
-- **NILM badge from header bar** – the NILM status badge next to the clock has been removed since the dedicated NILM tab now provides all information. Removes the `nilm-badge-hdr` element, the `_updateNilmStatus()` polling function, and the 30s interval timer.
-
-## 16.13.30 - 2026-04-06
-### Fixed
-- **NILM tab fully internationalized** – all hardcoded German strings replaced with `t()` i18n calls. Added ~40 new translation keys for DE/EN/ES covering: status badges, metric cards, pattern labels, category names, device overview, transitions timeline, appliance database, and learning status. Appliance names in pattern cards and signature DB now use translated `appliance.*.name` keys. Category donut chart labels are translated. Other languages (FR, PT, IT, PL, CS, RU) fall back to English.
-
-## 16.13.29 - 2026-04-06
+## 16.13.32 - 2026-04-06
 ### Added
 - **Dedicated NILM statistics tab** – new "NILM" tab (brain icon) with rich, colorful statistics for Non-Intrusive Load Monitoring:
   - **Overview metric cards** – pattern count, transitions detected, devices monitored, appliance categories
@@ -21,7 +13,10 @@
   - **Learning progress** – when < 10 transitions detected, shows progress bar and status
 - **`/api/nilm_detail` endpoint** – returns rich NILM data: clusters with std_w/typical_hour, raw transitions with timestamps, hourly distribution, per-device stats, category breakdown, and appliance signature reference
 - **Responsive layout** – pattern grid scales from 1→2→3 columns, two-column layout for categories + devices on desktop, full-width on mobile
-- **Legacy HTTP server** – `/api/nilm_detail` also available via the standalone webdash HTTP server
+- **Full i18n** – ~40 new translation keys (DE/EN/ES) for all NILM tab strings; appliance names and category labels translated; other languages fall back to English
+
+### Removed
+- **NILM badge from header bar** – replaced by the dedicated NILM tab
 
 ## 16.13.28 - 2026-04-06
 ### Fixed
