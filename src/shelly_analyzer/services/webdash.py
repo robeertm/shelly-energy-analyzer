@@ -5343,7 +5343,7 @@ function renderForecast(d) {{
 ────────────────────────────────────────────── */
 async function loadStandby() {{
   const cont = document.getElementById('standby-cards');
-  cont.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
+  cont.innerHTML = '<p class="loading-msg">' + t('web.loading','Loading\u2026') + '</p>';
   try {{
     const r = await fetch('/api/standby');
     if (!r.ok) throw new Error(r.status);
@@ -5354,59 +5354,256 @@ async function loadStandby() {{
   }}
 }}
 function renderStandby(d) {{
-  let html = '<div class="card" style="margin-bottom:10px"><div class="card-title">Standby Summary</div><div class="metric-grid">' +
-    metricCardHtml('Annual Cost', (d.total_annual_standby_cost||0).toFixed(0) + ' \u20ac', 'Standby total') +
-    metricCardHtml('Annual kWh', (d.total_annual_standby_kwh||0).toFixed(0) + ' kWh', 'Standby total') +
-    '</div></div>';
-  document.getElementById('standby-cards').innerHTML = html;
   const wrap = document.getElementById('standby-table-wrap');
-  if (!d.devices || !d.devices.length) {{
-    let diagHtml = '<p class="info-msg">' + t('web.standby.no_data', 'No standby data available. The analysis requires at least 6 hours of data in the last {days} days.').replace('{{days}}', d.analysis_days || 30) + '</p>';
-    if (d.diagnostic) {{
-      diagHtml += '<div style="font-size:11px;color:var(--muted);margin-top:8px">';
-      Object.keys(d.diagnostic).forEach(function(k) {{
-        var di = d.diagnostic[k];
-        diagHtml += '<div>' + esc(di.name) + ': ' + di.hourly_rows + ' hourly / ' + di.sample_rows + ' samples</div>';
-      }});
-      diagHtml += '</div>';
-    }}
-    wrap.innerHTML = '<div class="card">' + diagHtml + '</div>';
+  const devs = d.devices || [];
+  const nDev = devs.length;
+
+  /* ── Summary cards ── */
+  const highCount = devs.filter(function(x){{ return x.risk==='high'; }}).length;
+  const medCount = devs.filter(function(x){{ return x.risk==='medium'; }}).length;
+  const lowCount = devs.filter(function(x){{ return x.risk==='low'; }}).length;
+  const avgBase = nDev ? Math.round(devs.reduce(function(s,x){{ return s+x.base_load_w; }},0)/nDev) : 0;
+
+  let html = '<div class="nilm-metrics" style="margin-bottom:12px">';
+  html += _nilmMetricCard('\u26a0\ufe0f', t('web.standby.annual_cost','Standby-Kosten/Jahr'), (d.total_annual_standby_cost||0).toFixed(0) + ' \u20ac', t('web.standby.all_devices','Alle Geräte'));
+  html += _nilmMetricCard('\u26a1', t('web.standby.annual_kwh','Standby kWh/Jahr'), (d.total_annual_standby_kwh||0).toFixed(0) + ' kWh', t('web.standby.wasted','Verlorene Energie'));
+  html += _nilmMetricCard('\ud83d\udcca', t('web.standby.avg_base','Mittlere Grundlast'), avgBase + ' W', nDev + ' ' + t('web.standby.devices','Geräte'));
+  html += _nilmMetricCard('\ud83d\udea8', t('web.standby.risk_overview','Risiko-Übersicht'),
+    '<span style="color:#dc2626">' + highCount + '</span> / <span style="color:#d97706">' + medCount + '</span> / <span style="color:#16a34a">' + lowCount + '</span>',
+    t('web.standby.high_med_low','Hoch / Mittel / Niedrig'));
+  html += '</div>';
+
+  document.getElementById('standby-cards').innerHTML = html;
+
+  if (!nDev) {{
+    wrap.innerHTML = '<div class="card" style="text-align:center;padding:30px">' +
+      '<div style="font-size:40px;margin-bottom:10px">\ud83d\udd0c</div>' +
+      '<div style="font-size:16px;font-weight:600;margin-bottom:6px">' + t('web.standby.no_data_title','Keine Standby-Daten') + '</div>' +
+      '<div style="color:var(--muted);font-size:13px">' + t('web.standby.no_data_hint','Mindestens 6 Stunden Daten in den letzten {days} Tagen nötig.').replace('{{days}}', d.analysis_days||30) + '</div></div>';
     return;
   }}
-  // Device cards
-  let cards = '<div class="card-grid">';
-  d.devices.forEach(function(dev) {{
-    const riskColor = dev.risk === 'high' ? '#dc2626' : dev.risk === 'medium' ? '#d97706' : '#16a34a';
-    cards += '<div class="card">' +
-      '<div class="card-title">' + esc(dev.device_name) + ' <span style="color:' + riskColor + '">\u25cf ' + dev.risk.toUpperCase() + '</span></div>' +
-      '<div class="metric-grid">' +
-      metricCardHtml('Base load', dev.base_load_w + ' W', '') +
-      metricCardHtml('kWh/year', dev.annual_standby_kwh + '', '') +
-      metricCardHtml('\u20ac/year', dev.annual_standby_cost + ' \u20ac', '') +
-      metricCardHtml('Share', dev.standby_share_pct + '%', '') +
-      '</div></div>';
+
+  let cards = '';
+
+  /* ── Cost pie + cost bar (side by side) ── */
+  cards += '<div class="nilm-two-col" style="margin-bottom:10px">';
+  cards += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.cost_breakdown','Kosten-Verteilung') + '</div>';
+  cards += '<canvas id="sb-cost-pie" style="width:100%;height:200px"></canvas>';
+  cards += '<div id="sb-cost-pie-legend" style="margin-top:6px"></div></div>';
+  cards += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.cost_ranking','Kosten-Ranking') + '</div>';
+  cards += '<canvas id="sb-cost-bar" style="width:100%;height:200px"></canvas></div>';
+  cards += '</div>';
+
+  /* ── Per-device detail cards ── */
+  cards += '<div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.per_device','Geräte-Details') + '</div>';
+  cards += '<div class="nilm-pattern-grid">';
+  devs.forEach(function(dev, idx) {{
+    const rc = dev.risk === 'high' ? '#dc2626' : dev.risk === 'medium' ? '#d97706' : '#16a34a';
+    const riskLabel = dev.risk === 'high' ? t('web.standby.risk_high','HOCH') : dev.risk === 'medium' ? t('web.standby.risk_med','MITTEL') : t('web.standby.risk_low','NIEDRIG');
+    cards += '<div class="nilm-pattern-card" style="border-left:4px solid ' + rc + '">';
+    cards += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+    cards += '<span style="font-weight:700;font-size:14px">' + esc(dev.device_name) + '</span>';
+    cards += '<span class="badge" style="background:' + rc + '22;color:' + rc + ';font-size:10px">' + riskLabel + '</span>';
+    cards += '</div>';
+    // Stats grid
+    cards += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px">';
+    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.base_load_w + '</span><span class="nilm-stat-lbl">' + t('web.standby.base_w','Grundlast W') + '</span></div>';
+    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + (dev.night_median_w||dev.base_load_w) + '</span><span class="nilm-stat-lbl">' + t('web.standby.night_w','Nacht W') + '</span></div>';
+    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + (dev.standby_pct||0).toFixed(0) + '%</span><span class="nilm-stat-lbl">' + t('web.standby.time_pct','Zeit Standby') + '</span></div>';
+    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.annual_standby_kwh + '</span><span class="nilm-stat-lbl">kWh/' + t('web.standby.year','Jahr') + '</span></div>';
+    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.annual_standby_cost + ' \u20ac</span><span class="nilm-stat-lbl">\u20ac/' + t('web.standby.year','Jahr') + '</span></div>';
+    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.standby_share_pct + '%</span><span class="nilm-stat-lbl">' + t('web.standby.share','Anteil') + '</span></div>';
+    cards += '</div>';
+    // Standby vs active mini bar
+    const activePct = Math.max(0, 100 - (dev.standby_share_pct||0));
+    cards += '<div style="display:flex;gap:4px;align-items:center;margin-bottom:6px;font-size:10px">';
+    cards += '<span style="color:' + rc + '">' + t('web.standby.standby','Standby') + '</span>';
+    cards += '<div style="flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden">';
+    cards += '<div style="width:' + (dev.standby_share_pct||0) + '%;height:100%;background:' + rc + ';border-radius:4px"></div>';
+    cards += '</div>';
+    cards += '<span style="color:var(--muted)">' + t('web.standby.active','Aktiv') + '</span></div>';
+    // 24h mini profile
+    cards += '<canvas class="sb-24h-mini" data-idx="' + idx + '" style="width:100%;height:60px"></canvas>';
+    cards += '</div>';
   }});
   cards += '</div>';
-  // Charts
-  cards += '<div class="card-grid">' +
-    '<div class="card"><canvas id="standby-cost-chart" height="160" style="width:100%"></canvas></div>' +
-    '<div class="card"><canvas id="standby-24h-chart" height="160" style="width:100%"></canvas></div>' +
-    '</div>';
-  wrap.innerHTML = cards;
-  requestAnimationFrame(function() {{
-    // Cost bar chart
-    const names = d.devices.map(function(x) {{ return x.device_name.substring(0, 12); }});
-    const costs = d.devices.map(function(x) {{ return x.annual_standby_cost; }});
-    const cColors = d.devices.map(function(x) {{ return x.risk === 'high' ? '#dc2626' : x.risk === 'medium' ? '#d97706' : '#16a34a'; }});
-    _drawBarChart('standby-cost-chart', names, costs, {{ colors: cColors, title: 'Standby \u20ac/year', decimals: 0 }});
-    // 24h profile first device
-    if (d.devices.length && d.devices[0].hourly_profile) {{
-      const hp = d.devices[0].hourly_profile;
-      const hrs = Array.from({{ length: 24 }}, function(_, i) {{ return String(i); }});
-      const hColors = hrs.map(function(h) {{ return parseInt(h) <= 5 || parseInt(h) >= 22 ? '#34495e' : '#3498db'; }});
-      _drawBarChart('standby-24h-chart', hrs, hp, {{ colors: hColors, title: '24h: ' + d.devices[0].device_name, threshold: d.devices[0].base_load_w, thresholdColor: '#dc2626', thresholdLabel: 'Standby', decimals: 0 }});
-    }}
+
+  /* ── Full 24h comparison chart (all devices overlaid) ── */
+  if (devs.length > 1) {{
+    cards += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.compare_24h','24h-Vergleich alle Geräte') + '</div>';
+    cards += '<canvas id="sb-24h-all" style="width:100%;height:180px"></canvas>';
+    cards += '<div id="sb-24h-legend" style="margin-top:6px"></div></div>';
+  }}
+
+  /* ── Savings potential ── */
+  cards += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.savings','Einsparpotenzial') + '</div>';
+  cards += '<div style="display:grid;grid-template-columns:1fr;gap:6px">';
+  devs.forEach(function(dev) {{
+    if (dev.annual_standby_cost < 5) return;
+    const rc = dev.risk === 'high' ? '#dc2626' : dev.risk === 'medium' ? '#d97706' : '#16a34a';
+    cards += '<div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--bg);border-radius:8px">';
+    cards += '<span style="font-size:16px">\ud83d\udca1</span>';
+    cards += '<div style="flex:1;min-width:0">';
+    cards += '<div style="font-weight:600;font-size:13px">' + esc(dev.device_name) + '</div>';
+    cards += '<div style="font-size:12px;color:var(--muted)">' + t('web.standby.savings_tip','Standby-Stecker oder Zeitschaltuhr spart') + ' <strong style="color:' + rc + '">' + dev.annual_standby_cost + ' \u20ac/' + t('web.standby.year','Jahr') + '</strong></div>';
+    cards += '</div></div>';
   }});
+  cards += '</div></div>';
+
+  wrap.innerHTML = cards;
+
+  /* ── Draw all canvases ── */
+  requestAnimationFrame(function() {{
+    _sbDrawCostPie(devs);
+    _sbDrawCostBar(devs);
+    _sbDraw24hMinis(devs);
+    if (devs.length > 1) _sbDraw24hAll(devs);
+  }});
+}}
+
+function _sbDrawCostPie(devs) {{
+  const canvas = document.getElementById('sb-cost-pie');
+  const legend = document.getElementById('sb-cost-pie-legend');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+  const cx = W/2, cy = H/2, R = Math.min(cx,cy)-10, r = R*0.55;
+  const total = devs.reduce(function(s,x){{ return s+x.annual_standby_cost; }},0) || 1;
+  const colors = ['#dc2626','#d97706','#16a34a','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#06b6d4'];
+  let angle = -Math.PI/2;
+  let legHtml = '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+  devs.forEach(function(dev,i) {{
+    const slice = (dev.annual_standby_cost/total)*Math.PI*2;
+    const col = colors[i%colors.length];
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(cx,cy,R,angle,angle+slice); ctx.arc(cx,cy,r,angle+slice,angle,true); ctx.closePath(); ctx.fill();
+    angle += slice;
+    legHtml += '<span style="font-size:10px;display:flex;align-items:center;gap:2px"><span style="width:8px;height:8px;border-radius:50%;background:'+col+';display:inline-block"></span>'+esc(dev.device_name)+' ('+dev.annual_standby_cost+'\u20ac)</span>';
+  }});
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg')||'#111';
+  ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(total.toFixed(0) + ' \u20ac', cx, cy-6);
+  ctx.font = '10px sans-serif'; ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted')||'#666';
+  ctx.fillText('/' + t('web.standby.year','Jahr'), cx, cy+10);
+  legHtml += '</div>';
+  if (legend) legend.innerHTML = legHtml;
+}}
+
+function _sbDrawCostBar(devs) {{
+  const names = devs.map(function(x){{ return x.device_name.substring(0,14); }});
+  const costs = devs.map(function(x){{ return x.annual_standby_cost; }});
+  const cols = devs.map(function(x){{ return x.risk==='high'?'#dc2626':x.risk==='medium'?'#d97706':'#16a34a'; }});
+  _drawBarChart('sb-cost-bar', names, costs, {{colors:cols, decimals:0}});
+}}
+
+function _sbDraw24hMinis(devs) {{
+  devs.forEach(function(dev, idx) {{
+    const canvas = document.querySelector('.sb-24h-mini[data-idx="'+idx+'"]');
+    if (!canvas || !dev.hourly_profile || dev.hourly_profile.length !== 24) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio||1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+    ctx.scale(dpr,dpr);
+    const W = rect.width, H = rect.height;
+    const pad = {{top:4,right:4,bottom:14,left:28}};
+    const cW = W-pad.left-pad.right, cH = H-pad.top-pad.bottom;
+    const hp = dev.hourly_profile;
+    const maxV = Math.max.apply(null,hp.concat([1]))*1.15;
+    const barW = Math.max(2,(cW/24)-1.5);
+    const rc = dev.risk==='high'?'#dc2626':dev.risk==='medium'?'#d97706':'#16a34a';
+    const fg = getComputedStyle(document.body).getPropertyValue('--muted')||'#999';
+    // Standby threshold line
+    const thY = pad.top+cH-(dev.base_load_w/maxV)*cH;
+    ctx.strokeStyle = rc; ctx.lineWidth = 1; ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(pad.left,thY); ctx.lineTo(pad.left+cW,thY); ctx.stroke();
+    ctx.setLineDash([]);
+    // Bars
+    hp.forEach(function(v,i) {{
+      const x = pad.left+(i/24)*cW+0.5;
+      const h = (v/maxV)*cH;
+      const y = pad.top+cH-h;
+      ctx.fillStyle = v <= dev.base_load_w*2 ? rc+'88' : 'hsl(210,60%,55%)';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x,y,barW,h,[1,1,0,0]);
+      else {{ ctx.rect(x,y,barW,h); }}
+      ctx.fill();
+      if (i%6===0) {{
+        ctx.fillStyle = fg; ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(String(i).padStart(2,'0'), x+barW/2, pad.top+cH+10);
+      }}
+    }});
+    // Y axis label
+    ctx.fillStyle = fg; ctx.font = '8px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(Math.round(maxV)+'W', pad.left-3, pad.top+6);
+    ctx.fillText('0', pad.left-3, pad.top+cH+2);
+  }});
+}}
+
+function _sbDraw24hAll(devs) {{
+  const canvas = document.getElementById('sb-24h-all');
+  const legend = document.getElementById('sb-24h-legend');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio||1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+  ctx.scale(dpr,dpr);
+  const W = rect.width, H = rect.height;
+  const pad = {{top:8,right:8,bottom:20,left:40}};
+  const cW = W-pad.left-pad.right, cH = H-pad.top-pad.bottom;
+  const colors = ['#3b82f6','#dc2626','#d97706','#16a34a','#8b5cf6','#ec4899','#14b8a6','#f97316'];
+  // Find global max
+  let maxV = 1;
+  devs.forEach(function(dev) {{
+    if (dev.hourly_profile) maxV = Math.max(maxV, Math.max.apply(null, dev.hourly_profile));
+  }});
+  maxV *= 1.15;
+  const fg = getComputedStyle(document.body).getPropertyValue('--muted')||'#999';
+  const border = getComputedStyle(document.body).getPropertyValue('--border')||'#e0e0e0';
+  // Grid
+  ctx.strokeStyle = border; ctx.lineWidth = 0.5;
+  for (let i=0;i<=4;i++) {{
+    const y = pad.top+cH-(cH*i/4);
+    ctx.beginPath(); ctx.moveTo(pad.left,y); ctx.lineTo(pad.left+cW,y); ctx.stroke();
+    ctx.fillStyle = fg; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(Math.round(maxV*i/4)+'W', pad.left-4, y+3);
+  }}
+  // Hour labels
+  for (let h=0;h<24;h+=3) {{
+    const x = pad.left+(h/24)*cW;
+    ctx.fillStyle = fg; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(String(h).padStart(2,'0'), x, pad.top+cH+14);
+  }}
+  // Lines per device
+  let legHtml = '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  devs.forEach(function(dev,di) {{
+    if (!dev.hourly_profile || dev.hourly_profile.length!==24) return;
+    const col = colors[di%colors.length];
+    ctx.strokeStyle = col; ctx.lineWidth = 2;
+    ctx.beginPath();
+    dev.hourly_profile.forEach(function(v,h) {{
+      const x = pad.left+(h/23)*cW;
+      const y = pad.top+cH-(v/maxV)*cH;
+      if (h===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }});
+    ctx.stroke();
+    // Dots
+    ctx.fillStyle = col;
+    dev.hourly_profile.forEach(function(v,h) {{
+      if (h%3!==0) return;
+      const x = pad.left+(h/23)*cW;
+      const y = pad.top+cH-(v/maxV)*cH;
+      ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2); ctx.fill();
+    }});
+    legHtml += '<span style="font-size:10px;display:flex;align-items:center;gap:2px"><span style="width:10px;height:3px;background:'+col+';display:inline-block;border-radius:2px"></span>'+esc(dev.device_name)+'</span>';
+  }});
+  legHtml += '</div>';
+  if (legend) legend.innerHTML = legHtml;
 }}
 
 /* ──────────────────────────────────────────────
