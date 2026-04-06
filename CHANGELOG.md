@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.31 - 2026-04-06
+### Changed
+- **License changed from MIT to proprietary** – software remains free to use, but copyright belongs to Robert Manuwald. Modification, redistribution, and sublicensing require written permission. Updated LICENSE, pyproject.toml, README.md, and version badge now shows `© Robert Manuwald`.
+
 ## 16.13.30 - 2026-04-06
 ### Fixed
 - **Version badge shown twice in Plots tab** – the `/plots` page is embedded as an iframe inside the dashboard, both had the `_inject_version_badge` overlay, resulting in duplicate version text. Removed badge injection from the plots page.
