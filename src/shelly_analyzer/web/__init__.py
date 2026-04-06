@@ -317,7 +317,9 @@ def _render_plots_html(state: "AppState") -> bytes:
         "devices_json": json.dumps(devs, ensure_ascii=False),
     }
     rendered = _render_template_tokens(tpl, values)
-    return _inject_version_badge(rendered).encode("utf-8")
+    # No version badge in plots — it's embedded as an iframe in the dashboard
+    # which already has its own badge, resulting in a duplicate.
+    return rendered.encode("utf-8")
 
 
 def create_app(config_path: Optional[str] = None) -> Flask:
