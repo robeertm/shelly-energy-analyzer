@@ -1,5 +1,17 @@
 # Changelog
 
+## 16.13.37 - 2026-04-06
+### Changed
+- **Standby tab completely redesigned** with rich statistics and per-device detail:
+  - **4 overview metric cards** – annual cost, annual kWh, average base load, risk overview (high/medium/low counts)
+  - **Cost donut chart** – per-device standby cost breakdown with legend
+  - **Cost ranking bar chart** – devices sorted by annual standby cost, color-coded by risk
+  - **Per-device detail cards** – each with: base load W, night median W, standby time %, annual kWh and cost, standby share %, standby-vs-active progress bar, and individual 24h power profile mini chart with standby threshold line
+  - **24h comparison chart** – all devices overlaid as line charts with color legend, shared Y axis
+  - **Savings potential section** – actionable tips per device with estimated annual savings
+  - **Empty state** – friendly message with progress hint when no data available
+- **API extended** – `/api/standby` now returns `night_median_w`, `standby_pct`, `total_kwh` per device
+
 ## 16.13.36 - 2026-04-06
 ### Fixed
 - **Settings page failed to load** – typographic quotation marks (`„"`) in a JavaScript string hint caused rendering issues on some browsers. Replaced with plain text.
