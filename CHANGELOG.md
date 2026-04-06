@@ -1,6 +1,6 @@
 # Changelog
 
-## 16.13.32 - 2026-04-06
+## 16.13.29 - 2026-04-06
 ### Added
 - **Dedicated NILM statistics tab** – new "NILM" tab (brain icon) with rich, colorful statistics for Non-Intrusive Load Monitoring:
   - **Overview metric cards** – pattern count, transitions detected, devices monitored, appliance categories
