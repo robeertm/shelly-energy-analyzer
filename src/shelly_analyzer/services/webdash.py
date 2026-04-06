@@ -1116,7 +1116,7 @@ _HTML_TEMPLATE = """<!doctype html>
        Live sparklines grow with viewport height so cards fill the window vertically.
        Mobile keeps fixed heights + full width. */
     @media (min-width: 900px) {{
-      .pane.active {{ max-width: 66%; margin-left: auto; margin-right: auto; }}
+      .pane.active {{ max-width: 80%; margin-left: auto; margin-right: auto; }}
       canvas.sparkline {{ height: clamp(56px, 11vh, 180px); }}
       canvas.sparkline-sm {{ height: clamp(40px, 8vh, 130px); }}
     }}
@@ -1536,9 +1536,7 @@ _HTML_TEMPLATE = """<!doctype html>
       .sb-dev-grid[data-cols="4"] {{ grid-template-columns: repeat(4, 1fr); }}
     }}
     /* Override pane max-width for NILM to use more space on desktop */
-    @media (min-width: 900px) {{
-      #pane-nilm.active, #pane-standby.active {{ max-width: 80%; }}
-    }}
+    /* (80% pane width now applied globally via .pane.active rule) */
     /* ── Chart canvas ── */
     canvas.bar-chart {{
       width: 100%;
