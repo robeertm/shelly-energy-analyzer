@@ -228,12 +228,52 @@ class BackgroundServiceManager:
                 logger.debug("Feed loop error: %s", e)
 
     def _load_today_baseline(self, device_key: str, day_start_ts: int) -> tuple:
-        """Read already-imported kWh for *today* from DB.
+        """Read already-imported kWh for *today* from the computed cache
+        (same source as the Costs tab) so both show identical values.
+
+        Falls back to the DB hourly table if computed data is unavailable.
 
         Returns (baseline_kwh, baseline_last_ts) where baseline_last_ts is the
-        end of the latest hour_ts we already have, so live accumulation only
+        end of the latest data row we have, so live accumulation only
         starts after it (no double counting after a sync).
         """
+        import pandas as pd
+
+        # Primary: use computed DataFrame (same as Costs tab)
+        try:
+            dispatcher = getattr(self, "_dispatcher", None)
+            if dispatcher is not None:
+                cd = dispatcher.computed.get(device_key)
+                if cd is not None and cd.df is not None and not cd.df.empty:
+                    df = cd.df.copy()
+                    if "timestamp" in df.columns and "energy_kwh" in df.columns:
+                        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+                        df = df.dropna(subset=["timestamp"])
+                        try:
+                            if df["timestamp"].dt.tz is None:
+                                df["timestamp"] = df["timestamp"].dt.tz_localize("UTC")
+                            from datetime import datetime, timezone
+                            local_tz = datetime.now().astimezone().tzinfo
+                            df["timestamp"] = df["timestamp"].dt.tz_convert(local_tz)
+                        except Exception:
+                            pass
+                        day_start_dt = pd.Timestamp.fromtimestamp(day_start_ts)
+                        try:
+                            day_start_dt = day_start_dt.tz_localize(df["timestamp"].dt.tz)
+                        except Exception:
+                            pass
+                        mask = df["timestamp"] >= day_start_dt
+                        ekwh = pd.to_numeric(df.loc[mask, "energy_kwh"], errors="coerce").fillna(0.0)
+                        total = float(ekwh.sum())
+                        if not df.loc[mask].empty:
+                            last_ts = int(df.loc[mask, "timestamp"].max().timestamp())
+                        else:
+                            last_ts = int(day_start_ts)
+                        return total, last_ts
+        except Exception as e:
+            logger.debug("Computed baseline lookup failed for %s: %s", device_key, e)
+
+        # Fallback: DB hourly table
         try:
             db = getattr(self.storage, "db", None)
             if db is None:
@@ -242,7 +282,6 @@ class BackgroundServiceManager:
             if df is None or df.empty:
                 return 0.0, int(day_start_ts)
             total = float(df["kwh"].fillna(0).sum())
-            # End of latest completed hour we have data for
             last_hour = int(df["hour_ts"].max())
             last_end = last_hour + 3600
             return total, last_end
