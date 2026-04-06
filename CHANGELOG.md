@@ -1,5 +1,16 @@
 # Changelog
 
+## 16.13.41 - 2026-04-06
+### Changed
+- **Anomaly tab completely redesigned** with rich statistics and visualizations:
+  - **Overview metrics** – total events, types detected, devices affected, max/avg sigma deviation
+  - **Type donut chart** – visual breakdown by anomaly type (unusual daily, night consumption, peak time) with colored legend
+  - **Device breakdown** – per-device event count with progress bars, type chips, and color-coded categories
+  - **Sigma distribution chart** – bar chart showing event distribution across sigma buckets (2-3σ, 3-4σ, etc.)
+  - **Rich event timeline** – each event with type icon, color-coded dot, device name, value (kWh/W), sigma bar indicator, timestamp, and description
+  - **Empty state** – friendly message with checkmark when no anomalies detected
+  - **API extended** – returns `total_count`, `type_counts`, `device_counts`, `max_sigma`, `avg_sigma`, `model`, `sigma_threshold`
+
 ## 16.13.40 - 2026-04-06
 ### Changed
 - **CO2 tab significantly enhanced** with new analytics and visualizations:
