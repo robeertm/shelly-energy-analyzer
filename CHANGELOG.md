@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.13.33 - 2026-04-06
+### Fixed
+- **Live tab today kWh now matches Costs/Plots tabs** – Live tab was using the DB hourly table as baseline for today's kWh, while Costs and Plots used the computed DataFrame (CSV-based). Now Live reads from the same computed cache as Costs, so both show identical values. Falls back to DB hourly if computed data is unavailable.
+- **Costs summary cards still excluded 1-phase devices** – the summary section (top metric cards) still had the old `phases >= 3` filter from before v16.13.26; only the per-device detail section was fixed. Now both sections include all non-switch devices.
+
 ## 16.13.32 - 2026-04-06
 ### Fixed
 - **Navigation bar centered on desktop** – bottom nav uses `justify-content: center` on viewports ≥ 900px so tabs sit in the middle of the screen. Mobile remains horizontally scrollable as before.

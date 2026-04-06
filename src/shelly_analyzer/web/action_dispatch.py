@@ -1838,8 +1838,7 @@ class ActionDispatcher:
                 _fixed_ct = round(_unit * 100, 2)
 
                 _all_devs = [d for d in (self.cfg.devices or [])
-                             if int(getattr(d, "phases", 3) or 3) >= 3
-                             and str(getattr(d, "kind", "em")) != "switch"]
+                             if str(getattr(d, "kind", "em")) != "switch"]
                 _widget_keys = str(getattr(self.cfg.ui, "widget_devices", "") or "").strip()
                 if _widget_keys:
                     _allowed = {k.strip() for k in _widget_keys.split(",") if k.strip()}
