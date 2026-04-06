@@ -371,29 +371,45 @@ class BackgroundServiceManager:
     def _push_nilm_to_store(self) -> None:
         try:
             all_clusters = []
+            all_transitions: list = []
             total_trans = 0
             for dk, lrn in self._nilm_learners.items():
                 try:
                     cls = lrn.cluster()
-                    # cluster() already persists via _save when persist_path is set,
-                    # but call flush() too so latest transitions are always on disk.
                     lrn.flush()
-                    total_trans += int(lrn.get_transition_count())
+                    trans_count = int(lrn.get_transition_count())
+                    total_trans += trans_count
                     for c in cls:
                         all_clusters.append({
                             "matched_appliance": getattr(c, "matched_appliance", "") or "",
                             "count": int(getattr(c, "count", 0)),
                             "centroid_w": float(getattr(c, "centroid_w", 0.0)),
+                            "std_w": float(getattr(c, "std_w", 0.0)),
+                            "typical_hour": int(getattr(c, "typical_hour", 12)),
+                            "avg_duration_min": float(getattr(c, "avg_duration_min", 0.0)),
                             "icon": getattr(c, "icon", "") or "🔌",
                             "label": getattr(c, "label", "") or "",
                             "device_key": dk,
                         })
+                    # Collect last 500 transitions for timeline/plots
+                    with lrn._lock:
+                        for tr in lrn._transitions[-500:]:
+                            all_transitions.append({
+                                "ts": tr.timestamp,
+                                "device_key": tr.device_key,
+                                "delta_w": round(tr.delta_w, 1),
+                                "power_before": round(tr.power_before, 1),
+                                "power_after": round(tr.power_after, 1),
+                            })
                 except Exception:
                     continue
+            all_transitions.sort(key=lambda x: x["ts"], reverse=True)
             store = self.live_store
             if store is not None:
                 store._nilm_clusters = all_clusters  # type: ignore[attr-defined]
                 store._nilm_transition_count = total_trans  # type: ignore[attr-defined]
+                store._nilm_transitions = all_transitions[:500]  # type: ignore[attr-defined]
+                store._nilm_device_count = len(self._nilm_learners)  # type: ignore[attr-defined]
         except Exception as e:
             logger.debug("NILM push failed: %s", e)
 
