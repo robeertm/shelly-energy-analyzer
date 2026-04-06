@@ -106,6 +106,11 @@ class AppState:
         ]
         # Language or device list changed: re-render cached HTML templates
         # (dashboard/plots/control pages embed translations + device chips at startup).
+        # Propagate config to background service manager (alert rules, Telegram, etc.)
+        bg = getattr(self, "_bg", None)
+        if bg is not None:
+            bg.cfg = cfg
+
         try:
             from shelly_analyzer.web import _render_dashboard_html, _render_plots_html, _render_control_html
             self._dashboard_html = _render_dashboard_html(self)
