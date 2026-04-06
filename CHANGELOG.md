@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.34 - 2026-04-06
+### Fixed
+- **Standby tab always showed 0** – the standby analysis relied exclusively on the `hourly_energy` DB table (populated by sync). If no sync had run or the DB was empty, every device returned `None` and the tab was blank. Now falls back to the computed DataFrames (CSV-based, same source as Costs/Plots) via new `analyze_standby_from_df()` function. Computes base load (10th percentile), night median, annual standby kWh/cost, risk level, and 24h hourly profile from whatever data is available.
+
 ## 16.13.33 - 2026-04-06
 ### Fixed
 - **Live tab today kWh now matches Costs/Plots tabs** – Live tab was using the DB hourly table as baseline for today's kWh, while Costs and Plots used the computed DataFrame (CSV-based). Now Live reads from the same computed cache as Costs, so both show identical values. Falls back to DB hourly if computed data is unavailable.

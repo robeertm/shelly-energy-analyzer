@@ -184,6 +184,105 @@ def analyze_standby(
     )
 
 
+def analyze_standby_from_df(
+    df: pd.DataFrame,
+    device_key: str,
+    device_name: str,
+    price_eur_per_kwh: float = 0.3265,
+    days: int = 30,
+) -> Optional[StandbyDevice]:
+    """Analyze standby from a computed DataFrame (CSV-based, same as Costs tab).
+
+    This is the fallback when the DB hourly table has no data.
+    """
+    try:
+        df = df.copy()
+        if "timestamp" not in df.columns:
+            return None
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+        df = df.dropna(subset=["timestamp"])
+        if df.empty:
+            return None
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        start = now - datetime.timedelta(days=days)
+        try:
+            if df["timestamp"].dt.tz is None:
+                df["timestamp"] = df["timestamp"].dt.tz_localize("UTC")
+        except Exception:
+            pass
+        mask = df["timestamp"] >= start
+        df = df.loc[mask].copy()
+        if len(df) < 6:
+            return None
+
+        # Build power array from total_power or energy_kwh
+        if "total_power" in df.columns:
+            avg_power = pd.to_numeric(df["total_power"], errors="coerce").fillna(0).values.astype(float)
+        elif "energy_kwh" in df.columns:
+            avg_power = pd.to_numeric(df["energy_kwh"], errors="coerce").fillna(0).values.astype(float) * 1000.0
+        else:
+            return None
+
+        kwh_arr = pd.to_numeric(df.get("energy_kwh", pd.Series(avg_power / 1000.0)), errors="coerce").fillna(0).values.astype(float)
+        hours = df["timestamp"]
+
+        valid = ~np.isnan(avg_power) & (avg_power >= 0)
+        if valid.sum() < 6:
+            return None
+        avg_power = avg_power[valid]
+        kwh_arr = kwh_arr[valid]
+        hours = hours[valid]
+
+        base_load = float(np.percentile(avg_power, 10))
+        night_mask = hours.dt.hour.isin([0, 1, 2, 3, 4])
+        if night_mask.sum() > 5:
+            night_median = float(np.median(avg_power[night_mask]))
+        else:
+            night_median = base_load
+
+        standby_w = max(base_load, night_median * 0.8)
+        threshold = max(standby_w * 2, standby_w + 20)
+        standby_hours = (avg_power < threshold).sum()
+        standby_pct = float(standby_hours / len(avg_power) * 100)
+        annual_standby_kwh = standby_w * 8760 / 1000.0
+        annual_standby_cost = annual_standby_kwh * price_eur_per_kwh
+
+        hour_of_day = hours.dt.hour
+        hourly_profile = [0.0] * 24
+        for h in range(24):
+            m = hour_of_day == h
+            if m.sum() > 0:
+                hourly_profile[h] = float(np.mean(avg_power[m]))
+
+        total_kwh = float(kwh_arr.sum())
+        standby_share = (annual_standby_kwh / (total_kwh * 365 / max(days, 1)) * 100) if total_kwh > 0 else 0
+
+        if annual_standby_cost > 50:
+            risk = "high"
+        elif annual_standby_cost > 20:
+            risk = "medium"
+        else:
+            risk = "low"
+
+        return StandbyDevice(
+            device_key=device_key,
+            device_name=device_name,
+            base_load_w=round(standby_w, 1),
+            night_median_w=round(night_median, 1),
+            standby_pct=round(standby_pct, 1),
+            annual_standby_kwh=round(annual_standby_kwh, 1),
+            annual_standby_cost=round(annual_standby_cost, 2),
+            risk=risk,
+            hourly_profile=[round(v, 1) for v in hourly_profile],
+            total_kwh=round(total_kwh, 2),
+            standby_share_pct=round(min(standby_share, 100), 1),
+        )
+    except Exception:
+        logger.debug("analyze_standby_from_df failed for %s", device_key, exc_info=True)
+        return None
+
+
 def generate_standby_report(
     db,
     devices: list,
