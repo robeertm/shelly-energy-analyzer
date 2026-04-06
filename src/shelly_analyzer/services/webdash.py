@@ -1659,7 +1659,6 @@ _HTML_TEMPLATE = """<!doctype html>
   <header id="hdr">
     <span id="hdr-title" style="font-weight:700;font-size:15px">⚡ Shelly Analyzer</span>
     <div id="hdr-actions" style="display:flex;gap:8px;align-items:center">
-      <span id="nilm-badge-hdr" style="font-size:10px;color:var(--muted);background:var(--chipbg);border-radius:8px;padding:3px 8px;display:none"></span>
       <span id="live-stamp" style="font-size:11px;color:var(--muted)"></span>
       <button id="btn-hamburger" class="icon-btn" title="Menü" onclick="toggleNavDrawer()">☰</button>
       <button id="btn-freeze" class="icon-btn" title="{web_btn_freeze_title}" style="display:none">▶</button>
@@ -3056,27 +3055,6 @@ function startLive() {{
   var _fb = document.getElementById('btn-freeze');
   _fb.removeEventListener('click', toggleFreeze);
   _fb.addEventListener('click', toggleFreeze);
-  // NILM learning status (update every 30s)
-  _updateNilmStatus();
-  if (!window._nilmTimer) window._nilmTimer = setInterval(_updateNilmStatus, 30000);
-}}
-function _updateNilmStatus() {{
-  fetch('/api/nilm_status').then(function(r) {{ return r.json(); }}).then(function(d) {{
-    var badge = document.getElementById('nilm-badge-hdr');
-    if (!badge) return;
-    badge.style.display = 'inline-block';
-    if (d.cluster_count > 0) {{
-      var top = (d.clusters || []).slice(0, 3).map(function(c) {{
-        return (c.icon || '') + ' ' + Math.round(c.centroid_w || 0) + 'W x' + (c.count || 0);
-      }}).join('  ');
-      badge.textContent = 'NILM ML: ' + d.cluster_count + ' {t_patterns}  |  ' + top;
-    }} else {{
-      var tc = d.transition_count || 0;
-      badge.textContent = tc > 0
-        ? 'NILM ML: {t_learning} (' + tc + ' {t_transitions}' + (tc < 10 ? ', min. 10' : '') + ')'
-        : 'NILM ML: {t_waiting}';
-    }}
-  }}).catch(function() {{}});
 }}
 function stopLive() {{
   if (liveTimer) {{ clearInterval(liveTimer); liveTimer = null; }}
@@ -9477,10 +9455,6 @@ class LiveWebDashboard:
                 "web_ev_all_plugs": _t(self.lang, "web.ev.all_plugs"),
                 "web_ev_apikey_hint": _t(self.lang, "web.ev.apikey_hint"),
                 "web_ev_save": _t(self.lang, "web.ev.save"),
-                "t_patterns": _t(self.lang, "web.nilm.patterns"),
-                "t_learning": _t(self.lang, "web.nilm.learning"),
-                "t_transitions": _t(self.lang, "web.nilm.transitions"),
-                "t_waiting": _t(self.lang, "web.nilm.waiting"),
                 "web_tab_export": _t(self.lang, "web.tab.export"),
                 # New feature pane titles
                 "smart_sched_title": _t(self.lang, "smart_sched.title") if _t(self.lang, "smart_sched.title") != "smart_sched.title" else "Smart-Zeitplanung",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.31 - 2026-04-06
+### Removed
+- **NILM badge from header bar** – the NILM status badge next to the clock has been removed since the dedicated NILM tab now provides all information. Removes the `nilm-badge-hdr` element, the `_updateNilmStatus()` polling function, and the 30s interval timer.
+
 ## 16.13.30 - 2026-04-06
 ### Fixed
 - **NILM tab fully internationalized** – all hardcoded German strings replaced with `t()` i18n calls. Added ~40 new translation keys for DE/EN/ES covering: status badges, metric cards, pattern labels, category names, device overview, transitions timeline, appliance database, and learning status. Appliance names in pattern cards and signature DB now use translated `appliance.*.name` keys. Category donut chart labels are translated. Other languages (FR, PT, IT, PL, CS, RU) fall back to English.
