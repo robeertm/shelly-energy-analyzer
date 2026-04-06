@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.35 - 2026-04-06
+### Added
+- **Tariff type selector in "Preise & Tarif" settings** – prominent "Tarif-Modell" dropdown (Fester Tarif / Dynamischer Tarif) directly in the pricing section so users don't have to navigate to the Spot-Preise section to switch. Selecting "Dynamisch" automatically enables `spot_price.enabled`. Spot-Preise section now shows hints that tariff type is configured in Preise & Tarif.
+
 ## 16.13.34 - 2026-04-06
 ### Fixed
 - **Standby tab always showed 0** – the standby analysis relied exclusively on the `hourly_energy` DB table (populated by sync). If no sync had run or the DB was empty, every device returned `None` and the tab was blank. Now falls back to the computed DataFrames (CSV-based, same source as Costs/Plots) via new `analyze_standby_from_df()` function. Computes base load (10th percentile), night median, annual standby kWh/cost, risk level, and 24h hourly profile from whatever data is available.
