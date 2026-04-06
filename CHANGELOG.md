@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.38 - 2026-04-06
+### Fixed
+- **Standby device cards now fill full width** – device grid adapts columns to device count (2 devices = 2 columns, 3 = 3, etc.) instead of fixed 3-column grid leaving empty space. Standby pane uses 80% width on desktop (like NILM). Mobile stays single column.
+
 ## 16.13.37 - 2026-04-06
 ### Changed
 - **Standby tab completely redesigned** with rich statistics and per-device detail:

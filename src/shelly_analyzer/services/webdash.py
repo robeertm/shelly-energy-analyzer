@@ -1520,9 +1520,24 @@ _HTML_TEMPLATE = """<!doctype html>
       background: var(--bg);
       border-radius: 8px;
     }}
+    /* Standby device grid: fills full width, responsive */
+    .sb-dev-grid {{
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }}
+    @media (min-width: 560px) {{
+      .sb-dev-grid[data-cols="2"] {{ grid-template-columns: 1fr 1fr; }}
+      .sb-dev-grid[data-cols="3"] {{ grid-template-columns: 1fr 1fr; }}
+      .sb-dev-grid[data-cols="4"] {{ grid-template-columns: 1fr 1fr; }}
+    }}
+    @media (min-width: 960px) {{
+      .sb-dev-grid[data-cols="3"] {{ grid-template-columns: repeat(3, 1fr); }}
+      .sb-dev-grid[data-cols="4"] {{ grid-template-columns: repeat(4, 1fr); }}
+    }}
     /* Override pane max-width for NILM to use more space on desktop */
     @media (min-width: 900px) {{
-      #pane-nilm.active {{ max-width: 80%; }}
+      #pane-nilm.active, #pane-standby.active {{ max-width: 80%; }}
     }}
     /* ── Chart canvas ── */
     canvas.bar-chart {{
@@ -5396,7 +5411,7 @@ function renderStandby(d) {{
 
   /* ── Per-device detail cards ── */
   cards += '<div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.per_device','Geräte-Details') + '</div>';
-  cards += '<div class="nilm-pattern-grid">';
+  cards += '<div class="sb-dev-grid" data-cols="' + Math.min(nDev, 4) + '">';
   devs.forEach(function(dev, idx) {{
     const rc = dev.risk === 'high' ? '#dc2626' : dev.risk === 'medium' ? '#d97706' : '#16a34a';
     const riskLabel = dev.risk === 'high' ? t('web.standby.risk_high','HOCH') : dev.risk === 'medium' ? t('web.standby.risk_med','MITTEL') : t('web.standby.risk_low','NIEDRIG');
