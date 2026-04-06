@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.13.40 - 2026-04-06
+### Changed
+- **CO2 tab significantly enhanced** with new analytics and visualizations:
+  - **CO2 analytics card** – average, minimum (with hour), maximum (with hour) intensity
+  - **Trend indicator** – compares last 6h vs previous 6h average, shows rising/falling/stable with percentage
+  - **Green score card** – renewable energy percentage as animated ring chart, A–E rating scale based on current intensity
+  - **Fuel mix donut chart** – visual breakdown of generation sources with legend (replaces simple stacked bar)
+  - **Fuel detail table** – scrollable table with color dots per fuel type, MW, %, and lifecycle CO2 factor
+  - **Two-column layout** – analytics + score side by side, fuel donut + detail side by side
+
 ## 16.13.39 - 2026-04-06
 ### Changed
 - **All tabs now use 80% width on desktop** – previously only NILM and Standby had the wider layout (80%), all other tabs were limited to 66%. Now consistent across all tabs.
