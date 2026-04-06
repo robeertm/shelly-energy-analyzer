@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.30 - 2026-04-06
+### Fixed
+- **NILM tab fully internationalized** – all hardcoded German strings replaced with `t()` i18n calls. Added ~40 new translation keys for DE/EN/ES covering: status badges, metric cards, pattern labels, category names, device overview, transitions timeline, appliance database, and learning status. Appliance names in pattern cards and signature DB now use translated `appliance.*.name` keys. Category donut chart labels are translated. Other languages (FR, PT, IT, PL, CS, RU) fall back to English.
+
 ## 16.13.29 - 2026-04-06
 ### Added
 - **Dedicated NILM statistics tab** – new "NILM" tab (brain icon) with rich, colorful statistics for Non-Intrusive Load Monitoring:

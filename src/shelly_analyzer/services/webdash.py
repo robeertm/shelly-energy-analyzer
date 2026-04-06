@@ -2232,26 +2232,26 @@ function renderNilm(data, el) {{
   const learning = data.transition_count < 10;
   html += '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">';
   html += '<span class="badge ' + (data.cluster_count > 0 ? 'badge-green' : learning ? 'badge-yellow' : 'badge-red') + '">' +
-    (data.cluster_count > 0 ? 'NILM Active' : learning ? 'Learning\u2026' : 'Waiting for data') + '</span>';
-  html += '<span class="badge badge-yellow">' + data.cluster_count + ' Patterns</span>';
-  html += '<span class="badge badge-yellow">' + data.transition_count + ' Transitions</span>';
-  html += '<span class="badge badge-yellow">' + data.device_count + ' Devices</span>';
+    (data.cluster_count > 0 ? t('web.nilm.active','NILM Active') : learning ? t('web.nilm.learning_status','Learning\u2026') : t('web.nilm.waiting_status','Waiting for data')) + '</span>';
+  html += '<span class="badge badge-yellow">' + data.cluster_count + ' ' + t('web.nilm.patterns_badge','Patterns') + '</span>';
+  html += '<span class="badge badge-yellow">' + data.transition_count + ' ' + t('web.nilm.transitions_badge','Transitions') + '</span>';
+  html += '<span class="badge badge-yellow">' + data.device_count + ' ' + t('web.nilm.devices_badge','Devices') + '</span>';
   html += '</div>';
 
   /* ── Overview Metric Cards ── */
   html += '<div class="nilm-metrics">';
-  html += _nilmMetricCard('🧠', 'Erkannte Muster', data.cluster_count, 'Cluster aus ML k-means');
-  html += _nilmMetricCard('⚡', 'Transitionen', data.transition_count, 'Leistungssprünge erkannt');
-  html += _nilmMetricCard('📡', 'Geräte überwacht', data.device_count, '3-Phasen EM Geräte');
+  html += _nilmMetricCard('🧠', t('web.nilm.detected_patterns','Detected Patterns'), data.cluster_count, t('web.nilm.cluster_from_ml','Clusters from ML k-means'));
+  html += _nilmMetricCard('⚡', t('web.nilm.transitions_badge','Transitions'), data.transition_count, t('web.nilm.power_jumps','Power transitions detected'));
+  html += _nilmMetricCard('📡', t('web.nilm.monitored_devices','Devices Monitored'), data.device_count, t('web.nilm.three_phase_em','3-phase EM devices'));
   const cats = Object.keys(data.categories || {{}}).length;
-  html += _nilmMetricCard('📊', 'Kategorien', cats, 'Verschiedene Gerätekategorien');
+  html += _nilmMetricCard('📊', t('web.nilm.categories_count','Categories'), cats, t('web.nilm.diff_categories','Different appliance categories'));
   html += '</div>';
 
   /* ── Top 10 Patterns with mini power-profile canvas ── */
   const clusters = (data.clusters || []).slice(0, 10);
   if (clusters.length > 0) {{
     html += '<div class="card" style="margin-bottom:12px">';
-    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">Top 10 erkannte Muster</div>';
+    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">' + t('web.nilm.top10','Top 10 Detected Patterns') + '</div>';
     html += '<div class="nilm-pattern-grid">';
     clusters.forEach(function(c, idx) {{
       const devName = (data.device_names || {{}})[c.device_key] || c.device_key || '?';
@@ -2262,14 +2262,14 @@ function renderNilm(data, el) {{
       html += '<span style="font-size:20px">' + (c.icon || '🔌') + '</span>';
       html += '<span class="badge" style="background:hsl(' + colHue + ',70%,90%);color:hsl(' + colHue + ',70%,30%);font-size:11px">#' + (idx+1) + '</span>';
       html += '</div>';
-      html += '<div style="font-weight:700;font-size:14px;margin-bottom:2px">' + esc(c.label || c.matched_appliance || 'Unbekannt') + '</div>';
+      html += '<div style="font-weight:700;font-size:14px;margin-bottom:2px">' + esc(c.label ? t('appliance.' + c.label + '.name', c.label) : c.matched_appliance ? t('appliance.' + c.matched_appliance + '.name', c.matched_appliance) : t('web.nilm.unknown','Unknown')) + '</div>';
       html += '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">' + esc(devName) + '</div>';
       html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">';
-      html += '<div class="nilm-stat"><span class="nilm-stat-val">' + Math.round(c.centroid_w) + '</span><span class="nilm-stat-lbl">Watt</span></div>';
-      html += '<div class="nilm-stat"><span class="nilm-stat-val">' + c.count + '</span><span class="nilm-stat-lbl">Events</span></div>';
-      html += '<div class="nilm-stat"><span class="nilm-stat-val">' + pct + '%</span><span class="nilm-stat-lbl">Anteil</span></div>';
-      if (c.std_w) html += '<div class="nilm-stat"><span class="nilm-stat-val">\u00b1' + Math.round(c.std_w) + '</span><span class="nilm-stat-lbl">Std W</span></div>';
-      if (c.typical_hour !== undefined) html += '<div class="nilm-stat"><span class="nilm-stat-val">' + String(c.typical_hour).padStart(2,'0') + ':00</span><span class="nilm-stat-lbl">Peak</span></div>';
+      html += '<div class="nilm-stat"><span class="nilm-stat-val">' + Math.round(c.centroid_w) + '</span><span class="nilm-stat-lbl">' + t('web.nilm.watt','Watt') + '</span></div>';
+      html += '<div class="nilm-stat"><span class="nilm-stat-val">' + c.count + '</span><span class="nilm-stat-lbl">' + t('web.nilm.events','Events') + '</span></div>';
+      html += '<div class="nilm-stat"><span class="nilm-stat-val">' + pct + '%</span><span class="nilm-stat-lbl">' + t('web.nilm.share','Share') + '</span></div>';
+      if (c.std_w) html += '<div class="nilm-stat"><span class="nilm-stat-val">\u00b1' + Math.round(c.std_w) + '</span><span class="nilm-stat-lbl">' + t('web.nilm.std_w','Std W') + '</span></div>';
+      if (c.typical_hour !== undefined) html += '<div class="nilm-stat"><span class="nilm-stat-val">' + String(c.typical_hour).padStart(2,'0') + ':00</span><span class="nilm-stat-lbl">' + t('web.nilm.peak','Peak') + '</span></div>';
       html += '</div>';
       // Mini power bar (visual representation of centroid_w relative to max)
       const maxW = Math.max.apply(null, clusters.map(function(x){{ return x.centroid_w; }})) || 1;
@@ -2285,8 +2285,8 @@ function renderNilm(data, el) {{
   }} else {{
     html += '<div class="card" style="margin-bottom:12px;text-align:center;padding:30px">';
     html += '<div style="font-size:40px;margin-bottom:10px">🧠</div>';
-    html += '<div style="font-size:16px;font-weight:600;margin-bottom:6px">NILM lernt noch\u2026</div>';
-    html += '<div style="color:var(--muted);font-size:13px">Mindestens 10 Leistungssprünge nötig. Aktuell: ' + data.transition_count + '</div>';
+    html += '<div style="font-size:16px;font-weight:600;margin-bottom:6px">' + t('web.nilm.still_learning','NILM still learning\u2026') + '</div>';
+    html += '<div style="color:var(--muted);font-size:13px">' + t('web.nilm.min_transitions','At least 10 power transitions needed. Current: {{count}}', {{count: data.transition_count}}) + '</div>';
     html += '<div style="margin-top:12px;background:var(--bg);border-radius:6px;height:8px;overflow:hidden;max-width:300px;margin-left:auto;margin-right:auto">';
     const prog = Math.min(100, Math.round(data.transition_count / 10 * 100));
     html += '<div style="width:' + prog + '%;height:100%;background:var(--accent);border-radius:6px;transition:width .5s"></div>';
@@ -2297,7 +2297,7 @@ function renderNilm(data, el) {{
   const hourly = data.hourly_distribution || [];
   if (hourly.some(function(v){{ return v > 0; }})) {{
     html += '<div class="card" style="margin-bottom:12px">';
-    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">Aktivität nach Tageszeit</div>';
+    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">' + t('web.nilm.hourly_activity','Activity by Time of Day') + '</div>';
     html += '<canvas id="nilm-hourly-canvas" style="width:100%;height:120px"></canvas>';
     html += '</div>';
   }}
@@ -2307,17 +2307,17 @@ function renderNilm(data, el) {{
   if (catEntries.length > 0) {{
     html += '<div class="nilm-two-col">';
     html += '<div class="card">';
-    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">Kategorien</div>';
+    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">' + t('web.nilm.categories','Categories') + '</div>';
     html += '<canvas id="nilm-cat-canvas" style="width:100%;height:200px"></canvas>';
     html += '<div id="nilm-cat-legend" style="margin-top:8px"></div>';
     html += '</div>';
 
     /* ── Per-Device Breakdown ── */
     html += '<div class="card">';
-    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">Geräte-Übersicht</div>';
+    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">' + t('web.nilm.device_overview','Device Overview') + '</div>';
     const devEntries = Object.entries(data.device_stats || {{}});
     if (devEntries.length === 0) {{
-      html += '<p style="color:var(--muted);font-size:13px">Keine Gerätedaten vorhanden.</p>';
+      html += '<p style="color:var(--muted);font-size:13px">' + t('web.nilm.no_device_data','No device data available.') + '</p>';
     }} else {{
       devEntries.sort(function(a,b){{ return b[1].total_events - a[1].total_events; }});
       devEntries.forEach(function(de) {{
@@ -2326,13 +2326,13 @@ function renderNilm(data, el) {{
         html += '<div style="margin-bottom:10px;padding:8px;background:var(--bg);border-radius:8px">';
         html += '<div style="font-weight:600;font-size:13px;margin-bottom:4px">' + esc(dn) + '</div>';
         html += '<div style="display:flex;gap:12px;font-size:12px;color:var(--muted);flex-wrap:wrap">';
-        html += '<span>' + ds.cluster_count + ' Muster</span>';
-        html += '<span>' + ds.total_events + ' Events</span>';
+        html += '<span>' + ds.cluster_count + ' ' + t('web.nilm.pattern_count','Patterns') + '</span>';
+        html += '<span>' + ds.total_events + ' ' + t('web.nilm.events','Events') + '</span>';
         html += '</div>';
         if (ds.top_appliances && ds.top_appliances.length > 0) {{
           html += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">';
           ds.top_appliances.forEach(function(a) {{
-            html += '<span class="appl-chip">' + (a.icon||'') + ' ' + esc(a.appliance) + ' ' + Math.round(a.centroid_w) + 'W</span>';
+            html += '<span class="appl-chip">' + (a.icon||'') + ' ' + esc(t('appliance.' + a.appliance + '.name', a.appliance)) + ' ' + Math.round(a.centroid_w) + 'W</span>';
           }});
           html += '</div>';
         }}
@@ -2346,7 +2346,7 @@ function renderNilm(data, el) {{
   const trans = (data.transitions || []).slice(0, 30);
   if (trans.length > 0) {{
     html += '<div class="card" style="margin-bottom:12px">';
-    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">Letzte Transitionen</div>';
+    html += '<div style="font-size:14px;font-weight:700;margin-bottom:10px">' + t('web.nilm.recent_transitions','Recent Transitions') + '</div>';
     html += '<div class="nilm-timeline">';
     trans.forEach(function(tr) {{
       const dt = new Date(tr.ts * 1000);
@@ -2372,13 +2372,13 @@ function renderNilm(data, el) {{
   const sigs = data.signatures || [];
   if (sigs.length > 0) {{
     html += '<div class="card" style="margin-bottom:12px">';
-    html += '<details><summary style="font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px">Geräte-Datenbank (' + sigs.length + ' Signaturen)</summary>';
+    html += '<details><summary style="font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px">' + t('web.nilm.signature_db','Appliance Database ({{count}} signatures)', {{count: sigs.length}}) + '</summary>';
     html += '<div class="nilm-sig-grid">';
     sigs.forEach(function(s) {{
       html += '<div class="nilm-sig-item">';
       html += '<span style="font-size:18px">' + s.icon + '</span>';
       html += '<div style="flex:1;min-width:0">';
-      html += '<div style="font-weight:600;font-size:12px">' + esc(s.id) + '</div>';
+      html += '<div style="font-weight:600;font-size:12px">' + esc(t('appliance.' + s.id + '.name', s.id)) + '</div>';
       html += '<div style="font-size:11px;color:var(--muted)">' + s.power_min + '–' + s.power_max + ' W · ' + esc(s.pattern_type) + ' · ' + s.typical_duration_min + ' min</div>';
       html += '</div></div>';
     }});
@@ -2606,7 +2606,7 @@ function _drawNilmCategoryDonut(catEntries) {{
     const pct = Math.round(count / total * 100);
     legendHtml += '<span style="font-size:11px;display:flex;align-items:center;gap:3px">' +
       '<span style="width:10px;height:10px;border-radius:50%;background:' + col + ';display:inline-block"></span>' +
-      esc(name) + ' (' + pct + '%)' +
+      esc(t('web.nilm.category.' + name, name)) + ' (' + pct + '%)' +
       '</span>';
   }});
 
