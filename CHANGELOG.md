@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.30 - 2026-04-06
+### Fixed
+- **Version badge shown twice in Plots tab** – the `/plots` page is embedded as an iframe inside the dashboard, both had the `_inject_version_badge` overlay, resulting in duplicate version text. Removed badge injection from the plots page.
+
 ## 16.13.29 - 2026-04-06
 ### Added
 - **Dedicated NILM statistics tab** – new "NILM" tab (brain icon) with rich, colorful statistics for Non-Intrusive Load Monitoring:
