@@ -1,5 +1,17 @@
 # Changelog
 
+## 16.13.26 - 2026-04-06
+### Fixed
+- **Costs tab showed no data for 1-phase devices** – the costs action filtered for `phases >= 3` only, excluding all single-phase Shelly devices. Now includes all non-switch devices regardless of phase count.
+- **Computed device cache never refreshed** – the lazy-loaded cache was populated on first access and never invalidated (except on config reload). If the first request arrived before the initial sync completed, the cache stayed empty forever. Now auto-refreshes every 2 minutes.
+
+### Added
+- **Telegram alert notifications** – alert rules with `action_telegram=true` now send detailed messages via Telegram Bot API when thresholds are breached. Supports all metrics (W, V, A, VAR, cos φ, Hz, A_N) with per-phase granularity, configurable duration and cooldown.
+- **Email alert notifications** – alert rules with `action_email=true` send SMTP emails with subject line and detailed body. Supports TLS/STARTTLS, multiple recipients, and file attachments.
+- **Webhook alert notifications** – alert rules with `action_webhook=true` POST JSON payloads to the configured webhook URL with device, metric, value, and threshold data. Supports custom HTTP headers.
+- **Scheduled daily summaries** – sends per-device kWh + cost breakdown for the previous day via Telegram, email, and/or webhook at the configured time (`telegram_daily_summary_time`).
+- **Scheduled monthly summaries** – sends per-device kWh + cost breakdown for the previous month (on the 1st–2nd of each month) via all configured channels.
+
 ## 16.13.25 - 2026-04-05
 ### Changed
 - **README rewritten for web-only architecture** – removed the "Desktop App" screenshots section (17 images) and all desktop-app wording. The app is now described as a cross-platform **web application** with a browser UI. "Setup Wizard" section points to the new `/setup` web wizard. Removed references to `config.json`, matplotlib plots, treeviews, and other desktop-only concepts.
