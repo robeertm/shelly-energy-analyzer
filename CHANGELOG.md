@@ -1,5 +1,11 @@
 # Changelog
 
+## 16.13.50 - 2026-04-07
+### Fixed
+- **Heatmap monthly chart labels too wide** – values above bars now show short format (no decimals for values >= 10, one decimal otherwise) instead of full `hmFmtVal` with 3 decimal places and unit suffix
+### Added
+- **i18n translations for Weather, Heatmap, Goals tabs** – added ~50 new translation keys (DE/EN/ES) for all new UI strings from recent updates: weather feels-like/pressure/correlation/comfort zones/best-worst days, heatmap stats/monthly/weekday/legend, goals level/streak/badges/charts/rankings. Other languages (FR/PT/IT/PL/CS/RU) fall back to English via `_mk_lang()`.
+
 ## 16.13.49 - 2026-04-07
 ### Changed
 - **Heatmap tab significantly enhanced** with new visualizations and statistics:
