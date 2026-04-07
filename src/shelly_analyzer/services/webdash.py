@@ -5323,40 +5323,155 @@ async function loadCompare() {{
 }}
 
 function renderCompare(data, el) {{
-  if (!data) {{ el.innerHTML = '<p class="info-msg">' + t('web.no_data', 'No data.') + '</p>'; return; }}
+  if (!data || !data.ok) {{ el.innerHTML = '<p class="info-msg">' + t('web.no_data', 'No data.') + '</p>'; return; }}
   const unit = data.unit || 'kWh';
   const ta = data.total_a || 0;
   const tb = data.total_b || 0;
-  const delta = ta - tb;
-  const pct = tb !== 0 ? ((delta / Math.abs(tb)) * 100) : 0;
+  const delta = data.delta || (ta - tb);
+  const pct = data.delta_pct || (tb !== 0 ? ((delta / Math.abs(tb)) * 100) : 0);
+  const lA = data.label_a || data.name_a || data.device_a || 'A';
+  const lB = data.label_b || data.name_b || data.device_b || 'B';
+  const deltaColor = delta > 0 ? '#dc2626' : delta < 0 ? '#16a34a' : 'var(--muted)';
+  const deltaIcon = delta > 0 ? '📈' : delta < 0 ? '📉' : '➡️';
 
-  let html = '<div class="card">' +
-    '<div class="delta-grid">' +
-    metricCardHtml(data.label_a || 'Device A', fmt(ta,3,unit), '') +
-    metricCardHtml(data.label_b || 'Device B', fmt(tb,3,unit), '') +
-    metricCardHtml('Delta', (delta >= 0 ? '+' : '') + fmt(delta,3,unit), '') +
-    metricCardHtml('Δ %', (pct >= 0 ? '+' : '') + fmt(pct,1,'%'), '') +
-    '</div></div>';
+  let html = '';
 
-  // Bar chart — always shown (series for daily/monthly, totals comparison for "total" granularity)
-  html += '<div class="card"><canvas class="bar-chart" id="cmp-canvas"></canvas></div>';
+  /* ── Summary metrics ── */
+  html += '<div class="nilm-metrics" style="margin-bottom:12px">';
+  html += _nilmMetricCard('🔵', esc(data.name_a || data.device_a || 'A'), fmt(ta,1,unit), (data.days_a||0) + ' ' + t('web.cmp.days','Tage'));
+  html += _nilmMetricCard('🟠', esc(data.name_b || data.device_b || 'B'), fmt(tb,1,unit), (data.days_b||0) + ' ' + t('web.cmp.days','Tage'));
+  html += _nilmMetricCard(deltaIcon, t('web.cmp.delta','Differenz'), '<span style="color:'+deltaColor+'">' + (delta>=0?'+':'') + fmt(delta,1,unit) + '</span>', (pct>=0?'+':'') + fmt(pct,1) + '%');
+  const avgA = data.avg_a || 0, avgB = data.avg_b || 0;
+  const avgDelta = avgA - avgB;
+  const avgCol = avgDelta > 0 ? '#dc2626' : avgDelta < 0 ? '#16a34a' : 'var(--muted)';
+  html += _nilmMetricCard('📊', t('web.cmp.daily_avg','Tagesschnitt'), fmt(avgA,2) + ' / ' + fmt(avgB,2), '<span style="color:'+avgCol+'">'+t('web.cmp.delta','Diff')+': '+(avgDelta>=0?'+':'')+fmt(avgDelta,2)+' '+unit+'</span>');
+  html += '</div>';
+
+  /* ── Visual comparison (A vs B bars) ── */
+  html += '<div class="nilm-two-col" style="margin-bottom:12px">';
+  // Side-by-side total comparison
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.cmp.total','Gesamt-Vergleich') + '</div>';
+  const maxTotal = Math.max(ta, tb) || 1;
+  html += '<div style="margin-bottom:12px">';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+  html += '<span style="font-size:11px;color:#3b82f6;min-width:20px">A</span>';
+  html += '<div style="flex:1;height:24px;background:var(--bg);border-radius:6px;overflow:hidden"><div style="width:' + Math.round(ta/maxTotal*100) + '%;height:100%;background:#3b82f6;border-radius:6px;display:flex;align-items:center;padding-left:6px"><span style="font-size:10px;color:#fff;font-weight:700">' + fmt(ta,1) + ' ' + unit + '</span></div></div></div>';
+  html += '<div style="display:flex;align-items:center;gap:8px">';
+  html += '<span style="font-size:11px;color:#f59e0b;min-width:20px">B</span>';
+  html += '<div style="flex:1;height:24px;background:var(--bg);border-radius:6px;overflow:hidden"><div style="width:' + Math.round(tb/maxTotal*100) + '%;height:100%;background:#f59e0b;border-radius:6px;display:flex;align-items:center;padding-left:6px"><span style="font-size:10px;color:#fff;font-weight:700">' + fmt(tb,1) + ' ' + unit + '</span></div></div></div>';
+  html += '</div>';
+  // Delta indicator
+  html += '<div style="text-align:center;margin-top:12px;padding:10px;background:var(--bg);border-radius:8px">';
+  html += '<div style="font-size:28px">' + deltaIcon + '</div>';
+  html += '<div style="font-size:20px;font-weight:800;color:' + deltaColor + '">' + (pct>=0?'+':'') + fmt(pct,1) + '%</div>';
+  html += '<div style="font-size:11px;color:var(--muted)">' + (delta>=0?'+':'') + fmt(delta,1) + ' ' + unit + '</div>';
+  html += '</div></div>';
+
+  // Daily average comparison
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.cmp.avg_compare','Tagesschnitt-Vergleich') + '</div>';
+  html += '<canvas id="cmp-avg-chart" style="width:100%;height:180px"></canvas></div>';
+  html += '</div>';
+
+  /* ── Time series chart ── */
+  html += '<div class="card" style="margin-bottom:12px">';
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
+  html += '<div style="font-size:14px;font-weight:700">' + t('web.cmp.timeline','Zeitverlauf') + '</div>';
+  html += '<span style="font-size:11px;display:flex;align-items:center;gap:3px"><span style="width:12px;height:4px;background:#3b82f6;border-radius:2px;display:inline-block"></span>' + esc(lA) + '</span>';
+  html += '<span style="font-size:11px;display:flex;align-items:center;gap:3px"><span style="width:12px;height:4px;background:#f59e0b;border-radius:2px;display:inline-block"></span>' + esc(lB) + '</span>';
+  html += '</div>';
+  html += '<canvas class="bar-chart" id="cmp-canvas"></canvas></div>';
+
+  /* ── Cumulative chart ── */
+  if (data.values_a && data.values_b && data.values_a.length > 1) {{
+    html += '<div class="card" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.cmp.cumulative','Kumuliert') + '</div>';
+    html += '<canvas id="cmp-cumul-chart" style="width:100%;height:180px"></canvas></div>';
+  }}
+
   el.innerHTML = html;
 
-  const canvas = document.getElementById('cmp-canvas');
-  if (data.values_a && data.values_b && data.labels && data.labels.length > 1) {{
-    drawBars(canvas, data.labels, [
-      {{ values: data.values_a, color: 'rgba(37,99,235,0.75)', label: data.label_a || data.device_a || 'A' }},
-      {{ values: data.values_b, color: 'rgba(217,119,6,0.75)', label: data.label_b || data.device_b || 'B' }}
-    ], {{ unit: unit }});
-  }} else {{
-    // Total-only: simple side-by-side comparison of A vs B
-    const lA = data.label_a || data.device_a || 'A';
-    const lB = data.label_b || data.device_b || 'B';
-    drawBars(canvas, [lA, lB], [
-      {{ values: [ta, 0], color: 'rgba(37,99,235,0.75)', label: lA }},
-      {{ values: [0, tb], color: 'rgba(217,119,6,0.75)', label: lB }}
-    ], {{ unit: unit }});
+  /* ── Draw charts ── */
+  requestAnimationFrame(function() {{
+    // Main comparison bars
+    const canvas = document.getElementById('cmp-canvas');
+    if (data.values_a && data.values_b && data.labels && data.labels.length > 1) {{
+      drawBars(canvas, data.labels, [
+        {{ values: data.values_a, color: 'rgba(59,130,246,0.75)', label: lA }},
+        {{ values: data.values_b, color: 'rgba(245,158,11,0.75)', label: lB }}
+      ], {{ unit: unit }});
+    }} else {{
+      drawBars(canvas, [lA, lB], [
+        {{ values: [ta, 0], color: 'rgba(59,130,246,0.75)', label: lA }},
+        {{ values: [0, tb], color: 'rgba(245,158,11,0.75)', label: lB }}
+      ], {{ unit: unit }});
+    }}
+    // Average comparison
+    _drawBarChart('cmp-avg-chart', [t('web.cmp.a','A') + ' (' + fmt(avgA,2) + ')', t('web.cmp.b','B') + ' (' + fmt(avgB,2) + ')'], [avgA, avgB], {{colors: ['#3b82f6','#f59e0b'], decimals: 2}});
+    // Cumulative line chart
+    if (data.values_a && data.values_b && data.values_a.length > 1) {{
+      _drawCmpCumulative(data);
+    }}
+  }});
+}}
+
+function _drawCmpCumulative(data) {{
+  const canvas = document.getElementById('cmp-cumul-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio||1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+  ctx.scale(dpr,dpr);
+  const W = rect.width, H = rect.height;
+  const pad = {{top:8,right:8,bottom:20,left:44}};
+  const cW = W-pad.left-pad.right, cH = H-pad.top-pad.bottom;
+
+  // Build cumulative
+  const cumA = [], cumB = [];
+  let sa = 0, sb = 0;
+  for (let i = 0; i < data.values_a.length; i++) {{
+    sa += data.values_a[i]||0;
+    sb += (data.values_b[i]||0);
+    cumA.push(sa); cumB.push(sb);
   }}
+  const maxV = Math.max(sa, sb, 0.1) * 1.1;
+  const n = cumA.length;
+  const fg = getComputedStyle(document.body).getPropertyValue('--muted')||'#999';
+  const border = getComputedStyle(document.body).getPropertyValue('--border')||'#e0e0e0';
+
+  // Grid
+  ctx.strokeStyle = border; ctx.lineWidth = 0.5;
+  for (let i=0;i<=4;i++) {{
+    const y = pad.top+cH-(cH*i/4);
+    ctx.beginPath(); ctx.moveTo(pad.left,y); ctx.lineTo(pad.left+cW,y); ctx.stroke();
+    ctx.fillStyle = fg; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText((maxV*i/4).toFixed(0), pad.left-4, y+3);
+  }}
+
+  // Line A
+  ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  cumA.forEach(function(v,i){{
+    const x = pad.left+(i/(n-1||1))*cW;
+    const y = pad.top+cH-(v/maxV)*cH;
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  }});
+  ctx.stroke();
+
+  // Line B
+  ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  cumB.forEach(function(v,i){{
+    const x = pad.left+(i/(n-1||1))*cW;
+    const y = pad.top+cH-(v/maxV)*cH;
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  }});
+  ctx.stroke();
+
+  // End labels
+  ctx.fillStyle = '#3b82f6'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'right';
+  ctx.fillText(fmt(sa,0) + ' ' + (data.unit||''), pad.left+cW, pad.top+cH-(sa/maxV)*cH-4);
+  ctx.fillStyle = '#f59e0b';
+  ctx.fillText(fmt(sb,0) + ' ' + (data.unit||''), pad.left+cW, pad.top+cH-(sb/maxV)*cH+12);
 }}
 
 /* ──────────────────────────────────────────────
