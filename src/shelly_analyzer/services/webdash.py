@@ -3785,6 +3785,58 @@ function renderCosts(data, el) {{
   }});
   html += '</div>';
 
+  // ── Device cost ranking + donut (side by side) ──
+  const devs = data.devices || [];
+  if (devs.length > 1) {{
+    html += '<div class="nilm-two-col" style="margin-top:10px">';
+    // Cost donut
+    html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.breakdown','Kosten-Verteilung') + ' (' + t('web.costs.month','Monat') + ')</div>';
+    html += '<canvas id="costs-donut" style="width:100%;height:200px"></canvas>';
+    html += '<div id="costs-donut-legend" style="margin-top:6px"></div></div>';
+    // Ranking bar
+    html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.ranking','Kosten-Ranking') + '</div>';
+    html += '<canvas id="costs-ranking-bar" style="width:100%;height:200px"></canvas></div>';
+    html += '</div>';
+  }}
+
+  // ── Period comparison chart (today / week / month / year) ──
+  if (data.summary) {{
+    html += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.period_compare','Zeitraum-Vergleich') + '</div>';
+    html += '<canvas id="costs-period-chart" style="width:100%;height:150px"></canvas></div>';
+  }}
+
+  // ── Per-device comparison bars (month kWh) ──
+  if (devs.length > 1) {{
+    html += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.device_compare','Geräte-Vergleich (Monat kWh)') + '</div>';
+    devs.slice().sort(function(a,b){{ return (b.month_kwh||0) - (a.month_kwh||0); }}).forEach(function(d) {{
+      const maxKwh = Math.max.apply(null, devs.map(function(x){{ return x.month_kwh||0; }})) || 1;
+      const pct = Math.round((d.month_kwh||0) / maxKwh * 100);
+      const share = data.summary && data.summary.month_kwh > 0 ? Math.round((d.month_kwh||0) / data.summary.month_kwh * 100) : 0;
+      html += '<div style="margin-bottom:6px">';
+      html += '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span style="font-weight:600">' + esc(d.name||d.key) + '</span><span style="color:var(--muted)">' + fmt(d.month_kwh,1) + ' kWh | ' + fmt(d.month_eur,2) + ' \u20ac | ' + share + '%</span></div>';
+      html += '<div style="background:var(--bg);border-radius:4px;height:8px;overflow:hidden"><div style="width:' + pct + '%;height:100%;background:var(--accent);border-radius:4px"></div></div>';
+      html += '</div>';
+    }});
+    html += '</div>';
+  }}
+
+  // ── Projection card ──
+  if (data.summary && data.summary.proj_kwh) {{
+    const s = data.summary;
+    html += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.projection','Monatsprognose') + '</div>';
+    html += '<div class="nilm-metrics">';
+    html += _nilmMetricCard('📅', t('web.costs.projected','Prognose'), fmt(s.proj_kwh,0) + ' kWh', fmt(s.proj_eur,0) + ' \u20ac');
+    html += _nilmMetricCard('📆', t('web.costs.year_proj','Jahres-Hochrechnung'), fmt((s.proj_kwh||0)*12,0) + ' kWh', fmt((s.proj_eur||0)*12,0) + ' \u20ac');
+    const lastM = s.last_month_kwh || 0;
+    const projDelta = lastM > 0 ? Math.round(((s.proj_kwh||0) - lastM) / lastM * 100) : 0;
+    const dIcon = projDelta > 5 ? '📈' : projDelta < -5 ? '📉' : '➡️';
+    const dCol = projDelta > 5 ? '#dc2626' : projDelta < -5 ? '#16a34a' : 'var(--muted)';
+    html += _nilmMetricCard(dIcon, t('web.costs.vs_last','vs. Vormonat'), '<span style="color:'+dCol+'">' + (projDelta>0?'+':'') + projDelta + '%</span>', fmt(lastM,0) + ' kWh letzter Monat');
+    const dailyCost = (s.month_eur||0) / Math.max(1, new Date().getDate());
+    html += _nilmMetricCard('💰', t('web.costs.daily_avg','Tagesschnitt'), fmt(dailyCost,2) + ' \u20ac', fmt(dailyCost * 365,0) + ' \u20ac/Jahr');
+    html += '</div></div>';
+  }}
+
   // Show upcoming tariff changes if any
   if (data.tariff_schedule && data.tariff_schedule.length > 0) {{
     html += '<div class="card" style="margin-top:10px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">' + t('settings.pricing.tariff_schedule', 'Tariff Schedule') + '</div>';
@@ -3801,10 +3853,106 @@ function renderCosts(data, el) {{
 
   el.innerHTML = html;
 
-  // Draw spot chart if present
-  if (data.spot_enabled && data.spot_chart && data.spot_chart.length > 0) {{
-    _drawSpotChart(data.spot_chart, data.fixed_ct_per_kwh || 0);
+  // Draw charts
+  requestAnimationFrame(function() {{
+    if (data.spot_enabled && data.spot_chart && data.spot_chart.length > 0) {{
+      _drawSpotChart(data.spot_chart, data.fixed_ct_per_kwh || 0);
+    }}
+    if (devs.length > 1) {{
+      _drawCostsDonut(devs);
+      _drawCostsRanking(devs);
+    }}
+    if (data.summary) _drawCostsPeriodChart(data.summary);
+  }});
+}}
+
+function _drawCostsDonut(devs) {{
+  const canvas = document.getElementById('costs-donut');
+  const legend = document.getElementById('costs-donut-legend');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio||1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+  ctx.scale(dpr,dpr);
+  const W = rect.width, H = rect.height, cx = W/2, cy = H/2, R = Math.min(cx,cy)-8, r = R*0.55;
+  const colors = ['#3b82f6','#ef4444','#f59e0b','#22c55e','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#06b6d4'];
+  const total = devs.reduce(function(s,d){{ return s + (d.month_eur||0); }},0) || 1;
+  let angle = -Math.PI/2;
+  let legHtml = '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+  devs.forEach(function(d,i) {{
+    const v = d.month_eur || 0;
+    if (v <= 0) return;
+    const slice = (v/total)*Math.PI*2;
+    const col = colors[i%colors.length];
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(cx,cy,R,angle,angle+slice); ctx.arc(cx,cy,r,angle+slice,angle,true); ctx.closePath(); ctx.fill();
+    angle += slice;
+    legHtml += '<span style="font-size:10px;display:flex;align-items:center;gap:2px"><span style="width:8px;height:8px;border-radius:50%;background:'+col+';display:inline-block"></span>'+esc(d.name||d.key)+' ('+fmt(v,2)+'\u20ac)</span>';
+  }});
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg')||'#111';
+  ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(fmt(total,2) + ' \u20ac', cx, cy-6);
+  ctx.font = '10px sans-serif'; ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted')||'#666';
+  ctx.fillText(t('web.costs.month','Monat'), cx, cy+10);
+  legHtml += '</div>';
+  if (legend) legend.innerHTML = legHtml;
+}}
+
+function _drawCostsRanking(devs) {{
+  const sorted = devs.slice().sort(function(a,b){{ return (b.month_eur||0)-(a.month_eur||0); }});
+  const names = sorted.map(function(d){{ return (d.name||d.key).substring(0,14); }});
+  const vals = sorted.map(function(d){{ return d.month_eur||0; }});
+  const colors = ['#3b82f6','#ef4444','#f59e0b','#22c55e','#8b5cf6','#ec4899','#14b8a6','#f97316'];
+  _drawBarChart('costs-ranking-bar', names, vals, {{colors: colors.slice(0, vals.length), decimals: 2}});
+}}
+
+function _drawCostsPeriodChart(s) {{
+  const labels = [t('web.costs.today','Heute'), t('web.costs.week','Woche'), t('web.costs.month','Monat'), t('web.costs.year','Jahr')];
+  const kwh = [s.today_kwh||0, s.week_kwh||0, s.month_kwh||0, s.year_kwh||0];
+  const eur = [s.today_eur||0, s.week_eur||0, s.month_eur||0, s.year_eur||0];
+  // Draw as grouped bars: kWh + EUR
+  const canvas = document.getElementById('costs-period-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio||1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
+  ctx.scale(dpr,dpr);
+  const W = rect.width, H = rect.height;
+  const pad = {{top:10,right:10,bottom:24,left:44}};
+  const cW = W-pad.left-pad.right, cH = H-pad.top-pad.bottom;
+  const n = labels.length;
+  const maxV = Math.max.apply(null, kwh.concat([0.1])) * 1.2;
+  const groupW = cW / n;
+  const barW = groupW * 0.35;
+  const fg = getComputedStyle(document.body).getPropertyValue('--muted')||'#999';
+  const border = getComputedStyle(document.body).getPropertyValue('--border')||'#e0e0e0';
+  // Grid
+  ctx.strokeStyle = border; ctx.lineWidth = 0.5;
+  for (let i=0;i<=4;i++) {{
+    const y = pad.top+cH-(cH*i/4);
+    ctx.beginPath(); ctx.moveTo(pad.left,y); ctx.lineTo(pad.left+cW,y); ctx.stroke();
+    ctx.fillStyle = fg; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText((maxV*i/4).toFixed(1), pad.left-4, y+3);
   }}
+  // Bars
+  labels.forEach(function(lbl, i) {{
+    const x = pad.left + i * groupW;
+    // kWh bar
+    const h1 = (kwh[i]/maxV)*cH;
+    ctx.fillStyle = '#3b82f6';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x+groupW*0.1, pad.top+cH-h1, barW, h1, [3,3,0,0]);
+    else ctx.rect(x+groupW*0.1, pad.top+cH-h1, barW, h1);
+    ctx.fill();
+    // EUR label on bar
+    ctx.fillStyle = '#f59e0b'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(fmt(eur[i],2)+'\u20ac', x+groupW*0.1+barW/2, pad.top+cH-h1-3);
+    // Label
+    ctx.fillStyle = fg; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(lbl, x+groupW/2, pad.top+cH+14);
+  }});
 }}
 
 function _drawSpotChart(hourly, fixedCt) {{
