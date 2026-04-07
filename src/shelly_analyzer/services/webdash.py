@@ -1707,13 +1707,16 @@ _HTML_TEMPLATE = """<!doctype html>
         <select id="hm-device"></select>
         <select id="hm-unit">
           <option value="kWh">kWh</option>
+          <option value="eur">EUR</option>
           <option value="co2">g CO₂</option>
         </select>
         <select id="hm-year"></select>
         <button class="btn btn-outline" onclick="loadHeatmap()">↻</button>
       </div>
+      <div id="hm-stats-wrap"></div>
       <div id="hm-calendar-wrap"></div>
       <div id="hm-hourly-wrap" style="margin-top:14px"></div>
+      <div id="hm-charts-wrap" style="margin-top:14px"></div>
     </div>
 
     <!-- Solar -->
@@ -4132,8 +4135,7 @@ function initHeatmap() {{
   if (sel.children.length === 0) {{
     DEVICES.forEach(function(d) {{
       const opt = document.createElement('option');
-      opt.value = d.key;
-      opt.textContent = d.name || d.key;
+      opt.value = d.key; opt.textContent = d.name || d.key;
       sel.appendChild(opt);
     }});
   }}
@@ -4142,8 +4144,7 @@ function initHeatmap() {{
     const now = new Date().getFullYear();
     for (let y = now; y >= now - 4; y--) {{
       const opt = document.createElement('option');
-      opt.value = y;
-      opt.textContent = y;
+      opt.value = y; opt.textContent = y;
       ySel.appendChild(opt);
     }}
   }}
@@ -4166,74 +4167,101 @@ async function loadHeatmap() {{
   const unit = document.getElementById('hm-unit').value;
   const calWrap = document.getElementById('hm-calendar-wrap');
   const hrWrap = document.getElementById('hm-hourly-wrap');
-  calWrap.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
-  hrWrap.innerHTML = '';
+  const stWrap = document.getElementById('hm-stats-wrap');
+  const chWrap = document.getElementById('hm-charts-wrap');
+  calWrap.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Lade\u2026') + '</p>';
+  hrWrap.innerHTML = ''; if (stWrap) stWrap.innerHTML = ''; if (chWrap) chWrap.innerHTML = '';
   if (!device) {{ calWrap.innerHTML = '<p class="info-msg">' + t('web.dash.select_device', 'Select a device.') + '</p>'; return; }}
   try {{
     const r = await fetch('/api/heatmap?device=' + encodeURIComponent(device) + '&year=' + year + '&unit=' + unit);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
+    if (data.summary && stWrap) renderHmStats(data, stWrap, unit);
     renderHeatmapCalendar(data, calWrap, unit);
     renderHeatmapHourly(data, hrWrap, unit);
+    if (data.summary && chWrap) renderHmCharts(data, chWrap, unit);
   }} catch(e) {{
     calWrap.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
   }}
 }}
 
-/* Green→Yellow→Red gradient: 0=green, 0.5=yellow, 1=red */
+/* ── Color functions ── */
 function ratioColor(ratio) {{
   if (ratio <= 0.5) {{
     const t = ratio * 2;
-    const r = Math.round(34 + (234 - 34) * t);
-    const g = Math.round(197 + (179 - 197) * t);
-    const b = Math.round(94 + (8 - 94) * t);
-    return 'rgb(' + r + ',' + g + ',' + b + ')';
+    return 'rgb(' + Math.round(34 + 200 * t) + ',' + Math.round(197 - 18 * t) + ',' + Math.round(94 - 86 * t) + ')';
   }} else {{
     const t = (ratio - 0.5) * 2;
-    const r = Math.round(234 + (239 - 234) * t);
-    const g = Math.round(179 + (68 - 179) * t);
-    const b = Math.round(8 + (68 - 8) * t);
-    return 'rgb(' + r + ',' + g + ',' + b + ')';
+    return 'rgb(' + Math.round(234 + 5 * t) + ',' + Math.round(179 - 111 * t) + ',' + Math.round(8 + 60 * t) + ')';
   }}
 }}
-
-/* Yellow→Orange→Red gradient for CO₂ mode */
 function ratioCo2Color(ratio) {{
   if (ratio <= 0.5) {{
     const t = ratio * 2;
-    const r = Math.round(255);
-    const g = Math.round(235 + (167 - 235) * t);
-    const b = Math.round(132 + (38 - 132) * t);
-    return 'rgb(' + r + ',' + g + ',' + b + ')';
+    return 'rgb(255,' + Math.round(235 - 68 * t) + ',' + Math.round(132 - 94 * t) + ')';
   }} else {{
     const t = (ratio - 0.5) * 2;
-    const r = Math.round(255 + (215 - 255) * t);
-    const g = Math.round(167 + (25 - 167) * t);
-    const b = Math.round(38 + (28 - 38) * t);
-    return 'rgb(' + r + ',' + g + ',' + b + ')';
+    return 'rgb(' + Math.round(255 - 40 * t) + ',' + Math.round(167 - 142 * t) + ',' + Math.round(38 - 10 * t) + ')';
   }}
 }}
-
-function hmColorFn(unit) {{ return unit === 'co2' ? ratioCo2Color : ratioColor; }}
+function ratioEurColor(ratio) {{
+  if (ratio <= 0.5) {{
+    const t = ratio * 2;
+    return 'rgb(' + Math.round(46 + 160 * t) + ',' + Math.round(204 - 64 * t) + ',' + Math.round(113 - 75 * t) + ')';
+  }} else {{
+    const t = (ratio - 0.5) * 2;
+    return 'rgb(' + Math.round(206 + 25 * t) + ',' + Math.round(140 - 80 * t) + ',' + Math.round(38 + 15 * t) + ')';
+  }}
+}}
+function hmColorFn(unit) {{ return unit === 'co2' ? ratioCo2Color : unit === 'eur' ? ratioEurColor : ratioColor; }}
 function hmFmtVal(v, unit) {{
   if (unit === 'co2') return fmt(v, 1, 'g CO\u2082');
   if (unit === 'eur') return fmt(v, 2, '\u20ac');
   return fmt(v, 3, 'kWh');
 }}
+function hmUnitLabel(unit) {{
+  if (unit === 'co2') return 'g CO\u2082';
+  if (unit === 'eur') return '\u20ac';
+  return 'kWh';
+}}
 
+/* ── Summary statistics cards ── */
+function renderHmStats(data, el, unit) {{
+  var s = data.summary;
+  if (!s) return;
+  var u = hmUnitLabel(unit);
+  var html = '<div class="nilm-metrics" style="margin-bottom:10px">';
+  html += '<div class="card"><div class="metric-label">\u2211 ' + t('web.hm.total', 'Total') + '</div><div class="metric-value">' + hmFmtVal(s.total, unit) + '</div></div>';
+  html += '<div class="card"><div class="metric-label">\u00f8 ' + t('web.hm.avg_daily', 'Daily avg') + '</div><div class="metric-value">' + hmFmtVal(s.avg_daily, unit) + '</div></div>';
+  html += '<div class="card"><div class="metric-label">\U0001f4c5 ' + t('web.hm.days', 'Days') + '</div><div class="metric-value">' + (s.days_with_data || 0) + '</div></div>';
+  html += '<div class="card"><div class="metric-label">\u23f0 ' + t('web.hm.peak_hour', 'Peak hour') + '</div><div class="metric-value">' + (s.peak_hour != null ? s.peak_hour + ':00' : '\u2013') + '</div><div style="font-size:10px;color:var(--muted)">\u00f8 ' + hmFmtVal(s.peak_hour_avg || 0, unit) + '</div></div>';
+  html += '</div>';
+
+  // Weekday vs Weekend + Peak/Min day
+  html += '<div class="nilm-metrics">';
+  html += '<div class="card"><div class="metric-label">\U0001f4bc ' + t('web.hm.weekday', 'Weekday avg') + '</div><div class="metric-value">' + hmFmtVal(s.weekday_avg, unit) + '</div></div>';
+  html += '<div class="card"><div class="metric-label">\U0001f3d6\ufe0f ' + t('web.hm.weekend', 'Weekend avg') + '</div><div class="metric-value">' + hmFmtVal(s.weekend_avg, unit) + '</div></div>';
+  if (s.peak_day) {{
+    html += '<div class="card"><div class="metric-label">\U0001f4a5 ' + t('web.hm.peak_day', 'Peak day') + '</div><div class="metric-value">' + hmFmtVal(s.peak_day.value, unit) + '</div><div style="font-size:10px;color:var(--muted)">' + s.peak_day.date + '</div></div>';
+  }}
+  if (s.min_day) {{
+    html += '<div class="card"><div class="metric-label">\U0001f33f ' + t('web.hm.min_day', 'Best day') + '</div><div class="metric-value">' + hmFmtVal(s.min_day.value, unit) + '</div><div style="font-size:10px;color:var(--muted)">' + s.min_day.date + '</div></div>';
+  }}
+  html += '</div>';
+  el.innerHTML = html;
+}}
+
+/* ── Calendar heatmap ── */
 function renderHeatmapCalendar(data, el, unit) {{
-  // API returns calendar as [{date, value}, ...] — convert to dict
   const calArr = data.calendar || [];
   const daily = {{}};
   calArr.forEach(function(item) {{ daily[item.date] = item.value; }});
   const year = parseInt(document.getElementById('hm-year').value);
   const start = new Date(year, 0, 1);
-  // Align to Monday
   while (start.getDay() !== 1) start.setDate(start.getDate() - 1);
   const vals = Object.values(daily).filter(function(v) {{ return v > 0; }});
   const maxVal = vals.length ? Math.max(...vals) : 1;
 
-  // Generate weeks: always produce full weeks (Mon-Sun) until Dec 31 is covered
   const weeks = [];
   let cur = new Date(start);
   let coveredDec31 = false;
@@ -4247,20 +4275,15 @@ function renderHeatmapCalendar(data, el, unit) {{
     weeks.push(week);
   }}
 
-  // Dynamic cell size: prefer readable size, allow horizontal scroll on narrow screens
   const pane = el.closest('.pane') || document.body;
   const availW = pane.clientWidth - 32;
   const numWeeks = weeks.length;
   const calCellFromW = Math.floor((availW - (numWeeks - 1) * 2) / numWeeks);
-  // Minimum 10px for readability; container scrolls horizontally if needed
   const calCellSize = Math.max(10, Math.min(calCellFromW, 18));
-  const cellGap = 2;
 
-  // Month labels — always short (3 chars) for readability
   const _dtfMonth = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{month: 'short'}});
   const monthNames = Array.from({{length: 12}}, function(_, i) {{ return _dtfMonth.format(new Date(2000, i, 1)); }});
-  const _lblFontSize = '9px';
-  let monthLabelHtml = '<div class="hm-month-labels" style="font-size:' + _lblFontSize + '">';
+  let monthLabelHtml = '<div class="hm-month-labels">';
   let lastMonth = -1;
   weeks.forEach(function(week) {{
     const m = week[0].getMonth();
@@ -4274,6 +4297,7 @@ function renderHeatmapCalendar(data, el, unit) {{
   monthLabelHtml += '</div>';
 
   let gridHtml = '<div class="hm-grid">';
+  const _colorFn = hmColorFn(unit);
   weeks.forEach(function(week) {{
     gridHtml += '<div class="hm-week">';
     week.forEach(function(day) {{
@@ -4282,7 +4306,6 @@ function renderHeatmapCalendar(data, el, unit) {{
       const ratio = maxVal > 0 ? v / maxVal : 0;
       const label = hmFmtVal(v, unit);
       const inYear = day.getFullYear() === year;
-      const _colorFn = hmColorFn(unit);
       const bg = inYear && v > 0 ? _colorFn(ratio) : 'var(--chipbg)';
       gridHtml += '<div class="hm-day" style="width:' + calCellSize + 'px;height:' + calCellSize + 'px;background:' + bg + '" data-date="' + key + '" data-val="' + label + '"></div>';
     }});
@@ -4290,22 +4313,27 @@ function renderHeatmapCalendar(data, el, unit) {{
   }});
   gridHtml += '</div>';
 
-  el.innerHTML = '<div class="card"><div class="card-title">' + t('web.hm.year_overview', 'Jahres\xfcbersicht') + '</div><div class="hm-calendar">' + monthLabelHtml + gridHtml + '</div></div>';
+  // Color legend
+  var legendHtml = '<div style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:10px;color:var(--muted)">';
+  legendHtml += '<span>' + t('web.hm.less', 'Less') + '</span>';
+  for (var li = 0; li <= 4; li++) {{
+    legendHtml += '<div style="width:12px;height:12px;border-radius:2px;background:' + _colorFn(li / 4) + '"></div>';
+  }}
+  legendHtml += '<span>' + t('web.hm.more', 'More') + '</span>';
+  legendHtml += '<span style="margin-left:auto">Max: ' + hmFmtVal(maxVal, unit) + '</span>';
+  legendHtml += '</div>';
 
-  // Tooltip
+  el.innerHTML = '<div class="card"><div class="card-title">' + t('web.hm.year_overview', 'Jahres\u00fcbersicht') + ' ' + year + '</div><div class="hm-calendar">' + monthLabelHtml + gridHtml + '</div>' + legendHtml + '</div>';
+
   el.querySelectorAll('.hm-day').forEach(function(cell) {{
-    cell.addEventListener('mousemove', function(e) {{
-      showHmTooltip(e, cell.dataset.date + ': ' + cell.dataset.val);
-    }});
-    cell.addEventListener('touchstart', function(e) {{
-      e.preventDefault();
-      showHmTooltip(e.touches[0], cell.dataset.date + ': ' + cell.dataset.val);
-    }}, {{passive:false}});
+    cell.addEventListener('mousemove', function(e) {{ showHmTooltip(e, cell.dataset.date + ': ' + cell.dataset.val); }});
+    cell.addEventListener('touchstart', function(e) {{ e.preventDefault(); showHmTooltip(e.touches[0], cell.dataset.date + ': ' + cell.dataset.val); }}, {{passive:false}});
     cell.addEventListener('mouseleave', hideHmTooltip);
     cell.addEventListener('touchend', hideHmTooltip);
   }});
 }}
 
+/* ── Hourly pattern table ── */
 function renderHeatmapHourly(data, el, unit) {{
   const hourly = data.hourly;
   if (!hourly) return;
@@ -4318,15 +4346,14 @@ function renderHeatmapHourly(data, el, unit) {{
   }}
   const maxVal = vals.length ? Math.max(...vals) : 1;
 
-  // Dynamic cell size: 24 cols + label col; use full available width
   const pane = el.closest('.pane') || document.body;
   const availW = pane.clientWidth - 32;
   const labelW = 22;
   const cellFromW = Math.floor((availW - labelW - 2 * 25) / 24);
-  // Height constraint: reserve same ~290px overhead; remaining split between cal (7) and hourly (7)
   const availHHr = window.innerHeight - 290;
-  const cellFromH = Math.floor((availHHr - 20) / 7 - 2); // 20=head row, 2=gap
+  const cellFromH = Math.floor((availHHr - 20) / 7 - 2);
   const cellSize = Math.max(8, Math.min(cellFromW, cellFromH));
+  const _colorFn = hmColorFn(unit);
 
   let html = '<div class="card"><div class="card-title">' + t('web.dash.hourly_pattern', 'Hourly Pattern') + '</div>';
   html += '<div class="hm-table-wrap"><table class="hm-table" style="table-layout:fixed;width:' + (labelW + 2 + 24 * (cellSize + 2)) + 'px"><thead><tr>';
@@ -4341,8 +4368,7 @@ function renderHeatmapHourly(data, el, unit) {{
     for (let h = 0; h < 24; h++) {{
       const v = (hourly[d] && hourly[d][h]) ? hourly[d][h] : 0;
       const ratio = maxVal > 0 ? v / maxVal : 0;
-      const _colorFn2 = hmColorFn(unit);
-      const bg = v > 0 ? _colorFn2(ratio) : 'var(--chipbg)';
+      const bg = v > 0 ? _colorFn(ratio) : 'var(--chipbg)';
       const title = days[d] + ' ' + h + 'h: ' + hmFmtVal(v, unit);
       html += '<td class="hm-cell" style="width:' + cellSize + 'px;height:' + cellSize + 'px;background:' + bg + '" data-tip="' + title + '"></td>';
     }}
@@ -4354,12 +4380,148 @@ function renderHeatmapHourly(data, el, unit) {{
   el.querySelectorAll('.hm-cell[data-tip]').forEach(function(cell) {{
     cell.addEventListener('mousemove', function(e) {{ showHmTooltip(e, cell.dataset.tip); }});
     cell.addEventListener('mouseleave', hideHmTooltip);
-    cell.addEventListener('touchstart', function(e) {{
-      e.preventDefault();
-      showHmTooltip(e.touches[0], cell.dataset.tip);
-    }}, {{passive:false}});
+    cell.addEventListener('touchstart', function(e) {{ e.preventDefault(); showHmTooltip(e.touches[0], cell.dataset.tip); }}, {{passive:false}});
     cell.addEventListener('touchend', hideHmTooltip);
   }});
+}}
+
+/* ── Monthly + Weekday charts ── */
+function renderHmCharts(data, el, unit) {{
+  var s = data.summary;
+  if (!s) return;
+  var html = '<div class="nilm-two-col">';
+  // Monthly bar chart
+  if (s.monthly && Object.keys(s.monthly).length > 0) {{
+    html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">' + t('web.hm.monthly', 'Monthly Breakdown') + '</div>';
+    html += '<canvas id="hm-monthly-chart" style="width:100%;height:200px"></canvas></div>';
+  }}
+  // Weekday bar chart
+  if (s.weekday_avgs) {{
+    html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">' + t('web.hm.weekday_chart', 'Weekday Pattern') + '</div>';
+    html += '<canvas id="hm-weekday-chart" style="width:100%;height:200px"></canvas></div>';
+  }}
+  html += '</div>';
+  el.innerHTML = html;
+
+  if (s.monthly && Object.keys(s.monthly).length > 0) {{
+    setTimeout(function() {{ _drawHmMonthlyChart(s.monthly, unit); }}, 50);
+  }}
+  if (s.weekday_avgs) {{
+    setTimeout(function() {{ _drawHmWeekdayChart(s.weekday_avgs, unit); }}, 60);
+  }}
+}}
+
+function _hmInitCanvas(id) {{
+  var el = document.getElementById(id);
+  if (!el) return null;
+  var dpr = window.devicePixelRatio || 1;
+  var rect = el.getBoundingClientRect();
+  el.width = rect.width * dpr; el.height = rect.height * dpr;
+  var ctx = el.getContext('2d'); ctx.scale(dpr, dpr);
+  return {{ctx: ctx, W: rect.width, H: rect.height}};
+}}
+
+function _drawHmMonthlyChart(monthly, unit) {{
+  var c = _hmInitCanvas('hm-monthly-chart');
+  if (!c) return;
+  var ctx = c.ctx, W = c.W, H = c.H;
+  var muted = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
+  var border = getComputedStyle(document.body).getPropertyValue('--border') || '#e0e0e0';
+  var pad = {{top: 10, right: 12, bottom: 28, left: 48}};
+  var cW = W - pad.left - pad.right, cH = H - pad.top - pad.bottom;
+
+  var months = [];
+  for (var m = 1; m <= 12; m++) {{
+    months.push({{ m: m, val: monthly[String(m)] || 0 }});
+  }}
+  var maxV = Math.max.apply(null, months.map(function(x){{ return x.val; }})) * 1.15 || 1;
+  var barW = Math.max(6, (cW / 12) * 0.7);
+  var _colorFn = hmColorFn(unit);
+  var _dtfMonth = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{month: 'short'}});
+
+  // Grid
+  ctx.strokeStyle = border; ctx.lineWidth = 0.5;
+  ctx.fillStyle = muted; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+  for (var i = 0; i <= 4; i++) {{
+    var gy = pad.top + cH - (cH * i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cW, gy); ctx.stroke();
+    ctx.fillText(hmFmtVal(maxV * i / 4, unit), pad.left - 4, gy + 3);
+  }}
+
+  // Bars
+  months.forEach(function(mo, idx) {{
+    var x = pad.left + (cW * (idx + 0.5) / 12) - barW / 2;
+    var bh = cH * (mo.val / maxV);
+    var ratio = maxV > 0 ? mo.val / maxV : 0;
+    ctx.fillStyle = _colorFn(ratio); ctx.globalAlpha = 0.85;
+    ctx.fillRect(x, pad.top + cH - bh, barW, bh);
+    ctx.globalAlpha = 1;
+    // Value on top
+    if (mo.val > 0) {{
+      ctx.fillStyle = muted; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(hmFmtVal(mo.val, unit), x + barW / 2, pad.top + cH - bh - 4);
+    }}
+  }});
+
+  // X-axis
+  ctx.fillStyle = muted; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+  months.forEach(function(mo, idx) {{
+    var lbl = _dtfMonth.format(new Date(2000, mo.m - 1, 1));
+    ctx.fillText(lbl, pad.left + (cW * (idx + 0.5) / 12), pad.top + cH + 16);
+  }});
+}}
+
+function _drawHmWeekdayChart(weekdayAvgs, unit) {{
+  var c = _hmInitCanvas('hm-weekday-chart');
+  if (!c) return;
+  var ctx = c.ctx, W = c.W, H = c.H;
+  var muted = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
+  var border = getComputedStyle(document.body).getPropertyValue('--border') || '#e0e0e0';
+  var pad = {{top: 10, right: 12, bottom: 28, left: 48}};
+  var cW = W - pad.left - pad.right, cH = H - pad.top - pad.bottom;
+
+  var _dtfDay = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{weekday: 'short'}});
+  var days = [];
+  for (var d = 0; d < 7; d++) {{
+    days.push({{ d: d, val: weekdayAvgs[String(d)] || 0, label: _dtfDay.format(new Date(2001, 0, 1 + d)) }});
+  }}
+  var maxV = Math.max.apply(null, days.map(function(x){{ return x.val; }})) * 1.15 || 1;
+  var barW = Math.max(10, (cW / 7) * 0.6);
+
+  // Grid
+  ctx.strokeStyle = border; ctx.lineWidth = 0.5;
+  ctx.fillStyle = muted; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+  for (var i = 0; i <= 4; i++) {{
+    var gy = pad.top + cH - (cH * i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cW, gy); ctx.stroke();
+    ctx.fillText(hmFmtVal(maxV * i / 4, unit), pad.left - 4, gy + 3);
+  }}
+
+  // Bars (weekday=blue, weekend=orange)
+  days.forEach(function(dy, idx) {{
+    var x = pad.left + (cW * (idx + 0.5) / 7) - barW / 2;
+    var bh = cH * (dy.val / maxV);
+    var isWeekend = idx >= 5;
+    ctx.fillStyle = isWeekend ? 'rgba(230,126,34,0.8)' : 'rgba(52,152,219,0.8)';
+    ctx.fillRect(x, pad.top + cH - bh, barW, bh);
+    // Value
+    if (dy.val > 0) {{
+      ctx.fillStyle = muted; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(hmFmtVal(dy.val, unit), x + barW / 2, pad.top + cH - bh - 4);
+    }}
+  }});
+
+  // X-axis + legend
+  ctx.fillStyle = muted; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+  days.forEach(function(dy, idx) {{
+    ctx.fillText(dy.label, pad.left + (cW * (idx + 0.5) / 7), pad.top + cH + 16);
+  }});
+  // Legend
+  ctx.fillStyle = 'rgba(52,152,219,0.8)'; ctx.fillRect(W - 100, 4, 10, 10);
+  ctx.fillStyle = muted; ctx.textAlign = 'left'; ctx.font = '9px sans-serif';
+  ctx.fillText(t('web.hm.weekday', 'Weekday'), W - 86, 13);
+  ctx.fillStyle = 'rgba(230,126,34,0.8)'; ctx.fillRect(W - 100, 18, 10, 10);
+  ctx.fillStyle = muted; ctx.fillText(t('web.hm.weekend', 'Weekend'), W - 86, 27);
 }}
 
 function showHmTooltip(e, text) {{

@@ -1,5 +1,16 @@
 # Changelog
 
+## 16.13.49 - 2026-04-07
+### Changed
+- **Heatmap tab significantly enhanced** with new visualizations and statistics:
+  - **8 summary metric cards** – total, daily average, days with data, peak hour, weekday avg, weekend avg, peak day (with date), best day (with date)
+  - **Color legend** under calendar with gradient preview and max value label
+  - **EUR unit option** – new unit selector for cost-based heatmap (green→purple gradient)
+  - **Monthly breakdown bar chart** – 12 bars colored by intensity with value labels
+  - **Weekday pattern bar chart** – 7 bars (blue=weekday, orange=weekend) with legend
+  - **Year label** in calendar title for clarity
+  - **API enhanced** – `/api/heatmap` now returns `summary` object with total, avg_daily, days_with_data, peak_day, min_day, peak_hour, weekday/weekend averages, monthly totals, and per-weekday averages
+
 ## 16.13.48 - 2026-04-07
 ### Changed
 - **Weather tab completely redesigned** with rich visualizations:
