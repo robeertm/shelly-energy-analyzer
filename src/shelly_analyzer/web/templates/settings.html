@@ -261,6 +261,11 @@ const SECTIONS = [
     {key:"pricing.vat_enabled", label:"MwSt. aktiv", type:"checkbox"},
     {key:"pricing.vat_rate_percent", label:"MwSt.-Satz (%)", type:"number", step:"0.1"},
     {key:"pricing.co2_intensity_g_per_kwh", label:"CO₂-Intensität (g/kWh)", type:"number"},
+    {key:"pricing.tariff_schedule", label:"Preisänderungen", type:"list", itemLabel:"Tarifperiode", hint:"Ab Startdatum gilt der neue Preis. Ältere Daten behalten den vorherigen Preis.", schema:[
+      {key:"start_date", label:"Ab Datum", type:"date"},
+      {key:"electricity_price_eur_per_kwh", label:"Strompreis €/kWh", type:"number", step:"0.0001"},
+      {key:"base_fee_eur_per_year", label:"Grundgebühr €/Jahr", type:"number", step:"0.01"},
+    ], defaults:{start_date:"",electricity_price_eur_per_kwh:0.3265,base_fee_eur_per_year:127.51}},
   ]},
   {id:"tou", title:"TOU (Zeittarife)", group:"Grundeinstellungen", fields:[
     {key:"tou.enabled", label:"TOU-Tarif aktiv", type:"checkbox"},
