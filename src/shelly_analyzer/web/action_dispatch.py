@@ -2264,8 +2264,23 @@ class ActionDispatcher:
                             _current_spot_ct = _sp_entry["total_ct"]
                             break
 
+                # Build summary from device totals
+                _s = {}
+                for rk in ["today", "week", "month", "year", "last_month"]:
+                    _s[rk + "_kwh"] = round(sum(d.get(rk + "_kwh", 0) for d in devices_out), 3)
+                    _s[rk + "_eur"] = round(sum(d.get(rk + "_eur", 0) for d in devices_out), 2)
+                try:
+                    _dim_s = calendar.monthrange(_now.year, _now.month)[1]
+                    _el_s = max(1, (_now - _month_start).total_seconds() / 86400.0)
+                    _s["proj_kwh"] = round(_s["month_kwh"] / _el_s * _dim_s, 1)
+                    _s["proj_eur"] = round(_s["month_eur"] / _el_s * _dim_s, 2)
+                except Exception:
+                    _s["proj_kwh"] = 0
+                    _s["proj_eur"] = 0
+
                 return {
                     "ok": True, "devices": devices_out, "unit_eur": _unit,
+                    "summary": _s,
                     "co2_g_per_kwh": _co2_g,
                     "solar_co2_saved_month_kg": round(_solar_co2_saved_month_kg, 3),
                     "tariff_schedule": _tariff_sched,
