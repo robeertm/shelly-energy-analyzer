@@ -1,5 +1,12 @@
 # Changelog
 
+## 16.13.44 - 2026-04-07
+### Added
+- **Tariff schedule editor in Settings** – new list field in "Preise & Tarif" to add/edit/delete tariff periods (start date + electricity price + base fee). Hint text explains that historical data keeps the old price.
+
+### Fixed
+- **Costs tab now uses date-based pricing** – when tariff periods are configured, the Costs tab calculates costs per day using the effective price on that date (via `effective_pricing_for_date()`). Previously all historical ranges used today's price, resulting in wrong costs for periods before a price change. Only applies to fixed tariff mode; dynamic/spot pricing is unaffected.
+
 ## 16.13.43 - 2026-04-07
 ### Changed
 - **Daily and monthly reports completely rewritten** with much richer content:

@@ -2073,6 +2073,28 @@ class ActionDispatcher:
                     "last_month": (_last_month_start, _month_start),
                 }
 
+                _pricing = self.cfg.pricing
+                _has_schedule = bool(getattr(_pricing, "tariff_schedule", None))
+
+                def _calc_cost_with_schedule(df_slice, rng_start, rng_end):
+                    """Calculate cost using per-day effective pricing from tariff schedule."""
+                    if df_slice.empty or "energy_kwh" not in df_slice.columns:
+                        return 0.0
+                    if not _has_schedule:
+                        return float(pd.to_numeric(df_slice["energy_kwh"], errors="coerce").fillna(0).sum()) * _unit
+                    # Group by date and apply effective price per day
+                    df_tmp = df_slice.copy()
+                    df_tmp["_date"] = df_tmp["timestamp"].dt.date
+                    total_cost = 0.0
+                    for day, grp in df_tmp.groupby("_date"):
+                        day_kwh = float(pd.to_numeric(grp["energy_kwh"], errors="coerce").fillna(0).sum())
+                        try:
+                            day_price = float(_pricing.effective_pricing_for_date(day).unit_price_gross())
+                        except Exception:
+                            day_price = _unit
+                        total_cost += day_kwh * day_price
+                    return total_cost
+
                 _cost_devices = [d for d in (self.cfg.devices or [])
                                 if str(getattr(d, "kind", "em")) != "switch"]
 
@@ -2084,23 +2106,33 @@ class ActionDispatcher:
                 devices_out = []
                 for d in _cost_devices:
                     dev_data: Dict[str, Any] = {"key": d.key, "name": d.name, "host": d.host}
+                    # Pre-load device DataFrame once
+                    _dev_df = None
+                    try:
+                        cd = self.computed.get(d.key)
+                        if cd is not None and cd.df is not None and not cd.df.empty:
+                            _dev_df = cd.df.copy()
+                            if "timestamp" in _dev_df.columns:
+                                _dev_df["timestamp"] = pd.to_datetime(_dev_df["timestamp"], errors="coerce")
+                                _dev_df = _dev_df.dropna(subset=["timestamp"])
+                                try:
+                                    if _dev_df["timestamp"].dt.tz is None:
+                                        _dev_df["timestamp"] = _dev_df["timestamp"].dt.tz_localize("UTC")
+                                    _dev_df["timestamp"] = _dev_df["timestamp"].dt.tz_convert(_tz)
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+
                     for rng_key, (rng_start, rng_end) in _ranges.items():
                         kwh = 0.0
+                        cost = 0.0
+                        _df_slice = None
                         try:
-                            cd = self.computed.get(d.key)
-                            if cd is not None:
-                                df_c = cd.df.copy()
-                                if "timestamp" in df_c.columns:
-                                    df_c["timestamp"] = pd.to_datetime(df_c["timestamp"], errors="coerce")
-                                    df_c = df_c.dropna(subset=["timestamp"])
-                                    try:
-                                        if df_c["timestamp"].dt.tz is None:
-                                            df_c["timestamp"] = df_c["timestamp"].dt.tz_localize("UTC")
-                                        df_c["timestamp"] = df_c["timestamp"].dt.tz_convert(_tz)
-                                    except Exception:
-                                        pass
-                                    m = (df_c["timestamp"] >= rng_start) & (df_c["timestamp"] < rng_end)
-                                    kwh = float(pd.to_numeric(df_c.loc[m, "energy_kwh"], errors="coerce").fillna(0.0).sum())
+                            if _dev_df is not None:
+                                m = (_dev_df["timestamp"] >= rng_start) & (_dev_df["timestamp"] < rng_end)
+                                _df_slice = _dev_df.loc[m]
+                                kwh = float(pd.to_numeric(_df_slice["energy_kwh"], errors="coerce").fillna(0.0).sum())
                         except Exception:
                             pass
                         dev_data[rng_key + "_kwh"] = round(kwh, 3)
@@ -2117,7 +2149,12 @@ class ActionDispatcher:
                             except Exception:
                                 dev_data[rng_key + "_eur"] = round(kwh * _unit, 2)
                         else:
-                            dev_data[rng_key + "_eur"] = round(kwh * _unit, 2)
+                            # Use tariff-schedule-aware cost calculation
+                            if _has_schedule and _df_slice is not None and not _df_slice.empty:
+                                cost = _calc_cost_with_schedule(_df_slice, rng_start, rng_end)
+                                dev_data[rng_key + "_eur"] = round(cost, 2)
+                            else:
+                                dev_data[rng_key + "_eur"] = round(kwh * _unit, 2)
                         dev_data[rng_key + "_co2_kg"] = round(_calc_co2(d.key, rng_start, rng_end, kwh), 3)
 
                     try:
