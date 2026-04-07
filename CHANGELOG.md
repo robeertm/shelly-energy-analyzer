@@ -1,5 +1,23 @@
 # Changelog
 
+## 16.13.43 - 2026-04-07
+### Changed
+- **Daily and monthly reports completely rewritten** with much richer content:
+  - **Daily report**: Per-device kWh + cost + peak hour + peak W, total with comparison to day before, peak consumption hour, night standby estimate (W + annual kWh), CO2 estimate, monthly projection, and ASCII 24h bar chart
+  - **Monthly report**: Ranked device list with medals, per-device share %, comparison to previous month (kWh + cost delta), daily average, best/worst day, CO2 + tree-days, year projection
+  - **All in German** for better readability
+
+### Added
+- **Telegram chart photos** – daily and monthly summaries now include a matplotlib-generated PNG chart sent via `sendPhoto`:
+  - Daily: stacked hourly bar chart + per-device totals with cost labels
+  - Monthly: daily totals bar chart with average line + device pie chart
+  - Dark theme matching the app's dark mode
+- **Email PDF attachments** – email summaries now include a PDF report (reportlab) with summary text + embedded chart image, plus the chart PNG as separate attachment. Footer with copyright.
+- **`_telegram_send_photo()`** – new method for sending images via Telegram Bot API
+- **`_generate_summary_chart()`** – matplotlib chart generation for daily/monthly (stacked bars, pie charts, dark theme)
+- **`_generate_summary_pdf()`** – reportlab PDF generation with text + chart embedding
+- **Telegram long message support** – messages > 4000 chars are automatically split into chunks
+
 ## 16.13.42 - 2026-04-06
 ### Changed
 - **Forecast tab completely redesigned** with rich visualizations:

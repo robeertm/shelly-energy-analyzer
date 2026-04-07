@@ -794,18 +794,70 @@ class BackgroundServiceManager:
 
         try:
             import requests as req
-            resp = req.post(
-                f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": chat_id, "text": text},
-                timeout=10,
-                verify=bool(getattr(ui, "telegram_verify_ssl", True)),
-            )
-            ok = resp.status_code == 200
-            if not ok:
-                logger.warning("Telegram send failed: %s %s", resp.status_code, resp.text[:200])
+            # Split into chunks if > 4000 chars
+            chunks = []
+            if len(text) <= 4000:
+                chunks = [text]
+            else:
+                lines = text.split("\n")
+                chunk = ""
+                for line in lines:
+                    if len(chunk) + len(line) + 1 > 4000:
+                        chunks.append(chunk)
+                        chunk = line
+                    else:
+                        chunk = chunk + "\n" + line if chunk else line
+                if chunk:
+                    chunks.append(chunk)
+
+            ok = True
+            verify = bool(getattr(ui, "telegram_verify_ssl", True))
+            for chunk in chunks:
+                resp = req.post(
+                    f"https://api.telegram.org/bot{token}/sendMessage",
+                    json={"chat_id": chat_id, "text": chunk},
+                    timeout=10,
+                    verify=verify,
+                )
+                if resp.status_code != 200:
+                    logger.warning("Telegram send failed: %s %s", resp.status_code, resp.text[:200])
+                    ok = False
             return ok
         except Exception as e:
             logger.warning("Telegram send error: %s", e)
+            return False
+
+    def _telegram_send_photo(self, photo_path: Path, caption: str = "") -> bool:
+        """Send a photo via Telegram. Returns True on success."""
+        try:
+            ui = self.cfg.ui
+            if not getattr(ui, "telegram_enabled", False):
+                return False
+            token = str(getattr(ui, "telegram_bot_token", "") or "").strip()
+            chat_id = str(getattr(ui, "telegram_chat_id", "") or "").strip()
+            if not token or not chat_id:
+                return False
+        except Exception:
+            return False
+        try:
+            import requests as req
+            with open(photo_path, "rb") as f:
+                data = {"chat_id": chat_id}
+                if caption:
+                    data["caption"] = caption[:1024]
+                resp = req.post(
+                    f"https://api.telegram.org/bot{token}/sendPhoto",
+                    data=data,
+                    files={"photo": f},
+                    timeout=15,
+                    verify=bool(getattr(ui, "telegram_verify_ssl", True)),
+                )
+            ok = resp.status_code == 200
+            if not ok:
+                logger.warning("Telegram photo failed: %s %s", resp.status_code, resp.text[:200])
+            return ok
+        except Exception as e:
+            logger.warning("Telegram photo error: %s", e)
             return False
 
     # ── Webhook ───────────────────────────────────────────────────────
@@ -967,9 +1019,22 @@ class BackgroundServiceManager:
             pass
         return 0.0
 
+    def _query_device_hourly(self, device_key: str, start_ts: int, end_ts: int):
+        """Query hourly data for a device. Returns DataFrame with kwh, avg_power_w, hour_ts."""
+        try:
+            import pandas as pd
+            df = self.storage.db.query_hourly(device_key, start_ts=start_ts, end_ts=end_ts)
+            if df is not None and not df.empty:
+                return df
+        except Exception:
+            pass
+        return None
+
     def _build_daily_summary(self) -> str:
-        """Build a daily summary text with yesterday's data + comparison."""
+        """Build a rich daily summary with per-device breakdown, peaks, standby, CO2."""
+        import calendar
         from zoneinfo import ZoneInfo
+        import numpy as np
         tz = ZoneInfo("Europe/Berlin")
         now = datetime.now(tz)
         yesterday = now - timedelta(days=1)
@@ -985,11 +1050,12 @@ class BackgroundServiceManager:
         y_end = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
         db_start = int(day_before.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
 
-        lines = [f"📊 Daily Summary – {yesterday.strftime('%A, %d.%m.%Y')}", ""]
+        lines = [f"📊 Tagesbericht – {yesterday.strftime('%A, %d.%m.%Y')}", ""]
 
         total_kwh = 0.0
         total_prev = 0.0
-        dev_lines = []
+        dev_data = []
+        hourly_total = [0.0] * 24
 
         for d in (self.cfg.devices or []):
             if str(getattr(d, "kind", "em")) == "switch":
@@ -998,48 +1064,105 @@ class BackgroundServiceManager:
             prev = self._query_device_kwh(d.key, db_start, y_start)
             total_kwh += kwh
             total_prev += prev
-            cost = kwh * unit_price
-            delta = ""
-            if prev > 0:
-                pct = ((kwh - prev) / prev) * 100
-                arrow = "📈" if pct > 5 else "📉" if pct < -5 else "➡️"
-                delta = f" {arrow} {pct:+.0f}%"
+            # Hourly breakdown
+            peak_w = 0.0
+            peak_hour = -1
+            hdf = self._query_device_hourly(d.key, y_start, y_end)
+            if hdf is not None and not hdf.empty:
+                for _, row in hdf.iterrows():
+                    try:
+                        h_ts = int(row.get("hour_ts", 0))
+                        h = datetime.fromtimestamp(h_ts, tz=tz).hour
+                        hw = float(row.get("kwh", 0) or 0)
+                        hourly_total[h] += hw
+                        pw = float(row.get("avg_power_w", 0) or 0)
+                        if pw > peak_w:
+                            peak_w = pw
+                            peak_hour = h
+                    except Exception:
+                        pass
             if kwh > 0:
-                dev_lines.append(f"  ⚡ {d.name}: {kwh:.2f} kWh | {cost:.2f} €{delta}")
+                dev_data.append({
+                    "name": d.name, "kwh": kwh, "prev": prev,
+                    "cost": kwh * unit_price, "peak_w": peak_w, "peak_hour": peak_hour,
+                })
 
-        if dev_lines:
-            lines.extend(dev_lines)
-        else:
-            lines.append("  No data for yesterday.")
+        dev_data.sort(key=lambda x: x["kwh"], reverse=True)
 
+        # Device breakdown
+        lines.append("⚡ Geräte:")
+        for dd in dev_data:
+            delta = ""
+            if dd["prev"] > 0:
+                pct = ((dd["kwh"] - dd["prev"]) / dd["prev"]) * 100
+                arrow = "📈" if pct > 5 else "📉" if pct < -5 else "➡️"
+                delta = f" {arrow}{pct:+.0f}%"
+            peak_info = f" | Peak: {dd['peak_w']:.0f}W ({dd['peak_hour']:02d}:00)" if dd["peak_hour"] >= 0 else ""
+            lines.append(f"  {dd['name']}: {dd['kwh']:.2f} kWh | {dd['cost']:.2f} \u20ac{delta}{peak_info}")
+
+        if not dev_data:
+            lines.append("  Keine Daten vorhanden.")
+
+        # Totals
         total_cost = total_kwh * unit_price
         lines.append("")
-        lines.append(f"🔋 Total: {total_kwh:.2f} kWh | 💰 {total_cost:.2f} €")
-
+        lines.append(f"🔋 Gesamt: {total_kwh:.2f} kWh | {total_cost:.2f} \u20ac")
         if total_prev > 0:
             pct = ((total_kwh - total_prev) / total_prev) * 100
-            lines.append(f"📊 vs. day before: {pct:+.1f}%")
+            arrow = "📈" if pct > 5 else "📉" if pct < -5 else "➡️"
+            lines.append(f"{arrow} vs. Vortag: {pct:+.1f}%")
+
+        # Peak hour
+        if any(v > 0 for v in hourly_total):
+            peak_h = hourly_total.index(max(hourly_total))
+            lines.append(f"⏰ Spitzenstunde: {peak_h:02d}:00–{peak_h+1:02d}:00 ({max(hourly_total):.2f} kWh)")
+
+        # Standby estimate (night 00-05 average)
+        night_kwh = sum(hourly_total[h] for h in range(0, 5))
+        if night_kwh > 0:
+            standby_w = (night_kwh / 5) * 1000
+            standby_annual = standby_w * 8760 / 1000
+            lines.append(f"🌙 Nacht-Grundlast: ~{standby_w:.0f} W ({standby_annual:.0f} kWh/Jahr)")
+
+        # CO2 estimate
+        try:
+            co2_cfg = getattr(self.cfg, "co2", None)
+            if co2_cfg and getattr(co2_cfg, "enabled", False):
+                co2_g = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380) or 380)
+                co2_kg = total_kwh * co2_g / 1000
+                lines.append(f"🌍 CO\u2082: {co2_kg:.1f} kg")
+        except Exception:
+            pass
 
         # Monthly projection
         try:
-            import calendar
             days_in_month = calendar.monthrange(now.year, now.month)[1]
-            day_of_month = now.day
-            if day_of_month > 1:
-                # Use this month's average daily consumption so far
+            if now.day > 1:
                 m_start = int(now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp())
                 m_kwh = sum(self._query_device_kwh(d.key, m_start, y_end) for d in (self.cfg.devices or []) if str(getattr(d, "kind", "em")) != "switch")
                 if m_kwh > 0:
-                    proj = m_kwh / (day_of_month - 1) * days_in_month
+                    proj = m_kwh / (now.day - 1) * days_in_month
                     proj_cost = proj * unit_price
-                    lines.append(f"📅 Month projection: ~{proj:.0f} kWh | ~{proj_cost:.0f} €")
+                    lines.append(f"📅 Monats-Hochrechnung: ~{proj:.0f} kWh | ~{proj_cost:.0f} \u20ac")
         except Exception:
             pass
+
+        # 24h mini chart (text bar chart)
+        if any(v > 0 for v in hourly_total):
+            lines.append("")
+            lines.append("📊 24h-Verlauf:")
+            max_h = max(hourly_total) or 1
+            for h in [0, 3, 6, 9, 12, 15, 18, 21]:
+                val = hourly_total[h]
+                bar_len = int(val / max_h * 12)
+                bar = "█" * bar_len + "░" * (12 - bar_len)
+                lines.append(f"  {h:02d}h {bar} {val:.2f}")
 
         return "\n".join(lines)
 
     def _build_monthly_summary(self) -> str:
-        """Build a monthly summary text with comparison to previous month."""
+        """Build a rich monthly summary with rankings, comparisons, and stats."""
+        import calendar
         from zoneinfo import ZoneInfo
         tz = ZoneInfo("Europe/Berlin")
         now = datetime.now(tz)
@@ -1047,6 +1170,7 @@ class BackgroundServiceManager:
         last_month_start = (last_month_end - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         prev_month_start = (last_month_start - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         month_label = last_month_start.strftime("%B %Y")
+        days_in_month = calendar.monthrange(last_month_start.year, last_month_start.month)[1]
 
         unit_price = 0.30
         try:
@@ -1058,7 +1182,7 @@ class BackgroundServiceManager:
         me_ts = int(last_month_end.timestamp())
         ps_ts = int(prev_month_start.timestamp())
 
-        lines = [f"📊 Monthly Summary – {month_label}", ""]
+        lines = [f"📊 Monatsbericht – {month_label}", ""]
         total_kwh = 0.0
         total_prev = 0.0
         dev_data = []
@@ -1071,38 +1195,294 @@ class BackgroundServiceManager:
             total_kwh += kwh
             total_prev += prev
             if kwh > 0:
-                dev_data.append((d.name, kwh, prev))
+                dev_data.append({"name": d.name, "kwh": kwh, "prev": prev, "cost": kwh * unit_price})
 
-        # Sort by consumption descending
-        dev_data.sort(key=lambda x: x[1], reverse=True)
+        dev_data.sort(key=lambda x: x["kwh"], reverse=True)
 
-        for name, kwh, prev in dev_data:
-            cost = kwh * unit_price
+        # Device ranking
+        lines.append("⚡ Geräte-Ranking:")
+        for i, dd in enumerate(dev_data):
+            medal = ["🥇", "🥈", "🥉"][i] if i < 3 else f"  {i+1}."
             delta = ""
-            if prev > 0:
-                pct = ((kwh - prev) / prev) * 100
+            if dd["prev"] > 0:
+                pct = ((dd["kwh"] - dd["prev"]) / dd["prev"]) * 100
                 arrow = "📈" if pct > 5 else "📉" if pct < -5 else "➡️"
-                delta = f" {arrow} {pct:+.0f}%"
-            lines.append(f"  ⚡ {name}: {kwh:.1f} kWh | {cost:.2f} €{delta}")
+                delta = f" {arrow}{pct:+.0f}%"
+            share = (dd["kwh"] / total_kwh * 100) if total_kwh > 0 else 0
+            lines.append(f"{medal} {dd['name']}: {dd['kwh']:.1f} kWh | {dd['cost']:.2f} \u20ac | {share:.0f}%{delta}")
 
+        if not dev_data:
+            lines.append("  Keine Daten vorhanden.")
+
+        # Totals
         total_cost = total_kwh * unit_price
         lines.append("")
-        lines.append(f"🔋 Total: {total_kwh:.1f} kWh | 💰 {total_cost:.2f} €")
+        lines.append(f"🔋 Gesamt: {total_kwh:.1f} kWh | {total_cost:.2f} \u20ac")
 
         if total_prev > 0:
             pct = ((total_kwh - total_prev) / total_prev) * 100
-            lines.append(f"📊 vs. previous month: {pct:+.1f}%")
+            diff_kwh = total_kwh - total_prev
+            diff_cost = diff_kwh * unit_price
+            arrow = "📈" if pct > 5 else "📉" if pct < -5 else "➡️"
+            lines.append(f"{arrow} vs. Vormonat: {pct:+.1f}% ({diff_kwh:+.1f} kWh | {diff_cost:+.2f} \u20ac)")
 
-        # Daily average
+        # Statistics
+        avg_daily = total_kwh / days_in_month if days_in_month else 0
+        avg_daily_cost = avg_daily * unit_price
+        lines.append(f"📅 Tagesschnitt: {avg_daily:.1f} kWh | {avg_daily_cost:.2f} \u20ac")
+
+        # Best/worst days
         try:
-            import calendar
-            days = calendar.monthrange(last_month_start.year, last_month_start.month)[1]
-            avg_daily = total_kwh / days
-            lines.append(f"📅 Daily average: {avg_daily:.1f} kWh | {avg_daily * unit_price:.2f} €")
+            daily_totals = {}
+            for d in (self.cfg.devices or []):
+                if str(getattr(d, "kind", "em")) == "switch":
+                    continue
+                hdf = self._query_device_hourly(d.key, ms_ts, me_ts)
+                if hdf is not None and not hdf.empty:
+                    for _, row in hdf.iterrows():
+                        try:
+                            h_ts = int(row.get("hour_ts", 0))
+                            day_str = datetime.fromtimestamp(h_ts, tz=tz).strftime("%d.%m")
+                            daily_totals[day_str] = daily_totals.get(day_str, 0) + float(row.get("kwh", 0) or 0)
+                        except Exception:
+                            pass
+            if daily_totals:
+                best = min(daily_totals, key=daily_totals.get)
+                worst = max(daily_totals, key=daily_totals.get)
+                lines.append(f"✅ Bester Tag: {best} ({daily_totals[best]:.1f} kWh)")
+                lines.append(f"❌ Schlechtester Tag: {worst} ({daily_totals[worst]:.1f} kWh)")
+        except Exception:
+            pass
+
+        # CO2
+        try:
+            co2_g = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380) or 380)
+            co2_kg = total_kwh * co2_g / 1000
+            lines.append(f"🌍 CO\u2082: {co2_kg:.1f} kg | {co2_kg / 22:.0f} Baumtage")
+        except Exception:
+            pass
+
+        # Year projection
+        try:
+            year_proj = avg_daily * 365
+            year_cost = year_proj * unit_price
+            lines.append(f"📆 Jahres-Hochrechnung: ~{year_proj:.0f} kWh | ~{year_cost:.0f} \u20ac")
         except Exception:
             pass
 
         return "\n".join(lines)
+
+    def _generate_summary_chart(self, chart_type: str) -> Optional[Path]:
+        """Generate a summary chart as PNG. Returns path or None."""
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            import matplotlib.ticker as mticker
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo("Europe/Berlin")
+            now = datetime.now(tz)
+
+            unit_price = 0.30
+            try:
+                unit_price = float(self.cfg.pricing.unit_price_gross())
+            except Exception:
+                pass
+
+            fig, axes = plt.subplots(2, 1, figsize=(8, 6), facecolor="#121821")
+            for ax in axes:
+                ax.set_facecolor("#0b0f14")
+                ax.tick_params(colors="#9fb0c3", labelsize=8)
+                ax.spines["top"].set_visible(False)
+                ax.spines["right"].set_visible(False)
+                for spine in ax.spines.values():
+                    spine.set_color("#333")
+
+            if chart_type == "daily":
+                yesterday = now - timedelta(days=1)
+                y_start = int(yesterday.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+                y_end = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+
+                # Per-device hourly stacked
+                hours = list(range(24))
+                dev_hourly = {}
+                colors = ["#3b82f6", "#ef4444", "#f59e0b", "#22c55e", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"]
+                dev_names = []
+                for d in (self.cfg.devices or []):
+                    if str(getattr(d, "kind", "em")) == "switch":
+                        continue
+                    vals = [0.0] * 24
+                    hdf = self._query_device_hourly(d.key, y_start, y_end)
+                    if hdf is not None and not hdf.empty:
+                        for _, row in hdf.iterrows():
+                            try:
+                                h = datetime.fromtimestamp(int(row.get("hour_ts", 0)), tz=tz).hour
+                                vals[h] = float(row.get("kwh", 0) or 0)
+                            except Exception:
+                                pass
+                    if sum(vals) > 0:
+                        dev_hourly[d.name] = vals
+                        dev_names.append(d.name)
+
+                # Stacked bar chart
+                ax1 = axes[0]
+                bottom = [0.0] * 24
+                for i, name in enumerate(dev_names):
+                    vals = dev_hourly[name]
+                    ax1.bar(hours, vals, bottom=bottom, color=colors[i % len(colors)], label=name, width=0.8)
+                    bottom = [b + v for b, v in zip(bottom, vals)]
+                ax1.set_title(f"Stundenverlauf – {yesterday.strftime('%d.%m.%Y')}", color="#e8eef6", fontsize=11, fontweight="bold")
+                ax1.set_xlabel("Stunde", color="#9fb0c3", fontsize=9)
+                ax1.set_ylabel("kWh", color="#9fb0c3", fontsize=9)
+                ax1.legend(fontsize=7, facecolor="#121821", edgecolor="#333", labelcolor="#e8eef6", loc="upper left")
+
+                # Per-device totals bar
+                ax2 = axes[1]
+                if dev_names:
+                    kwh_vals = [sum(dev_hourly[n]) for n in dev_names]
+                    cost_vals = [k * unit_price for k in kwh_vals]
+                    x = range(len(dev_names))
+                    bars = ax2.bar(x, kwh_vals, color=[colors[i % len(colors)] for i in range(len(dev_names))], width=0.6)
+                    ax2.set_xticks(list(x))
+                    ax2.set_xticklabels([n[:12] for n in dev_names], rotation=30, ha="right", fontsize=8)
+                    ax2.set_ylabel("kWh", color="#9fb0c3", fontsize=9)
+                    ax2.set_title("Geräte-Verbrauch", color="#e8eef6", fontsize=11, fontweight="bold")
+                    for bar, cost in zip(bars, cost_vals):
+                        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.02,
+                                 f"{cost:.2f}\u20ac", ha="center", va="bottom", color="#9fb0c3", fontsize=7)
+
+            elif chart_type == "monthly":
+                last_month_end = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                last_month_start = (last_month_end - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                ms_ts = int(last_month_start.timestamp())
+                me_ts = int(last_month_end.timestamp())
+
+                # Daily totals
+                daily_totals = {}
+                for d in (self.cfg.devices or []):
+                    if str(getattr(d, "kind", "em")) == "switch":
+                        continue
+                    hdf = self._query_device_hourly(d.key, ms_ts, me_ts)
+                    if hdf is not None and not hdf.empty:
+                        for _, row in hdf.iterrows():
+                            try:
+                                h_ts = int(row.get("hour_ts", 0))
+                                day = datetime.fromtimestamp(h_ts, tz=tz).day
+                                daily_totals[day] = daily_totals.get(day, 0) + float(row.get("kwh", 0) or 0)
+                            except Exception:
+                                pass
+
+                ax1 = axes[0]
+                if daily_totals:
+                    days = sorted(daily_totals.keys())
+                    vals = [daily_totals[d] for d in days]
+                    avg = sum(vals) / len(vals) if vals else 0
+                    bar_colors = ["#dc2626" if v > avg * 1.3 else "#f59e0b" if v > avg else "#3b82f6" for v in vals]
+                    ax1.bar(days, vals, color=bar_colors, width=0.7)
+                    ax1.axhline(y=avg, color="#22c55e", linestyle="--", linewidth=1, label=f"Schnitt: {avg:.1f} kWh")
+                    ax1.legend(fontsize=7, facecolor="#121821", edgecolor="#333", labelcolor="#e8eef6")
+                ax1.set_title(f"Tagesverlauf – {last_month_start.strftime('%B %Y')}", color="#e8eef6", fontsize=11, fontweight="bold")
+                ax1.set_xlabel("Tag", color="#9fb0c3", fontsize=9)
+                ax1.set_ylabel("kWh", color="#9fb0c3", fontsize=9)
+
+                # Device pie
+                ax2 = axes[1]
+                dev_kwh = []
+                dev_names = []
+                colors = ["#3b82f6", "#ef4444", "#f59e0b", "#22c55e", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"]
+                for d in (self.cfg.devices or []):
+                    if str(getattr(d, "kind", "em")) == "switch":
+                        continue
+                    kwh = self._query_device_kwh(d.key, ms_ts, me_ts)
+                    if kwh > 0:
+                        dev_kwh.append(kwh)
+                        dev_names.append(d.name)
+                if dev_kwh:
+                    wedges, texts, autotexts = ax2.pie(
+                        dev_kwh, labels=dev_names, autopct="%1.0f%%",
+                        colors=[colors[i % len(colors)] for i in range(len(dev_kwh))],
+                        textprops={"color": "#e8eef6", "fontsize": 8},
+                    )
+                    for at in autotexts:
+                        at.set_fontsize(7)
+                    ax2.set_title("Geräte-Anteil", color="#e8eef6", fontsize=11, fontweight="bold")
+
+            plt.tight_layout(pad=1.5)
+            out = self.out_dir / "data" / "runtime" / f"summary_{chart_type}.png"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(str(out), dpi=150, bbox_inches="tight", facecolor="#121821")
+            plt.close(fig)
+            return out
+        except Exception as e:
+            logger.warning("Chart generation failed: %s", e)
+            return None
+
+    def _generate_summary_pdf(self, chart_type: str, text: str) -> Optional[Path]:
+        """Generate a PDF with summary text + chart. Returns path or None."""
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.units import cm
+            from reportlab.pdfgen import canvas as pdfcanvas
+            from reportlab.lib.utils import ImageReader
+
+            out = self.out_dir / "data" / "runtime" / f"summary_{chart_type}.pdf"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            c = pdfcanvas.Canvas(str(out), pagesize=A4)
+            w, h = A4
+
+            # Title
+            c.setFont("Helvetica-Bold", 16)
+            c.drawString(2 * cm, h - 2 * cm, f"Shelly Energy Analyzer – {chart_type.title()} Report")
+
+            # Date
+            c.setFont("Helvetica", 10)
+            c.setFillColorRGB(0.5, 0.5, 0.5)
+            c.drawString(2 * cm, h - 2.8 * cm, datetime.now().strftime("%d.%m.%Y %H:%M"))
+
+            # Text
+            c.setFillColorRGB(0, 0, 0)
+            c.setFont("Helvetica", 9)
+            y = h - 4 * cm
+            for line in text.split("\n"):
+                # Strip emoji for PDF (reportlab can't render them)
+                clean = line
+                for ch in list(clean):
+                    if ord(ch) > 0xFFFF:
+                        clean = clean.replace(ch, "")
+                if y < 3 * cm:
+                    c.showPage()
+                    y = h - 2 * cm
+                    c.setFont("Helvetica", 9)
+                c.drawString(2 * cm, y, clean.strip())
+                y -= 0.4 * cm
+
+            # Chart image
+            chart_path = self.out_dir / "data" / "runtime" / f"summary_{chart_type}.png"
+            if chart_path.exists():
+                try:
+                    img = ImageReader(str(chart_path))
+                    iw, ih = img.getSize()
+                    max_w = w - 4 * cm
+                    scale = min(max_w / iw, 1.0)
+                    draw_w = iw * scale
+                    draw_h = ih * scale
+                    if y - draw_h < 2 * cm:
+                        c.showPage()
+                        y = h - 2 * cm
+                    c.drawImage(str(chart_path), 2 * cm, y - draw_h, width=draw_w, height=draw_h)
+                except Exception:
+                    pass
+
+            # Footer
+            c.setFont("Helvetica", 7)
+            c.setFillColorRGB(0.5, 0.5, 0.5)
+            c.drawString(2 * cm, 1 * cm, "\u00a9 Robert Manuwald – Shelly Energy Analyzer")
+
+            c.save()
+            return out
+        except Exception as e:
+            logger.warning("PDF generation failed: %s", e)
+            return None
 
     def _summary_loop(self) -> None:
         """Periodically check if daily/monthly summaries are due."""
@@ -1126,10 +1506,21 @@ class BackgroundServiceManager:
                     d_hh, d_mm = self._parse_hhmm(getattr(ui, "telegram_daily_summary_time", "00:00"))
                     if now.hour > d_hh or (now.hour == d_hh and now.minute >= d_mm):
                         summary = self._build_daily_summary()
+                        chart_path = self._generate_summary_chart("daily")
                         if tg_daily:
                             self._telegram_send(summary)
+                            if chart_path and chart_path.exists():
+                                self._telegram_send_photo(chart_path, "Tagesbericht Charts")
                         if em_daily:
-                            self._email_send("Shelly Energy – Daily Summary", summary)
+                            pdf_path = self._generate_summary_pdf("daily", summary)
+                            attachments = [pdf_path] if pdf_path and pdf_path.exists() else []
+                            if chart_path and chart_path.exists():
+                                attachments.append(chart_path)
+                            self._email_send(
+                                "Shelly Energy – Tagesbericht",
+                                summary,
+                                attachments=attachments if attachments else None,
+                            )
                         if wh_daily:
                             self._webhook_send({
                                 "type": "daily_summary",
@@ -1150,10 +1541,21 @@ class BackgroundServiceManager:
                     m_hh, m_mm = self._parse_hhmm(getattr(ui, "telegram_monthly_summary_time", "00:00"))
                     if now.hour > m_hh or (now.hour == m_hh and now.minute >= m_mm):
                         summary = self._build_monthly_summary()
+                        chart_path = self._generate_summary_chart("monthly")
                         if tg_monthly:
                             self._telegram_send(summary)
+                            if chart_path and chart_path.exists():
+                                self._telegram_send_photo(chart_path, "Monatsbericht Charts")
                         if em_monthly:
-                            self._email_send("Shelly Energy – Monthly Summary", summary)
+                            pdf_path = self._generate_summary_pdf("monthly", summary)
+                            attachments = [pdf_path] if pdf_path and pdf_path.exists() else []
+                            if chart_path and chart_path.exists():
+                                attachments.append(chart_path)
+                            self._email_send(
+                                "Shelly Energy – Monatsbericht",
+                                summary,
+                                attachments=attachments if attachments else None,
+                            )
                         if wh_monthly:
                             self._webhook_send({
                                 "type": "monthly_summary",
