@@ -245,6 +245,7 @@ class AppState:
 
     def get_config_response(self) -> Dict[str, Any]:
         """Data for /api/config endpoint."""
+        cfg = self.cfg
         return {
             "window_minutes": int(self.window_minutes),
             "refresh_seconds": float(self.refresh_seconds),
@@ -253,6 +254,21 @@ class AppState:
             "analyzer_heartbeat_ts": int(time.time()),
             "devices_meta": self.devices_meta,
             "lang": self.lang,
+            "features": {
+                "solar": bool(getattr(cfg.solar, "enabled", False)),
+                "weather": bool(getattr(cfg.weather, "enabled", False)),
+                "co2": bool(getattr(cfg.co2, "enabled", False)),
+                "anomalies": bool(getattr(cfg.anomaly, "enabled", False)),
+                "forecast": bool(getattr(cfg.forecast, "enabled", False)),
+                "ev": bool(getattr(cfg.ev_charging, "enabled", False)),
+                "ev_log": bool(getattr(cfg.ev_charging, "enabled", False)),
+                "smart_sched": bool(getattr(cfg.smart_schedule, "enabled", False)),
+                "tariff": bool(getattr(cfg.tariff_compare, "enabled", False)),
+                "battery": bool(getattr(cfg.battery, "enabled", False)),
+                "advisor": bool(getattr(cfg.advisor, "enabled", False)),
+                "goals": bool(getattr(cfg.gamification, "enabled", False)),
+                "tenants": bool(getattr(cfg.tenant, "enabled", False)),
+            },
         }
 
     def set_window_minutes(self, minutes: int) -> int:

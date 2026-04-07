@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.47 - 2026-04-07
+### Changed
+- **Feature-gated tabs** – tabs like Solar, Battery, EV, EV Log, Schedule, Tariff, Weather, CO2, Anomalies, Forecast, Advisor, Goals, and Tenants are now hidden from the navigation when their corresponding feature is not enabled in Settings. `/api/config` now returns a `features` map with enabled flags. If the user navigates to a disabled tab (e.g. via saved state), the app falls back to the Live tab.
+
 ## 16.13.46 - 2026-04-07
 ### Changed
 - **Compare tab completely redesigned** with rich visualizations:
