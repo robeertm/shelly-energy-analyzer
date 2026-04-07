@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.13.45 - 2026-04-07
+### Changed
+- **Costs tab significantly enhanced** with new visualizations and statistics:
+  - **Cost donut chart** – per-device monthly cost breakdown with legend
+  - **Cost ranking bar chart** – devices sorted by monthly cost
+  - **Period comparison chart** – grouped bars for today/week/month/year with kWh bars and EUR labels
+  - **Per-device comparison bars** – horizontal progress bars showing each device's monthly share with kWh, EUR, and percentage
+  - **Projection card** – 4 metric cards: monthly projection, yearly projection, vs. last month delta, daily average cost
+  - **API `summary` object** – `/api/costs` now returns aggregated summary with today/week/month/year/last_month kWh+EUR and projection
+
 ## 16.13.44 - 2026-04-07
 ### Added
 - **Tariff schedule editor in Settings** – new list field in "Preise & Tarif" to add/edit/delete tariff periods (start date + electricity price + base fee). Hint text explains that historical data keeps the old price.
