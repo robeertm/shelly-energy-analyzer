@@ -1,5 +1,32 @@
 # Changelog
 
+## 16.13.48 - 2026-04-07
+### Changed
+- **Weather tab completely redesigned** with rich visualizations:
+  - **Weather hero card** – large temperature display with description and "feels like"
+  - **6 metric cards** – temperature, humidity, wind, clouds, pressure (hPa), feels-like
+  - **Correlation banner** – color-coded interpretation icon (heating/cooling/neutral) with data point count
+  - **6 correlation metrics** – Pearson r, HDD, CDD, total kWh, kWh/HDD, kWh/CDD
+  - **Temperature zone breakdown** – avg consumption for cold (<10°C), mild (10-20°C), warm (>20°C)
+  - **Humidity correlation** – separate Pearson r for humidity vs consumption
+  - **Comfort zone bar chart** – horizontal bars showing avg kWh/h per temperature bucket (8 ranges)
+  - **Scatter + Timeline side-by-side** – two-column layout on desktop
+  - **Daily temperature range chart** – min/max range lines with colored dots + kWh bars overlay
+  - **Best/Worst energy days** – top 3 lowest and highest consumption days with weather context
+  - **API enhanced** – returns `daily` aggregates, `humidity_corr`, `comfort_zones`, `feels_like_c`, `pressure_hpa`, `description`, temperature zone averages
+
+- **Goals tab completely redesigned** with gamification system:
+  - **Level & XP hero** – large level display with XP bar, rank title (Bronze→Master), background fill
+  - **Streak visualization** – fire emojis (up to 10), current + best streak display
+  - **Enhanced goal cards** – weekly + monthly with large numbers, achievement icons, remaining/saved text
+  - **4 statistics metrics** – daily average, daily target, days under target, savings in EUR
+  - **30-day daily chart** – bar chart with green (under target) / red (over target) bars and dashed target line
+  - **Weekly trend chart** – 8-week bar chart with target markers on each bar
+  - **Best/Worst days ranking** – top 10 best and top 5 worst days with percentage of target
+  - **Rich badge grid** – responsive auto-fill grid with icon, name, description, progress bar, percentage
+  - **XP system** – 10 XP per streak day, 50 per badge, 100 for weekly goal, 200 for monthly goal, 5 per day under target
+  - **API enhanced** – returns `daily_history`, `weekly_history`, `level`, `xp`, `savings_eur`, `best_days`, `worst_days`
+
 ## 16.13.47 - 2026-04-07
 ### Changed
 - **Feature-gated tabs** – tabs like Solar, Battery, EV, EV Log, Schedule, Tariff, Weather, CO2, Anomalies, Forecast, Advisor, Goals, and Tenants are now hidden from the navigation when their corresponding feature is not enabled in Settings. `/api/config` now returns a `features` map with enabled flags. If the user navigates to a disabled tab (e.g. via saved state), the app falls back to the Live tab.

@@ -2613,9 +2613,12 @@ class ActionDispatcher:
                     if snap_w:
                         current_data = {
                             "temp_c": snap_w.temp_c,
+                            "feels_like_c": getattr(snap_w, "feels_like_c", snap_w.temp_c),
                             "humidity_pct": snap_w.humidity_pct,
                             "wind_speed_ms": snap_w.wind_speed_ms,
                             "clouds_pct": snap_w.clouds_pct,
+                            "pressure_hpa": getattr(snap_w, "pressure_hpa", 0),
+                            "description": getattr(snap_w, "description", ""),
                         }
                         hour_ts = (int(snap_w.timestamp) // 3600) * 3600
                         self.storage.db.upsert_weather([(
@@ -2634,7 +2637,8 @@ class ActionDispatcher:
                 if dev is None and self.cfg.devices:
                     dev = self.cfg.devices[0]
                 if dev is None:
-                    return {"ok": True, "current": current_data, "correlation": None, "paired": []}
+                    return {"ok": True, "current": current_data, "correlation": None, "paired": [],
+                            "daily": [], "humidity_corr": None, "comfort_zones": []}
 
                 now_wc = datetime.now(ZoneInfo("UTC"))
                 start_ts_wc = int((now_wc - timedelta(days=30)).timestamp())
@@ -2644,20 +2648,34 @@ class ActionDispatcher:
                 hourly_wc = self.storage.db.query_hourly(dev.key, start_ts=start_ts_wc, end_ts=end_ts_wc)
 
                 if weather_df.empty or hourly_wc.empty:
-                    return {"ok": True, "current": current_data, "correlation": None, "paired": []}
+                    return {"ok": True, "current": current_data, "correlation": None, "paired": [],
+                            "daily": [], "humidity_corr": None, "comfort_zones": []}
 
-                w_by_hour = {}
+                # Build full weather lookup (temp + humidity + wind + pressure)
+                w_full = {}
                 for _, row in weather_df.iterrows():
                     h = int(row["hour_ts"])
-                    w_by_hour[h] = float(row["temp_c"]) if row["temp_c"] is not None else None
+                    if row["temp_c"] is not None:
+                        w_full[h] = {
+                            "temp": float(row["temp_c"]),
+                            "humidity": float(row["humidity_pct"]) if row.get("humidity_pct") is not None else None,
+                            "wind": float(row["wind_speed_ms"]) if row.get("wind_speed_ms") is not None else None,
+                            "clouds": float(row["clouds_pct"]) if row.get("clouds_pct") is not None else None,
+                            "pressure": float(row["pressure_hpa"]) if row.get("pressure_hpa") is not None else None,
+                        }
 
                 paired = []
                 temps_list = []
                 kwh_list = []
+                humidity_list = []
+                hum_kwh_list = []
+                # Daily aggregation
+                daily_agg = {}  # date_str -> {temps:[], kwhs:[], humids:[]}
                 for _, row in hourly_wc.iterrows():
                     h = int(row["hour_ts"])
-                    if h in w_by_hour and w_by_hour[h] is not None:
-                        t_val = w_by_hour[h]
+                    if h in w_full:
+                        wd = w_full[h]
+                        t_val = wd["temp"]
                         k_val = float(row["kwh"])
                         dt_wc = datetime.fromtimestamp(h, tz=ZoneInfo("UTC"))
                         paired.append({
@@ -2665,11 +2683,40 @@ class ActionDispatcher:
                             "temp": round(t_val, 2),
                             "kwh": round(k_val, 4),
                             "hour_of_day": dt_wc.hour,
+                            "humidity": round(wd["humidity"], 1) if wd["humidity"] is not None else None,
+                            "wind": round(wd["wind"], 1) if wd["wind"] is not None else None,
+                            "clouds": round(wd["clouds"], 0) if wd["clouds"] is not None else None,
                         })
                         temps_list.append(t_val)
                         kwh_list.append(k_val)
+                        if wd["humidity"] is not None:
+                            humidity_list.append(wd["humidity"])
+                            hum_kwh_list.append(k_val)
+                        # Daily aggregate
+                        day_str = dt_wc.strftime("%Y-%m-%d")
+                        if day_str not in daily_agg:
+                            daily_agg[day_str] = {"temps": [], "kwhs": [], "humids": []}
+                        daily_agg[day_str]["temps"].append(t_val)
+                        daily_agg[day_str]["kwhs"].append(k_val)
+                        if wd["humidity"] is not None:
+                            daily_agg[day_str]["humids"].append(wd["humidity"])
+
+                # Build daily summary
+                daily = []
+                for day_str in sorted(daily_agg.keys()):
+                    da = daily_agg[day_str]
+                    daily.append({
+                        "date": day_str,
+                        "temp_min": round(min(da["temps"]), 1),
+                        "temp_max": round(max(da["temps"]), 1),
+                        "temp_avg": round(sum(da["temps"]) / len(da["temps"]), 1),
+                        "kwh": round(sum(da["kwhs"]), 3),
+                        "humidity_avg": round(sum(da["humids"]) / len(da["humids"]), 0) if da["humids"] else None,
+                        "hours": len(da["temps"]),
+                    })
 
                 correlation = None
+                humidity_corr = None
                 if len(temps_list) >= 3:
                     temps_arr = np.array(temps_list)
                     kwh_arr = np.array(kwh_list)
@@ -2683,6 +2730,10 @@ class ActionDispatcher:
                         z = np.polyfit(temps_arr, kwh_arr, 1)
                         slope = round(float(z[0]), 6)
                         intercept = round(float(z[1]), 6)
+                    # Temperature efficiency: avg kWh at cold (<10) vs mild (10-20) vs warm (>20)
+                    cold_kwh = [k for t, k in zip(temps_list, kwh_list) if t < 10]
+                    mild_kwh = [k for t, k in zip(temps_list, kwh_list) if 10 <= t <= 20]
+                    warm_kwh = [k for t, k in zip(temps_list, kwh_list) if t > 20]
                     correlation = {
                         "r_value": round(r_val, 4),
                         "hdd": round(hdd, 1),
@@ -2691,9 +2742,39 @@ class ActionDispatcher:
                         "kwh_per_cdd": round(total_kwh / cdd, 2) if cdd > 1 else None,
                         "slope": slope,
                         "intercept": intercept,
+                        "total_kwh": round(total_kwh, 1),
+                        "avg_kwh_cold": round(sum(cold_kwh) / len(cold_kwh), 4) if cold_kwh else None,
+                        "avg_kwh_mild": round(sum(mild_kwh) / len(mild_kwh), 4) if mild_kwh else None,
+                        "avg_kwh_warm": round(sum(warm_kwh) / len(warm_kwh), 4) if warm_kwh else None,
+                        "data_points": len(temps_list),
+                        "days_covered": len(daily),
                     }
 
-                return {"ok": True, "current": current_data, "correlation": correlation, "paired": paired}
+                # Humidity correlation
+                if len(humidity_list) >= 3:
+                    hum_arr = np.array(humidity_list)
+                    hkwh_arr = np.array(hum_kwh_list)
+                    h_r = float(np.corrcoef(hum_arr, hkwh_arr)[0, 1]) if np.std(hum_arr) > 0 and np.std(hkwh_arr) > 0 else 0.0
+                    humidity_corr = {"r_value": round(h_r, 4)}
+
+                # Comfort zone analysis: bucket by temp ranges, show avg consumption
+                comfort_zones = []
+                temp_buckets = [(-99, 0, "<0"), (0, 5, "0-5"), (5, 10, "5-10"), (10, 15, "10-15"),
+                                (15, 20, "15-20"), (20, 25, "20-25"), (25, 30, "25-30"), (30, 99, ">30")]
+                for lo, hi, label in temp_buckets:
+                    bk = [k for t, k in zip(temps_list, kwh_list) if lo <= t < hi]
+                    if bk:
+                        comfort_zones.append({
+                            "range": label,
+                            "avg_kwh": round(sum(bk) / len(bk), 4),
+                            "count": len(bk),
+                        })
+
+                return {
+                    "ok": True, "current": current_data, "correlation": correlation,
+                    "paired": paired, "daily": daily,
+                    "humidity_corr": humidity_corr, "comfort_zones": comfort_zones,
+                }
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 
