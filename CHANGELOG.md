@@ -1,5 +1,16 @@
 # Changelog
 
+## 16.13.46 - 2026-04-07
+### Changed
+- **Compare tab completely redesigned** with rich visualizations:
+  - **4 overview metrics** – A total, B total, delta with color + icon, daily average comparison
+  - **Visual total comparison** – horizontal A vs B bars with percentage fill and values
+  - **Delta indicator** – centered large icon + percentage + absolute difference
+  - **Daily average chart** – side-by-side bar comparison
+  - **Timeline chart** – grouped bars with legend (blue=A, orange=B)
+  - **Cumulative line chart** – running total of A vs B as overlaid lines with end labels
+  - **API enhanced** – returns `label_a/b`, `name_a/b`, `days_a/b`, `avg_a/b` for richer UI
+
 ## 16.13.45 - 2026-04-07
 ### Changed
 - **Costs tab significantly enhanced** with new visualizations and statistics:

@@ -2925,14 +2925,44 @@ class ActionDispatcher:
                 else:
                     vals_a, vals_b, labels_c = [total_a], [total_b], ["A vs B"]
 
+                # Device names
+                _name_a = device_a
+                _name_b = device_b
+                for _dd in self.cfg.devices:
+                    if _dd.key == device_a:
+                        _name_a = _dd.name
+                    if _dd.key == device_b:
+                        _name_b = _dd.name
+
+                # Label: name + date range
+                _la = f"{_name_a} ({from_a.strftime('%d.%m')}–{to_a.strftime('%d.%m.%y')})"
+                _lb = f"{_name_b} ({from_b.strftime('%d.%m')}–{to_b.strftime('%d.%m.%y')})"
+                if _spot_mode4:
+                    _la = f"{_name_a} (Fix)"
+                    _lb = f"{_name_a} (Spot)"
+
+                # Daily averages
+                _days_a = max(1, (to_a - from_a).days + 1)
+                _days_b = max(1, (to_b - from_b).days + 1)
+                _avg_a = total_a / _days_a
+                _avg_b = total_b / _days_b
+
                 return {
                     "ok": True,
                     "device_a": device_a,
                     "device_b": device_b,
+                    "name_a": _name_a,
+                    "name_b": _name_b,
+                    "label_a": _la,
+                    "label_b": _lb,
                     "from_a": from_a.isoformat(),
                     "to_a": to_a.isoformat(),
                     "from_b": from_b.isoformat(),
                     "to_b": to_b.isoformat(),
+                    "days_a": _days_a,
+                    "days_b": _days_b,
+                    "avg_a": round(_avg_a, 3),
+                    "avg_b": round(_avg_b, 3),
                     "unit": unit_c,
                     "gran": gran,
                     "labels": labels_c,
