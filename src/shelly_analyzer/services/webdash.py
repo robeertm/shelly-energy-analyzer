@@ -4456,10 +4456,11 @@ function _drawHmMonthlyChart(monthly, unit) {{
     ctx.fillStyle = _colorFn(ratio); ctx.globalAlpha = 0.85;
     ctx.fillRect(x, pad.top + cH - bh, barW, bh);
     ctx.globalAlpha = 1;
-    // Value on top
+    // Value on top (short label)
     if (mo.val > 0) {{
       ctx.fillStyle = muted; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(hmFmtVal(mo.val, unit), x + barW / 2, pad.top + cH - bh - 4);
+      var lbl = unit === 'co2' ? Math.round(mo.val) + '' : unit === 'eur' ? mo.val.toFixed(0) : mo.val >= 10 ? mo.val.toFixed(0) : mo.val.toFixed(1);
+      ctx.fillText(lbl, x + barW / 2, pad.top + cH - bh - 4);
     }}
   }});
 
