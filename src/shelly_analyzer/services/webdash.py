@@ -4976,7 +4976,7 @@ function initWeather() {{
 }}
 async function loadWeather() {{
   const el = document.getElementById('weather-content');
-  el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Lade\u2026') + '</p>';
   try {{
     const r = await fetch('/api/weather_correlation');
     if (!r.ok) throw new Error(r.status);
@@ -4987,74 +4987,231 @@ async function loadWeather() {{
   }}
 }}
 
+function _wxCard(icon, label, value) {{
+  return '<div class="card"><div class="metric-label">' + icon + ' ' + label + '</div><div class="metric-value">' + value + '</div></div>';
+}}
+function _wxSectionTitle(text) {{
+  return '<div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">' + text + '</div>';
+}}
+
 function renderWeather(d, el) {{
   if (!d.ok) {{
     el.innerHTML = '<p class="info-msg">' + (d.error || t('web.weather.no_data', 'No weather data.')) + '</p>';
     return;
   }}
   var html = '';
+  var cur = d.current;
 
-  // Current weather cards
-  if (d.current) {{
-    html += '<div class="metric-grid">';
-    html += '<div class="card"><div class="metric-label">\U0001f321\ufe0f ' + t('web.weather.temp', 'Temperature') + '</div><div class="metric-value">' + (d.current.temp_c != null ? d.current.temp_c.toFixed(1) + ' \u00b0C' : '\u2013') + '</div></div>';
-    html += '<div class="card"><div class="metric-label">\U0001f4a7 ' + t('web.weather.humidity', 'Humidity') + '</div><div class="metric-value">' + (d.current.humidity_pct != null ? Math.round(d.current.humidity_pct) + '%' : '\u2013') + '</div></div>';
-    html += '<div class="card"><div class="metric-label">\U0001f4a8 ' + t('web.weather.wind', 'Wind') + '</div><div class="metric-value">' + (d.current.wind_speed_ms != null ? d.current.wind_speed_ms.toFixed(1) + ' m/s' : '\u2013') + '</div></div>';
-    html += '<div class="card"><div class="metric-label">\u2601\ufe0f ' + t('web.weather.clouds', 'Cloud cover') + '</div><div class="metric-value">' + (d.current.clouds_pct != null ? Math.round(d.current.clouds_pct) + '%' : '\u2013') + '</div></div>';
+  // Current weather hero
+  if (cur) {{
+    var desc = (cur.description || '').charAt(0).toUpperCase() + (cur.description || '').slice(1);
+    if (desc) {{
+      html += '<div class="card" style="text-align:center;margin-bottom:10px">';
+      html += '<div style="font-size:28px;font-weight:700">' + (cur.temp_c != null ? cur.temp_c.toFixed(1) + ' \u00b0C' : '\u2013') + '</div>';
+      html += '<div style="font-size:13px;color:var(--muted);margin-top:2px">' + esc(desc) + '</div>';
+      if (cur.feels_like_c != null) html += '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + t('web.weather.feels_like', 'Feels like') + ' ' + cur.feels_like_c.toFixed(1) + ' \u00b0C</div>';
+      html += '</div>';
+    }}
+    html += '<div class="nilm-metrics">';
+    html += _wxCard('\U0001f321\ufe0f', t('web.weather.temp', 'Temperature'), cur.temp_c != null ? cur.temp_c.toFixed(1) + ' \u00b0C' : '\u2013');
+    html += _wxCard('\U0001f4a7', t('web.weather.humidity', 'Humidity'), cur.humidity_pct != null ? Math.round(cur.humidity_pct) + ' %' : '\u2013');
+    html += _wxCard('\U0001f4a8', t('web.weather.wind', 'Wind'), cur.wind_speed_ms != null ? cur.wind_speed_ms.toFixed(1) + ' m/s' : '\u2013');
+    html += _wxCard('\u2601\ufe0f', t('web.weather.clouds', 'Cloud cover'), cur.clouds_pct != null ? Math.round(cur.clouds_pct) + ' %' : '\u2013');
+    html += _wxCard('\U0001f9ed', t('web.weather.pressure', 'Pressure'), cur.pressure_hpa ? Math.round(cur.pressure_hpa) + ' hPa' : '\u2013');
+    html += _wxCard('\U0001f321\ufe0f', t('web.weather.feels_like', 'Feels like'), cur.feels_like_c != null ? cur.feels_like_c.toFixed(1) + ' \u00b0C' : '\u2013');
     html += '</div>';
   }}
 
-  // Correlation metrics
+  // Correlation statistics
   if (d.correlation) {{
     var c = d.correlation;
-    html += '<div class="metric-grid" style="margin-top:10px">';
-    html += '<div class="card"><div class="metric-label">' + t('web.weather.pearson', 'Pearson r') + '</div><div class="metric-value">' + (c.r_value != null ? c.r_value.toFixed(3) : '\u2013') + '</div></div>';
-    html += '<div class="card"><div class="metric-label">' + t('web.weather.hdd', 'HDD') + '</div><div class="metric-value">' + (c.hdd != null ? c.hdd.toFixed(1) : '\u2013') + '</div></div>';
-    html += '<div class="card"><div class="metric-label">' + t('web.weather.cdd', 'CDD') + '</div><div class="metric-value">' + (c.cdd != null ? c.cdd.toFixed(1) : '\u2013') + '</div></div>';
-    html += '<div class="card"><div class="metric-label">' + t('web.weather.kwh_hdd', 'kWh/HDD') + '</div><div class="metric-value">' + (c.kwh_per_hdd != null ? c.kwh_per_hdd.toFixed(2) : '\u2013') + '</div></div>';
-    html += '<div class="card"><div class="metric-label">' + t('web.weather.kwh_cdd', 'kWh/CDD') + '</div><div class="metric-value">' + (c.kwh_per_cdd != null ? c.kwh_per_cdd.toFixed(2) : '\u2013') + '</div></div>';
+    html += '<div style="margin-top:14px">' + _wxSectionTitle(t('web.weather.correlation', 'Weather-Energy Correlation')) + '</div>';
+    var interpIcon = '\u2753', interpText = '', interpColor = 'var(--muted)';
+    if (c.r_value != null) {{
+      if (c.r_value < -0.4) {{ interpIcon = '\u2744\ufe0f'; interpText = t('web.weather.heating', 'Strong heating correlation'); interpColor = '#3498db'; }}
+      else if (c.r_value > 0.4) {{ interpIcon = '\u2600\ufe0f'; interpText = t('web.weather.cooling', 'Strong cooling correlation'); interpColor = '#e67e22'; }}
+      else {{ interpIcon = '\u2705'; interpText = t('web.weather.none', 'No significant weather dependency'); interpColor = '#27ae60'; }}
+      interpText += ' (r = ' + c.r_value.toFixed(3) + ')';
+    }}
+    html += '<div class="card" style="margin-bottom:10px;display:flex;align-items:center;gap:10px">';
+    html += '<span style="font-size:28px">' + interpIcon + '</span>';
+    html += '<div><div style="font-size:14px;font-weight:600;color:' + interpColor + '">' + interpText + '</div>';
+    html += '<div style="font-size:11px;color:var(--muted)">' + (c.data_points || 0) + ' ' + t('web.weather.data_points', 'data points') + ', ' + (c.days_covered || 0) + ' ' + t('web.weather.days', 'days') + '</div>';
+    html += '</div></div>';
+
+    html += '<div class="nilm-metrics">';
+    html += _wxCard('\U0001f4ca', 'Pearson r', c.r_value != null ? c.r_value.toFixed(3) : '\u2013');
+    html += _wxCard('\u2744\ufe0f', 'HDD', c.hdd != null ? c.hdd.toFixed(1) : '\u2013');
+    html += _wxCard('\u2600\ufe0f', 'CDD', c.cdd != null ? c.cdd.toFixed(1) : '\u2013');
+    html += _wxCard('\u26a1', t('web.weather.total_kwh', 'Total kWh'), c.total_kwh != null ? c.total_kwh.toFixed(1) : '\u2013');
+    html += _wxCard('\u2744\ufe0f', 'kWh/HDD', c.kwh_per_hdd != null ? c.kwh_per_hdd.toFixed(2) : '\u2013');
+    html += _wxCard('\u2600\ufe0f', 'kWh/CDD', c.kwh_per_cdd != null ? c.kwh_per_cdd.toFixed(2) : '\u2013');
     html += '</div>';
 
-    // Interpretation
-    var interp = '';
-    if (c.r_value != null) {{
-      if (c.r_value < -0.4) interp = t('web.weather.heating', 'Strong heating correlation') + ' (r = ' + c.r_value.toFixed(2) + ')';
-      else if (c.r_value > 0.4) interp = t('web.weather.cooling', 'Strong cooling correlation') + ' (r = ' + c.r_value.toFixed(2) + ')';
-      else interp = t('web.weather.none', 'No significant weather dependency') + ' (r = ' + c.r_value.toFixed(2) + ')';
+    // Temperature zone breakdown
+    if (c.avg_kwh_cold != null || c.avg_kwh_mild != null || c.avg_kwh_warm != null) {{
+      html += '<div class="card" style="margin-top:10px">' + _wxSectionTitle(t('web.weather.temp_zones', 'Consumption by Temperature Zone')) + '</div>';
+      html += '<div class="nilm-metrics" style="margin-top:0">';
+      html += _wxCard('\u2744\ufe0f', '< 10\u00b0C (' + t('web.weather.cold', 'Cold') + ')', c.avg_kwh_cold != null ? c.avg_kwh_cold.toFixed(3) + ' kWh/h' : '\u2013');
+      html += _wxCard('\U0001f33f', '10\u201320\u00b0C (' + t('web.weather.mild', 'Mild') + ')', c.avg_kwh_mild != null ? c.avg_kwh_mild.toFixed(3) + ' kWh/h' : '\u2013');
+      html += _wxCard('\U0001f525', '> 20\u00b0C (' + t('web.weather.warm', 'Warm') + ')', c.avg_kwh_warm != null ? c.avg_kwh_warm.toFixed(3) + ' kWh/h' : '\u2013');
+      html += '</div>';
     }}
-    if (interp) html += '<p style="color:var(--muted);font-size:12px;margin:8px 0 0">' + interp + '</p>';
+
+    // Humidity correlation
+    if (d.humidity_corr) {{
+      html += '<div class="card" style="margin-top:10px;display:flex;align-items:center;gap:10px">';
+      html += '<span style="font-size:22px">\U0001f4a7</span>';
+      html += '<div><div style="font-size:12px;font-weight:600">' + t('web.weather.humidity_corr', 'Humidity Correlation') + '</div>';
+      html += '<div style="font-size:11px;color:var(--muted)">Pearson r = ' + d.humidity_corr.r_value.toFixed(3) + '</div></div></div>';
+    }}
   }}
 
-  // Charts
+  // Comfort zone chart
+  if (d.comfort_zones && d.comfort_zones.length > 0) {{
+    html += '<div class="card" style="margin-top:10px">' + _wxSectionTitle(t('web.weather.comfort', 'Comfort Zone Analysis')) + '';
+    html += '<canvas id="wx-comfort-chart" style="width:100%;height:180px"></canvas></div>';
+  }}
+
+  // Charts side by side
   if (d.paired && d.paired.length >= 3) {{
-    html += '<div class="card" style="margin-top:10px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">' + t('web.weather.scatter', 'Temperature vs. Consumption') + '</div>';
-    html += '<canvas id="weather-scatter" style="width:100%;height:220px"></canvas></div>';
-
-    html += '<div class="card" style="margin-top:10px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">' + t('web.weather.timeline', 'Timeline') + '</div>';
-    html += '<canvas id="weather-timeline" style="width:100%;height:220px"></canvas></div>';
-
-    // Legend for scatter
-    html += '<div style="display:flex;gap:10px;justify-content:center;margin-top:6px;font-size:10px;color:var(--muted)">';
-    html += '<span>\U0001f319 0\u20136h</span><span>\U0001f305 6\u201312h</span><span>\u2600\ufe0f 12\u201318h</span><span>\U0001f306 18\u201324h</span>';
+    html += '<div class="nilm-two-col" style="margin-top:10px">';
+    html += '<div class="card">' + _wxSectionTitle(t('web.weather.scatter', 'Temperature vs. Consumption')) + '';
+    html += '<canvas id="weather-scatter" style="width:100%;height:240px"></canvas>';
+    html += '<div style="display:flex;gap:8px;justify-content:center;margin-top:6px;font-size:10px;color:var(--muted)">';
+    html += '<span>\U0001f319 0\u20136h</span><span>\U0001f305 6\u201312h</span><span>\u2600\ufe0f 12\u201318h</span><span>\U0001f306 18\u201324h</span></div></div>';
+    html += '<div class="card">' + _wxSectionTitle(t('web.weather.timeline', 'Hourly Timeline')) + '';
+    html += '<canvas id="weather-timeline" style="width:100%;height:240px"></canvas></div>';
     html += '</div>';
-  }} else if (d.paired) {{
-    html += '<p style="color:var(--muted);font-size:12px;margin-top:10px">' + t('web.weather.few_data', 'Only ' + d.paired.length + ' data points.').replace('{{n}}', d.paired.length) + '</p>';
+  }}
+
+  // Daily temperature range + consumption
+  if (d.daily && d.daily.length >= 2) {{
+    html += '<div class="card" style="margin-top:10px">' + _wxSectionTitle(t('web.weather.daily_range', 'Daily Temperature Range & Consumption')) + '';
+    html += '<canvas id="wx-daily-chart" style="width:100%;height:220px"></canvas></div>';
+  }}
+
+  // Best / Worst energy days
+  if (d.daily && d.daily.length >= 3) {{
+    var sortedDays = d.daily.slice().sort(function(a,b){{ return a.kwh - b.kwh; }});
+    var best3 = sortedDays.slice(0, 3);
+    var worst3 = sortedDays.slice(-3).reverse();
+    html += '<div class="nilm-two-col" style="margin-top:10px">';
+    html += '<div class="card">' + _wxSectionTitle(t('web.weather.best_days', 'Best Energy Days'));
+    best3.forEach(function(dy, i) {{
+      var medal = ['\U0001f947','\U0001f948','\U0001f949'][i] || '';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px">';
+      html += '<span>' + medal + ' ' + dy.date + '</span>';
+      html += '<span style="display:flex;gap:12px"><span style="color:#3498db;font-weight:600">' + dy.kwh.toFixed(2) + ' kWh</span>';
+      html += '<span style="color:#e74c3c">' + dy.temp_min.toFixed(0) + '\u2013' + dy.temp_max.toFixed(0) + '\u00b0C</span></span></div>';
+    }});
+    html += '</div>';
+    html += '<div class="card">' + _wxSectionTitle(t('web.weather.worst_days', 'Worst Energy Days'));
+    worst3.forEach(function(dy) {{
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px">';
+      html += '<span>' + dy.date + '</span>';
+      html += '<span style="display:flex;gap:12px"><span style="color:#e74c3c;font-weight:600">' + dy.kwh.toFixed(2) + ' kWh</span>';
+      html += '<span style="color:#e74c3c">' + dy.temp_min.toFixed(0) + '\u2013' + dy.temp_max.toFixed(0) + '\u00b0C</span></span></div>';
+    }});
+    html += '</div></div>';
   }}
 
   el.innerHTML = html;
 
-  // Draw charts after DOM update
-  if (d.paired && d.paired.length >= 3) {{
-    setTimeout(function() {{ _drawWeatherCharts(d); }}, 50);
-  }}
+  if (d.paired && d.paired.length >= 3) setTimeout(function() {{ _drawWeatherCharts(d); }}, 50);
+  if (d.comfort_zones && d.comfort_zones.length > 0) setTimeout(function() {{ _drawWxComfortChart(d.comfort_zones); }}, 60);
+  if (d.daily && d.daily.length >= 2) setTimeout(function() {{ _drawWxDailyChart(d.daily); }}, 70);
 }}
 
 function _weatherHourColor(h) {{
-  // twilight-shifted: night=dark blue, morning=warm orange, noon=bright yellow, evening=purple
   var hue = (240 + h * 15) % 360;
   var sat = 70;
   var lgt = (h >= 6 && h <= 20) ? 55 : 35;
   return 'hsl(' + hue + ',' + sat + '%,' + lgt + '%)';
+}}
+function _wxTempColor(t) {{
+  if (t < 0) return '#2980b9';
+  if (t < 10) return '#3498db';
+  if (t < 20) return '#27ae60';
+  if (t < 30) return '#e67e22';
+  return '#e74c3c';
+}}
+function _wxInitCanvas(id) {{
+  var el = document.getElementById(id);
+  if (!el) return null;
+  var dpr = window.devicePixelRatio || 1;
+  var rect = el.getBoundingClientRect();
+  el.width = rect.width * dpr; el.height = rect.height * dpr;
+  var ctx = el.getContext('2d'); ctx.scale(dpr, dpr);
+  return {{ctx: ctx, W: rect.width, H: rect.height}};
+}}
+
+function _drawWxComfortChart(zones) {{
+  var c = _wxInitCanvas('wx-comfort-chart');
+  if (!c) return;
+  var ctx = c.ctx, W = c.W, H = c.H;
+  var muted = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
+  var pad = {{top: 8, right: 16, bottom: 20, left: 60}};
+  var cW = W - pad.left - pad.right;
+  var cH = H - pad.top - pad.bottom;
+  var n = zones.length;
+  var barH = Math.min(22, (cH / n) - 4);
+  var maxKwh = Math.max.apply(null, zones.map(function(z){{ return z.avg_kwh; }})) * 1.15 || 1;
+  var colors = ['#2980b9','#3498db','#27ae60','#2ecc71','#f1c40f','#e67e22','#e74c3c','#c0392b'];
+  zones.forEach(function(z, i) {{
+    var y = pad.top + (cH * i / n) + (cH / n - barH) / 2;
+    var bw = cW * (z.avg_kwh / maxKwh);
+    ctx.fillStyle = colors[i % colors.length]; ctx.globalAlpha = 0.8;
+    ctx.fillRect(pad.left, y, bw, barH); ctx.globalAlpha = 1;
+    ctx.fillStyle = muted; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(z.range + '\u00b0C', pad.left - 4, y + barH / 2 + 3);
+    ctx.fillStyle = colors[i % colors.length]; ctx.textAlign = 'left'; ctx.font = '10px sans-serif';
+    ctx.fillText(z.avg_kwh.toFixed(3) + ' kWh/h (' + z.count + ')', pad.left + bw + 4, y + barH / 2 + 3);
+  }});
+}}
+
+function _drawWxDailyChart(daily) {{
+  var c = _wxInitCanvas('wx-daily-chart');
+  if (!c) return;
+  var ctx = c.ctx, W = c.W, H = c.H;
+  var muted = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
+  var border = getComputedStyle(document.body).getPropertyValue('--border') || '#e0e0e0';
+  var pad = {{top: 12, right: 48, bottom: 28, left: 48}};
+  var cW = W - pad.left - pad.right, cH = H - pad.top - pad.bottom;
+  var n = daily.length;
+  var allTemps = []; daily.forEach(function(d) {{ allTemps.push(d.temp_min); allTemps.push(d.temp_max); }});
+  var minT = Math.min.apply(null, allTemps) - 2, maxT = Math.max.apply(null, allTemps) + 2;
+  var maxK = Math.max.apply(null, daily.map(function(d){{ return d.kwh; }})) * 1.15 || 1;
+  var barW = Math.max(2, (cW / n) - 2);
+
+  ctx.strokeStyle = border; ctx.lineWidth = 0.5;
+  for (var i = 0; i <= 4; i++) {{ var gy = pad.top + cH - (cH * i / 4); ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cW, gy); ctx.stroke(); }}
+  ctx.fillStyle = '#3498db'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+  for (var i = 0; i <= 4; i++) {{ var gy = pad.top + cH - (cH * i / 4); ctx.fillText((maxK * i / 4).toFixed(1), pad.left - 4, gy + 3); }}
+  ctx.fillStyle = '#e74c3c'; ctx.textAlign = 'left';
+  for (var i = 0; i <= 4; i++) {{ var gy = pad.top + cH - (cH * i / 4); ctx.fillText((minT + (maxT - minT) * i / 4).toFixed(0) + '\u00b0', pad.left + cW + 4, gy + 3); }}
+
+  ctx.fillStyle = 'rgba(52,152,219,0.5)';
+  daily.forEach(function(d, i) {{ var x = pad.left + (cW * i / n) + 1; var bh = cH * (d.kwh / maxK); ctx.fillRect(x, pad.top + cH - bh, barW, bh); }});
+
+  daily.forEach(function(d, i) {{
+    var x = pad.left + (cW * (i + 0.5) / n);
+    var yMin = pad.top + cH - cH * (d.temp_min - minT) / (maxT - minT);
+    var yMax = pad.top + cH - cH * (d.temp_max - minT) / (maxT - minT);
+    ctx.strokeStyle = _wxTempColor(d.temp_avg); ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x, yMin); ctx.lineTo(x, yMax); ctx.stroke();
+    var yAvg = pad.top + cH - cH * (d.temp_avg - minT) / (maxT - minT);
+    ctx.beginPath(); ctx.arc(x, yAvg, 3, 0, Math.PI * 2);
+    ctx.fillStyle = _wxTempColor(d.temp_avg); ctx.fill();
+  }});
+
+  ctx.fillStyle = muted; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+  var step = Math.max(1, Math.floor(n / (W < 400 ? 4 : 8)));
+  for (var i = 0; i < n; i += step) {{ ctx.fillText(daily[i].date.slice(5), pad.left + (cW * (i + 0.5) / n), pad.top + cH + 16); }}
+  ctx.fillStyle = '#3498db'; ctx.font = '10px sans-serif';
+  ctx.save(); ctx.translate(12, pad.top + cH / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText('kWh', 0, 0); ctx.restore();
+  ctx.fillStyle = '#e74c3c';
+  ctx.save(); ctx.translate(W - 6, pad.top + cH / 2); ctx.rotate(Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText('\u00b0C', 0, 0); ctx.restore();
 }}
 
 function _drawWeatherCharts(d) {{
@@ -5062,155 +5219,77 @@ function _drawWeatherCharts(d) {{
   var muted = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
   var border = getComputedStyle(document.body).getPropertyValue('--border') || '#e0e0e0';
 
-  // --- Scatter plot ---
-  var scatterEl = document.getElementById('weather-scatter');
-  if (scatterEl) {{
-    var dpr = window.devicePixelRatio || 1;
-    var rect = scatterEl.getBoundingClientRect();
-    scatterEl.width = rect.width * dpr;
-    scatterEl.height = rect.height * dpr;
-    var ctx = scatterEl.getContext('2d');
-    ctx.scale(dpr, dpr);
-    var W = rect.width, H = rect.height;
+  var sc = _wxInitCanvas('weather-scatter');
+  if (sc) {{
+    var ctx = sc.ctx, W = sc.W, H = sc.H;
     var pad = {{top: 12, right: 16, bottom: 28, left: 48}};
-    var cW = W - pad.left - pad.right;
-    var cH = H - pad.top - pad.bottom;
-
+    var cW = W - pad.left - pad.right, cH = H - pad.top - pad.bottom;
     var temps = pts.map(function(p) {{ return p.temp; }});
     var kwhs = pts.map(function(p) {{ return p.kwh; }});
-    var minT = Math.min.apply(null, temps) - 1;
-    var maxT = Math.max.apply(null, temps) + 1;
-    var minK = 0;
-    var maxK = Math.max.apply(null, kwhs) * 1.1 || 1;
+    var minT = Math.min.apply(null, temps) - 1, maxT = Math.max.apply(null, temps) + 1;
+    var minK = 0, maxK = Math.max.apply(null, kwhs) * 1.1 || 1;
 
-    // Grid
     ctx.strokeStyle = border; ctx.lineWidth = 0.5;
     ctx.fillStyle = muted; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
-    for (var i = 0; i <= 4; i++) {{
-      var gy = pad.top + cH - (cH * i / 4);
-      ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cW, gy); ctx.stroke();
-      ctx.fillText((minK + (maxK - minK) * i / 4).toFixed(2), pad.left - 4, gy + 3);
-    }}
+    for (var i = 0; i <= 4; i++) {{ var gy = pad.top + cH - (cH * i / 4); ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cW, gy); ctx.stroke(); ctx.fillText((minK + (maxK - minK) * i / 4).toFixed(2), pad.left - 4, gy + 3); }}
     ctx.textAlign = 'center';
-    for (var j = 0; j <= 4; j++) {{
-      var gx = pad.left + (cW * j / 4);
-      ctx.fillText((minT + (maxT - minT) * j / 4).toFixed(0) + '\u00b0', gx, pad.top + cH + 16);
-    }}
-
-    // Axis labels
+    for (var j = 0; j <= 4; j++) {{ var gx = pad.left + (cW * j / 4); ctx.fillText((minT + (maxT - minT) * j / 4).toFixed(0) + '\u00b0', gx, pad.top + cH + 16); }}
     ctx.fillStyle = muted; ctx.font = '10px sans-serif';
-    ctx.save(); ctx.translate(12, pad.top + cH / 2); ctx.rotate(-Math.PI/2);
-    ctx.textAlign = 'center'; ctx.fillText('kWh', 0, 0); ctx.restore();
+    ctx.save(); ctx.translate(12, pad.top + cH / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText('kWh', 0, 0); ctx.restore();
     ctx.textAlign = 'center'; ctx.fillText('\u00b0C', pad.left + cW / 2, H - 2);
 
-    // Points colored by hour
     pts.forEach(function(p) {{
       var x = pad.left + cW * (p.temp - minT) / (maxT - minT);
       var y = pad.top + cH - cH * (p.kwh - minK) / (maxK - minK);
-      ctx.beginPath();
-      ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2);
       ctx.fillStyle = _weatherHourColor(p.hour_of_day || 0);
-      ctx.globalAlpha = 0.7;
-      ctx.fill();
+      ctx.globalAlpha = 0.7; ctx.fill();
     }});
     ctx.globalAlpha = 1.0;
 
-    // Regression line
     if (d.correlation && d.correlation.slope != null) {{
       var sl = d.correlation.slope, ic = d.correlation.intercept;
-      var x1 = pad.left;
-      var x2 = pad.left + cW;
-      var t1 = minT, t2 = maxT;
-      var y1 = pad.top + cH - cH * ((sl * t1 + ic) - minK) / (maxK - minK);
-      var y2 = pad.top + cH - cH * ((sl * t2 + ic) - minK) / (maxK - minK);
-      ctx.setLineDash([6, 3]);
-      ctx.strokeStyle = '#e74c3c';
-      ctx.lineWidth = 1.5;
-      ctx.globalAlpha = 0.7;
-      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.globalAlpha = 1.0;
+      var y1 = pad.top + cH - cH * ((sl * minT + ic) - minK) / (maxK - minK);
+      var y2 = pad.top + cH - cH * ((sl * maxT + ic) - minK) / (maxK - minK);
+      ctx.setLineDash([6, 3]); ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.7;
+      ctx.beginPath(); ctx.moveTo(pad.left, y1); ctx.lineTo(pad.left + cW, y2); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1.0;
     }}
   }}
 
-  // --- Timeline chart ---
-  var timeEl = document.getElementById('weather-timeline');
-  if (timeEl) {{
+  var tc = _wxInitCanvas('weather-timeline');
+  if (tc) {{
     var sorted = pts.slice().sort(function(a, b) {{ return a.ts - b.ts; }});
     if (sorted.length > 72) sorted = sorted.slice(sorted.length - 72);
-
-    var dpr2 = window.devicePixelRatio || 1;
-    var rect2 = timeEl.getBoundingClientRect();
-    timeEl.width = rect2.width * dpr2;
-    timeEl.height = rect2.height * dpr2;
-    var ctx2 = timeEl.getContext('2d');
-    ctx2.scale(dpr2, dpr2);
-    var W2 = rect2.width, H2 = rect2.height;
+    var ctx2 = tc.ctx, W2 = tc.W, H2 = tc.H;
     var pad2 = {{top: 12, right: 48, bottom: 28, left: 48}};
-    var cW2 = W2 - pad2.left - pad2.right;
-    var cH2 = H2 - pad2.top - pad2.bottom;
-
+    var cW2 = W2 - pad2.left - pad2.right, cH2 = H2 - pad2.top - pad2.bottom;
     var kwhs2 = sorted.map(function(p) {{ return p.kwh; }});
     var temps2 = sorted.map(function(p) {{ return p.temp; }});
     var maxK2 = Math.max.apply(null, kwhs2) * 1.15 || 1;
-    var minT2 = Math.min.apply(null, temps2) - 1;
-    var maxT2 = Math.max.apply(null, temps2) + 1;
-    var n = sorted.length;
-    var barW = Math.max(1, (cW2 / n) - 1);
+    var minT2 = Math.min.apply(null, temps2) - 1, maxT2 = Math.max.apply(null, temps2) + 1;
+    var n = sorted.length, barW = Math.max(1, (cW2 / n) - 1);
 
-    // Grid + Y-axis left (kWh)
     ctx2.strokeStyle = border; ctx2.lineWidth = 0.5;
     ctx2.fillStyle = '#3498db'; ctx2.font = '10px sans-serif'; ctx2.textAlign = 'right';
-    for (var gi = 0; gi <= 4; gi++) {{
-      var gy2 = pad2.top + cH2 - (cH2 * gi / 4);
-      ctx2.beginPath(); ctx2.moveTo(pad2.left, gy2); ctx2.lineTo(pad2.left + cW2, gy2); ctx2.stroke();
-      ctx2.fillText((maxK2 * gi / 4).toFixed(2), pad2.left - 4, gy2 + 3);
-    }}
-    // Y-axis right (°C)
+    for (var gi = 0; gi <= 4; gi++) {{ var gy2 = pad2.top + cH2 - (cH2 * gi / 4); ctx2.beginPath(); ctx2.moveTo(pad2.left, gy2); ctx2.lineTo(pad2.left + cW2, gy2); ctx2.stroke(); ctx2.fillText((maxK2 * gi / 4).toFixed(2), pad2.left - 4, gy2 + 3); }}
     ctx2.fillStyle = '#e74c3c'; ctx2.textAlign = 'left';
-    for (var gj = 0; gj <= 4; gj++) {{
-      var gy3 = pad2.top + cH2 - (cH2 * gj / 4);
-      ctx2.fillText((minT2 + (maxT2 - minT2) * gj / 4).toFixed(0) + '\u00b0', pad2.left + cW2 + 4, gy3 + 3);
-    }}
-
-    // Bars (kWh)
+    for (var gj = 0; gj <= 4; gj++) {{ var gy3 = pad2.top + cH2 - (cH2 * gj / 4); ctx2.fillText((minT2 + (maxT2 - minT2) * gj / 4).toFixed(0) + '\u00b0', pad2.left + cW2 + 4, gy3 + 3); }}
     ctx2.fillStyle = 'rgba(52,152,219,0.6)';
-    sorted.forEach(function(p, i) {{
-      var x = pad2.left + (cW2 * i / n) + 1;
-      var bh = cH2 * (p.kwh / maxK2);
-      ctx2.fillRect(x, pad2.top + cH2 - bh, barW, bh);
-    }});
-
-    // Temperature line
+    sorted.forEach(function(p, i) {{ var x = pad2.left + (cW2 * i / n) + 1; var bh = cH2 * (p.kwh / maxK2); ctx2.fillRect(x, pad2.top + cH2 - bh, barW, bh); }});
     ctx2.strokeStyle = '#e74c3c'; ctx2.lineWidth = 2; ctx2.globalAlpha = 0.85;
     ctx2.beginPath();
-    sorted.forEach(function(p, i) {{
-      var x = pad2.left + (cW2 * (i + 0.5) / n);
-      var y = pad2.top + cH2 - cH2 * (p.temp - minT2) / (maxT2 - minT2);
-      if (i === 0) ctx2.moveTo(x, y); else ctx2.lineTo(x, y);
-    }});
-    ctx2.stroke();
-    ctx2.globalAlpha = 1.0;
+    sorted.forEach(function(p, i) {{ var x = pad2.left + (cW2 * (i + 0.5) / n); var y = pad2.top + cH2 - cH2 * (p.temp - minT2) / (maxT2 - minT2); if (i === 0) ctx2.moveTo(x, y); else ctx2.lineTo(x, y); }});
+    ctx2.stroke(); ctx2.globalAlpha = 1.0;
 
-    // X-axis labels (date+hour) – fewer on narrow screens
     ctx2.fillStyle = muted; ctx2.font = '9px sans-serif'; ctx2.textAlign = 'center';
     var maxLabels = W2 < 400 ? 4 : (W2 < 600 ? 5 : 8);
     var step = Math.max(1, Math.floor(n / maxLabels));
-    for (var li = 0; li < n; li += step) {{
-      var dt = new Date(sorted[li].ts * 1000);
-      var lbl = ('0'+dt.getDate()).slice(-2) + '.' + ('0'+(dt.getMonth()+1)).slice(-2);
-      if (W2 >= 400) lbl += ' ' + ('0'+dt.getHours()).slice(-2) + 'h';
-      var lx = pad2.left + (cW2 * (li + 0.5) / n);
-      ctx2.fillText(lbl, lx, pad2.top + cH2 + 16);
-    }}
-
-    // Axis labels
+    for (var li = 0; li < n; li += step) {{ var dt = new Date(sorted[li].ts * 1000); var lbl = ('0'+dt.getDate()).slice(-2) + '.' + ('0'+(dt.getMonth()+1)).slice(-2); if (W2 >= 400) lbl += ' ' + ('0'+dt.getHours()).slice(-2) + 'h'; ctx2.fillText(lbl, pad2.left + (cW2 * (li + 0.5) / n), pad2.top + cH2 + 16); }}
     ctx2.fillStyle = '#3498db'; ctx2.font = '10px sans-serif';
-    ctx2.save(); ctx2.translate(12, pad2.top + cH2 / 2); ctx2.rotate(-Math.PI/2);
-    ctx2.textAlign = 'center'; ctx2.fillText('kWh', 0, 0); ctx2.restore();
+    ctx2.save(); ctx2.translate(12, pad2.top + cH2 / 2); ctx2.rotate(-Math.PI / 2); ctx2.textAlign = 'center'; ctx2.fillText('kWh', 0, 0); ctx2.restore();
     ctx2.fillStyle = '#e74c3c';
-    ctx2.save(); ctx2.translate(W2 - 6, pad2.top + cH2 / 2); ctx2.rotate(Math.PI/2);
-    ctx2.textAlign = 'center'; ctx2.fillText('\u00b0C', 0, 0); ctx2.restore();
+    ctx2.save(); ctx2.translate(W2 - 6, pad2.top + cH2 / 2); ctx2.rotate(Math.PI / 2); ctx2.textAlign = 'center'; ctx2.fillText('\u00b0C', 0, 0); ctx2.restore();
   }}
 }}
 
@@ -7168,7 +7247,7 @@ _loadLsSettings();
   /* ── Goals & Gamification ── */
   async function loadGoals() {{
     const el = document.getElementById('goals-content');
-    el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Lade\u2026') + '</p>';
     try {{
       const r = await fetch('/api/goals');
       if (!r.ok) throw new Error(r.status);
@@ -7176,42 +7255,252 @@ _loadLsSettings();
       if (!d.ok) throw new Error(d.error || 'unknown');
       renderGoals(d.data, el);
     }} catch(e) {{
-      el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>';
+      el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
     }}
   }}
+  function _glBar(pct, h) {{
+    h = h || 6;
+    return '<div style="height:' + h + 'px;background:var(--border);border-radius:3px;margin-top:4px">' +
+      '<div style="height:100%;width:' + Math.min(pct,100) + '%;background:' +
+      (pct <= 100 ? '#4caf50' : '#e53935') + ';border-radius:3px;transition:width .4s"></div></div>';
+  }}
+  function _glCard(icon, label, value, sub) {{
+    return '<div class="card"><div class="metric-label">' + icon + ' ' + label + '</div><div class="metric-value">' + value + '</div>' +
+      (sub ? '<div style="font-size:10px;color:var(--muted);margin-top:2px">' + sub + '</div>' : '') + '</div>';
+  }}
+
   function renderGoals(data, el) {{
-    function bar(pct) {{
-      return '<div style="height:6px;background:var(--border);border-radius:3px;margin-top:6px">' +
-        '<div style="height:100%;width:' + Math.min(pct,100) + '%;background:' +
-        (pct <= 100 ? '#4caf50' : '#e53935') + ';border-radius:3px"></div></div>';
+    var html = '';
+    var s = data.streak || {{}};
+    var wg = data.weekly_goal || {{}};
+    var mg = data.monthly_goal || {{}};
+
+    // ── Level & XP Hero ──────────────────────────────────────
+    var lvl = data.level || 1;
+    var xp = data.xp || 0;
+    var xpNext = data.xp_for_next || 100;
+    var xpIn = data.xp_in_level || 0;
+    var lpct = data.level_progress_pct || 0;
+    var lvlTitle = lvl >= 20 ? '\U0001f451 Master' : lvl >= 15 ? '\U0001f48e Diamond' : lvl >= 10 ? '\U0001f947 Gold' : lvl >= 5 ? '\U0001f948 Silver' : '\U0001f949 Bronze';
+    html += '<div class="card" style="text-align:center;margin-bottom:10px;position:relative;overflow:hidden">';
+    html += '<div style="position:absolute;top:0;left:0;height:100%;width:' + lpct + '%;background:rgba(76,175,80,0.08);transition:width .5s"></div>';
+    html += '<div style="position:relative;z-index:1">';
+    html += '<div style="font-size:36px;font-weight:800;color:var(--accent)">Level ' + lvl + '</div>';
+    html += '<div style="font-size:13px;color:var(--muted);margin-top:2px">' + lvlTitle + ' \u2022 ' + xp + ' XP</div>';
+    html += _glBar(lpct, 8);
+    html += '<div style="font-size:10px;color:var(--muted);margin-top:2px">' + xpIn + ' / ' + xpNext + ' XP ' + t('web.goals.to_next', 'to next level') + '</div>';
+    html += '</div></div>';
+
+    // ── Streak Hero ──────────────────────────────────────────
+    var fire = '';
+    for (var fi = 0; fi < Math.min(s.current_days || 0, 10); fi++) fire += '\U0001f525';
+    if (!fire) fire = '\u2744\ufe0f';
+    html += '<div class="card" style="text-align:center;margin-bottom:10px">';
+    html += '<div style="font-size:24px">' + fire + '</div>';
+    html += '<div style="font-size:20px;font-weight:700">' + (s.current_days || 0) + ' ' + t('web.goals.streak_days', 'Tage Serie') + '</div>';
+    html += '<div style="font-size:11px;color:var(--muted)">' + t('web.goals.best_streak', 'Best') + ': ' + (s.best_days || 0) + ' ' + t('web.goals.days', 'Tage') + '</div>';
+    html += '</div>';
+
+    // ── Goal cards (weekly + monthly) ────────────────────────
+    html += '<div class="nilm-two-col">';
+    // Weekly
+    html += '<div class="card">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+    html += '<div class="card-title">\U0001f4c5 ' + t('web.goals.weekly', 'Wochenziel') + '</div>';
+    html += '<span style="font-size:18px">' + (wg.achieved ? '\u2705' : '\u23f3') + '</span></div>';
+    html += '<div style="font-size:22px;font-weight:700;margin:6px 0">' + (wg.actual_kwh||0).toFixed(1) + ' <span style="font-size:14px;color:var(--muted)">/ ' + (wg.target_kwh||0).toFixed(1) + ' kWh</span></div>';
+    html += _glBar(wg.progress_pct||0, 10);
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:4px">';
+    if (wg.achieved) html += '\u2705 ' + t('web.goals.achieved', 'Ziel erreicht!') + ' \u2013 ' + (wg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.saved', 'gespart');
+    else html += '\u23f3 ' + t('web.goals.remaining', 'Noch') + ' ' + (wg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.to_go', '\u00fcbrig');
+    html += '</div></div>';
+    // Monthly
+    html += '<div class="card">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+    html += '<div class="card-title">\U0001f4c6 ' + t('web.goals.monthly', 'Monatsziel') + '</div>';
+    html += '<span style="font-size:18px">' + (mg.achieved ? '\u2705' : '\u23f3') + '</span></div>';
+    html += '<div style="font-size:22px;font-weight:700;margin:6px 0">' + (mg.actual_kwh||0).toFixed(1) + ' <span style="font-size:14px;color:var(--muted)">/ ' + (mg.target_kwh||0).toFixed(1) + ' kWh</span></div>';
+    html += _glBar(mg.progress_pct||0, 10);
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:4px">';
+    if (mg.achieved) html += '\u2705 ' + t('web.goals.achieved', 'Ziel erreicht!') + ' \u2013 ' + (mg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.saved', 'gespart');
+    else html += '\u23f3 ' + t('web.goals.remaining', 'Noch') + ' ' + (mg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.to_go', '\u00fcbrig');
+    html += '</div></div>';
+    html += '</div>';
+
+    // ── Statistics overview ──────────────────────────────────
+    var sav = data.savings_eur || {{}};
+    html += '<div class="nilm-metrics" style="margin-top:10px">';
+    html += _glCard('\U0001f4ca', t('web.goals.avg_daily', 'Tages\u00f8'), (data.avg_daily_kwh||0).toFixed(1) + ' kWh', '');
+    html += _glCard('\U0001f3af', t('web.goals.target', 'Tagesziel'), (data.daily_target_kwh||0).toFixed(1) + ' kWh', '90% vom \u00f8');
+    html += _glCard('\u2705', t('web.goals.days_under', 'Tage unter Ziel'), (data.days_under_target||0) + ' / ' + (data.days_total||0), '');
+    html += _glCard('\U0001f4b0', t('web.goals.saved_eur', 'Gespart'), (sav.weekly||0).toFixed(2) + ' \u20ac/W \u2022 ' + (sav.monthly||0).toFixed(2) + ' \u20ac/M', sav.price_kwh ? sav.price_kwh.toFixed(2) + ' \u20ac/kWh' : '');
+    html += '</div>';
+
+    // ── Daily chart (30 days) ────────────────────────────────
+    if (data.daily_history && data.daily_history.length > 0) {{
+      html += '<div class="card" style="margin-top:10px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">' + t('web.goals.daily_chart', '30-Tage Verbrauch') + '</div>';
+      html += '<canvas id="gl-daily-chart" style="width:100%;height:200px"></canvas></div>';
     }}
-    const s = data.streak || {{}};
-    const fire = '🔥'.repeat(Math.min(s.current_days || 0, 5));
-    let html = '<div class="card" style="margin-bottom:10px;text-align:center">' +
-      '<div style="font-size:18px;padding:6px 0">' + fire + ' <b>' + (s.current_days || 0) + '</b> Tage unter dem Durchschnitt</div></div>';
 
-    const wg = data.weekly_goal || {{}};
-    const mg = data.monthly_goal || {{}};
-    html += '<div class="card-grid">' +
-      '<div class="card"><div class="card-title">📅 Wochenziel</div>' +
-      '<div>' + (wg.actual_kwh||0).toFixed(1) + ' / ' + (wg.target_kwh||0).toFixed(1) + ' kWh</div>' + bar(wg.progress_pct||0) + '</div>' +
-      '<div class="card"><div class="card-title">📆 Monatsziel</div>' +
-      '<div>' + (mg.actual_kwh||0).toFixed(1) + ' / ' + (mg.target_kwh||0).toFixed(1) + ' kWh</div>' + bar(mg.progress_pct||0) + '</div>' +
-      '</div>';
+    // ── Weekly trend chart ───────────────────────────────────
+    if (data.weekly_history && data.weekly_history.length > 0) {{
+      html += '<div class="card" style="margin-top:10px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">' + t('web.goals.weekly_chart', 'Wochentrend') + '</div>';
+      html += '<canvas id="gl-weekly-chart" style="width:100%;height:180px"></canvas></div>';
+    }}
 
-    html += '<div class="card" style="margin-top:10px"><div class="card-title">🏆 Abzeichen (' +
-      (data.unlocked_count||0) + '/' + (data.total_badges||0) + ')</div>' +
-      '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:6px 0">';
+    // ── Best / Worst days ────────────────────────────────────
+    if (data.best_days && data.best_days.length > 0) {{
+      html += '<div class="nilm-two-col" style="margin-top:10px">';
+      html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">\U0001f3c6 ' + t('web.goals.best_days', 'Top 10 beste Tage') + '</div>';
+      data.best_days.forEach(function(d, i) {{
+        var medal = ['\U0001f947','\U0001f948','\U0001f949'][i] || '\U0001f539';
+        var pct = data.daily_target_kwh > 0 ? Math.round(d.kwh / data.daily_target_kwh * 100) : 0;
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);font-size:12px">';
+        html += '<span>' + medal + ' ' + d.date.slice(5) + '</span>';
+        html += '<span style="font-weight:600;color:#4caf50">' + d.kwh.toFixed(1) + ' kWh <span style="color:var(--muted);font-weight:400">(' + pct + '%)</span></span></div>';
+      }});
+      html += '</div>';
+      if (data.worst_days && data.worst_days.length > 0) {{
+        html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">\U0001f4a5 ' + t('web.goals.worst_days', 'Top 5 schlechteste Tage') + '</div>';
+        data.worst_days.forEach(function(d) {{
+          var pct = data.daily_target_kwh > 0 ? Math.round(d.kwh / data.daily_target_kwh * 100) : 0;
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);font-size:12px">';
+          html += '<span>' + d.date.slice(5) + '</span>';
+          html += '<span style="font-weight:600;color:#e53935">' + d.kwh.toFixed(1) + ' kWh <span style="color:var(--muted);font-weight:400">(' + pct + '%)</span></span></div>';
+        }});
+        html += '</div>';
+      }}
+      html += '</div>';
+    }}
+
+    // ── Badges ───────────────────────────────────────────────
+    html += '<div class="card" style="margin-top:10px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">\U0001f3c6 ' + t('web.goals.badges', 'Abzeichen') + ' (' + (data.unlocked_count||0) + '/' + (data.total_badges||0) + ')</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">';
     (data.badges || []).forEach(function(b) {{
-      const opacity = b.unlocked ? '1' : '0.4';
-      const lock = b.unlocked ? '' : '🔒 ';
-      html += '<div style="text-align:center;opacity:' + opacity + ';overflow:hidden">' +
-        '<div style="font-size:20px">' + b.icon + '</div>' +
-        '<div style="font-size:8px;line-height:1.1;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + lock + esc(b.name) + '</div>' +
-        bar(b.progress_pct || 0) + '</div>';
+      var unlocked = b.unlocked;
+      html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center;opacity:' + (unlocked ? '1' : '0.5') + '">';
+      html += '<div style="font-size:26px">' + b.icon + '</div>';
+      html += '<div style="font-size:11px;font-weight:600;margin-top:3px">' + (unlocked ? '' : '\U0001f512 ') + esc(b.name) + '</div>';
+      html += '<div style="font-size:9px;color:var(--muted);margin-top:1px">' + esc(b.description) + '</div>';
+      html += _glBar(b.progress_pct || 0, 4);
+      html += '<div style="font-size:9px;color:var(--muted);margin-top:2px">' + Math.round(b.progress_pct || 0) + '%</div>';
+      html += '</div>';
     }});
     html += '</div></div>';
+
     el.innerHTML = html;
+
+    // Draw charts
+    if (data.daily_history && data.daily_history.length > 0) {{
+      setTimeout(function() {{ _glDrawDailyChart(data.daily_history, data.daily_target_kwh || 0); }}, 50);
+    }}
+    if (data.weekly_history && data.weekly_history.length > 0) {{
+      setTimeout(function() {{ _glDrawWeeklyChart(data.weekly_history); }}, 60);
+    }}
+  }}
+
+  function _glInitCanvas(id) {{
+    var el = document.getElementById(id);
+    if (!el) return null;
+    var dpr = window.devicePixelRatio || 1;
+    var rect = el.getBoundingClientRect();
+    el.width = rect.width * dpr; el.height = rect.height * dpr;
+    var ctx = el.getContext('2d'); ctx.scale(dpr, dpr);
+    return {{ctx: ctx, W: rect.width, H: rect.height}};
+  }}
+
+  function _glDrawDailyChart(daily, target) {{
+    var c = _glInitCanvas('gl-daily-chart');
+    if (!c) return;
+    var ctx = c.ctx, W = c.W, H = c.H;
+    var muted = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
+    var border = getComputedStyle(document.body).getPropertyValue('--border') || '#e0e0e0';
+    var pad = {{top: 10, right: 12, bottom: 28, left: 44}};
+    var cW = W - pad.left - pad.right, cH = H - pad.top - pad.bottom;
+    var n = daily.length;
+    var maxK = Math.max(target * 1.3, Math.max.apply(null, daily.map(function(d){{ return d.kwh; }})) * 1.1) || 1;
+    var barW = Math.max(2, (cW / n) - 2);
+
+    // Grid
+    ctx.strokeStyle = border; ctx.lineWidth = 0.5;
+    ctx.fillStyle = muted; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+    for (var i = 0; i <= 4; i++) {{
+      var gy = pad.top + cH - (cH * i / 4);
+      ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cW, gy); ctx.stroke();
+      ctx.fillText((maxK * i / 4).toFixed(1), pad.left - 4, gy + 3);
+    }}
+
+    // Target line
+    if (target > 0) {{
+      var ty = pad.top + cH - cH * (target / maxK);
+      ctx.strokeStyle = '#4caf50'; ctx.lineWidth = 1.5; ctx.setLineDash([6, 3]);
+      ctx.beginPath(); ctx.moveTo(pad.left, ty); ctx.lineTo(pad.left + cW, ty); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#4caf50'; ctx.textAlign = 'left'; ctx.font = '9px sans-serif';
+      ctx.fillText(t('web.goals.target', 'Ziel') + ' ' + target.toFixed(1), pad.left + cW + 2, ty + 3);
+    }}
+
+    // Bars
+    daily.forEach(function(d, i) {{
+      var x = pad.left + (cW * i / n) + 1;
+      var bh = cH * (d.kwh / maxK);
+      ctx.fillStyle = d.under ? 'rgba(76,175,80,0.7)' : (d.kwh > 0 ? 'rgba(229,57,53,0.6)' : 'rgba(150,150,150,0.2)');
+      ctx.fillRect(x, pad.top + cH - bh, barW, bh);
+    }});
+
+    // X-axis
+    ctx.fillStyle = muted; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+    var step = Math.max(1, Math.floor(n / (W < 400 ? 5 : 10)));
+    for (var i = 0; i < n; i += step) {{
+      ctx.fillText(daily[i].date.slice(5), pad.left + (cW * (i + 0.5) / n), pad.top + cH + 16);
+    }}
+  }}
+
+  function _glDrawWeeklyChart(weekly) {{
+    var c = _glInitCanvas('gl-weekly-chart');
+    if (!c) return;
+    var ctx = c.ctx, W = c.W, H = c.H;
+    var muted = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
+    var border = getComputedStyle(document.body).getPropertyValue('--border') || '#e0e0e0';
+    var pad = {{top: 10, right: 12, bottom: 28, left: 44}};
+    var cW = W - pad.left - pad.right, cH = H - pad.top - pad.bottom;
+    var n = weekly.length;
+    var maxK = Math.max.apply(null, weekly.map(function(w){{ return Math.max(w.kwh, w.target); }})) * 1.15 || 1;
+    var barW = Math.max(8, (cW / n) * 0.6);
+
+    // Grid
+    ctx.strokeStyle = border; ctx.lineWidth = 0.5;
+    ctx.fillStyle = muted; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+    for (var i = 0; i <= 4; i++) {{
+      var gy = pad.top + cH - (cH * i / 4);
+      ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cW, gy); ctx.stroke();
+      ctx.fillText((maxK * i / 4).toFixed(0), pad.left - 4, gy + 3);
+    }}
+
+    // Bars + target markers
+    weekly.forEach(function(w, i) {{
+      var x = pad.left + (cW * (i + 0.5) / n) - barW / 2;
+      var bh = cH * (w.kwh / maxK);
+      var under = w.kwh <= w.target;
+      ctx.fillStyle = under ? 'rgba(76,175,80,0.7)' : 'rgba(229,57,53,0.6)';
+      ctx.fillRect(x, pad.top + cH - bh, barW, bh);
+      // Target marker
+      if (w.target > 0) {{
+        var ty = pad.top + cH - cH * (w.target / maxK);
+        ctx.strokeStyle = '#4caf50'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(x - 2, ty); ctx.lineTo(x + barW + 2, ty); ctx.stroke();
+      }}
+      // Value on top
+      ctx.fillStyle = muted; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(w.kwh.toFixed(0), x + barW / 2, pad.top + cH - bh - 4);
+    }});
+
+    // X-axis (week labels)
+    ctx.fillStyle = muted; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+    weekly.forEach(function(w, i) {{
+      var lbl = w.week_start.slice(5);
+      ctx.fillText(lbl, pad.left + (cW * (i + 0.5) / n), pad.top + cH + 16);
+    }});
   }}
 
   /* ── Language selector ── */
