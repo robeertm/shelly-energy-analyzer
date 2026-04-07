@@ -2562,6 +2562,49 @@ class ActionDispatcher:
                             val = avg_val
                         hourly_out[str(wd)][str(h)] = round(val, 4)
 
+                # ── Summary statistics ─────────────────────────────────────
+                cal_vals = [c["value"] for c in calendar_data if c["value"] > 0]
+                total_val = sum(cal_vals) if cal_vals else 0
+                avg_daily = total_val / len(cal_vals) if cal_vals else 0
+                peak_day = max(calendar_data, key=lambda c: c["value"]) if calendar_data else None
+                min_day = min((c for c in calendar_data if c["value"] > 0), key=lambda c: c["value"], default=None)
+
+                # Monthly totals
+                monthly_totals: Dict[int, float] = {}
+                for c in calendar_data:
+                    m = int(c["date"][5:7])
+                    monthly_totals[m] = monthly_totals.get(m, 0) + c["value"]
+
+                # Weekday averages (from hourly matrix)
+                weekday_avgs: Dict[int, float] = {}
+                for wd in range(7):
+                    wd_total = sum(hourly_out[str(wd)].get(str(h), 0) for h in range(24))
+                    weekday_avgs[wd] = round(wd_total, 3)
+
+                # Peak hour (from hourly averages across all days)
+                hour_totals = {}
+                for h in range(24):
+                    hour_totals[h] = sum(float(hourly_out[str(wd)].get(str(h), 0)) for wd in range(7)) / 7
+                peak_hour = max(hour_totals, key=hour_totals.get) if hour_totals else 0
+
+                # Weekday vs weekend
+                wd_avg = sum(weekday_avgs.get(d, 0) for d in range(5)) / 5 if any(weekday_avgs.get(d, 0) > 0 for d in range(5)) else 0
+                we_avg = sum(weekday_avgs.get(d, 0) for d in range(5, 7)) / 2 if any(weekday_avgs.get(d, 0) > 0 for d in range(5, 7)) else 0
+
+                summary = {
+                    "total": round(total_val, 2),
+                    "avg_daily": round(avg_daily, 3),
+                    "days_with_data": len(cal_vals),
+                    "peak_day": peak_day,
+                    "min_day": min_day,
+                    "peak_hour": peak_hour,
+                    "peak_hour_avg": round(hour_totals.get(peak_hour, 0), 4),
+                    "weekday_avg": round(wd_avg, 3),
+                    "weekend_avg": round(we_avg, 3),
+                    "monthly": {str(m): round(v, 2) for m, v in sorted(monthly_totals.items())},
+                    "weekday_avgs": {str(wd): weekday_avgs[wd] for wd in range(7)},
+                }
+
                 devices_list = [{"key": d.key, "name": d.name} for d in self.cfg.devices]
                 return {
                     "ok": True,
@@ -2571,6 +2614,7 @@ class ActionDispatcher:
                     "calendar": calendar_data,
                     "hourly": hourly_out,
                     "devices": devices_list,
+                    "summary": summary,
                 }
             except Exception as e:
                 return {"ok": False, "error": str(e)}
