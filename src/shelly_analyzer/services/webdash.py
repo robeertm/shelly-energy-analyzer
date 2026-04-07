@@ -1929,11 +1929,11 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">🔥</span>
       <span class="nav-label">{web_tab_heatmap}</span>
     </button>
-    <button class="nav-btn" onclick="switchPane('solar',this)">
+    <button class="nav-btn" data-feature="solar" onclick="switchPane('solar',this)">
       <span class="nav-icon">☀️</span>
       <span class="nav-label">{web_tab_solar}</span>
     </button>
-    <button class="nav-btn" onclick="switchPane('weather',this)">
+    <button class="nav-btn" data-feature="weather" onclick="switchPane('weather',this)">
       <span class="nav-icon">🌡️</span>
       <span class="nav-label">{web_tab_weather}</span>
     </button>
@@ -1941,15 +1941,15 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">🔀</span>
       <span class="nav-label">{web_tab_compare}</span>
     </button>
-    <button class="nav-btn" onclick="switchPane('co2',this)">
+    <button class="nav-btn" data-feature="co2" onclick="switchPane('co2',this)">
       <span class="nav-icon">🌍</span>
       <span class="nav-label">{web_tab_co2}</span>
     </button>
-    <button class="nav-btn" onclick="switchPane('anomalies',this)">
+    <button class="nav-btn" data-feature="anomalies" onclick="switchPane('anomalies',this)">
       <span class="nav-icon">🔍</span>
       <span class="nav-label">{web_tab_anomalies}</span>
     </button>
-    <button class="nav-btn" onclick="switchPane('forecast',this)">
+    <button class="nav-btn" data-feature="forecast" onclick="switchPane('forecast',this)">
       <span class="nav-icon">📈</span>
       <span class="nav-label">{web_tab_forecast}</span>
     </button>
@@ -1961,7 +1961,7 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">⚡</span>
       <span class="nav-label">{web_tab_sankey}</span>
     </button>
-    <button class="nav-btn" onclick="switchPane('ev',this)">
+    <button class="nav-btn" data-feature="ev" onclick="switchPane('ev',this)">
       <span class="nav-icon">🔌</span>
       <span class="nav-label">{web_tab_ev}</span>
     </button>
@@ -1969,31 +1969,31 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">📥</span>
       <span class="nav-label">{web_tab_export}</span>
     </button>
-    <button class="nav-btn" onclick="switchPane('smart_sched',this)">
+    <button class="nav-btn" data-feature="smart_sched" onclick="switchPane('smart_sched',this)">
       <span class="nav-icon">⏱</span>
       <span class="nav-label">Schedule</span>
     </button>
-    <button class="nav-btn" onclick="switchPane('ev_log',this)">
+    <button class="nav-btn" data-feature="ev_log" onclick="switchPane('ev_log',this)">
       <span class="nav-icon">🚗</span>
       <span class="nav-label">EV Log</span>
     </button>
-    <button class="nav-btn" onclick="switchPane('tariff',this)">
+    <button class="nav-btn" data-feature="tariff" onclick="switchPane('tariff',this)">
       <span class="nav-icon">💱</span>
       <span class="nav-label">Tariff</span>
     </button>
-    <button class="nav-btn" onclick="switchPane('battery',this)">
+    <button class="nav-btn" data-feature="battery" onclick="switchPane('battery',this)">
       <span class="nav-icon">🔋</span>
       <span class="nav-label">Battery</span>
     </button>
-    <button class="nav-btn" onclick="switchPane('advisor',this)">
+    <button class="nav-btn" data-feature="advisor" onclick="switchPane('advisor',this)">
       <span class="nav-icon">🤖</span>
       <span class="nav-label">Advisor</span>
     </button>
-    <button class="nav-btn" onclick="switchPane('goals',this)">
+    <button class="nav-btn" data-feature="goals" onclick="switchPane('goals',this)">
       <span class="nav-icon">🏆</span>
       <span class="nav-label">Goals</span>
     </button>
-    <button class="nav-btn" onclick="switchPane('tenants',this)">
+    <button class="nav-btn" data-feature="tenants" onclick="switchPane('tenants',this)">
       <span class="nav-icon">🏘</span>
       <span class="nav-label">Mieter</span>
     </button>
@@ -2014,23 +2014,23 @@ _HTML_TEMPLATE = """<!doctype html>
     <button class="drawer-item" onclick="switchPaneFromDrawer('plots',this)"><span class="drawer-ico">📊</span>Plots</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('costs',this)"><span class="drawer-ico">💰</span>{web_tab_costs}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('heatmap',this)"><span class="drawer-ico">🔥</span>{web_tab_heatmap}</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('solar',this)"><span class="drawer-ico">☀️</span>{web_tab_solar}</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('weather',this)"><span class="drawer-ico">🌡️</span>{web_tab_weather}</button>
+    <button class="drawer-item" data-feature="solar" onclick="switchPaneFromDrawer('solar',this)"><span class="drawer-ico">☀️</span>{web_tab_solar}</button>
+    <button class="drawer-item" data-feature="weather" onclick="switchPaneFromDrawer('weather',this)"><span class="drawer-ico">🌡️</span>{web_tab_weather}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('compare',this)"><span class="drawer-ico">🔀</span>{web_tab_compare}</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('co2',this)"><span class="drawer-ico">🌍</span>{web_tab_co2}</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('anomalies',this)"><span class="drawer-ico">🔍</span>{web_tab_anomalies}</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('forecast',this)"><span class="drawer-ico">📈</span>{web_tab_forecast}</button>
+    <button class="drawer-item" data-feature="co2" onclick="switchPaneFromDrawer('co2',this)"><span class="drawer-ico">🌍</span>{web_tab_co2}</button>
+    <button class="drawer-item" data-feature="anomalies" onclick="switchPaneFromDrawer('anomalies',this)"><span class="drawer-ico">🔍</span>{web_tab_anomalies}</button>
+    <button class="drawer-item" data-feature="forecast" onclick="switchPaneFromDrawer('forecast',this)"><span class="drawer-ico">📈</span>{web_tab_forecast}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('standby',this)"><span class="drawer-ico">🔌</span>{web_tab_standby}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('sankey',this)"><span class="drawer-ico">⚡</span>{web_tab_sankey}</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('ev',this)"><span class="drawer-ico">🔌</span>{web_tab_ev}</button>
+    <button class="drawer-item" data-feature="ev" onclick="switchPaneFromDrawer('ev',this)"><span class="drawer-ico">🔌</span>{web_tab_ev}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('export',this)"><span class="drawer-ico">📥</span>{web_tab_export}</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('smart_sched',this)"><span class="drawer-ico">⏱</span>Schedule</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('ev_log',this)"><span class="drawer-ico">🚗</span>EV Log</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('tariff',this)"><span class="drawer-ico">💱</span>Tariff</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('battery',this)"><span class="drawer-ico">🔋</span>Battery</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('advisor',this)"><span class="drawer-ico">🤖</span>Advisor</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('goals',this)"><span class="drawer-ico">🏆</span>Goals</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('tenants',this)"><span class="drawer-ico">🏘</span>Mieter</button>
+    <button class="drawer-item" data-feature="smart_sched" onclick="switchPaneFromDrawer('smart_sched',this)"><span class="drawer-ico">⏱</span>Schedule</button>
+    <button class="drawer-item" data-feature="ev_log" onclick="switchPaneFromDrawer('ev_log',this)"><span class="drawer-ico">🚗</span>EV Log</button>
+    <button class="drawer-item" data-feature="tariff" onclick="switchPaneFromDrawer('tariff',this)"><span class="drawer-ico">💱</span>Tariff</button>
+    <button class="drawer-item" data-feature="battery" onclick="switchPaneFromDrawer('battery',this)"><span class="drawer-ico">🔋</span>Battery</button>
+    <button class="drawer-item" data-feature="advisor" onclick="switchPaneFromDrawer('advisor',this)"><span class="drawer-ico">🤖</span>Advisor</button>
+    <button class="drawer-item" data-feature="goals" onclick="switchPaneFromDrawer('goals',this)"><span class="drawer-ico">🏆</span>Goals</button>
+    <button class="drawer-item" data-feature="tenants" onclick="switchPaneFromDrawer('tenants',this)"><span class="drawer-ico">🏘</span>Mieter</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('nilm',this)"><span class="drawer-ico">🧠</span>NILM</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('sync',this)"><span class="drawer-ico">🔄</span>Sync</button>
   </aside>
@@ -7223,6 +7223,35 @@ _loadLsSettings();
     fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{action:'set_language',params:{{language:lang}}}})}}
     ).then(()=>window.location.reload()).catch(()=>{{}});
   }}
+
+  // Hide tabs for disabled features
+  (function() {{
+    fetch('/api/config').then(function(r){{ return r.json(); }}).then(function(cfg) {{
+      var ft = cfg.features || {{}};
+      // Feature-to-pane mapping (feature key → pane id)
+      var map = {{
+        solar:'solar', weather:'weather', co2:'co2',
+        anomalies:'anomalies', forecast:'forecast',
+        ev:'ev', ev_log:'ev_log', smart_sched:'smart_sched',
+        tariff:'tariff', battery:'battery', advisor:'advisor',
+        goals:'goals', tenants:'tenants'
+      }};
+      Object.keys(map).forEach(function(fk) {{
+        if (ft[fk]) return; // enabled → keep visible
+        var paneId = map[fk];
+        // Hide nav button, drawer item, and pane
+        document.querySelectorAll('[data-feature="' + fk + '"]').forEach(function(el) {{
+          el.style.display = 'none';
+        }});
+        var pane = document.getElementById('pane-' + paneId);
+        if (pane) pane.style.display = 'none';
+      }});
+      // If current pane got hidden, fall back to live
+      if (currentPane && !ft[currentPane] && map[currentPane]) {{
+        switchPane('live', document.querySelector('.nav-btn[onclick*="live"]'));
+      }}
+    }}).catch(function(){{}});
+  }})();
 
   // Restore last pane
   const last = localStorage.getItem('sea_pane');
