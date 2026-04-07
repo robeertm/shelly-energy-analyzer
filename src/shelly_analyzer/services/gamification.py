@@ -291,6 +291,8 @@ class GoalsEngine:
 
 def get_gamification_status(db, cfg) -> dict:
     """Main entry point for gamification data."""
+    import datetime as _dt
+
     engine = GoalsEngine()
     device_keys = [d.key for d in cfg.devices if getattr(d, 'kind', 'em') == 'em']
 
@@ -298,6 +300,90 @@ def get_gamification_status(db, cfg) -> dict:
     monthly = engine.check_monthly_goal(db, device_keys, cfg.gamification.monthly_goal_kwh)
     badges = engine.check_badges(db, device_keys, cfg)
     streak = engine.get_streak(db, device_keys)
+
+    # ── Daily history (last 30 days) ──────────────────────────────────
+    now = int(time.time())
+    today = _dt.date.today()
+    daily_history = []
+    daily_kwh_map = {}
+    start_30d = now - 30 * 86400
+    for key in device_keys:
+        try:
+            df = db.query_hourly(key, start_30d, now)
+            if df is not None and not df.empty:
+                for _, row in df.iterrows():
+                    h_ts = int(row.get("hour_ts", 0))
+                    day_key = _dt.date.fromtimestamp(h_ts).isoformat()
+                    daily_kwh_map[day_key] = daily_kwh_map.get(day_key, 0) + float(row.get("kwh", 0) or 0)
+        except Exception:
+            pass
+
+    avg_daily = sum(daily_kwh_map.values()) / len(daily_kwh_map) if daily_kwh_map else 0
+    daily_target = avg_daily * 0.9 if avg_daily > 0 else 10.0
+    best_day = None
+    worst_day = None
+    for i in range(30):
+        d = (today - _dt.timedelta(days=29 - i)).isoformat()
+        kwh = round(daily_kwh_map.get(d, 0), 2)
+        under = kwh <= daily_target and kwh > 0
+        daily_history.append({"date": d, "kwh": kwh, "target": round(daily_target, 2), "under": under})
+        if kwh > 0:
+            if best_day is None or kwh < best_day["kwh"]:
+                best_day = {"date": d, "kwh": kwh}
+            if worst_day is None or kwh > worst_day["kwh"]:
+                worst_day = {"date": d, "kwh": kwh}
+
+    # ── Weekly history (last 8 weeks) ─────────────────────────────────
+    weekly_history = []
+    monday = today - _dt.timedelta(days=today.weekday())
+    for w in range(7, -1, -1):
+        ws = monday - _dt.timedelta(weeks=w)
+        we = ws + _dt.timedelta(days=7)
+        ws_ts = int(_dt.datetime.combine(ws, _dt.time.min).timestamp())
+        we_ts = int(_dt.datetime.combine(we, _dt.time.min).timestamp())
+        wk_kwh = engine._sum_kwh(db, device_keys, ws_ts, we_ts)
+        weekly_history.append({
+            "week_start": ws.isoformat(),
+            "kwh": round(wk_kwh, 1),
+            "target": round(weekly.target_kwh, 1),
+        })
+
+    # ── Level / XP system ─────────────────────────────────────────────
+    xp = 0
+    xp += streak.current_streak_days * 10  # 10 XP per streak day
+    xp += sum(50 for b in badges if b.unlocked)  # 50 XP per badge
+    if weekly.achieved:
+        xp += 100
+    if monthly.achieved:
+        xp += 200
+    # Days under target
+    days_under = sum(1 for dh in daily_history if dh["under"])
+    xp += days_under * 5
+    level = 1
+    xp_for_next = 100
+    remaining_xp = xp
+    while remaining_xp >= xp_for_next:
+        remaining_xp -= xp_for_next
+        level += 1
+        xp_for_next = int(xp_for_next * 1.3)
+    level_progress_pct = round(remaining_xp / xp_for_next * 100, 1) if xp_for_next > 0 else 0
+
+    # ── Savings estimate (EUR) ────────────────────────────────────────
+    price_kwh = 0.30  # default
+    try:
+        price_kwh = float(getattr(cfg.pricing, "electricity_price_eur_per_kwh", 0.30) or 0.30)
+    except Exception:
+        pass
+    weekly_saved_kwh = max(0, weekly.target_kwh - weekly.actual_kwh) if weekly.achieved else 0
+    monthly_saved_kwh = max(0, monthly.target_kwh - monthly.actual_kwh) if monthly.achieved else 0
+
+    # ── Day ranking (best 10 and worst 5) ─────────────────────────────
+    ranked_days = sorted(
+        [dh for dh in daily_history if dh["kwh"] > 0],
+        key=lambda x: x["kwh"],
+    )
+    best_days = ranked_days[:10]
+    worst_days = ranked_days[-5:][::-1] if len(ranked_days) >= 5 else []
 
     return {
         "weekly_goal": {
@@ -332,4 +418,24 @@ def get_gamification_status(db, cfg) -> dict:
         },
         "unlocked_count": sum(1 for b in badges if b.unlocked),
         "total_badges": len(badges),
+        "daily_history": daily_history,
+        "weekly_history": weekly_history,
+        "level": level,
+        "xp": xp,
+        "xp_for_next": xp_for_next,
+        "xp_in_level": remaining_xp,
+        "level_progress_pct": level_progress_pct,
+        "avg_daily_kwh": round(avg_daily, 2),
+        "daily_target_kwh": round(daily_target, 2),
+        "days_under_target": days_under,
+        "days_total": len([dh for dh in daily_history if dh["kwh"] > 0]),
+        "best_day": best_day,
+        "worst_day": worst_day,
+        "best_days": best_days,
+        "worst_days": worst_days,
+        "savings_eur": {
+            "weekly": round(weekly_saved_kwh * price_kwh, 2),
+            "monthly": round(monthly_saved_kwh * price_kwh, 2),
+            "price_kwh": price_kwh,
+        },
     }
