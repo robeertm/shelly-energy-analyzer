@@ -10,41 +10,55 @@ Runs as a local Flask web server — access the dashboard from any browser on yo
 
 ## Screenshots
 
-### Plots
+All desktop shots are captured at native **4K (3840×2160)**, all mobile shots at **iPhone 16 Pro Max** resolution (1290×2796).
 
-| W (Power) | V (Voltage) | A (Current) |
-|-----------|-------------|-------------|
-| ![W](docs/screenshots/plots_w_haus.png) | ![V](docs/screenshots/plots_v_haus.png) | ![A](docs/screenshots/plots_a_haus.png) |
-
-| kWh (Energy) | VAR (Reactive) | cos φ (Power Factor) |
-|--------------|----------------|----------------------|
-| ![kWh](docs/screenshots/plots_kwh_haus.png) | ![VAR](docs/screenshots/plots_var_haus.png) | ![cos φ](docs/screenshots/plots_cosphi_haus.png) |
-
-| Hz (Frequency) | CO₂ Emissions | Dynamic Price |
-|----------------|---------------|---------------|
-| ![Hz](docs/screenshots/plots_hz_haus.png) | ![CO2](docs/screenshots/plots_co2_haus.png) | ![Dyn Price](docs/screenshots/plots_dynprice_haus.png) |
-
-### Web Dashboard
+### Desktop (4K)
 
 | Live | Costs | Heatmap |
 |------|-------|---------|
-| ![Live](docs/screenshots/web_01_live.png) | ![Costs](docs/screenshots/web_02_costs.png) | ![Heatmap](docs/screenshots/web_03_heatmap.png) |
+| ![Live](docs/screenshots/desktop_01_live.png) | ![Costs](docs/screenshots/desktop_02_costs.png) | ![Heatmap](docs/screenshots/desktop_03_heatmap.png) |
 
-| Solar | Compare | CO₂ |
-|-------|---------|-----|
-| ![Solar](docs/screenshots/web_04_solar.png) | ![Compare](docs/screenshots/web_05_compare.png) | ![CO2](docs/screenshots/web_06_co2.png) |
+| Weather | CO₂ | Anomalies |
+|---------|-----|-----------|
+| ![Weather](docs/screenshots/desktop_05_weather.png) | ![CO2](docs/screenshots/desktop_06_co2.png) | ![Anomalies](docs/screenshots/desktop_07_anomalies.png) |
 
-| Anomalies | Forecast | Standby |
-|-----------|----------|---------|
-| ![Anomalies](docs/screenshots/web_07_anomalies.png) | ![Forecast](docs/screenshots/web_08_forecast.png) | ![Standby](docs/screenshots/web_09_standby.png) |
+| Forecast | Standby | Energy Flow |
+|----------|---------|-------------|
+| ![Forecast](docs/screenshots/desktop_08_forecast.png) | ![Standby](docs/screenshots/desktop_09_standby.png) | ![Energy Flow](docs/screenshots/desktop_10_energy_flow.png) |
 
-| Energy Flow | Export | Live (Dark) |
-|-------------|-------|-------------|
-| ![Energy Flow](docs/screenshots/web_10_energy_flow.png) | ![Export](docs/screenshots/web_11_export.png) | ![Live Dark](docs/screenshots/web_01_live_dark.png) |
+| Goals | NILM |
+|-------|------|
+| ![Goals](docs/screenshots/desktop_12_goals.png) | ![NILM](docs/screenshots/desktop_14_nilm.png) |
 
-| Costs (Dark) | CO₂ (Dark) |
-|--------------|------------|
-| ![Costs Dark](docs/screenshots/web_02_costs_dark.png) | ![CO2 Dark](docs/screenshots/web_06_co2_dark.png) |
+#### Dark theme
+
+| Live | Costs | Heatmap | CO₂ |
+|------|-------|---------|-----|
+| ![Live Dark](docs/screenshots/desktop_01_live_dark.png) | ![Costs Dark](docs/screenshots/desktop_02_costs_dark.png) | ![Heatmap Dark](docs/screenshots/desktop_03_heatmap_dark.png) | ![CO2 Dark](docs/screenshots/desktop_06_co2_dark.png) |
+
+### Mobile (iPhone 16 Pro Max)
+
+| Live | Costs | Heatmap |
+|------|-------|---------|
+| ![Live](docs/screenshots/mobile_01_live.png) | ![Costs](docs/screenshots/mobile_02_costs.png) | ![Heatmap](docs/screenshots/mobile_03_heatmap.png) |
+
+| Weather | CO₂ | Anomalies |
+|---------|-----|-----------|
+| ![Weather](docs/screenshots/mobile_05_weather.png) | ![CO2](docs/screenshots/mobile_06_co2.png) | ![Anomalies](docs/screenshots/mobile_07_anomalies.png) |
+
+| Forecast | Standby | Energy Flow |
+|----------|---------|-------------|
+| ![Forecast](docs/screenshots/mobile_08_forecast.png) | ![Standby](docs/screenshots/mobile_09_standby.png) | ![Energy Flow](docs/screenshots/mobile_10_energy_flow.png) |
+
+| Goals | NILM |
+|-------|------|
+| ![Goals](docs/screenshots/mobile_12_goals.png) | ![NILM](docs/screenshots/mobile_14_nilm.png) |
+
+#### Dark theme
+
+| Live | Costs | Heatmap | CO₂ |
+|------|-------|---------|-----|
+| ![Live Dark](docs/screenshots/mobile_01_live_dark.png) | ![Costs Dark](docs/screenshots/mobile_02_costs_dark.png) | ![Heatmap Dark](docs/screenshots/mobile_03_heatmap_dark.png) | ![CO2 Dark](docs/screenshots/mobile_06_co2_dark.png) |
 
 ### iOS Widget (Scriptable)
 
