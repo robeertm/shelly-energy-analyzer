@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.58 - 2026-04-10
+### Changed
+- **Hero screenshot replaced** in the README with a real-world 5K desktop capture (5120×2706) showing the Live tab with an expanded device card (voltage, current, power factor, phase details, sparklines, reactive power, neutral current, frequency). Much more information-dense than the automated 4K headless shot.
+
 ## 16.13.57 - 2026-04-10
 ### Added
 - **Big README marketing rewrite** targeted at making the repo discoverable and attractive to new visitors landing on the GitHub page:
