@@ -2050,6 +2050,9 @@ function t(k, fbOrVars, maybeVars) {{
 let frozen = false;
 let liveTimer = null;
 let currentPane = 'live';
+// Set to true while a periodic per-tab auto-refresh is in flight so the
+// loadXxx functions skip the "Loading…" spinner and avoid the visible flash.
+let _quietRefresh = false;
 let sparkData = {{}};   // key -> [{{"ts":..,"w":..,"v":..,"a":..,"phases":[...]}}]
 let cmpChart = null;
 let liveWindowSec = 60;
@@ -2104,6 +2107,8 @@ function onPaneActivated(name) {{
   // Stop polling when leaving export tab
   if (name !== 'export' && typeof _expStopJobsPolling === 'function') _expStopJobsPolling();
   if (name !== 'co2' && typeof _stopCo2LiveRates === 'function') _stopCo2LiveRates();
+  // Always (re)arm the per-tab live refresh based on the new pane
+  startTabLiveRefresh(name);
   if (name === 'live') {{
     startLive();
   }} else {{
@@ -2151,7 +2156,7 @@ let _nilmData = null;
 async function loadNilm() {{
   const el = document.getElementById('nilm-content');
   if (!el) return;
-  el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   try {{
     const r = await fetch('/api/nilm_detail');
     if (!r.ok) throw new Error(r.status);
@@ -2624,7 +2629,7 @@ let _tenantsDevices = [];
 function loadTenants() {{
   const el = document.getElementById('tenants-content');
   if (!el) return;
-  el.innerHTML = '<p class="loading-msg">Lade…</p>';
+  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Lade…</p>';
   Promise.all([
     fetch('/api/tenants').then(function(r) {{ return r.json(); }}),
     fetch('/api/config').then(function(r) {{ return r.json(); }})
@@ -2749,7 +2754,7 @@ function computeBills() {{
   if (e) q.set('period_end', e);
   if (tm) q.set('tariff_mode', tm);
   const el = document.getElementById('t-bills');
-  if (el) el.innerHTML = '<p class="loading-msg">Berechne…</p>';
+  if (el && !_quietRefresh) el.innerHTML = '<p class="loading-msg">Berechne…</p>';
   fetch('/api/tenants/bill?' + q.toString()).then(function(r) {{ return r.json(); }}).then(function(d) {{
     if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||'Keine Daten') + '</p>'; return; }}
     const rep = d.report;
@@ -2988,25 +2993,41 @@ async function loadHistory() {{
     }}
   }} catch(e) {{ /* silent */ }}
 }}
+/* ── Persistent live polling ──────────────────────────────────────────
+   /api/state is polled in the background regardless of which pane is
+   active. The Live grid is only re-rendered when currentPane === 'live',
+   but every successful poll dispatches a `sea-live` CustomEvent so any
+   pane can keep its own live elements in sync without doing its own
+   /api/state fetches. Combined with TAB_LIVE_REFRESH below this means
+   anything that updates in the Live tab also updates everywhere else. */
+let _liveLatest = null;
 function startLive() {{
-  if (liveTimer) return;
+  // Live-tab specific one-shot init: timescale buttons, history fetch.
   initTimescaleBtns();
-  tick(true);
-  loadHistory();
-  liveTimer = setInterval(function() {{ if (!frozen) tick(false); }}, REFRESH_MS);
+  if (!_historyLoaded) loadHistory();
+  // Re-render immediately from cached data so the grid isn't blank.
+  if (_liveLatest) renderLive(_liveLatest, true);
+  else tick(true);
   var _fb = document.getElementById('btn-freeze');
-  _fb.removeEventListener('click', toggleFreeze);
-  _fb.addEventListener('click', toggleFreeze);
+  if (_fb) {{
+    _fb.removeEventListener('click', toggleFreeze);
+    _fb.addEventListener('click', toggleFreeze);
+  }}
 }}
 function stopLive() {{
-  if (liveTimer) {{ clearInterval(liveTimer); liveTimer = null; }}
-  // Invalidate history cache so coming back to Live refetches the server
-  // window – otherwise sparklines look "reset" after leaving for >liveWindowSec.
+  // No-op: the persistent timer keeps running. We invalidate the history
+  // cache so the next time the Live tab is opened the server window is
+  // refetched (otherwise sparklines look "reset" after liveWindowSec).
   _historyLoaded = false;
+}}
+function startLivePolling() {{
+  if (liveTimer) return;
+  liveTimer = setInterval(function() {{ if (!frozen) tick(false); }}, REFRESH_MS);
 }}
 function toggleFreeze() {{
   frozen = !frozen;
-  document.getElementById('btn-freeze').textContent = frozen ? '▶' : '⏸';
+  var _fb = document.getElementById('btn-freeze');
+  if (_fb) _fb.textContent = frozen ? '▶' : '⏸';
 }}
 
 async function tick(first) {{
@@ -3014,13 +3035,72 @@ async function tick(first) {{
     const r = await fetch('/api/state');
     if (!r.ok) return;
     const data = await r.json();
-    renderLive(data, first);
+    _liveLatest = data;
+    if (currentPane === 'live') renderLive(data, first);
+    // Always update the live timestamp in the header (visible on the Live
+    // pane only, but harmless to set when hidden).
     const stamp = document.getElementById('live-stamp');
-    const d = new Date();
-    stamp.textContent = d.toLocaleTimeString();
+    if (stamp) stamp.textContent = new Date().toLocaleTimeString();
+    // Notify all panes that fresh live data is available so they can
+    // patch their own DOM elements without doing extra fetches.
+    try {{
+      window.dispatchEvent(new CustomEvent('sea-live', {{detail: data}}));
+    }} catch(e) {{}}
   }} catch(e) {{
     // silent retry
   }}
+}}
+
+/* ── Per-tab periodic refresh ─────────────────────────────────────────
+   Each entry maps a pane id to a refresh interval in ms. While that
+   pane is active and not frozen, the corresponding load function is
+   re-invoked at the configured cadence so aggregated views (which can't
+   be patched cheaply via sea-live) stay current.
+
+   Only tabs that actually display values which change live (current
+   power, today kWh / €, etc.) are listed. Purely historical tabs like
+   heatmap, compare, anomalies, forecast, tariff, ev_log, weather and
+   smart_sched are NOT refreshed because there is nothing to update.
+   The CO₂ tab has its own _co2LiveTimer (1s) and is excluded too. */
+const TAB_LIVE_REFRESH = {{
+  costs: 5000,
+  solar: 5000,
+  standby: 5000,
+  sankey: 3000,
+  ev: 5000,
+  battery: 5000,
+  goals: 10000,
+  nilm: 15000,
+}};
+let _tabRefreshTimer = null;
+function _runTabRefresh(pane) {{
+  if (currentPane !== pane || frozen) return;
+  // Suppress the "Loading…" spinner during periodic refreshes so users
+  // don't see a flash every few seconds.
+  _quietRefresh = true;
+  try {{
+    if (pane === 'costs')        loadCosts();
+    else if (pane === 'solar')   {{ try {{ loadSolar(typeof solarPeriod !== 'undefined' ? solarPeriod : 'month'); }} catch(e) {{}} }}
+    else if (pane === 'standby') loadStandby();
+    else if (pane === 'sankey')  loadSankey();
+    else if (pane === 'ev')      loadEv();
+    else if (pane === 'battery') {{ if (typeof loadBattery === 'function') loadBattery(); }}
+    else if (pane === 'goals')   {{ if (typeof loadGoals === 'function') loadGoals(); }}
+    else if (pane === 'nilm')    loadNilm();
+  }} finally {{
+    // Reset on next tick so the load function (which is async) has finished
+    // its synchronous spinner-skip path before we re-enable it for manual loads.
+    setTimeout(function() {{ _quietRefresh = false; }}, 0);
+  }}
+}}
+function startTabLiveRefresh(pane) {{
+  stopTabLiveRefresh();
+  var ms = TAB_LIVE_REFRESH[pane];
+  if (!ms) return;
+  _tabRefreshTimer = setInterval(function() {{ _runTabRefresh(pane); }}, ms);
+}}
+function stopTabLiveRefresh() {{
+  if (_tabRefreshTimer) {{ clearInterval(_tabRefreshTimer); _tabRefreshTimer = null; }}
 }}
 
 function renderLive(data, first) {{
@@ -3622,7 +3702,7 @@ function _fmtAxisVal(v, metric) {{
 ────────────────────────────────────────────── */
 async function loadCosts() {{
   const el = document.getElementById('costs-content');
-  el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   try {{
     const r = await fetch('/api/costs');
     if (!r.ok) throw new Error(r.status);
@@ -4092,7 +4172,7 @@ async function loadHeatmap() {{
   const hrWrap = document.getElementById('hm-hourly-wrap');
   const stWrap = document.getElementById('hm-stats-wrap');
   const chWrap = document.getElementById('hm-charts-wrap');
-  calWrap.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Lade\u2026') + '</p>';
+  if (!_quietRefresh) calWrap.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Lade\u2026') + '</p>';
   hrWrap.innerHTML = ''; if (stWrap) stWrap.innerHTML = ''; if (chWrap) chWrap.innerHTML = '';
   if (!device) {{ calWrap.innerHTML = '<p class="info-msg">' + t('web.dash.select_device', 'Select a device.') + '</p>'; return; }}
   try {{
@@ -4468,7 +4548,7 @@ let _co2Range = '24h';
 async function loadCo2(range) {{
   if (range) _co2Range = range;
   const el = document.getElementById('co2-content');
-  el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   try {{
     const r = await fetch('/api/co2?range=' + _co2Range);
     if (!r.ok) throw new Error(r.status);
@@ -4935,7 +5015,7 @@ function initSolar() {{
 
 async function loadSolar(period) {{
   const el = document.getElementById('solar-content');
-  el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   try {{
     const r = await fetch('/api/solar?period=' + period);
     if (!r.ok) throw new Error(r.status);
@@ -5062,7 +5142,7 @@ function initWeather() {{
 }}
 async function loadWeather() {{
   const el = document.getElementById('weather-content');
-  el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Lade\u2026') + '</p>';
+  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Lade\u2026') + '</p>';
   try {{
     const r = await fetch('/api/weather_correlation');
     if (!r.ok) throw new Error(r.status);
@@ -5436,7 +5516,7 @@ function initCompare() {{
 
 async function loadComparePreset(preset) {{
   const result = document.getElementById('cmp-result');
-  result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  if (!_quietRefresh) result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   try {{
     // Auto-granularity per preset: month→daily, quarter→weekly, halfyear/year→monthly
     const autoGran = preset === 'month' ? 'daily'
@@ -5461,7 +5541,7 @@ async function loadComparePreset(preset) {{
 
 async function loadCompare() {{
   const result = document.getElementById('cmp-result');
-  result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  if (!_quietRefresh) result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   try {{
     const da = document.getElementById('cmp-da').value;
     const fa = document.getElementById('cmp-fa').value;
@@ -5732,7 +5812,7 @@ function drawBars(canvas, labels, series, opts) {{
 ────────────────────────────────────────────── */
 async function loadAnomalies() {{
   const el = document.getElementById('anom-content');
-  el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
   try {{
     const r = await fetch('/api/anomalies');
     if (!r.ok) throw new Error(r.status);
@@ -5980,7 +6060,7 @@ async function loadForecast() {{
   }}
   const dk = sel.value || '';
   const cont = document.getElementById('forecast-cards');
-  cont.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
+  if (!_quietRefresh) cont.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
   try {{
     const r = await fetch('/api/forecast?device_key=' + encodeURIComponent(dk));
     if (!r.ok) throw new Error(r.status);
@@ -6178,7 +6258,7 @@ function _fcDrawCostBars(d) {{
 ────────────────────────────────────────────── */
 async function loadStandby() {{
   const cont = document.getElementById('standby-cards');
-  cont.innerHTML = '<p class="loading-msg">' + t('web.loading','Loading\u2026') + '</p>';
+  if (!_quietRefresh) cont.innerHTML = '<p class="loading-msg">' + t('web.loading','Loading\u2026') + '</p>';
   try {{
     const r = await fetch('/api/standby');
     if (!r.ok) throw new Error(r.status);
@@ -6465,7 +6545,7 @@ function initSankeyPeriods() {{
 async function loadSankey() {{
   initSankeyPeriods();
   const cont = document.getElementById('sankey-cards');
-  cont.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
+  if (!_quietRefresh) cont.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
   try {{
     const r = await fetch('/api/sankey?period=' + _sankeyPeriod);
     if (!r.ok) throw new Error(r.status);
@@ -6742,7 +6822,7 @@ async function _evGeocode(city) {{
 async function loadEv() {{
   const wrap = document.getElementById('ev-grid-wrap');
   if (!wrap) return;
-  wrap.innerHTML = '<p class="loading-msg">' + t('web.ev.loading', 'Loading chargers\u2026') + '</p>';
+  if (!_quietRefresh) wrap.innerHTML = '<p class="loading-msg">' + t('web.ev.loading', 'Loading chargers\u2026') + '</p>';
 
   const cityInput = document.getElementById('ev-city');
   const cityVal = (cityInput ? cityInput.value.trim() : '');
@@ -7086,7 +7166,7 @@ _loadLsSettings();
   window._ssDuration = 3;
   async function loadSmartSched() {{
     const el = document.getElementById('ss-content');
-    el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Lade…</p>';
     try {{
       const r = await fetch('/api/smart_schedule?duration=' + window._ssDuration);
       if (!r.ok) throw new Error(r.status);
@@ -7192,7 +7272,7 @@ _loadLsSettings();
   /* ── EV Log ── */
   async function loadEvLog() {{
     const el = document.getElementById('ev-content');
-    el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Lade…</p>';
     try {{
       const r = await fetch('/api/ev_sessions');
       if (!r.ok) throw new Error(r.status);
@@ -7236,7 +7316,7 @@ _loadLsSettings();
   /* ── Tariff Comparison ── */
   async function loadTariff() {{
     const el = document.getElementById('tariff-content');
-    el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Lade…</p>';
     try {{
       const r = await fetch('/api/tariff_compare');
       if (!r.ok) throw new Error(r.status);
@@ -7274,7 +7354,7 @@ _loadLsSettings();
   /* ── Battery ── */
   async function loadBattery() {{
     const el = document.getElementById('bat-content');
-    el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Lade…</p>';
     try {{
       const r = await fetch('/api/battery');
       if (!r.ok) throw new Error(r.status);
@@ -7300,7 +7380,7 @@ _loadLsSettings();
   /* ── AI Advisor ── */
   async function loadAdvisor() {{
     const el = document.getElementById('advisor-content');
-    el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Lade…</p>';
     try {{
       const r = await fetch('/api/advisor');
       if (!r.ok) throw new Error(r.status);
@@ -7333,7 +7413,7 @@ _loadLsSettings();
   /* ── Goals & Gamification ── */
   async function loadGoals() {{
     const el = document.getElementById('goals-content');
-    el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Lade\u2026') + '</p>';
+    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Lade\u2026') + '</p>';
     try {{
       const r = await fetch('/api/goals');
       if (!r.ok) throw new Error(r.status);
@@ -7627,6 +7707,10 @@ _loadLsSettings();
       }}
     }}).catch(function(){{}});
   }})();
+
+  // Always start the persistent /api/state polling regardless of which pane
+  // is initially active so cross-tab live updates work from page load.
+  startLivePolling();
 
   // Restore last pane
   const last = localStorage.getItem('sea_pane');
