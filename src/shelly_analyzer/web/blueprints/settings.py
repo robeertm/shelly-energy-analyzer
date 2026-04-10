@@ -36,6 +36,26 @@ def _cfg_to_json(cfg: AppConfig) -> Dict[str, Any]:
             pass
 
 
+@bp.route("/api/zones", methods=["GET"])
+def get_zones():
+    """Return the curated bidding-zone lists for the spot-price and CO₂
+    settings dropdowns. Uses the hyphen form for Energy-Charts (spot) and
+    the underscore form for ENTSO-E (CO₂)."""
+    from shelly_analyzer.services.zones import (
+        SPOT_ZONES_ENERGY_CHARTS,
+        SPOT_ZONES_AWATTAR,
+        get_co2_zones,
+    )
+    resp = jsonify({
+        "spot_energy_charts": SPOT_ZONES_ENERGY_CHARTS,
+        "spot_awattar": SPOT_ZONES_AWATTAR,
+        "co2": get_co2_zones(),
+    })
+    # Zones are static; cache for an hour.
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+
 @bp.route("/api/i18n", methods=["GET"])
 def get_i18n():
     """Return the effective i18n map + language for the current user session.

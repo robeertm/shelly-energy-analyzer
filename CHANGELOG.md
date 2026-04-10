@@ -1,5 +1,17 @@
 # Changelog
 
+## 16.13.55 - 2026-04-10
+### Changed
+- **Bidding zones are now dropdowns** in Settings → Energie → Spot-Preise and Settings → Energie → CO₂. Previously both were free-text inputs where a typo silently broke the Energy-Charts / aWATTar / ENTSO-E fetches. Now:
+  - **Spot-Preise → Gebotszone**: the dropdown content switches based on the selected `primary_api`. Energy-Charts shows all 45 EU bidding zones (DE-LU, AT, BE, BG, CH, CZ, DK1/2, EE, ES, FI, FR, GB, GR, HR, HU, IE, IT-CALA/CNOR/CSUD/NORD/SARD/SICI/SUD, LT, LV, ME, MK, NL, NO1/2/3/4/5, PL, PT, RO, RS, SE1/2/3/4, SI, SK); aWATTar shows only DE + AT.
+  - **CO₂ → Zone**: the dropdown lists all 38 ENTSO-E bidding zones sourced directly from `services/entsoe._EIC_CODES` so it can't drift apart from the code.
+  - Human-readable labels with country names for both lists (e.g. `Deutschland + Luxemburg (DE-LU)`).
+  - Existing configured values that aren't in the list (e.g. custom test zones) are preserved as a `(current: X)` option at the top of the dropdown so saving doesn't silently change them.
+### Added
+- **New module** `services/zones.py` with curated `SPOT_ZONES_ENERGY_CHARTS`, `SPOT_ZONES_AWATTAR` and `get_co2_zones()`.
+- **New endpoint** `GET /api/zones` returns all three lists as JSON, with a 1-hour Cache-Control since the data is static.
+- **New field type** `select-dyn` in `settings.html` renders a dropdown whose options come from a runtime source (`dynSrc`), letting the API dropdown drive the zone dropdown without a full page reload.
+
 ## 16.13.54 - 2026-04-10
 ### Changed
 - **Live values now update on every tab, not just Live.** Previously `/api/state` polling was started when opening the Live tab and **stopped** as soon as you navigated away, so Costs / Solar / Battery / Standby / Sankey / EV / Goals / NILM all showed frozen values until you reloaded the page. The poller is now **persistent** — started once at page load and kept running until a manual freeze.
