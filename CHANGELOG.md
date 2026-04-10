@@ -1,5 +1,12 @@
 # Changelog
 
+## 16.13.52 - 2026-04-10
+### Fixed
+- **Costs tab "Heute" now matches Live tab per-device values.** Two root causes, both fixed:
+  1. **Live tab used the wrong price**: the feed loop cached `unit_price_gross()` (base price) once at startup, ignoring the tariff schedule and any price change in Settings. Now it resolves the effective price per day via `effective_pricing_for_date(day).unit_price_gross()`, so hot-reloaded config and scheduled tariff changes are honored immediately.
+  2. **Costs tab was missing the live delta**: the Costs tab summary read only from the computed DataFrame cache (synced hours), while the Live tab additionally trapezoid-integrated incoming poll samples since the last synced hour — so the Live per-device value was always a bit higher. The Costs tab now mirrors the Live tab by reading `base_kwh + live_kwh` from `BackgroundServiceManager._today_state` and folding the delta into the today/week/month/year ranges (both kWh and €). Summary aggregates inherit the correction automatically since they sum per-device values.
+- **Dispatcher ↔ background wiring**: `ActionDispatcher._bg` is now set in `__main__.py` so the costs action can access `bg._today_state` for the live delta.
+
 ## 16.13.51 - 2026-04-10
 ### Added
 - **Full update management in the web UI** (Settings → Erweitert → Updates):
