@@ -90,21 +90,54 @@ def main(argv: list[str] | None = None) -> int:
         if ssl_mode != "off":
             try:
                 import ssl
-                from shelly_analyzer.web.ssl_utils import _ensure_ssl_cert
+                from shelly_analyzer.web.ssl_utils import (
+                    ensure_ssl_cert,
+                    inspect_cert,
+                )
+                from pathlib import Path as _P
 
                 ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
                 if ssl_mode == "custom" and getattr(cfg.ui, "live_web_ssl_cert", "") and getattr(cfg.ui, "live_web_ssl_key", ""):
-                    ctx.load_cert_chain(cfg.ui.live_web_ssl_cert, cfg.ui.live_web_ssl_key)
-                    logger.info("HTTPS enabled (custom certificate)")
+                    custom_cert = _P(cfg.ui.live_web_ssl_cert)
+                    ctx.load_cert_chain(str(custom_cert), cfg.ui.live_web_ssl_key)
+                    info = inspect_cert(custom_cert)
+                    if info.days_remaining is not None:
+                        if info.days_remaining < 0:
+                            logger.error(
+                                "Custom TLS certificate EXPIRED %d days ago — browsers will reject it",
+                                -info.days_remaining,
+                            )
+                        elif info.days_remaining < int(getattr(cfg.ui, "live_web_ssl_renew_days", 30) or 30):
+                            logger.warning(
+                                "Custom TLS certificate expires in %d days — renew it soon",
+                                info.days_remaining,
+                            )
+                    logger.info(
+                        "HTTPS enabled (custom certificate: %s, %s days remaining)",
+                        custom_cert,
+                        info.days_remaining if info.days_remaining is not None else "?",
+                    )
+                    state._ssl_cert_info = info
                 else:
                     cert_dir = out_dir / "data" / "runtime" / "ssl"
-                    cert, key = _ensure_ssl_cert(cert_dir)
+                    cert, key, info = ensure_ssl_cert(
+                        cert_dir,
+                        auto_renew=bool(getattr(cfg.ui, "live_web_ssl_auto_renew", True)),
+                        renew_days=int(getattr(cfg.ui, "live_web_ssl_renew_days", 30) or 30),
+                    )
                     ctx.load_cert_chain(str(cert), str(key))
-                    logger.info("HTTPS enabled (self-signed certificate)")
+                    logger.info(
+                        "HTTPS enabled (self-signed certificate, %s days remaining)",
+                        info.days_remaining if info.days_remaining is not None else "?",
+                    )
+                    state._ssl_cert_info = info
                 ssl_context = ctx
                 state._is_https = True
+                state._ssl_mode = ssl_mode
             except Exception as e:
                 logger.warning("HTTPS not available: %s — falling back to HTTP", e)
+                state._ssl_cert_info = None
+                state._ssl_mode = "off"
 
     scheme = "https" if ssl_context else "http"
     from shelly_analyzer.web.ssl_utils import _local_ip_guess
