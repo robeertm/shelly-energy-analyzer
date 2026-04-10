@@ -1,5 +1,20 @@
 # Changelog
 
+## 16.13.57 - 2026-04-10
+### Added
+- **Big README marketing rewrite** targeted at making the repo discoverable and attractive to new visitors landing on the GitHub page:
+  - Hero section with center-aligned title, one-line elevator pitch, 7 shields.io badges (license, Python, Flask, release, last commit, i18n languages, platforms) and the 4K Live dashboard screenshot pinned right at the top.
+  - Dedicated "**Why Shelly Energy Analyzer?**" section contrasting against commercial dashboards, with a "What it does that others don't" bullet list calling out the load-bearing features (exact tariff handling, real ENTSO-E CO₂ intensity, NILM, PV surplus automation, smart scheduling, Home Assistant MQTT, iOS widget, REST API, 100 % self-hosted, zero subscription).
+  - "**Who it's for**" section listing home owners, PV prosumers, landlords, dynamic-tariff customers, Home Assistant tinkerers and data nerds.
+  - Compact 3-block quickstart (macOS / Linux / Windows) right under the hero.
+- **GitHub repo metadata set via `gh repo edit`** so the About box on the repo page is no longer empty:
+  - Description: "Self-hosted energy monitoring, cost tracking and smart automation for Shelly EM / 3EM. Flask web app with 23 dashboards, dynamic spot tariffs, real ENTSO-E CO₂ intensity, PV/solar, NILM appliance detection, MQTT/Home Assistant, InfluxDB/Prometheus, iOS widget. No cloud, no subscription."
+  - **20 discoverability topics**: `shelly`, `shelly-em`, `energy-monitoring`, `power-monitoring`, `smart-home`, `home-automation`, `home-assistant`, `self-hosted`, `flask`, `python`, `photovoltaic`, `nilm`, `entsoe`, `spot-price`, `dynamic-tariff`, `mqtt`, `influxdb`, `prometheus`, `dashboard`, `iot`.
+  - **GitHub Discussions enabled** so there's a community space beyond issues.
+- **`.github/ISSUE_TEMPLATE/`** – bug report (version, OS, Python, devices, what-happens, repro, logs, config, checks), feature request (problem, solution, alternatives, area multi-select), and a `config.yml` that disables blank issues and points to Discussions + README.
+- **`SECURITY.md`** – private disclosure via GitHub Security Advisories, scope (in + out), supported versions, credit policy.
+- **`CONTRIBUTING.md`** – dev environment setup, project layout walkthrough, versioning workflow (bump `__init__.py` + `pyproject.toml` + CHANGELOG), pull request expectations, no-secrets reminder, how to help without coding (translations in `i18n.py`, screenshots, docs, bug reports).
+
 ## 16.13.56 - 2026-04-10
 ### Changed
 - **All screenshots regenerated** from the current web UI. Old `web_*` + `plots_*` PNGs removed; replaced with a complete set in two size profiles:

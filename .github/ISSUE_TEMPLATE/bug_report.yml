@@ -1,0 +1,111 @@
+name: 🐛 Bug report
+description: Something is broken, crashes or behaves wrong
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report! Please fill in as much as you can —
+        the more concrete the reproduction, the faster it gets fixed.
+
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown in Settings → Über → App-Version (or `pyproject.toml`).
+      placeholder: "e.g. v16.13.56"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: "`python --version`"
+      placeholder: "e.g. 3.11.8"
+    validations:
+      required: false
+
+  - type: input
+    id: devices
+    attributes:
+      label: Shelly devices involved
+      description: Model(s) + firmware version(s), e.g. "Shelly 3EM 1.14.0, Shelly Plus 1PM 1.3.2"
+      placeholder: "e.g. Shelly 3EM (gen1, fw 1.14.0)"
+    validations:
+      required: false
+
+  - type: textarea
+    id: what_happens
+    attributes:
+      label: What happens?
+      description: Describe the actual behavior. Include any error messages.
+      placeholder: "When I open the Costs tab, I see …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_should_happen
+    attributes:
+      label: What should happen?
+      description: What you expected to see instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps someone else can follow to see the same bug.
+      placeholder: |
+        1. Open Settings → Preise & Tarif
+        2. Change …
+        3. Click Save
+        4. Observe …
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Relevant log output from `data/logs/` or the terminal where the app was started.
+        Please wrap long logs in `<details>` tags.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant config
+      description: |
+        Sanitised excerpt of `config.json` (remove any API tokens / passwords).
+      render: json
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I have searched existing issues and this is not a duplicate
+          required: true
+        - label: I am running the latest release (or can reproduce on it)
+          required: false
+        - label: I have removed all secrets (tokens, passwords, API keys) from pasted content
+          required: true

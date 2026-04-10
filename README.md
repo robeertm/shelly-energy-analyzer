@@ -1,10 +1,73 @@
-# Shelly Energy Analyzer
+<div align="center">
 
-A cross-platform **web application** to analyze, visualize and export energy data from Shelly devices (1-phase and 3-phase) — including live dashboards, cost tracking, historical plots, CSV/PDF exports, Telegram alerts, solar/PV monitoring, anomaly detection, NILM appliance detection, device scheduling, consumption forecasting, weather correlation, tenant billing, smart scheduling, EV charging logs, tariff comparison, battery monitoring, AI energy advisor, gamification, InfluxDB/Prometheus export, REST API, multi-location support, and much more.
+# ⚡ Shelly Energy Analyzer
 
-Runs as a local Flask web server — access the dashboard from any browser on your network (desktop or mobile). No desktop GUI required. This repository is **GitHub-ready** (free to use, (c) Robert Manuwald, clean structure, no secrets). Releases are published via **GitHub Releases** so the built-in updater can find and download new versions.
+**Self-hosted energy monitoring, cost tracking and smart automation for Shelly EM / 3EM devices.**
+No cloud. No subscription. No data lock-in.
 
-> **Current version: v16.13.x** — web-only architecture with full-featured browser UI, first-run setup wizard, complete in-browser settings & device management, and all prior features from the former desktop app.
+[![License: Proprietary – Free to use](https://img.shields.io/badge/license-Proprietary%20%7C%20Free%20to%20use-blue)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Flask](https://img.shields.io/badge/flask-3.0%2B-black?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
+[![Release](https://img.shields.io/github/v/release/robeertm/shelly-energy-analyzer?logo=github)](https://github.com/robeertm/shelly-energy-analyzer/releases/latest)
+[![Last commit](https://img.shields.io/github/last-commit/robeertm/shelly-energy-analyzer?logo=git&logoColor=white)](https://github.com/robeertm/shelly-energy-analyzer/commits/main)
+[![i18n](https://img.shields.io/badge/i18n-9%20languages-brightgreen)](#languages)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#quick-start-end-users)
+
+![Hero](docs/screenshots/desktop_01_live.png)
+
+</div>
+
+---
+
+## 🎯 Why Shelly Energy Analyzer?
+
+You bought Shelly EM / 3EM meters. You want to know **how much you spend**, **when you spend it**, and **what to change** — without your data leaving your home and without a monthly bill.
+
+Commercial energy dashboards lock you into subscriptions, truncate history after a few months, ignore your actual tariff, and push you toward proprietary clouds. **Shelly Energy Analyzer** is a single **self-hosted Flask web app** that reads your Shellys directly over LAN and turns their data into 23 real dashboards with real-time cost, real-time CO₂ and real automation.
+
+### What it does that others don't
+
+- 💰 **Knows your exact tariff** — fixed, time-of-use, dynamic spot market (Energy-Charts / aWATTar), multi-step schedules with future price changes — and shows live € cost per device, per second
+- 🌱 **Real ENTSO-E CO₂ intensity** (not a flat 380 g/kWh average), with neighbour-zone cross-border flow correction so imports from French nuclear and Polish coal are weighted correctly
+- 🧠 **Built-in NILM** — k-means clustering on power transitions automatically identifies appliances from the total-power trace. ~25 built-in device profiles plus learned patterns
+- ☀️ **PV surplus automation** — state machine that switches boilers / wallboxes on when solar excess is available, off when it drops, with priority-ordered consumer list and debounce
+- ⏰ **Smart scheduling** — finds the cheapest 1–12 h time block tomorrow from day-ahead spot prices and can push the schedule to a Shelly Gen2 relay automatically
+- 🏠 **Native Home Assistant integration** via MQTT auto-discovery — sensors appear automatically, no extra YAML
+- 📱 **Real iOS home-screen widget** via Scriptable (3 sizes) — live power, today's cost, spot price, CO₂ intensity, tap-to-open dashboard
+- 🌐 **Full REST API v1** + **InfluxDB line-protocol push** + **Prometheus `/metrics`** for your own stack
+- 🔒 **100 % self-hosted** — your energy data never leaves your LAN
+- 🆓 **Zero subscription** — no cloud, no accounts, no analytics
+
+### Who it's for
+
+- 🏠 **Home owners** with Shelly 1PM / Plus 1PM / EM / 3EM at the grid connection or per circuit
+- ☀️ **PV / solar prosumers** tracking self-consumption, autarky, feed-in and investment amortisation
+- 🏢 **Landlords** needing per-tenant sub-metering and Nebenkostenabrechnung PDFs
+- ⚡ **Dynamic-tariff customers** (Tibber, aWATTar, Ostrom, 1Komma5°, E.ON Spot, …) who want to compare vs. their old fixed tariff or pick the cheapest hour
+- 🔧 **Home Assistant / Node-RED tinkerers** pulling metrics into MQTT, InfluxDB or Prometheus
+- 📊 **Data nerds** who want raw SQLite access, CSV/PDF/Excel exports and a REST API
+
+---
+
+## ⚡ Quickstart
+
+```bash
+git clone https://github.com/robeertm/shelly-energy-analyzer.git
+cd shelly-energy-analyzer
+
+# macOS
+./start.command
+
+# Linux
+chmod +x start.sh && ./start.sh
+
+# Windows
+start.bat
+```
+
+Open <https://localhost:8765> and follow the 5-step setup wizard — it will discover your Shellys via mDNS, ask for your tariff, and you're live.
+
+> **No Shellys yet?** Enable **Demo Mode** in Settings → Advanced to explore the full UI with realistic generated data. Great for seeing what the tool can do before buying hardware.
 
 ---
 
