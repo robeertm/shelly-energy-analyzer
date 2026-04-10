@@ -1,5 +1,20 @@
 # Changelog
 
+## 16.13.51 - 2026-04-10
+### Added
+- **Full update management in the web UI** (Settings → Erweitert → Updates):
+  - **Status panel** shows current installed version, latest GitHub release and whether an update is available (auto-loaded on page render)
+  - **Version picker** – "Letzte 10 Versionen laden" fetches the last 10 GitHub releases with per-row badges (`installiert` / `neuer` / `älter`) and an Install / Rollback button for each one
+  - **Rollback** to any earlier version is now possible directly from the browser – no terminal or desktop app required
+  - **Install flow**: Backend downloads the platform-specific ZIP asset, extracts to a staging directory, spawns `updater_helper.py` fully detached, then exits the running app so files can be replaced and the app is restarted via `start.command`/`start.sh`/`start.bat`
+- **New blueprint** `web/blueprints/updates.py` with 3 endpoints:
+  - `GET /api/updates/status` – current + latest release (uses existing `services/updater.check_latest_release`)
+  - `GET /api/updates/releases?limit=10` – last N releases with tag/asset URL/is_current/is_newer/is_older flags
+  - `POST /api/updates/install` – body `{tag, asset_url}` → download + stage + spawn helper + exit
+- **27 new i18n keys** under `settings.updates.*` (DE/EN/ES) for the new UI strings
+### Changed
+- **Updates section moved** from group "Integrationen" (with just 3 config fields) to group "Erweitert" between "Demo-Modus" and "Über", and converted to a custom section that combines the config fields with the new version picker
+
 ## 16.13.50 - 2026-04-07
 ### Fixed
 - **Heatmap monthly chart labels too wide** – values above bars now show short format (no decimals for values >= 10, one decimal otherwise) instead of full `hmFmtVal` with 3 decimal places and unit suffix
