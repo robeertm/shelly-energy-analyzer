@@ -370,12 +370,6 @@ const SECTIONS = [
     {key:"api.cors_allowed_origins", label:"CORS Origins", type:"text"},
     {key:"api.rate_limit_per_minute", label:"Rate Limit / Min", type:"number"},
   ]},
-  {id:"updates", title:"Updates", group:"Integrationen", fields:[
-    {key:"updates.repo", label:"GitHub Repo", type:"text"},
-    {key:"updates.check_on_start", label:"Check beim Start", type:"checkbox"},
-    {key:"updates.auto_install", label:"Auto-Install", type:"checkbox"},
-  ]},
-
   {id:"solar", title:"Solar / PV", group:"Energie", fields:[
     {key:"solar.enabled", label:"Solar aktiv", type:"checkbox"},
     {key:"solar.pv_meter_device_key", label:"PV-Meter Gerät", type:"select-device"},
@@ -538,6 +532,7 @@ const SECTIONS = [
     {key:"demo.seed", label:"Seed", type:"number"},
     {key:"demo.scenario", label:"Szenario", type:"select", opts:[["household","Haushalt"],["pv-home","PV-Haus"],["heatpump","Wärmepumpe"],["tenant-metering","Mieter"]]},
   ]},
+  {id:"updates", title:"Updates", group:"Erweitert", custom:true},
   {id:"about", title:"Über", group:"Erweitert", custom:true},
 ];
 
@@ -625,6 +620,7 @@ function renderSection(s) {
     if (s.id === "about") return renderAbout();
     if (s.id === "health") return renderHealth();
     if (s.id === "alerts") return renderAlerts();
+    if (s.id === "updates") return renderUpdates();
   }
   const fieldsHtml = (s.fields||[]).map(renderField).join("");
   const hint = s.hint ? `<div class="hint" style="margin-bottom:10px">${s.hint}</div>` : "";
@@ -744,6 +740,119 @@ function renderAbout() {
     <p>Config-Version: <span class="hint">${cfg.version||"?"}</span></p>
     <div id="about-stats" class="hint">Lade DB-Statistik…</div>
   </section>`;
+}
+
+function renderUpdates() {
+  const u = (cfg && cfg.updates) || {};
+  const repo = u.repo || "";
+  const checkOnStart = u.check_on_start !== false;
+  const autoInstall = !!u.auto_install;
+  return `<section id="sec-updates"><h2>${T("settings.updates.title","Updates")}</h2>
+    <div class="grid2">
+      <div class="field"><label>${T("settings.updates.repo","GitHub Repo")}</label>
+        <input type="text" data-key="updates.repo" value="${esc(repo)}"></div>
+      <label class="field row"><span>${T("settings.updates.check_on_start","Check beim Start")}</span>
+        <input type="checkbox" data-key="updates.check_on_start" ${checkOnStart?"checked":""}></label>
+      <label class="field row"><span>${T("settings.updates.auto_install","Auto-Install")}</span>
+        <input type="checkbox" data-key="updates.auto_install" ${autoInstall?"checked":""}></label>
+    </div>
+    <div class="section-actions">
+      <button onclick="saveSection('updates')">${T("settings.btn.save","💾 Speichern")}</button>
+      <button class="secondary" onclick="checkUpdateStatus()">🔄 ${T("settings.updates.check_now","Jetzt prüfen")}</button>
+      <button class="secondary" onclick="loadReleaseList()">${T("settings.updates.load_releases","Letzte 10 Versionen laden")}</button>
+    </div>
+    <div id="updates-status" class="hint" style="margin-top:8px">${T("settings.updates.status_loading","Status wird geladen…")}</div>
+    <div id="updates-releases" style="margin-top:12px"></div>
+    <p class="hint" style="margin-top:10px">${T("settings.updates.hint","Hinweis: Die App startet nach einem Update automatisch neu. Rollback auf eine frühere Version ist jederzeit möglich.")}</p>
+  </section>`;
+}
+
+async function checkUpdateStatus() {
+  const el = document.getElementById("updates-status");
+  if (!el) return;
+  el.textContent = T("settings.updates.status_loading","Status wird geladen…");
+  try {
+    const r = await fetch("/api/updates/status");
+    const j = await r.json();
+    if (!j.ok && !j.current) {
+      el.innerHTML = `<span style="color:var(--danger)">${esc(j.error||"Fehler")}</span>`;
+      return;
+    }
+    const cur = j.current || "?";
+    if (!j.reachable) {
+      el.innerHTML = `${T("settings.updates.current","Aktuelle Version")}: <strong>v${esc(cur)}</strong> · <span style="color:var(--muted)">${esc(j.status||T("settings.updates.offline","Offline"))}</span>`;
+      return;
+    }
+    const latest = j.latest_tag || "?";
+    if (j.has_update) {
+      el.innerHTML = `${T("settings.updates.current","Aktuelle Version")}: <strong>v${esc(cur)}</strong> · ${T("settings.updates.latest","Neueste")}: <strong style="color:var(--ok,#22c55e)">${esc(latest)}</strong> · <button class="small" onclick='installVersion(${JSON.stringify(latest)},${JSON.stringify(j.asset_url||"")})'>⬆ ${T("settings.updates.install_latest","Auf neueste aktualisieren")}</button>`;
+    } else {
+      el.innerHTML = `${T("settings.updates.current","Aktuelle Version")}: <strong>v${esc(cur)}</strong> · ${T("settings.updates.up_to_date","Du bist auf dem neuesten Stand")} <span style="color:var(--ok,#22c55e)">✓</span>`;
+    }
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--danger)">${esc(e.message)}</span>`;
+  }
+}
+
+async function loadReleaseList() {
+  const el = document.getElementById("updates-releases");
+  if (!el) return;
+  el.innerHTML = `<p class="hint">${T("settings.updates.loading_releases","Lade Versionen…")}</p>`;
+  try {
+    const r = await fetch("/api/updates/releases?limit=10");
+    const j = await r.json();
+    if (!j.ok) {
+      el.innerHTML = `<p class="hint" style="color:var(--danger)">${esc(j.error||"Fehler")}</p>`;
+      return;
+    }
+    if (!j.releases || !j.releases.length) {
+      el.innerHTML = `<p class="hint">${T("settings.updates.no_releases","Keine Releases gefunden")}</p>`;
+      return;
+    }
+    const rows = j.releases.map(rel => {
+      const tag = rel.tag || "";
+      let badge = "";
+      if (rel.is_current) badge = `<span style="color:var(--muted);font-size:.75rem">● ${T("settings.updates.current_tag","installiert")}</span>`;
+      else if (rel.is_newer) badge = `<span style="color:var(--ok,#22c55e);font-size:.75rem">↑ ${T("settings.updates.newer","neuer")}</span>`;
+      else if (rel.is_older) badge = `<span style="color:var(--warn,#eab308);font-size:.75rem">↓ ${T("settings.updates.older","älter")}</span>`;
+      const btnLabel = rel.is_current
+        ? T("settings.updates.btn_installed","Installiert")
+        : (rel.is_newer ? "⬆ " + T("settings.updates.btn_install","Installieren") : "⤺ " + T("settings.updates.btn_rollback","Zurück auf diese Version"));
+      const disabled = rel.is_current || !rel.asset_url ? "disabled" : "";
+      const hint = !rel.asset_url && !rel.is_current ? `<span class="hint" style="font-size:.7rem;color:var(--warn,#eab308);margin-left:6px">${T("settings.updates.no_asset","kein Asset")}</span>` : "";
+      return `<div class="devcard" style="justify-content:space-between;align-items:center">
+        <div class="info"><h4 style="margin:0">${esc(tag)} ${badge}</h4><p style="margin:2px 0 0">${esc(rel.asset_name||"")}</p></div>
+        <button class="small ${rel.is_older?"secondary":""}" ${disabled} onclick='installVersion(${JSON.stringify(tag)},${JSON.stringify(rel.asset_url||"")})'>${btnLabel}</button>${hint}
+      </div>`;
+    }).join("");
+    el.innerHTML = rows;
+  } catch(e) {
+    el.innerHTML = `<p class="hint" style="color:var(--danger)">${esc(e.message)}</p>`;
+  }
+}
+
+async function installVersion(tag, assetUrl) {
+  if (!tag) return;
+  const msg = T("settings.updates.confirm_install","Version {v} wirklich installieren? Die App wird neu gestartet.",{v:tag});
+  if (!confirm(msg)) return;
+  toast("⏳ " + T("settings.updates.installing","Installiere {v}…",{v:tag}));
+  try {
+    const r = await fetch("/api/updates/install",{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({tag:tag, asset_url:assetUrl||""})});
+    const j = await r.json();
+    if (j.ok) {
+      toast("✓ " + (j.message || T("settings.updates.install_started","Update gestartet")));
+      setTimeout(()=>{
+        const el = document.getElementById("updates-status");
+        if (el) el.innerHTML = `<strong>${T("settings.updates.restarting","App startet neu… Bitte Seite in ~10s neu laden.")}</strong>`;
+      }, 400);
+    } else {
+      toast("Fehler: " + (j.error||"?"), "error");
+    }
+  } catch(e) {
+    toast("Fehler: " + e.message, "error");
+  }
 }
 
 function renderHealth() {
@@ -1011,6 +1120,10 @@ function renderAll() {
   }).catch(()=>{});
   // Load alert rules
   loadAlerts();
+  // Auto-check update status if the updates section is rendered
+  if (document.getElementById("sec-updates")) {
+    checkUpdateStatus();
+  }
 }
 
 async function discoverDevices() {
