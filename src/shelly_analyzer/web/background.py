@@ -161,9 +161,27 @@ class BackgroundServiceManager:
     def _feed_loop(self) -> None:
         """Drain live samples from poller queue into LiveStateStore."""
         import queue
-        from datetime import datetime
+        from datetime import datetime, date as _date
 
-        unit_price = float(self.cfg.pricing.unit_price_gross())
+        # Cache the effective price per date so we both honor the tariff schedule
+        # and pick up config hot-reloads without an app restart.
+        _price_cache: Dict[_date, float] = {}
+
+        def _price_for(day: _date) -> float:
+            p = _price_cache.get(day)
+            if p is not None:
+                return p
+            try:
+                p = float(self.cfg.pricing.effective_pricing_for_date(day).unit_price_gross())
+            except Exception:
+                p = float(getattr(self.cfg.pricing, "electricity_price_eur_per_kwh", 0.30) or 0.30)
+            _price_cache[day] = p
+            # Keep cache small: only today + yesterday are ever needed.
+            if len(_price_cache) > 4:
+                for old in list(_price_cache.keys()):
+                    if old != day:
+                        _price_cache.pop(old, None)
+            return p
 
         while not self._stop_event.is_set():
             try:
@@ -187,7 +205,7 @@ class BackgroundServiceManager:
                 ts_i = int(sample.ts or time.time())
                 power_total = float(p.get("total", 0) or 0)
                 kwh_today = self._accumulate_today_kwh(sample.device_key, ts_i, power_total)
-                cost_today = kwh_today * unit_price
+                cost_today = kwh_today * _price_for(datetime.fromtimestamp(ts_i).date())
                 # Feed NILM learner
                 self._observe_nilm(sample.device_key, ts_i, power_total)
 
