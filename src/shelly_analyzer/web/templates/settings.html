@@ -121,6 +121,20 @@ const LANGS = {de:"Deutsch",en:"English",es:"Español",fr:"Français",pt:"Portug
 let cfg = {};
 let devices = [];
 let I18N = {};
+// Populated once per page load from /api/zones. Each entry is a list of
+// [value, label] pairs. Used by select-dyn fields to render their options.
+let ZONES = {spot_energy_charts: [], spot_awattar: [], co2: []};
+function _dynOpts(f) {
+  if (!f || !f.dynSrc) return [];
+  if (f.dynSrc === "co2") return ZONES.co2 || [];
+  if (f.dynSrc === "spot") {
+    // Dependent on the selected API: Energy-Charts covers all EU zones,
+    // aWATTar only DE/AT.
+    const api = (cfg && cfg.spot_price && cfg.spot_price.primary_api) || "energy_charts";
+    return api === "awattar" ? (ZONES.spot_awattar || []) : (ZONES.spot_energy_charts || []);
+  }
+  return [];
+}
 // t(key, fallback) – looks up in I18N, falls back to the German literal if missing.
 // This lets the page stay fully German-out-of-the-box and progressively add translations.
 function T(key, fallback, vars) {
@@ -401,7 +415,7 @@ const SECTIONS = [
   {id:"spot_price", title:"Spot-Preise (Details)", group:"Energie", hint:"Tarif-Modell (Fix/Dynamisch) wird unter Preise und Tarif eingestellt.", fields:[
     {key:"spot_price.enabled", label:"Spot-Preise aktiv", type:"checkbox", hint:"Wird automatisch gesetzt wenn Tarif-Modell = Dynamisch"},
     {key:"spot_price.primary_api", label:"API", type:"select", opts:[["energy_charts","Energy-Charts"],["awattar","aWATTar"]]},
-    {key:"spot_price.bidding_zone", label:"Gebotszone", type:"text"},
+    {key:"spot_price.bidding_zone", label:"Gebotszone", type:"select-dyn", dynSrc:"spot", hint:"Abhängig vom gewählten API (Energy-Charts: alle EU-Zonen; aWATTar: nur DE/AT)"},
     {key:"spot_price.fetch_interval_hours", label:"Intervall (Std)", type:"number"},
     {key:"spot_price.tariff_type", label:"Tarif-Typ", type:"select", opts:[["fixed","Fix"],["dynamic","Dynamisch"]], hint:"Spiegelt die Einstellung aus Preise & Tarif"},
     {key:"spot_price.include_vat", label:"MwSt. aufschlagen", type:"checkbox"},
@@ -417,7 +431,7 @@ const SECTIONS = [
   {id:"co2", title:"CO₂ / ENTSO-E", group:"Energie", fields:[
     {key:"co2.enabled", label:"CO₂-Tracking aktiv", type:"checkbox"},
     {key:"co2.entso_e_api_token", label:"ENTSO-E Token", type:"password"},
-    {key:"co2.bidding_zone", label:"Zone", type:"text"},
+    {key:"co2.bidding_zone", label:"Zone", type:"select-dyn", dynSrc:"co2"},
     {key:"co2.fetch_interval_hours", label:"Intervall (Std)", type:"number"},
     {key:"co2.backfill_days", label:"Backfill (Tage)", type:"number"},
     {key:"co2.show_green_dirty_hours", label:"Grün/Dirty Stunden zeigen", type:"checkbox"},
@@ -590,10 +604,19 @@ function renderField(f) {
     input = `<input type="checkbox" data-key="${f.key}" ${val?"checked":""}>`;
     return `<label class="field row"><span>${label}</span>${input}</label>`;
   }
-  if (f.type === "select" || f.type === "select-device") {
+  if (f.type === "select" || f.type === "select-device" || f.type === "select-dyn") {
     let opts = f.opts || [];
     if (f.type === "select-device") {
       opts = [["","(keine)"]].concat(devices.map(d=>[d.key, d.name+" ("+d.key+")"]));
+    } else if (f.type === "select-dyn") {
+      opts = _dynOpts(f) || [];
+    }
+    // If the saved value isn't in the options list, prepend it as a
+    // "(current: xyz)" row so the user can still see + change it
+    // instead of silently falling back to the first option.
+    const haveVal = opts.some(([k,_]) => String(k) === String(val));
+    if (!haveVal && val !== "" && val != null) {
+      opts = [[val, "(" + String(val) + ")"]].concat(opts);
     }
     const options = opts.map(([k,v])=>`<option value="${k}" ${String(k)===String(val)?"selected":""}>${v}</option>`).join("");
     input = `<select data-key="${f.key}">${options}</select>`;
@@ -1231,6 +1254,28 @@ function renderAll() {
   if (document.getElementById("sec-ssl")) {
     loadSSLStatus();
   }
+  // Keep the spot-zone dropdown in sync with the spot API selector: when
+  // the user flips primary_api, re-render the spot_price section so the
+  // zone dropdown switches between Energy-Charts zones and aWATTar zones.
+  // Rebind after re-render (old select node is gone).
+  _bindSpotApiChange();
+}
+
+function _bindSpotApiChange() {
+  const sel = document.querySelector('#sec-spot_price select[data-key="spot_price.primary_api"]');
+  if (!sel) return;
+  sel.addEventListener("change", function onSpotApiChange() {
+    if (!cfg.spot_price) cfg.spot_price = {};
+    cfg.spot_price.primary_api = sel.value;
+    const secEl = document.getElementById("sec-spot_price");
+    const s = SECTIONS.find(x => x.id === "spot_price");
+    if (secEl && s && !s.custom) {
+      const fieldsHtml = (s.fields||[]).map(renderField).join("");
+      const grid = secEl.querySelector(".grid2");
+      if (grid) { grid.innerHTML = fieldsHtml; wireListEvents(grid); }
+      _bindSpotApiChange();
+    }
+  });
 }
 
 async function discoverDevices() {
@@ -1285,14 +1330,16 @@ async function testConnection(which) {
 
 async function reload() {
   try {
-    const [cfgR, devR, i18nR] = await Promise.all([
+    const [cfgR, devR, i18nR, zonesR] = await Promise.all([
       fetch("/api/settings").then(r=>r.json()),
       fetch("/api/devices").then(r=>r.json()),
       fetch("/api/i18n?prefix=settings.").then(r=>r.json()).catch(_=>({map:{}})),
+      fetch("/api/zones").then(r=>r.json()).catch(_=>({spot_energy_charts:[], spot_awattar:[], co2:[]})),
     ]);
     cfg = cfgR;
     devices = devR.devices || [];
     I18N = (i18nR && i18nR.map) || {};
+    ZONES = zonesR || ZONES;
     // Apply i18n to header + title
     try {
       document.title = T("settings.page.title", "Einstellungen") + " – Shelly Energy Analyzer";
