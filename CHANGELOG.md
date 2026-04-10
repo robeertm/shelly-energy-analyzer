@@ -1,5 +1,16 @@
 # Changelog
 
+## 16.13.54 - 2026-04-10
+### Changed
+- **Live values now update on every tab, not just Live.** Previously `/api/state` polling was started when opening the Live tab and **stopped** as soon as you navigated away, so Costs / Solar / Battery / Standby / Sankey / EV / Goals / NILM all showed frozen values until you reloaded the page. The poller is now **persistent** — started once at page load and kept running until a manual freeze.
+- **`sea-live` CustomEvent** is dispatched on `window` after every successful `/api/state` fetch (payload: full `{devices: [...]}` state). Any pane can subscribe via `window.addEventListener('sea-live', e => ...)` to patch its own DOM without firing its own fetch. This replaces the need for every tab to own its own polling timer.
+- **Per-tab periodic refresh dispatcher** (`TAB_LIVE_REFRESH` map + `_runTabRefresh`). For tabs that display aggregated values which can't be cheaply patched from `/api/state` alone (e.g. Costs summary, Solar production, Battery SoC, Sankey flows, NILM pattern counts), the active pane's `load*()` function is re-invoked at a configurable cadence: Costs/Solar/Standby/EV/Battery 5 s, Sankey 3 s, Goals 10 s, NILM 15 s. Purely historical tabs (Heatmap, Compare, Anomalies, Forecast, Tariff, EV-Log, Weather, Smart Schedule) are deliberately excluded — no live data to refresh there. CO₂ keeps its existing dedicated 1 s live ticker.
+- **Silent refresh (no spinner flash)**: a global `_quietRefresh` flag is set by the dispatcher and all 21 `innerHTML = '<p class="loading-msg">…</p>'` spinner sites across the dashboard were wrapped in `if (!_quietRefresh)` so the periodic auto-refresh no longer causes a visible "Loading…" flash every few seconds. Manual user-triggered loads still show the spinner normally.
+- **Freeze button** (Live tab) now pauses both the Live grid updates **and** the cross-tab live refresh (both code paths check the same `frozen` flag). Unfreeze resumes everything.
+
+### Fixed
+- **Live grid doesn't flash blank** when navigating back to the Live tab. The latest `/api/state` response is cached in `_liveLatest`; opening the Live tab re-renders from the cache immediately while the next scheduled poll refreshes it. Previously the grid rebuilt from an empty state on every tab switch.
+
 ## 16.13.53 - 2026-04-10
 ### Fixed
 - **SSL auto-renew actually works now.** The config fields `live_web_ssl_auto_renew` / `live_web_ssl_renew_days` existed in `UiConfig` and were exposed in Settings, but **no code ever read them** – the self-signed cert was generated once and kept forever, expired or not. Now [ssl_utils.ensure_ssl_cert()](src/shelly_analyzer/web/ssl_utils.py) inspects the existing cert on every start: if fewer than `renew_days` days remain (or it's already expired), the old pair is backed up to `server.{crt,key}.bak.<timestamp>` and a fresh 10-year self-signed cert is generated in place. Custom certs are not regenerated (user-managed) but the app now **logs a warning** when the custom cert is near expiry and an **error** when it's already expired.
