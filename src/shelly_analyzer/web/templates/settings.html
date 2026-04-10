@@ -244,14 +244,10 @@ const SECTIONS = [
     {key:"ui.live_web_port", label:"Port", type:"number"},
     {key:"ui.live_web_refresh_seconds", label:"Refresh (Sek)", type:"number", step:"0.1"},
     {key:"ui.live_web_token", label:"Zugriffs-Token", type:"password", hint:"Leer = kein Login nötig"},
-    {key:"ui.live_web_ssl_mode", label:"SSL-Modus", type:"select", opts:[["auto","Auto (self-signed)"],["custom","Custom Cert"],["off","HTTP (kein SSL)"]]},
-    {key:"ui.live_web_ssl_cert", label:"SSL Cert (Pfad)", type:"text"},
-    {key:"ui.live_web_ssl_key", label:"SSL Key (Pfad)", type:"text"},
-    {key:"ui.live_web_ssl_auto_renew", label:"Auto-Renew", type:"checkbox"},
-    {key:"ui.live_web_ssl_renew_days", label:"Renew vor (Tage)", type:"number"},
     {key:"ui.widget_domain", label:"Widget Domain", type:"text", hint:"Für iOS Widget"},
     {key:"ui.widget_devices", label:"Widget Geräte", type:"text", hint:"Komma-separiert"},
   ]},
+  {id:"ssl", title:"SSL-Zertifikat", group:"Grundeinstellungen", custom:true},
   {id:"pricing", title:"Preise & Tarif", group:"Grundeinstellungen", fields:[
     {key:"spot_price.tariff_type", label:"Tarif-Modell", type:"select", opts:[["fixed","Fester Tarif"],["dynamic","Dynamischer Tarif (Spot)"]], hint:"Fix = fester Strompreis, Dynamisch = stündliche Börsenpreise"},
     {key:"pricing.electricity_price_eur_per_kwh", label:"Strompreis €/kWh", type:"number", step:"0.0001", hint:"Bei festem Tarif: dein Vertragspreis"},
@@ -621,6 +617,7 @@ function renderSection(s) {
     if (s.id === "health") return renderHealth();
     if (s.id === "alerts") return renderAlerts();
     if (s.id === "updates") return renderUpdates();
+    if (s.id === "ssl") return renderSSL();
   }
   const fieldsHtml = (s.fields||[]).map(renderField).join("");
   const hint = s.hint ? `<div class="hint" style="margin-bottom:10px">${s.hint}</div>` : "";
@@ -847,6 +844,112 @@ async function installVersion(tag, assetUrl) {
         const el = document.getElementById("updates-status");
         if (el) el.innerHTML = `<strong>${T("settings.updates.restarting","App startet neu… Bitte Seite in ~10s neu laden.")}</strong>`;
       }, 400);
+    } else {
+      toast("Fehler: " + (j.error||"?"), "error");
+    }
+  } catch(e) {
+    toast("Fehler: " + e.message, "error");
+  }
+}
+
+function renderSSL() {
+  const ui = (cfg && cfg.ui) || {};
+  const mode = ui.live_web_ssl_mode || "auto";
+  const cert = ui.live_web_ssl_cert || "";
+  const key = ui.live_web_ssl_key || "";
+  const autoRenew = ui.live_web_ssl_auto_renew !== false;
+  const renewDays = ui.live_web_ssl_renew_days || 30;
+  return `<section id="sec-ssl"><h2>${T("settings.ssl.title","SSL-Zertifikat")}</h2>
+    <div class="grid2">
+      <div class="field"><label>${T("settings.ssl.mode","SSL-Modus")}</label>
+        <select data-key="ui.live_web_ssl_mode">
+          <option value="auto" ${mode==="auto"?"selected":""}>${T("settings.ssl.mode_auto","Auto (self-signed)")}</option>
+          <option value="custom" ${mode==="custom"?"selected":""}>${T("settings.ssl.mode_custom","Eigenes Zertifikat")}</option>
+          <option value="off" ${mode==="off"?"selected":""}>${T("settings.ssl.mode_off","HTTP (kein SSL)")}</option>
+        </select></div>
+      <div class="field"><label>${T("settings.ssl.cert_path","Cert-Datei (Pfad)")}</label>
+        <input type="text" data-key="ui.live_web_ssl_cert" value="${esc(cert)}" placeholder="/etc/letsencrypt/live/.../fullchain.pem"></div>
+      <div class="field"><label>${T("settings.ssl.key_path","Key-Datei (Pfad)")}</label>
+        <input type="text" data-key="ui.live_web_ssl_key" value="${esc(key)}" placeholder="/etc/letsencrypt/live/.../privkey.pem"></div>
+      <label class="field row"><span>${T("settings.ssl.auto_renew","Auto-Renew (nur Auto-Modus)")}</span>
+        <input type="checkbox" data-key="ui.live_web_ssl_auto_renew" ${autoRenew?"checked":""}></label>
+      <div class="field"><label>${T("settings.ssl.renew_days","Erneuern ab (verbleibende Tage)")}</label>
+        <input type="number" data-key="ui.live_web_ssl_renew_days" value="${Number(renewDays)}" min="1"></div>
+    </div>
+    <div class="section-actions">
+      <button onclick="saveSection('ssl')">${T("settings.btn.save","💾 Speichern")}</button>
+      <button class="secondary" onclick="loadSSLStatus()">🔄 ${T("settings.ssl.refresh","Status aktualisieren")}</button>
+      <button class="secondary" onclick="regenerateSSL()">♻ ${T("settings.ssl.regenerate","Jetzt neu erzeugen")}</button>
+    </div>
+    <div id="ssl-status" class="hint" style="margin-top:10px">${T("settings.ssl.loading","Zertifikats-Status wird geladen…")}</div>
+    <p class="hint" style="margin-top:8px">${T("settings.ssl.hint","Im Auto-Modus wird bei jedem Start geprüft, ob das self-signed Zertifikat bald abläuft – wenn weniger als X Tage verbleiben, wird es automatisch neu erzeugt (altes Paar wird als .bak gesichert). Änderungen werden erst nach einem Neustart wirksam.")}</p>
+  </section>`;
+}
+
+function _sslDaysBadge(days) {
+  if (days == null) return `<span class="hint">${T("settings.ssl.unknown","unbekannt")}</span>`;
+  if (days < 0) return `<strong style="color:var(--danger,#ef4444)">${T("settings.ssl.expired","abgelaufen vor {n} Tagen",{n:-days})}</strong>`;
+  if (days < 30) return `<strong style="color:var(--warn,#eab308)">${T("settings.ssl.expires_soon","läuft in {n} Tagen ab",{n:days})}</strong>`;
+  return `<strong style="color:var(--ok,#22c55e)">${T("settings.ssl.valid_for","gültig für {n} Tage",{n:days})}</strong>`;
+}
+
+async function loadSSLStatus() {
+  const el = document.getElementById("ssl-status");
+  if (!el) return;
+  el.textContent = T("settings.ssl.loading","Zertifikats-Status wird geladen…");
+  try {
+    const r = await fetch("/api/ssl/status");
+    const j = await r.json();
+    if (!j.ok) {
+      el.innerHTML = `<span style="color:var(--danger)">${esc(j.error||"Fehler")}</span>`;
+      return;
+    }
+    const c = j.cert || {};
+    if (!c.exists) {
+      el.innerHTML = `<span class="hint">${T("settings.ssl.none","Kein Zertifikat vorhanden (Modus: {m})",{m:j.mode})}</span>`;
+      return;
+    }
+    if (c.error) {
+      el.innerHTML = `<span style="color:var(--danger)">${esc(c.error)}</span>`;
+      return;
+    }
+    const modeLabel = j.mode === "custom" ? T("settings.ssl.mode_custom","Eigenes Zertifikat")
+      : j.mode === "off" ? T("settings.ssl.mode_off","HTTP (kein SSL)")
+      : T("settings.ssl.mode_auto","Auto (self-signed)");
+    const httpsBadge = j.is_https
+      ? `<span style="color:var(--ok,#22c55e)">🔒 HTTPS aktiv</span>`
+      : `<span style="color:var(--warn,#eab308)">⚠ HTTP (SSL inaktiv)</span>`;
+    const typeBadge = c.is_self_signed
+      ? `<span class="hint">${T("settings.ssl.self_signed","self-signed")}</span>`
+      : `<span class="hint">${T("settings.ssl.ca_signed","CA-signiert")}</span>`;
+    const willRenew = j.will_renew
+      ? `<div style="margin-top:4px;color:var(--warn,#eab308)">♻ ${T("settings.ssl.will_renew_msg","Wird beim nächsten Start automatisch erneuert")}</div>`
+      : "";
+    const nb = c.not_before ? new Date(c.not_before).toLocaleDateString() : "?";
+    const na = c.not_after ? new Date(c.not_after).toLocaleDateString() : "?";
+    el.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:6px">
+        ${httpsBadge} · <span>${T("settings.ssl.mode","SSL-Modus")}: <strong>${esc(modeLabel)}</strong></span> · ${typeBadge}
+      </div>
+      <div>${T("settings.ssl.validity","Gültigkeit")}: <strong>${esc(nb)}</strong> → <strong>${esc(na)}</strong> · ${_sslDaysBadge(c.days_remaining)}</div>
+      <div style="margin-top:4px"><span class="hint">${T("settings.ssl.subject","Inhaber")}: ${esc(c.subject||"?")}</span></div>
+      <div><span class="hint">${T("settings.ssl.issuer","Aussteller")}: ${esc(c.issuer||"?")}</span></div>
+      ${c.sha256 ? `<div style="margin-top:4px;font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);word-break:break-all">SHA-256: ${esc(c.sha256)}</div>` : ""}
+      ${willRenew}`;
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--danger)">${esc(e.message)}</span>`;
+  }
+}
+
+async function regenerateSSL() {
+  if (!confirm(T("settings.ssl.confirm_regenerate","Zertifikat wirklich neu erzeugen? Der Browser zeigt danach eine Warnung (self-signed). Neustart der App nötig, damit es greift."))) return;
+  toast("⏳ " + T("settings.ssl.regenerating","Erzeuge neues Zertifikat…"));
+  try {
+    const r = await fetch("/api/ssl/regenerate",{method:"POST"});
+    const j = await r.json();
+    if (j.ok) {
+      toast("✓ " + (j.message||T("settings.ssl.regenerated","Zertifikat neu erzeugt – bitte App neu starten")));
+      loadSSLStatus();
     } else {
       toast("Fehler: " + (j.error||"?"), "error");
     }
@@ -1123,6 +1226,10 @@ function renderAll() {
   // Auto-check update status if the updates section is rendered
   if (document.getElementById("sec-updates")) {
     checkUpdateStatus();
+  }
+  // Auto-load SSL status if the SSL section is rendered
+  if (document.getElementById("sec-ssl")) {
+    loadSSLStatus();
   }
 }
 

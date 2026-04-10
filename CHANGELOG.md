@@ -1,5 +1,25 @@
 # Changelog
 
+## 16.13.53 - 2026-04-10
+### Fixed
+- **SSL auto-renew actually works now.** The config fields `live_web_ssl_auto_renew` / `live_web_ssl_renew_days` existed in `UiConfig` and were exposed in Settings, but **no code ever read them** – the self-signed cert was generated once and kept forever, expired or not. Now [ssl_utils.ensure_ssl_cert()](src/shelly_analyzer/web/ssl_utils.py) inspects the existing cert on every start: if fewer than `renew_days` days remain (or it's already expired), the old pair is backed up to `server.{crt,key}.bak.<timestamp>` and a fresh 10-year self-signed cert is generated in place. Custom certs are not regenerated (user-managed) but the app now **logs a warning** when the custom cert is near expiry and an **error** when it's already expired.
+- **`datetime.utcnow()` deprecation** replaced with `datetime.now(timezone.utc)` in cert generation (silenced DeprecationWarning on Python 3.12+, required for 3.14+).
+- **Dead code removed**: the old `_ensure_ssl_cert` copy in `services/webdash.py` (pre-Flask era) is gone; the legacy `LiveWebDashboard` class now delegates to the new `ssl_utils` module too.
+
+### Added
+- **Full SSL status + regenerate UI** in Settings → Grundeinstellungen → SSL-Zertifikat (new dedicated custom section):
+  - Shows current mode (auto/custom/off), whether HTTPS is actually active, cert subject/issuer, self-signed vs CA-signed badge, validity period, days-remaining badge (green/amber/red), SHA-256 fingerprint, and a "will renew on next start" warning when applicable.
+  - Auto-loaded on Settings page render; manual "Refresh status" button.
+  - "Regenerate now" button force-creates a fresh self-signed cert (with backup of the old pair). Disabled in custom mode.
+- **New blueprint** `web/blueprints/ssl.py` with 2 endpoints:
+  - `GET /api/ssl/status` – full cert metadata + effective mode + auto-renew flags + `will_renew` prediction.
+  - `POST /api/ssl/regenerate` – force a new self-signed cert (auto mode only).
+- **`inspect_cert()` with openssl CLI fallback**: when the `cryptography` library is not installed (it isn't listed as a runtime dependency), `inspect_cert` now shells out to `openssl x509` to parse subject/issuer/dates/fingerprint. Without this, the whole status UI would show blanks on fresh installs.
+- **27 new i18n keys** under `settings.ssl.*` (DE/EN/ES) covering the new UI strings and renewal messages.
+
+### Changed
+- **Web-Server settings section** cleaned up: the 5 SSL-related fields (mode/cert/key/auto_renew/renew_days) were moved out of the generic field list into the new dedicated SSL custom section, so the Web-Server section now only contains port, token and widget config.
+
 ## 16.13.52 - 2026-04-10
 ### Fixed
 - **Costs tab "Heute" now matches Live tab per-device values.** Two root causes, both fixed:
