@@ -1,5 +1,16 @@
 # Changelog
 
+## 16.13.56 - 2026-04-10
+### Changed
+- **All screenshots regenerated** from the current web UI. Old `web_*` + `plots_*` PNGs removed; replaced with a complete set in two size profiles:
+  - **Desktop 4K** at native 3840×2160 (DPR 1, viewport captures).
+  - **iPhone 16 Pro Max** at 1290×2796 (CSS 430×932 × DPR 3, full-page captures).
+  - Both light and dark theme variants for Live / Costs / Heatmap / CO₂.
+  - Captured automatically via a Playwright script (`/tmp/sea_capture.py`) that drives `switchPane()` + waits for the loading spinner to disappear before each shot, so no half-loaded panes.
+- Only panes whose feature is **enabled** in the live config are included in the README (solar/battery/advisor/EV charging are disabled in the reference install, so the README skips them to avoid showing empty sections).
+- **README screenshot section rewritten** into two dedicated tables (Desktop + Mobile) with dedicated dark-theme sub-tables. Plots section removed — the plots iframe is now reachable from the dashboard's Plots tab and no longer warrants its own per-metric screenshot wall.
+- **Widget screenshots** (`widget_small.png`, `widget_medium.png`, `widget_large.png`) were preserved unchanged.
+
 ## 16.13.55 - 2026-04-10
 ### Changed
 - **Bidding zones are now dropdowns** in Settings → Energie → Spot-Preise and Settings → Energie → CO₂. Previously both were free-text inputs where a typo silently broke the Energy-Charts / aWATTar / ENTSO-E fetches. Now:
