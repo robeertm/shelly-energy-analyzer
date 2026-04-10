@@ -1,0 +1,82 @@
+name: 💡 Feature request
+description: Suggest a new feature, integration or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion! Please describe the problem you want to solve first,
+        then the solution you have in mind. The "what problem" part is often more
+        valuable than a ready-made "how".
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      placeholder: "When I look at the Costs tab I can't tell …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Your proposed solution
+      description: How would you like it to work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area of the app does this touch?
+      multiple: true
+      options:
+        - Live tab
+        - Costs / tariff
+        - Heatmap
+        - PV / Solar
+        - CO₂ / ENTSO-E
+        - Weather correlation
+        - Anomalies / alerts
+        - Forecast
+        - NILM
+        - Energy Flow / Sankey
+        - Battery
+        - Goals / gamification
+        - Tenants / billing
+        - Exports (CSV / PDF / Excel)
+        - REST API
+        - MQTT / Home Assistant
+        - InfluxDB / Prometheus
+        - iOS widget
+        - Settings / setup wizard
+        - Updater / release process
+        - i18n / translations
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: |
+        Screenshots, mockups, links, API docs, similar implementations elsewhere,
+        anything that helps.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I have searched existing issues and discussions for similar requests
+          required: true

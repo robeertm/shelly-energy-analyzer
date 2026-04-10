@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions & general discussion
+    url: https://github.com/robeertm/shelly-energy-analyzer/discussions
+    about: For setup help, configuration questions, or to share your setup.
+  - name: 📖 Full feature list
+    url: https://github.com/robeertm/shelly-energy-analyzer#-full-feature-list
+    about: Before asking if something exists, check the README.
