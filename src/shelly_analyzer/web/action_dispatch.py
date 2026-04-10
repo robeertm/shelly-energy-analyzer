@@ -2157,6 +2157,34 @@ class ActionDispatcher:
                                 dev_data[rng_key + "_eur"] = round(kwh * _unit, 2)
                         dev_data[rng_key + "_co2_kg"] = round(_calc_co2(d.key, rng_start, rng_end, kwh), 3)
 
+                    # ── Live-delta from background._today_state ─────────────────
+                    # The Live tab shows `base_kwh + live_kwh` (trapezoid-integrated
+                    # from poll samples since the last synced hour). The Costs tab
+                    # only sees synced rows from the computed DataFrame, so it's
+                    # always a bit behind. Mirror the Live tab's value here so both
+                    # match to the last digit.
+                    try:
+                        _bg = getattr(self, "_bg", None)
+                        _tstate = getattr(_bg, "_today_state", None) if _bg is not None else None
+                        if _tstate is not None:
+                            _live = _tstate.get(d.key)
+                            if _live and _live.get("date") == _now.date():
+                                _live_total = float(_live.get("base_kwh") or 0.0) + float(_live.get("live_kwh") or 0.0)
+                                _df_today = float(dev_data.get("today_kwh", 0.0) or 0.0)
+                                _delta = _live_total - _df_today
+                                if _delta != 0.0:
+                                    # Delta is today's portion, so it belongs to every
+                                    # range that includes today (today/week/month/year).
+                                    for _rk in ("today", "week", "month", "year"):
+                                        dev_data[_rk + "_kwh"] = round(
+                                            float(dev_data.get(_rk + "_kwh", 0.0)) + _delta, 3
+                                        )
+                                        dev_data[_rk + "_eur"] = round(
+                                            float(dev_data.get(_rk + "_eur", 0.0)) + _delta * _unit, 2
+                                        )
+                    except Exception:
+                        pass
+
                     try:
                         _dim = calendar.monthrange(_now.year, _now.month)[1]
                         _elapsed = max(1, (_now - _month_start).total_seconds() / 86400.0)
