@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.17.0 - 2026-04-11
+### Added
+- **Single source of configuration: everything is now in `/settings`.** The dashboard's gear-icon modal (live-settings) is gone — clicking ⚙ on the dashboard header now jumps straight to `/settings#sec-devices`. No more "two places to configure things":
+  - **Drag-to-reorder devices in the Devices section.** Each device card grows a `⋮⋮` drag handle. Grab and drop to reorder; the new order is persisted to `localStorage.device_order` (same key the dashboard reads), so the Live tab follows immediately. Drop targets get a 2 px accent-coloured top/bottom line as visual feedback, and the dragged card fades to 45 % opacity. Native HTML5 drag-and-drop, no library.
+  - **Per-device visibility toggle on the Devices section.** A 👁 checkbox in each device card writes the key to `localStorage.hidden_devices` — the Live tab hides the card without deleting any of its history or sync state. Toggle back on to bring it back.
+  - **iOS Widget section moved to `/settings → Erweitert → iOS Widget`.** Same content as the old modal — install instructions (5 steps), the live host address shown as a copyable `<code>` block, "📋 Copy script" button (`navigator.clipboard.writeText` of `/widget.js`) and "⬇ Download .js" link. New `settings.ios_widget.*` i18n keys (10 strings) for both DE and EN.
+  - **Hint banner** on the Devices section: "Drag the ⋮⋮ handle to reorder devices on the Live tab. Toggle 👁 to hide a device from the Live tab without deleting its data."
+- **20 new i18n keys** (DE + EN, synced) for all the moved-in UI: drag hint, visibility label, "Probe", "Add", "Setup wizard" button, IP placeholder, the iOS widget step list and buttons. DE + EN now at **1870 keys** each.
+- The legacy `live-settings-modal` HTML in `webdash.py` is left in place but no longer reachable from the UI (the gear button bypasses it). Will be removed in a follow-up.
+
 ## 16.16.1 - 2026-04-11
 ### Fixed
 - **iOS widget instructions now translated.** The "📱 iOS Widget (Scriptable)" section in the live-settings modal (steps 1–5, the "Script kopieren" button, "⬇ Download .js", "Kopiert!" toast) was hard-coded German. All 10 strings are now `_t(lang, "web.widget.*")` placeholders fed into the template via the dashboard render dict. DE + EN both at 1850 keys, perfectly synced. Other languages fall back to English.
