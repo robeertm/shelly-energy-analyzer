@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.17.1 - 2026-04-11
+### Fixed
+- **Blank `/settings` page regression from 16.17.0.** `renderIosWidget()` passed an HTML snippet to `T()` whose second argument used `\"` escapes inside a double-quoted JS string (`T("key","Install <a href=\"…\"…>")`). Inside a template-literal `${…}` interpolation, the JS parser interpreted `\\` as an escaped backslash and then terminated the inner string at the following raw `"`, turning the rest of the URL into an unexpected identifier. The entire settings script block failed to parse, so the page loaded empty. Fix: switched the outer string to single quotes so the inner `"` characters pass through literally. `esprima.parseScript` of the full main script now succeeds.
+- **Two settings icons in the dashboard header.** v16.17.0 made the existing `⚙ btn-live-settings` button redirect to `/settings#sec-devices`, but the legacy `_render_dashboard_html()` injection at `web/__init__.py` was still adding a second `🔧` anchor right before `btn-theme`. That injection is removed — the header now has a single settings icon.
+
 ## 16.17.0 - 2026-04-11
 ### Added
 - **Single source of configuration: everything is now in `/settings`.** The dashboard's gear-icon modal (live-settings) is gone — clicking ⚙ on the dashboard header now jumps straight to `/settings#sec-devices`. No more "two places to configure things":
