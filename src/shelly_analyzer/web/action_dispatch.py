@@ -2036,8 +2036,7 @@ class ActionDispatcher:
                 _co2_zone = getattr(_co2_cfg, "bidding_zone", "DE_LU") or "DE_LU"
                 _use_entsoe = False
                 try:
-                    _entsoe_token = getattr(_co2_cfg, "entsoe_token", "") or ""
-                    if _entsoe_token and hasattr(self.storage, "db"):
+                    if _co2_cfg and getattr(_co2_cfg, "enabled", False) and hasattr(self.storage, "db"):
                         _use_entsoe = True
                 except Exception:
                     pass
@@ -2533,8 +2532,7 @@ class ActionDispatcher:
                     try:
                         _co2_cfg_hm = getattr(self.cfg, "co2", None)
                         _zone_hm = getattr(_co2_cfg_hm, "bidding_zone", "DE_LU") or "DE_LU"
-                        _token_hm = getattr(_co2_cfg_hm, "entsoe_token", "") or ""
-                        if _token_hm and hasattr(self.storage, "db"):
+                        if _co2_cfg_hm and getattr(_co2_cfg_hm, "enabled", False) and hasattr(self.storage, "db"):
                             df_co2_hm = self.storage.db.query_co2_intensity(_zone_hm, start_ts, end_ts + 3600)
                             if not df_co2_hm.empty:
                                 for _, r in df_co2_hm.iterrows():
@@ -2931,14 +2929,13 @@ class ActionDispatcher:
                 try:
                     _co2_cfg_s = getattr(self.cfg, "co2", None)
                     _co2_zone_s = getattr(_co2_cfg_s, "bidding_zone", "DE_LU") or "DE_LU"
-                    _co2_token_s = getattr(_co2_cfg_s, "entsoe_token", "") or ""
-                    if _co2_token_s and hasattr(self.storage, "db"):
+                    if _co2_cfg_s and getattr(_co2_cfg_s, "enabled", False) and hasattr(self.storage, "db"):
                         df_co2_s = self.storage.db.query_co2_intensity(_co2_zone_s, start_ts3, end_ts3 + 3600)
                         if df_co2_s is not None and not df_co2_s.empty and "intensity_g_per_kwh" in df_co2_s.columns:
                             avg_int = float(pd.to_numeric(df_co2_s["intensity_g_per_kwh"], errors="coerce").mean())
                             if avg_int > 0:
                                 co2_g_per_kwh = avg_int
-                                _co2_source = "entsoe"
+                                _co2_source = "live"
                 except Exception:
                     pass
 
@@ -3262,6 +3259,19 @@ class ActionDispatcher:
                             "co2_g_h": round(co2_g_h, 1),
                         })
 
+                forecast_points: list = []
+                forecast_ts = 0
+                bg = getattr(self, "_bg", None)
+                forecaster = getattr(bg, "_co2_forecaster", None) if bg is not None else None
+                if forecaster is not None:
+                    try:
+                        from shelly_analyzer.services.co2_forecast import point_to_dict
+                        for p in forecaster.get_forecast(zone):
+                            forecast_points.append(point_to_dict(p))
+                        forecast_ts = int(forecaster.last_run_ts() or 0)
+                    except Exception:
+                        pass
+
                 return {
                     "ok": True,
                     "current_intensity": round(ci, 1),
@@ -3269,6 +3279,8 @@ class ActionDispatcher:
                     "green_threshold": green_thr,
                     "dirty_threshold": dirty_thr,
                     "device_rates": device_rates,
+                    "forecast": forecast_points,
+                    "forecast_updated_ts": forecast_ts,
                 }
             except Exception as e:
                 return {"ok": False, "error": str(e)}

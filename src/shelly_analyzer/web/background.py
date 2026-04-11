@@ -48,6 +48,7 @@ class BackgroundServiceManager:
         self._mqtt_publisher = None
         self._influxdb_exporter = None
         self._co2_fetcher = None
+        self._co2_forecaster = None
         self._spot_fetcher = None
         self._feed_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -86,6 +87,7 @@ class BackgroundServiceManager:
         self._start_influxdb()
         self._start_autosync()
         self._start_co2_fetcher()
+        self._start_co2_forecaster()
         self._start_spot_fetcher()
         self._start_summary_scheduler()
         self._start_update_checker()
@@ -118,6 +120,11 @@ class BackgroundServiceManager:
         if self._co2_fetcher:
             try:
                 self._co2_fetcher.stop()
+            except Exception:
+                pass
+        if self._co2_forecaster:
+            try:
+                self._co2_forecaster.stop()
             except Exception:
                 pass
         if self._spot_fetcher:
@@ -641,6 +648,23 @@ class BackgroundServiceManager:
         except Exception as e:
             logger.exception("CO2 fetcher failed to start: %s", e)
 
+    def _start_co2_forecaster(self) -> None:
+        """Start the 6h CO2 forecast service (trend + Open-Meteo weather)."""
+        co2_cfg = getattr(self.cfg, "co2", None)
+        if co2_cfg is None or not getattr(co2_cfg, "enabled", False):
+            return
+        try:
+            from shelly_analyzer.services.co2_forecast import Co2ForecastService
+            self._co2_forecaster = Co2ForecastService(
+                db=self.storage.db,
+                get_config=lambda: self.cfg,
+            )
+            self._co2_forecaster.start()
+            logger.info("CO2 forecaster started (zone=%s)",
+                        getattr(co2_cfg, "bidding_zone", "?"))
+        except Exception as e:
+            logger.exception("CO2 forecaster failed to start: %s", e)
+
     def _start_spot_fetcher(self) -> None:
         """Start periodic spot-price fetch if enabled."""
         spot_cfg = getattr(self.cfg, "spot_price", None)
@@ -725,7 +749,7 @@ class BackgroundServiceManager:
                 }
 
             # Re-check every 6 hours. Break out immediately on shutdown.
-            if self._stop_event.wait(6 * 3600):
+            if self._stop_event.wait(3600):
                 return
 
     # ── Runtime metadata ───────────────────────────────────────────────
