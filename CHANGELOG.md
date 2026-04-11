@@ -1,5 +1,24 @@
 # Changelog
 
+## 16.14.0 - 2026-04-11
+### Added
+- **Trend-aware 6 h CO₂ forecast** with weather data. New `services/co2_forecast.py` computes a forward-looking CO₂ intensity forecast for the configured bidding zone instead of showing a flat static value:
+  - **Baseline** = per-hour-of-day median of the last 14 days of real (non-estimated) CO₂ data in the DB. This tracks the zone's real trend (night vs. day, weekday patterns) instead of assuming a constant ~380 g/kWh.
+  - **Weather adjustment** via the free **Open-Meteo** API (no API key, global coverage) — cloud cover, wind speed at 10 m, temperature, precipitation for the zone's centroid. Strong wind lowers intensity in wind-heavy zones (DE, DK, AU-SA, UK), clear sky + daylight lowers it in solar-heavy zones (CA, IT-S, AU-QLD), cold weather raises it in thermal-heavy zones (PL, US-MIDW-MISO), rain lowers it in hydro-heavy zones (NO, CH, AT, CA-QC, BR, IS).
+  - **Per-zone generation-mix profile** weights how strongly each weather factor kicks in, so wind has 3× the effect in DK-1/DK-2 (55 % wind share) as it does in CH (1 % wind share).
+  - Covers **150+ zones** across ENTSO-E (underscore form) and Electricity Maps (hyphen form) with population-weighted centroids for Europe, North America, South America, Asia, Oceania, Africa, and the Middle East.
+  - Runs as a new `Co2ForecastService` background thread that refreshes every hour alongside the CO₂ fetcher. In-memory only — the forecast is ephemeral and doesn't pollute the `co2_intensity` table.
+  - **New 6 h forecast strip** on the CO₂ pane under the live-intensity hero card. Each hour shows the forecasted intensity (colored by green/dirty thresholds), a ↑/↓/→ vs-baseline arrow, a weather icon (☀/⛅/☁), and the forecasted temperature. Hovering reveals cloud %, wind m/s, and temp °C. Live-refreshes every second via the existing `/api/co2_live` poll.
+  - `/api/co2_live` now returns `forecast: [{hour_ts, intensity_g_per_kwh, baseline_g_per_kwh, weather_factor, cloud_cover_pct, wind_ms, temp_c, precip_mm}]` + `forecast_updated_ts`.
+- **Update check cadence raised from every 6 hours to every hour** — GitHub traffic is still well under any rate limit, and the Live-tab update banner now appears much sooner after a new release is published.
+
+### Fixed
+- **CO₂ grid intensity now uses live DB values** instead of the flat 380 g/kWh `pricing.co2_intensity_g_per_kwh` fallback. Three places in `action_dispatch.py` looked up the non-existent attribute `cfg.co2.entsoe_token` (typo: the field is `entso_e_api_token`), which always evaluated to empty, so the code always fell through to the static fallback — even with ENTSO-E or Electricity Maps fully configured. The dashboard, costs heatmap, and solar stats now correctly gate on `cfg.co2.enabled` and query real per-hour intensity from the `co2_intensity` table.
+
+### Changed
+- **Semantic versioning: bumped MINOR (16.13 → 16.14)** for this feature release. Going forward the project follows MAJOR.MINOR.PATCH strictly: MINOR for new features, PATCH for bugfixes, MAJOR for breaking changes.
+- **`config.example.json` regenerated** from the current `io/config.py` defaults via `save_config()`. Was pinned at `v11.17.3` and missing 30+ config fields added in the last 5 major releases (theme, SSL, weather, spot-price fee breakdown, Electricity Maps key, EIA key, tenant billing, MQTT, InfluxDB, Prometheus, NILM, etc.). All placeholders (device keys, billing issuer/customer, GitHub repo) are now neutral so nothing looks like leaked real data.
+
 ## 16.13.60 - 2026-04-11
 ### Changed
 - **README updated** to reflect the new worldwide spot-price / CO₂ coverage. The "Dynamic Spot Market Prices" section now documents all three provider groups (Energy-Charts/aWATTar for Europe, EIA for the USA, AEMO for Australia) with the full zone list, API-key requirements and automatic currency conversion. The "Why" hero bullets call out the new `USA via EIA, Australia via AEMO` and `92 Electricity Maps zones` coverage. "Who it's for" targets dynamic-tariff customers worldwide (Tibber/aWATTar/Ostrom in EU, Griddy/Rhythm in ERCOT, Amber in Australia). New bullet for the self-updating feature (6h GitHub poll + one-click banner install/rollback from the Live tab) shipped in 16.13.59.
