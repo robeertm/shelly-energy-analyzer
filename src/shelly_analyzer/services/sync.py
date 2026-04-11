@@ -92,7 +92,7 @@ def sync_one_device(
 
     if not supports_emdata:
         end_ts = int(time.time())
-        logger.info("Sync %s: Gerät unterstützt kein EMData-CSV – übersprungen", device.name)
+        logger.info("Sync %s: device does not support EMData CSV – skipped", device.name)
         return SyncResult(
             device_key=device.key,
             device_name=device.name,
@@ -178,7 +178,7 @@ def sync_one_device(
                 pass
 
     logger.info(
-        "Sync %s: Bereich %s → %s (%d Chunks, host=%s)",
+        "Sync %s: range %s → %s (%d chunks, host=%s)",
         device.name,
         time.strftime("%Y-%m-%d %H:%M", time.localtime(ts_start)),
         time.strftime("%Y-%m-%d %H:%M", time.localtime(ts_end)),
@@ -186,7 +186,7 @@ def sync_one_device(
         device.host,
     )
     for a, b in iter_time_chunks(ts_start, ts_end, cfg.download.chunk_seconds):
-        _progress(f"Lade {a}-{b} …")
+        _progress(f"Loading {a}-{b} …")
         try:
             content = download_csv(http, device.host, device.em_id, a, b)
             # Skip saving empty CSV responses (header-only)
@@ -194,25 +194,25 @@ def sync_one_device(
             if len(lines) <= 1:
                 chunks.append(ChunkResult(ts=a, end_ts=b, ok=False, error="No data returned for this interval (likely outside device history retention)."))
                 done_chunks += 1
-                _progress("Keine Daten (außerhalb Historie)")
+                _progress("No data (outside retention)")
                 continue
             storage.save_chunk(device.key, a, b, content)  # v6: writes to DB
             chunks.append(ChunkResult(ts=a, end_ts=b, ok=True))
             last_success_end = b
             done_chunks += 1
             _progress("OK")
-            logger.info("Sync %s: Chunk %d/%d OK (%d Zeilen)", device.name, done_chunks, total_chunks, len(lines) - 1)
+            logger.info("Sync %s: chunk %d/%d OK (%d rows)", device.name, done_chunks, total_chunks, len(lines) - 1)
         except Exception as e:
             chunks.append(ChunkResult(ts=a, end_ts=b, ok=False, error=str(e)))
-            _progress(f"Fehler: {e}")
-            logger.warning("Sync %s: Chunk fehlgeschlagen: %s", device.name, e)
+            _progress(f"Error: {e}")
+            logger.warning("Sync %s: chunk failed: %s", device.name, e)
             break
 
     ok_count = sum(1 for c in chunks if c.ok)
     logger.info(
-        "Sync %s: fertig – %d/%d Chunks OK (last_end=%s)",
+        "Sync %s: done – %d/%d chunks OK (last_end=%s)",
         device.name, ok_count, len(chunks),
-        time.strftime("%Y-%m-%d %H:%M", time.localtime(last_success_end)) if last_success_end else "unverändert",
+        time.strftime("%Y-%m-%d %H:%M", time.localtime(last_success_end)) if last_success_end else "unchanged",
     )
 
     ended_at = int(time.time())

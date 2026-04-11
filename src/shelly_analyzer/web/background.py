@@ -1210,7 +1210,7 @@ class BackgroundServiceManager:
         y_end = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
         db_start = int(day_before.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
 
-        lines = [f"📊 Tagesbericht – {yesterday.strftime('%A, %d.%m.%Y')}", ""]
+        lines = [f"📊 Daily report – {yesterday.strftime('%A, %d.%m.%Y')}", ""]
 
         total_kwh = 0.0
         total_prev = 0.0
@@ -1250,7 +1250,7 @@ class BackgroundServiceManager:
         dev_data.sort(key=lambda x: x["kwh"], reverse=True)
 
         # Device breakdown
-        lines.append("⚡ Geräte:")
+        lines.append("⚡ Devices:")
         for dd in dev_data:
             delta = ""
             if dd["prev"] > 0:
@@ -1261,28 +1261,28 @@ class BackgroundServiceManager:
             lines.append(f"  {dd['name']}: {dd['kwh']:.2f} kWh | {dd['cost']:.2f} \u20ac{delta}{peak_info}")
 
         if not dev_data:
-            lines.append("  Keine Daten vorhanden.")
+            lines.append("  No data available.")
 
         # Totals
         total_cost = total_kwh * unit_price
         lines.append("")
-        lines.append(f"🔋 Gesamt: {total_kwh:.2f} kWh | {total_cost:.2f} \u20ac")
+        lines.append(f"🔋 Total: {total_kwh:.2f} kWh | {total_cost:.2f} \u20ac")
         if total_prev > 0:
             pct = ((total_kwh - total_prev) / total_prev) * 100
             arrow = "📈" if pct > 5 else "📉" if pct < -5 else "➡️"
-            lines.append(f"{arrow} vs. Vortag: {pct:+.1f}%")
+            lines.append(f"{arrow} vs. previous day: {pct:+.1f}%")
 
         # Peak hour
         if any(v > 0 for v in hourly_total):
             peak_h = hourly_total.index(max(hourly_total))
-            lines.append(f"⏰ Spitzenstunde: {peak_h:02d}:00–{peak_h+1:02d}:00 ({max(hourly_total):.2f} kWh)")
+            lines.append(f"⏰ Peak hour: {peak_h:02d}:00–{peak_h+1:02d}:00 ({max(hourly_total):.2f} kWh)")
 
         # Standby estimate (night 00-05 average)
         night_kwh = sum(hourly_total[h] for h in range(0, 5))
         if night_kwh > 0:
             standby_w = (night_kwh / 5) * 1000
             standby_annual = standby_w * 8760 / 1000
-            lines.append(f"🌙 Nacht-Grundlast: ~{standby_w:.0f} W ({standby_annual:.0f} kWh/Jahr)")
+            lines.append(f"🌙 Night base load: ~{standby_w:.0f} W ({standby_annual:.0f} kWh/year)")
 
         # CO2 estimate
         try:
@@ -1303,14 +1303,14 @@ class BackgroundServiceManager:
                 if m_kwh > 0:
                     proj = m_kwh / (now.day - 1) * days_in_month
                     proj_cost = proj * unit_price
-                    lines.append(f"📅 Monats-Hochrechnung: ~{proj:.0f} kWh | ~{proj_cost:.0f} \u20ac")
+                    lines.append(f"📅 Month projection: ~{proj:.0f} kWh | ~{proj_cost:.0f} \u20ac")
         except Exception:
             pass
 
         # 24h mini chart (text bar chart)
         if any(v > 0 for v in hourly_total):
             lines.append("")
-            lines.append("📊 24h-Verlauf:")
+            lines.append("📊 24h profile:")
             max_h = max(hourly_total) or 1
             for h in [0, 3, 6, 9, 12, 15, 18, 21]:
                 val = hourly_total[h]
@@ -1342,7 +1342,7 @@ class BackgroundServiceManager:
         me_ts = int(last_month_end.timestamp())
         ps_ts = int(prev_month_start.timestamp())
 
-        lines = [f"📊 Monatsbericht – {month_label}", ""]
+        lines = [f"📊 Monthly report – {month_label}", ""]
         total_kwh = 0.0
         total_prev = 0.0
         dev_data = []
@@ -1360,7 +1360,7 @@ class BackgroundServiceManager:
         dev_data.sort(key=lambda x: x["kwh"], reverse=True)
 
         # Device ranking
-        lines.append("⚡ Geräte-Ranking:")
+        lines.append("⚡ Device ranking:")
         for i, dd in enumerate(dev_data):
             medal = ["🥇", "🥈", "🥉"][i] if i < 3 else f"  {i+1}."
             delta = ""
@@ -1372,24 +1372,24 @@ class BackgroundServiceManager:
             lines.append(f"{medal} {dd['name']}: {dd['kwh']:.1f} kWh | {dd['cost']:.2f} \u20ac | {share:.0f}%{delta}")
 
         if not dev_data:
-            lines.append("  Keine Daten vorhanden.")
+            lines.append("  No data available.")
 
         # Totals
         total_cost = total_kwh * unit_price
         lines.append("")
-        lines.append(f"🔋 Gesamt: {total_kwh:.1f} kWh | {total_cost:.2f} \u20ac")
+        lines.append(f"🔋 Total: {total_kwh:.1f} kWh | {total_cost:.2f} \u20ac")
 
         if total_prev > 0:
             pct = ((total_kwh - total_prev) / total_prev) * 100
             diff_kwh = total_kwh - total_prev
             diff_cost = diff_kwh * unit_price
             arrow = "📈" if pct > 5 else "📉" if pct < -5 else "➡️"
-            lines.append(f"{arrow} vs. Vormonat: {pct:+.1f}% ({diff_kwh:+.1f} kWh | {diff_cost:+.2f} \u20ac)")
+            lines.append(f"{arrow} vs. previous month: {pct:+.1f}% ({diff_kwh:+.1f} kWh | {diff_cost:+.2f} \u20ac)")
 
         # Statistics
         avg_daily = total_kwh / days_in_month if days_in_month else 0
         avg_daily_cost = avg_daily * unit_price
-        lines.append(f"📅 Tagesschnitt: {avg_daily:.1f} kWh | {avg_daily_cost:.2f} \u20ac")
+        lines.append(f"📅 Daily average: {avg_daily:.1f} kWh | {avg_daily_cost:.2f} \u20ac")
 
         # Best/worst days
         try:
@@ -1409,8 +1409,8 @@ class BackgroundServiceManager:
             if daily_totals:
                 best = min(daily_totals, key=daily_totals.get)
                 worst = max(daily_totals, key=daily_totals.get)
-                lines.append(f"✅ Bester Tag: {best} ({daily_totals[best]:.1f} kWh)")
-                lines.append(f"❌ Schlechtester Tag: {worst} ({daily_totals[worst]:.1f} kWh)")
+                lines.append(f"✅ Best day: {best} ({daily_totals[best]:.1f} kWh)")
+                lines.append(f"❌ Worst day: {worst} ({daily_totals[worst]:.1f} kWh)")
         except Exception:
             pass
 
@@ -1418,7 +1418,7 @@ class BackgroundServiceManager:
         try:
             co2_g = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380) or 380)
             co2_kg = total_kwh * co2_g / 1000
-            lines.append(f"🌍 CO\u2082: {co2_kg:.1f} kg | {co2_kg / 22:.0f} Baumtage")
+            lines.append(f"🌍 CO\u2082: {co2_kg:.1f} kg | {co2_kg / 22:.0f} tree-days")
         except Exception:
             pass
 
@@ -1426,7 +1426,7 @@ class BackgroundServiceManager:
         try:
             year_proj = avg_daily * 365
             year_cost = year_proj * unit_price
-            lines.append(f"📆 Jahres-Hochrechnung: ~{year_proj:.0f} kWh | ~{year_cost:.0f} \u20ac")
+            lines.append(f"📆 Year projection: ~{year_proj:.0f} kWh | ~{year_cost:.0f} \u20ac")
         except Exception:
             pass
 
@@ -1491,8 +1491,8 @@ class BackgroundServiceManager:
                     vals = dev_hourly[name]
                     ax1.bar(hours, vals, bottom=bottom, color=colors[i % len(colors)], label=name, width=0.8)
                     bottom = [b + v for b, v in zip(bottom, vals)]
-                ax1.set_title(f"Stundenverlauf – {yesterday.strftime('%d.%m.%Y')}", color="#e8eef6", fontsize=11, fontweight="bold")
-                ax1.set_xlabel("Stunde", color="#9fb0c3", fontsize=9)
+                ax1.set_title(f"Hourly – {yesterday.strftime('%d.%m.%Y')}", color="#e8eef6", fontsize=11, fontweight="bold")
+                ax1.set_xlabel("Hour", color="#9fb0c3", fontsize=9)
                 ax1.set_ylabel("kWh", color="#9fb0c3", fontsize=9)
                 ax1.legend(fontsize=7, facecolor="#121821", edgecolor="#333", labelcolor="#e8eef6", loc="upper left")
 
@@ -1506,7 +1506,7 @@ class BackgroundServiceManager:
                     ax2.set_xticks(list(x))
                     ax2.set_xticklabels([n[:12] for n in dev_names], rotation=30, ha="right", fontsize=8)
                     ax2.set_ylabel("kWh", color="#9fb0c3", fontsize=9)
-                    ax2.set_title("Geräte-Verbrauch", color="#e8eef6", fontsize=11, fontweight="bold")
+                    ax2.set_title("Device consumption", color="#e8eef6", fontsize=11, fontweight="bold")
                     for bar, cost in zip(bars, cost_vals):
                         ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.02,
                                  f"{cost:.2f}\u20ac", ha="center", va="bottom", color="#9fb0c3", fontsize=7)
@@ -1539,10 +1539,10 @@ class BackgroundServiceManager:
                     avg = sum(vals) / len(vals) if vals else 0
                     bar_colors = ["#dc2626" if v > avg * 1.3 else "#f59e0b" if v > avg else "#3b82f6" for v in vals]
                     ax1.bar(days, vals, color=bar_colors, width=0.7)
-                    ax1.axhline(y=avg, color="#22c55e", linestyle="--", linewidth=1, label=f"Schnitt: {avg:.1f} kWh")
+                    ax1.axhline(y=avg, color="#22c55e", linestyle="--", linewidth=1, label=f"Avg: {avg:.1f} kWh")
                     ax1.legend(fontsize=7, facecolor="#121821", edgecolor="#333", labelcolor="#e8eef6")
-                ax1.set_title(f"Tagesverlauf – {last_month_start.strftime('%B %Y')}", color="#e8eef6", fontsize=11, fontweight="bold")
-                ax1.set_xlabel("Tag", color="#9fb0c3", fontsize=9)
+                ax1.set_title(f"Daily – {last_month_start.strftime('%B %Y')}", color="#e8eef6", fontsize=11, fontweight="bold")
+                ax1.set_xlabel("Day", color="#9fb0c3", fontsize=9)
                 ax1.set_ylabel("kWh", color="#9fb0c3", fontsize=9)
 
                 # Device pie
@@ -1565,7 +1565,7 @@ class BackgroundServiceManager:
                     )
                     for at in autotexts:
                         at.set_fontsize(7)
-                    ax2.set_title("Geräte-Anteil", color="#e8eef6", fontsize=11, fontweight="bold")
+                    ax2.set_title("Device share", color="#e8eef6", fontsize=11, fontweight="bold")
 
             plt.tight_layout(pad=1.5)
             out = self.out_dir / "data" / "runtime" / f"summary_{chart_type}.png"

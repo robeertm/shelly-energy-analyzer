@@ -34,7 +34,7 @@ GERMAN_TARIFF_TEMPLATES = [
      "price_eur_per_kwh": 0.3199, "base_fee_eur_per_year": 143.88},
     {"name": "EnBW Comfort", "provider": "EnBW", "tariff_type": "fixed",
      "price_eur_per_kwh": 0.3485, "base_fee_eur_per_year": 155.88},
-    {"name": "HT/NT Tarif", "provider": "Stadtwerke", "tariff_type": "tou",
+    {"name": "Day/Night TOU", "provider": "Municipal", "tariff_type": "tou",
      "price_eur_per_kwh": 0.0, "base_fee_eur_per_year": 140.0,
      "ht_price": 0.35, "nt_price": 0.22, "ht_start": 6, "ht_end": 22},
 ]
@@ -184,8 +184,8 @@ def compare_tariffs(
 
         # Add current tariff
         results.append(TariffResult(
-            name="Aktueller Tarif",
-            provider="Aktuell",
+            name="Current tariff",
+            provider="Current",
             tariff_type="fixed",
             annual_cost_eur=round(current_annual, 2),
             monthly_avg_eur=round(current_annual / 12, 2),

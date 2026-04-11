@@ -66,10 +66,10 @@ class RuleBasedAdvisor:
                     tips.append(Tip(
                         category="standby",
                         priority=2,
-                        title=f"Standby-Verbrauch: {dev.name}",
-                        description=f"Grundlast von {base_w:.0f} W erkannt. "
-                                    f"Einsparung bis zu {cost:.0f} \u20ac/Jahr m\u00f6glich durch "
-                                    f"Abschalten ungenutzter Ger\u00e4te oder schaltbare Steckdosen.",
+                        title=f"Standby consumption: {dev.name}",
+                        description=f"Base load of {base_w:.0f} W detected. "
+                                    f"Savings of up to {cost:.0f} \u20ac/year possible by "
+                                    f"switching off idle devices or using smart plugs.",
                         potential_savings_eur=round(cost, 2),
                         icon="\U0001f50c",
                     ))
@@ -105,10 +105,10 @@ class RuleBasedAdvisor:
                     tips.append(Tip(
                         category="spot",
                         priority=1,
-                        title="G\u00fcnstigste Stunden nutzen",
-                        description=f"Preisspreizung heute: {spread:.1f} ct/kWh. "
-                                    f"G\u00fcnstigster Zeitpunkt: {cheap_time} Uhr ({min_price:.1f} ct/kWh). "
-                                    f"Gro\u00dfe Verbraucher (Waschmaschine, Trockner) in g\u00fcnstige Stunden verlegen.",
+                        title="Use the cheapest hours",
+                        description=f"Price spread today: {spread:.1f} ct/kWh. "
+                                    f"Cheapest hour: {cheap_time} ({min_price:.1f} ct/kWh). "
+                                    f"Shift heavy loads (washing machine, dryer) into cheap hours.",
                         potential_savings_eur=round(spread * 5 / 100 * 365, 2),  # Rough estimate: 5 kWh/day
                         icon="\u26a1",
                     ))
@@ -148,10 +148,10 @@ class RuleBasedAdvisor:
                     tips.append(Tip(
                         category="forecast",
                         priority=2,
-                        title=f"Verbrauch gestiegen (+{change_pct:.0f}%)",
-                        description=f"In den letzten 30 Tagen {recent_kwh:.0f} kWh verbraucht "
-                                    f"(+{change_pct:.0f}% vs. Vormonat). "
-                                    f"Pr\u00fcfen ob neue Verbraucher hinzugekommen sind.",
+                        title=f"Consumption rising (+{change_pct:.0f}%)",
+                        description=f"Used {recent_kwh:.0f} kWh in the last 30 days "
+                                    f"(+{change_pct:.0f}% vs. previous month). "
+                                    f"Check whether new loads were added.",
                         potential_savings_eur=round(max(0, extra_cost), 2),
                         icon="\U0001f4c8",
                     ))
@@ -159,8 +159,8 @@ class RuleBasedAdvisor:
                     tips.append(Tip(
                         category="forecast",
                         priority=4,
-                        title=f"Verbrauch gesunken ({change_pct:.0f}%)",
-                        description=f"Gute Nachricht! Verbrauch um {abs(change_pct):.0f}% gesunken "
+                        title=f"Consumption falling ({change_pct:.0f}%)",
+                        description=f"Good news! Consumption dropped by {abs(change_pct):.0f}% "
                                     f"({recent_kwh:.0f} kWh vs. {prev_kwh:.0f} kWh).",
                         potential_savings_eur=0,
                         icon="\U0001f389",
@@ -184,18 +184,18 @@ class RuleBasedAdvisor:
                     tips.append(Tip(
                         category="weather",
                         priority=3,
-                        title="K\u00e4ltewarnung: Heizkosten beachten",
-                        description=f"Aktuelle Au\u00dfentemperatur: {temp:.1f}\u00b0C. "
-                                    f"Heizung effizienter einstellen, Sto\u00dfl\u00fcften statt Kippl\u00fcften.",
+                        title="Cold warning: watch heating costs",
+                        description=f"Current outside temperature: {temp:.1f}\u00b0C. "
+                                    f"Tune your heating for efficiency and prefer short bursts of full ventilation over tilted windows.",
                         icon="\U0001f321\ufe0f",
                     ))
                 elif temp > 28:
                     tips.append(Tip(
                         category="weather",
                         priority=3,
-                        title="Hitzewarnung: Klimaanlage optimieren",
-                        description=f"Aktuelle Au\u00dfentemperatur: {temp:.1f}\u00b0C. "
-                                    f"Rolll\u00e4den tags\u00fcber schlie\u00dfen, Klimaanlage auf 25\u00b0C statt 20\u00b0C.",
+                        title="Heat warning: optimize AC",
+                        description=f"Current outside temperature: {temp:.1f}\u00b0C. "
+                                    f"Close shutters during the day, set AC to 25\u00b0C instead of 20\u00b0C.",
                         icon="\u2600\ufe0f",
                     ))
         except Exception:
@@ -210,9 +210,9 @@ class RuleBasedAdvisor:
             tips.append(Tip(
                 category="general",
                 priority=3,
-                title="Dynamische Strompreise aktivieren",
-                description="Spot-Preise sind nicht aktiviert. Mit einem dynamischen Tarif "
-                            "k\u00f6nnen Sie von g\u00fcnstigen B\u00f6rsenstunden profitieren.",
+                title="Enable dynamic electricity prices",
+                description="Spot prices are disabled. With a dynamic tariff you can "
+                            "profit from cheap market hours.",
                 icon="\U0001f4b0",
             ))
 
@@ -221,9 +221,9 @@ class RuleBasedAdvisor:
             tips.append(Tip(
                 category="general",
                 priority=5,
-                title="Solar-Monitoring einrichten",
-                description="Wenn Sie eine PV-Anlage haben, aktivieren Sie das Solar-Monitoring "
-                            "f\u00fcr Eigenverbrauchs- und Amortisationsanalyse.",
+                title="Set up solar monitoring",
+                description="If you have a PV system, enable solar monitoring to see "
+                            "self-consumption and payback analysis.",
                 icon="\u2600\ufe0f",
             ))
 
@@ -256,15 +256,15 @@ class LlmAdvisor:
 
     def _build_prompt(self, tips: List[Tip], context: str) -> str:
         tip_text = "\n".join(
-            f"- [{t.category}] {t.title}: {t.description} (Einsparung: {t.potential_savings_eur}\u20ac/Jahr)"
+            f"- [{t.category}] {t.title}: {t.description} (savings: {t.potential_savings_eur} \u20ac/year)"
             for t in tips[:10]
         )
         return (
-            "Du bist ein Energieberater. Fasse die folgenden Energiespar-Tipps "
-            "in einem kurzen, freundlichen Absatz zusammen. Priorisiere nach Einsparpotenzial.\n\n"
-            f"Tipps:\n{tip_text}\n\n"
-            f"Kontext: {context}\n\n"
-            "Antwort (max 150 W\u00f6rter, auf Deutsch):"
+            "You are an energy advisor. Summarize the following energy-saving tips "
+            "in a short, friendly paragraph. Prioritize by savings potential.\n\n"
+            f"Tips:\n{tip_text}\n\n"
+            f"Context: {context}\n\n"
+            "Answer (max 150 words, in English):"
         )
 
     def _call_ollama(self, prompt: str) -> str:

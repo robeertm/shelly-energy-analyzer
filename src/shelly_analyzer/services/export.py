@@ -1694,7 +1694,7 @@ def export_pdf_email_daily(
         col_r   = margin + col_w + col_gap   # x-start of right column
         kpi_h2  = 1.6 * cm
         kpi_gap2 = 0.2 * cm
-        detail_title = "Gerätedetails" if not is_en else "Device Details"
+        detail_title = "Device Details"
 
         for pair_start in range(0, len(dev_names), 2):
             c.showPage()
@@ -1975,7 +1975,7 @@ def export_pdf_email_monthly(
         col_r   = margin + col_w + col_gap
         kpi_h2  = 1.6 * cm
         kpi_gap2 = 0.2 * cm
-        detail_title = "Gerätedetails" if not is_en else "Device Details"
+        detail_title = "Device Details"
 
         for pair_start in range(0, len(dev_names), 2):
             c.showPage()

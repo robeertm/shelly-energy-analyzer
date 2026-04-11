@@ -1,4 +1,4 @@
-"""Tenant (Mieter) list + Nebenkostenabrechnung endpoints."""
+"""Tenant list + utility billing endpoints."""
 from __future__ import annotations
 
 import logging
@@ -95,7 +95,7 @@ def compute_bills():
 
         tc = getattr(state.cfg, "tenant", None)
         if tc is None or not tc.tenants:
-            return jsonify({"ok": False, "error": "Keine Mieter konfiguriert"}), 400
+            return jsonify({"ok": False, "error": "No tenants configured"}), 400
 
         # Map config TenantDef → service TenantDef (same fields)
         svc_tenants = [
