@@ -4899,7 +4899,7 @@ function renderCo2(data, el) {{
   // ── Draw canvases (deferred to ensure layout) ──
   if (hourly.length > 1) {{
     requestAnimationFrame(function() {{
-      _drawCo2Chart(hourly, green, dirty);
+      _drawCo2Chart(hourly, green, dirty, data.forecast || []);
       _drawCo2RenewRing();
       _drawCo2FuelDonut(mixKeys, mix, fuelColors);
     }});
@@ -4963,7 +4963,8 @@ function _drawCo2RenewRing() {{
   ctx.beginPath(); ctx.arc(cx, cy, R - lw/2, -Math.PI/2, -Math.PI/2 + angle); ctx.stroke();
 }}
 
-function _drawCo2Chart(hourly, green, dirty) {{
+function _drawCo2Chart(hourly, green, dirty, forecast) {{
+    forecast = forecast || [];
     const canvas = document.getElementById('co2-chart');
     if (canvas) {{
       const ctx = canvas.getContext('2d');
@@ -4977,8 +4978,16 @@ function _drawCo2Chart(hourly, green, dirty) {{
       const cW = W - pad.left - pad.right;
       const cH = H - pad.top - pad.bottom;
 
+      // Total span = historical hours + forecast hours along the same x-axis
+      const nHist = hourly.length;
+      const nFc = forecast.length;
+      const nTotal = nHist + nFc;
+      const denom = Math.max(1, nTotal - 1);
+
       const vals = hourly.map(function(h) {{ return h.intensity; }});
-      const maxV = Math.max(dirty * 1.1, Math.max.apply(null, vals) * 1.1);
+      const fcVals = forecast.map(function(p) {{ return p.intensity_g_per_kwh; }});
+      const allVals = vals.concat(fcVals);
+      const maxV = Math.max(dirty * 1.1, (allVals.length ? Math.max.apply(null, allVals) : 0) * 1.1);
       const minV = 0;
 
       // Grid lines
@@ -5007,42 +5016,101 @@ function _drawCo2Chart(hourly, green, dirty) {{
       drawThreshold(green, '#4caf50');
       drawThreshold(dirty, '#e53935');
 
-      // Area fill + line
+      // Helper: x position for index across the combined history+forecast axis
+      function xAt(i) {{ return pad.left + (cW * i / denom); }}
+      function yAt(v) {{ return pad.top + cH - (cH * (v - minV) / (maxV - minV)); }}
+
+      // Area fill (history only)
       ctx.beginPath();
       hourly.forEach(function(h, i) {{
-        const x = pad.left + (cW * i / (hourly.length - 1));
-        const y = pad.top + cH - (cH * (h.intensity - minV) / (maxV - minV));
+        const x = xAt(i);
+        const y = yAt(h.intensity);
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }});
-      // Close area
-      const lastX = pad.left + cW;
-      ctx.lineTo(lastX, pad.top + cH);
+      const histEndX = xAt(nHist - 1);
+      ctx.lineTo(histEndX, pad.top + cH);
       ctx.lineTo(pad.left, pad.top + cH);
       ctx.closePath();
       ctx.fillStyle = 'rgba(76,175,80,0.12)';
       ctx.fill();
 
-      // Line with gradient color
+      // Solid history line with gradient color
       hourly.forEach(function(h, i) {{
         if (i === 0) return;
-        const x0 = pad.left + (cW * (i-1) / (hourly.length - 1));
-        const y0 = pad.top + cH - (cH * (hourly[i-1].intensity - minV) / (maxV - minV));
-        const x1 = pad.left + (cW * i / (hourly.length - 1));
-        const y1 = pad.top + cH - (cH * (h.intensity - minV) / (maxV - minV));
+        const x0 = xAt(i - 1);
+        const y0 = yAt(hourly[i-1].intensity);
+        const x1 = xAt(i);
+        const y1 = yAt(h.intensity);
         ctx.strokeStyle = _co2Color((hourly[i-1].intensity + h.intensity) / 2, green, dirty);
         ctx.lineWidth = 2.5;
         ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
       }});
 
-      // "Now" vertical marker
+      // ── Forecast continuation: dashed line + soft fill, hour markers ──
+      if (nFc > 0 && nHist > 0) {{
+        // Bridge from last historical point to first forecast point
+        const lastH = hourly[nHist - 1];
+        const xBridge0 = xAt(nHist - 1);
+        const yBridge0 = yAt(lastH.intensity);
+
+        // Dashed line through forecast
+        ctx.setLineDash([5, 4]);
+        ctx.lineWidth = 2;
+        let xPrev = xBridge0, yPrev = yBridge0, vPrev = lastH.intensity;
+        forecast.forEach(function(p, i) {{
+          const xC = xAt(nHist + i);
+          const yC = yAt(p.intensity_g_per_kwh);
+          ctx.strokeStyle = _co2Color((vPrev + p.intensity_g_per_kwh) / 2, green, dirty);
+          ctx.beginPath(); ctx.moveTo(xPrev, yPrev); ctx.lineTo(xC, yC); ctx.stroke();
+          xPrev = xC; yPrev = yC; vPrev = p.intensity_g_per_kwh;
+        }});
+        ctx.setLineDash([]);
+
+        // Forecast area fill
+        ctx.beginPath();
+        ctx.moveTo(xBridge0, pad.top + cH);
+        ctx.lineTo(xBridge0, yBridge0);
+        forecast.forEach(function(p, i) {{
+          ctx.lineTo(xAt(nHist + i), yAt(p.intensity_g_per_kwh));
+        }});
+        ctx.lineTo(xAt(nHist + nFc - 1), pad.top + cH);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(106,167,255,0.10)';
+        ctx.fill();
+
+        // Forecast point markers
+        forecast.forEach(function(p, i) {{
+          const xC = xAt(nHist + i);
+          const yC = yAt(p.intensity_g_per_kwh);
+          ctx.fillStyle = _co2Color(p.intensity_g_per_kwh, green, dirty);
+          ctx.beginPath(); ctx.arc(xC, yC, 3, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }});
+
+        // Forecast caption above the strip
+        ctx.fillStyle = '#6aa7ff';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(t('web.co2.forecast_label','\u2192 6h Prognose'), xBridge0 + 4, pad.top + 10);
+      }}
+
+      // "Now" vertical marker — sits between history and forecast when forecast is present
       const nowTs = Date.now() / 1000;
-      if (hourly.length > 1 && hourly[0].ts && hourly[hourly.length-1].ts) {{
+      if (nHist > 1 && hourly[0].ts && hourly[nHist - 1].ts) {{
         const tFirst = hourly[0].ts;
         const tStepCo2 = hourly[1].ts - hourly[0].ts || 3600;
-        const tLast = hourly[hourly.length - 1].ts + tStepCo2;
-        if (nowTs >= tFirst && nowTs <= tLast) {{
+        const tLast = hourly[nHist - 1].ts + tStepCo2;
+        let nowX = null;
+        if (nFc > 0) {{
+          // Anchor "now" at the boundary between history and forecast
+          nowX = xAt(nHist - 1) + (xAt(nHist) - xAt(nHist - 1)) * 0.5;
+        }} else if (nowTs >= tFirst && nowTs <= tLast) {{
           const fracN = (nowTs - tFirst) / (tLast - tFirst);
-          const nowX = pad.left + fracN * cW;
+          nowX = pad.left + fracN * cW * (nHist - 1) / denom;
+        }}
+        if (nowX !== null) {{
           ctx.strokeStyle = '#ff1744';
           ctx.lineWidth = 2;
           ctx.setLineDash([4, 3]);
@@ -5055,17 +5123,28 @@ function _drawCo2Chart(hourly, green, dirty) {{
         }}
       }}
 
-      // X-axis labels
+      // X-axis labels (history + key forecast hours)
       ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted') || '#999';
       ctx.font = '10px sans-serif';
       ctx.textAlign = 'center';
-      const step = Math.max(1, Math.floor(hourly.length / 6));
+      const step = Math.max(1, Math.floor(nHist / 6));
       hourly.forEach(function(h, i) {{
-        if (i % step === 0 || i === hourly.length - 1) {{
-          const x = pad.left + (cW * i / (hourly.length - 1));
-          ctx.fillText(h.hour, x, pad.top + cH + 14);
+        if (i % step === 0 || i === nHist - 1) {{
+          ctx.fillText(h.hour, xAt(i), pad.top + cH + 14);
         }}
       }});
+      // Forecast labels: first and last forecast hour
+      if (nFc > 0) {{
+        ctx.fillStyle = '#6aa7ff';
+        const labelHours = [0, nFc - 1];
+        labelHours.forEach(function(i) {{
+          if (i < 0 || i >= nFc) return;
+          const ts = forecast[i].hour_ts;
+          const d = new Date(ts * 1000);
+          const lbl = d.toLocaleTimeString('de-DE', {{hour:'2-digit',minute:'2-digit'}});
+          ctx.fillText('+' + (i + 1) + 'h', xAt(nHist + i), pad.top + cH + 14);
+        }});
+      }}
     }}
 }}
 

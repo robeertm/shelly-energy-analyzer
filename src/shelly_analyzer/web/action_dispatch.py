@@ -3429,6 +3429,20 @@ class ActionDispatcher:
                 year_start_ts = int(_year_start.timestamp())
                 now_ts = int(_nowc.timestamp())
 
+                # Pull 6h forecast from background service (if running)
+                _forecast_points: List[Dict[str, Any]] = []
+                _forecast_run_ts: int = 0
+                _bg_co2 = getattr(self, "_bg", None)
+                _forecaster = getattr(_bg_co2, "_co2_forecaster", None) if _bg_co2 is not None else None
+                if _forecaster is not None:
+                    try:
+                        from shelly_analyzer.services.co2_forecast import point_to_dict
+                        for _p in _forecaster.get_forecast(zone):
+                            _forecast_points.append(point_to_dict(_p))
+                        _forecast_run_ts = int(_forecaster.last_run_ts() or 0)
+                    except Exception:
+                        pass
+
                 co2_range = str(params.get("range", "24h")) if params else "24h"
                 if co2_range == "7d":
                     h24_start = now_ts - 7 * 86400
@@ -3606,6 +3620,8 @@ class ActionDispatcher:
                     "fuel_mix": fuel_mix,
                     "fuel_mix_hour": fuel_mix_hour,
                     "device_hourly_co2": device_hourly_co2,
+                    "forecast": _forecast_points,
+                    "forecast_updated_ts": _forecast_run_ts,
                 }
             except Exception as e:
                 return {"ok": False, "error": str(e)}
