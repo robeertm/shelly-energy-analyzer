@@ -345,8 +345,8 @@ class BillingParty:
 
 @dataclass(frozen=True)
 class BillingConfig:
-    issuer: BillingParty = BillingParty(name="Firma Muster GmbH", address_lines=["Musterstraße 1", "12345 Musterstadt"], vat_id="DE000000000")
-    customer: BillingParty = BillingParty(name="Kunde", address_lines=["Kundenstraße 1", "12345 Kundenstadt"]) 
+    issuer: BillingParty = BillingParty(name="Example Company Ltd", address_lines=["Example Street 1", "12345 Example City"], vat_id="GB000000000")
+    customer: BillingParty = BillingParty(name="Customer", address_lines=["Customer Street 1", "12345 Customer City"])
     invoice_prefix: str = "INV"
     payment_terms_days: int = 14
     invoice_logo_path: str = ""
@@ -368,7 +368,7 @@ class SolarConfig:
     enabled: bool = False
     # Key of the device at the grid connection point (negative power = export to grid)
     pv_meter_device_key: str = ""
-    # Feed-in tariff (Einspeisevergütung) in €/kWh
+    # Feed-in tariff in €/kWh
     feed_in_tariff_eur_per_kwh: float = 0.082
     # Installed PV capacity in kWp (0 = unknown/not set)
     kw_peak: float = 0.0

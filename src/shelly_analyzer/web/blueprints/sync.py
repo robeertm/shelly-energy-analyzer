@@ -21,10 +21,10 @@ def co2_refresh():
     state = _get_state()
     bg = getattr(state, "_bg", None)
     if bg is None or bg._co2_fetcher is None:
-        return jsonify({"ok": False, "error": "CO2 fetcher nicht aktiv (ENTSO-E Token & enabled prüfen)"}), 400
+        return jsonify({"ok": False, "error": "CO2 fetcher not active (check ENTSO-E token & enabled flag)"}), 400
     try:
         bg._co2_fetcher.trigger_now()
-        return jsonify({"ok": True, "message": "CO2 Abruf gestartet"})
+        return jsonify({"ok": True, "message": "CO2 fetch started"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -63,10 +63,10 @@ def spot_refresh():
     state = _get_state()
     bg = getattr(state, "_bg", None)
     if bg is None or bg._spot_fetcher is None:
-        return jsonify({"ok": False, "error": "Spot-Preis Fetcher nicht aktiv"}), 400
+        return jsonify({"ok": False, "error": "Spot price fetcher not active"}), 400
     try:
         bg._spot_fetcher.trigger_now()
-        return jsonify({"ok": True, "message": "Spot-Preis Abruf gestartet"})
+        return jsonify({"ok": True, "message": "Spot price fetch started"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

@@ -41,16 +41,16 @@ class StreakInfo:
 
 # Badge definitions
 BADGE_DEFS = [
-    {"id": "saver_10", "name": "Energiesparer", "desc": "10% weniger als Vorwoche", "icon": "\U0001f331", "threshold": 10},
-    {"id": "saver_20", "name": "Sparchampion", "desc": "20% weniger als Vorwoche", "icon": "\U0001f3c6", "threshold": 20},
-    {"id": "low_standby", "name": "Standby-Killer", "desc": "Standby unter 50W gedr\u00fcckt", "icon": "\U0001f50c", "threshold": 50},
-    {"id": "green_hour", "name": "Gr\u00fcne Stunde", "desc": "Verbrauch in CO\u2082-arme Stunden verlagert", "icon": "\U0001f30d", "threshold": 0},
-    {"id": "solar_champ", "name": "Solar-Champion", "desc": ">80% Eigenverbrauch an einem Tag", "icon": "\u2600\ufe0f", "threshold": 80},
-    {"id": "streak_7", "name": "7-Tage-Serie", "desc": "7 Tage unter dem Tagesziel", "icon": "\U0001f525", "threshold": 7},
-    {"id": "streak_30", "name": "30-Tage-Serie", "desc": "30 Tage unter dem Tagesziel", "icon": "\U0001f48e", "threshold": 30},
-    {"id": "night_saver", "name": "Nachtsparer", "desc": "Nachtverbrauch unter 1 kWh", "icon": "\U0001f319", "threshold": 1},
-    {"id": "peak_avoider", "name": "Spitzenvermeidung", "desc": "Keine Spitzenlast >3kW am Tag", "icon": "\U0001f4c9", "threshold": 3000},
-    {"id": "consistent", "name": "Konstant sparsam", "desc": "4 Wochen stabil unter dem Durchschnitt", "icon": "\u2b50", "threshold": 4},
+    {"id": "saver_10", "name": "Energy saver", "desc": "10% less than last week", "icon": "\U0001f331", "threshold": 10},
+    {"id": "saver_20", "name": "Savings champion", "desc": "20% less than last week", "icon": "\U0001f3c6", "threshold": 20},
+    {"id": "low_standby", "name": "Standby killer", "desc": "Standby below 50 W", "icon": "\U0001f50c", "threshold": 50},
+    {"id": "green_hour", "name": "Green hour", "desc": "Shifted consumption to low-CO\u2082 hours", "icon": "\U0001f30d", "threshold": 0},
+    {"id": "solar_champ", "name": "Solar champion", "desc": ">80% self-consumption in one day", "icon": "\u2600\ufe0f", "threshold": 80},
+    {"id": "streak_7", "name": "7-day streak", "desc": "7 days below daily target", "icon": "\U0001f525", "threshold": 7},
+    {"id": "streak_30", "name": "30-day streak", "desc": "30 days below daily target", "icon": "\U0001f48e", "threshold": 30},
+    {"id": "night_saver", "name": "Night saver", "desc": "Night consumption below 1 kWh", "icon": "\U0001f319", "threshold": 1},
+    {"id": "peak_avoider", "name": "Peak avoider", "desc": "No peak load >3 kW per day", "icon": "\U0001f4c9", "threshold": 3000},
+    {"id": "consistent", "name": "Consistently frugal", "desc": "4 weeks stable below average", "icon": "\u2b50", "threshold": 4},
 ]
 
 
