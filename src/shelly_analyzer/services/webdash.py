@@ -4630,6 +4630,11 @@ async function _refreshCo2LiveRates() {{
       const _tsStr = _d.toLocaleDateString('de-DE', {{day:'2-digit',month:'2-digit',year:'numeric'}}) + ' ' + _d.toLocaleTimeString('de-DE', {{hour:'2-digit',minute:'2-digit'}});
       heroTs.textContent = heroTs.textContent.replace(/\xb7[^\xb7]*$/, '\xb7 ' + _tsStr);
     }}
+    // Refresh 6h forecast strip (re-renders in place)
+    const fcWrap = document.getElementById('co2-forecast-wrap');
+    if (fcWrap && data.forecast !== undefined) {{
+      fcWrap.innerHTML = _renderCo2Forecast(data, data.green_threshold || 150, data.dirty_threshold || 400);
+    }}
     // Update device rates table
     const tbody = document.getElementById('co2-rates-tbody');
     if (tbody && data.device_rates) {{
@@ -4640,6 +4645,44 @@ async function _refreshCo2LiveRates() {{
       tbody.innerHTML = rows;
     }}
   }} catch(e) {{}}
+}}
+
+function _renderCo2Forecast(data, green, dirty) {{
+  const fc = (data && data.forecast) || [];
+  if (!fc.length) {{
+    return '<div class="card" style="padding:10px 14px;font-size:12px;color:var(--muted)">' +
+      t('web.co2.forecast_waiting', '6h-Prognose wird berechnet (Trend + Open-Meteo Wetter) \u2026') +
+      '</div>';
+  }}
+  let html = '<div class="card" style="padding:12px 14px">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+  html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">' +
+    t('web.co2.forecast_6h', '6h Prognose (Trend + Wetter)') + '</div>';
+  const upd = data.forecast_updated_ts ? new Date(data.forecast_updated_ts * 1000) : null;
+  const updStr = upd ? upd.toLocaleTimeString('de-DE', {{hour:'2-digit',minute:'2-digit'}}) : '';
+  html += '<div style="font-size:10px;color:var(--muted)">' + (updStr ? '\u21bb ' + updStr : '') + '</div>';
+  html += '</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(' + fc.length + ',1fr);gap:6px">';
+  fc.forEach(function(p) {{
+    const d = new Date(p.hour_ts * 1000);
+    const hh = d.toLocaleTimeString('de-DE', {{hour:'2-digit',minute:'2-digit'}});
+    const col = _co2Color(p.intensity_g_per_kwh, green, dirty);
+    const delta = p.intensity_g_per_kwh - p.baseline_g_per_kwh;
+    const arrow = delta < -3 ? '\u2193' : (delta > 3 ? '\u2191' : '\u2192');
+    const wicon = p.cloud_cover_pct < 30 ? '\u2600\ufe0f' : (p.cloud_cover_pct > 70 ? '\u2601\ufe0f' : '\u26c5');
+    const windHint = p.wind_ms >= 8 ? ' \U0001F4A8' : '';
+    html += '<div style="text-align:center;padding:6px 4px;border-radius:8px;background:var(--bg-alt,rgba(255,255,255,.03));border:1px solid var(--border,rgba(255,255,255,.08))">';
+    html += '<div style="font-size:10px;color:var(--muted);margin-bottom:2px">' + hh + '</div>';
+    html += '<div style="font-size:18px;font-weight:700;color:' + col + '">' + p.intensity_g_per_kwh.toFixed(0) + '</div>';
+    html += '<div style="font-size:10px;color:var(--muted)">g/kWh ' + arrow + '</div>';
+    html += '<div style="font-size:11px;margin-top:3px" title="Wolken: ' + p.cloud_cover_pct.toFixed(0) + '% \u00b7 Wind: ' + p.wind_ms.toFixed(1) + ' m/s \u00b7 ' + p.temp_c.toFixed(0) + '\u00b0C">' + wicon + ' ' + p.temp_c.toFixed(0) + '\u00b0' + windHint + '</div>';
+    html += '</div>';
+  }});
+  html += '</div>';
+  html += '<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:center">' +
+    t('web.co2.forecast_hint', 'Basierend auf 14-Tage-Trend f\u00fcr diese Stunde \u00d7 Wetterprognose (Wind, Sonne, Temperatur)') + '</div>';
+  html += '</div>';
+  return html;
 }}
 
 function _co2Color(val, green, dirty) {{
@@ -4673,6 +4716,9 @@ function renderCo2(data, el) {{
   var _heroTsStr = _heroTs ? _heroTs.toLocaleDateString('de-DE', {{day:'2-digit',month:'2-digit',year:'numeric'}}) + ' ' + _heroTs.toLocaleTimeString('de-DE', {{hour:'2-digit',minute:'2-digit'}}) : '';
   html += '<div id="co2-hero-ts" style="font-size:11px;color:var(--muted);margin-top:2px">' + esc(data.zone || '') + ' \xb7 ' + esc(srcLabel) + (_heroTsStr ? ' \xb7 ' + _heroTsStr : '') + '</div>';
   html += '</div>';
+
+  // ── 6h Forecast strip (trend + weather) ──
+  html += '<div id="co2-forecast-wrap" style="margin-top:8px">' + _renderCo2Forecast(data, green, dirty) + '</div>';
 
   // ── Summary cards ──
   html += '<div class="card" style="margin-top:8px"><div class="metric-grid">';

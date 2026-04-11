@@ -1,23 +1,33 @@
 {
-  "version": "11.17.3",
+  "version": "X.Y.Z",
   "devices": [
     {
-      "key": "shelly1",
-      "name": "Haus",
-      "host": "192.168.3.175",
-      "em_id": 0
+      "key": "device1",
+      "name": "Device 1",
+      "host": "192.0.2.10",
+      "em_id": 0,
+      "kind": "em",
+      "gen": 0,
+      "model": "",
+      "phases": 3,
+      "supports_emdata": true
     },
     {
-      "key": "shelly2",
-      "name": "Server",
-      "host": "192.168.3.189",
-      "em_id": 0
+      "key": "device2",
+      "name": "Device 2",
+      "host": "192.0.2.11",
+      "em_id": 0,
+      "kind": "em",
+      "gen": 0,
+      "model": "",
+      "phases": 3,
+      "supports_emdata": true
     }
   ],
   "download": {
     "chunk_seconds": 43200,
     "overlap_seconds": 60,
-    "timeout_seconds": 8,
+    "timeout_seconds": 8.0,
     "retries": 3,
     "backoff_base_seconds": 1.5
   },
@@ -27,40 +37,48 @@
     "remove_merged": false
   },
   "ui": {
-    "live_poll_seconds": 1,
-    "plot_redraw_seconds": 0.5,
+    "live_poll_seconds": 1.0,
+    "plot_redraw_seconds": 1.0,
+    "language": "de",
+    "theme": "auto",
     "live_window_minutes": 10,
     "live_retention_minutes": 120,
-    "language": "de",
-    "plot_theme_mode": "auto",
+    "device_page_index": 0,
+    "selected_view_type": "page",
+    "selected_view_group": "",
     "autosync_enabled": false,
     "autosync_interval_hours": 12,
+    "autosync_interval_minutes": 0,
     "autosync_mode": "incremental",
     "live_web_enabled": true,
     "live_web_port": 8765,
-    "live_web_refresh_seconds": 1,
+    "live_web_refresh_seconds": 1.0,
+    "live_web_ssl_mode": "auto",
+    "live_web_ssl_cert": "",
+    "live_web_ssl_key": "",
+    "live_web_ssl_auto_renew": true,
+    "live_web_ssl_renew_days": 30,
+    "widget_domain": "",
+    "widget_devices": "",
     "live_web_token": "",
     "live_smoothing_enabled": false,
     "live_smoothing_seconds": 10,
     "live_daynight_mode": "all",
     "live_day_start": "06:00",
     "live_night_start": "22:00",
-    "device_page_index": 0,
-    "selected_view_type": "page",
-    "selected_view_group": "",
     "telegram_enabled": false,
     "telegram_bot_token": "",
     "telegram_chat_id": "",
     "telegram_verify_ssl": true,
     "telegram_detail_level": "detailed",
-    "telegram_alarm_plots_enabled": true,
     "telegram_daily_summary_enabled": false,
     "telegram_daily_summary_time": "00:00",
     "telegram_monthly_summary_enabled": false,
     "telegram_monthly_summary_time": "00:00",
+    "telegram_alarm_plots_enabled": true,
+    "telegram_summary_load_w": 200.0,
     "telegram_daily_summary_last_sent": "",
     "telegram_monthly_summary_last_sent": "",
-    "telegram_summary_load_w": 200.0,
     "webhook_enabled": false,
     "webhook_url": "",
     "webhook_custom_headers": "",
@@ -79,53 +97,41 @@
     "email_daily_summary_enabled": false,
     "email_monthly_summary_enabled": false,
     "email_daily_summary_time": "00:00",
-    "email_monthly_summary_time": "00:00"
+    "email_monthly_summary_time": "00:00",
+    "email_monthly_invoice_enabled": false,
+    "plot_theme_mode": "auto"
   },
-  "pricing": {
-    "electricity_price_eur_per_kwh": 0.3265,
-    "price_includes_vat": true,
-    "vat_enabled": true,
-    "vat_rate_percent": 19,
-    "base_fee_eur_per_year": 127.51,
-    "base_fee_includes_vat": true,
-    "co2_intensity_g_per_kwh": 380.0
+  "updates": {
+    "repo": "<github-user>/<repo>",
+    "check_on_start": true,
+    "auto_install": false
   },
-  "billing": {
-    "issuer": {
-      "name": "Firma Muster GmbH",
-      "address_lines": [
-        "Musterstraße 1",
-        "12345 Musterstadt"
-      ],
-      "vat_id": "DE000000000",
-      "email": "",
-      "phone": "",
-      "iban": "",
-      "bic": ""
-    },
-    "customer": {
-      "name": "Kunde",
-      "address_lines": [
-        "Kundenstraße 1",
-        "12345 Kundenstadt"
-      ],
-      "vat_id": "",
-      "email": "",
-      "phone": "",
-      "iban": "",
-      "bic": ""
-    },
-    "invoice_prefix": "INV",
-    "payment_terms_days": 14,
-    "invoice_logo_path": ""
+  "demo": {
+    "enabled": false,
+    "seed": 1234,
+    "scenario": "household"
   },
+  "alerts": [],
   "solar": {
     "enabled": false,
     "pv_meter_device_key": "",
     "feed_in_tariff_eur_per_kwh": 0.082,
     "kw_peak": 0.0,
     "battery_kwh": 0.0,
-    "co2_production_kg_per_kwp": 1000.0
+    "co2_production_kg_per_kwp": 1000.0,
+    "investment_eur": 0.0,
+    "installation_year": 0,
+    "degradation_pct": 0.5
+  },
+  "pricing": {
+    "electricity_price_eur_per_kwh": 0.3265,
+    "base_fee_eur_per_year": 127.51,
+    "base_fee_includes_vat": true,
+    "price_includes_vat": true,
+    "vat_enabled": true,
+    "vat_rate_percent": 19.0,
+    "co2_intensity_g_per_kwh": 380.0,
+    "tariff_schedule": []
   },
   "tou": {
     "enabled": false,
@@ -146,26 +152,37 @@
       }
     ]
   },
-  "co2": {
-    "enabled": false,
-    "entso_e_api_token": "",
-    "bidding_zone": "DE_LU",
-    "fetch_interval_hours": 1,
-    "backfill_days": 7,
-    "show_green_dirty_hours": true,
-    "green_threshold_g_per_kwh": 150.0,
-    "dirty_threshold_g_per_kwh": 400.0,
-    "cross_border_flows": false
+  "billing": {
+    "issuer": {
+      "name": "<Your Company>",
+      "address_lines": [
+        "<Street 1>",
+        "<12345 City>"
+      ],
+      "vat_id": "",
+      "email": "",
+      "phone": "",
+      "iban": "",
+      "bic": ""
+    },
+    "customer": {
+      "name": "<Customer Name>",
+      "address_lines": [
+        "<Street 1>",
+        "<12345 City>"
+      ],
+      "vat_id": "",
+      "email": "",
+      "phone": "",
+      "iban": "",
+      "bic": ""
+    },
+    "invoice_prefix": "INV",
+    "payment_terms_days": 14,
+    "invoice_logo_path": ""
   },
-  "spot_price": {
-    "enabled": false,
-    "primary_api": "energy_charts",
-    "bidding_zone": "DE-LU",
-    "fetch_interval_hours": 1,
-    "markup_ct_per_kwh": 16.0,
-    "include_vat": true,
-    "show_as_comparison": true
-  },
+  "groups": [],
+  "schedules": [],
   "anomaly": {
     "enabled": false,
     "sigma_threshold": 2.0,
@@ -180,52 +197,134 @@
     "auto_interval_minutes": 15,
     "max_history": 200
   },
-  "groups": [
-    {
-      "name": "Apartment 1",
-      "device_keys": ["shelly1"]
-    }
-  ],
-  "schedules": [
-    {
-      "schedule_id": "sched1",
-      "device_key": "shelly2",
-      "name": "Server Nacht-Aus",
-      "time_on": "07:00",
-      "time_off": "23:00",
-      "weekdays": [0, 1, 2, 3, 4, 5, 6],
-      "enabled": false,
-      "switch_id": 0,
-      "shelly_id_on": -1,
-      "shelly_id_off": -1
-    }
-  ],
-  "alerts": [
-    {
-      "rule_id": "rule1",
-      "enabled": false,
-      "device_key": "*",
-      "metric": "W",
-      "op": ">",
-      "threshold": 5000.0,
-      "duration_seconds": 10,
-      "cooldown_seconds": 120,
-      "action_popup": true,
-      "action_beep": true,
-      "action_telegram": false,
-      "action_webhook": false,
-      "action_email": false,
-      "message": ""
-    }
-  ],
-  "demo": {
+  "co2": {
     "enabled": false,
-    "scenario": "household",
-    "seed": 1234
+    "entso_e_api_token": "",
+    "electricity_maps_api_key": "",
+    "bidding_zone": "DE_LU",
+    "fetch_interval_hours": 1,
+    "backfill_days": 7,
+    "show_green_dirty_hours": true,
+    "green_threshold_g_per_kwh": 150.0,
+    "dirty_threshold_g_per_kwh": 400.0,
+    "cross_border_flows": false
   },
-  "updates": {
-    "repo": "robeertm/shelly-energy-analyzer",
-    "check_on_start": true,
-    "auto_install": false
+  "spot_price": {
+    "enabled": false,
+    "primary_api": "energy_charts",
+    "bidding_zone": "DE-LU",
+    "eia_api_key": "",
+    "fetch_interval_hours": 1,
+    "grid_fee_ct": 8.5,
+    "electricity_tax_ct": 2.05,
+    "concession_fee_ct": 1.66,
+    "kwk_surcharge_ct": 0.277,
+    "sec19_surcharge_ct": 0.643,
+    "offshore_surcharge_ct": 0.656,
+    "supplier_margin_ct": 1.5,
+    "include_vat": true,
+    "show_as_comparison": true,
+    "tariff_type": "fixed"
+  },
+  "forecast": {
+    "enabled": false,
+    "horizon_days": 30,
+    "history_days": 90
+  },
+  "weather": {
+    "enabled": false,
+    "api_key": "",
+    "city": "",
+    "lat": 0.0,
+    "lon": 0.0,
+    "fetch_interval_minutes": 30
+  },
+  "mqtt": {
+    "enabled": false,
+    "broker": "127.0.0.1",
+    "port": 1883,
+    "username": "",
+    "password": "",
+    "topic_prefix": "shelly_analyzer",
+    "ha_discovery": true,
+    "ha_discovery_prefix": "homeassistant",
+    "publish_interval_seconds": 10.0,
+    "use_tls": false
+  },
+  "tenant": {
+    "enabled": false,
+    "tenants": [],
+    "common_device_keys": [],
+    "billing_period_months": 12
+  },
+  "smart_schedule": {
+    "enabled": false,
+    "default_duration_hours": 3.0,
+    "auto_schedule_enabled": false
+  },
+  "pv_surplus": {
+    "enabled": false,
+    "on_threshold_w": 500.0,
+    "off_threshold_w": 200.0,
+    "debounce_seconds": 30,
+    "consumers": []
+  },
+  "ev_charging": {
+    "enabled": false,
+    "wallbox_device_key": "",
+    "detection_threshold_w": 1500.0,
+    "min_session_minutes": 5
+  },
+  "tariff_compare": {
+    "enabled": false,
+    "custom_tariffs": []
+  },
+  "battery": {
+    "enabled": false,
+    "device_key": "",
+    "capacity_kwh": 10.0,
+    "max_charge_rate_kw": 5.0,
+    "max_discharge_rate_kw": 5.0,
+    "efficiency_pct": 95.0
+  },
+  "influxdb": {
+    "enabled": false,
+    "url": "http://127.0.0.1:8086",
+    "token": "",
+    "org": "",
+    "bucket": "shelly",
+    "measurement": "energy",
+    "push_interval_seconds": 60,
+    "version": 2
+  },
+  "prometheus": {
+    "enabled": false,
+    "port": 9090,
+    "path": "/metrics"
+  },
+  "api": {
+    "enabled": false,
+    "api_key": "",
+    "cors_allowed_origins": "*",
+    "rate_limit_per_minute": 60
+  },
+  "advisor": {
+    "enabled": false,
+    "use_llm": false,
+    "llm_provider": "ollama",
+    "llm_model": "llama3",
+    "ollama_url": "http://127.0.0.1:11434",
+    "openai_api_key": "",
+    "anthropic_api_key": ""
+  },
+  "gamification": {
+    "enabled": false,
+    "weekly_goal_kwh": 0.0,
+    "monthly_goal_kwh": 0.0
+  },
+  "multi_location": {
+    "enabled": false,
+    "locations": [],
+    "active_location_id": ""
   }
 }
