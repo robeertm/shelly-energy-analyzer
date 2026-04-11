@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.14.1 - 2026-04-11
+### Added
+- **6 h forecast continuation in the CO₂ intensity chart.** The main canvas chart on the CO₂ pane (`_drawCo2Chart`) now extends past "now" with the forecast points returned by `services/co2_forecast.py`: dashed line in the same green/amber/red colour scheme, soft blue area fill, point markers and `+1h … +6h` axis labels. The chart's y-axis auto-rescales to fit forecast peaks, and the "jetzt" marker is anchored at the boundary between historical and forecast data so users can read the trend continuation at a glance. The `co2` action now returns the same `forecast[]` + `forecast_updated_ts` fields as `co2_live`, so the chart shows the forecast for every range (`24h`, `7d`, `30d`, `all`).
+
 ## 16.14.0 - 2026-04-11
 ### Added
 - **Trend-aware 6 h CO₂ forecast** with weather data. New `services/co2_forecast.py` computes a forward-looking CO₂ intensity forecast for the configured bidding zone instead of showing a flat static value:
