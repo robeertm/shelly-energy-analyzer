@@ -1,5 +1,14 @@
 # Changelog
 
+## 16.15.1 - 2026-04-11
+### Changed
+- **README updated** to document the v16.15.0 features:
+  - New 🔐 hero bullet for password-protected Shelly support (Gen 1 → Basic, Gen 2 / 3 / 4 → Digest, all platforms).
+  - New 🔮 hero bullet for the trend + weather CO₂ forecast shipped in 16.14.0.
+  - "Languages" section now states the app always starts in English and lists `en` as the default.
+  - New "Password-Protected Shellys" section with the gen-vs-auth table, auth-flow explanation, security notes (`config.json` storage, masked GET response, `***` placeholder behaviour) and the list of HTTP touch-points (live poller, sync, scheduler, switch toggle, firmware OTA, mDNS rescan, Probe button).
+  - Self-updating bullet now reflects the hourly poll cadence (was 6 h before 16.14.0).
+
 ## 16.15.0 - 2026-04-11
 ### Added
 - **Password-protected Shelly devices are now reachable.** All Shelly generations are supported on every platform (Windows / macOS / Linux):

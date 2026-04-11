@@ -29,15 +29,17 @@ Commercial energy dashboards lock you into subscriptions, truncate history after
 
 - 💰 **Knows your exact tariff** — fixed, time-of-use, dynamic spot market (EU via Energy-Charts / aWATTar, **USA via EIA, Australia via AEMO**), multi-step schedules with future price changes — and shows live € cost per device, per second
 - 🌱 **Real grid CO₂ intensity** — EU via ENTSO-E (with cross-border flow correction), **rest of the world via Electricity Maps (92 zones across North & South America, Asia, Oceania, Africa and the Middle East)** — never a flat 380 g/kWh average
+- 🔮 **Trend + weather CO₂ forecast (6 h ahead)** — per-hour-of-day median of the last 14 days × Open-Meteo wind / sun / temp / rain × per-zone generation-mix profile (150+ zones). Rendered as a dashed continuation of the main CO₂ chart, plus a 6-cell strip with weather icons
 - 🧠 **Built-in NILM** — k-means clustering on power transitions automatically identifies appliances from the total-power trace. ~25 built-in device profiles plus learned patterns
 - ☀️ **PV surplus automation** — state machine that switches boilers / wallboxes on when solar excess is available, off when it drops, with priority-ordered consumer list and debounce
 - ⏰ **Smart scheduling** — finds the cheapest 1–12 h time block tomorrow from day-ahead spot prices and can push the schedule to a Shelly Gen2 relay automatically
+- 🔐 **Password-protected Shellys supported** — Gen 1 (Basic auth), Gen 2 / 3 / 4 Plus / Pro (Digest auth), all on Windows / macOS / Linux. Per-host credentials with auto-detection of the correct scheme; setup wizard and device card prompt for the password whenever a device responds 401
 - 🏠 **Native Home Assistant integration** via MQTT auto-discovery — sensors appear automatically, no extra YAML
 - 📱 **Real iOS home-screen widget** via Scriptable (3 sizes) — live power, today's cost, spot price, CO₂ intensity, tap-to-open dashboard
 - 🌐 **Full REST API v1** + **InfluxDB line-protocol push** + **Prometheus `/metrics`** for your own stack
 - 🔒 **100 % self-hosted** — your energy data never leaves your LAN
 - 🆓 **Zero subscription** — no cloud, no accounts, no analytics
-- ⬆ **Self-updating** — background thread polls GitHub every 6 h for new releases; the Live tab shows a one-click banner to install or roll back to any of the last 10 versions, entirely from the browser
+- ⬆ **Self-updating** — background thread polls GitHub every hour for new releases; the Live tab shows a one-click banner to install or roll back to any of the last 10 versions, entirely from the browser
 
 ### Who it's for
 
@@ -444,12 +446,12 @@ Demo Mode lets you test the full application **without any Shelly devices** — 
 
 ## Languages
 
-The UI supports 9 languages (change in **Settings -> Language**):
+The UI supports 9 languages. **The app always starts in English** — switch to any other language in **Settings → Language** during the session; the next restart resets back to English.
 
 | Code | Language   |
 |------|------------|
+| `en` | English (default) |
 | `de` | German     |
-| `en` | English    |
 | `es` | Spanish    |
 | `fr` | French     |
 | `pt` | Portuguese |
@@ -457,6 +459,25 @@ The UI supports 9 languages (change in **Settings -> Language**):
 | `pl` | Polish     |
 | `cs` | Czech      |
 | `ru` | Russian    |
+
+---
+
+## Password-Protected Shellys
+
+If you have set an admin password on your Shelly's web UI, the analyzer will reach it transparently — both the **5-step setup wizard** and the **Settings → Devices** page prompt for the password whenever a device responds `401 Unauthorized`.
+
+| Generation | Models                                    | Auth scheme |
+|------------|-------------------------------------------|-------------|
+| **Gen 1**  | Shelly 1, 1PM, 2.5, EM, 3EM, Plug S       | HTTP Basic  |
+| **Gen 2**  | Plus 1, Plus 1PM, Plus 2PM, Plus Plug S   | HTTP Digest |
+| **Gen 3**  | Pro 1, Pro 1PM, Pro 4PM, Pro 3EM          | HTTP Digest |
+| **Gen 4**  | latest Plus / Pro firmware                | HTTP Digest |
+
+The HTTP client (`io/http.py`) registers per-host credentials, tries Digest first, parses the `WWW-Authenticate` header on 401, falls back to Basic if needed, and caches the working scheme so subsequent calls go through with one round trip. Works on Windows / macOS / Linux without any platform-specific code (built on `requests.auth.HTTPDigestAuth` / `HTTPBasicAuth`).
+
+Credentials are stored in `config.json` per-device (`username` + `password`) and never returned to the browser — `GET /api/devices` only exposes the username and a `has_password: bool` flag, and `PUT /api/devices/<key>` honours the `***` masked placeholder so the saved password isn't accidentally overwritten when you edit other fields.
+
+All HTTP touch-points pick up the credentials automatically: the live poller, historical CSV sync, the local scheduler, switch toggling, firmware OTA, mDNS rescan and the "Probe" button on the Settings page.
 
 ---
 
