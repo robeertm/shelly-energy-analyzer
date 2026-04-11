@@ -27,8 +27,8 @@ Commercial energy dashboards lock you into subscriptions, truncate history after
 
 ### What it does that others don't
 
-- 💰 **Knows your exact tariff** — fixed, time-of-use, dynamic spot market (Energy-Charts / aWATTar), multi-step schedules with future price changes — and shows live € cost per device, per second
-- 🌱 **Real ENTSO-E CO₂ intensity** (not a flat 380 g/kWh average), with neighbour-zone cross-border flow correction so imports from French nuclear and Polish coal are weighted correctly
+- 💰 **Knows your exact tariff** — fixed, time-of-use, dynamic spot market (EU via Energy-Charts / aWATTar, **USA via EIA, Australia via AEMO**), multi-step schedules with future price changes — and shows live € cost per device, per second
+- 🌱 **Real grid CO₂ intensity** — EU via ENTSO-E (with cross-border flow correction), **rest of the world via Electricity Maps (92 zones across North & South America, Asia, Oceania, Africa and the Middle East)** — never a flat 380 g/kWh average
 - 🧠 **Built-in NILM** — k-means clustering on power transitions automatically identifies appliances from the total-power trace. ~25 built-in device profiles plus learned patterns
 - ☀️ **PV surplus automation** — state machine that switches boilers / wallboxes on when solar excess is available, off when it drops, with priority-ordered consumer list and debounce
 - ⏰ **Smart scheduling** — finds the cheapest 1–12 h time block tomorrow from day-ahead spot prices and can push the schedule to a Shelly Gen2 relay automatically
@@ -37,13 +37,14 @@ Commercial energy dashboards lock you into subscriptions, truncate history after
 - 🌐 **Full REST API v1** + **InfluxDB line-protocol push** + **Prometheus `/metrics`** for your own stack
 - 🔒 **100 % self-hosted** — your energy data never leaves your LAN
 - 🆓 **Zero subscription** — no cloud, no accounts, no analytics
+- ⬆ **Self-updating** — background thread polls GitHub every 6 h for new releases; the Live tab shows a one-click banner to install or roll back to any of the last 10 versions, entirely from the browser
 
 ### Who it's for
 
 - 🏠 **Home owners** with Shelly 1PM / Plus 1PM / EM / 3EM at the grid connection or per circuit
 - ☀️ **PV / solar prosumers** tracking self-consumption, autarky, feed-in and investment amortisation
 - 🏢 **Landlords** needing per-tenant sub-metering and Nebenkostenabrechnung PDFs
-- ⚡ **Dynamic-tariff customers** (Tibber, aWATTar, Ostrom, 1Komma5°, E.ON Spot, …) who want to compare vs. their old fixed tariff or pick the cheapest hour
+- ⚡ **Dynamic-tariff customers worldwide** — Tibber, aWATTar, Ostrom, 1Komma5°, E.ON Spot in Europe; Griddy/Rhythm/ERCOT Retailers in Texas; Amber Electric in Australia; and anyone comparing their fixed contract against live wholesale prices
 - 🔧 **Home Assistant / Node-RED tinkerers** pulling metrics into MQTT, InfluxDB or Prometheus
 - 📊 **Data nerds** who want raw SQLite access, CSV/PDF/Excel exports and a REST API
 
@@ -148,19 +149,21 @@ All desktop shots are captured at native **4K (3840×2160)**, all mobile shots a
 - Monthly cost projection based on current usage
 - Previous month comparison (% change)
 - Per-device breakdown with cost share and bar chart
-- **CO2 tracking with real grid data** — per-device CO2 footprint (Today / Week / Month / Year / Forecast in kg) using real hourly ENTSO-E grid intensity data; falls back to configurable static CO2 intensity (g/kWh) if ENTSO-E is not configured
+- **CO2 tracking with real grid data** — per-device CO2 footprint (Today / Week / Month / Year / Forecast in kg) using real hourly grid intensity. **EU** via ENTSO-E (EIC bidding zones + cross-border flow correction), **rest of the world** via Electricity Maps (92 global zones — USA CAISO/ERCOT/ISO-NE/NYISO/PJM/MISO, all Canadian provinces, Mexico, Brazil regions, Argentina, Chile, Japan by region, South Korea, Taiwan, China, India, Indonesia, Australia NEM, NZ, South Africa, Israel, Turkey, UAE, Saudi Arabia, …). Falls back to a configurable static intensity (g/kWh) if neither provider is configured.
 - **Dynamic spot price comparison** — shows what each period would cost with a dynamic tariff (EPEX Spot + configurable markup + VAT) alongside your fixed tariff; orange-highlighted delta per card
 - **24h spot market price chart** — rolling bar chart with colour-coded bars (green = cheap, red = expensive) and fixed-price reference line; shown in both desktop and web dashboard
 
-### ⚡ Dynamic Spot Market Prices
-- **Automatic price import** from free public APIs: Energy-Charts (Fraunhofer ISE, 15-min resolution from Oct 2025) and aWATTar (hourly, history from 2015)
-- Background service backfills from oldest measurement timestamp — no manual intervention
+### ⚡ Dynamic Spot Market Prices — Worldwide
+- **Automatic price import** from free public APIs — provider is auto-selected based on the chosen bidding zone:
+  - 🇪🇺 **Europe** — Energy-Charts (Fraunhofer ISE, 15-min resolution from Oct 2025) and aWATTar (hourly, history from 2015). 45 bidding zones: DE-LU, AT, CH, BE, BG, CZ, DK1/DK2, EE, ES, FI, FR, GB, GR, HR, HU, IE, IT (7 regions), LT, LV, ME, MK, NL, NO1–NO5, PL, PT, RO, RS, SE1–SE4, SI, SK. **No API key needed.**
+  - 🇺🇸 **USA** — [EIA open data](https://www.eia.gov/opendata/) wholesale daily LMP per NERC region: `US-CAL`, `US-CAR`, `US-CENT`, `US-FLA`, `US-MIDA` (PJM), `US-MIDW` (MISO), `US-NE` (ISO-NE), `US-NW` (BPA), `US-NY` (NYISO), `US-SE`, `US-SW`, `US-TEN`, `US-TEX` (ERCOT). Free API key required (register at eia.gov/opendata/register.php).
+  - 🇦🇺 **Australia** — AEMO NEM dispatch feed: `AU-NSW`, `AU-QLD`, `AU-SA`, `AU-TAS`, `AU-VIC`. **No API key needed.**
+- **Automatic currency conversion** — USD and AUD prices are converted to EUR/MWh via daily ECB rates so all cost math and dashboards work unchanged regardless of which region you're in.
+- Background service backfills from oldest measurement timestamp, auto-dispatches by zone prefix — you pick a zone, the app picks the right provider.
 - Configurable markup (default 16 ct/kWh net) covering grid fees, taxes, and supplier margin
 - VAT toggle — apply your configured VAT rate on top of spot price + markup
 - **Plots sub-tab "Dyn. Preis"** — grouped bar chart comparing fixed vs. dynamic tariff costs per hour/day/week/month
 - **Compare tab "vs. Dynamic Tariff"** — one-click toggle to compare your fixed tariff against spot prices for any period
-- Supported bidding zones: DE-LU, AT, CH, BE, DK, ES, FI, FR, NL, NO, PL, SE and more
-- No API key required — both APIs are free and public
 
 ### 💱 Time-of-Use (TOU) Tariffs
 - Define multiple time-based electricity price zones (peak, off-peak, etc.)
