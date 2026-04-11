@@ -111,8 +111,8 @@ def trigger_firmware_update(device_key: str):
 
                 if stage is None:
                     if available.get("beta"):
-                        return jsonify({"ok": False, "error": "Nur Beta-Update verfügbar – wird nicht automatisch installiert"})
-                    return jsonify({"ok": False, "error": "Kein Firmware-Update verfügbar"})
+                        return jsonify({"ok": False, "error": "Only beta update available – not installed automatically"})
+                    return jsonify({"ok": False, "error": "No firmware update available"})
 
                 ver = available[stage].get("version", "?")
                 r = req.post(
@@ -122,7 +122,7 @@ def trigger_firmware_update(device_key: str):
                 )
                 if r.status_code == 200:
                     return jsonify({"ok": True, "gen": 2, "stage": stage,
-                                    "message": f"Update auf {stage} {ver} gestartet"})
+                                    "message": f"Update to {stage} {ver} started"})
                 # Fall back to GET style
                 r = req.get(f"http://{d.host}/rpc/Shelly.Update?stage={stage}", timeout=15)
                 if r.status_code == 200:
@@ -130,9 +130,9 @@ def trigger_firmware_update(device_key: str):
                     # Shelly returns {"code":-106,"message":"Already in progress"} when update already running
                     if rj.get("code") == -106:
                         return jsonify({"ok": True, "gen": 2, "stage": stage,
-                                        "message": "Update läuft bereits"})
+                                        "message": "Update already in progress"})
                     return jsonify({"ok": True, "gen": 2, "stage": stage,
-                                    "message": f"Update auf {stage} {ver} gestartet"})
+                                    "message": f"Update to {stage} {ver} started"})
                 return jsonify({"ok": False, "error": f"Gen2 Update HTTP {r.status_code}: {r.text[:200]}"})
         except Exception:
             pass

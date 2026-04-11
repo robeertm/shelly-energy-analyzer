@@ -320,11 +320,11 @@ def _compute_i_n(measured: float, ia: float, ib: float, ic: float,
 # ── Scriptable Widget JS (served via /widget.js) ───────────────────────────
 _SCRIPTABLE_WIDGET_JS = r"""
 // Shelly Energy Analyzer – iOS Scriptable Widget
-// Lade dieses Script in der Scriptable App.
-// Widget-Parameter: IP:PORT deines Analyzers (z.B. 192.168.1.50:8765)
+// Load this script in the Scriptable app.
+// Widget parameter: IP:PORT of your analyzer (e.g. 192.168.1.50:8765)
 //
-// Konfiguration: Tippe bei Widget hinzufügen auf "Parameter"
-// und gib die Adresse ein, z.B. "192.168.1.50:8765"
+// Setup: when adding the widget, tap "Parameter"
+// and enter the address, e.g. "192.168.1.50:8765"
 
 const PARAM = args.widgetParameter || "192.168.1.50:8765";
 const DARK = Device.isUsingDarkAppearance();
@@ -369,7 +369,7 @@ if (!data) {
   t2.font = Font.systemFont(11);
   t2.textColor = C.muted;
   w.addSpacer(2);
-  const t3 = w.addText("Prüfe WiFi & IP-Adresse");
+  const t3 = w.addText("Check WiFi & IP address");
   t3.font = Font.systemFont(10);
   t3.textColor = C.muted;
   Script.setWidget(w);
@@ -403,20 +403,20 @@ if (!config.runsInWidget) {
     table.addRow(r);
   }
 
-  addRow("⚡ Leistung", fmt(data.power_w, 0) + " W");
-  addRow("📅 Heute", fmt(data.today_kwh, 2) + " kWh  ·  " + fmt(data.today_eur, 2) + " €");
-  addRow("📆 Monat", fmt(data.month_kwh, 1) + " kWh  ·  " + fmt(data.month_eur, 2) + " €");
-  addRow("📊 Prognose", fmt(data.proj_kwh, 0) + " kWh  ·  " + fmt(data.proj_eur, 2) + " €");
+  addRow("⚡ Power", fmt(data.power_w, 0) + " W");
+  addRow("📅 Today", fmt(data.today_kwh, 2) + " kWh  ·  " + fmt(data.today_eur, 2) + " €");
+  addRow("📆 Month", fmt(data.month_kwh, 1) + " kWh  ·  " + fmt(data.month_eur, 2) + " €");
+  addRow("📊 Forecast", fmt(data.proj_kwh, 0) + " kWh  ·  " + fmt(data.proj_eur, 2) + " €");
   if (data.spot_enabled && data.spot_ct != null) {
     const delta = data.spot_ct - data.fixed_ct;
     const sign = delta > 0 ? "+" : "";
     const col = delta <= 0 ? Color.green() : Color.red();
-    addRow("💰 Spotpreis", data.spot_ct.toFixed(1) + " ct/kWh (" + sign + delta.toFixed(1) + " ct)", col);
-    addRow("💰 Festpreis", data.fixed_ct.toFixed(1) + " ct/kWh", C.blue);
+    addRow("💰 Spot price", data.spot_ct.toFixed(1) + " ct/kWh (" + sign + delta.toFixed(1) + " ct)", col);
+    addRow("💰 Fixed price", data.fixed_ct.toFixed(1) + " ct/kWh", C.blue);
   }
   if (data.co2_enabled && data.co2_current != null) {
     const co2Col = co2Color(data.co2_current, data.co2_green_thr, data.co2_dirty_thr);
-    addRow("🌿 CO₂ Intensität", data.co2_current.toFixed(0) + " g/kWh", co2Col);
+    addRow("🌿 CO₂ Intensity", data.co2_current.toFixed(0) + " g/kWh", co2Col);
   }
   if (data.devices && data.devices.length > 0) {
     addRow("", "");
@@ -427,7 +427,7 @@ if (!config.runsInWidget) {
 
   // Open dashboard button
   const btnRow = new UITableRow();
-  const btn = btnRow.addButton("🌐 Dashboard öffnen");
+  const btn = btnRow.addButton("🌐 Open Dashboard");
   btn.onTap = () => Safari.open(BASE);
   table.addRow(btnRow);
 
@@ -444,7 +444,7 @@ function buildSmall(d) {
   w.url = BASE;
 
   // Title
-  const title = w.addText("⚡ Energie");
+  const title = w.addText("⚡ Energy");
   title.font = Font.boldSystemFont(11);
   title.textColor = C.accent;
   w.addSpacer(6);
@@ -455,7 +455,7 @@ function buildSmall(d) {
   pw.textColor = C.text;
 
   // Today
-  const tl = w.addText("Heute: " + fmt(d.today_kwh, 1) + " kWh · " + fmt(d.today_eur, 2) + " €");
+  const tl = w.addText("Today: " + fmt(d.today_kwh, 1) + " kWh · " + fmt(d.today_eur, 2) + " €");
   tl.font = Font.systemFont(10);
   tl.textColor = C.muted;
   w.addSpacer(4);
@@ -542,14 +542,14 @@ function buildMedium(d) {
   const tVal = right.addText(fmt(d.today_kwh, 1) + " kWh · " + fmt(d.today_eur, 2) + " €");
   tVal.font = Font.mediumSystemFont(10);
   tVal.textColor = C.text;
-  const tLbl = right.addText("Heute");
+  const tLbl = right.addText("Today");
   tLbl.font = Font.systemFont(8);
   tLbl.textColor = C.muted;
   right.addSpacer(2);
   const mVal = right.addText(fmt(d.month_kwh, 1) + " kWh · " + fmt(d.month_eur, 2) + " €");
   mVal.font = Font.mediumSystemFont(10);
   mVal.textColor = C.text;
-  const mLbl = right.addText("Monat");
+  const mLbl = right.addText("Month");
   mLbl.font = Font.systemFont(8);
   mLbl.textColor = C.muted;
 
@@ -607,7 +607,7 @@ function buildLarge(d) {
     const spRow = w.addStack();
     spRow.layoutHorizontally();
     spRow.centerAlignContent();
-    const sp1 = spRow.addText("Spotpreis: " + d.spot_ct.toFixed(1) + " ct/kWh");
+    const sp1 = spRow.addText("Spot price: " + d.spot_ct.toFixed(1) + " ct/kWh");
     sp1.font = Font.boldSystemFont(14);
     sp1.textColor = col;
     spRow.addSpacer(6);
@@ -615,7 +615,7 @@ function buildLarge(d) {
     sp2.font = Font.systemFont(11);
     sp2.textColor = col;
     w.addSpacer(2);
-    const fixLbl = w.addText("Festpreis: " + d.fixed_ct.toFixed(1) + " ct/kWh");
+    const fixLbl = w.addText("Fixed price: " + d.fixed_ct.toFixed(1) + " ct/kWh");
     fixLbl.font = Font.systemFont(10);
     fixLbl.textColor = C.blue;
     w.addSpacer(4);
@@ -652,18 +652,18 @@ function buildLarge(d) {
   // Metrics grid
   const g = w.addStack();
   g.layoutHorizontally();
-  addMetric(g, "Heute", fmt(d.today_kwh,1) + " kWh", fmt(d.today_eur,2) + " €");
+  addMetric(g, "Today", fmt(d.today_kwh,1) + " kWh", fmt(d.today_eur,2) + " €");
   g.addSpacer();
-  addMetric(g, "Monat", fmt(d.month_kwh,1) + " kWh", fmt(d.month_eur,2) + " €");
+  addMetric(g, "Month", fmt(d.month_kwh,1) + " kWh", fmt(d.month_eur,2) + " €");
   g.addSpacer();
-  addMetric(g, "Prognose", fmt(d.proj_kwh,0) + " kWh", fmt(d.proj_eur,2) + " €");
+  addMetric(g, "Forecast", fmt(d.proj_kwh,0) + " kWh", fmt(d.proj_eur,2) + " €");
 
   // Spot today cost
   if (d.spot_enabled && d.spot_today_eur != null) {
     w.addSpacer(4);
     const stRow = w.addStack();
     stRow.layoutHorizontally();
-    const stLbl = stRow.addText("⚡ Spotkosten heute: ");
+    const stLbl = stRow.addText("⚡ Spot cost today: ");
     stLbl.font = Font.systemFont(10);
     stLbl.textColor = C.muted;
     const diff = d.spot_today_eur - d.today_eur;
@@ -1599,7 +1599,7 @@ _HTML_TEMPLATE = """<!doctype html>
     <span id="hdr-title" style="font-weight:700;font-size:15px">⚡ Shelly Analyzer</span>
     <div id="hdr-actions" style="display:flex;gap:8px;align-items:center">
       <span id="live-stamp" style="font-size:11px;color:var(--muted)"></span>
-      <button id="btn-hamburger" class="icon-btn" title="Menü" onclick="toggleNavDrawer()">☰</button>
+      <button id="btn-hamburger" class="icon-btn" title="Menu" onclick="toggleNavDrawer()">☰</button>
       <button id="btn-freeze" class="icon-btn" title="{web_btn_freeze_title}" style="display:none">▶</button>
       <button id="btn-live-settings" class="icon-btn" title="{web_btn_settings_title}" onclick="window.location.href='/settings#sec-devices'">⚙</button>
       <button id="btn-theme" class="icon-btn" title="{web_btn_theme_title}">☀</button>
@@ -2162,7 +2162,7 @@ let _nilmData = null;
 async function loadNilm() {{
   const el = document.getElementById('nilm-content');
   if (!el) return;
-  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     const r = await fetch('/api/nilm_detail');
     if (!r.ok) throw new Error(r.status);
@@ -2635,7 +2635,7 @@ let _tenantsDevices = [];
 function loadTenants() {{
   const el = document.getElementById('tenants-content');
   if (!el) return;
-  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Lade…</p>';
+  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Loading…</p>';
   Promise.all([
     fetch('/api/tenants').then(function(r) {{ return r.json(); }}),
     fetch('/api/config').then(function(r) {{ return r.json(); }})
@@ -2646,7 +2646,7 @@ function loadTenants() {{
     _tenantsDevices = (cfg.devices_meta || cfg.devices || []).map(function(d) {{ return {{key:d.key, name:d.name||d.key}}; }});
     renderTenants();
   }}).catch(function(e) {{
-    el.innerHTML = '<p style="color:var(--red)">Fehler: ' + (e && e.message || '?') + '</p>';
+    el.innerHTML = '<p style="color:var(--red)">Error: ' + (e && e.message || '?') + '</p>';
   }});
 }}
 function _tenantsDeviceOptions(selectedKeys) {{
@@ -2664,29 +2664,29 @@ function renderTenants() {{
   // Config card
   h += '<div class="card" style="margin-bottom:8px">';
   h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px">';
-  h += '<label style="display:flex;gap:4px;align-items:center;font-size:12px"><input type="checkbox" id="t-enabled"' + (td.enabled?' checked':'') + '> Mieter-Abrechnung aktiv</label>';
-  h += '<label style="font-size:12px">Abrechnungsperiode (Monate): <input type="number" id="t-period" value="' + (td.billing_period_months||12) + '" style="width:60px"></label>';
+  h += '<label style="display:flex;gap:4px;align-items:center;font-size:12px"><input type="checkbox" id="t-enabled"' + (td.enabled?' checked':'') + '> Tenant billing active</label>';
+  h += '<label style="font-size:12px">Billing period (months): <input type="number" id="t-period" value="' + (td.billing_period_months||12) + '" style="width:60px"></label>';
   h += '<span style="flex:1"></span>';
-  h += '<button class="btn" onclick="addTenantRow()">+ Mieter</button>';
-  h += '<button class="btn btn-accent" onclick="saveTenants()">💾 Speichern</button>';
+  h += '<button class="btn" onclick="addTenantRow()">+ Tenant</button>';
+  h += '<button class="btn btn-accent" onclick="saveTenants()">💾 Save</button>';
   h += '</div>';
-  h += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Gemeinschaftsflächen (Allgemeinstrom)</div>';
+  h += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Common areas (shared meter)</div>';
   h += '<div id="t-common" style="display:flex;flex-wrap:wrap">' + _tenantsDeviceOptions(td.common_device_keys) + '</div>';
   h += '</div>';
   // Tenants list
   h += '<div id="t-list">';
   (td.tenants || []).forEach(function(t, i) {{ h += _tenantRowHtml(t, i); }});
   if (!td.tenants || !td.tenants.length) {{
-    h += '<div class="card" style="color:var(--muted);font-size:12px">Noch keine Mieter angelegt. Mit "+ Mieter" hinzufügen.</div>';
+    h += '<div class="card" style="color:var(--muted);font-size:12px">No tenants yet. Click "+ Tenant" to add one.</div>';
   }}
   h += '</div>';
   // Billing computation
   h += '<div class="card" style="margin-top:8px">';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">';
-  h += '<label style="font-size:12px">Von: <input type="date" id="t-start"></label>';
-  h += '<label style="font-size:12px">Bis: <input type="date" id="t-end"></label>';
-  h += '<label style="font-size:12px">Tarif: <select id="t-tariff"><option value="">Auto (Settings)</option><option value="fixed">Fix</option><option value="dynamic">Dynamisch</option></select></label>';
-  h += '<button class="btn btn-accent" onclick="computeBills()">📊 Abrechnung berechnen</button>';
+  h += '<label style="font-size:12px">From: <input type="date" id="t-start"></label>';
+  h += '<label style="font-size:12px">To: <input type="date" id="t-end"></label>';
+  h += '<label style="font-size:12px">Tariff: <select id="t-tariff"><option value="">Auto (Settings)</option><option value="fixed">Fixed</option><option value="dynamic">Dynamic</option></select></label>';
+  h += '<button class="btn btn-accent" onclick="computeBills()">📊 Compute bills</button>';
   h += '</div>';
   h += '<div id="t-bills"></div>';
   h += '</div>';
@@ -2697,14 +2697,14 @@ function _tenantRowHtml(t, i) {{
   return '<div class="card" data-idx="' + i + '" style="margin-bottom:6px">' +
     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' +
     '<input class="t-name" placeholder="Name" value="' + esc(t.name||'') + '" style="flex:2;min-width:120px">' +
-    '<input class="t-unit" placeholder="Wohnung" value="' + esc(t.unit||'') + '" style="flex:1;min-width:80px">' +
+    '<input class="t-unit" placeholder="Unit" value="' + esc(t.unit||'') + '" style="flex:1;min-width:80px">' +
     '<input class="t-id" placeholder="ID" value="' + tid + '" style="width:80px">' +
     '<input class="t-persons" type="number" min="1" placeholder="Pers." value="' + (t.persons||1) + '" style="width:60px">' +
-    '<input class="t-in" type="date" value="' + esc(t.move_in||'') + '" style="width:140px" title="Einzug">' +
-    '<input class="t-out" type="date" value="' + esc(t.move_out||'') + '" style="width:140px" title="Auszug">' +
-    '<button class="btn" onclick="removeTenantRow(' + i + ')" title="Löschen">🗑</button>' +
+    '<input class="t-in" type="date" value="' + esc(t.move_in||'') + '" style="width:140px" title="Move-in">' +
+    '<input class="t-out" type="date" value="' + esc(t.move_out||'') + '" style="width:140px" title="Move-out">' +
+    '<button class="btn" onclick="removeTenantRow(' + i + ')" title="Delete">🗑</button>' +
     '</div>' +
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:2px">Zugeordnete Geräte:</div>' +
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:2px">Assigned devices:</div>' +
     '<div class="t-devs" style="display:flex;flex-wrap:wrap">' + _tenantsDeviceOptions(t.device_keys) + '</div>' +
     '</div>';
 }}
@@ -2747,9 +2747,9 @@ function saveTenants() {{
   fetch('/api/tenants', {{method:'PUT',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}})
     .then(function(r) {{ return r.json(); }})
     .then(function(d) {{
-      if (d.ok) {{ _tenantsCache = Object.assign(_tenantsCache||{{}}, body); renderTenants(); alert('Gespeichert'); }}
-      else alert('Fehler: ' + (d.error||'?'));
-    }}).catch(function(e) {{ alert('Fehler: ' + e); }});
+      if (d.ok) {{ _tenantsCache = Object.assign(_tenantsCache||{{}}, body); renderTenants(); alert('Saved'); }}
+      else alert('Error: ' + (d.error||'?'));
+    }}).catch(function(e) {{ alert('Error: ' + e); }});
 }}
 function computeBills() {{
   const s = (document.getElementById('t-start')||{{}}).value || '';
@@ -2760,50 +2760,50 @@ function computeBills() {{
   if (e) q.set('period_end', e);
   if (tm) q.set('tariff_mode', tm);
   const el = document.getElementById('t-bills');
-  if (el && !_quietRefresh) el.innerHTML = '<p class="loading-msg">Berechne…</p>';
+  if (el && !_quietRefresh) el.innerHTML = '<p class="loading-msg">Computing…</p>';
   fetch('/api/tenants/bill?' + q.toString()).then(function(r) {{ return r.json(); }}).then(function(d) {{
-    if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||'Keine Daten') + '</p>'; return; }}
+    if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||'No data') + '</p>'; return; }}
     const rep = d.report;
-    const tariffLabel = rep.tariff_mode === 'dynamic' ? '⚡ Dynamischer Tarif' : '💲 Fixtarif';
-    let h = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Periode: ' + esc(rep.period_start) + ' bis ' + esc(rep.period_end)
+    const tariffLabel = rep.tariff_mode === 'dynamic' ? '⚡ Dynamic tariff' : '💲 Fixed tariff';
+    let h = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Period: ' + esc(rep.period_start) + ' to ' + esc(rep.period_end)
       + ' · ' + tariffLabel + ' · ' + (rep.price_eur_per_kwh_net*100).toFixed(2) + ' ct/kWh netto'
-      + ' · Grundgebühr: ' + (rep.base_fee_eur_per_year_net||0).toFixed(2) + ' €/Jahr netto'
-      + ' · MwSt. ' + (rep.vat_rate_percent||19).toFixed(0) + '%'
-      + ' · Gesamt: ' + rep.total_kwh.toFixed(1) + ' kWh · ' + rep.total_cost.toFixed(2) + ' €</div>';
+      + ' · Base fee: ' + (rep.base_fee_eur_per_year_net||0).toFixed(2) + ' €/year net'
+      + ' · VAT ' + (rep.vat_rate_percent||19).toFixed(0) + '%'
+      + ' · Total: ' + rep.total_kwh.toFixed(1) + ' kWh · ' + rep.total_cost.toFixed(2) + ' €</div>';
     (rep.bills || []).forEach(function(b) {{
       h += '<div class="card" style="margin-bottom:6px">';
       h += '<div style="font-weight:650;margin-bottom:4px">' + esc(b.tenant.name) + (b.tenant.unit ? ' (' + esc(b.tenant.unit) + ')' : '') + ' · ' + b.tenant.persons + ' Pers.</div>';
       h += '<table style="width:100%;font-size:11px;border-collapse:collapse">';
-      h += '<tr style="border-bottom:1px solid var(--border);color:var(--muted)"><th style="text-align:left;padding:3px">Position</th><th style="text-align:right">kWh</th><th style="text-align:right">€/kWh</th><th style="text-align:right">€</th></tr>';
+      h += '<tr style="border-bottom:1px solid var(--border);color:var(--muted)"><th style="text-align:left;padding:3px">Item</th><th style="text-align:right">kWh</th><th style="text-align:right">€/kWh</th><th style="text-align:right">€</th></tr>';
       (b.line_items || []).forEach(function(li) {{
         // Grundpreis / base-fee lines have kwh=0 and unit_price=0 — show them as "–"
         var kwhCell = (li.kwh && li.kwh > 0) ? li.kwh.toFixed(1) : '–';
         var priceCell = (li.unit_price && li.unit_price > 0) ? li.unit_price.toFixed(4) : '–';
         h += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px">' + esc(li.description) + '</td><td style="text-align:right">' + kwhCell + '</td><td style="text-align:right">' + priceCell + '</td><td style="text-align:right">' + li.amount.toFixed(2) + '</td></tr>';
       }});
-      h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">Netto</td><td style="text-align:right">' + b.subtotal_net.toFixed(2) + '</td></tr>';
-      h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">MwSt.</td><td style="text-align:right">' + b.vat_amount.toFixed(2) + '</td></tr>';
-      h += '<tr style="font-weight:700"><td colspan="3" style="padding:3px;text-align:right">Gesamt brutto</td><td style="text-align:right">' + b.total_gross.toFixed(2) + ' €</td></tr>';
+      h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">Net</td><td style="text-align:right">' + b.subtotal_net.toFixed(2) + '</td></tr>';
+      h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">VAT</td><td style="text-align:right">' + b.vat_amount.toFixed(2) + '</td></tr>';
+      h += '<tr style="font-weight:700"><td colspan="3" style="padding:3px;text-align:right">Total gross</td><td style="text-align:right">' + b.total_gross.toFixed(2) + ' €</td></tr>';
       h += '</table>';
       h += '</div>';
     }});
     el.innerHTML = h;
-  }}).catch(function(e) {{ el.innerHTML = '<p style="color:var(--red)">Fehler: ' + e + '</p>'; }});
+  }}).catch(function(e) {{ el.innerHTML = '<p style="color:var(--red)">Error: ' + e + '</p>'; }});
 }}
 
 function refreshSyncStatus() {{
   const el = document.getElementById('sync-status-panel');
   if (!el) return;
   fetch('/api/sync/status').then(function(r) {{ return r.json(); }}).then(function(d) {{
-    if (!d.ok) {{ el.textContent = 'Status nicht verfügbar: ' + (d.error || '?'); return; }}
+    if (!d.ok) {{ el.textContent = 'Status unavailable: ' + (d.error || '?'); return; }}
     const devs = d.devices || [];
-    if (!devs.length) {{ el.textContent = 'Keine Geräte konfiguriert'; return; }}
+    if (!devs.length) {{ el.textContent = 'No devices configured'; return; }}
     const parts = devs.map(function(x) {{
-      const ts = x.last_sync_ts ? new Date(x.last_sync_ts*1000).toLocaleString() : 'nie';
+      const ts = x.last_sync_ts ? new Date(x.last_sync_ts*1000).toLocaleString() : 'never';
       return x.name + ': ' + ts;
     }});
-    el.textContent = 'Letzte Sync-Zeiten: ' + parts.join('  ·  ');
-  }}).catch(function(e) {{ el.textContent = 'Status-Abruf fehlgeschlagen'; }});
+    el.textContent = 'Last sync: ' + parts.join('  ·  ');
+  }}).catch(function(e) {{ el.textContent = 'Status fetch failed'; }});
 }}
 
 /* ──────────────────────────────────────────────
@@ -3743,7 +3743,7 @@ function _fmtAxisVal(v, metric) {{
 ────────────────────────────────────────────── */
 async function loadCosts() {{
   const el = document.getElementById('costs-content');
-  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     const r = await fetch('/api/costs');
     if (!r.ok) throw new Error(r.status);
@@ -3805,7 +3805,7 @@ function renderCosts(data, el) {{
   html += '<div class="card-grid">';
   data.devices.forEach(function(d) {{
     // Fixed tariff section
-    var fixedLabel = '<div style="font-size:11px;color:#2196F3;margin-bottom:4px">\U0001f4b2 ' + t('plots.dynprice.fixed', 'Festpreis') + '</div>';
+    var fixedLabel = '<div style="font-size:11px;color:#2196F3;margin-bottom:4px">\U0001f4b2 ' + t('plots.dynprice.fixed', 'Fixed price') + '</div>';
     var fixedGrid = '<div class="metric-grid">' +
       metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_eur,2,'\u20ac'), fmt(d.today_kwh,3,'kWh')) +
       metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_eur,2,'\u20ac'), fmt(d.week_kwh,3,'kWh')) +
@@ -3815,7 +3815,7 @@ function renderCosts(data, el) {{
     // Dynamic tariff section
     var dynSection = spotActive
       ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">' +
-          '<div style="font-size:11px;color:#ff9800;margin-bottom:4px">\u26a1 ' + t('spot.cost_label', 'Dyn. Tarif') + '</div>' +
+          '<div style="font-size:11px;color:#ff9800;margin-bottom:4px">\u26a1 ' + t('spot.cost_label', 'Dyn. tariff') + '</div>' +
           '<div class="metric-grid">' +
           metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_spot_eur,2,'\u20ac'), spotSub('today',d), true) +
           metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_spot_eur,2,'\u20ac'), spotSub('week',d), true) +
@@ -3837,7 +3837,7 @@ function renderCosts(data, el) {{
   if (devs.length > 1) {{
     html += '<div class="nilm-two-col" style="margin-top:10px">';
     // Cost donut
-    html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.breakdown','Kosten-Verteilung') + ' (' + t('web.costs.month','Monat') + ')</div>';
+    html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.breakdown','Kosten-Verteilung') + ' (' + t('web.costs.month','Month') + ')</div>';
     html += '<canvas id="costs-donut" style="width:100%;height:200px"></canvas>';
     html += '<div id="costs-donut-legend" style="margin-top:6px"></div></div>';
     // Ranking bar
@@ -3848,13 +3848,13 @@ function renderCosts(data, el) {{
 
   // ── Period comparison chart (today / week / month / year) ──
   if (data.summary) {{
-    html += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.period_compare','Zeitraum-Vergleich') + '</div>';
+    html += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.period_compare','Period comparison') + '</div>';
     html += '<canvas id="costs-period-chart" style="width:100%;height:150px"></canvas></div>';
   }}
 
   // ── Per-device comparison bars (month kWh) ──
   if (devs.length > 1) {{
-    html += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.device_compare','Geräte-Vergleich (Monat kWh)') + '</div>';
+    html += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.device_compare','Device comparison (month kWh)') + '</div>';
     devs.slice().sort(function(a,b){{ return (b.month_kwh||0) - (a.month_kwh||0); }}).forEach(function(d) {{
       const maxKwh = Math.max.apply(null, devs.map(function(x){{ return x.month_kwh||0; }})) || 1;
       const pct = Math.round((d.month_kwh||0) / maxKwh * 100);
@@ -3870,17 +3870,17 @@ function renderCosts(data, el) {{
   // ── Projection card ──
   if (data.summary && data.summary.proj_kwh) {{
     const s = data.summary;
-    html += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.projection','Monatsprognose') + '</div>';
+    html += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.projection','Month projection') + '</div>';
     html += '<div class="nilm-metrics">';
     html += _nilmMetricCard('📅', t('web.costs.projected','Prognose'), fmt(s.proj_kwh,0) + ' kWh', fmt(s.proj_eur,0) + ' \u20ac');
-    html += _nilmMetricCard('📆', t('web.costs.year_proj','Jahres-Hochrechnung'), fmt((s.proj_kwh||0)*12,0) + ' kWh', fmt((s.proj_eur||0)*12,0) + ' \u20ac');
+    html += _nilmMetricCard('📆', t('web.costs.year_proj','Year projection'), fmt((s.proj_kwh||0)*12,0) + ' kWh', fmt((s.proj_eur||0)*12,0) + ' \u20ac');
     const lastM = s.last_month_kwh || 0;
     const projDelta = lastM > 0 ? Math.round(((s.proj_kwh||0) - lastM) / lastM * 100) : 0;
     const dIcon = projDelta > 5 ? '📈' : projDelta < -5 ? '📉' : '➡️';
     const dCol = projDelta > 5 ? '#dc2626' : projDelta < -5 ? '#16a34a' : 'var(--muted)';
-    html += _nilmMetricCard(dIcon, t('web.costs.vs_last','vs. Vormonat'), '<span style="color:'+dCol+'">' + (projDelta>0?'+':'') + projDelta + '%</span>', fmt(lastM,0) + ' kWh letzter Monat');
+    html += _nilmMetricCard(dIcon, t('web.costs.vs_last','vs. previous month'), '<span style="color:'+dCol+'">' + (projDelta>0?'+':'') + projDelta + '%</span>', fmt(lastM,0) + ' kWh last month');
     const dailyCost = (s.month_eur||0) / Math.max(1, new Date().getDate());
-    html += _nilmMetricCard('💰', t('web.costs.daily_avg','Tagesschnitt'), fmt(dailyCost,2) + ' \u20ac', fmt(dailyCost * 365,0) + ' \u20ac/Jahr');
+    html += _nilmMetricCard('💰', t('web.costs.daily_avg','Daily average'), fmt(dailyCost,2) + ' \u20ac', fmt(dailyCost * 365,0) + ' \u20ac/year');
     html += '</div></div>';
   }}
 
@@ -3893,7 +3893,7 @@ function renderCosts(data, el) {{
       var today = new Date().toISOString().slice(0,10);
       var active = tp.start_date <= today;
       var style = active ? 'font-weight:bold' : 'color:var(--muted)';
-      html += '<tr style="border-bottom:1px solid var(--border);' + style + '"><td style="padding:4px">' + esc(tp.start_date) + (active ? ' \u2713' : '') + '</td><td style="text-align:right;padding:4px">' + tp.price.toFixed(4) + ' \u20ac/kWh</td><td style="text-align:right;padding:4px">' + tp.base_fee.toFixed(2) + ' \u20ac/' + t('web.costs.year', 'year') + '</td></tr>';
+      html += '<tr style="border-bottom:1px solid var(--border);' + style + '"><td style="padding:4px">' + esc(tp.start_date) + (active ? ' \u2713' : '') + '</td><td style="text-align:right;padding:4px">' + tp.price.toFixed(4) + ' \u20ac/kWh</td><td style="text-align:right;padding:4px">' + tp.base_fee.toFixed(2) + ' \u20ac/' + t('web.costs.year', 'Year') + '</td></tr>';
     }});
     html += '</table></div>';
   }}
@@ -3941,7 +3941,7 @@ function _drawCostsDonut(devs) {{
   ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(fmt(total,2) + ' \u20ac', cx, cy-6);
   ctx.font = '10px sans-serif'; ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted')||'#666';
-  ctx.fillText(t('web.costs.month','Monat'), cx, cy+10);
+  ctx.fillText(t('web.costs.month','Month'), cx, cy+10);
   legHtml += '</div>';
   if (legend) legend.innerHTML = legHtml;
 }}
@@ -3955,7 +3955,7 @@ function _drawCostsRanking(devs) {{
 }}
 
 function _drawCostsPeriodChart(s) {{
-  const labels = [t('web.costs.today','Heute'), t('web.costs.week','Woche'), t('web.costs.month','Monat'), t('web.costs.year','Jahr')];
+  const labels = [t('web.costs.today','Today'), t('web.costs.week','Week'), t('web.costs.month','Month'), t('web.costs.year','Year')];
   const kwh = [s.today_kwh||0, s.week_kwh||0, s.month_kwh||0, s.year_kwh||0];
   const eur = [s.today_eur||0, s.week_eur||0, s.month_eur||0, s.year_eur||0];
   // Draw as grouped bars: kWh + EUR
@@ -4213,7 +4213,7 @@ async function loadHeatmap() {{
   const hrWrap = document.getElementById('hm-hourly-wrap');
   const stWrap = document.getElementById('hm-stats-wrap');
   const chWrap = document.getElementById('hm-charts-wrap');
-  if (!_quietRefresh) calWrap.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Lade\u2026') + '</p>';
+  if (!_quietRefresh) calWrap.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   hrWrap.innerHTML = ''; if (stWrap) stWrap.innerHTML = ''; if (chWrap) chWrap.innerHTML = '';
   if (!device) {{ calWrap.innerHTML = '<p class="info-msg">' + t('web.dash.select_device', 'Select a device.') + '</p>'; return; }}
   try {{
@@ -4367,7 +4367,7 @@ function renderHeatmapCalendar(data, el, unit) {{
   legendHtml += '<span style="margin-left:auto">Max: ' + hmFmtVal(maxVal, unit) + '</span>';
   legendHtml += '</div>';
 
-  el.innerHTML = '<div class="card"><div class="card-title">' + t('web.hm.year_overview', 'Jahres\u00fcbersicht') + ' ' + year + '</div><div class="hm-calendar">' + monthLabelHtml + gridHtml + '</div>' + legendHtml + '</div>';
+  el.innerHTML = '<div class="card"><div class="card-title">' + t('web.hm.year_overview', 'Year overview') + ' ' + year + '</div><div class="hm-calendar">' + monthLabelHtml + gridHtml + '</div>' + legendHtml + '</div>';
 
   el.querySelectorAll('.hm-day').forEach(function(cell) {{
     cell.addEventListener('mousemove', function(e) {{ showHmTooltip(e, cell.dataset.date + ': ' + cell.dataset.val); }});
@@ -4589,7 +4589,7 @@ let _co2Range = '24h';
 async function loadCo2(range) {{
   if (range) _co2Range = range;
   const el = document.getElementById('co2-content');
-  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     const r = await fetch('/api/co2?range=' + _co2Range);
     if (!r.ok) throw new Error(r.status);
@@ -4680,7 +4680,7 @@ function _renderCo2Forecast(data, green, dirty) {{
   }});
   html += '</div>';
   html += '<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:center">' +
-    t('web.co2.forecast_hint', 'Basierend auf 14-Tage-Trend f\u00fcr diese Stunde \u00d7 Wetterprognose (Wind, Sonne, Temperatur)') + '</div>';
+    t('web.co2.forecast_hint', 'Based on 14-day trend for this hour × weather forecast (wind, sun, temperature)') + '</div>';
   html += '</div>';
   return html;
 }}
@@ -4758,7 +4758,7 @@ function renderCo2(data, el) {{
     // Analytics card
     html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">' + t('web.co2.analytics','CO₂ Analyse') + '</div>';
     html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
-    html += '<div class="nilm-stat"><span class="nilm-stat-val" style="color:' + _co2Color(avgI,green,dirty) + '">' + avgI.toFixed(0) + '</span><span class="nilm-stat-lbl">' + t('web.co2.avg','Durchschnitt') + ' g/kWh</span></div>';
+    html += '<div class="nilm-stat"><span class="nilm-stat-val" style="color:' + _co2Color(avgI,green,dirty) + '">' + avgI.toFixed(0) + '</span><span class="nilm-stat-lbl">' + t('web.co2.avg','Average') + ' g/kWh</span></div>';
     html += '<div class="nilm-stat"><span class="nilm-stat-val" style="color:' + _co2Color(minI,green,dirty) + '">' + minI.toFixed(0) + '</span><span class="nilm-stat-lbl">' + t('web.co2.min','Minimum') + ' (' + esc(minH.hour) + ')</span></div>';
     html += '<div class="nilm-stat"><span class="nilm-stat-val" style="color:' + _co2Color(maxI,green,dirty) + '">' + maxI.toFixed(0) + '</span><span class="nilm-stat-lbl">' + t('web.co2.max','Maximum') + ' (' + esc(maxH.hour) + ')</span></div>';
     html += '</div>';
@@ -4769,7 +4769,7 @@ function renderCo2(data, el) {{
     html += '</div></div>';
 
     // Renewables + score card
-    html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">' + t('web.co2.green_score','Grünstrom-Score') + '</div>';
+    html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">' + t('web.co2.green_score','Green-power score') + '</div>';
     // Score ring
     const scoreColor = renewPct >= 70 ? '#16a34a' : renewPct >= 40 ? '#d97706' : '#dc2626';
     html += '<div style="text-align:center">';
@@ -4848,7 +4848,7 @@ function renderCo2(data, el) {{
 
     // Table
     html += '<div class="card">';
-    html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">' + t('web.co2.fuel_detail', 'Erzeugung Detail') + '</div>';
+    html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">' + t('web.co2.fuel_detail', 'Generation detail') + '</div>';
     // Stacked bar on top
     html += '<div style="display:flex;border-radius:6px;overflow:hidden;height:16px;margin-bottom:8px">';
     mixKeys.forEach(function(k) {{
@@ -5181,7 +5181,7 @@ function initSolar() {{
 
 async function loadSolar(period) {{
   const el = document.getElementById('solar-content');
-  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     const r = await fetch('/api/solar?period=' + period);
     if (!r.ok) throw new Error(r.status);
@@ -5308,7 +5308,7 @@ function initWeather() {{
 }}
 async function loadWeather() {{
   const el = document.getElementById('weather-content');
-  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Lade\u2026') + '</p>';
+  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     const r = await fetch('/api/weather_correlation');
     if (!r.ok) throw new Error(r.status);
@@ -5675,14 +5675,14 @@ function initCompare() {{
     qhtml += '<button class="btn btn-outline btn-sm" onclick="loadComparePreset(\\'' + p[0] + '\\')">' + p[1] + '</button>';
   }});
   qhtml += '<label style="display:inline-flex;align-items:center;gap:4px;margin-left:12px;font-size:12px;cursor:pointer">' +
-    '<input type="checkbox" id="cmp-spot" onchange="loadCompare()"> \u26a1 ' + t('compare.vs_dynamic', 'vs. Dynamic Tariff') + '</label>';
+    '<input type="checkbox" id="cmp-spot" onchange="loadCompare()"> \u26a1 ' + t('compare.vs_dynamic', 'vs. dynamic tariff') + '</label>';
   qhtml += '</div>';
   quick.innerHTML = qhtml;
 }}
 
 async function loadComparePreset(preset) {{
   const result = document.getElementById('cmp-result');
-  if (!_quietRefresh) result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  if (!_quietRefresh) result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     // Auto-granularity per preset: month→daily, quarter→weekly, halfyear/year→monthly
     const autoGran = preset === 'month' ? 'daily'
@@ -5707,7 +5707,7 @@ async function loadComparePreset(preset) {{
 
 async function loadCompare() {{
   const result = document.getElementById('cmp-result');
-  if (!_quietRefresh) result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  if (!_quietRefresh) result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     const da = document.getElementById('cmp-da').value;
     const fa = document.getElementById('cmp-fa').value;
@@ -5749,19 +5749,19 @@ function renderCompare(data, el) {{
 
   /* ── Summary metrics ── */
   html += '<div class="nilm-metrics" style="margin-bottom:12px">';
-  html += _nilmMetricCard('🔵', esc(data.name_a || data.device_a || 'A'), fmt(ta,1,unit), (data.days_a||0) + ' ' + t('web.cmp.days','Tage'));
-  html += _nilmMetricCard('🟠', esc(data.name_b || data.device_b || 'B'), fmt(tb,1,unit), (data.days_b||0) + ' ' + t('web.cmp.days','Tage'));
+  html += _nilmMetricCard('🔵', esc(data.name_a || data.device_a || 'A'), fmt(ta,1,unit), (data.days_a||0) + ' ' + t('web.cmp.days','Days'));
+  html += _nilmMetricCard('🟠', esc(data.name_b || data.device_b || 'B'), fmt(tb,1,unit), (data.days_b||0) + ' ' + t('web.cmp.days','Days'));
   html += _nilmMetricCard(deltaIcon, t('web.cmp.delta','Differenz'), '<span style="color:'+deltaColor+'">' + (delta>=0?'+':'') + fmt(delta,1,unit) + '</span>', (pct>=0?'+':'') + fmt(pct,1) + '%');
   const avgA = data.avg_a || 0, avgB = data.avg_b || 0;
   const avgDelta = avgA - avgB;
   const avgCol = avgDelta > 0 ? '#dc2626' : avgDelta < 0 ? '#16a34a' : 'var(--muted)';
-  html += _nilmMetricCard('📊', t('web.cmp.daily_avg','Tagesschnitt'), fmt(avgA,2) + ' / ' + fmt(avgB,2), '<span style="color:'+avgCol+'">'+t('web.cmp.delta','Diff')+': '+(avgDelta>=0?'+':'')+fmt(avgDelta,2)+' '+unit+'</span>');
+  html += _nilmMetricCard('📊', t('web.cmp.daily_avg','Daily average'), fmt(avgA,2) + ' / ' + fmt(avgB,2), '<span style="color:'+avgCol+'">'+t('web.cmp.delta','Diff')+': '+(avgDelta>=0?'+':'')+fmt(avgDelta,2)+' '+unit+'</span>');
   html += '</div>';
 
   /* ── Visual comparison (A vs B bars) ── */
   html += '<div class="nilm-two-col" style="margin-bottom:12px">';
   // Side-by-side total comparison
-  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.cmp.total','Gesamt-Vergleich') + '</div>';
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.cmp.total','Total comparison') + '</div>';
   const maxTotal = Math.max(ta, tb) || 1;
   html += '<div style="margin-bottom:12px">';
   html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
@@ -5779,14 +5779,14 @@ function renderCompare(data, el) {{
   html += '</div></div>';
 
   // Daily average comparison
-  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.cmp.avg_compare','Tagesschnitt-Vergleich') + '</div>';
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.cmp.avg_compare','Daily average comparison') + '</div>';
   html += '<canvas id="cmp-avg-chart" style="width:100%;height:180px"></canvas></div>';
   html += '</div>';
 
   /* ── Time series chart ── */
   html += '<div class="card" style="margin-bottom:12px">';
   html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
-  html += '<div style="font-size:14px;font-weight:700">' + t('web.cmp.timeline','Zeitverlauf') + '</div>';
+  html += '<div style="font-size:14px;font-weight:700">' + t('web.cmp.timeline','Timeline') + '</div>';
   html += '<span style="font-size:11px;display:flex;align-items:center;gap:3px"><span style="width:12px;height:4px;background:#3b82f6;border-radius:2px;display:inline-block"></span>' + esc(lA) + '</span>';
   html += '<span style="font-size:11px;display:flex;align-items:center;gap:3px"><span style="width:12px;height:4px;background:#f59e0b;border-radius:2px;display:inline-block"></span>' + esc(lB) + '</span>';
   html += '</div>';
@@ -5978,7 +5978,7 @@ function drawBars(canvas, labels, series, opts) {{
 ────────────────────────────────────────────── */
 async function loadAnomalies() {{
   const el = document.getElementById('anom-content');
-  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>';
+  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     const r = await fetch('/api/anomalies');
     if (!r.ok) throw new Error(r.status);
@@ -6011,17 +6011,17 @@ function renderAnomalies(data, el) {{
   if (events.length === 0) {{
     html += '<div class="card" style="text-align:center;padding:30px">';
     html += '<div style="font-size:40px;margin-bottom:10px">✅</div>';
-    html += '<div style="font-size:16px;font-weight:600;margin-bottom:6px">' + t('web.dash.no_anomalies_title','Keine Anomalien erkannt') + '</div>';
-    html += '<div style="color:var(--muted);font-size:13px">' + t('web.dash.no_anomalies', 'Alle Geräte verhalten sich normal.') + '</div></div>';
+    html += '<div style="font-size:16px;font-weight:600;margin-bottom:6px">' + t('web.dash.no_anomalies_title','No anomalies detected') + '</div>';
+    html += '<div style="color:var(--muted);font-size:13px">' + t('web.dash.no_anomalies', 'All devices behave normally.') + '</div></div>';
     el.innerHTML = html;
     return;
   }}
 
   /* ── Overview metrics ── */
   html += '<div class="nilm-metrics" style="margin-bottom:12px">';
-  html += _nilmMetricCard('🔍', t('web.anom.total','Anomalien gesamt'), data.total_count || events.length, t('web.anom.last_days','Letzte 7 Tage'));
+  html += _nilmMetricCard('🔍', t('web.anom.total','Anomalien gesamt'), data.total_count || events.length, t('web.anom.last_days','Last 7 days'));
   html += _nilmMetricCard('📊', t('web.anom.types','Typen erkannt'), Object.keys(tc).length, Object.keys(tc).map(function(k){{ return (typeIcons[k]||'') + ' ' + (tc[k]||0); }}).join('  '));
-  html += _nilmMetricCard('📡', t('web.anom.devices','Geräte betroffen'), Object.keys(dc).length, t('web.anom.of_total','von allen Geräten'));
+  html += _nilmMetricCard('📡', t('web.anom.devices','Devices affected'), Object.keys(dc).length, t('web.anom.of_total','of all devices'));
   html += _nilmMetricCard('⚠️', t('web.anom.max_sigma','Max Abweichung'), (data.max_sigma||0) + '\u03c3', t('web.anom.avg','Schnitt') + ': ' + (data.avg_sigma||0) + '\u03c3');
   html += '</div>';
 
@@ -6029,12 +6029,12 @@ function renderAnomalies(data, el) {{
   html += '<div class="nilm-two-col" style="margin-bottom:12px">';
 
   // Type donut
-  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.anom.by_type','Nach Typ') + '</div>';
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.anom.by_type','By type') + '</div>';
   html += '<canvas id="anom-type-donut" style="width:100%;height:180px"></canvas>';
   html += '<div id="anom-type-legend" style="margin-top:6px"></div></div>';
 
   // Device breakdown
-  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.anom.by_device','Nach Gerät') + '</div>';
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.anom.by_device','By device') + '</div>';
   const devKeys = Object.keys(dc).sort(function(a,b){{ return dc[b].count - dc[a].count; }});
   if (devKeys.length === 0) {{
     html += '<p style="color:var(--muted);font-size:13px">—</p>';
@@ -6249,10 +6249,10 @@ function renderForecast(d) {{
 
   /* ── Overview metrics ── */
   html += '<div class="nilm-metrics" style="margin-bottom:12px">';
-  html += _nilmMetricCard('📊', t('web.fc.avg_daily','Tagesschnitt'), (d.avg_daily_kwh||0).toFixed(1) + ' kWh', esc(d.device_name||''));
-  html += _nilmMetricCard(trendIcon, t('web.fc.trend','Trend'), '<span style="color:' + trendColor + '">' + (trendPct > 0 ? '+' : '') + trendPct.toFixed(1) + '%</span>', t('web.fc.per_month','pro Monat'));
-  html += _nilmMetricCard('📅', t('web.fc.next_month','Nächster Monat'), (d.forecast_next_month_kwh||0).toFixed(0) + ' kWh', fmt(d.forecast_next_month_cost||0, 2) + ' \u20ac');
-  html += _nilmMetricCard('📆', t('web.fc.next_year','Nächstes Jahr'), (d.forecast_year_kwh||0).toFixed(0) + ' kWh', fmt(d.forecast_year_cost||0, 0) + ' \u20ac');
+  html += _nilmMetricCard('📊', t('web.fc.avg_daily','Daily average'), (d.avg_daily_kwh||0).toFixed(1) + ' kWh', esc(d.device_name||''));
+  html += _nilmMetricCard(trendIcon, t('web.fc.trend','Trend'), '<span style="color:' + trendColor + '">' + (trendPct > 0 ? '+' : '') + trendPct.toFixed(1) + '%</span>', t('web.fc.per_month','per month'));
+  html += _nilmMetricCard('📅', t('web.fc.next_month','Next month'), (d.forecast_next_month_kwh||0).toFixed(0) + ' kWh', fmt(d.forecast_next_month_cost||0, 2) + ' \u20ac');
+  html += _nilmMetricCard('📆', t('web.fc.next_year','Next year'), (d.forecast_year_kwh||0).toFixed(0) + ' kWh', fmt(d.forecast_year_cost||0, 0) + ' \u20ac');
   html += '</div>';
 
   /* ── Trend + cost comparison ── */
@@ -6261,8 +6261,8 @@ function renderForecast(d) {{
   html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.trend_analysis','Trend-Analyse') + '</div>';
   html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">';
   html += '<span style="font-size:36px">' + trendIcon + '</span>';
-  html += '<div><div style="font-size:20px;font-weight:800;color:' + trendColor + '">' + (trendPct > 0 ? '+' : '') + trendPct.toFixed(1) + '% / ' + t('web.fc.month','Monat') + '</div>';
-  html += '<div style="font-size:12px;color:var(--muted)">' + t('web.fc.based_on','Basierend auf') + ' ' + histDays + ' ' + t('web.fc.days_data','Tagen Daten') + '</div></div></div>';
+  html += '<div><div style="font-size:20px;font-weight:800;color:' + trendColor + '">' + (trendPct > 0 ? '+' : '') + trendPct.toFixed(1) + '% / ' + t('web.fc.month','Month') + '</div>';
+  html += '<div style="font-size:12px;color:var(--muted)">' + t('web.fc.based_on','Basierend auf') + ' ' + histDays + ' ' + t('web.fc.days_data','days of data') + '</div></div></div>';
   // History summary
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
   html += '<div style="background:var(--bg);border-radius:8px;padding:8px;text-align:center"><div style="font-size:18px;font-weight:700">' + totalHistKwh.toFixed(0) + '</div><div style="font-size:10px;color:var(--muted)">kWh (' + histDays + 'd)</div></div>';
@@ -6286,12 +6286,12 @@ function renderForecast(d) {{
 
   /* ── Weekday + Hourly profiles ── */
   html += '<div class="nilm-two-col" style="margin-bottom:12px">';
-  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.weekday','Wochentags-Profil') + '</div>';
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.weekday','Weekday profile') + '</div>';
   html += '<canvas id="fc-weekday-chart" style="width:100%;height:150px"></canvas>';
-  html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center">' + t('web.fc.weekday_hint','Faktor relativ zum Durchschnitt (1.0 = normal)') + '</div></div>';
-  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.hourly','Stunden-Profil') + '</div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center">' + t('web.fc.weekday_hint','Factor relative to average (1.0 = normal)') + '</div></div>';
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.hourly','Hourly profile') + '</div>';
   html += '<canvas id="fc-hourly-chart" style="width:100%;height:150px"></canvas>';
-  html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center">' + t('web.fc.hourly_hint','Faktor relativ zum Tagesschnitt') + '</div></div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center">' + t('web.fc.hourly_hint','Factor relative to daily average') + '</div></div>';
   html += '</div>';
 
   document.getElementById('forecast-cards').innerHTML = html;
@@ -6413,7 +6413,7 @@ function _fcDrawMainChart(d) {{
 }}
 
 function _fcDrawCostBars(d) {{
-  const labels = [t('web.fc.month_short','Monat'), t('web.fc.year_short','Jahr')];
+  const labels = [t('web.fc.month_short','Month'), t('web.fc.year_short','Year')];
   const vals = [d.forecast_next_month_cost || 0, d.forecast_year_cost || 0];
   const colors = ['#f59e0b', '#ef4444'];
   _drawBarChart('fc-cost-bars', labels, vals, {{ colors: colors, decimals: 0 }});
@@ -6424,7 +6424,7 @@ function _fcDrawCostBars(d) {{
 ────────────────────────────────────────────── */
 async function loadStandby() {{
   const cont = document.getElementById('standby-cards');
-  if (!_quietRefresh) cont.innerHTML = '<p class="loading-msg">' + t('web.loading','Loading\u2026') + '</p>';
+  if (!_quietRefresh) cont.innerHTML = '<p class="loading-msg">' + t('web.loading','Loading…') + '</p>';
   try {{
     const r = await fetch('/api/standby');
     if (!r.ok) throw new Error(r.status);
@@ -6446,12 +6446,12 @@ function renderStandby(d) {{
   const avgBase = nDev ? Math.round(devs.reduce(function(s,x){{ return s+x.base_load_w; }},0)/nDev) : 0;
 
   let html = '<div class="nilm-metrics" style="margin-bottom:12px">';
-  html += _nilmMetricCard('\u26a0\ufe0f', t('web.standby.annual_cost','Standby-Kosten/Jahr'), (d.total_annual_standby_cost||0).toFixed(0) + ' \u20ac', t('web.standby.all_devices','Alle Geräte'));
-  html += _nilmMetricCard('\u26a1', t('web.standby.annual_kwh','Standby kWh/Jahr'), (d.total_annual_standby_kwh||0).toFixed(0) + ' kWh', t('web.standby.wasted','Verlorene Energie'));
-  html += _nilmMetricCard('📊', t('web.standby.avg_base','Mittlere Grundlast'), avgBase + ' W', nDev + ' ' + t('web.standby.devices','Geräte'));
-  html += _nilmMetricCard('🚨', t('web.standby.risk_overview','Risiko-Übersicht'),
+  html += _nilmMetricCard('\u26a0\ufe0f', t('web.standby.annual_cost','Standby cost/year'), (d.total_annual_standby_cost||0).toFixed(0) + ' \u20ac', t('web.standby.all_devices','All devices'));
+  html += _nilmMetricCard('\u26a1', t('web.standby.annual_kwh','Standby kWh/year'), (d.total_annual_standby_kwh||0).toFixed(0) + ' kWh', t('web.standby.wasted','Verlorene Energie'));
+  html += _nilmMetricCard('📊', t('web.standby.avg_base','Average base load'), avgBase + ' W', nDev + ' ' + t('web.standby.devices','Devices'));
+  html += _nilmMetricCard('🚨', t('web.standby.risk_overview','Risk overview'),
     '<span style="color:#dc2626">' + highCount + '</span> / <span style="color:#d97706">' + medCount + '</span> / <span style="color:#16a34a">' + lowCount + '</span>',
-    t('web.standby.high_med_low','Hoch / Mittel / Niedrig'));
+    t('web.standby.high_med_low','High / Medium / Low'));
   html += '</div>';
 
   document.getElementById('standby-cards').innerHTML = html;
@@ -6459,8 +6459,8 @@ function renderStandby(d) {{
   if (!nDev) {{
     wrap.innerHTML = '<div class="card" style="text-align:center;padding:30px">' +
       '<div style="font-size:40px;margin-bottom:10px">🔌</div>' +
-      '<div style="font-size:16px;font-weight:600;margin-bottom:6px">' + t('web.standby.no_data_title','Keine Standby-Daten') + '</div>' +
-      '<div style="color:var(--muted);font-size:13px">' + t('web.standby.no_data_hint','Mindestens 6 Stunden Daten in den letzten {days} Tagen nötig.').replace('{{days}}', d.analysis_days||30) + '</div></div>';
+      '<div style="font-size:16px;font-weight:600;margin-bottom:6px">' + t('web.standby.no_data_title','No standby data') + '</div>' +
+      '<div style="color:var(--muted);font-size:13px">' + t('web.standby.no_data_hint','At least 6 hours of data needed in the last {days} days.').replace('{{days}}', d.analysis_days||30) + '</div></div>';
     return;
   }}
 
@@ -6476,7 +6476,7 @@ function renderStandby(d) {{
   cards += '</div>';
 
   /* ── Per-device detail cards ── */
-  cards += '<div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.per_device','Geräte-Details') + '</div>';
+  cards += '<div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.per_device','Device details') + '</div>';
   cards += '<div class="sb-dev-grid" data-cols="' + Math.min(nDev, 4) + '">';
   devs.forEach(function(dev, idx) {{
     const rc = dev.risk === 'high' ? '#dc2626' : dev.risk === 'medium' ? '#d97706' : '#16a34a';
@@ -6488,11 +6488,11 @@ function renderStandby(d) {{
     cards += '</div>';
     // Stats grid
     cards += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px">';
-    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.base_load_w + '</span><span class="nilm-stat-lbl">' + t('web.standby.base_w','Grundlast W') + '</span></div>';
-    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + (dev.night_median_w||dev.base_load_w) + '</span><span class="nilm-stat-lbl">' + t('web.standby.night_w','Nacht W') + '</span></div>';
-    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + (dev.standby_pct||0).toFixed(0) + '%</span><span class="nilm-stat-lbl">' + t('web.standby.time_pct','Zeit Standby') + '</span></div>';
-    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.annual_standby_kwh + '</span><span class="nilm-stat-lbl">kWh/' + t('web.standby.year','Jahr') + '</span></div>';
-    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.annual_standby_cost + ' \u20ac</span><span class="nilm-stat-lbl">\u20ac/' + t('web.standby.year','Jahr') + '</span></div>';
+    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.base_load_w + '</span><span class="nilm-stat-lbl">' + t('web.standby.base_w','Base load W') + '</span></div>';
+    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + (dev.night_median_w||dev.base_load_w) + '</span><span class="nilm-stat-lbl">' + t('web.standby.night_w','Night W') + '</span></div>';
+    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + (dev.standby_pct||0).toFixed(0) + '%</span><span class="nilm-stat-lbl">' + t('web.standby.time_pct','Standby time') + '</span></div>';
+    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.annual_standby_kwh + '</span><span class="nilm-stat-lbl">kWh/' + t('web.standby.year','Year') + '</span></div>';
+    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.annual_standby_cost + ' \u20ac</span><span class="nilm-stat-lbl">\u20ac/' + t('web.standby.year','Year') + '</span></div>';
     cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.standby_share_pct + '%</span><span class="nilm-stat-lbl">' + t('web.standby.share','Anteil') + '</span></div>';
     cards += '</div>';
     // Standby vs active mini bar
@@ -6511,13 +6511,13 @@ function renderStandby(d) {{
 
   /* ── Full 24h comparison chart (all devices overlaid) ── */
   if (devs.length > 1) {{
-    cards += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.compare_24h','24h-Vergleich alle Geräte') + '</div>';
+    cards += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.compare_24h','24h comparison all devices') + '</div>';
     cards += '<canvas id="sb-24h-all" style="width:100%;height:180px"></canvas>';
     cards += '<div id="sb-24h-legend" style="margin-top:6px"></div></div>';
   }}
 
   /* ── Savings potential ── */
-  cards += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.savings','Einsparpotenzial') + '</div>';
+  cards += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.savings','Savings potential') + '</div>';
   cards += '<div style="display:grid;grid-template-columns:1fr;gap:6px">';
   devs.forEach(function(dev) {{
     if (dev.annual_standby_cost < 5) return;
@@ -6526,7 +6526,7 @@ function renderStandby(d) {{
     cards += '<span style="font-size:16px">💡</span>';
     cards += '<div style="flex:1;min-width:0">';
     cards += '<div style="font-weight:600;font-size:13px">' + esc(dev.device_name) + '</div>';
-    cards += '<div style="font-size:12px;color:var(--muted)">' + t('web.standby.savings_tip','Standby-Stecker oder Zeitschaltuhr spart') + ' <strong style="color:' + rc + '">' + dev.annual_standby_cost + ' \u20ac/' + t('web.standby.year','Jahr') + '</strong></div>';
+    cards += '<div style="font-size:12px;color:var(--muted)">' + t('web.standby.savings_tip','A smart plug or timer saves') + ' <strong style="color:' + rc + '">' + dev.annual_standby_cost + ' \u20ac/' + t('web.standby.year','Year') + '</strong></div>';
     cards += '</div></div>';
   }});
   cards += '</div></div>';
@@ -6569,7 +6569,7 @@ function _sbDrawCostPie(devs) {{
   ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(total.toFixed(0) + ' \u20ac', cx, cy-6);
   ctx.font = '10px sans-serif'; ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted')||'#666';
-  ctx.fillText('/' + t('web.standby.year','Jahr'), cx, cy+10);
+  ctx.fillText('/' + t('web.standby.year','Year'), cx, cy+10);
   legHtml += '</div>';
   if (legend) legend.innerHTML = legHtml;
 }}
@@ -7332,7 +7332,7 @@ _loadLsSettings();
   window._ssDuration = 3;
   async function loadSmartSched() {{
     const el = document.getElementById('ss-content');
-    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Loading…</p>';
     try {{
       const r = await fetch('/api/smart_schedule?duration=' + window._ssDuration);
       if (!r.ok) throw new Error(r.status);
@@ -7340,7 +7340,7 @@ _loadLsSettings();
       if (!d.ok) throw new Error(d.error || 'unknown');
       renderSmartSched(d.data, el);
     }} catch(e) {{
-      el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>';
+      el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
     }}
   }}
   function _ssFmtDateTime(ts) {{
@@ -7353,7 +7353,7 @@ _loadLsSettings();
     const dateStr = d.toLocaleDateString([], {{day:'2-digit', month:'2-digit', year:'numeric'}});
     const timeStr = d.toLocaleTimeString([], {{hour:'2-digit', minute:'2-digit'}});
     let prefix = wday + ', ' + dateStr;
-    if (dayStart.getTime() === today.getTime()) prefix = 'Heute · ' + wday;
+    if (dayStart.getTime() === today.getTime()) prefix = 'Today · ' + wday;
     else if (dayStart.getTime() === tomorrow.getTime()) prefix = 'Morgen · ' + wday;
     return {{ prefix: prefix, date: dateStr, time: timeStr }};
   }}
@@ -7369,7 +7369,7 @@ _loadLsSettings();
 
     const blocks = data.blocks || [];
     if (!blocks.length) {{
-      el.innerHTML = durSel + '<div class="card" style="padding:14px"><p class="info-msg">Keine Spot-Preisdaten für die nächsten 24h. Spot-Preise in den Einstellungen aktivieren oder warten bis die Daten gefetched wurden.</p></div>';
+      el.innerHTML = durSel + '<div class="card" style="padding:14px"><p class="info-msg">No spot price data for the next 24h. Enable spot prices in settings or wait for data to be fetched.</p></div>';
       return;
     }}
     const fixed = data.fixed_ct || 0;
@@ -7380,16 +7380,16 @@ _loadLsSettings();
     // Context card – what does this tab do?
     let html = durSel;
     html += '<div class="card" style="margin-bottom:10px;padding:12px;background:linear-gradient(135deg,rgba(255,152,0,0.08),rgba(255,152,0,0.02));border-left:3px solid #ff9800">' +
-      '<div style="font-size:13px;font-weight:650;color:#ff9800;margin-bottom:4px">⏱ Günstigste Zeitfenster in den nächsten 24h</div>' +
-      '<div style="font-size:12px;color:var(--muted);line-height:1.5">Startet deine <b>energieintensiven Geräte</b> (Waschmaschine, Spülmaschine, Trockner, E-Auto, Wärmepumpe) in einem der Zeitfenster unten – dort ist der Spot-Strom am billigsten. Die Ersparnis gilt gegenüber deinem Festpreis.</div>' +
+      '<div style="font-size:13px;font-weight:650;color:#ff9800;margin-bottom:4px">⏱ Cheapest time windows in the next 24h</div>' +
+      '<div style="font-size:12px;color:var(--muted);line-height:1.5">Start your <b>energy-hungry appliances</b> (washing machine, dishwasher, dryer, EV, heat pump) during one of the windows below — that is when spot power is cheapest. Savings are compared to your fixed price.</div>' +
       '</div>';
 
     // 24h context tiles
     html += '<div class="metric-grid" style="margin-bottom:10px">' +
-      metricCardHtml('Ø 24h Spot', avg24.toFixed(1) + ' ct/kWh', 'Durchschnitt') +
-      metricCardHtml('Festpreis', fixed.toFixed(1) + ' ct/kWh', 'Dein Tarif') +
-      metricCardHtml('Billigste Stunde', cheap.toFixed(1) + ' ct/kWh', '') +
-      metricCardHtml('Teuerste Stunde', exp.toFixed(1) + ' ct/kWh', '') +
+      metricCardHtml('Ø 24h Spot', avg24.toFixed(1) + ' ct/kWh', 'Average') +
+      metricCardHtml('Fixed price', fixed.toFixed(1) + ' ct/kWh', 'Your tariff') +
+      metricCardHtml('Cheapest hour', cheap.toFixed(1) + ' ct/kWh', '') +
+      metricCardHtml('Most expensive hour', exp.toFixed(1) + ' ct/kWh', '') +
       '</div>';
 
     // Top-3 blocks
@@ -7403,14 +7403,14 @@ _loadLsSettings();
       const borderColor = idx === 0 ? '#ff9800' : 'var(--border)';
       const borderWidth = idx === 0 ? '2px' : '1px';
       const vsFixedText = saveCtKwh > 0
-        ? 'Spare <b style="color:#4caf50">' + saveCtKwh.toFixed(1) + ' ct/kWh</b> ggü. Festpreis'
-        : (saveCtKwh < 0 ? '<b style="color:#e53935">' + Math.abs(saveCtKwh).toFixed(1) + ' ct/kWh teurer</b> als Festpreis' : 'Gleicher Preis wie Festpreis');
+        ? 'Save <b style="color:#4caf50">' + saveCtKwh.toFixed(1) + ' ct/kWh</b> vs. fixed price'
+        : (saveCtKwh < 0 ? '<b style="color:#e53935">' + Math.abs(saveCtKwh).toFixed(1) + ' ct/kWh more</b> than fixed price' : 'Same price as fixed tariff');
 
       html += '<div class="card" style="margin-bottom:8px;border:' + borderWidth + ' solid ' + borderColor + ';padding:12px">' +
         '<div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:10px">' +
         '<div style="flex:1;min-width:200px">' +
           '<div style="font-size:18px;font-weight:700">' + rank + ' ' + st.time + ' – ' + en.time + '</div>' +
-          '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + st.prefix + ' · ' + b.block_hours + ' h Zeitblock</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + st.prefix + ' · ' + b.block_hours + ' h window</div>' +
           '<div style="font-size:12px;margin-top:6px">' + vsFixedText + '</div>' +
         '</div>' +
         '<div style="text-align:right;min-width:120px">' +
@@ -7419,8 +7419,8 @@ _loadLsSettings();
         '</div>' +
         '</div>' +
         '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;color:var(--muted)">' +
-          '💡 Bei 2 kWh Verbrauch (z.B. Waschmaschine): ' +
-          '<b style="color:' + saveColor + '">' + (saveCtKwh >= 0 ? '-' : '+') + Math.abs(saveCtKwh * 2).toFixed(0) + ' ct</b> ggü. Festpreis · ' +
+          '💡 At 2 kWh usage (e.g. washing machine): ' +
+          '<b style="color:' + saveColor + '">' + (saveCtKwh >= 0 ? '-' : '+') + Math.abs(saveCtKwh * 2).toFixed(0) + ' ct</b> vs. fixed price · ' +
           '<b>' + (b.avg_price_ct * 2).toFixed(0) + ' ct</b> total' +
         '</div>' +
         '</div>';
@@ -7428,8 +7428,8 @@ _loadLsSettings();
 
     // Footer hint
     html += '<div style="margin-top:10px;font-size:11px;color:var(--muted);text-align:center;line-height:1.5">' +
-      'Preise inkl. Netzentgelt, Stromsteuer, KWK/§19/Offshore, Anbieter-Marge und MwSt. aus deinen Spot-Preis-Einstellungen. ' +
-      'Zone: ' + (data.zone || '?') + ' · Update stündlich.' +
+      'Prices incl. grid fee, electricity tax, CHP/§19/offshore surcharges, supplier margin and VAT from your spot-price settings. ' +
+      'Zone: ' + (data.zone || '?') + ' · Updated hourly.' +
       '</div>';
 
     el.innerHTML = html;
@@ -7438,7 +7438,7 @@ _loadLsSettings();
   /* ── EV Log ── */
   async function loadEvLog() {{
     const el = document.getElementById('ev-content');
-    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Loading…</p>';
     try {{
       const r = await fetch('/api/ev_sessions');
       if (!r.ok) throw new Error(r.status);
@@ -7446,25 +7446,25 @@ _loadLsSettings();
       if (!d.ok) throw new Error(d.error || 'unknown');
       renderEvLog(d.data, el);
     }} catch(e) {{
-      el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>';
+      el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
     }}
   }}
   function renderEvLog(data, el) {{
-    let html = '<div class="card" style="margin-bottom:10px"><div class="card-title">🚗 Ladeübersicht</div>' +
+    let html = '<div class="card" style="margin-bottom:10px"><div class="card-title">🚗 Charging overview</div>' +
       '<div class="metric-grid">' +
-      metricCardHtml('Ladevorgänge', data.total_sessions || 0) +
-      metricCardHtml('Gesamt', (data.total_kwh||0).toFixed(1) + ' kWh') +
-      metricCardHtml('Kosten', (data.total_cost||0).toFixed(2) + ' €') +
-      metricCardHtml('Ø Dauer', (data.avg_duration_min||0).toFixed(0) + ' min') +
+      metricCardHtml('Charge sessions', data.total_sessions || 0) +
+      metricCardHtml('Total', (data.total_kwh||0).toFixed(1) + ' kWh') +
+      metricCardHtml('Cost', (data.total_cost||0).toFixed(2) + ' €') +
+      metricCardHtml('Ø duration', (data.avg_duration_min||0).toFixed(0) + ' min') +
       '</div></div>';
     if (!data.sessions || !data.sessions.length) {{
-      html += '<div class="card" style="padding:14px"><p class="info-msg">Keine Ladevorgänge erkannt. Wallbox-Gerät in den Einstellungen konfigurieren.</p></div>';
+      html += '<div class="card" style="padding:14px"><p class="info-msg">No charge sessions detected. Configure wallbox device in settings.</p></div>';
       el.innerHTML = html;
       return;
     }}
     html += '<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">' +
       '<thead><tr style="border-bottom:1px solid var(--border)">';
-    ['Datum','Zeit','Dauer','kWh','€'].forEach(function(c){{ html += '<th style="padding:6px;color:var(--muted)">'+c+'</th>'; }});
+    ['Date','Time','Duration','kWh','€'].forEach(function(c){{ html += '<th style="padding:6px;color:var(--muted)">'+c+'</th>'; }});
     html += '</tr></thead><tbody>';
     data.sessions.slice(-20).reverse().forEach(function(se) {{
       const sd = new Date(se.start_ts*1000);
@@ -7482,7 +7482,7 @@ _loadLsSettings();
   /* ── Tariff Comparison ── */
   async function loadTariff() {{
     const el = document.getElementById('tariff-content');
-    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Loading…</p>';
     try {{
       const r = await fetch('/api/tariff_compare');
       if (!r.ok) throw new Error(r.status);
@@ -7490,28 +7490,28 @@ _loadLsSettings();
       if (!d.ok) throw new Error(d.error || 'unknown');
       renderTariff(d.data, el);
     }} catch(e) {{
-      el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>';
+      el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
     }}
   }}
   function renderTariff(data, el) {{
     const results = data.results || [];
     if (!results.length) {{
-      el.innerHTML = '<div class="card" style="padding:14px"><p class="info-msg">Keine Verbrauchsdaten vorhanden.</p></div>';
+      el.innerHTML = '<div class="card" style="padding:14px"><p class="info-msg">No consumption data available.</p></div>';
       return;
     }}
     let html = '';
     results.forEach(function(r) {{
       const border = r.is_current ? '2px solid #ff9800' : '1px solid var(--border)';
       const sav = r.is_current ? '' : (r.savings_vs_current_eur > 0
-        ? '<span style="color:#4caf50;font-weight:600">▼ ' + r.savings_vs_current_eur.toFixed(0) + ' €/Jahr</span>'
-        : '<span style="color:#e53935">▲ ' + Math.abs(r.savings_vs_current_eur).toFixed(0) + ' €/Jahr</span>');
+        ? '<span style="color:#4caf50;font-weight:600">▼ ' + r.savings_vs_current_eur.toFixed(0) + ' €/year</span>'
+        : '<span style="color:#e53935">▲ ' + Math.abs(r.savings_vs_current_eur).toFixed(0) + ' €/year</span>');
       const badge = r.is_current ? ' <span style="background:#ff9800;color:#fff;font-size:10px;padding:2px 6px;border-radius:8px">Aktuell</span>' : '';
       html += '<div class="card" style="border:' + border + '">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">' +
         '<div><b style="font-size:14px">' + esc(r.name) + '</b>' + badge +
         '<br><span style="font-size:11px;color:var(--muted)">' + esc(r.provider) + ' · ' + r.tariff_type.toUpperCase() + '</span></div>' +
         '<div style="text-align:right"><div style="font-size:17px;font-weight:700">' + r.annual_cost_eur.toFixed(0) +
-        ' €<span style="font-size:11px;font-weight:400;color:var(--muted)">/Jahr</span></div>' + sav + '</div>' +
+        ' €<span style="font-size:11px;font-weight:400;color:var(--muted)">/year</span></div>' + sav + '</div>' +
         '</div></div>';
     }});
     el.innerHTML = html;
@@ -7520,7 +7520,7 @@ _loadLsSettings();
   /* ── Battery ── */
   async function loadBattery() {{
     const el = document.getElementById('bat-content');
-    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Loading…</p>';
     try {{
       const r = await fetch('/api/battery');
       if (!r.ok) throw new Error(r.status);
@@ -7528,11 +7528,11 @@ _loadLsSettings();
       if (!d.ok) throw new Error(d.error || 'unknown');
       renderBattery(d.data, el);
     }} catch(e) {{
-      el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>';
+      el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
     }}
   }}
   function renderBattery(data, el) {{
-    const ml = {{charging:'Laden', discharging:'Entladen', idle:'Standby'}};
+    const ml = {{charging:'Loading', discharging:'Entladen', idle:'Standby'}};
     el.innerHTML = '<div class="card" style="margin-bottom:10px"><div class="card-title">🔋 Batteriespeicher</div>' +
       '<div class="metric-grid">' +
       metricCardHtml('SOC', data.soc_pct.toFixed(0) + '%') +
@@ -7546,7 +7546,7 @@ _loadLsSettings();
   /* ── AI Advisor ── */
   async function loadAdvisor() {{
     const el = document.getElementById('advisor-content');
-    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Lade…</p>';
+    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Loading…</p>';
     try {{
       const r = await fetch('/api/advisor');
       if (!r.ok) throw new Error(r.status);
@@ -7554,21 +7554,21 @@ _loadLsSettings();
       if (!d.ok) throw new Error(d.error || 'unknown');
       renderAdvisor(d.data, el);
     }} catch(e) {{
-      el.innerHTML = '<p class="error-msg">Fehler: ' + e.message + '</p>';
+      el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
     }}
   }}
   function renderAdvisor(data, el) {{
     let html = '<div class="card" style="margin-bottom:10px;text-align:center">' +
       '<div class="card-title">🤖 KI-Energieberater</div>' +
       '<div style="font-size:20px;font-weight:700;color:#4caf50;padding:8px 0">💰 ' +
-      data.total_savings_potential_eur.toFixed(0) + ' €/Jahr Einsparpotenzial</div></div>';
+      data.total_savings_potential_eur.toFixed(0) + ' €/year savings potential</div></div>';
     if (data.llm_summary) {{
       html += '<div class="card" style="margin-bottom:10px"><div class="card-title">🤖 KI-Zusammenfassung</div>' +
         '<div style="padding:4px 0">' + esc(data.llm_summary) + '</div></div>';
     }}
     (data.tips || []).forEach(function(tip) {{
       const sav = tip.potential_savings_eur > 0
-        ? '<div style="color:#4caf50;font-size:12px;margin-top:4px">💰 ' + tip.potential_savings_eur.toFixed(0) + ' €/Jahr</div>'
+        ? '<div style="color:#4caf50;font-size:12px;margin-top:4px">💰 ' + tip.potential_savings_eur.toFixed(0) + ' €/year</div>'
         : '';
       html += '<div class="card"><div class="card-title">' + tip.icon + ' ' + esc(tip.title) + '</div>' +
         '<div style="color:var(--muted);font-size:12px">' + esc(tip.description) + '</div>' + sav + '</div>';
@@ -7579,7 +7579,7 @@ _loadLsSettings();
   /* ── Goals & Gamification ── */
   async function loadGoals() {{
     const el = document.getElementById('goals-content');
-    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Lade\u2026') + '</p>';
+    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
     try {{
       const r = await fetch('/api/goals');
       if (!r.ok) throw new Error(r.status);
@@ -7629,8 +7629,8 @@ _loadLsSettings();
     if (!fire) fire = '\u2744\ufe0f';
     html += '<div class="card" style="text-align:center;margin-bottom:10px">';
     html += '<div style="font-size:24px">' + fire + '</div>';
-    html += '<div style="font-size:20px;font-weight:700">' + (s.current_days || 0) + ' ' + t('web.goals.streak_days', 'Tage Serie') + '</div>';
-    html += '<div style="font-size:11px;color:var(--muted)">' + t('web.goals.best_streak', 'Best') + ': ' + (s.best_days || 0) + ' ' + t('web.goals.days', 'Tage') + '</div>';
+    html += '<div style="font-size:20px;font-weight:700">' + (s.current_days || 0) + ' ' + t('web.goals.streak_days', 'Day streak') + '</div>';
+    html += '<div style="font-size:11px;color:var(--muted)">' + t('web.goals.best_streak', 'Best') + ': ' + (s.best_days || 0) + ' ' + t('web.goals.days', 'Days') + '</div>';
     html += '</div>';
 
     // ── Goal cards (weekly + monthly) ────────────────────────
@@ -7638,52 +7638,52 @@ _loadLsSettings();
     // Weekly
     html += '<div class="card">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center">';
-    html += '<div class="card-title">\U0001f4c5 ' + t('web.goals.weekly', 'Wochenziel') + '</div>';
+    html += '<div class="card-title">\U0001f4c5 ' + t('web.goals.weekly', 'Weekly goal') + '</div>';
     html += '<span style="font-size:18px">' + (wg.achieved ? '\u2705' : '\u23f3') + '</span></div>';
     html += '<div style="font-size:22px;font-weight:700;margin:6px 0">' + (wg.actual_kwh||0).toFixed(1) + ' <span style="font-size:14px;color:var(--muted)">/ ' + (wg.target_kwh||0).toFixed(1) + ' kWh</span></div>';
     html += _glBar(wg.progress_pct||0, 10);
     html += '<div style="font-size:11px;color:var(--muted);margin-top:4px">';
     if (wg.achieved) html += '\u2705 ' + t('web.goals.achieved', 'Ziel erreicht!') + ' \u2013 ' + (wg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.saved', 'gespart');
-    else html += '\u23f3 ' + t('web.goals.remaining', 'Noch') + ' ' + (wg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.to_go', '\u00fcbrig');
+    else html += '\u23f3 ' + t('web.goals.remaining', 'Noch') + ' ' + (wg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.to_go', 'to go');
     html += '</div></div>';
     // Monthly
     html += '<div class="card">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center">';
-    html += '<div class="card-title">\U0001f4c6 ' + t('web.goals.monthly', 'Monatsziel') + '</div>';
+    html += '<div class="card-title">\U0001f4c6 ' + t('web.goals.monthly', 'Monthly goal') + '</div>';
     html += '<span style="font-size:18px">' + (mg.achieved ? '\u2705' : '\u23f3') + '</span></div>';
     html += '<div style="font-size:22px;font-weight:700;margin:6px 0">' + (mg.actual_kwh||0).toFixed(1) + ' <span style="font-size:14px;color:var(--muted)">/ ' + (mg.target_kwh||0).toFixed(1) + ' kWh</span></div>';
     html += _glBar(mg.progress_pct||0, 10);
     html += '<div style="font-size:11px;color:var(--muted);margin-top:4px">';
     if (mg.achieved) html += '\u2705 ' + t('web.goals.achieved', 'Ziel erreicht!') + ' \u2013 ' + (mg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.saved', 'gespart');
-    else html += '\u23f3 ' + t('web.goals.remaining', 'Noch') + ' ' + (mg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.to_go', '\u00fcbrig');
+    else html += '\u23f3 ' + t('web.goals.remaining', 'Noch') + ' ' + (mg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.to_go', 'to go');
     html += '</div></div>';
     html += '</div>';
 
     // ── Statistics overview ──────────────────────────────────
     var sav = data.savings_eur || {{}};
     html += '<div class="nilm-metrics" style="margin-top:10px">';
-    html += _glCard('\U0001f4ca', t('web.goals.avg_daily', 'Tages\u00f8'), (data.avg_daily_kwh||0).toFixed(1) + ' kWh', '');
-    html += _glCard('\U0001f3af', t('web.goals.target', 'Tagesziel'), (data.daily_target_kwh||0).toFixed(1) + ' kWh', '90% vom \u00f8');
-    html += _glCard('\u2705', t('web.goals.days_under', 'Tage unter Ziel'), (data.days_under_target||0) + ' / ' + (data.days_total||0), '');
-    html += _glCard('\U0001f4b0', t('web.goals.saved_eur', 'Gespart'), (sav.weekly||0).toFixed(2) + ' \u20ac/W \u2022 ' + (sav.monthly||0).toFixed(2) + ' \u20ac/M', sav.price_kwh ? sav.price_kwh.toFixed(2) + ' \u20ac/kWh' : '');
+    html += _glCard('\U0001f4ca', t('web.goals.avg_daily', 'Daily Ø'), (data.avg_daily_kwh||0).toFixed(1) + ' kWh', '');
+    html += _glCard('\U0001f3af', t('web.goals.target', 'Daily target'), (data.daily_target_kwh||0).toFixed(1) + ' kWh', '90% of Ø');
+    html += _glCard('\u2705', t('web.goals.days_under', 'Days under target'), (data.days_under_target||0) + ' / ' + (data.days_total||0), '');
+    html += _glCard('\U0001f4b0', t('web.goals.saved_eur', 'Saved'), (sav.weekly||0).toFixed(2) + ' \u20ac/W \u2022 ' + (sav.monthly||0).toFixed(2) + ' \u20ac/M', sav.price_kwh ? sav.price_kwh.toFixed(2) + ' \u20ac/kWh' : '');
     html += '</div>';
 
     // ── Daily chart (30 days) ────────────────────────────────
     if (data.daily_history && data.daily_history.length > 0) {{
-      html += '<div class="card" style="margin-top:10px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">' + t('web.goals.daily_chart', '30-Tage Verbrauch') + '</div>';
+      html += '<div class="card" style="margin-top:10px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">' + t('web.goals.daily_chart', '30-day consumption') + '</div>';
       html += '<canvas id="gl-daily-chart" style="width:100%;height:200px"></canvas></div>';
     }}
 
     // ── Weekly trend chart ───────────────────────────────────
     if (data.weekly_history && data.weekly_history.length > 0) {{
-      html += '<div class="card" style="margin-top:10px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">' + t('web.goals.weekly_chart', 'Wochentrend') + '</div>';
+      html += '<div class="card" style="margin-top:10px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">' + t('web.goals.weekly_chart', 'Weekly trend') + '</div>';
       html += '<canvas id="gl-weekly-chart" style="width:100%;height:180px"></canvas></div>';
     }}
 
     // ── Best / Worst days ────────────────────────────────────
     if (data.best_days && data.best_days.length > 0) {{
       html += '<div class="nilm-two-col" style="margin-top:10px">';
-      html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">\U0001f3c6 ' + t('web.goals.best_days', 'Top 10 beste Tage') + '</div>';
+      html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">\U0001f3c6 ' + t('web.goals.best_days', 'Top 10 best days') + '</div>';
       data.best_days.forEach(function(d, i) {{
         var medal = ['\U0001f947','\U0001f948','\U0001f949'][i] || '\U0001f539';
         var pct = data.daily_target_kwh > 0 ? Math.round(d.kwh / data.daily_target_kwh * 100) : 0;
@@ -7693,7 +7693,7 @@ _loadLsSettings();
       }});
       html += '</div>';
       if (data.worst_days && data.worst_days.length > 0) {{
-        html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">\U0001f4a5 ' + t('web.goals.worst_days', 'Top 5 schlechteste Tage') + '</div>';
+        html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">\U0001f4a5 ' + t('web.goals.worst_days', 'Top 5 worst days') + '</div>';
         data.worst_days.forEach(function(d) {{
           var pct = data.daily_target_kwh > 0 ? Math.round(d.kwh / data.daily_target_kwh * 100) : 0;
           html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);font-size:12px">';
@@ -8321,7 +8321,7 @@ async function fetchJsonWithTimeout(url, timeoutMs=60000){
       // Distinguish user-triggered supersede from real timeout
       const reason = (ctrl.signal && ctrl.signal.reason) || '';
       if (reason === 'superseded') { const err = new Error('__superseded__'); err.superseded = true; throw err; }
-      throw new Error('Zeitüberschreitung (' + Math.round(timeoutMs/1000) + 's) – Zeitbereich verkleinern');
+      throw new Error('Timeout (' + Math.round(timeoutMs/1000) + 's) — reduce time range');
     }
     throw e;
   } finally {
@@ -9718,7 +9718,7 @@ function _ctrlFileCard(f) {
       <div style="font-size:13px;font-weight:600;word-break:break-all">${name}</div>
       <div style="font-size:11px;color:var(--muted)">${ext}</div>
     </div>
-    <a href="${url}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:8px 16px;border-radius:10px;border:1px solid rgba(106,167,255,0.35);background:rgba(106,167,255,0.12);color:var(--accent);text-decoration:none;font-weight:600;white-space:nowrap;min-height:40px">Öffnen</a>
+    <a href="${url}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:8px 16px;border-radius:10px;border:1px solid rgba(106,167,255,0.35);background:rgba(106,167,255,0.12);color:var(--accent);text-decoration:none;font-weight:600;white-space:nowrap;min-height:40px">Open</a>
   </div>`;
 }
 function showResults(files) {
@@ -10983,12 +10983,12 @@ class LiveWebDashboard:
                 "web_ev_save": _t(self.lang, "web.ev.save"),
                 "web_tab_export": _t(self.lang, "web.tab.export"),
                 # New feature pane titles
-                "smart_sched_title": _t(self.lang, "smart_sched.title") if _t(self.lang, "smart_sched.title") != "smart_sched.title" else "Smart-Zeitplanung",
-                "ev_log_title": _t(self.lang, "ev_log.title") if _t(self.lang, "ev_log.title") != "ev_log.title" else "E-Auto Ladeprotokoll",
-                "tariff_title": _t(self.lang, "tariff.title") if _t(self.lang, "tariff.title") != "tariff.title" else "Tarifvergleich",
-                "battery_title": _t(self.lang, "battery.title") if _t(self.lang, "battery.title") != "battery.title" else "Batteriespeicher",
-                "advisor_title": _t(self.lang, "advisor.title") if _t(self.lang, "advisor.title") != "advisor.title" else "KI-Energieberater",
-                "goals_title": _t(self.lang, "goals.title") if _t(self.lang, "goals.title") != "goals.title" else "Ziele & Erfolge",
+                "smart_sched_title": _t(self.lang, "smart_sched.title") if _t(self.lang, "smart_sched.title") != "smart_sched.title" else "Smart scheduling",
+                "ev_log_title": _t(self.lang, "ev_log.title") if _t(self.lang, "ev_log.title") != "ev_log.title" else "EV charge log",
+                "tariff_title": _t(self.lang, "tariff.title") if _t(self.lang, "tariff.title") != "tariff.title" else "Tariff comparison",
+                "battery_title": _t(self.lang, "battery.title") if _t(self.lang, "battery.title") != "battery.title" else "Battery storage",
+                "advisor_title": _t(self.lang, "advisor.title") if _t(self.lang, "advisor.title") != "advisor.title" else "AI energy advisor",
+                "goals_title": _t(self.lang, "goals.title") if _t(self.lang, "goals.title") != "goals.title" else "Goals & achievements",
                 # Export pane
                 "exp_daterange": _t(self.lang, "web.control.export.daterange"),
                 "exp_from": _t(self.lang, "web.control.plots.from"),

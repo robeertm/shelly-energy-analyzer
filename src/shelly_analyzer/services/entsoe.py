@@ -1089,7 +1089,7 @@ class Co2FetchService:
         try:
             deleted = self._db.delete_estimated_co2(zone, recent_cutoff)
             if deleted:
-                self._svc_log(f"CO₂ Bereinigung: {deleted} alte Schätzwerte entfernt")
+                self._svc_log(f"CO₂ cleanup: removed {deleted} old estimated values")
         except Exception:
             pass
 
@@ -1213,8 +1213,8 @@ class Co2FetchService:
                         if attempt < max_retries:
                             wait_s = attempt * 30  # 30s, 60s backoff
                             self._svc_log(
-                                f"    Fehler (Versuch {attempt}/{max_retries}): {exc} – "
-                                f"Wiederholung in {wait_s}s..."
+                                f"    Error (attempt {attempt}/{max_retries}): {exc} – "
+                                f"retrying in {wait_s}s..."
                             )
                             logger.warning(
                                 "Co2FetchService: chunk %s→%s attempt %d/%d failed: %s",
@@ -1223,8 +1223,8 @@ class Co2FetchService:
                             self._stop_event.wait(wait_s)
                         else:
                             self._svc_log(
-                                f"    Fehler (Versuch {attempt}/{max_retries}): {exc} – "
-                                f"Chunk übersprungen, fahre mit nächstem fort."
+                                f"    Error (attempt {attempt}/{max_retries}): {exc} – "
+                                f"chunk skipped, continuing with next one."
                             )
                             logger.warning(
                                 "Co2FetchService: chunk %s→%s failed after %d retries, skipping",
@@ -1238,7 +1238,7 @@ class Co2FetchService:
                 cursor = chunk_end
 
         if total_written:
-            self._svc_log(f"CO₂ Import: {total_written} Werte gespeichert")
+            self._svc_log(f"CO₂ import: stored {total_written} values")
             logger.info("Co2FetchService: stored %d intensity points", total_written)
 
         # Recent gaps are filled by Co2ForecastService (trend + Open-Meteo
@@ -1254,13 +1254,13 @@ class Co2FetchService:
         if failed_ranges:
             n = len(failed_ranges)
             self._svc_log(
-                f"CO₂ Import abgeschlossen mit {n} fehlgeschlagenen Chunk(s) – "
-                f"Lücken wurden mit Schätzwerten aufgefüllt"
+                f"CO₂ import finished with {n} failed chunk(s) – "
+                f"gaps filled with estimated values"
             )
         elif total_written == 0 and not failed_ranges:
-            self._svc_log("CO₂ Import abgeschlossen: 0 Werte – keine Daten empfangen")
+            self._svc_log("CO₂ import finished: 0 values – no data received")
         else:
-            self._svc_log("CO₂ Import abgeschlossen")
+            self._svc_log("CO₂ import finished")
         self._last_fetch_ts = time.time()
 
         # ── Fuel mix backfill ─────────────────────────────────────────────
@@ -1313,10 +1313,10 @@ class Co2FetchService:
                                             self._latest_mix_hour = latest_h
                                             self._latest_mix = hour_mix
                             except Exception as exc:
-                                self._svc_log(f"    Fehler: {exc}")
+                                self._svc_log(f"    Error: {exc}")
                         mix_cursor = mix_chunk_end
                     if mix_written:
-                        self._svc_log(f"Kraftwerksmix: {mix_written} Stunden nachgeladen")
+                        self._svc_log(f"Generation mix: {mix_written} hours backfilled")
             except Exception as exc:
-                self._svc_log(f"Kraftwerksmix Backfill fehlgeschlagen: {exc}")
+                self._svc_log(f"Generation mix backfill failed: {exc}")
                 logger.warning("Fuel mix backfill failed: %s", exc)
