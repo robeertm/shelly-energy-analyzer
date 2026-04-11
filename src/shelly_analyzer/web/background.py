@@ -53,6 +53,12 @@ class BackgroundServiceManager:
         self._stop_event = threading.Event()
         self._autosync_thread: Optional[threading.Thread] = None
 
+        # Latest result from the periodic GitHub update check. Written by the
+        # update-check thread, read by /api/updates/cached for the Live-tab
+        # banner. None means "not checked yet".
+        self._update_check_state: Optional[Dict[str, Any]] = None
+        self._update_check_thread: Optional[threading.Thread] = None
+
         # Today kWh tracking per device (trapezoid integration of power samples)
         # state[device_key] = {"date": date, "kwh": float, "last_ts": int, "last_p": float}
         self._today_state: Dict[str, Dict[str, Any]] = {}
@@ -82,6 +88,7 @@ class BackgroundServiceManager:
         self._start_co2_fetcher()
         self._start_spot_fetcher()
         self._start_summary_scheduler()
+        self._start_update_checker()
         self._write_runtime_devices_meta()
         logger.info("All background services started")
 
@@ -583,13 +590,41 @@ class BackgroundServiceManager:
     # ── CO2 / Spot fetchers ────────────────────────────────────────────
 
     def _start_co2_fetcher(self) -> None:
-        """Start periodic ENTSO-E CO₂ intensity fetch if enabled."""
+        """Start periodic CO₂ intensity fetch if enabled. Dispatches to
+        Electricity Maps for global zones (hyphen form, API key set) or
+        ENTSO-E for EU zones (underscore form)."""
         co2_cfg = getattr(self.cfg, "co2", None)
         if co2_cfg is None or not getattr(co2_cfg, "enabled", False):
             logger.debug("CO2 fetcher disabled")
             return
-        if not (getattr(co2_cfg, "entso_e_api_token", "") or ""):
-            logger.warning("CO2 enabled but no ENTSO-E token configured")
+
+        zone = str(getattr(co2_cfg, "bidding_zone", "") or "")
+        em_key = str(getattr(co2_cfg, "electricity_maps_api_key", "") or "")
+        entsoe_token = str(getattr(co2_cfg, "entso_e_api_token", "") or "")
+
+        # Electricity Maps zones are hyphen-coded (no underscores). If the
+        # zone looks global and a key is present, use Electricity Maps
+        # instead of ENTSO-E.
+        use_electricity_maps = bool(em_key) and ("_" not in zone) and zone
+        if use_electricity_maps:
+            try:
+                from shelly_analyzer.services.electricity_maps import ElectricityMapsFetchService
+                self._co2_fetcher = ElectricityMapsFetchService(
+                    db=self.storage.db,
+                    get_config=lambda: self.cfg,
+                )
+                self._co2_fetcher.start()
+                self._co2_fetcher.trigger_now()
+                logger.info("CO2 fetcher started via Electricity Maps (zone=%s)", zone)
+                return
+            except Exception as e:
+                logger.exception("Electricity Maps fetcher failed to start: %s", e)
+
+        if not entsoe_token:
+            logger.warning(
+                "CO2 enabled but no provider available: zone=%s, entso_e_token=%s, em_key=%s",
+                zone, bool(entsoe_token), bool(em_key),
+            )
             return
         try:
             from shelly_analyzer.services.entsoe import Co2FetchService
@@ -600,8 +635,8 @@ class BackgroundServiceManager:
             self._co2_fetcher.start()
             # Trigger immediately so we have data shortly after startup
             self._co2_fetcher.trigger_now()
-            logger.info("CO2 fetcher started (zone=%s, interval=%sh)",
-                        getattr(co2_cfg, "bidding_zone", "?"),
+            logger.info("CO2 fetcher started via ENTSO-E (zone=%s, interval=%sh)",
+                        zone or "?",
                         getattr(co2_cfg, "fetch_interval_hours", 1))
         except Exception as e:
             logger.exception("CO2 fetcher failed to start: %s", e)
@@ -624,6 +659,74 @@ class BackgroundServiceManager:
                         getattr(spot_cfg, "bidding_zone", "?"))
         except Exception as e:
             logger.exception("Spot-price fetcher failed to start: %s", e)
+
+    # ── Periodic Update Check ──────────────────────────────────────────
+
+    def _start_update_checker(self) -> None:
+        """Periodically query GitHub for the latest release and cache the
+        result so the Live-tab banner can surface new versions without
+        hitting the network on every page load."""
+        upd_cfg = getattr(self.cfg, "updates", None)
+        if upd_cfg is None or not getattr(upd_cfg, "check_on_start", True):
+            logger.debug("Update checker disabled via config")
+            return
+        self._update_check_thread = threading.Thread(
+            target=self._update_check_loop, name="UpdateChecker", daemon=True,
+        )
+        self._update_check_thread.start()
+        logger.info("Update checker started")
+
+    def _update_check_loop(self) -> None:
+        """Run an initial check ~15s after startup, then re-check every 6h."""
+        from shelly_analyzer import __version__
+        from shelly_analyzer.services.updater import check_latest_release, is_newer
+
+        # Delay the first check so the app is fully up and /api/state is
+        # serving before we hit the network.
+        if self._stop_event.wait(15.0):
+            return
+
+        while not self._stop_event.is_set():
+            try:
+                repo = str(getattr(getattr(self.cfg, "updates", None), "repo", "") or "").strip()
+                if not repo:
+                    self._update_check_state = {
+                        "ok": False, "error": "updates.repo not configured",
+                        "current": __version__,
+                        "checked_at": int(time.time()),
+                    }
+                else:
+                    info = check_latest_release(repo)
+                    self._update_check_state = {
+                        "ok": True,
+                        "current": __version__,
+                        "repo": repo,
+                        "reachable": info.reachable,
+                        "status": info.status,
+                        "latest_tag": info.latest_tag,
+                        "has_update": bool(
+                            info.latest_tag and is_newer(info.latest_tag, __version__)
+                        ),
+                        "asset_url": info.asset_url,
+                        "asset_name": info.asset_name,
+                        "checked_at": int(time.time()),
+                    }
+                    if self._update_check_state.get("has_update"):
+                        logger.info(
+                            "Update available: %s (current %s)",
+                            info.latest_tag, __version__,
+                        )
+            except Exception as e:
+                logger.warning("Update check failed: %s", e)
+                self._update_check_state = {
+                    "ok": False, "error": str(e),
+                    "current": __version__,
+                    "checked_at": int(time.time()),
+                }
+
+            # Re-check every 6 hours. Break out immediately on shutdown.
+            if self._stop_event.wait(6 * 3600):
+                return
 
     # ── Runtime metadata ───────────────────────────────────────────────
 

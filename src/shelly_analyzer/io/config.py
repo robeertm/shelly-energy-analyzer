@@ -406,10 +406,24 @@ class AnomalyConfig:
 
 @dataclass(frozen=True)
 class Co2Config:
-    """ENTSO-E CO₂ intensity integration settings."""
+    """Grid CO₂ intensity integration settings.
+
+    Two providers are supported:
+
+    - **ENTSO-E** (EU only, zones use underscore form like ``DE_LU``).
+      Requires a free API token from transparency.entsoe.eu.
+    - **Electricity Maps** (global, zones use hyphen form like ``US-CAL-CISO``,
+      ``JP-TK``). Requires a free API key from electricitymap.org.
+
+    The fetch service dispatches to Electricity Maps automatically when
+    the selected zone does not contain an underscore AND an Electricity
+    Maps API key is configured; otherwise it uses ENTSO-E.
+    """
     enabled: bool = False
     entso_e_api_token: str = ""
-    # ENTSO-E bidding zone (e.g. "DE_LU", "AT", "CH", "FR", "PL", ...)
+    # Electricity Maps API key (free tier at https://api.electricitymap.org)
+    electricity_maps_api_key: str = ""
+    # Bidding / Electricity-Maps zone. EU default uses the ENTSO-E format.
     bidding_zone: str = "DE_LU"
     # How often to fetch new data from the ENTSO-E API (hours)
     fetch_interval_hours: int = 1
@@ -430,10 +444,16 @@ class Co2Config:
 class SpotPriceConfig:
     """Dynamic spot market electricity price settings."""
     enabled: bool = False
-    # Primary API: "energy_charts" (15-min from Oct 2025) or "awattar" (hourly, from 2015)
+    # Primary API: "energy_charts" (EU, 15-min from Oct 2025), "awattar" (DE/AT,
+    # hourly from 2015), "eia" (US wholesale daily, needs API key), or "aemo"
+    # (Australian NEM, 30-min rolling window, no key).
     primary_api: str = "energy_charts"
-    # Bidding zone for Energy-Charts API (DE-LU, AT, etc.)
+    # Bidding zone. Format depends on provider: "DE-LU", "AT", ... for EU,
+    # "US-CAL" / "US-TEX" / ... for the US, "AU-NSW" / "AU-VIC" / ... for AU.
     bidding_zone: str = "DE-LU"
+    # Free API key registered at https://www.eia.gov/opendata/ — required
+    # only when a US- prefixed zone is selected.
+    eia_api_key: str = ""
     # How often to fetch new prices (hours)
     fetch_interval_hours: int = 1
     # Detailed markup breakdown (all in ct/kWh, net, excl. VAT)
@@ -1072,6 +1092,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     co2 = Co2Config(
         enabled=bool(co2_raw.get("enabled", Co2Config.enabled)),
         entso_e_api_token=str(co2_raw.get("entso_e_api_token", Co2Config.entso_e_api_token) or ""),
+        electricity_maps_api_key=str(co2_raw.get("electricity_maps_api_key", Co2Config.electricity_maps_api_key) or ""),
         bidding_zone=str(co2_raw.get("bidding_zone", Co2Config.bidding_zone) or "DE_LU"),
         fetch_interval_hours=_coerce_int(co2_raw.get("fetch_interval_hours", Co2Config.fetch_interval_hours), Co2Config.fetch_interval_hours),
         backfill_days=_coerce_int(co2_raw.get("backfill_days", Co2Config.backfill_days), Co2Config.backfill_days),
@@ -1089,6 +1110,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         enabled=bool(spot_raw.get("enabled", SpotPriceConfig.enabled)),
         primary_api=str(spot_raw.get("primary_api", SpotPriceConfig.primary_api) or "energy_charts"),
         bidding_zone=str(spot_raw.get("bidding_zone", SpotPriceConfig.bidding_zone) or "DE-LU"),
+        eia_api_key=str(spot_raw.get("eia_api_key", SpotPriceConfig.eia_api_key) or ""),
         fetch_interval_hours=_coerce_int(spot_raw.get("fetch_interval_hours", SpotPriceConfig.fetch_interval_hours), SpotPriceConfig.fetch_interval_hours),
         grid_fee_ct=_coerce_float(spot_raw.get("grid_fee_ct", SpotPriceConfig.grid_fee_ct if _has_breakdown else (max(0, _legacy_markup - 7.5) if _legacy_markup > 0 else SpotPriceConfig.grid_fee_ct)), SpotPriceConfig.grid_fee_ct),
         electricity_tax_ct=_coerce_float(spot_raw.get("electricity_tax_ct", SpotPriceConfig.electricity_tax_ct), SpotPriceConfig.electricity_tax_ct),
@@ -1628,6 +1650,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
         "co2": {
             "enabled": bool(getattr(cfg.co2, "enabled", False)),
             "entso_e_api_token": str(getattr(cfg.co2, "entso_e_api_token", "") or ""),
+            "electricity_maps_api_key": str(getattr(cfg.co2, "electricity_maps_api_key", "") or ""),
             "bidding_zone": str(getattr(cfg.co2, "bidding_zone", "DE_LU") or "DE_LU"),
             "fetch_interval_hours": int(getattr(cfg.co2, "fetch_interval_hours", 1)),
             "backfill_days": int(getattr(cfg.co2, "backfill_days", 7)),
@@ -1640,6 +1663,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "enabled": bool(getattr(cfg.spot_price, "enabled", False)),
             "primary_api": str(getattr(cfg.spot_price, "primary_api", "energy_charts") or "energy_charts"),
             "bidding_zone": str(getattr(cfg.spot_price, "bidding_zone", "DE-LU") or "DE-LU"),
+            "eia_api_key": str(getattr(cfg.spot_price, "eia_api_key", "") or ""),
             "fetch_interval_hours": int(getattr(cfg.spot_price, "fetch_interval_hours", 1)),
             "grid_fee_ct": float(getattr(cfg.spot_price, "grid_fee_ct", 8.50)),
             "electricity_tax_ct": float(getattr(cfg.spot_price, "electricity_tax_ct", 2.05)),

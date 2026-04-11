@@ -122,18 +122,36 @@ let cfg = {};
 let devices = [];
 let I18N = {};
 // Populated once per page load from /api/zones. Each entry is a list of
-// [value, label] pairs. Used by select-dyn fields to render their options.
-let ZONES = {spot_energy_charts: [], spot_awattar: [], co2: []};
+// [value, label] pairs; the *_grouped variants are lists of
+// [group-name, [[value, label], ...]] for <optgroup> rendering.
+let ZONES = {
+  spot_energy_charts: [], spot_awattar: [], spot_aemo: [], spot_eia: [],
+  spot_grouped: [], co2: [], co2_grouped: [],
+};
+// Return either a flat [[k,v],...] list or a grouped
+// [[groupName, [[k,v],...]], ...] list — the renderer detects the shape.
 function _dynOpts(f) {
   if (!f || !f.dynSrc) return [];
-  if (f.dynSrc === "co2") return ZONES.co2 || [];
+  if (f.dynSrc === "co2") {
+    if (ZONES.co2_grouped && ZONES.co2_grouped.length) return ZONES.co2_grouped;
+    return ZONES.co2 || [];
+  }
   if (f.dynSrc === "spot") {
-    // Dependent on the selected API: Energy-Charts covers all EU zones,
-    // aWATTar only DE/AT.
+    // aWATTar is a special case: if the user explicitly picked aWATTar,
+    // only show DE/AT; otherwise show the full grouped global list so
+    // they can also pick US / AU zones.
     const api = (cfg && cfg.spot_price && cfg.spot_price.primary_api) || "energy_charts";
-    return api === "awattar" ? (ZONES.spot_awattar || []) : (ZONES.spot_energy_charts || []);
+    if (api === "awattar") return ZONES.spot_awattar || [];
+    if (ZONES.spot_grouped && ZONES.spot_grouped.length) return ZONES.spot_grouped;
+    return ZONES.spot_energy_charts || [];
   }
   return [];
+}
+// Detect whether an options list is grouped ([[name,[[k,v],...]], ...])
+// or flat ([[k,v],...]). Grouped lists have nested arrays at index 1.
+function _isGroupedOpts(opts) {
+  return opts && opts.length > 0 && Array.isArray(opts[0]) && Array.isArray(opts[0][1])
+    && opts[0][1].length > 0 && Array.isArray(opts[0][1][0]);
 }
 // t(key, fallback) – looks up in I18N, falls back to the German literal if missing.
 // This lets the page stay fully German-out-of-the-box and progressively add translations.
@@ -412,10 +430,11 @@ const SECTIONS = [
       {key:"min_power_w", label:"Min. Leistung (W)", type:"number"},
     ], defaults:{name:"",device_key:"",switch_id:0,priority:1,min_power_w:500}},
   ]},
-  {id:"spot_price", title:"Spot-Preise (Details)", group:"Energie", hint:"Tarif-Modell (Fix/Dynamisch) wird unter Preise und Tarif eingestellt.", fields:[
+  {id:"spot_price", title:"Spot-Preise (Details)", group:"Energie", hint:"Tarif-Modell (Fix/Dynamisch) wird unter Preise und Tarif eingestellt. Zone wählen → passender Provider wird automatisch genutzt (EU → Energy-Charts, US → EIA, AU → AEMO).", fields:[
     {key:"spot_price.enabled", label:"Spot-Preise aktiv", type:"checkbox", hint:"Wird automatisch gesetzt wenn Tarif-Modell = Dynamisch"},
-    {key:"spot_price.primary_api", label:"API", type:"select", opts:[["energy_charts","Energy-Charts"],["awattar","aWATTar"]]},
-    {key:"spot_price.bidding_zone", label:"Gebotszone", type:"select-dyn", dynSrc:"spot", hint:"Abhängig vom gewählten API (Energy-Charts: alle EU-Zonen; aWATTar: nur DE/AT)"},
+    {key:"spot_price.primary_api", label:"API (EU)", type:"select", opts:[["energy_charts","Energy-Charts (alle EU)"],["awattar","aWATTar (nur DE/AT)"]], hint:"Nur relevant für EU-Zonen; US- und AU-Zonen nutzen EIA bzw. AEMO automatisch"},
+    {key:"spot_price.bidding_zone", label:"Gebotszone", type:"select-dyn", dynSrc:"spot", hint:"Weltweite Zonen. Werte außerhalb der EU werden per Tages-Wechselkurs in EUR/MWh konvertiert."},
+    {key:"spot_price.eia_api_key", label:"EIA API-Key (nur USA)", type:"password", hint:"Kostenlos unter eia.gov/opendata/register.php – nur nötig für US-Zonen"},
     {key:"spot_price.fetch_interval_hours", label:"Intervall (Std)", type:"number"},
     {key:"spot_price.tariff_type", label:"Tarif-Typ", type:"select", opts:[["fixed","Fix"],["dynamic","Dynamisch"]], hint:"Spiegelt die Einstellung aus Preise & Tarif"},
     {key:"spot_price.include_vat", label:"MwSt. aufschlagen", type:"checkbox"},
@@ -428,9 +447,10 @@ const SECTIONS = [
     {key:"spot_price.offshore_surcharge_ct", label:"Offshore (ct)", type:"number", step:"0.01"},
     {key:"spot_price.supplier_margin_ct", label:"Anbieter-Marge (ct)", type:"number", step:"0.01"},
   ]},
-  {id:"co2", title:"CO₂ / ENTSO-E", group:"Energie", fields:[
+  {id:"co2", title:"CO₂ / ENTSO-E + Electricity Maps", group:"Energie", hint:"EU-Zonen (Format DE_LU, AT, …) nutzen ENTSO-E (eigener Token). Globale Zonen (Format DE, US-CAL-CISO, JP-TK, …) nutzen Electricity Maps (freier API-Key).", fields:[
     {key:"co2.enabled", label:"CO₂-Tracking aktiv", type:"checkbox"},
-    {key:"co2.entso_e_api_token", label:"ENTSO-E Token", type:"password"},
+    {key:"co2.entso_e_api_token", label:"ENTSO-E Token (EU)", type:"password", hint:"Kostenlos unter transparency.entsoe.eu – nur für EU-Zonen"},
+    {key:"co2.electricity_maps_api_key", label:"Electricity Maps API-Key (global)", type:"password", hint:"Kostenlos unter api.electricitymap.org – für weltweite Zonen"},
     {key:"co2.bidding_zone", label:"Zone", type:"select-dyn", dynSrc:"co2"},
     {key:"co2.fetch_interval_hours", label:"Intervall (Std)", type:"number"},
     {key:"co2.backfill_days", label:"Backfill (Tage)", type:"number"},
@@ -611,15 +631,36 @@ function renderField(f) {
     } else if (f.type === "select-dyn") {
       opts = _dynOpts(f) || [];
     }
-    // If the saved value isn't in the options list, prepend it as a
-    // "(current: xyz)" row so the user can still see + change it
-    // instead of silently falling back to the first option.
-    const haveVal = opts.some(([k,_]) => String(k) === String(val));
-    if (!haveVal && val !== "" && val != null) {
-      opts = [[val, "(" + String(val) + ")"]].concat(opts);
+    // Grouped options: emit <optgroup> elements. Preserve the
+    // "current value not in list" fallback at the top.
+    if (_isGroupedOpts(opts)) {
+      const allFlat = [];
+      opts.forEach(g => { (g[1]||[]).forEach(kv => allFlat.push(kv)); });
+      const haveVal = allFlat.some(([k,_]) => String(k) === String(val));
+      let optionsHtml = "";
+      if (!haveVal && val !== "" && val != null) {
+        optionsHtml += `<option value="${esc(val)}" selected>(${esc(val)})</option>`;
+      }
+      opts.forEach(g => {
+        const gName = g[0] || "";
+        const gOpts = g[1] || [];
+        optionsHtml += `<optgroup label="${esc(gName)}">`;
+        gOpts.forEach(([k,v]) => {
+          const sel = String(k) === String(val) ? "selected" : "";
+          optionsHtml += `<option value="${esc(k)}" ${sel}>${esc(v)}</option>`;
+        });
+        optionsHtml += `</optgroup>`;
+      });
+      input = `<select data-key="${f.key}">${optionsHtml}</select>`;
+    } else {
+      // Flat list — unchanged behavior.
+      const haveVal = opts.some(([k,_]) => String(k) === String(val));
+      if (!haveVal && val !== "" && val != null) {
+        opts = [[val, "(" + String(val) + ")"]].concat(opts);
+      }
+      const options = opts.map(([k,v])=>`<option value="${k}" ${String(k)===String(val)?"selected":""}>${v}</option>`).join("");
+      input = `<select data-key="${f.key}">${options}</select>`;
     }
-    const options = opts.map(([k,v])=>`<option value="${k}" ${String(k)===String(val)?"selected":""}>${v}</option>`).join("");
-    input = `<select data-key="${f.key}">${options}</select>`;
   } else if (f.type === "textarea") {
     input = `<textarea data-key="${f.key}">${(val===null||val===undefined)?"":String(val)}</textarea>`;
   } else if (f.type === "list") {

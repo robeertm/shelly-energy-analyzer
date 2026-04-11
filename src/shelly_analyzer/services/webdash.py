@@ -1609,6 +1609,12 @@ _HTML_TEMPLATE = """<!doctype html>
   <div id="panes">
     <!-- Live -->
     <div id="pane-live" class="pane active">
+      <div id="update-banner" style="display:none;margin:0 0 10px 0;padding:10px 14px;border-radius:10px;background:linear-gradient(90deg,#3b82f6,#22c55e);color:#fff;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15)" onclick="goToUpdates()">
+        <span style="font-size:16px">⬆</span>
+        <strong id="update-banner-title">Neue Version verfügbar</strong>
+        <span id="update-banner-tag" style="margin-left:6px;font-weight:600"></span>
+        <span style="opacity:0.85;margin-left:10px">→ Einstellungen öffnen</span>
+      </div>
       <div id="live-timescale" style="display:flex;gap:6px;flex-wrap:wrap;padding:0 0 8px 0"></div>
       <div id="live-grid" class="card-grid"></div>
     </div>
@@ -3049,6 +3055,41 @@ async function tick(first) {{
   }} catch(e) {{
     // silent retry
   }}
+}}
+
+/* ── Update check banner ──────────────────────────────────────────────
+   Polls /api/updates/cached (background-thread result, no network call)
+   on startup and every 30 minutes. When a newer GitHub release is
+   detected, shows a banner at the top of the Live pane. Clicking it
+   jumps directly to the Updates section on the settings page. */
+function goToUpdates() {{
+  window.location.href = '/settings#sec-updates';
+}}
+async function checkForUpdateBanner() {{
+  try {{
+    const r = await fetch('/api/updates/cached', {{ cache: 'no-store' }});
+    if (!r.ok) return;
+    const j = await r.json();
+    const banner = document.getElementById('update-banner');
+    if (!banner) return;
+    if (j && j.has_update && j.latest_tag) {{
+      const tag = document.getElementById('update-banner-tag');
+      if (tag) tag.textContent = 'v' + String(j.latest_tag).replace(/^v/i, '');
+      banner.style.display = 'block';
+    }} else {{
+      banner.style.display = 'none';
+    }}
+  }} catch(e) {{ /* silent */ }}
+}}
+let _updateBannerTimer = null;
+function startUpdateBannerPolling() {{
+  if (_updateBannerTimer) return;
+  // First check after a short delay so the background thread has a
+  // chance to populate the cache (first check runs ~15s after start).
+  setTimeout(checkForUpdateBanner, 20000);
+  // Then re-poll every 30 minutes — the server cache refreshes every 6h
+  // so more frequent polling is pointless.
+  _updateBannerTimer = setInterval(checkForUpdateBanner, 30 * 60 * 1000);
 }}
 
 /* ── Per-tab periodic refresh ─────────────────────────────────────────
@@ -7711,6 +7752,8 @@ _loadLsSettings();
   // Always start the persistent /api/state polling regardless of which pane
   // is initially active so cross-tab live updates work from page load.
   startLivePolling();
+  // Start background polling for the update banner on the Live tab.
+  startUpdateBannerPolling();
 
   // Restore last pane
   const last = localStorage.getItem('sea_pane');
