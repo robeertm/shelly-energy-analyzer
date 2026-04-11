@@ -1,5 +1,14 @@
 # Changelog
 
+## 16.14.2 - 2026-04-11
+### Fixed
+- **No more flat 400 g/kWh spikes in the CO₂ chart.** The legacy gap-fill in `Co2FetchService._tick()` (entsoe.py) wrote a constant mean intensity into every missing recent hour, which appeared as ugly steps in the chart. That fill is removed; the new `Co2ForecastService.fill_recent_estimates()` now back-fills the last 72 hours with proper trend-+-weather estimates instead — same model used for the 6 h forward forecast (per-hour-of-day median × Open-Meteo wind/sun/temp/rain factor) — written to the DB with `source='forecast'`. Real provider rows always overwrite forecast rows on the next fetch (`INSERT OR REPLACE` on `(hour_ts, zone)`).
+- **Live "AKTUELLE NETZ-CO₂-INTENSITÄT" uses the forecast value when real data is missing or stale.** The `co2_live` and `co2` actions now fall back to the forecast cache for the current hour if the latest real data point is older than the current hour boundary. New `current_source` field exposes whether the displayed value is `live` or `forecast`. As soon as ENTSO-E / Electricity Maps return real data for the current hour, the forecast is overwritten and the source flips back to `live`.
+- **`find_co2_gaps(include_estimated=True)` now also treats forecast-source rows as gaps**, so the next provider fetch will refresh them with real data instead of leaving stale forecast rows in place. `delete_estimated_co2` deletes both `estimated` and `forecast` placeholder rows when running the 48 h cleanup.
+- New `db.delete_forecast_co2(zone, after_ts)` helper for refreshing the forecast window without touching real data.
+- `Co2ForecastService.trigger_now()` now runs both forward forecast AND backfill in one pass; the forecaster fires immediately on startup (2 s delay) so the chart doesn't show a spike during the first 25 s.
+- Open-Meteo fetch now accepts `past_hours` (uses Open-Meteo's `past_hours` query parameter, returns up to 168 h of historical weather alongside the forecast).
+
 ## 16.14.1 - 2026-04-11
 ### Added
 - **6 h forecast continuation in the CO₂ intensity chart.** The main canvas chart on the CO₂ pane (`_drawCo2Chart`) now extends past "now" with the forecast points returned by `services/co2_forecast.py`: dashed line in the same green/amber/red colour scheme, soft blue area fill, point markers and `+1h … +6h` axis labels. The chart's y-axis auto-rescales to fit forecast peaks, and the "jetzt" marker is anchored at the boundary between historical and forecast data so users can read the trend continuation at a glance. The `co2` action now returns the same `forecast[]` + `forecast_updated_ts` fields as `co2_live`, so the chart shows the forecast for every range (`24h`, `7d`, `30d`, `all`).
