@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.13.60 - 2026-04-11
+### Changed
+- **README updated** to reflect the new worldwide spot-price / CO₂ coverage. The "Dynamic Spot Market Prices" section now documents all three provider groups (Energy-Charts/aWATTar for Europe, EIA for the USA, AEMO for Australia) with the full zone list, API-key requirements and automatic currency conversion. The "Why" hero bullets call out the new `USA via EIA, Australia via AEMO` and `92 Electricity Maps zones` coverage. "Who it's for" targets dynamic-tariff customers worldwide (Tibber/aWATTar/Ostrom in EU, Griddy/Rhythm in ERCOT, Amber in Australia). New bullet for the self-updating feature (6h GitHub poll + one-click banner install/rollback from the Live tab) shipped in 16.13.59.
+
 ## 16.13.59 - 2026-04-11
 ### Added
 - **Auto update notifications on the Live tab.** A new background thread in `BackgroundServiceManager` polls GitHub every 6 hours via `services/updater.check_latest_release()` and caches the result. A new `GET /api/updates/cached` endpoint exposes the cached payload without hitting the network, and the dashboard polls it every 30 minutes. When a newer release is detected, a gradient banner appears at the top of the Live pane (`Neue Version verfügbar · v16.x.x → Einstellungen öffnen`); clicking it navigates to `/settings#sec-updates` so the user can review and install or roll back to any of the last 10 releases.
