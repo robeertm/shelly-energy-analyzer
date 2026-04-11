@@ -233,12 +233,29 @@ async function saveSection(sectionId) {
     if (!data.spot_price) data.spot_price = {};
     data.spot_price.enabled = data.spot_price.tariff_type === "dynamic";
   }
+  // Detect language change so we can hard-reload the page afterwards —
+  // the i18n map on the client is only fetched once on initial load, so a
+  // language switch otherwise leaves the UI in the old language until the
+  // user manually refreshes.
+  const langChanging = (
+    sectionId === "ui"
+    && data.ui
+    && typeof data.ui.language === "string"
+    && cfg && cfg.ui
+    && data.ui.language !== cfg.ui.language
+  );
   try {
     const r = await fetch("/api/settings",{method:"PUT",
       headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
     const j = await r.json();
     if (j.ok) {
       toast(T("settings.toast.saved","✓ Gespeichert"));
+      if (langChanging) {
+        // Give the toast a beat, then hard-reload so /api/i18n returns the
+        // new language and every label on the page re-renders with it.
+        setTimeout(function(){ window.location.reload(); }, 350);
+        return;
+      }
       // Re-fetch server-side config + re-render the section so the UI matches
       // what the server actually persisted (verifies the write round-trip
       // visually; if a value "jumps back", you know the server rejected it).
