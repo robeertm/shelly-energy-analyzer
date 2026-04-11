@@ -1,5 +1,13 @@
 # Changelog
 
+## 16.17.2 - 2026-04-11
+### Added
+- **Language switch now auto-reloads the Settings page.** When the user changes `ui.language` on the Anzeige section and clicks 💾 Speichern, `saveSection()` detects the delta between the new value and the previously-loaded `cfg.ui.language`, shows the ✓ Gespeichert toast, waits 350 ms so the toast is visible, and then calls `window.location.reload()`. The reload re-fetches `/api/i18n` in the new language and every label / button / section title re-renders without the user having to manually refresh. Previously the settings page stayed in the old language until the next navigation, which looked like nothing happened.
+- **`scripts/check_templates_js.py` — pre-commit JS sanity check.** Parses every `<script>` block in every `web/templates/*.html` file with esprima and exits non-zero on the first syntax error. This exists specifically so the v16.17.0-class bug ("blank /settings") can never ship again: a parse error means the `<script>` block never runs, which makes the entire page blank — and if it's the Settings page, users can't even reach the in-app updater to install the fix. Must be run before every template edit; also wired into the commit skill's pre-flight so I can't forget.
+
+### Fixed
+- Nothing from user reports this round — the release is driven by "das darf nie wieder vorkommen" (never again) + one UX polish.
+
 ## 16.17.1 - 2026-04-11
 ### Fixed
 - **Blank `/settings` page regression from 16.17.0.** `renderIosWidget()` passed an HTML snippet to `T()` whose second argument used `\"` escapes inside a double-quoted JS string (`T("key","Install <a href=\"…\"…>")`). Inside a template-literal `${…}` interpolation, the JS parser interpreted `\\` as an escaped backslash and then terminated the inner string at the following raw `"`, turning the rest of the URL into an unexpected identifier. The entire settings script block failed to parse, so the page loaded empty. Fix: switched the outer string to single quotes so the inner `"` characters pass through literally. `esprima.parseScript` of the full main script now succeeds.
