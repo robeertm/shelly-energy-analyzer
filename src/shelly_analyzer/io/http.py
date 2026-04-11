@@ -174,13 +174,24 @@ def _normalize_rpc_params(obj: Any) -> Any:
     return str(obj)
 
 
-def build_csv_url(host: str, em_id: int, ts: int, end_ts: int, add_keys: bool = True) -> str:
-    base = f"http://{host}/emdata/{em_id}/data.csv"
-    params = []
-    if add_keys:
-        params.append("add_keys=true")
-    params.append(f"ts={int(ts)}")
-    params.append(f"end_ts={int(end_ts)}")
+def build_csv_url(host: str, em_id: int, ts: int, end_ts: int, add_keys: bool = True, gen: int = 0) -> str:
+    """Build the Shelly EMData CSV download URL.
+
+    Gen1 (Shelly EM / 3EM classic) uses ``/emeter/<id>/em_data.csv``.
+    Gen2+ (Pro 3EM, Pro EM-50) uses ``/emdata/<id>/data.csv``.
+    Both accept ``ts`` / ``end_ts`` query params in seconds. ``add_keys``
+    is Gen2-only and adds a header row with column names.
+    """
+    if int(gen) == 1:
+        base = f"http://{host}/emeter/{em_id}/em_data.csv"
+        params = [f"ts={int(ts)}", f"end_ts={int(end_ts)}"]
+    else:
+        base = f"http://{host}/emdata/{em_id}/data.csv"
+        params = []
+        if add_keys:
+            params.append("add_keys=true")
+        params.append(f"ts={int(ts)}")
+        params.append(f"end_ts={int(end_ts)}")
     return base + "?" + "&".join(params)
 
 
@@ -225,10 +236,160 @@ def get_earliest_emdata_ts(records_payload: Dict[str, Any]) -> Optional[int]:
                     earliest = ts_i
     return earliest
 
-def download_csv(client: ShellyHttp, host: str, em_id: int, ts: int, end_ts: int) -> bytes:
-    url = build_csv_url(host, em_id, ts, end_ts)
-    r = client.get(url)
-    return r.content
+def _emdata_rpc_to_csv(payload: Dict[str, Any]) -> bytes:
+    """Convert an EMData.GetData RPC JSON response into CSV bytes that
+    :func:`shelly_analyzer.io.database.Database.insert_csv_bytes` can parse.
+
+    Gen2+ firmwares return the payload in one of two shapes:
+
+    1. ``{"keys": [...], "values": [[...], [...]]}`` — column keys once,
+       followed by row arrays.
+    2. ``{"records": [{"ts": ..., "a_total_act_energy": ...}, ...]}`` —
+       list of per-record dicts.
+
+    Unknown / missing columns are simply left out; the DB parser picks up
+    whatever energy columns are present.
+    """
+    import csv as _csv
+    import io as _io
+
+    rows: List[Dict[str, Any]] = []
+
+    if not isinstance(payload, dict):
+        return b""
+
+    if isinstance(payload.get("records"), list):
+        for r in payload["records"]:
+            if isinstance(r, dict):
+                rows.append(dict(r))
+
+    if not rows and isinstance(payload.get("data"), list):
+        for r in payload["data"]:
+            if isinstance(r, dict):
+                rows.append(dict(r))
+
+    if not rows:
+        keys = payload.get("keys")
+        values = payload.get("values")
+        if isinstance(keys, list) and isinstance(values, list):
+            for row in values:
+                if isinstance(row, (list, tuple)) and len(row) == len(keys):
+                    rows.append({str(k): v for k, v in zip(keys, row)})
+
+    if not rows:
+        return b""
+
+    # Normalize timestamp key so the DB parser recognizes it.
+    normalized: List[Dict[str, Any]] = []
+    seen_keys: List[str] = []
+    for r in rows:
+        nr = dict(r)
+        # ts may be named 'ts', 'timestamp', 'time', …; the DB parser
+        # already accepts all of these, but we always include 'ts'.
+        if "ts" not in nr:
+            for cand in ("timestamp", "time", "Date/Time", "date_time"):
+                if cand in nr:
+                    nr["ts"] = nr[cand]
+                    break
+        # Map Pro 3EM short keys → DB column names expected by insert_csv_bytes.
+        rename = {
+            "a_total_act": "a_total_act_energy",
+            "b_total_act": "b_total_act_energy",
+            "c_total_act": "c_total_act_energy",
+            "a_total_act_ret": "a_total_act_ret_energy",
+            "b_total_act_ret": "b_total_act_ret_energy",
+            "c_total_act_ret": "c_total_act_ret_energy",
+        }
+        for src_k, dst_k in rename.items():
+            if src_k in nr and dst_k not in nr:
+                nr[dst_k] = nr.pop(src_k)
+        normalized.append(nr)
+        for k in nr.keys():
+            if k not in seen_keys:
+                seen_keys.append(k)
+
+    # Ensure 'ts' is first if present so DictReader finds it.
+    if "ts" in seen_keys:
+        seen_keys.remove("ts")
+        seen_keys.insert(0, "ts")
+
+    buf = _io.StringIO()
+    writer = _csv.DictWriter(buf, fieldnames=seen_keys, extrasaction="ignore")
+    writer.writeheader()
+    for r in normalized:
+        writer.writerow(r)
+    return buf.getvalue().encode("utf-8")
+
+
+def download_csv(
+    client: ShellyHttp,
+    host: str,
+    em_id: int,
+    ts: int,
+    end_ts: int,
+    gen: int = 0,
+) -> bytes:
+    """Download an EMData CSV chunk from a Shelly device.
+
+    Tries the most likely URL for the device's generation first, then
+    falls back through known variants. On Gen2+ devices whose firmware
+    no longer exposes the direct ``/emdata/<id>/data.csv`` endpoint we
+    fall back to the ``EMData.GetData`` RPC method and synthesize CSV.
+
+    Raises the last HTTP error if every path fails.
+    """
+    from requests.exceptions import HTTPError
+
+    attempts: List[str] = []
+    last_err: Optional[BaseException] = None
+
+    if int(gen) == 1:
+        attempts.append(build_csv_url(host, em_id, ts, end_ts, gen=1))
+    else:
+        # Gen2+ (or auto): try the documented path first
+        attempts.append(build_csv_url(host, em_id, ts, end_ts, gen=2, add_keys=True))
+        # Some firmwares dislike add_keys=true — retry without it
+        attempts.append(build_csv_url(host, em_id, ts, end_ts, gen=2, add_keys=False))
+        # Last REST fallback: the Gen1 URL (harmless if 404; just tried)
+        attempts.append(build_csv_url(host, em_id, ts, end_ts, gen=1))
+
+    for url in attempts:
+        try:
+            r = client.get(url)
+            return r.content
+        except HTTPError as e:
+            last_err = e
+            code = getattr(e.response, "status_code", 0)
+            # Only retry on 404 / 400; other codes (401, 500…) propagate.
+            if code not in (400, 404):
+                break
+        except Exception as e:
+            last_err = e
+            break
+
+    # REST paths exhausted. For Gen2+, try the RPC method.
+    if int(gen) != 1:
+        try:
+            payload = rpc_call(
+                client,
+                host,
+                "EMData.GetData",
+                {
+                    "id": int(em_id),
+                    "ts": int(ts),
+                    "end_ts": int(end_ts),
+                    "add_keys": True,
+                },
+            )
+            data = _emdata_rpc_to_csv(payload)
+            if data:
+                return data
+        except Exception as e:
+            last_err = e
+
+    if last_err is not None:
+        raise last_err
+    return b""
 
 
 def get_em_status(client: ShellyHttp, host: str, em_id: int) -> Dict[str, Any]:

@@ -99,12 +99,43 @@ class AppState:
 
     # ── Config hot-reload ──────────────────────────────────────────────
 
-    def reload_config(self, cfg: AppConfig) -> None:
-        """Hot-reload configuration."""
+    def set_language(self, lang: str) -> None:
+        """Explicitly change the session language.
+
+        This is the only place ``self.lang`` is updated after boot. The
+        settings blueprint calls this when the user actively picks a new
+        language — saving other settings must NOT bounce the language back
+        to the disk value (which is always whatever was there before we
+        forced English on startup).
+        """
         import gzip
-        old_lang = getattr(self, "lang", None)
+        new_lang = normalize_lang(lang)
+        if new_lang == getattr(self, "lang", None):
+            return
+        self.lang = new_lang
+        try:
+            from shelly_analyzer.web import _render_dashboard_html, _render_plots_html, _render_control_html
+            self._dashboard_html = _render_dashboard_html(self)
+            self._dashboard_html_gz = gzip.compress(self._dashboard_html, compresslevel=6)
+            self._plots_html = _render_plots_html(self)
+            self._plots_html_gz = gzip.compress(self._plots_html, compresslevel=6)
+            self._control_html = _render_control_html(self)
+            self._control_html_gz = gzip.compress(self._control_html, compresslevel=6)
+            logger.info("Language set: %s – HTML templates re-rendered", new_lang)
+        except Exception as e:
+            logger.warning("HTML re-render after language switch failed: %s", e)
+
+    def reload_config(self, cfg: AppConfig) -> None:
+        """Hot-reload configuration.
+
+        Does NOT touch ``self.lang``. The session language is managed
+        exclusively by :meth:`set_language`, which the settings blueprint
+        calls when the user explicitly picks a new language. Everything
+        else (device edits, alert rules, sync config, …) goes through
+        this method without affecting language.
+        """
+        import gzip
         self.cfg = cfg
-        self.lang = normalize_lang(cfg.ui.language)
         self.devices_meta = [
             {
                 "key": d.key,
@@ -129,8 +160,6 @@ class AppState:
             self._plots_html_gz = gzip.compress(self._plots_html, compresslevel=6)
             self._control_html = _render_control_html(self)
             self._control_html_gz = gzip.compress(self._control_html, compresslevel=6)
-            if old_lang != self.lang:
-                logger.info("Language switched: %s → %s – HTML templates re-rendered", old_lang, self.lang)
         except Exception as e:
             logger.warning("HTML re-render after config reload failed: %s", e)
 

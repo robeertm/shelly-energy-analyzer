@@ -175,9 +175,11 @@ def probe_device(
                 if ml.startswith("spem-003") or "3em" in ml:
                     phases = 3
 
-
-            # emdata CSV is mainly Gen1; keep False for Gen2
-            supports_emdata = False
+            # Gen2+ EM devices (Pro 3EM, Pro EM-50) all support EMData history
+            # — either via the /emdata/<id>/data.csv endpoint, or via the
+            # EMData.GetData RPC fallback we synthesize into CSV. Non-EM
+            # devices (switches, plugs, relays) have no EMData at all.
+            supports_emdata = (kind == "em")
 
         return DiscoveredDevice(
             host=host,

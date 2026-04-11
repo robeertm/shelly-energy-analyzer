@@ -2766,7 +2766,7 @@ function computeBills() {{
     const rep = d.report;
     const tariffLabel = rep.tariff_mode === 'dynamic' ? '⚡ Dynamic tariff' : '💲 Fixed tariff';
     let h = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Period: ' + esc(rep.period_start) + ' to ' + esc(rep.period_end)
-      + ' · ' + tariffLabel + ' · ' + (rep.price_eur_per_kwh_net*100).toFixed(2) + ' ct/kWh netto'
+      + ' · ' + tariffLabel + ' · ' + (rep.price_eur_per_kwh_net*100).toFixed(2) + ' ct/kWh net'
       + ' · Base fee: ' + (rep.base_fee_eur_per_year_net||0).toFixed(2) + ' €/year net'
       + ' · VAT ' + (rep.vat_rate_percent||19).toFixed(0) + '%'
       + ' · Total: ' + rep.total_kwh.toFixed(1) + ' kWh · ' + rep.total_cost.toFixed(2) + ' €</div>';
@@ -3810,7 +3810,7 @@ function renderCosts(data, el) {{
       metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_eur,2,'\u20ac'), fmt(d.today_kwh,3,'kWh')) +
       metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_eur,2,'\u20ac'), fmt(d.week_kwh,3,'kWh')) +
       metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_eur,2,'\u20ac'), fmt(d.month_kwh,3,'kWh')) +
-      metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_eur,2,'\u20ac'), fmt(d.proj_kwh,1,'kWh')) +
+      metricCardHtml(t('web.costs.projected', 'Forecast'), fmt(d.proj_eur,2,'\u20ac'), fmt(d.proj_kwh,1,'kWh')) +
       '</div>';
     // Dynamic tariff section
     var dynSection = spotActive
@@ -3820,7 +3820,7 @@ function renderCosts(data, el) {{
           metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_spot_eur,2,'\u20ac'), spotSub('today',d), true) +
           metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_spot_eur,2,'\u20ac'), spotSub('week',d), true) +
           metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_spot_eur,2,'\u20ac'), spotSub('month',d), true) +
-          metricCardHtml(t('web.costs.projected', 'Prognose'), fmt(d.proj_spot_eur||0,2,'\u20ac'), spotSub('proj',d), true) +
+          metricCardHtml(t('web.costs.projected', 'Forecast'), fmt(d.proj_spot_eur||0,2,'\u20ac'), spotSub('proj',d), true) +
           '</div></div>'
       : '';
     // Card: fixed costs → dynamic costs
@@ -3837,11 +3837,11 @@ function renderCosts(data, el) {{
   if (devs.length > 1) {{
     html += '<div class="nilm-two-col" style="margin-top:10px">';
     // Cost donut
-    html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.breakdown','Kosten-Verteilung') + ' (' + t('web.costs.month','Month') + ')</div>';
+    html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.breakdown','Cost breakdown') + ' (' + t('web.costs.month','Month') + ')</div>';
     html += '<canvas id="costs-donut" style="width:100%;height:200px"></canvas>';
     html += '<div id="costs-donut-legend" style="margin-top:6px"></div></div>';
     // Ranking bar
-    html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.ranking','Kosten-Ranking') + '</div>';
+    html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.ranking','Cost ranking') + '</div>';
     html += '<canvas id="costs-ranking-bar" style="width:100%;height:200px"></canvas></div>';
     html += '</div>';
   }}
@@ -3872,7 +3872,7 @@ function renderCosts(data, el) {{
     const s = data.summary;
     html += '<div class="card" style="margin-top:10px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.costs.projection','Month projection') + '</div>';
     html += '<div class="nilm-metrics">';
-    html += _nilmMetricCard('📅', t('web.costs.projected','Prognose'), fmt(s.proj_kwh,0) + ' kWh', fmt(s.proj_eur,0) + ' \u20ac');
+    html += _nilmMetricCard('📅', t('web.costs.projected','Forecast'), fmt(s.proj_kwh,0) + ' kWh', fmt(s.proj_eur,0) + ' \u20ac');
     html += _nilmMetricCard('📆', t('web.costs.year_proj','Year projection'), fmt((s.proj_kwh||0)*12,0) + ' kWh', fmt((s.proj_eur||0)*12,0) + ' \u20ac');
     const lastM = s.last_month_kwh || 0;
     const projDelta = lastM > 0 ? Math.round(((s.proj_kwh||0) - lastM) / lastM * 100) : 0;
@@ -4651,13 +4651,13 @@ function _renderCo2Forecast(data, green, dirty) {{
   const fc = (data && data.forecast) || [];
   if (!fc.length) {{
     return '<div class="card" style="padding:10px 14px;font-size:12px;color:var(--muted)">' +
-      t('web.co2.forecast_waiting', '6h-Prognose wird berechnet (Trend + Open-Meteo Wetter) \u2026') +
+      t('web.co2.forecast_waiting', '6h forecast being computed (trend + Open-Meteo weather) \u2026') +
       '</div>';
   }}
   let html = '<div class="card" style="padding:12px 14px">';
   html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
   html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">' +
-    t('web.co2.forecast_6h', '6h Prognose (Trend + Wetter)') + '</div>';
+    t('web.co2.forecast_6h', '6h forecast (trend + weather)') + '</div>';
   const upd = data.forecast_updated_ts ? new Date(data.forecast_updated_ts * 1000) : null;
   const updStr = upd ? upd.toLocaleTimeString('de-DE', {{hour:'2-digit',minute:'2-digit'}}) : '';
   html += '<div style="font-size:10px;color:var(--muted)">' + (updStr ? '\u21bb ' + updStr : '') + '</div>';
@@ -4765,7 +4765,7 @@ function renderCo2(data, el) {{
     html += '<div style="margin-top:10px;display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg);border-radius:8px">';
     html += '<span style="font-size:20px">' + trendIcon + '</span>';
     html += '<div><div style="font-weight:600;font-size:13px;color:' + trendColor + '">' + t('web.co2.trend','Trend') + ': ' + (trendPct > 0 ? '+' : '') + trendPct + '%</div>';
-    html += '<div style="font-size:11px;color:var(--muted)">' + t('web.co2.trend_hint','Letzte 6h vs. vorherige 6h') + '</div></div>';
+    html += '<div style="font-size:11px;color:var(--muted)">' + t('web.co2.trend_hint','Last 6h vs. previous 6h') + '</div></div>';
     html += '</div></div>';
 
     // Renewables + score card
@@ -5093,7 +5093,7 @@ function _drawCo2Chart(hourly, green, dirty, forecast) {{
         ctx.fillStyle = '#6aa7ff';
         ctx.font = '10px sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(t('web.co2.forecast_label','\u2192 6h Prognose'), xBridge0 + 4, pad.top + 10);
+        ctx.fillText(t('web.co2.forecast_label','\u2192 6h forecast'), xBridge0 + 4, pad.top + 10);
       }}
 
       // "Now" vertical marker — sits between history and forecast when forecast is present
@@ -6019,10 +6019,10 @@ function renderAnomalies(data, el) {{
 
   /* ── Overview metrics ── */
   html += '<div class="nilm-metrics" style="margin-bottom:12px">';
-  html += _nilmMetricCard('🔍', t('web.anom.total','Anomalien gesamt'), data.total_count || events.length, t('web.anom.last_days','Last 7 days'));
+  html += _nilmMetricCard('🔍', t('web.anom.total','Total anomalies'), data.total_count || events.length, t('web.anom.last_days','Last 7 days'));
   html += _nilmMetricCard('📊', t('web.anom.types','Typen erkannt'), Object.keys(tc).length, Object.keys(tc).map(function(k){{ return (typeIcons[k]||'') + ' ' + (tc[k]||0); }}).join('  '));
   html += _nilmMetricCard('📡', t('web.anom.devices','Devices affected'), Object.keys(dc).length, t('web.anom.of_total','of all devices'));
-  html += _nilmMetricCard('⚠️', t('web.anom.max_sigma','Max Abweichung'), (data.max_sigma||0) + '\u03c3', t('web.anom.avg','Schnitt') + ': ' + (data.avg_sigma||0) + '\u03c3');
+  html += _nilmMetricCard('⚠️', t('web.anom.max_sigma','Max deviation'), (data.max_sigma||0) + '\u03c3', t('web.anom.avg','Avg') + ': ' + (data.avg_sigma||0) + '\u03c3');
   html += '</div>';
 
   /* ── Type breakdown + Device breakdown (side by side) ── */
@@ -6059,7 +6059,7 @@ function renderAnomalies(data, el) {{
   html += '</div></div>';
 
   /* ── Sigma distribution chart ── */
-  html += '<div class="card" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.anom.sigma_dist','Sigma-Verteilung') + '</div>';
+  html += '<div class="card" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.anom.sigma_dist','Sigma distribution') + '</div>';
   html += '<canvas id="anom-sigma-chart" style="width:100%;height:120px"></canvas></div>';
 
   /* ── Event timeline ── */
@@ -6267,7 +6267,7 @@ function renderForecast(d) {{
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
   html += '<div style="background:var(--bg);border-radius:8px;padding:8px;text-align:center"><div style="font-size:18px;font-weight:700">' + totalHistKwh.toFixed(0) + '</div><div style="font-size:10px;color:var(--muted)">kWh (' + histDays + 'd)</div></div>';
   const avgW = d.avg_daily_kwh ? (d.avg_daily_kwh * 1000 / 24).toFixed(0) : '0';
-  html += '<div style="background:var(--bg);border-radius:8px;padding:8px;text-align:center"><div style="font-size:18px;font-weight:700">' + avgW + '</div><div style="font-size:10px;color:var(--muted)">' + t('web.fc.avg_w','Schnitt W') + '</div></div>';
+  html += '<div style="background:var(--bg);border-radius:8px;padding:8px;text-align:center"><div style="font-size:18px;font-weight:700">' + avgW + '</div><div style="font-size:10px;color:var(--muted)">' + t('web.fc.avg_w','Avg W') + '</div></div>';
   html += '</div></div>';
 
   // Cost projection card
@@ -6276,10 +6276,10 @@ function renderForecast(d) {{
   html += '</div></div>';
 
   /* ── Main chart with confidence band ── */
-  html += '<div class="card" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.history_forecast','Verlauf + Prognose') + '</div>';
+  html += '<div class="card" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.history_forecast','History + forecast') + '</div>';
   html += '<div style="display:flex;gap:12px;font-size:11px;color:var(--muted);margin-bottom:6px">';
   html += '<span><span style="display:inline-block;width:12px;height:4px;background:#3b82f6;border-radius:2px;vertical-align:middle;margin-right:3px"></span>' + t('web.fc.history','Verlauf') + '</span>';
-  html += '<span><span style="display:inline-block;width:12px;height:4px;background:#ef4444;border-radius:2px;vertical-align:middle;margin-right:3px"></span>' + t('web.fc.forecast','Prognose') + '</span>';
+  html += '<span><span style="display:inline-block;width:12px;height:4px;background:#ef4444;border-radius:2px;vertical-align:middle;margin-right:3px"></span>' + t('web.fc.forecast','Forecast') + '</span>';
   if (d.forecast_upper && d.forecast_upper.length) html += '<span><span style="display:inline-block;width:12px;height:8px;background:rgba(239,68,68,0.15);border-radius:2px;vertical-align:middle;margin-right:3px"></span>' + t('web.fc.confidence','Konfidenz') + '</span>';
   html += '</div>';
   html += '<canvas id="fc-main-chart" style="width:100%;height:200px"></canvas></div>';
@@ -6468,10 +6468,10 @@ function renderStandby(d) {{
 
   /* ── Cost pie + cost bar (side by side) ── */
   cards += '<div class="nilm-two-col" style="margin-bottom:10px">';
-  cards += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.cost_breakdown','Kosten-Verteilung') + '</div>';
+  cards += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.cost_breakdown','Cost breakdown') + '</div>';
   cards += '<canvas id="sb-cost-pie" style="width:100%;height:200px"></canvas>';
   cards += '<div id="sb-cost-pie-legend" style="margin-top:6px"></div></div>';
-  cards += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.cost_ranking','Kosten-Ranking') + '</div>';
+  cards += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.standby.cost_ranking','Cost ranking') + '</div>';
   cards += '<canvas id="sb-cost-bar" style="width:100%;height:200px"></canvas></div>';
   cards += '</div>';
 
@@ -6480,7 +6480,7 @@ function renderStandby(d) {{
   cards += '<div class="sb-dev-grid" data-cols="' + Math.min(nDev, 4) + '">';
   devs.forEach(function(dev, idx) {{
     const rc = dev.risk === 'high' ? '#dc2626' : dev.risk === 'medium' ? '#d97706' : '#16a34a';
-    const riskLabel = dev.risk === 'high' ? t('web.standby.risk_high','HOCH') : dev.risk === 'medium' ? t('web.standby.risk_med','MITTEL') : t('web.standby.risk_low','NIEDRIG');
+    const riskLabel = dev.risk === 'high' ? t('web.standby.risk_high','HIGH') : dev.risk === 'medium' ? t('web.standby.risk_med','MEDIUM') : t('web.standby.risk_low','LOW');
     cards += '<div class="nilm-pattern-card" style="border-left:4px solid ' + rc + '">';
     cards += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
     cards += '<span style="font-weight:700;font-size:14px">' + esc(dev.device_name) + '</span>';
@@ -6502,7 +6502,7 @@ function renderStandby(d) {{
     cards += '<div style="flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden">';
     cards += '<div style="width:' + (dev.standby_share_pct||0) + '%;height:100%;background:' + rc + ';border-radius:4px"></div>';
     cards += '</div>';
-    cards += '<span style="color:var(--muted)">' + t('web.standby.active','Aktiv') + '</span></div>';
+    cards += '<span style="color:var(--muted)">' + t('web.standby.active','Active') + '</span></div>';
     // 24h mini profile
     cards += '<canvas class="sb-24h-mini" data-idx="' + idx + '" style="width:100%;height:60px"></canvas>';
     cards += '</div>';
@@ -7354,7 +7354,7 @@ _loadLsSettings();
     const timeStr = d.toLocaleTimeString([], {{hour:'2-digit', minute:'2-digit'}});
     let prefix = wday + ', ' + dateStr;
     if (dayStart.getTime() === today.getTime()) prefix = 'Today · ' + wday;
-    else if (dayStart.getTime() === tomorrow.getTime()) prefix = 'Morgen · ' + wday;
+    else if (dayStart.getTime() === tomorrow.getTime()) prefix = 'Tomorrow · ' + wday;
     return {{ prefix: prefix, date: dateStr, time: timeStr }};
   }}
   function renderSmartSched(data, el) {{
@@ -7533,7 +7533,7 @@ _loadLsSettings();
   }}
   function renderBattery(data, el) {{
     const ml = {{charging:'Loading', discharging:'Entladen', idle:'Standby'}};
-    el.innerHTML = '<div class="card" style="margin-bottom:10px"><div class="card-title">🔋 Batteriespeicher</div>' +
+    el.innerHTML = '<div class="card" style="margin-bottom:10px"><div class="card-title">🔋 Battery storage</div>' +
       '<div class="metric-grid">' +
       metricCardHtml('SOC', data.soc_pct.toFixed(0) + '%') +
       metricCardHtml('Leistung', data.power_w.toFixed(0) + ' W') +
@@ -7643,7 +7643,7 @@ _loadLsSettings();
     html += '<div style="font-size:22px;font-weight:700;margin:6px 0">' + (wg.actual_kwh||0).toFixed(1) + ' <span style="font-size:14px;color:var(--muted)">/ ' + (wg.target_kwh||0).toFixed(1) + ' kWh</span></div>';
     html += _glBar(wg.progress_pct||0, 10);
     html += '<div style="font-size:11px;color:var(--muted);margin-top:4px">';
-    if (wg.achieved) html += '\u2705 ' + t('web.goals.achieved', 'Ziel erreicht!') + ' \u2013 ' + (wg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.saved', 'gespart');
+    if (wg.achieved) html += '\u2705 ' + t('web.goals.achieved', 'Goal reached!') + ' \u2013 ' + (wg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.saved', 'saved');
     else html += '\u23f3 ' + t('web.goals.remaining', 'Noch') + ' ' + (wg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.to_go', 'to go');
     html += '</div></div>';
     // Monthly
@@ -7654,7 +7654,7 @@ _loadLsSettings();
     html += '<div style="font-size:22px;font-weight:700;margin:6px 0">' + (mg.actual_kwh||0).toFixed(1) + ' <span style="font-size:14px;color:var(--muted)">/ ' + (mg.target_kwh||0).toFixed(1) + ' kWh</span></div>';
     html += _glBar(mg.progress_pct||0, 10);
     html += '<div style="font-size:11px;color:var(--muted);margin-top:4px">';
-    if (mg.achieved) html += '\u2705 ' + t('web.goals.achieved', 'Ziel erreicht!') + ' \u2013 ' + (mg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.saved', 'gespart');
+    if (mg.achieved) html += '\u2705 ' + t('web.goals.achieved', 'Goal reached!') + ' \u2013 ' + (mg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.saved', 'saved');
     else html += '\u23f3 ' + t('web.goals.remaining', 'Noch') + ' ' + (mg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.to_go', 'to go');
     html += '</div></div>';
     html += '</div>';
@@ -7769,7 +7769,7 @@ _loadLsSettings();
       ctx.beginPath(); ctx.moveTo(pad.left, ty); ctx.lineTo(pad.left + cW, ty); ctx.stroke();
       ctx.setLineDash([]);
       ctx.fillStyle = '#4caf50'; ctx.textAlign = 'left'; ctx.font = '9px sans-serif';
-      ctx.fillText(t('web.goals.target', 'Ziel') + ' ' + target.toFixed(1), pad.left + cW + 2, ty + 3);
+      ctx.fillText(t('web.goals.target', 'Target') + ' ' + target.toFixed(1), pad.left + cW + 2, ty + 3);
     }}
 
     // Bars
@@ -9425,7 +9425,7 @@ async function run(action, params) {
     return await r.json();
   } catch (e) {
     const t = await r.text();
-    throw new Error(t || "Antwort ist kein JSON");
+    throw new Error(t || "Response is not JSON");
   }
 }
 

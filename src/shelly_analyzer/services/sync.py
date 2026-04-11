@@ -85,7 +85,7 @@ def sync_one_device(
             if _pw:
                 http_probe.set_credentials(device.host, getattr(device, "username", "admin") or "admin", _pw)
             now_probe = int(time.time())
-            _ = download_csv(http_probe, device.host, device.em_id, max(0, now_probe - 300), now_probe)
+            _ = download_csv(http_probe, device.host, device.em_id, max(0, now_probe - 300), now_probe, gen=int(getattr(device, "gen", 0) or 0))
             supports_emdata = True
         except Exception:
             supports_emdata = False
@@ -149,15 +149,20 @@ def sync_one_device(
     if _pw:
         http.set_credentials(device.host, getattr(device, "username", "admin") or "admin", _pw)
 
-    # Try to align requested start with the oldest data still stored on the device
-    try:
-        rec = get_emdata_records(http, device.host, device.em_id, ts=0)
-        earliest_ts = get_earliest_emdata_ts(rec)
-        if earliest_ts is not None and ts_start < earliest_ts:
-            ts_start = earliest_ts
-    except Exception:
-        # If this fails, we continue with the user-requested range and let empty chunks be skipped.
-        pass
+    dev_gen = int(getattr(device, "gen", 0) or 0)
+
+    # Try to align requested start with the oldest data still stored on the device.
+    # EMData.GetRecords is a Gen2+ RPC — skip it entirely on Gen1 devices, whose
+    # /status endpoint does not advertise history retention.
+    if dev_gen != 1:
+        try:
+            rec = get_emdata_records(http, device.host, device.em_id, ts=0)
+            earliest_ts = get_earliest_emdata_ts(rec)
+            if earliest_ts is not None and ts_start < earliest_ts:
+                ts_start = earliest_ts
+        except Exception:
+            # If this fails, we continue with the user-requested range and let empty chunks be skipped.
+            pass
 
     chunks: List[ChunkResult] = []
     last_success_end: Optional[int] = None
@@ -188,7 +193,7 @@ def sync_one_device(
     for a, b in iter_time_chunks(ts_start, ts_end, cfg.download.chunk_seconds):
         _progress(f"Loading {a}-{b} …")
         try:
-            content = download_csv(http, device.host, device.em_id, a, b)
+            content = download_csv(http, device.host, device.em_id, a, b, gen=dev_gen)
             # Skip saving empty CSV responses (header-only)
             lines = [ln for ln in content.splitlines() if ln.strip()]
             if len(lines) <= 1:
