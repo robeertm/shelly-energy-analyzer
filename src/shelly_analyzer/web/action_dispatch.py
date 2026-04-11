@@ -1471,6 +1471,9 @@ class ActionDispatcher:
                     backoff_base_seconds=float(self.cfg.download.backoff_base_seconds),
                 )
             )
+            _pw = getattr(dev, "password", "") or ""
+            if _pw:
+                http.set_credentials(dev.host, getattr(dev, "username", "admin") or "admin", _pw)
 
             try:
                 st = get_switch_status(http, dev.host, int(dev.em_id))

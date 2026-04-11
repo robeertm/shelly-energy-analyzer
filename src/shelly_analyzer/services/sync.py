@@ -81,6 +81,9 @@ def sync_one_device(
     if not supports_emdata and str(getattr(device, "kind", "")) == "em":
         try:
             http_probe = ShellyHttp(HttpConfig(timeout_seconds=min(cfg.download.timeout_seconds, 3.0), retries=1, backoff_base_seconds=0.1))
+            _pw = getattr(device, "password", "") or ""
+            if _pw:
+                http_probe.set_credentials(device.host, getattr(device, "username", "admin") or "admin", _pw)
             now_probe = int(time.time())
             _ = download_csv(http_probe, device.host, device.em_id, max(0, now_probe - 300), now_probe)
             supports_emdata = True
@@ -142,6 +145,9 @@ def sync_one_device(
             backoff_base_seconds=cfg.download.backoff_base_seconds,
         )
     )
+    _pw = getattr(device, "password", "") or ""
+    if _pw:
+        http.set_credentials(device.host, getattr(device, "username", "admin") or "admin", _pw)
 
     # Try to align requested start with the oldest data still stored on the device
     try:

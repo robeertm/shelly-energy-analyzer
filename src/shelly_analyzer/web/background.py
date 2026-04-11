@@ -497,6 +497,14 @@ class BackgroundServiceManager:
                 retries=int(self.cfg.download.retries),
                 backoff_base_seconds=float(self.cfg.download.backoff_base_seconds),
             ))
+            for _d in self.cfg.devices:
+                _pw = getattr(_d, "password", "") or ""
+                if _pw:
+                    http_client.set_credentials(
+                        _d.host,
+                        getattr(_d, "username", "admin") or "admin",
+                        _pw,
+                    )
             self._scheduler = LocalScheduler(
                 get_config=lambda: self.cfg,
                 get_http=lambda: http_client,
