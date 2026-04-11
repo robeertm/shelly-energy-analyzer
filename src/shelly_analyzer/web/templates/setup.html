@@ -240,24 +240,49 @@ async function scanMdns(){
   }catch(e){btn.disabled=false;btn.textContent='🔍 Netzwerk scannen';toast('Fehler: '+e.message,'error');}
 }
 
+async function _postDevice(payload){
+  return fetch('/api/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+}
+
+async function _addWithAuthRetry(basePayload, label){
+  try{
+    let r=await _postDevice(basePayload);
+    let j=await r.json();
+    if(j.ok){
+      addedDevices.push(j.device);
+      toast('✓ Added: '+(j.device.name||label),'success');
+      render();
+      return true;
+    }
+    if(j.error==='auth_required'){
+      const pw=prompt('Device '+label+' is password-protected.\nEnter the admin password:');
+      if(!pw){toast('Skipped (no password entered)','error');return false;}
+      const r2=await _postDevice(Object.assign({},basePayload,{username:'admin',password:pw}));
+      const j2=await r2.json();
+      if(j2.ok){
+        addedDevices.push(j2.device);
+        toast('✓ Added with credentials: '+(j2.device.name||label),'success');
+        render();
+        return true;
+      }
+      toast('Auth failed: '+(j2.error||'unknown'),'error');
+      return false;
+    }
+    toast('Error: '+j.error,'error');
+    return false;
+  }catch(e){toast('Error: '+e.message,'error');return false;}
+}
+
 async function addByIp(){
   const ip=document.getElementById('ip-input').value.trim();
-  if(!ip){toast('IP-Adresse leer','error');return;}
-  try{
-    const r=await fetch('/api/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:ip})});
-    const j=await r.json();
-    if(j.ok){addedDevices.push(j.device);toast('✓ Hinzugefügt: '+(j.device.name||ip),'success');document.getElementById('ip-input').value='';render();}
-    else toast('Fehler: '+j.error,'error');
-  }catch(e){toast('Fehler: '+e.message,'error');}
+  if(!ip){toast('IP address empty','error');return;}
+  const ok=await _addWithAuthRetry({host:ip},ip);
+  if(ok)document.getElementById('ip-input').value='';
 }
 
 async function addDiscovered(d){
-  try{
-    const r=await fetch('/api/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
-    const j=await r.json();
-    if(j.ok){addedDevices.push(j.device);toast('✓ Hinzugefügt: '+(j.device.name||d.host),'success');render();scanMdns();}
-    else toast('Fehler: '+j.error,'error');
-  }catch(e){toast('Fehler: '+e.message,'error');}
+  const ok=await _addWithAuthRetry(d,d.host);
+  if(ok)scanMdns();
 }
 
 async function removeDevice(key){

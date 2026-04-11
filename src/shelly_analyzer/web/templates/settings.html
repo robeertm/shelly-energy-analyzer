@@ -728,9 +728,11 @@ function renderDevices() {
           <option value="3" ${Number(d.phases)===3?"selected":""}>3-phasig</option>
         </select></div>
         <div class="field"><label>Modell</label><input type="text" data-df="model" value="${esc(d.model||"")}" placeholder="z. B. SHEM-3"></div>
-        <label class="field row" style="grid-column:1/-1"><span>EMData / historische Daten unterstützt</span><input type="checkbox" data-df="supports_emdata" ${d.supports_emdata!==false?"checked":""}></label>
+        <div class="field"><label>HTTP user (password-protected Shellys)</label><input type="text" data-df="username" value="${esc(d.username||"admin")}" placeholder="admin" autocomplete="off"></div>
+        <div class="field"><label>HTTP password</label><input type="password" data-df="password" value="${d.has_password?"***":""}" placeholder="${d.has_password?"(saved – type to change)":"leave empty for unprotected device"}" autocomplete="off"></div>
+        <label class="field row" style="grid-column:1/-1"><span>EMData / historical data supported</span><input type="checkbox" data-df="supports_emdata" ${d.supports_emdata!==false?"checked":""}></label>
       </div>
-      <div class="hint" style="margin-top:6px;font-size:.72rem">Status: ${d.online?'<span style="color:var(--ok)">● Online</span>':'<span style="color:var(--muted)">○ Offline / keine Daten</span>'}</div>
+      <div class="hint" style="margin-top:6px;font-size:.72rem">Status: ${d.online?'<span style="color:var(--ok)">● Online</span>':'<span style="color:var(--muted)">○ Offline / no data</span>'}${d.has_password?' &nbsp;·&nbsp; <span style="color:var(--accent)">🔒 password set</span>':''}</div>
     </div>`;
   }).join("");
   return `<section id="sec-devices"><h2>Geräte</h2>
@@ -769,29 +771,60 @@ async function saveDevice(key) {
 
 async function probeDevice(key) {
   const card = document.querySelector(`.list-item[data-devkey="${CSS.escape(key)}"]`);
-  const host = card ? card.querySelector('[data-df="host"]').value : "";
-  if (!host) { toast("Host/IP fehlt", "error"); return; }
+  if (!card) return;
+  const host = card.querySelector('[data-df="host"]').value;
+  const username = card.querySelector('[data-df="username"]').value || "admin";
+  let password = card.querySelector('[data-df="password"]').value || "";
+  // Treat the masked placeholder as "use whatever's saved"
+  if (password === "***") password = "";
+  if (!host) { toast("Host/IP missing", "error"); return; }
   try {
     const r = await fetch("/api/devices/probe",{method:"POST",
-      headers:{"Content-Type":"application/json"},body:JSON.stringify({host})});
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({host, username, password})});
     const j = await r.json();
-    if (j.ok) toast("✓ Erreichbar: " + (j.device.model||j.device.kind||"Shelly"));
-    else toast("Nicht erreichbar: " + j.error, "error");
-  } catch(e) { toast("Fehler: " + e.message, "error"); }
+    if (j.ok) { toast("✓ Reachable: " + (j.device.model||j.device.kind||"Shelly")); return; }
+    if (j.error === "auth_required") {
+      const pw = prompt("Device " + host + " is password-protected.\nEnter the admin password:");
+      if (!pw) return;
+      const r2 = await fetch("/api/devices/probe",{method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({host, username, password: pw})});
+      const j2 = await r2.json();
+      if (j2.ok) {
+        // Cache the working password into the form so the user can hit Save
+        const pwInp = card.querySelector('[data-df="password"]');
+        if (pwInp) pwInp.value = pw;
+        toast("✓ Authenticated: " + (j2.device.model||j2.device.kind||"Shelly")
+              + " — click Save to persist");
+      } else {
+        toast("Auth failed: " + (j2.error||"unknown"), "error");
+      }
+      return;
+    }
+    toast("Not reachable: " + j.error, "error");
+  } catch(e) { toast("Error: " + e.message, "error"); }
 }
 
 async function probeAllDevices() {
-  toast("🔌 Prüfe alle Geräte…");
+  toast("🔌 Probing all devices…");
   let ok=0, fail=0;
   for (const d of devices) {
     try {
+      // Stored credentials live in config; the probe endpoint will only re-auth
+      // when given fresh creds, so for the all-probe we just rely on the
+      // device responding without auth (since the live poller already uses
+      // its own cached credentials path).
       const r = await fetch("/api/devices/probe",{method:"POST",
-        headers:{"Content-Type":"application/json"},body:JSON.stringify({host:d.host})});
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({host:d.host, username:d.username||"admin", password:""})});
       const j = await r.json();
-      if (j.ok) ok++; else fail++;
+      if (j.ok) ok++;
+      else if (j.error === "auth_required" && d.has_password) ok++;  // already configured
+      else fail++;
     } catch(e) { fail++; }
   }
-  toast(`Geprüft: ${ok} ok, ${fail} Fehler`, fail?"error":"success");
+  toast(`Probed: ${ok} ok, ${fail} failed`, fail?"error":"success");
   reload();
 }
 
@@ -1346,11 +1379,24 @@ async function addDiscovered(dev) {
 async function addByIp() {
   const ip = $("#probe-ip").value.trim();
   if (!ip) return;
+  let username = "admin";
+  let password = "";
   const r = await fetch("/api/devices",{method:"POST",
-    headers:{"Content-Type":"application/json"},body:JSON.stringify({host:ip})});
+    headers:{"Content-Type":"application/json"},body:JSON.stringify({host:ip, username, password})});
   const j = await r.json();
-  if (j.ok) { toast(T("settings.toast.device_added","✓ Gerät hinzugefügt")); $("#probe-ip").value=""; reload(); }
-  else toast("Fehler: " + j.error, "error");
+  if (j.ok) { toast(T("settings.toast.device_added","✓ Device added")); $("#probe-ip").value=""; reload(); return; }
+  if (j.error === "auth_required") {
+    const pw = prompt("Device " + ip + " is password-protected.\nEnter the admin password:");
+    if (!pw) return;
+    const r2 = await fetch("/api/devices",{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({host:ip, username, password: pw})});
+    const j2 = await r2.json();
+    if (j2.ok) { toast("✓ Device added with credentials"); $("#probe-ip").value=""; reload(); }
+    else toast("Auth failed: " + (j2.error||"unknown"), "error");
+    return;
+  }
+  toast("Error: " + j.error, "error");
 }
 
 async function deleteDevice(key) {

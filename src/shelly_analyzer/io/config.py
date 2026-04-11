@@ -55,6 +55,10 @@ class DeviceConfig:
     model: str = ""
     phases: int = 3
     supports_emdata: bool = True
+    # HTTP auth for password-protected devices.
+    # Gen2+ uses Digest auth (admin user), Gen1 uses Basic. Empty password = no auth.
+    username: str = "admin"
+    password: str = ""
 
 
 @dataclass(frozen=True)
@@ -833,6 +837,8 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         if kind != "em" and phases <= 1:
             phases = 1
         supports_emdata = bool(d.get("supports_emdata", True if kind == "em" else False))
+        username = str(d.get("username", "admin") or "admin")
+        password = str(d.get("password", "") or "")
         devices.append(
             DeviceConfig(
                 key=key,
@@ -844,6 +850,8 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
                 model=model,
                 phases=phases,
                 supports_emdata=supports_emdata,
+                username=username,
+                password=password,
             )
         )
 
@@ -1436,6 +1444,8 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
                 "model": getattr(d, "model", ""),
                 "phases": getattr(d, "phases", 3),
                 "supports_emdata": getattr(d, "supports_emdata", True),
+                "username": getattr(d, "username", "admin") or "admin",
+                "password": getattr(d, "password", "") or "",
             }
             for d in cfg.devices
         ],

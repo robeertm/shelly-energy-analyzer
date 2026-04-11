@@ -1,5 +1,20 @@
 # Changelog
 
+## 16.15.0 - 2026-04-11
+### Added
+- **Password-protected Shelly devices are now reachable.** All Shelly generations are supported on every platform (Windows / macOS / Linux):
+  - **Gen 1** (e.g. Shelly EM, 3EM, 1, 2.5, Plug S) → HTTP **Basic** auth.
+  - **Gen 2 / 3 / 4** (Plus / Pro family) → HTTP **Digest** auth.
+  - The new `ShellyHttp.set_credentials(host, user, password)` registers per-host credentials on the centralized HTTP client. Each request tries Digest first; on a 401 the client parses the `WWW-Authenticate` header, switches to Basic if the device requires it, retries once, and caches the chosen scheme so subsequent calls go through with one round trip. No `requests`-version-specific behaviour, no platform-specific paths — just `requests.auth.HTTPDigestAuth` / `HTTPBasicAuth` which ship with the standard `requests` package.
+  - **`DeviceConfig`** gains `username: str = "admin"` and `password: str = ""` fields. Both are persisted in `config.json` and merged on settings update. The web `GET /api/devices` response never returns the actual password — it returns `username` + a `has_password: bool` flag instead, and `PUT /api/devices/<key>` honours the `***` masked placeholder so the saved password isn't accidentally overwritten when the user edits other fields.
+  - **All HTTP call sites** (`MultiLivePoller`, `LivePoller` per-device thread, scheduler, sync, switch control, firmware OTA, discovery probe) now register credentials before the first request, so password-protected devices work end-to-end: live polling, historical sync, schedule push/pull, switch toggling, OTA updates, mDNS rescan.
+- **Settings → Devices: HTTP user / password inputs.** Each device card on the Settings page now has two new fields ("HTTP user" and "HTTP password"). Empty password = no auth (existing behaviour). When a password is saved, the input shows `***` and the row gets a 🔒 badge. The 🔌 "Probe" button now sends the form's credentials and surfaces a `prompt()` dialog if the device replies 401 — entering the right password caches it into the form so the user can hit "Save".
+- **Setup wizard: credential prompt for password-protected devices.** When the user clicks "Add" on a discovered device or types an IP under "Add manually", the wizard sends an unauthenticated probe first. If the device responds 401, a prompt asks for the admin password and re-tries the add request with the credentials in the body. The wizard then persists the device with its credentials in one go — no separate "edit" step needed.
+- **Discovery / probe surface 401 as `auth_required`.** `services/discovery.probe_device(host, username, password)` now signals `ValueError("auth_required")` when the device replies 401 and no credentials were supplied. `/api/devices/probe` and `/api/devices` (POST) translate this into HTTP 401 + `{ok:false, error:"auth_required"}` so any UI calling these endpoints can show a credential prompt.
+
+### Changed
+- **App always starts in English.** The runtime UI language is reset to `"en"` on every fresh start, regardless of the saved `cfg.ui.language` value. The user can switch language during the session via Settings (which is persisted), but the next app start brings English back. This makes the app shareable on demos, screenshots and Reddit posts without surprising visitors with a German UI on first boot.
+
 ## 16.14.2 - 2026-04-11
 ### Fixed
 - **No more flat 400 g/kWh spikes in the CO₂ chart.** The legacy gap-fill in `Co2FetchService._tick()` (entsoe.py) wrote a constant mean intensity into every missing recent hour, which appeared as ugly steps in the chart. That fill is removed; the new `Co2ForecastService.fill_recent_estimates()` now back-fills the last 72 hours with proper trend-+-weather estimates instead — same model used for the 6 h forward forecast (per-hour-of-day median × Open-Meteo wind/sun/temp/rain factor) — written to the DB with `source='forecast'`. Real provider rows always overwrite forecast rows on the next fetch (`INSERT OR REPLACE` on `(hour_ts, zone)`).

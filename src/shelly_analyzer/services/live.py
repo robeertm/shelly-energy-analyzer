@@ -152,6 +152,12 @@ class LivePoller:
                 backoff_base_seconds=download_cfg.backoff_base_seconds,
             )
         )
+        # Register per-device credentials so password-protected Shellys
+        # are reachable. ShellyHttp picks Digest (Gen2+) or Basic (Gen1).
+        _pw = getattr(device, "password", "") or ""
+        if _pw:
+            _user = getattr(device, "username", "admin") or "admin"
+            self._http.set_credentials(device.host, _user, _pw)
         self._thread = threading.Thread(target=self._run, name=f"LivePoller-{device.key}", daemon=True)
 
     def start(self) -> None:
@@ -270,6 +276,13 @@ class MultiLivePoller:
         http = getattr(self._thread_local, "http", None)
         if http is None:
             http = ShellyHttp(self._http_cfg)
+            # Register all device credentials on the per-thread client so
+            # password-protected Shellys are reachable from any worker.
+            for _d in self.devices:
+                _pw = getattr(_d, "password", "") or ""
+                if _pw:
+                    _user = getattr(_d, "username", "admin") or "admin"
+                    http.set_credentials(_d.host, _user, _pw)
             self._thread_local.http = http
         return http
 
