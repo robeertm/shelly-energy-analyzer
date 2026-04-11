@@ -156,6 +156,19 @@ def put_settings():
         state.cfg = new_cfg
         state.reload_config(new_cfg)
 
+        # Language change is handled OUT-OF-BAND from reload_config so
+        # that saving unrelated settings never bounces `state.lang` back
+        # to the disk value (the app is always forced to English at boot;
+        # users can still pick another language explicitly here).
+        try:
+            ui_update = updates.get("ui") if isinstance(updates, dict) else None
+            if isinstance(ui_update, dict) and "language" in ui_update:
+                new_lang = str(ui_update.get("language") or "").strip()
+                if new_lang:
+                    state.set_language(new_lang)
+        except Exception:
+            pass
+
         # Debug: log key effective fields so we can verify the round-trip
         try:
             logger.info(

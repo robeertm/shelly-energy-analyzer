@@ -227,7 +227,7 @@ function gatherSection(sectionId) {
 async function saveSection(sectionId) {
   let data;
   try { data = gatherSection(sectionId); }
-  catch(e) { toast(T("settings.toast.error","Fehler: {err}",{err:e.message}), "error"); return; }
+  catch(e) { toast(T("settings.toast.error","Error: {err}",{err:e.message}), "error"); return; }
   // When pricing section sets tariff_type, auto-toggle spot_price.enabled
   if (sectionId === "pricing" && data.spot_price && data.spot_price.tariff_type) {
     if (!data.spot_price) data.spot_price = {};
@@ -249,7 +249,7 @@ async function saveSection(sectionId) {
       headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
     const j = await r.json();
     if (j.ok) {
-      toast(T("settings.toast.saved","✓ Gespeichert"));
+      toast(T("settings.toast.saved","Saved"));
       if (langChanging) {
         // Give the toast a beat, then hard-reload so /api/i18n returns the
         // new language and every label on the page re-renders with it.
@@ -271,12 +271,12 @@ async function saveSection(sectionId) {
         }
       } catch(e) {}
     }
-    else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
-  } catch(e) { toast(T("settings.toast.error","Fehler: {err}",{err:e.message}), "error"); }
+    else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
+  } catch(e) { toast(T("settings.toast.error","Error: {err}",{err:e.message}), "error"); }
 }
 
 const SECTIONS = [
-  {id:"devices", title:"Geräte", group:"Grundeinstellungen", custom:true},
+  {id:"devices", title:"Devices", group:"Basic", custom:true},
   {id:"health", title:"Health Check", group:"Grundeinstellungen", custom:true},
   {id:"ui", title:"Anzeige", group:"Grundeinstellungen", fields:[
     {key:"ui.language", label:"Sprache", type:"select", opts:Object.entries(LANGS)},
@@ -286,8 +286,8 @@ const SECTIONS = [
     {key:"ui.plot_redraw_seconds", label:"Plot Refresh (Sek)", type:"number", step:"0.1"},
     {key:"ui.live_window_minutes", label:"Live-Fenster (Min)", type:"number"},
     {key:"ui.live_retention_minutes", label:"Live Retention (Min)", type:"number"},
-    {key:"ui.live_smoothing_enabled", label:"Glättung aktiv", type:"checkbox"},
-    {key:"ui.live_smoothing_seconds", label:"Glättung (Sek)", type:"number"},
+    {key:"ui.live_smoothing_enabled", label:"Smoothing active", type:"checkbox"},
+    {key:"ui.live_smoothing_seconds", label:"Smoothing (s)", type:"number"},
     {key:"ui.live_day_start", label:"Tag-Start (HH:MM)", type:"text"},
     {key:"ui.live_night_start", label:"Nacht-Start (HH:MM)", type:"text"},
     {key:"ui.live_daynight_mode", label:"Tag/Nacht-Modus", type:"select", opts:[["all","Alle"],["day","Tag"],["night","Nacht"]]},
@@ -296,24 +296,24 @@ const SECTIONS = [
     {key:"ui.live_web_enabled", label:"Web-Dashboard aktiv", type:"checkbox"},
     {key:"ui.live_web_port", label:"Port", type:"number"},
     {key:"ui.live_web_refresh_seconds", label:"Refresh (Sek)", type:"number", step:"0.1"},
-    {key:"ui.live_web_token", label:"Zugriffs-Token", type:"password", hint:"Leer = kein Login nötig"},
-    {key:"ui.widget_domain", label:"Widget Domain", type:"text", hint:"Für iOS Widget"},
-    {key:"ui.widget_devices", label:"Widget Geräte", type:"text", hint:"Komma-separiert"},
+    {key:"ui.live_web_token", label:"Access token", type:"password", hint:"Empty = no login required"},
+    {key:"ui.widget_domain", label:"Widget domain", type:"text", hint:"For iOS widget"},
+    {key:"ui.widget_devices", label:"Widget devices", type:"text", hint:"Comma-separated"},
   ]},
   {id:"ssl", title:"SSL-Zertifikat", group:"Grundeinstellungen", custom:true},
   {id:"pricing", title:"Preise & Tarif", group:"Grundeinstellungen", fields:[
-    {key:"spot_price.tariff_type", label:"Tarif-Modell", type:"select", opts:[["fixed","Fester Tarif"],["dynamic","Dynamischer Tarif (Spot)"]], hint:"Fix = fester Strompreis, Dynamisch = stündliche Börsenpreise"},
-    {key:"pricing.electricity_price_eur_per_kwh", label:"Strompreis €/kWh", type:"number", step:"0.0001", hint:"Bei festem Tarif: dein Vertragspreis"},
-    {key:"pricing.base_fee_eur_per_year", label:"Grundgebühr €/Jahr", type:"number", step:"0.01"},
+    {key:"spot_price.tariff_type", label:"Tariff model", type:"select", opts:[["fixed","Fixed tariff"],["dynamic","Dynamic tariff (spot)"]], hint:"Fixed = flat electricity price, Dynamic = hourly market prices"},
+    {key:"pricing.electricity_price_eur_per_kwh", label:"Electricity price €/kWh", type:"number", step:"0.0001", hint:"For fixed tariff: your contract price"},
+    {key:"pricing.base_fee_eur_per_year", label:"Base fee €/year", type:"number", step:"0.01"},
     {key:"pricing.price_includes_vat", label:"Preis inkl. MwSt.", type:"checkbox"},
-    {key:"pricing.base_fee_includes_vat", label:"Grundgebühr inkl. MwSt.", type:"checkbox"},
+    {key:"pricing.base_fee_includes_vat", label:"Base fee incl. VAT", type:"checkbox"},
     {key:"pricing.vat_enabled", label:"MwSt. aktiv", type:"checkbox"},
     {key:"pricing.vat_rate_percent", label:"MwSt.-Satz (%)", type:"number", step:"0.1"},
-    {key:"pricing.co2_intensity_g_per_kwh", label:"CO₂-Intensität (g/kWh)", type:"number"},
-    {key:"pricing.tariff_schedule", label:"Preisänderungen", type:"list", itemLabel:"Tarifperiode", hint:"Ab Startdatum gilt der neue Preis. Ältere Daten behalten den vorherigen Preis.", schema:[
+    {key:"pricing.co2_intensity_g_per_kwh", label:"CO₂ intensity (g/kWh)", type:"number"},
+    {key:"pricing.tariff_schedule", label:"Price changes", type:"list", itemLabel:"Tariff period", hint:"From the start date the new price applies. Older data behalten den vorherigen Preis.", schema:[
       {key:"start_date", label:"Ab Datum", type:"date"},
       {key:"electricity_price_eur_per_kwh", label:"Strompreis €/kWh", type:"number", step:"0.0001"},
-      {key:"base_fee_eur_per_year", label:"Grundgebühr €/Jahr", type:"number", step:"0.01"},
+      {key:"base_fee_eur_per_year", label:"Base fee €/year", type:"number", step:"0.01"},
     ], defaults:{start_date:"",electricity_price_eur_per_kwh:0.3265,base_fee_eur_per_year:127.51}},
   ]},
   {id:"tou", title:"TOU (Zeittarife)", group:"Grundeinstellungen", fields:[
@@ -329,7 +329,7 @@ const SECTIONS = [
   {id:"autosync", title:"Auto-Sync", group:"Grundeinstellungen", fields:[
     {key:"ui.autosync_enabled", label:"Auto-Sync aktiv", type:"checkbox"},
     {key:"ui.autosync_interval_hours", label:"Intervall (Std)", type:"number"},
-    {key:"ui.autosync_interval_minutes", label:"Intervall (Min, überschreibt Std wenn > 0)", type:"number"},
+    {key:"ui.autosync_interval_minutes", label:"Interval (min, overrides hours if > 0)", type:"number"},
     {key:"ui.autosync_mode", label:"Modus", type:"select", opts:[["incremental","Inkrementell"],["all","Alle"],["day","Tag"],["week","Woche"],["month","Monat"]]},
   ]},
 
@@ -338,7 +338,7 @@ const SECTIONS = [
     {key:"ui.telegram_bot_token", label:"Bot Token", type:"password"},
     {key:"ui.telegram_chat_id", label:"Chat ID", type:"text"},
     {key:"ui.telegram_verify_ssl", label:"SSL verifizieren", type:"checkbox"},
-    {key:"ui.telegram_detail_level", label:"Detail", type:"select", opts:[["simple","Kurz"],["detailed","Ausführlich"]]},
+    {key:"ui.telegram_detail_level", label:"Detail", type:"select", opts:[["simple","Brief"],["detailed","Detailed"]]},
     {key:"ui.telegram_alarm_plots_enabled", label:"Alarm-Plots", type:"checkbox"},
     {key:"ui.telegram_daily_summary_enabled", label:"Tages-Report", type:"checkbox"},
     {key:"ui.telegram_daily_summary_time", label:"Tages-Zeit", type:"text"},
@@ -354,7 +354,7 @@ const SECTIONS = [
     {key:"ui.email_smtp_password", label:"SMTP Passwort", type:"password"},
     {key:"ui.email_from_address", label:"Absender", type:"email"},
     {key:"ui.email_use_tls", label:"TLS verwenden", type:"checkbox"},
-    {key:"ui.email_recipients", label:"Empfänger", type:"text", hint:"Komma-separiert"},
+    {key:"ui.email_recipients", label:"Recipients", type:"text", hint:"Comma-separated"},
     {key:"ui.email_alarm_enabled", label:"Alarm-E-Mails", type:"checkbox"},
     {key:"ui.email_daily_summary_enabled", label:"Tages-Report", type:"checkbox"},
     {key:"ui.email_daily_summary_time", label:"Tages-Zeit", type:"text"},
@@ -421,8 +421,8 @@ const SECTIONS = [
   ]},
   {id:"solar", title:"Solar / PV", group:"Energie", fields:[
     {key:"solar.enabled", label:"Solar aktiv", type:"checkbox"},
-    {key:"solar.pv_meter_device_key", label:"PV-Meter Gerät", type:"select-device"},
-    {key:"solar.feed_in_tariff_eur_per_kwh", label:"Einspeisevergütung €/kWh", type:"number", step:"0.001"},
+    {key:"solar.pv_meter_device_key", label:"PV meter device", type:"select-device"},
+    {key:"solar.feed_in_tariff_eur_per_kwh", label:"Feed-in tariff €/kWh", type:"number", step:"0.001"},
     {key:"solar.kw_peak", label:"kWp", type:"number", step:"0.1"},
     {key:"solar.battery_kwh", label:"Batterie kWh", type:"number", step:"0.1"},
     {key:"solar.co2_production_kg_per_kwp", label:"CO₂ Produktion (kg/kWp)", type:"number"},
@@ -432,30 +432,30 @@ const SECTIONS = [
   ]},
   {id:"battery", title:"Batterie", group:"Energie", fields:[
     {key:"battery.enabled", label:"Batterie-Monitoring aktiv", type:"checkbox"},
-    {key:"battery.device_key", label:"Gerät", type:"select-device"},
-    {key:"battery.capacity_kwh", label:"Kapazität (kWh)", type:"number", step:"0.1"},
+    {key:"battery.device_key", label:"Device", type:"select-device"},
+    {key:"battery.capacity_kwh", label:"Capacity (kWh)", type:"number", step:"0.1"},
     {key:"battery.max_charge_rate_kw", label:"Max Ladeleistung (kW)", type:"number", step:"0.1"},
     {key:"battery.max_discharge_rate_kw", label:"Max Entladeleistung (kW)", type:"number", step:"0.1"},
     {key:"battery.efficiency_pct", label:"Effizienz (%)", type:"number", step:"0.1"},
   ]},
-  {id:"pv_surplus", title:"PV-Überschuss", group:"Energie", fields:[
-    {key:"pv_surplus.enabled", label:"PV-Überschuss aktiv", type:"checkbox"},
+  {id:"pv_surplus", title:"PV surplus", group:"Energie", fields:[
+    {key:"pv_surplus.enabled", label:"PV surplus active", type:"checkbox"},
     {key:"pv_surplus.on_threshold_w", label:"Ein-Schwelle (W)", type:"number"},
     {key:"pv_surplus.off_threshold_w", label:"Aus-Schwelle (W)", type:"number"},
     {key:"pv_surplus.debounce_seconds", label:"Debounce (Sek)", type:"number"},
     {key:"pv_surplus.consumers", label:"Verbraucher", type:"list", itemLabel:"Verbraucher", schema:[
       {key:"name", label:"Name", type:"text", placeholder:"Warmwasser / Pool"},
-      {key:"device_key", label:"Gerät", type:"select-device"},
+      {key:"device_key", label:"Device", type:"select-device"},
       {key:"switch_id", label:"Switch-ID", type:"number", min:0},
-      {key:"priority", label:"Priorität", type:"number", min:1, hint:"1 = höchste"},
+      {key:"priority", label:"Priority", type:"number", min:1, hint:"1 = highest"},
       {key:"min_power_w", label:"Min. Leistung (W)", type:"number"},
     ], defaults:{name:"",device_key:"",switch_id:0,priority:1,min_power_w:500}},
   ]},
-  {id:"spot_price", title:"Spot-Preise (Details)", group:"Energie", hint:"Tarif-Modell (Fix/Dynamisch) wird unter Preise und Tarif eingestellt. Zone wählen → passender Provider wird automatisch genutzt (EU → Energy-Charts, US → EIA, AU → AEMO).", fields:[
+  {id:"spot_price", title:"Spot prices (details)", group:"Energy", hint:"Tariff model (fixed/dynamic) is set under Pricing & tariff. Zone sellen → passender Provider wird automatisch genutzt (EU → Energy-Charts, US → EIA, AU → AEMO).", fields:[
     {key:"spot_price.enabled", label:"Spot-Preise aktiv", type:"checkbox", hint:"Wird automatisch gesetzt wenn Tarif-Modell = Dynamisch"},
-    {key:"spot_price.primary_api", label:"API (EU)", type:"select", opts:[["energy_charts","Energy-Charts (alle EU)"],["awattar","aWATTar (nur DE/AT)"]], hint:"Nur relevant für EU-Zonen; US- und AU-Zonen nutzen EIA bzw. AEMO automatisch"},
-    {key:"spot_price.bidding_zone", label:"Gebotszone", type:"select-dyn", dynSrc:"spot", hint:"Weltweite Zonen. Werte außerhalb der EU werden per Tages-Wechselkurs in EUR/MWh konvertiert."},
-    {key:"spot_price.eia_api_key", label:"EIA API-Key (nur USA)", type:"password", hint:"Kostenlos unter eia.gov/opendata/register.php – nur nötig für US-Zonen"},
+    {key:"spot_price.primary_api", label:"API (EU)", type:"select", opts:[["energy_charts","Energy-Charts (all EU)"],["awattar","aWATTar (DE/AT only)"]], hint:"Only relevant for EU zones; US and AU zones use EIA or AEMO automatically"},
+    {key:"spot_price.bidding_zone", label:"Bidding zone", type:"select-dyn", dynSrc:"spot", hint:"Worldwide zones. Values outside the EU are converted to EUR/MWh via daily FX rate."},
+    {key:"spot_price.eia_api_key", label:"EIA API key (USA only)", type:"password", hint:"Free at eia.gov/opendata/register.php – only needed for US Zonen"},
     {key:"spot_price.fetch_interval_hours", label:"Intervall (Std)", type:"number"},
     {key:"spot_price.tariff_type", label:"Tarif-Typ", type:"select", opts:[["fixed","Fix"],["dynamic","Dynamisch"]], hint:"Spiegelt die Einstellung aus Preise & Tarif"},
     {key:"spot_price.include_vat", label:"MwSt. aufschlagen", type:"checkbox"},
@@ -470,13 +470,13 @@ const SECTIONS = [
   ]},
   {id:"co2", title:"CO₂ / ENTSO-E + Electricity Maps", group:"Energie", hint:"EU-Zonen (Format DE_LU, AT, …) nutzen ENTSO-E (eigener Token). Globale Zonen (Format DE, US-CAL-CISO, JP-TK, …) nutzen Electricity Maps (freier API-Key).", fields:[
     {key:"co2.enabled", label:"CO₂-Tracking aktiv", type:"checkbox"},
-    {key:"co2.entso_e_api_token", label:"ENTSO-E Token (EU)", type:"password", hint:"Kostenlos unter transparency.entsoe.eu – nur für EU-Zonen"},
-    {key:"co2.electricity_maps_api_key", label:"Electricity Maps API-Key (global)", type:"password", hint:"Kostenlos unter api.electricitymap.org – für weltweite Zonen"},
+    {key:"co2.entso_e_api_token", label:"ENTSO-E token (EU)", type:"password", hint:"Free at transparency.entsoe.eu – only for EU zones"},
+    {key:"co2.electricity_maps_api_key", label:"Electricity Maps API key (global)", type:"password", hint:"Free at api.electricitymap.org – for wltweite Zonen"},
     {key:"co2.bidding_zone", label:"Zone", type:"select-dyn", dynSrc:"co2"},
     {key:"co2.fetch_interval_hours", label:"Intervall (Std)", type:"number"},
     {key:"co2.backfill_days", label:"Backfill (Tage)", type:"number"},
-    {key:"co2.show_green_dirty_hours", label:"Grün/Dirty Stunden zeigen", type:"checkbox"},
-    {key:"co2.green_threshold_g_per_kwh", label:"Grün-Schwelle (g/kWh)", type:"number"},
+    {key:"co2.show_green_dirty_hours", label:"Show green/dirty hours", type:"checkbox"},
+    {key:"co2.green_threshold_g_per_kwh", label:"Green threshold (g/kWh)", type:"number"},
     {key:"co2.dirty_threshold_g_per_kwh", label:"Dirty-Schwelle (g/kWh)", type:"number"},
     {key:"co2.cross_border_flows", label:"Cross-Border-Flows", type:"checkbox"},
   ]},
@@ -485,7 +485,7 @@ const SECTIONS = [
     {key:"weather.api_key", label:"OpenWeatherMap API Key", type:"password"},
     {key:"weather.city", label:"Stadt", type:"text"},
     {key:"weather.lat", label:"Breitengrad", type:"number", step:"0.0001"},
-    {key:"weather.lon", label:"Längengrad", type:"number", step:"0.0001"},
+    {key:"weather.lon", label:"Longitude", type:"number", step:"0.0001"},
     {key:"weather.fetch_interval_minutes", label:"Intervall (Min)", type:"number"},
   ]},
   {id:"forecast", title:"Prognose", group:"Energie", fields:[
@@ -501,7 +501,7 @@ const SECTIONS = [
   ]},
   {id:"ev_charging", title:"EV Charging", group:"Features", fields:[
     {key:"ev_charging.enabled", label:"EV-Erkennung aktiv", type:"checkbox"},
-    {key:"ev_charging.wallbox_device_key", label:"Wallbox-Gerät", type:"select-device"},
+    {key:"ev_charging.wallbox_device_key", label:"Wallbox device", type:"select-device"},
     {key:"ev_charging.detection_threshold_w", label:"Erkennungs-Schwelle (W)", type:"number"},
     {key:"ev_charging.min_session_minutes", label:"Min Session (Min)", type:"number"},
   ]},
@@ -512,7 +512,7 @@ const SECTIONS = [
       {key:"provider", label:"Anbieter", type:"text"},
       {key:"tariff_type", label:"Typ", type:"select", opts:[["fixed","Fix"],["tou","TOU"],["spot","Spot"]]},
       {key:"price_eur_per_kwh", label:"Preis €/kWh", type:"number", step:"0.0001"},
-      {key:"base_fee_eur_per_year", label:"Grundgebühr €/Jahr", type:"number", step:"0.01"},
+      {key:"base_fee_eur_per_year", label:"Base fee €/year", type:"number", step:"0.01"},
       {key:"ht_price", label:"HT-Preis (TOU)", type:"number", step:"0.0001"},
       {key:"nt_price", label:"NT-Preis (TOU)", type:"number", step:"0.0001"},
       {key:"ht_start", label:"HT-Start (Std)", type:"number", min:0, max:23},
@@ -540,14 +540,14 @@ const SECTIONS = [
     {key:"billing.payment_terms_days", label:"Zahlungsziel (Tage)", type:"number"},
     {key:"billing.invoice_logo_path", label:"Logo-Pfad", type:"text"},
     {key:"billing.issuer.name", label:"Aussteller Name", type:"text"},
-    {key:"billing.issuer.address", label:"Aussteller Adresse", type:"textarea", hint:"Straße, PLZ Ort, Land – mehrzeilig"},
+    {key:"billing.issuer.address", label:"Issuer address", type:"textarea", hint:"Street, ZIP city, country – multiline"},
     {key:"billing.issuer.vat_id", label:"Aussteller USt-ID", type:"text"},
     {key:"billing.issuer.email", label:"Aussteller E-Mail", type:"email"},
     {key:"billing.issuer.phone", label:"Aussteller Telefon", type:"text"},
     {key:"billing.issuer.iban", label:"Aussteller IBAN", type:"text"},
     {key:"billing.issuer.bic", label:"Aussteller BIC", type:"text"},
     {key:"billing.customer.name", label:"Kunde Name", type:"text"},
-    {key:"billing.customer.address", label:"Kunde Adresse", type:"textarea", hint:"Straße, PLZ Ort, Land – mehrzeilig"},
+    {key:"billing.customer.address", label:"Customer address", type:"textarea", hint:"Street, ZIP city, country – multiline"},
     {key:"billing.customer.email", label:"Kunde E-Mail", type:"email"},
     {key:"billing.customer.vat_id", label:"Kunde USt-ID", type:"text"},
   ]},
@@ -561,7 +561,7 @@ const SECTIONS = [
       {key:"persons", label:"Personen", type:"number", min:1},
       {key:"move_in", label:"Einzug (YYYY-MM-DD)", type:"text", placeholder:"2024-01-01"},
       {key:"move_out", label:"Auszug (YYYY-MM-DD)", type:"text", placeholder:"leer = aktuell"},
-      {key:"device_keys", label:"Geräte (Komma-getrennt)", type:"csv-list"},
+      {key:"device_keys", label:"Devices (comma-separated)", type:"csv-list"},
     ], defaults:{tenant_id:"",name:"",unit:"",persons:1,move_in:"",move_out:"",device_keys:[]}},
   ]},
   {id:"multi_location", title:"Multi-Location", group:"Erweitert", fields:[
@@ -581,11 +581,11 @@ const SECTIONS = [
   {id:"demo", title:"Demo-Modus", group:"Erweitert", fields:[
     {key:"demo.enabled", label:"Demo aktiv", type:"checkbox"},
     {key:"demo.seed", label:"Seed", type:"number"},
-    {key:"demo.scenario", label:"Szenario", type:"select", opts:[["household","Haushalt"],["pv-home","PV-Haus"],["heatpump","Wärmepumpe"],["tenant-metering","Mieter"]]},
+    {key:"demo.scenario", label:"Scenario", type:"select", opts:[["household","Household"],["pv-home","PV home"],["heatpump","Heat pump"],["tenant-metering","Mieter"]]},
   ]},
   {id:"ios_widget", title:"iOS Widget", group:"Erweitert", custom:true},
   {id:"updates", title:"Updates", group:"Erweitert", custom:true},
-  {id:"about", title:"Über", group:"Erweitert", custom:true},
+  {id:"about", title:"About", group:"Advanced", custom:true},
 ];
 
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -629,11 +629,11 @@ function renderListField(f, val) {
       <div class="list-item-grid">${rows}</div>
     </div>`;
   }
-  const itemsHtml = items.map(renderItem).join("") || `<p class="hint" style="margin:6px 0">${T("settings.list.empty","Keine Einträge – ➕ Hinzufügen drücken.")}</p>`;
+  const itemsHtml = items.map(renderItem).join("") || `<p class="hint" style="margin:6px 0">${T("settings.list.empty","No entries – click ➕ Add.")}</p>`;
   return `<div class="field list-field" style="grid-column:1/-1" data-key="${f.key}" data-list="1">
     <label>${esc(tField(f))}</label>
     <div id="${listId}" class="list-container">${itemsHtml}</div>
-    <div><button type="button" class="secondary small list-add">➕ ${T("settings.btn.add","Hinzufügen")}</button></div>
+    <div><button type="button" class="secondary small list-add">➕ ${T("settings.btn.add","Add")}</button></div>
     ${f.hint ? `<div class="hint">${esc(tHint(f))}</div>`:""}
     <template class="list-schema">${encodeURIComponent(JSON.stringify({schema:f.schema, defaults:f.defaults||{}, itemLabel:f.itemLabel||"Eintrag"}))}</template>
   </div>`;
@@ -834,7 +834,7 @@ function renderDevices() {
       <div class="list-item-grid">
         <div class="field"><label>${T("settings.devcard.name","Name")}</label><input type="text" data-df="name" value="${esc(d.name||"")}"></div>
         <div class="field"><label>${T("settings.devcard.host","Host / IP")}</label><input type="text" data-df="host" value="${esc(d.host||"")}"></div>
-        <div class="field"><label>${T("settings.devcard.key_readonly","Schlüssel (read-only)")}</label><input type="text" value="${esckey}" readonly></div>
+        <div class="field"><label>${T("settings.devcard.key_readonly","Key (read-only)")}</label><input type="text" value="${esckey}" readonly></div>
         <div class="field"><label>${T("settings.devcard.em_id","EM-ID")}</label><input type="number" data-df="em_id" min="0" value="${Number(d.em_id||0)}"></div>
         <div class="field"><label>${T("settings.devcard.kind","Typ")}</label><select data-df="kind">
           <option value="em" ${d.kind==="em"?"selected":""}>${T("settings.devcard.kind_em","Energy Meter")}</option>
@@ -861,9 +861,9 @@ function renderDevices() {
     </div>`;
   }).join("");
   setTimeout(_wireDeviceDragHandlers, 0);
-  return `<section id="sec-devices"><h2>${T("settings.section.devices","Geräte")}</h2>
+  return `<section id="sec-devices"><h2>${T("settings.section.devices","Devices")}</h2>
     <p class="hint" style="margin:-4px 0 8px 0">${T("settings.devices.hint_reorder","Drag the ⋮⋮ handle to reorder devices on the Live tab. Toggle 👁 to hide a device from the Live tab without deleting its data.")}</p>
-    <div id="devices-list" style="display:flex;flex-direction:column;gap:8px">${rows || `<p class='hint'>${T("settings.health.no_devices","Keine Geräte konfiguriert")}</p>`}</div>
+    <div id="devices-list" style="display:flex;flex-direction:column;gap:8px">${rows || `<p class='hint'>${T("settings.health.no_devices","No devices configured")}</p>`}</div>
     <div class="section-actions" style="justify-content:space-between;flex-wrap:wrap">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="secondary" onclick="discoverDevices()">🔍 mDNS Scan</button>
@@ -903,9 +903,9 @@ async function saveDevice(key) {
     const r = await fetch("/api/devices/"+encodeURIComponent(key),{method:"PUT",
       headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const j = await r.json();
-    if (j.ok) { toast("✓ Gerät aktualisiert"); reload(); }
-    else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
-  } catch(e) { toast(T("settings.toast.error","Fehler: {err}",{err:e.message}), "error"); }
+    if (j.ok) { toast("✓ Device updated"); reload(); }
+    else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
+  } catch(e) { toast(T("settings.toast.error","Error: {err}",{err:e.message}), "error"); }
 }
 
 async function probeDevice(key) {
@@ -999,7 +999,7 @@ async function copyWidgetScriptSettings() {
 }
 
 function renderAbout() {
-  return `<section id="sec-about"><h2>${T("settings.section.about","Über")}</h2>
+  return `<section id="sec-about"><h2>${T("settings.section.about","About")}</h2>
     <p>${T("settings.about.app_version","App-Version")}: <strong id="about-version">${T("settings.about.loading","Lade…")}</strong></p>
     <p>${T("settings.about.config_version","Config-Version")}: <span class="hint">${cfg.version||"?"}</span></p>
     <div id="about-stats" class="hint">${T("settings.about.loading_stats","Lade DB-Statistik…")}</div>
@@ -1022,12 +1022,12 @@ function renderUpdates() {
     </div>
     <div class="section-actions">
       <button onclick="saveSection('updates')">${T("settings.btn.save","💾 Speichern")}</button>
-      <button class="secondary" onclick="checkUpdateStatus()">🔄 ${T("settings.updates.check_now","Jetzt prüfen")}</button>
+      <button class="secondary" onclick="checkUpdateStatus()">🔄 ${T("settings.updates.check_now","Check now")}</button>
       <button class="secondary" onclick="loadReleaseList()">${T("settings.updates.load_releases","Letzte 10 Versionen laden")}</button>
     </div>
     <div id="updates-status" class="hint" style="margin-top:8px">${T("settings.updates.status_loading","Status wird geladen…")}</div>
     <div id="updates-releases" style="margin-top:12px"></div>
-    <p class="hint" style="margin-top:10px">${T("settings.updates.hint","Hinweis: Die App startet nach einem Update automatisch neu. Rollback auf eine frühere Version ist jederzeit möglich.")}</p>
+    <p class="hint" style="margin-top:10px">${T("settings.updates.hint","Note: the app restarts automatically after an update. Rollback is available via the dropdown.")}</p>
   </section>`;
 }
 
@@ -1039,7 +1039,7 @@ async function checkUpdateStatus() {
     const r = await fetch("/api/updates/status");
     const j = await r.json();
     if (!j.ok && !j.current) {
-      el.innerHTML = `<span style="color:var(--danger)">${esc(j.error||T("settings.err","Fehler"))}</span>`;
+      el.innerHTML = `<span style="color:var(--danger)">${esc(j.error||T("settings.err","Error"))}</span>`;
       return;
     }
     const cur = j.current || "?";
@@ -1066,11 +1066,11 @@ async function loadReleaseList() {
     const r = await fetch("/api/updates/releases?limit=10");
     const j = await r.json();
     if (!j.ok) {
-      el.innerHTML = `<p class="hint" style="color:var(--danger)">${esc(j.error||T("settings.err","Fehler"))}</p>`;
+      el.innerHTML = `<p class="hint" style="color:var(--danger)">${esc(j.error||T("settings.err","Error"))}</p>`;
       return;
     }
     if (!j.releases || !j.releases.length) {
-      el.innerHTML = `<p class="hint">${T("settings.updates.no_releases","Keine Releases gefunden")}</p>`;
+      el.innerHTML = `<p class="hint">${T("settings.updates.no_releases","No releases found")}</p>`;
       return;
     }
     const rows = j.releases.map(rel => {
@@ -1078,10 +1078,10 @@ async function loadReleaseList() {
       let badge = "";
       if (rel.is_current) badge = `<span style="color:var(--muted);font-size:.75rem">● ${T("settings.updates.current_tag","installiert")}</span>`;
       else if (rel.is_newer) badge = `<span style="color:var(--ok,#22c55e);font-size:.75rem">↑ ${T("settings.updates.newer","neuer")}</span>`;
-      else if (rel.is_older) badge = `<span style="color:var(--warn,#eab308);font-size:.75rem">↓ ${T("settings.updates.older","älter")}</span>`;
+      else if (rel.is_older) badge = `<span style="color:var(--warn,#eab308);font-size:.75rem">↓ ${T("settings.updates.older","older")}</span>`;
       const btnLabel = rel.is_current
         ? T("settings.updates.btn_installed","Installiert")
-        : (rel.is_newer ? "⬆ " + T("settings.updates.btn_install","Installieren") : "⤺ " + T("settings.updates.btn_rollback","Zurück auf diese Version"));
+        : (rel.is_newer ? "⬆ " + T("settings.updates.btn_install","Installieren") : "⤺ " + T("settings.updates.btn_rollback","Roll back to this version"));
       const disabled = rel.is_current || !rel.asset_url ? "disabled" : "";
       const hint = !rel.asset_url && !rel.is_current ? `<span class="hint" style="font-size:.7rem;color:var(--warn,#eab308);margin-left:6px">${T("settings.updates.no_asset","kein Asset")}</span>` : "";
       return `<div class="devcard" style="justify-content:space-between;align-items:center">
@@ -1112,10 +1112,10 @@ async function installVersion(tag, assetUrl) {
         if (el) el.innerHTML = `<strong>${T("settings.updates.restarting","App startet neu… Bitte Seite in ~10s neu laden.")}</strong>`;
       }, 400);
     } else {
-      toast(T("settings.toast.error","Fehler: {err}",{err:j.error||"?"}), "error");
+      toast(T("settings.toast.error","Error: {err}",{err:j.error||"?"}), "error");
     }
   } catch(e) {
-    toast(T("settings.toast.error","Fehler: {err}",{err:e.message}), "error");
+    toast(T("settings.toast.error","Error: {err}",{err:e.message}), "error");
   }
 }
 
@@ -1149,15 +1149,15 @@ function renderSSL() {
       <button class="secondary" onclick="regenerateSSL()">♻ ${T("settings.ssl.regenerate","Jetzt neu erzeugen")}</button>
     </div>
     <div id="ssl-status" class="hint" style="margin-top:10px">${T("settings.ssl.loading","Zertifikats-Status wird geladen…")}</div>
-    <p class="hint" style="margin-top:8px">${T("settings.ssl.hint","Im Auto-Modus wird bei jedem Start geprüft, ob das self-signed Zertifikat bald abläuft – wenn weniger als X Tage verbleiben, wird es automatisch neu erzeugt (altes Paar wird als .bak gesichert). Änderungen werden erst nach einem Neustart wirksam.")}</p>
+    <p class="hint" style="margin-top:8px">${T("settings.ssl.hint","In auto mode the app checks on every start whether the self-signed certificate is about to expire – if fewer than N days remain it is regenerated automatically (the old pair is backed up as .bak). Changes take effect after an app restart.")}</p>
   </section>`;
 }
 
 function _sslDaysBadge(days) {
   if (days == null) return `<span class="hint">${T("settings.ssl.unknown","unbekannt")}</span>`;
   if (days < 0) return `<strong style="color:var(--danger,#ef4444)">${T("settings.ssl.expired","abgelaufen vor {n} Tagen",{n:-days})}</strong>`;
-  if (days < 30) return `<strong style="color:var(--warn,#eab308)">${T("settings.ssl.expires_soon","läuft in {n} Tagen ab",{n:days})}</strong>`;
-  return `<strong style="color:var(--ok,#22c55e)">${T("settings.ssl.valid_for","gültig für {n} Tage",{n:days})}</strong>`;
+  if (days < 30) return `<strong style="color:var(--warn,#eab308)">${T("settings.ssl.expires_soon","expires in {n} days",{n:days})}</strong>`;
+  return `<strong style="color:var(--ok,#22c55e)">${T("settings.ssl.valid_for","valid for {n} days",{n:days})}</strong>`;
 }
 
 async function loadSSLStatus() {
@@ -1168,7 +1168,7 @@ async function loadSSLStatus() {
     const r = await fetch("/api/ssl/status");
     const j = await r.json();
     if (!j.ok) {
-      el.innerHTML = `<span style="color:var(--danger)">${esc(j.error||T("settings.err","Fehler"))}</span>`;
+      el.innerHTML = `<span style="color:var(--danger)">${esc(j.error||T("settings.err","Error"))}</span>`;
       return;
     }
     const c = j.cert || {};
@@ -1190,7 +1190,7 @@ async function loadSSLStatus() {
       ? `<span class="hint">${T("settings.ssl.self_signed","self-signed")}</span>`
       : `<span class="hint">${T("settings.ssl.ca_signed","CA-signiert")}</span>`;
     const willRenew = j.will_renew
-      ? `<div style="margin-top:4px;color:var(--warn,#eab308)">♻ ${T("settings.ssl.will_renew_msg","Wird beim nächsten Start automatisch erneuert")}</div>`
+      ? `<div style="margin-top:4px;color:var(--warn,#eab308)">♻ ${T("settings.ssl.will_renew_msg","Will be renewed automatically on next start")}</div>`
       : "";
     const nb = c.not_before ? new Date(c.not_before).toLocaleDateString() : "?";
     const na = c.not_after ? new Date(c.not_after).toLocaleDateString() : "?";
@@ -1198,7 +1198,7 @@ async function loadSSLStatus() {
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:6px">
         ${httpsBadge} · <span>${T("settings.ssl.mode","SSL-Modus")}: <strong>${esc(modeLabel)}</strong></span> · ${typeBadge}
       </div>
-      <div>${T("settings.ssl.validity","Gültigkeit")}: <strong>${esc(nb)}</strong> → <strong>${esc(na)}</strong> · ${_sslDaysBadge(c.days_remaining)}</div>
+      <div>${T("settings.ssl.validity","Validity")}: <strong>${esc(nb)}</strong> → <strong>${esc(na)}</strong> · ${_sslDaysBadge(c.days_remaining)}</div>
       <div style="margin-top:4px"><span class="hint">${T("settings.ssl.subject","Inhaber")}: ${esc(c.subject||"?")}</span></div>
       <div><span class="hint">${T("settings.ssl.issuer","Aussteller")}: ${esc(c.issuer||"?")}</span></div>
       ${c.sha256 ? `<div style="margin-top:4px;font-family:ui-monospace,monospace;font-size:.68rem;color:var(--muted);word-break:break-all">SHA-256: ${esc(c.sha256)}</div>` : ""}
@@ -1209,7 +1209,7 @@ async function loadSSLStatus() {
 }
 
 async function regenerateSSL() {
-  if (!confirm(T("settings.ssl.confirm_regenerate","Zertifikat wirklich neu erzeugen? Der Browser zeigt danach eine Warnung (self-signed). Neustart der App nötig, damit es greift."))) return;
+  if (!confirm(T("settings.ssl.confirm_regenerate","Really regenerate the certificate? The browser will show a warning on first visit."))) return;
   toast("⏳ " + T("settings.ssl.regenerating","Erzeuge neues Zertifikat…"));
   try {
     const r = await fetch("/api/ssl/regenerate",{method:"POST"});
@@ -1218,10 +1218,10 @@ async function regenerateSSL() {
       toast("✓ " + (j.message||T("settings.ssl.regenerated","Zertifikat neu erzeugt – bitte App neu starten")));
       loadSSLStatus();
     } else {
-      toast(T("settings.toast.error","Fehler: {err}",{err:j.error||"?"}), "error");
+      toast(T("settings.toast.error","Error: {err}",{err:j.error||"?"}), "error");
     }
   } catch(e) {
-    toast(T("settings.toast.error","Fehler: {err}",{err:e.message}), "error");
+    toast(T("settings.toast.error","Error: {err}",{err:e.message}), "error");
   }
 }
 
@@ -1229,10 +1229,10 @@ function renderHealth() {
   return `<section id="sec-health"><h2>${T("settings.section.health","Health Check")}</h2>
     <p class="hint">${T("settings.health.subtitle","Ping aller Shellys + Firmware-Status")}</p>
     <div class="section-actions" style="justify-content:flex-start;margin-top:0;border-top:none;padding-top:0;flex-wrap:wrap">
-      <button class="secondary" onclick="runHealthCheck()">🩺 ${T("settings.health.check_now","Jetzt prüfen")}</button>
+      <button class="secondary" onclick="runHealthCheck()">🩺 ${T("settings.health.check_now","Check now")}</button>
       <button class="secondary" onclick="updateAllWithPendingFirmware()">⬆ ${T("settings.health.update_all","Alle updaten")}</button>
     </div>
-    <div id="health-results" style="margin-top:12px"><p class="hint">${T("settings.health.click_to_check","Klick „Jetzt prüfen\u201c für aktuellen Status")}</p></div>
+    <div id="health-results" style="margin-top:12px"><p class="hint">${T("settings.health.click_to_check","Click \"Check now\" for current status")}</p></div>
   </section>`;
 }
 
@@ -1241,7 +1241,7 @@ const METRICS = ["W","V","A","VAR","COSPHI","W_L1","W_L2","W_L3","V_L1","V_L2","
 const OPS = [">","<",">=","<=","="];
 
 function renderAlerts() {
-  const devOpts = '<option value="*">'+T("settings.alerts.all_devices","Alle Geräte")+'</option>' +
+  const devOpts = '<option value="*">'+T("settings.alerts.all_devices","All devices")+'</option>' +
     devices.map(d=>`<option value="${d.key}">${esc(d.name)}</option>`).join("");
   return `<section id="sec-alerts"><h2>${T("settings.section.alerts","Alarm-Regeln")}</h2>
     <div id="alerts-list"><p class="hint">${T("settings.alerts.loading","Lade…")}</p></div>
@@ -1253,8 +1253,8 @@ function renderAlerts() {
       <div class="devcard" style="flex-direction:column;align-items:stretch">
         <div class="grid2" style="width:100%">
           <div class="field"><label>${T("settings.alerts.name_id","Name / ID")}</label><input class="a-id" type="text"></div>
-          <label class="field row"><span>${T("settings.alerts.enabled","Aktiv")}</span><input class="a-enabled" type="checkbox"></label>
-          <div class="field"><label>${T("settings.alerts.device","Gerät")}</label><select class="a-device">${devOpts}</select></div>
+          <label class="field row"><span>${T("settings.alerts.enabled","Active")}</span><input class="a-enabled" type="checkbox"></label>
+          <div class="field"><label>${T("settings.alerts.device","Device")}</label><select class="a-device">${devOpts}</select></div>
           <div class="field"><label>${T("settings.alerts.metric","Metrik")}</label><select class="a-metric">${METRICS.map(m=>`<option>${m}</option>`).join("")}</select></div>
           <div class="field"><label>${T("settings.alerts.operator","Operator")}</label><select class="a-op">${OPS.map(o=>`<option>${o}</option>`).join("")}</select></div>
           <div class="field"><label>${T("settings.alerts.threshold","Schwelle")}</label><input class="a-threshold" type="number" step="0.1"></div>
@@ -1270,7 +1270,7 @@ function renderAlerts() {
         <div class="field"><label>${T("settings.alerts.message","Nachricht")}</label><input class="a-message" type="text"></div>
         <div class="section-actions" style="margin-top:8px">
           <button class="secondary small save-btn">💾 ${T("settings.btn.save","Speichern")}</button>
-          <button class="danger small del-btn">✕ ${T("settings.btn.delete","Löschen")}</button>
+          <button class="danger small del-btn">✕ ${T("settings.btn.delete","Delete")}</button>
         </div>
       </div>
     </template>
@@ -1283,12 +1283,12 @@ async function loadAlerts() {
     const j = await r.json();
     alertRules = j.alerts || [];
     renderAlertList();
-  } catch(e) { $("#alerts-list").innerHTML = `<p class="hint">${T("settings.toast.error","Fehler: {err}",{err:e.message})}</p>`; }
+  } catch(e) { $("#alerts-list").innerHTML = `<p class="hint">${T("settings.toast.error","Error: {err}",{err:e.message})}</p>`; }
 }
 
 function renderAlertList() {
   const list = $("#alerts-list");
-  if (!alertRules.length) { list.innerHTML = '<p class="hint">'+T("settings.alerts.none","Keine Regeln konfiguriert")+'</p>'; return; }
+  if (!alertRules.length) { list.innerHTML = '<p class="hint">'+T("settings.alerts.none","No rules configured")+'</p>'; return; }
   list.innerHTML = "";
   const tmpl = $("#alert-tmpl");
   alertRules.forEach((rule, idx) => {
@@ -1339,8 +1339,8 @@ async function saveAlertRow(row, rowId) {
   const r = await fetch("/api/alerts/" + encodeURIComponent(rowId),
     {method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
   const j = await r.json();
-  if (j.ok) { toast("✓ "+T("settings.toast.saved","Gespeichert")); loadAlerts(); }
-  else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
+  if (j.ok) { toast("✓ "+T("settings.toast.saved","Saved")); loadAlerts(); }
+  else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
 }
 
 async function addAlertRule() {
@@ -1349,30 +1349,30 @@ async function addAlertRule() {
     body:JSON.stringify({enabled:true,device_key:"*",metric:"W",op:">",threshold:1000,duration_seconds:10,message:T("settings.alerts.default_msg","Hohe Last")})});
   const j = await r.json();
   if (j.ok) { toast(T("settings.toast.rule_added","✓ Regel erstellt")); loadAlerts(); }
-  else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
+  else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
 }
 
 async function deleteAlertRow(ruleId) {
-  if (!confirm(T("settings.alerts.confirm_delete","Regel „{id}\u201c löschen?",{id:ruleId}))) return;
+  if (!confirm(T("settings.alerts.confirm_delete","Delete rule \"{id}\"?",{id:ruleId}))) return;
   const r = await fetch("/api/alerts/" + encodeURIComponent(ruleId), {method:"DELETE"});
   const j = await r.json();
-  if (j.ok) { toast(T("settings.toast.rule_deleted","✓ Gelöscht")); loadAlerts(); }
-  else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
+  if (j.ok) { toast(T("settings.toast.rule_deleted","✓ Deleted")); loadAlerts(); }
+  else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
 }
 
 async function triggerFirmwareUpdate(key, name) {
-  if (!confirm(T("settings.health.confirm_firmware","Firmware-Update für „{name}\u201c starten?\n\nDas Gerät wird automatisch neu gestartet.",{name:name}))) return;
-  toast("⏳ "+T("settings.health.starting_update","Starte Update für {name}…",{name:name}));
+  if (!confirm(T("settings.health.confirm_firmware","Start firmware update for \"{name}\"?\\n\\nThe device will restart automatically.",{name:name}))) return;
+  toast("⏳ "+T("settings.health.starting_update","Starting update for {name}…",{name:name}));
   try {
     const r = await fetch("/api/health/" + encodeURIComponent(key) + "/update", {method:"POST"});
     const j = await r.json();
     if (j.ok) {
-      toast("✓ "+T("settings.health.update_started","Update gestartet für {device}",{device:name}));
+      toast("✓ "+T("settings.health.update_started","Update started for {device}",{device:name}));
       setTimeout(runHealthCheck, 30000); // Re-check after 30s
     } else {
-      toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
+      toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
     }
-  } catch(e) { toast(T("settings.toast.error","Fehler: {err}",{err:e.message}), "error"); }
+  } catch(e) { toast(T("settings.toast.error","Error: {err}",{err:e.message}), "error"); }
 }
 
 async function updateAllWithPendingFirmware() {
@@ -1381,8 +1381,8 @@ async function updateAllWithPendingFirmware() {
   const j = await r.json();
   if (!j.ok) return;
   const pending = j.devices.filter(d => d.online && d.firmware_update_available);
-  if (!pending.length) { toast(T("settings.health.no_updates","Keine Updates verfügbar")); return; }
-  if (!confirm(T("settings.health.confirm_update_all","{n} Gerät(e) haben Updates. Alle jetzt aktualisieren?",{n:pending.length}))) return;
+  if (!pending.length) { toast(T("settings.health.no_updates","No updates available")); return; }
+  if (!confirm(T("settings.health.confirm_update_all","{n} device(s) have updates. Update all now?",{n:pending.length}))) return;
   for (const d of pending) {
     toast("⏳ "+T("settings.health.updating_one","Update {name}…",{name:d.name}));
     await fetch("/api/health/" + encodeURIComponent(d.key) + "/update", {method:"POST"});
@@ -1394,7 +1394,7 @@ async function updateAllWithPendingFirmware() {
 
 async function runHealthCheck() {
   const el = $("#health-results");
-  el.innerHTML = '<p class="hint">'+T("settings.health.pinging","⏳ Pinge Geräte…")+'</p>';
+  el.innerHTML = '<p class="hint">'+T("settings.health.pinging","⏳ Pinging devices…")+'</p>';
   try {
     const r = await fetch("/api/health");
     const j = await r.json();
@@ -1402,7 +1402,7 @@ async function runHealthCheck() {
     const rows = j.devices.map(d => {
       const status = d.online ? '<span style="color:var(--ok)">● Online</span>' : '<span style="color:var(--danger)">● Offline</span>';
       const fw = d.firmware ? `<code style="font-size:.75rem">${d.firmware}</code>` : '<span class="hint">?</span>';
-      const upd = d.firmware_update_available ? '<span style="color:var(--warn,#eab308);margin-left:6px">⬆ Update verfügbar</span>' : '';
+      const upd = d.firmware_update_available ? '<span style="color:var(--warn,#eab308);margin-left:6px">⬆ Update available</span>' : '';
       const lat = d.latency_ms != null ? `${d.latency_ms} ms` : '-';
       const upt = d.uptime_s != null ? Math.floor(d.uptime_s/3600)+' h' : '-';
       const err = d.error ? `<div class="hint" style="color:var(--danger)">${d.error}</div>` : '';
@@ -1529,7 +1529,7 @@ async function discoverDevices() {
     const r = await fetch("/api/devices/discover?timeout=5",{method:"POST"});
     const j = await r.json();
     if (!j.ok) { results.innerHTML = `<p class="hint">Fehler: ${j.error}</p>`; return; }
-    if (!j.devices.length) { results.innerHTML = `<p class="hint">${T("settings.devices.none","Keine Geräte gefunden")}</p>`; return; }
+    if (!j.devices.length) { results.innerHTML = `<p class="hint">${T("settings.devices.none","No devices found")}</p>`; return; }
     results.innerHTML = j.devices.map(d=>`
       <div class="devcard">
         <div class="info"><h4>${d.name||d.host}</h4><p>${d.host} · ${d.kind} · ${d.model||""}</p></div>
@@ -1542,8 +1542,8 @@ async function addDiscovered(dev) {
   const r = await fetch("/api/devices",{method:"POST",
     headers:{"Content-Type":"application/json"},body:JSON.stringify(dev)});
   const j = await r.json();
-  if (j.ok) { toast(T("settings.toast.device_added","✓ Gerät hinzugefügt")); reload(); }
-  else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
+  if (j.ok) { toast(T("settings.toast.device_added","✓ Device added")); reload(); }
+  else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
 }
 
 async function addByIp() {
@@ -1570,11 +1570,11 @@ async function addByIp() {
 }
 
 async function deleteDevice(key) {
-  if (!confirm(T("settings.devices.confirm_remove","Gerät {key} wirklich entfernen?",{key:key}))) return;
+  if (!confirm(T("settings.devices.confirm_remove","Really remove device {key}?",{key:key}))) return;
   const r = await fetch("/api/devices/"+encodeURIComponent(key),{method:"DELETE"});
   const j = await r.json();
-  if (j.ok) { toast(T("settings.toast.device_removed","✓ Gerät entfernt")); reload(); }
-  else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
+  if (j.ok) { toast(T("settings.toast.device_removed","✓ Device removed")); reload(); }
+  else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
 }
 
 async function testConnection(which) {
@@ -1582,7 +1582,7 @@ async function testConnection(which) {
   const r = await fetch("/api/settings/test-"+which,{method:"POST"});
   const j = await r.json();
   if (j.ok) toast("✓ " + (j.message||"OK"));
-  else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
+  else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
 }
 
 async function reload() {
@@ -1606,7 +1606,7 @@ async function reload() {
     } catch(e){}
     renderAll();
   } catch(e) {
-    $("#main").innerHTML = '<p style="color:var(--danger)">'+T("settings.toast.error","Fehler: {err}",{err:e.message})+'</p>';
+    $("#main").innerHTML = '<p style="color:var(--danger)">'+T("settings.toast.error","Error: {err}",{err:e.message})+'</p>';
   }
 }
 
