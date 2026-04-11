@@ -615,29 +615,36 @@ function renderListField(f, val) {
     const maxA = sf.max!=null ? `max="${sf.max}"` : "";
     const ph = sf.placeholder ? `placeholder="${esc(sf.placeholder)}"` : "";
     const tp = sf.type === "number" ? "number" : "text";
-    return `<div class="field"><label>${esc(sf.label)}</label><input type="${tp}" ${step} ${minA} ${maxA} ${ph} data-k="${sf.key}" value="${esc(v)}"></div>`;
+    return `<div class="field"><label>${esc(tSubField(f.key, sf))}</label><input type="${tp}" ${step} ${minA} ${maxA} ${ph} data-k="${sf.key}" value="${esc(v)}"></div>`;
   }
   function renderItem(item, idx) {
-    const title = (item && (item.name || item.tenant_id || item.tenant_id)) || (f.itemLabel||"Eintrag") + " " + (idx+1);
+    const titleFallback = (f.itemLabel||"Eintrag") + " " + (idx+1);
+    const title = (item && (item.name || item.tenant_id || item.tenant_id)) || T("settings.list.item_n", titleFallback, {n: idx+1});
     const rows = f.schema.map(sf => renderSubInput(sf, item ? item[sf.key] : undefined)).join("");
     return `<div class="list-item" data-idx="${idx}">
       <div class="list-item-hdr">
         <span class="list-item-title">${esc(title)}</span>
-        <button type="button" class="small danger list-item-del" title="Entfernen">✕</button>
+        <button type="button" class="small danger list-item-del" title="${T("settings.btn.remove","Entfernen")}">✕</button>
       </div>
       <div class="list-item-grid">${rows}</div>
     </div>`;
   }
-  const itemsHtml = items.map(renderItem).join("") || `<p class="hint" style="margin:6px 0">Keine Einträge – ➕ Hinzufügen drücken.</p>`;
+  const itemsHtml = items.map(renderItem).join("") || `<p class="hint" style="margin:6px 0">${T("settings.list.empty","Keine Einträge – ➕ Hinzufügen drücken.")}</p>`;
   return `<div class="field list-field" style="grid-column:1/-1" data-key="${f.key}" data-list="1">
     <label>${esc(tField(f))}</label>
     <div id="${listId}" class="list-container">${itemsHtml}</div>
-    <div><button type="button" class="secondary small list-add">➕ Hinzufügen</button></div>
-    ${f.hint ? `<div class="hint">${esc(f.hint)}</div>`:""}
+    <div><button type="button" class="secondary small list-add">➕ ${T("settings.btn.add","Hinzufügen")}</button></div>
+    ${f.hint ? `<div class="hint">${esc(tHint(f))}</div>`:""}
     <template class="list-schema">${encodeURIComponent(JSON.stringify({schema:f.schema, defaults:f.defaults||{}, itemLabel:f.itemLabel||"Eintrag"}))}</template>
   </div>`;
 }
 function tField(f) { return T("settings.field."+f.key, f.label); }
+// Sub-field label inside a list schema (e.g. settings.field.tou.rates.name).
+function tSubField(parentKey, sf) { return T("settings.field."+parentKey+"."+sf.key, sf.label); }
+// Hint text (shown below a field). Looked up as settings.hint.<field.key>.
+function tHint(f) { return T("settings.hint."+f.key, f.hint || ""); }
+// Option label inside a select field. Looked up as settings.opts.<field.key>.<value>.
+function tOpt(fieldKey, optKey, optLabel) { return T("settings.opts."+fieldKey+"."+optKey, optLabel); }
 function renderField(f) {
   const val = get(cfg, f.key, "");
   const label = tField(f);
@@ -649,7 +656,7 @@ function renderField(f) {
   if (f.type === "select" || f.type === "select-device" || f.type === "select-dyn") {
     let opts = f.opts || [];
     if (f.type === "select-device") {
-      opts = [["","(keine)"]].concat(devices.map(d=>[d.key, d.name+" ("+d.key+")"]));
+      opts = [["",T("settings.opts.device.none","(keine)")]].concat(devices.map(d=>[d.key, d.name+" ("+d.key+")"]));
     } else if (f.type === "select-dyn") {
       opts = _dynOpts(f) || [];
     }
@@ -680,7 +687,7 @@ function renderField(f) {
       if (!haveVal && val !== "" && val != null) {
         opts = [[val, "(" + String(val) + ")"]].concat(opts);
       }
-      const options = opts.map(([k,v])=>`<option value="${k}" ${String(k)===String(val)?"selected":""}>${v}</option>`).join("");
+      const options = opts.map(([k,v])=>`<option value="${k}" ${String(k)===String(val)?"selected":""}>${esc(tOpt(f.key,k,v))}</option>`).join("");
       input = `<select data-key="${f.key}">${options}</select>`;
     }
   } else if (f.type === "textarea") {
@@ -692,7 +699,7 @@ function renderField(f) {
     const tp = f.type === "password" ? "password" : f.type === "number" ? "number" : (f.type === "email"?"email":(f.type==="url"?"url":"text"));
     input = `<input type="${tp}" ${step} data-key="${f.key}" value="${val===null||val===undefined?"":String(val).replace(/"/g,"&quot;")}">`;
   }
-  const hint = f.hint ? `<div class="hint">${f.hint}</div>` : "";
+  const hint = f.hint ? `<div class="hint">${tHint(f)}</div>` : "";
   return `<div class="field"><label>${label}</label>${input}${hint}</div>`;
 }
 
@@ -825,32 +832,32 @@ function renderDevices() {
         </div>
       </div>
       <div class="list-item-grid">
-        <div class="field"><label>Name</label><input type="text" data-df="name" value="${esc(d.name||"")}"></div>
-        <div class="field"><label>Host / IP</label><input type="text" data-df="host" value="${esc(d.host||"")}"></div>
-        <div class="field"><label>Schlüssel (read-only)</label><input type="text" value="${esckey}" readonly></div>
-        <div class="field"><label>EM-ID</label><input type="number" data-df="em_id" min="0" value="${Number(d.em_id||0)}"></div>
-        <div class="field"><label>Typ</label><select data-df="kind">
-          <option value="em" ${d.kind==="em"?"selected":""}>Energy Meter</option>
-          <option value="switch" ${d.kind==="switch"?"selected":""}>Switch / Relay</option>
-          <option value="unknown" ${d.kind==="unknown"?"selected":""}>Unbekannt</option>
+        <div class="field"><label>${T("settings.devcard.name","Name")}</label><input type="text" data-df="name" value="${esc(d.name||"")}"></div>
+        <div class="field"><label>${T("settings.devcard.host","Host / IP")}</label><input type="text" data-df="host" value="${esc(d.host||"")}"></div>
+        <div class="field"><label>${T("settings.devcard.key_readonly","Schlüssel (read-only)")}</label><input type="text" value="${esckey}" readonly></div>
+        <div class="field"><label>${T("settings.devcard.em_id","EM-ID")}</label><input type="number" data-df="em_id" min="0" value="${Number(d.em_id||0)}"></div>
+        <div class="field"><label>${T("settings.devcard.kind","Typ")}</label><select data-df="kind">
+          <option value="em" ${d.kind==="em"?"selected":""}>${T("settings.devcard.kind_em","Energy Meter")}</option>
+          <option value="switch" ${d.kind==="switch"?"selected":""}>${T("settings.devcard.kind_switch","Switch / Relay")}</option>
+          <option value="unknown" ${d.kind==="unknown"?"selected":""}>${T("settings.devcard.kind_unknown","Unbekannt")}</option>
         </select></div>
-        <div class="field"><label>Generation</label><select data-df="gen">
-          <option value="0" ${Number(d.gen||0)===0?"selected":""}>Auto</option>
+        <div class="field"><label>${T("settings.devcard.gen","Generation")}</label><select data-df="gen">
+          <option value="0" ${Number(d.gen||0)===0?"selected":""}>${T("settings.devcard.gen_auto","Auto")}</option>
           <option value="1" ${Number(d.gen)===1?"selected":""}>Gen 1</option>
           <option value="2" ${Number(d.gen)===2?"selected":""}>Gen 2</option>
           <option value="3" ${Number(d.gen)===3?"selected":""}>Gen 3</option>
         </select></div>
-        <div class="field"><label>Phasen</label><select data-df="phases">
-          <option value="1" ${Number(d.phases)===1?"selected":""}>1-phasig</option>
-          <option value="2" ${Number(d.phases)===2?"selected":""}>2-phasig</option>
-          <option value="3" ${Number(d.phases)===3?"selected":""}>3-phasig</option>
+        <div class="field"><label>${T("settings.devcard.phases","Phasen")}</label><select data-df="phases">
+          <option value="1" ${Number(d.phases)===1?"selected":""}>${T("settings.devcard.phases_1","1-phasig")}</option>
+          <option value="2" ${Number(d.phases)===2?"selected":""}>${T("settings.devcard.phases_2","2-phasig")}</option>
+          <option value="3" ${Number(d.phases)===3?"selected":""}>${T("settings.devcard.phases_3","3-phasig")}</option>
         </select></div>
-        <div class="field"><label>Modell</label><input type="text" data-df="model" value="${esc(d.model||"")}" placeholder="z. B. SHEM-3"></div>
-        <div class="field"><label>HTTP user (password-protected Shellys)</label><input type="text" data-df="username" value="${esc(d.username||"admin")}" placeholder="admin" autocomplete="off"></div>
-        <div class="field"><label>HTTP password</label><input type="password" data-df="password" value="${d.has_password?"***":""}" placeholder="${d.has_password?"(saved – type to change)":"leave empty for unprotected device"}" autocomplete="off"></div>
-        <label class="field row" style="grid-column:1/-1"><span>EMData / historical data supported</span><input type="checkbox" data-df="supports_emdata" ${d.supports_emdata!==false?"checked":""}></label>
+        <div class="field"><label>${T("settings.devcard.model","Modell")}</label><input type="text" data-df="model" value="${esc(d.model||"")}" placeholder="${T("settings.devcard.model_ph","z. B. SHEM-3")}"></div>
+        <div class="field"><label>${T("settings.devcard.http_user","HTTP user (password-protected Shellys)")}</label><input type="text" data-df="username" value="${esc(d.username||"admin")}" placeholder="admin" autocomplete="off"></div>
+        <div class="field"><label>${T("settings.devcard.http_pw","HTTP password")}</label><input type="password" data-df="password" value="${d.has_password?"***":""}" placeholder="${d.has_password?T("settings.devcard.pw_saved","(saved – type to change)"):T("settings.devcard.pw_empty","leave empty for unprotected device")}" autocomplete="off"></div>
+        <label class="field row" style="grid-column:1/-1"><span>${T("settings.devcard.emdata","EMData / historical data supported")}</span><input type="checkbox" data-df="supports_emdata" ${d.supports_emdata!==false?"checked":""}></label>
       </div>
-      <div class="hint" style="margin-top:6px;font-size:.72rem">Status: ${d.online?'<span style="color:var(--ok)">● Online</span>':'<span style="color:var(--muted)">○ Offline / no data</span>'}${d.has_password?' &nbsp;·&nbsp; <span style="color:var(--accent)">🔒 password set</span>':''}</div>
+      <div class="hint" style="margin-top:6px;font-size:.72rem">${T("settings.devcard.status_lbl","Status")}: ${d.online?'<span style="color:var(--ok)">● '+T("settings.devcard.online","Online")+'</span>':'<span style="color:var(--muted)">○ '+T("settings.devcard.offline","Offline / no data")+'</span>'}${d.has_password?' &nbsp;·&nbsp; <span style="color:var(--accent)">🔒 '+T("settings.devcard.pw_set","password set")+'</span>':''}</div>
     </div>`;
   }).join("");
   setTimeout(_wireDeviceDragHandlers, 0);
@@ -992,10 +999,10 @@ async function copyWidgetScriptSettings() {
 }
 
 function renderAbout() {
-  return `<section id="sec-about"><h2>Über</h2>
-    <p>App-Version: <strong id="about-version">Lade…</strong></p>
-    <p>Config-Version: <span class="hint">${cfg.version||"?"}</span></p>
-    <div id="about-stats" class="hint">Lade DB-Statistik…</div>
+  return `<section id="sec-about"><h2>${T("settings.section.about","Über")}</h2>
+    <p>${T("settings.about.app_version","App-Version")}: <strong id="about-version">${T("settings.about.loading","Lade…")}</strong></p>
+    <p>${T("settings.about.config_version","Config-Version")}: <span class="hint">${cfg.version||"?"}</span></p>
+    <div id="about-stats" class="hint">${T("settings.about.loading_stats","Lade DB-Statistik…")}</div>
   </section>`;
 }
 
@@ -1032,7 +1039,7 @@ async function checkUpdateStatus() {
     const r = await fetch("/api/updates/status");
     const j = await r.json();
     if (!j.ok && !j.current) {
-      el.innerHTML = `<span style="color:var(--danger)">${esc(j.error||"Fehler")}</span>`;
+      el.innerHTML = `<span style="color:var(--danger)">${esc(j.error||T("settings.err","Fehler"))}</span>`;
       return;
     }
     const cur = j.current || "?";
@@ -1059,7 +1066,7 @@ async function loadReleaseList() {
     const r = await fetch("/api/updates/releases?limit=10");
     const j = await r.json();
     if (!j.ok) {
-      el.innerHTML = `<p class="hint" style="color:var(--danger)">${esc(j.error||"Fehler")}</p>`;
+      el.innerHTML = `<p class="hint" style="color:var(--danger)">${esc(j.error||T("settings.err","Fehler"))}</p>`;
       return;
     }
     if (!j.releases || !j.releases.length) {
@@ -1161,7 +1168,7 @@ async function loadSSLStatus() {
     const r = await fetch("/api/ssl/status");
     const j = await r.json();
     if (!j.ok) {
-      el.innerHTML = `<span style="color:var(--danger)">${esc(j.error||"Fehler")}</span>`;
+      el.innerHTML = `<span style="color:var(--danger)">${esc(j.error||T("settings.err","Fehler"))}</span>`;
       return;
     }
     const c = j.cert || {};
@@ -1219,13 +1226,13 @@ async function regenerateSSL() {
 }
 
 function renderHealth() {
-  return `<section id="sec-health"><h2>Health Check</h2>
-    <p class="hint">Ping aller Shellys + Firmware-Status</p>
+  return `<section id="sec-health"><h2>${T("settings.section.health","Health Check")}</h2>
+    <p class="hint">${T("settings.health.subtitle","Ping aller Shellys + Firmware-Status")}</p>
     <div class="section-actions" style="justify-content:flex-start;margin-top:0;border-top:none;padding-top:0;flex-wrap:wrap">
-      <button class="secondary" onclick="runHealthCheck()">🩺 Jetzt prüfen</button>
-      <button class="secondary" onclick="updateAllWithPendingFirmware()">⬆ Alle updaten</button>
+      <button class="secondary" onclick="runHealthCheck()">🩺 ${T("settings.health.check_now","Jetzt prüfen")}</button>
+      <button class="secondary" onclick="updateAllWithPendingFirmware()">⬆ ${T("settings.health.update_all","Alle updaten")}</button>
     </div>
-    <div id="health-results" style="margin-top:12px"><p class="hint">Klick "Jetzt prüfen" für aktuellen Status</p></div>
+    <div id="health-results" style="margin-top:12px"><p class="hint">${T("settings.health.click_to_check","Klick „Jetzt prüfen\u201c für aktuellen Status")}</p></div>
   </section>`;
 }
 
@@ -1234,36 +1241,36 @@ const METRICS = ["W","V","A","VAR","COSPHI","W_L1","W_L2","W_L3","V_L1","V_L2","
 const OPS = [">","<",">=","<=","="];
 
 function renderAlerts() {
-  const devOpts = '<option value="*">Alle Geräte</option>' +
-    devices.map(d=>`<option value="${d.key}">${d.name}</option>`).join("");
-  return `<section id="sec-alerts"><h2>Alarm-Regeln</h2>
-    <div id="alerts-list"><p class="hint">Lade…</p></div>
+  const devOpts = '<option value="*">'+T("settings.alerts.all_devices","Alle Geräte")+'</option>' +
+    devices.map(d=>`<option value="${d.key}">${esc(d.name)}</option>`).join("");
+  return `<section id="sec-alerts"><h2>${T("settings.section.alerts","Alarm-Regeln")}</h2>
+    <div id="alerts-list"><p class="hint">${T("settings.alerts.loading","Lade…")}</p></div>
     <div class="section-actions" style="justify-content:flex-start">
-      <button onclick="addAlertRule()">➕ Neue Regel</button>
-      <button class="secondary" onclick="loadAlerts()">↻ Aktualisieren</button>
+      <button onclick="addAlertRule()">➕ ${T("settings.alerts.new_rule","Neue Regel")}</button>
+      <button class="secondary" onclick="loadAlerts()">↻ ${T("settings.alerts.refresh","Aktualisieren")}</button>
     </div>
     <template id="alert-tmpl">
       <div class="devcard" style="flex-direction:column;align-items:stretch">
         <div class="grid2" style="width:100%">
-          <div class="field"><label>Name / ID</label><input class="a-id" type="text"></div>
-          <label class="field row"><span>Aktiv</span><input class="a-enabled" type="checkbox"></label>
-          <div class="field"><label>Gerät</label><select class="a-device">${devOpts}</select></div>
-          <div class="field"><label>Metrik</label><select class="a-metric">${METRICS.map(m=>`<option>${m}</option>`).join("")}</select></div>
-          <div class="field"><label>Operator</label><select class="a-op">${OPS.map(o=>`<option>${o}</option>`).join("")}</select></div>
-          <div class="field"><label>Schwelle</label><input class="a-threshold" type="number" step="0.1"></div>
-          <div class="field"><label>Dauer (Sek)</label><input class="a-duration" type="number"></div>
-          <div class="field"><label>Cooldown (Sek)</label><input class="a-cooldown" type="number"></div>
+          <div class="field"><label>${T("settings.alerts.name_id","Name / ID")}</label><input class="a-id" type="text"></div>
+          <label class="field row"><span>${T("settings.alerts.enabled","Aktiv")}</span><input class="a-enabled" type="checkbox"></label>
+          <div class="field"><label>${T("settings.alerts.device","Gerät")}</label><select class="a-device">${devOpts}</select></div>
+          <div class="field"><label>${T("settings.alerts.metric","Metrik")}</label><select class="a-metric">${METRICS.map(m=>`<option>${m}</option>`).join("")}</select></div>
+          <div class="field"><label>${T("settings.alerts.operator","Operator")}</label><select class="a-op">${OPS.map(o=>`<option>${o}</option>`).join("")}</select></div>
+          <div class="field"><label>${T("settings.alerts.threshold","Schwelle")}</label><input class="a-threshold" type="number" step="0.1"></div>
+          <div class="field"><label>${T("settings.alerts.duration_s","Dauer (Sek)")}</label><input class="a-duration" type="number"></div>
+          <div class="field"><label>${T("settings.alerts.cooldown_s","Cooldown (Sek)")}</label><input class="a-cooldown" type="number"></div>
         </div>
         <div class="grid2" style="width:100%">
           <label class="field row"><span>→ Telegram</span><input class="a-telegram" type="checkbox"></label>
           <label class="field row"><span>→ Webhook</span><input class="a-webhook" type="checkbox"></label>
-          <label class="field row"><span>→ E-Mail</span><input class="a-email" type="checkbox"></label>
-          <div class="field row"><span style="flex:1">Popup/Beep</span><span style="display:flex;gap:8px"><label style="display:flex;align-items:center;gap:4px;font-size:.78rem;color:var(--muted);cursor:pointer"><input class="a-popup" type="checkbox" title="Popup">Popup</label><label style="display:flex;align-items:center;gap:4px;font-size:.78rem;color:var(--muted);cursor:pointer"><input class="a-beep" type="checkbox" title="Beep">Beep</label></span></div>
+          <label class="field row"><span>→ ${T("settings.alerts.email","E-Mail")}</span><input class="a-email" type="checkbox"></label>
+          <div class="field row"><span style="flex:1">${T("settings.alerts.popup_beep","Popup/Beep")}</span><span style="display:flex;gap:8px"><label style="display:flex;align-items:center;gap:4px;font-size:.78rem;color:var(--muted);cursor:pointer"><input class="a-popup" type="checkbox" title="Popup">Popup</label><label style="display:flex;align-items:center;gap:4px;font-size:.78rem;color:var(--muted);cursor:pointer"><input class="a-beep" type="checkbox" title="Beep">Beep</label></span></div>
         </div>
-        <div class="field"><label>Nachricht</label><input class="a-message" type="text"></div>
+        <div class="field"><label>${T("settings.alerts.message","Nachricht")}</label><input class="a-message" type="text"></div>
         <div class="section-actions" style="margin-top:8px">
-          <button class="secondary small save-btn">💾 Speichern</button>
-          <button class="danger small del-btn">✕ Löschen</button>
+          <button class="secondary small save-btn">💾 ${T("settings.btn.save","Speichern")}</button>
+          <button class="danger small del-btn">✕ ${T("settings.btn.delete","Löschen")}</button>
         </div>
       </div>
     </template>
@@ -1276,12 +1283,12 @@ async function loadAlerts() {
     const j = await r.json();
     alertRules = j.alerts || [];
     renderAlertList();
-  } catch(e) { $("#alerts-list").innerHTML = `<p class="hint">Fehler: ${e.message}</p>`; }
+  } catch(e) { $("#alerts-list").innerHTML = `<p class="hint">${T("settings.toast.error","Fehler: {err}",{err:e.message})}</p>`; }
 }
 
 function renderAlertList() {
   const list = $("#alerts-list");
-  if (!alertRules.length) { list.innerHTML = '<p class="hint">Keine Regeln konfiguriert</p>'; return; }
+  if (!alertRules.length) { list.innerHTML = '<p class="hint">'+T("settings.alerts.none","Keine Regeln konfiguriert")+'</p>'; return; }
   list.innerHTML = "";
   const tmpl = $("#alert-tmpl");
   alertRules.forEach((rule, idx) => {
@@ -1332,21 +1339,21 @@ async function saveAlertRow(row, rowId) {
   const r = await fetch("/api/alerts/" + encodeURIComponent(rowId),
     {method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
   const j = await r.json();
-  if (j.ok) { toast("✓ Gespeichert"); loadAlerts(); }
+  if (j.ok) { toast("✓ "+T("settings.toast.saved","Gespeichert")); loadAlerts(); }
   else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
 }
 
 async function addAlertRule() {
   const r = await fetch("/api/alerts",{method:"POST",
     headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({enabled:true,device_key:"*",metric:"W",op:">",threshold:1000,duration_seconds:10,message:"Hohe Last"})});
+    body:JSON.stringify({enabled:true,device_key:"*",metric:"W",op:">",threshold:1000,duration_seconds:10,message:T("settings.alerts.default_msg","Hohe Last")})});
   const j = await r.json();
   if (j.ok) { toast(T("settings.toast.rule_added","✓ Regel erstellt")); loadAlerts(); }
   else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
 }
 
 async function deleteAlertRow(ruleId) {
-  if (!confirm("Regel \""+ruleId+"\" löschen?")) return;
+  if (!confirm(T("settings.alerts.confirm_delete","Regel „{id}\u201c löschen?",{id:ruleId}))) return;
   const r = await fetch("/api/alerts/" + encodeURIComponent(ruleId), {method:"DELETE"});
   const j = await r.json();
   if (j.ok) { toast(T("settings.toast.rule_deleted","✓ Gelöscht")); loadAlerts(); }
@@ -1354,8 +1361,8 @@ async function deleteAlertRow(ruleId) {
 }
 
 async function triggerFirmwareUpdate(key, name) {
-  if (!confirm(`Firmware-Update für "${name}" starten?\n\nDas Gerät wird automatisch neu gestartet.`)) return;
-  toast("⏳ Starte Update für " + name + "…");
+  if (!confirm(T("settings.health.confirm_firmware","Firmware-Update für „{name}\u201c starten?\n\nDas Gerät wird automatisch neu gestartet.",{name:name}))) return;
+  toast("⏳ "+T("settings.health.starting_update","Starte Update für {name}…",{name:name}));
   try {
     const r = await fetch("/api/health/" + encodeURIComponent(key) + "/update", {method:"POST"});
     const j = await r.json();
@@ -1374,14 +1381,14 @@ async function updateAllWithPendingFirmware() {
   const j = await r.json();
   if (!j.ok) return;
   const pending = j.devices.filter(d => d.online && d.firmware_update_available);
-  if (!pending.length) { toast("Keine Updates verfügbar"); return; }
-  if (!confirm(`${pending.length} Gerät(e) haben Updates. Alle jetzt aktualisieren?`)) return;
+  if (!pending.length) { toast(T("settings.health.no_updates","Keine Updates verfügbar")); return; }
+  if (!confirm(T("settings.health.confirm_update_all","{n} Gerät(e) haben Updates. Alle jetzt aktualisieren?",{n:pending.length}))) return;
   for (const d of pending) {
-    toast("⏳ Update " + d.name + "…");
+    toast("⏳ "+T("settings.health.updating_one","Update {name}…",{name:d.name}));
     await fetch("/api/health/" + encodeURIComponent(d.key) + "/update", {method:"POST"});
     await new Promise(r => setTimeout(r, 2000));
   }
-  toast("✓ " + pending.length + " Update(s) gestartet");
+  toast("✓ "+T("settings.health.updates_started_n","{n} Update(s) gestartet",{n:pending.length}));
   setTimeout(runHealthCheck, 30000);
 }
 
