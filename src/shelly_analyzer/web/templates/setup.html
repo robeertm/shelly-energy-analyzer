@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ersteinrichtung – Shelly Energy Analyzer</title>
+<title>Setup – Shelly Energy Analyzer</title>
 <style>
 :root{--bg:#0b0f14;--card:#121821;--fg:#e8eef6;--muted:#9fb0c3;--accent:#6aa7ff;
 --border:rgba(255,255,255,0.08);--danger:#ef4444;--ok:#22c55e;
@@ -76,7 +76,7 @@ document.documentElement.dataset.theme=th;}catch(e){}})();
 <div class="wrap">
 <div class="hero">
   <h1>⚡ Shelly Energy Analyzer</h1>
-  <p>Ersteinrichtung – richte deine Shellys und deinen Tarif ein</p>
+  <p id="hero-sub">Setup – configure your Shellys and your tariff</p>
 </div>
 <div class="steps" id="steps"></div>
 <div id="stage"></div>
@@ -84,12 +84,19 @@ document.documentElement.dataset.theme=th;}catch(e){}})();
 <div class="toast" id="toast"></div>
 
 <script>
-const STEPS = [
-  {id:"welcome", title:"Willkommen"},
-  {id:"devices", title:"Shellys hinzufügen"},
-  {id:"pricing", title:"Strompreis"},
-  {id:"spot", title:"Spot-Preise (optional)"},
-  {id:"done", title:"Fertig"},
+let I18N = {};
+function T(key, fallback, vars) {
+  let s = (I18N && I18N[key]) ? I18N[key] : fallback;
+  if (vars) Object.keys(vars).forEach(function(k){ s = s.split('{'+k+'}').join(String(vars[k])); });
+  return s;
+}
+
+let STEPS = [
+  {id:"welcome", titleKey:"setup.step.welcome", titleEn:"Welcome"},
+  {id:"devices", titleKey:"setup.step.devices", titleEn:"Add Shellys"},
+  {id:"pricing", titleKey:"setup.step.pricing", titleEn:"Electricity price"},
+  {id:"spot",    titleKey:"setup.step.spot",    titleEn:"Spot prices (optional)"},
+  {id:"done",    titleKey:"setup.step.done",    titleEn:"Done"},
 ];
 let stepIdx = 0;
 let addedDevices = [];
@@ -106,7 +113,8 @@ function renderSteps(){
   const el=document.getElementById('steps');
   el.innerHTML=STEPS.map((s,i)=>{
     const cls=i<stepIdx?'done':(i===stepIdx?'active':'');
-    return `<div class="step-dot ${cls}" title="${s.title}">${i<stepIdx?'✓':(i+1)}</div>`;
+    const ttl=T(s.titleKey, s.titleEn);
+    return `<div class="step-dot ${cls}" title="${ttl}">${i<stepIdx?'✓':(i+1)}</div>`;
   }).join('<span style="color:var(--muted);font-size:.78rem;align-self:center">›</span>');
 }
 function render(){
@@ -115,13 +123,12 @@ function render(){
   const stage=document.getElementById('stage');
   if(s.id==="welcome"){
     stage.innerHTML = `<div class="card">
-      <h2>👋 Willkommen!</h2>
-      <p>Dieser Assistent hilft dir, deine Shelly-Geräte zu verbinden und deinen Stromtarif einzugeben.
-      Du kannst später jederzeit weitere Geräte in den Einstellungen ergänzen.</p>
-      <p>Stelle sicher, dass deine Shellys im gleichen WLAN-Netzwerk sind wie dieser Rechner.</p>
+      <h2>👋 ${T('setup.welcome.title','Welcome!')}</h2>
+      <p>${T('setup.welcome.intro1','This wizard helps you connect your Shelly devices and enter your electricity tariff. You can add more devices later from Settings.')}</p>
+      <p>${T('setup.welcome.intro2','Make sure your Shellys are on the same Wi-Fi network as this computer.')}</p>
       <div class="actions">
         <span></span>
-        <button onclick="next()">Los geht's →</button>
+        <button onclick="next()">${T('setup.btn.start',"Let's go →")}</button>
       </div>
     </div>`;
   }
@@ -138,24 +145,24 @@ function renderDevices(stage){
     <button class="secondary" onclick="removeDevice('${escape(d.key)}')">✕</button>
   </div>`).join('');
   stage.innerHTML = `<div class="card">
-    <h2>📡 Shelly-Geräte hinzufügen</h2>
-    <p>Scanne dein Netzwerk automatisch oder gib eine IP-Adresse manuell ein.</p>
+    <h2>📡 ${T('setup.devices.title','Add Shelly devices')}</h2>
+    <p>${T('setup.devices.intro','Scan your network automatically or enter an IP address manually.')}</p>
     <div class="grid2">
       <div class="field">
-        <label>Automatisch per mDNS scannen</label>
-        <button class="secondary" style="width:100%" id="btn-scan" onclick="scanMdns()">🔍 Netzwerk scannen</button>
+        <label>${T('setup.devices.scan_label','Auto-scan via mDNS')}</label>
+        <button class="secondary" style="width:100%" id="btn-scan" onclick="scanMdns()">🔍 ${T('setup.devices.scan_btn','Scan network')}</button>
       </div>
       <div class="field">
-        <label>Oder IP/Hostname eingeben</label>
+        <label>${T('setup.devices.ip_label','Or enter IP / hostname')}</label>
         <div style="display:flex;gap:8px"><input type="text" id="ip-input" placeholder="192.168.1.50">
         <button onclick="addByIp()">➕</button></div>
       </div>
     </div>
     <div id="scan-results"></div>
-    ${addedDevices.length?`<h3 style="font-size:.95rem;margin:14px 0 6px">Hinzugefügt (${addedDevices.length})</h3><div class="devlist">${added}</div>`:''}
+    ${addedDevices.length?`<h3 style="font-size:.95rem;margin:14px 0 6px">${T('setup.devices.added_n','Added ({n})',{n:addedDevices.length})}</h3><div class="devlist">${added}</div>`:''}
     <div class="actions">
-      <button class="secondary" onclick="back()">← Zurück</button>
-      <button onclick="next()" ${addedDevices.length===0?'disabled title="Mindestens ein Gerät hinzufügen"':''}>Weiter →</button>
+      <button class="secondary" onclick="back()">← ${T('setup.btn.back','Back')}</button>
+      <button onclick="next()" ${addedDevices.length===0?`disabled title="${T('setup.devices.need_one','Add at least one device')}"`:''}>${T('setup.btn.next','Next')} →</button>
     </div>
   </div>`;
   setTimeout(()=>{const ip=document.getElementById('ip-input');if(ip){ip.addEventListener('keydown',e=>{if(e.key==='Enter')addByIp();});}},50);
@@ -163,55 +170,55 @@ function renderDevices(stage){
 
 function renderPricing(stage){
   stage.innerHTML = `<div class="card">
-    <h2>💰 Strompreis</h2>
-    <p>Dein aktueller Tarif. Du kannst diese Werte später in den Einstellungen anpassen.</p>
+    <h2>💰 ${T('setup.pricing.title','Electricity price')}</h2>
+    <p>${T('setup.pricing.intro','Your current tariff. You can change these values later in Settings.')}</p>
     <div class="grid2">
-      <div class="field"><label>Strompreis €/kWh (brutto)</label>
+      <div class="field"><label>${T('setup.pricing.kwh','Price per kWh (€, gross)')}</label>
         <input type="number" step="0.0001" id="p-price" value="${pricing.price}"></div>
-      <div class="field"><label>Grundgebühr €/Jahr</label>
+      <div class="field"><label>${T('setup.pricing.base','Base fee per year (€)')}</label>
         <input type="number" step="0.01" id="p-base" value="${pricing.base}"></div>
     </div>
-    <label class="row"><span>Preise enthalten MwSt. (brutto)</span>
+    <label class="row"><span>${T('setup.pricing.vat','Prices include VAT (gross)')}</span>
       <input type="checkbox" id="p-vat" ${pricing.vat?'checked':''}></label>
     <div class="actions">
-      <button class="secondary" onclick="back()">← Zurück</button>
-      <button onclick="savePricingAndNext()">Weiter →</button>
+      <button class="secondary" onclick="back()">← ${T('setup.btn.back','Back')}</button>
+      <button onclick="savePricingAndNext()">${T('setup.btn.next','Next')} →</button>
     </div>
   </div>`;
 }
 
 function renderSpot(stage){
   stage.innerHTML = `<div class="card">
-    <h2>⚡ Spot-Preise (optional)</h2>
-    <p>Empfohlen für dynamische Tarife (z. B. Tibber, aWATTar). Kostenlose Daten von Energy-Charts / aWATTar.
-    Überspringbar wenn du einen Festpreis hast.</p>
-    <label class="row"><span>Spot-Preise aktivieren</span>
+    <h2>⚡ ${T('setup.spot.title','Spot prices (optional)')}</h2>
+    <p>${T('setup.spot.intro','Recommended for dynamic tariffs (e.g. Tibber, aWATTar). Free data from Energy-Charts / aWATTar. Skip this if you have a fixed-price contract.')}</p>
+    <label class="row"><span>${T('setup.spot.enable','Enable spot prices')}</span>
       <input type="checkbox" id="s-enabled" ${spot.enabled?'checked':''}></label>
-    <div class="field"><label>Gebotszone</label>
+    <div class="field"><label>${T('setup.spot.zone','Bidding zone')}</label>
       <select id="s-zone">
-        <option value="DE-LU" ${spot.zone==="DE-LU"?"selected":""}>Deutschland / Luxemburg (DE-LU)</option>
-        <option value="AT" ${spot.zone==="AT"?"selected":""}>Österreich (AT)</option>
-        <option value="CH" ${spot.zone==="CH"?"selected":""}>Schweiz (CH)</option>
-        <option value="FR" ${spot.zone==="FR"?"selected":""}>Frankreich (FR)</option>
-        <option value="NL" ${spot.zone==="NL"?"selected":""}>Niederlande (NL)</option>
-        <option value="BE" ${spot.zone==="BE"?"selected":""}>Belgien (BE)</option>
+        <option value="DE-LU" ${spot.zone==="DE-LU"?"selected":""}>Germany / Luxembourg (DE-LU)</option>
+        <option value="AT" ${spot.zone==="AT"?"selected":""}>Austria (AT)</option>
+        <option value="CH" ${spot.zone==="CH"?"selected":""}>Switzerland (CH)</option>
+        <option value="FR" ${spot.zone==="FR"?"selected":""}>France (FR)</option>
+        <option value="NL" ${spot.zone==="NL"?"selected":""}>Netherlands (NL)</option>
+        <option value="BE" ${spot.zone==="BE"?"selected":""}>Belgium (BE)</option>
       </select></div>
     <div class="actions">
-      <button class="secondary" onclick="back()">← Zurück</button>
-      <button onclick="saveSpotAndNext()">Weiter →</button>
+      <button class="secondary" onclick="back()">← ${T('setup.btn.back','Back')}</button>
+      <button onclick="saveSpotAndNext()">${T('setup.btn.next','Next')} →</button>
     </div>
   </div>`;
 }
 
 function renderDone(stage){
+  const n = addedDevices.length;
+  const dev_word = n === 1 ? T('setup.done.shelly','Shelly') : T('setup.done.shellys','Shellys');
   stage.innerHTML = `<div class="card">
-    <h2>✅ Fertig!</h2>
-    <p>Du hast <strong>${addedDevices.length}</strong> Shelly${addedDevices.length!==1?"s":""} hinzugefügt.
-    Deine Einstellungen wurden gespeichert.</p>
-    <p>Du kannst jederzeit in den <a href="/settings">Einstellungen</a> weitere Geräte hinzufügen oder den Tarif anpassen.</p>
+    <h2>✅ ${T('setup.done.title','All set!')}</h2>
+    <p>${T('setup.done.line1','You have added {n} {word}. Your settings have been saved.',{n:n,word:dev_word})}</p>
+    <p>${T('setup.done.line2','You can add more devices or change the tariff anytime in {link}.',{link:'<a href="/settings">'+T('setup.done.settings_link','Settings')+'</a>'})}</p>
     <div class="actions">
       <span></span>
-      <button onclick="window.location.href='/'">🚀 Zum Dashboard</button>
+      <button onclick="window.location.href='/'">🚀 ${T('setup.done.cta','Go to dashboard')}</button>
     </div>
   </div>`;
 }
@@ -223,21 +230,21 @@ function back(){stepIdx=Math.max(0,stepIdx-1);render();}
 async function scanMdns(){
   const btn=document.getElementById('btn-scan');
   const results=document.getElementById('scan-results');
-  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Scanne…';
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> '+T('setup.devices.scanning','Scanning…');
   results.innerHTML='';
   try{
     const r=await fetch('/api/devices/discover?timeout=5',{method:'POST'});
     const j=await r.json();
-    btn.disabled=false;btn.textContent='🔍 Netzwerk scannen';
-    if(!j.ok){toast('Scan-Fehler: '+j.error,'error');return;}
-    if(!j.devices.length){results.innerHTML='<p class="hint" style="margin-top:10px">Keine Shellys im Netzwerk gefunden. Probier eine IP-Adresse manuell einzugeben.</p>';return;}
-    results.innerHTML='<h3 style="font-size:.9rem;margin:12px 0 6px">Gefunden: '+j.devices.length+'</h3><div class="devlist">'+
+    btn.disabled=false;btn.textContent='🔍 '+T('setup.devices.scan_btn','Scan network');
+    if(!j.ok){toast(T('setup.toast.scan_error','Scan error: {err}',{err:j.error}),'error');return;}
+    if(!j.devices.length){results.innerHTML='<p class="hint" style="margin-top:10px">'+T('setup.devices.none_found','No Shellys found on the network. Try entering an IP address manually.')+'</p>';return;}
+    results.innerHTML='<h3 style="font-size:.9rem;margin:12px 0 6px">'+T('setup.devices.found_n','Found: {n}',{n:j.devices.length})+'</h3><div class="devlist">'+
       j.devices.map(d=>`<div class="devrow">
         <div class="meta"><div class="name">${escape(d.name||d.host)}</div>
         <div class="sub">${escape(d.host)} · ${escape(d.model||d.kind||'Shelly')}</div></div>
         <button ${d.already_added?'disabled':''} onclick='addDiscovered(${JSON.stringify(d).replace(/'/g,"&#39;")})'>${d.already_added?'✓':'➕'}</button>
       </div>`).join('')+'</div>';
-  }catch(e){btn.disabled=false;btn.textContent='🔍 Netzwerk scannen';toast('Fehler: '+e.message,'error');}
+  }catch(e){btn.disabled=false;btn.textContent='🔍 '+T('setup.devices.scan_btn','Scan network');toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');}
 }
 
 async function _postDevice(payload){
@@ -250,32 +257,32 @@ async function _addWithAuthRetry(basePayload, label){
     let j=await r.json();
     if(j.ok){
       addedDevices.push(j.device);
-      toast('✓ Added: '+(j.device.name||label),'success');
+      toast('✓ '+T('setup.toast.added','Added: {name}',{name:j.device.name||label}),'success');
       render();
       return true;
     }
     if(j.error==='auth_required'){
-      const pw=prompt('Device '+label+' is password-protected.\nEnter the admin password:');
-      if(!pw){toast('Skipped (no password entered)','error');return false;}
+      const pw=prompt(T('setup.auth.prompt','Device {host} is password-protected.\nEnter the admin password:',{host:label}));
+      if(!pw){toast(T('setup.toast.skipped','Skipped (no password entered)'),'error');return false;}
       const r2=await _postDevice(Object.assign({},basePayload,{username:'admin',password:pw}));
       const j2=await r2.json();
       if(j2.ok){
         addedDevices.push(j2.device);
-        toast('✓ Added with credentials: '+(j2.device.name||label),'success');
+        toast('✓ '+T('setup.toast.added_auth','Added with credentials: {name}',{name:j2.device.name||label}),'success');
         render();
         return true;
       }
-      toast('Auth failed: '+(j2.error||'unknown'),'error');
+      toast(T('setup.toast.auth_failed','Auth failed: {err}',{err:j2.error||'unknown'}),'error');
       return false;
     }
-    toast('Error: '+j.error,'error');
+    toast(T('setup.toast.error','Error: {err}',{err:j.error}),'error');
     return false;
-  }catch(e){toast('Error: '+e.message,'error');return false;}
+  }catch(e){toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');return false;}
 }
 
 async function addByIp(){
   const ip=document.getElementById('ip-input').value.trim();
-  if(!ip){toast('IP address empty','error');return;}
+  if(!ip){toast(T('setup.toast.ip_empty','IP address empty'),'error');return;}
   const ok=await _addWithAuthRetry({host:ip},ip);
   if(ok)document.getElementById('ip-input').value='';
 }
@@ -301,7 +308,7 @@ async function savePricingAndNext(){
     await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({pricing:{electricity_price_eur_per_kwh:pricing.price,base_fee_eur_per_year:pricing.base,price_includes_vat:pricing.vat,base_fee_includes_vat:pricing.vat}})});
     next();
-  }catch(e){toast('Fehler: '+e.message,'error');}
+  }catch(e){toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');}
 }
 
 async function saveSpotAndNext(){
@@ -311,14 +318,21 @@ async function saveSpotAndNext(){
     await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({spot_price:{enabled:spot.enabled,bidding_zone:spot.zone}})});
     next();
-  }catch(e){toast('Fehler: '+e.message,'error');}
+  }catch(e){toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');}
 }
 
-// Load existing devices if any (e.g. user re-enters wizard)
+// Load existing devices + i18n map (so wizard renders in the user's language)
 async function init(){
   try{
-    const r=await fetch('/api/devices').then(x=>x.json());
-    addedDevices=(r.devices||[]).map(d=>({key:d.key,name:d.name,host:d.host,kind:d.kind,model:d.model}));
+    const [devR, i18nR] = await Promise.all([
+      fetch('/api/devices').then(x=>x.json()).catch(_=>({devices:[]})),
+      fetch('/api/i18n?prefix=setup.').then(x=>x.json()).catch(_=>({map:{},lang:'en'})),
+    ]);
+    addedDevices=(devR.devices||[]).map(d=>({key:d.key,name:d.name,host:d.host,kind:d.kind,model:d.model}));
+    I18N = (i18nR && i18nR.map) || {};
+    document.documentElement.lang = (i18nR && i18nR.lang) || 'en';
+    const sub = document.getElementById('hero-sub');
+    if (sub) sub.textContent = T('setup.hero.sub','Setup – configure your Shellys and your tariff');
   }catch(e){}
   render();
 }
