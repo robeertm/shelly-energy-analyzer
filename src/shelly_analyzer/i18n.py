@@ -238,6 +238,15 @@ _I18N: Dict[str, Dict[str, str]] = {
         "settings.devices.confirm_remove": "Gerät {key} wirklich entfernen?",
         "web.update_banner.title": "Neue Version verfügbar",
         "web.update_banner.open": "Einstellungen öffnen",
+        "web.widget.title": "iOS Widget (Scriptable)",
+        "web.widget.step1": '1. Installiere <a href="https://apps.apple.com/app/scriptable/id1405459188" target="_blank" style="color:#ff9800">Scriptable</a> aus dem App Store',
+        "web.widget.step2": "2. Tippe auf den Button um das Script zu kopieren",
+        "web.widget.step3": "3. Erstelle ein neues Script in Scriptable und füge es ein",
+        "web.widget.step4": "4. Füge ein Scriptable-Widget zum Homescreen hinzu",
+        "web.widget.step5": "5. Wähle das Script und setze als Parameter:",
+        "web.widget.btn.copy": "Script kopieren",
+        "web.widget.btn.download": "Download .js",
+        "web.widget.copied": "Kopiert!",
         "tabs.billing": "Rechnung",
 
         # Network traffic
@@ -1732,6 +1741,15 @@ _I18N: Dict[str, Dict[str, str]] = {
         "settings.devices.confirm_remove": "Really remove device {key}?",
         "web.update_banner.title": "New version available",
         "web.update_banner.open": "Open settings",
+        "web.widget.title": "iOS Widget (Scriptable)",
+        "web.widget.step1": '1. Install <a href="https://apps.apple.com/app/scriptable/id1405459188" target="_blank" style="color:#ff9800">Scriptable</a> from the App Store',
+        "web.widget.step2": "2. Tap the button to copy the script",
+        "web.widget.step3": "3. Create a new script in Scriptable and paste it",
+        "web.widget.step4": "4. Add a Scriptable widget to your home screen",
+        "web.widget.step5": "5. Pick the script and set the parameter:",
+        "web.widget.btn.copy": "Copy script",
+        "web.widget.btn.download": "Download .js",
+        "web.widget.copied": "Copied!",
         "tabs.billing": "Invoice",
 
         # Sync tab
