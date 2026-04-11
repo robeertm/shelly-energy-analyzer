@@ -146,12 +146,12 @@ def trigger_firmware_update(device_key: str):
                 if new_ver:
                     r = req.get(f"http://{d.host}/ota", params={"update": "true"}, timeout=15)
                     if r.status_code == 200:
-                        return jsonify({"ok": True, "gen": 1, "message": f"Update auf {new_ver} gestartet"})
+                        return jsonify({"ok": True, "gen": 1, "message": f"Update to {new_ver} started"})
                     return jsonify({"ok": False, "error": f"Gen1 OTA HTTP {r.status_code}: {r.text[:200]}"})
-                return jsonify({"ok": False, "error": "Kein Firmware-Update verfügbar"})
+                return jsonify({"ok": False, "error": "No firmware update available"})
         except Exception as e_gen1:
-            return jsonify({"ok": False, "error": f"Update fehlgeschlagen: {e_gen1}"})
-        return jsonify({"ok": False, "error": "Gerät nicht erreichbar"})
+            return jsonify({"ok": False, "error": f"Update failed: {e_gen1}"})
+        return jsonify({"ok": False, "error": "Device not reachable"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 

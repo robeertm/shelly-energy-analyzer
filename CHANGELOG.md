@@ -1,5 +1,16 @@
 # Changelog
 
+## 16.16.0 - 2026-04-11
+### Fixed
+- **i18n leakage: hard-coded German strings now translated in all 9 languages.** Users on French / Italian / Polish / Czech / Russian / Portuguese reported untranslated German strings throughout the wizard and settings page. Audit + fix:
+  - **Setup wizard (`/setup`)**: full refactor — every label, button, hint, error, prompt and confirmation now goes through the `T(key, fallback)` helper. The wizard fetches `/api/i18n?prefix=setup.` on init and renders in the active session language. New `setup.*` namespace adds 47 keys (welcome intro, device add, mDNS scan, IP-add, pricing form, spot zone form, done page, all toasts, the password prompt for protected Shellys). The `<html lang>` attribute is also set from the i18n response.
+  - **Settings page (`/settings`)**: 41 missing `settings.field.*` and 2 missing `settings.section.*` keys added (SSL cert, Demo mode, tariff schedule, TOU rate fields, PV surplus consumer schema, tenant editor schema, billing address fields, EIA / Electricity Maps API key labels). Hard-coded `<h2>Geräte</h2>` and 7 inline `toast("Fehler: ..." + e.message)` calls replaced with `T("settings.toast.error", ..., {err: ...})`. The "delete device" `confirm()` and the firmware update toast also use `T()` now.
+  - **Live tab update banner** (`webdash.py`): `Neue Version verfügbar` / `Einstellungen öffnen` are now rendered via `{web_update_banner_title}` / `{web_update_banner_open}` template placeholders sourced from `_t(lang, "web.update_banner.*")`, so they translate with the rest of the dashboard.
+  - **`health.py` blueprint**: Gen 1 OTA error responses (`Update auf {ver} gestartet`, `Kein Firmware-Update verfügbar`, `Update fehlgeschlagen`, `Gerät nicht erreichbar`) translated to English (the API layer is always English; the UI translates the keys it cares about via `T()`).
+  - **`/api/i18n` blueprint**: filter now also returns `setup.*` keys so the new wizard can render in any language.
+  - **DE and EN maps now perfectly synced** at 1841 keys each (was 1756 before this release). The 7 partial-language overlays (fr/pt/it/pl/cs/ru) still fall back to English for any key not explicitly translated, so users on those languages now see English for the new keys instead of German.
+- Per-version count check: `len(set(de) ^ set(en)) == 0` is asserted before every commit going forward (no more "DE has key X but EN doesn't" → German leaks into all 6 partial languages via the de→en→requested fallback chain in `get_lang_map()`).
+
 ## 16.15.1 - 2026-04-11
 ### Changed
 - **README updated** to document the v16.15.0 features:

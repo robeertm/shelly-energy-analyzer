@@ -1611,9 +1611,9 @@ _HTML_TEMPLATE = """<!doctype html>
     <div id="pane-live" class="pane active">
       <div id="update-banner" style="display:none;margin:0 0 10px 0;padding:10px 14px;border-radius:10px;background:linear-gradient(90deg,#3b82f6,#22c55e);color:#fff;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15)" onclick="goToUpdates()">
         <span style="font-size:16px">⬆</span>
-        <strong id="update-banner-title">Neue Version verfügbar</strong>
+        <strong id="update-banner-title">{web_update_banner_title}</strong>
         <span id="update-banner-tag" style="margin-left:6px;font-weight:600"></span>
-        <span style="opacity:0.85;margin-left:10px">→ Einstellungen öffnen</span>
+        <span style="opacity:0.85;margin-left:10px">→ {web_update_banner_open}</span>
       </div>
       <div id="live-timescale" style="display:flex;gap:6px;flex-wrap:wrap;padding:0 0 8px 0"></div>
       <div id="live-grid" class="card-grid"></div>
