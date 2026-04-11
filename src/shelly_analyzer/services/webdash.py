@@ -1601,7 +1601,7 @@ _HTML_TEMPLATE = """<!doctype html>
       <span id="live-stamp" style="font-size:11px;color:var(--muted)"></span>
       <button id="btn-hamburger" class="icon-btn" title="Menü" onclick="toggleNavDrawer()">☰</button>
       <button id="btn-freeze" class="icon-btn" title="{web_btn_freeze_title}" style="display:none">▶</button>
-      <button id="btn-live-settings" class="icon-btn" title="{web_btn_settings_title}" onclick="openLiveSettings()">⚙</button>
+      <button id="btn-live-settings" class="icon-btn" title="{web_btn_settings_title}" onclick="window.location.href='/settings#sec-devices'">⚙</button>
       <button id="btn-theme" class="icon-btn" title="{web_btn_theme_title}">☀</button>
     </div>
   </header>
