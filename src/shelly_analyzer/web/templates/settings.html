@@ -735,7 +735,7 @@ function renderDevices() {
       <div class="hint" style="margin-top:6px;font-size:.72rem">Status: ${d.online?'<span style="color:var(--ok)">● Online</span>':'<span style="color:var(--muted)">○ Offline / no data</span>'}${d.has_password?' &nbsp;·&nbsp; <span style="color:var(--accent)">🔒 password set</span>':''}</div>
     </div>`;
   }).join("");
-  return `<section id="sec-devices"><h2>Geräte</h2>
+  return `<section id="sec-devices"><h2>${T("settings.section.devices","Geräte")}</h2>
     <div style="display:flex;flex-direction:column;gap:8px">${rows || `<p class='hint'>${T("settings.health.no_devices","Keine Geräte konfiguriert")}</p>`}</div>
     <div class="section-actions" style="justify-content:space-between;flex-wrap:wrap">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -765,8 +765,8 @@ async function saveDevice(key) {
       headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const j = await r.json();
     if (j.ok) { toast("✓ Gerät aktualisiert"); reload(); }
-    else toast("Fehler: " + j.error, "error");
-  } catch(e) { toast("Fehler: " + e.message, "error"); }
+    else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
+  } catch(e) { toast(T("settings.toast.error","Fehler: {err}",{err:e.message}), "error"); }
 }
 
 async function probeDevice(key) {
@@ -942,10 +942,10 @@ async function installVersion(tag, assetUrl) {
         if (el) el.innerHTML = `<strong>${T("settings.updates.restarting","App startet neu… Bitte Seite in ~10s neu laden.")}</strong>`;
       }, 400);
     } else {
-      toast("Fehler: " + (j.error||"?"), "error");
+      toast(T("settings.toast.error","Fehler: {err}",{err:j.error||"?"}), "error");
     }
   } catch(e) {
-    toast("Fehler: " + e.message, "error");
+    toast(T("settings.toast.error","Fehler: {err}",{err:e.message}), "error");
   }
 }
 
@@ -1048,10 +1048,10 @@ async function regenerateSSL() {
       toast("✓ " + (j.message||T("settings.ssl.regenerated","Zertifikat neu erzeugt – bitte App neu starten")));
       loadSSLStatus();
     } else {
-      toast("Fehler: " + (j.error||"?"), "error");
+      toast(T("settings.toast.error","Fehler: {err}",{err:j.error||"?"}), "error");
     }
   } catch(e) {
-    toast("Fehler: " + e.message, "error");
+    toast(T("settings.toast.error","Fehler: {err}",{err:e.message}), "error");
   }
 }
 
@@ -1170,7 +1170,7 @@ async function saveAlertRow(row, rowId) {
     {method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
   const j = await r.json();
   if (j.ok) { toast("✓ Gespeichert"); loadAlerts(); }
-  else toast("Fehler: "+j.error, "error");
+  else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
 }
 
 async function addAlertRule() {
@@ -1179,7 +1179,7 @@ async function addAlertRule() {
     body:JSON.stringify({enabled:true,device_key:"*",metric:"W",op:">",threshold:1000,duration_seconds:10,message:"Hohe Last"})});
   const j = await r.json();
   if (j.ok) { toast(T("settings.toast.rule_added","✓ Regel erstellt")); loadAlerts(); }
-  else toast("Fehler: "+j.error, "error");
+  else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
 }
 
 async function deleteAlertRow(ruleId) {
@@ -1187,7 +1187,7 @@ async function deleteAlertRow(ruleId) {
   const r = await fetch("/api/alerts/" + encodeURIComponent(ruleId), {method:"DELETE"});
   const j = await r.json();
   if (j.ok) { toast(T("settings.toast.rule_deleted","✓ Gelöscht")); loadAlerts(); }
-  else toast("Fehler: "+j.error, "error");
+  else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
 }
 
 async function triggerFirmwareUpdate(key, name) {
@@ -1197,12 +1197,12 @@ async function triggerFirmwareUpdate(key, name) {
     const r = await fetch("/api/health/" + encodeURIComponent(key) + "/update", {method:"POST"});
     const j = await r.json();
     if (j.ok) {
-      toast("✓ Update gestartet für " + name);
+      toast("✓ "+T("settings.health.update_started","Update gestartet für {device}",{device:name}));
       setTimeout(runHealthCheck, 30000); // Re-check after 30s
     } else {
-      toast("Fehler: " + j.error, "error");
+      toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
     }
-  } catch(e) { toast("Fehler: " + e.message, "error"); }
+  } catch(e) { toast(T("settings.toast.error","Fehler: {err}",{err:e.message}), "error"); }
 }
 
 async function updateAllWithPendingFirmware() {
@@ -1373,7 +1373,7 @@ async function addDiscovered(dev) {
     headers:{"Content-Type":"application/json"},body:JSON.stringify(dev)});
   const j = await r.json();
   if (j.ok) { toast(T("settings.toast.device_added","✓ Gerät hinzugefügt")); reload(); }
-  else toast("Fehler: " + j.error, "error");
+  else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
 }
 
 async function addByIp() {
@@ -1400,15 +1400,15 @@ async function addByIp() {
 }
 
 async function deleteDevice(key) {
-  if (!confirm("Gerät "+key+" wirklich entfernen?")) return;
+  if (!confirm(T("settings.devices.confirm_remove","Gerät {key} wirklich entfernen?",{key:key}))) return;
   const r = await fetch("/api/devices/"+encodeURIComponent(key),{method:"DELETE"});
   const j = await r.json();
   if (j.ok) { toast(T("settings.toast.device_removed","✓ Gerät entfernt")); reload(); }
-  else toast("Fehler: " + j.error, "error");
+  else toast(T("settings.toast.error","Fehler: {err}",{err:j.error}), "error");
 }
 
 async function testConnection(which) {
-  toast("Teste " + which + "…");
+  toast(T("settings.toast.testing","Teste {what}…",{what:which}));
   const r = await fetch("/api/settings/test-"+which,{method:"POST"});
   const j = await r.json();
   if (j.ok) toast("✓ " + (j.message||"OK"));

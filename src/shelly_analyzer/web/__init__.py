@@ -189,6 +189,8 @@ def _render_dashboard_html(state: "AppState") -> bytes:
         "web_btn_settings_title": _t(lang, "web.dash.device_settings"),
         "web_btn_theme_title": _t(lang, "web.btn.theme"),
         "web_loading": _t(lang, "web.loading"),
+        "web_update_banner_title": _t(lang, "web.update_banner.title"),
+        "web_update_banner_open": _t(lang, "web.update_banner.open"),
         "web_dash_device_order": _t(lang, "web.dash.device_order"),
         "web_dash_done": _t(lang, "web.dash.done"),
         "t_error_label": _t(lang, "web.error_label"),
