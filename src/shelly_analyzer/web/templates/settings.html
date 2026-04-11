@@ -57,7 +57,11 @@ padding-top:12px;border-top:1px solid var(--border)}
 .hint{font-size:.75rem;color:var(--muted);margin-top:2px}
 .list-field{display:flex;flex-direction:column;gap:8px;min-height:0!important}
 .list-container{display:flex;flex-direction:column;gap:8px}
-.list-item{background:var(--card-inset);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.list-item{background:var(--card-inset);border:1px solid var(--border);border-radius:8px;padding:10px 12px;transition:transform .15s,opacity .15s,border-color .15s}
+.list-item.dragging{opacity:.45}
+.list-item.drop-before{border-top:2px solid var(--accent)}
+.list-item.drop-after{border-bottom:2px solid var(--accent)}
+.drag-handle:active{cursor:grabbing}
 .list-item-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px}
 .list-item-title{font-size:.85rem;font-weight:600;color:var(--fg)}
 .list-item-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
@@ -562,6 +566,7 @@ const SECTIONS = [
     {key:"demo.seed", label:"Seed", type:"number"},
     {key:"demo.scenario", label:"Szenario", type:"select", opts:[["household","Haushalt"],["pv-home","PV-Haus"],["heatpump","Wärmepumpe"],["tenant-metering","Mieter"]]},
   ]},
+  {id:"ios_widget", title:"iOS Widget", group:"Erweitert", custom:true},
   {id:"updates", title:"Updates", group:"Erweitert", custom:true},
   {id:"about", title:"Über", group:"Erweitert", custom:true},
 ];
@@ -682,6 +687,7 @@ function renderSection(s) {
     if (s.id === "alerts") return renderAlerts();
     if (s.id === "updates") return renderUpdates();
     if (s.id === "ssl") return renderSSL();
+    if (s.id === "ios_widget") return renderIosWidget();
   }
   const fieldsHtml = (s.fields||[]).map(renderField).join("");
   const hint = s.hint ? `<div class="hint" style="margin-bottom:10px">${s.hint}</div>` : "";
@@ -693,16 +699,111 @@ function renderSection(s) {
     </div></section>`;
 }
 
+function _loadDevOrder() {
+  try {
+    const o = JSON.parse(localStorage.getItem("device_order") || "[]");
+    return Array.isArray(o) ? o : [];
+  } catch(e) { return []; }
+}
+function _saveDevOrder(order) {
+  try { localStorage.setItem("device_order", JSON.stringify(order)); } catch(e) {}
+}
+function _loadHiddenDevs() {
+  try {
+    const o = JSON.parse(localStorage.getItem("hidden_devices") || "[]");
+    return Array.isArray(o) ? o : [];
+  } catch(e) { return []; }
+}
+function _saveHiddenDevs(arr) {
+  try { localStorage.setItem("hidden_devices", JSON.stringify(arr)); } catch(e) {}
+}
+
+function _orderedDevices(devs) {
+  const order = _loadDevOrder();
+  if (!order.length) return devs.slice();
+  const byKey = {};
+  devs.forEach(function(d) { byKey[d.key] = d; });
+  const out = [];
+  order.forEach(function(k) { if (byKey[k]) { out.push(byKey[k]); delete byKey[k]; } });
+  Object.keys(byKey).forEach(function(k) { out.push(byKey[k]); });
+  return out;
+}
+
+function toggleDevHidden(key) {
+  const hidden = _loadHiddenDevs();
+  const i = hidden.indexOf(key);
+  if (i === -1) hidden.push(key); else hidden.splice(i, 1);
+  _saveHiddenDevs(hidden);
+  toast(T("settings.devices.visibility_saved","Visibility updated (live tab)"), "success");
+}
+
+function _persistDevOrderFromDom() {
+  const cards = document.querySelectorAll('#devices-list .list-item[data-devkey]');
+  const order = Array.from(cards).map(function(c) { return c.dataset.devkey; });
+  _saveDevOrder(order);
+}
+
+// Drag handlers wired per card on render
+let _draggingKey = null;
+function _onDragStart(e) {
+  const card = e.currentTarget.closest('.list-item');
+  if (!card) return;
+  _draggingKey = card.dataset.devkey;
+  e.dataTransfer.effectAllowed = 'move';
+  card.classList.add('dragging');
+}
+function _onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const card = e.currentTarget;
+  const rect = card.getBoundingClientRect();
+  const after = (e.clientY - rect.top) > rect.height / 2;
+  card.classList.toggle('drop-after', after);
+  card.classList.toggle('drop-before', !after);
+}
+function _onDragLeave(e) {
+  e.currentTarget.classList.remove('drop-after','drop-before');
+}
+function _onDrop(e) {
+  e.preventDefault();
+  const target = e.currentTarget;
+  target.classList.remove('drop-after','drop-before');
+  if (!_draggingKey) return;
+  const dragged = document.querySelector(`#devices-list .list-item[data-devkey="${CSS.escape(_draggingKey)}"]`);
+  if (!dragged || dragged === target) { _draggingKey = null; return; }
+  const rect = target.getBoundingClientRect();
+  const after = (e.clientY - rect.top) > rect.height / 2;
+  if (after) target.parentNode.insertBefore(dragged, target.nextSibling);
+  else target.parentNode.insertBefore(dragged, target);
+  _persistDevOrderFromDom();
+  _draggingKey = null;
+  toast(T("settings.devices.order_saved","Device order saved (live tab)"), "success");
+}
+function _onDragEnd(e) {
+  e.currentTarget.closest('.list-item').classList.remove('dragging');
+  document.querySelectorAll('#devices-list .list-item').forEach(function(c){
+    c.classList.remove('drop-after','drop-before');
+  });
+}
+
 function renderDevices() {
-  const rows = devices.map(d=>{
+  const hidden = _loadHiddenDevs();
+  const ordered = _orderedDevices(devices);
+  const rows = ordered.map(d=>{
     const esckey = esc(d.key);
+    const isHidden = hidden.indexOf(d.key) !== -1;
     return `
-    <div class="list-item" data-devkey="${esckey}">
+    <div class="list-item" data-devkey="${esckey}" draggable="false">
       <div class="list-item-hdr">
+        <span class="drag-handle" draggable="true" title="${T("settings.devices.drag_hint","Drag to reorder")}" style="cursor:grab;font-size:18px;color:var(--muted);user-select:none;padding:2px 6px">⋮⋮</span>
         <span class="list-item-title"><span class="dot ${d.online?"online":""}"></span>${esc(d.name||d.key)}</span>
         <div style="display:flex;gap:6px;align-items:center">
-          <button type="button" class="secondary small" onclick="probeDevice('${esckey}')" title="Verbindung prüfen">🔌</button>
-          <button type="button" class="small" onclick="saveDevice('${esckey}')">💾 Speichern</button>
+          <label title="${T("settings.devices.show_on_live","Show on Live tab")}" style="display:inline-flex;align-items:center;gap:4px;font-size:.78rem;color:var(--muted);cursor:pointer">
+            <input type="checkbox" ${isHidden?"":"checked"} onchange="toggleDevHidden('${esckey}')" style="margin:0">
+            👁
+          </label>
+          <button type="button" class="secondary small" onclick="probeDevice('${esckey}')" title="${T("settings.devices.probe","Test connection")}">🔌</button>
+          <button type="button" class="small" onclick="saveDevice('${esckey}')">💾 ${T("settings.btn.save","Save")}</button>
           <button type="button" class="small danger" onclick="deleteDevice('${esckey}')">✕</button>
         </div>
       </div>
@@ -735,19 +836,33 @@ function renderDevices() {
       <div class="hint" style="margin-top:6px;font-size:.72rem">Status: ${d.online?'<span style="color:var(--ok)">● Online</span>':'<span style="color:var(--muted)">○ Offline / no data</span>'}${d.has_password?' &nbsp;·&nbsp; <span style="color:var(--accent)">🔒 password set</span>':''}</div>
     </div>`;
   }).join("");
+  setTimeout(_wireDeviceDragHandlers, 0);
   return `<section id="sec-devices"><h2>${T("settings.section.devices","Geräte")}</h2>
-    <div style="display:flex;flex-direction:column;gap:8px">${rows || `<p class='hint'>${T("settings.health.no_devices","Keine Geräte konfiguriert")}</p>`}</div>
+    <p class="hint" style="margin:-4px 0 8px 0">${T("settings.devices.hint_reorder","Drag the ⋮⋮ handle to reorder devices on the Live tab. Toggle 👁 to hide a device from the Live tab without deleting its data.")}</p>
+    <div id="devices-list" style="display:flex;flex-direction:column;gap:8px">${rows || `<p class='hint'>${T("settings.health.no_devices","Keine Geräte konfiguriert")}</p>`}</div>
     <div class="section-actions" style="justify-content:space-between;flex-wrap:wrap">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="secondary" onclick="discoverDevices()">🔍 mDNS Scan</button>
-        <input id="probe-ip" type="text" placeholder="IP-Adresse" style="width:160px">
-        <button class="secondary" onclick="addByIp()">➕ Hinzufügen</button>
-        <button class="secondary" onclick="probeAllDevices()">🔌 Alle prüfen</button>
-        <a href="/setup" style="display:inline-flex;align-items:center;gap:4px;padding:8px 14px;border:1px solid var(--border);background:var(--btn-sec-bg);color:var(--fg);border-radius:6px;font-size:.88rem;text-decoration:none">🪄 Einrichtungs-Assistent</a>
+        <input id="probe-ip" type="text" placeholder="${T("settings.devices.ip_placeholder","IP address")}" style="width:160px">
+        <button class="secondary" onclick="addByIp()">➕ ${T("settings.devices.add","Add")}</button>
+        <button class="secondary" onclick="probeAllDevices()">🔌 ${T("settings.devices.probe_all","Probe all")}</button>
+        <a href="/setup" style="display:inline-flex;align-items:center;gap:4px;padding:8px 14px;border:1px solid var(--border);background:var(--btn-sec-bg);color:var(--fg);border-radius:6px;font-size:.88rem;text-decoration:none">🪄 ${T("settings.devices.wizard","Setup wizard")}</a>
       </div>
     </div>
     <div id="discover-results"></div>
   </section>`;
+}
+
+function _wireDeviceDragHandlers() {
+  document.querySelectorAll('#devices-list .drag-handle').forEach(function(h) {
+    h.addEventListener('dragstart', _onDragStart);
+    h.addEventListener('dragend', _onDragEnd);
+  });
+  document.querySelectorAll('#devices-list .list-item').forEach(function(c) {
+    c.addEventListener('dragover', _onDragOver);
+    c.addEventListener('dragleave', _onDragLeave);
+    c.addEventListener('drop', _onDrop);
+  });
 }
 
 async function saveDevice(key) {
@@ -826,6 +941,37 @@ async function probeAllDevices() {
   }
   toast(`Probed: ${ok} ok, ${fail} failed`, fail?"error":"success");
   reload();
+}
+
+function renderIosWidget() {
+  const host = location.host;
+  return `<section id="sec-ios_widget"><h2>${T("settings.section.ios_widget","📱 iOS Widget (Scriptable)")}</h2>
+    <p class="hint" style="margin-top:0">${T("settings.ios_widget.intro","Install the official Scriptable app to add a live home-screen widget showing your current power, today's cost, spot price and CO₂ intensity. Three sizes (small/medium/large), tap to open the dashboard.")}</p>
+    <ol style="margin:8px 0 12px 18px;padding:0;font-size:.88rem;line-height:1.6">
+      <li>${T("settings.ios_widget.step1","Install <a href=\\"https://apps.apple.com/app/scriptable/id1405459188\\" target=\\"_blank\\" style=\\"color:var(--accent)\\">Scriptable</a> from the App Store")}</li>
+      <li>${T("settings.ios_widget.step2","Tap the button below to copy the script (or download the .js file)")}</li>
+      <li>${T("settings.ios_widget.step3","In Scriptable: tap +, paste, save")}</li>
+      <li>${T("settings.ios_widget.step4","Long-press your home screen → Add Widget → Scriptable → choose size")}</li>
+      <li>${T("settings.ios_widget.step5","Pick the script and set Parameter to:")} <code style="background:var(--input-bg);padding:2px 8px;border-radius:4px;font-size:.85rem;user-select:all">${esc(host)}</code></li>
+    </ol>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="primary" onclick="copyWidgetScriptSettings()">📋 ${T("settings.ios_widget.btn_copy","Copy script")}</button>
+      <button class="secondary" onclick="window.open('/widget.js','_blank')">⬇ ${T("settings.ios_widget.btn_download","Download .js")}</button>
+      <span id="iw-copy-msg" style="font-size:.78rem;color:var(--ok);display:none">✓ ${T("settings.ios_widget.copied","Copied to clipboard")}</span>
+    </div>
+  </section>`;
+}
+
+async function copyWidgetScriptSettings() {
+  try {
+    const r = await fetch('/widget.js');
+    const txt = await r.text();
+    await navigator.clipboard.writeText(txt);
+    const msg = document.getElementById('iw-copy-msg');
+    if (msg) { msg.style.display = 'inline'; setTimeout(()=>msg.style.display='none', 2500); }
+  } catch(e) {
+    window.open('/widget.js','_blank');
+  }
 }
 
 function renderAbout() {
