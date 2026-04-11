@@ -854,7 +854,7 @@ def _make_hourly_chart(hourly_kwh: List[float], lang: str, tmp_dir: Path) -> Opt
         fig.patch.set_facecolor("#F8FBFD")
         ax.set_facecolor("#F8FBFD")
         ax.bar(hours, vals, color=colors, width=0.7, zorder=3)
-        ax.set_xlabel("Hour" if normalize_lang(lang) == "en" else "Stunde", fontsize=8)
+        ax.set_xlabel("Hour", fontsize=8)
         ax.set_ylabel("kWh", fontsize=8)
         ax.set_xticks(hours)
         ax.set_xticklabels([f"{h:02d}" for h in hours], fontsize=6)
@@ -957,7 +957,7 @@ def _make_stacked_hourly_chart(
             vals = np.array([per_device_hourly[name][h] if h < len(per_device_hourly[name]) else 0.0 for h in hours])
             ax.bar(hours, vals, bottom=bottoms, color=_device_color(idx), width=0.7, label=name[:25], zorder=3)
             bottoms += vals
-        ax.set_xlabel("Hour" if normalize_lang(lang) == "en" else "Stunde", fontsize=8)
+        ax.set_xlabel("Hour", fontsize=8)
         ax.set_ylabel("kWh", fontsize=8)
         ax.set_xticks(hours)
         ax.set_xticklabels([f"{h:02d}" for h in hours], fontsize=6)
@@ -1205,7 +1205,7 @@ def _make_co2_hourly_chart(
         fig.patch.set_facecolor("#F8FBFD")
         ax.set_facecolor("#F8FBFD")
         ax.bar(hours, vals, color=colors, width=0.7, zorder=3)
-        ax.set_xlabel("Hour" if normalize_lang(lang) == "en" else "Stunde", fontsize=8)
+        ax.set_xlabel("Hour", fontsize=8)
         ax.set_ylabel("kg CO₂", fontsize=8)
         ax.set_xticks(hours)
         ax.set_xticklabels([f"{h:02d}" for h in hours], fontsize=6)
@@ -1517,7 +1517,7 @@ def export_pdf_email_daily(
     page_n = 1
 
     date_str = data.period_start.strftime("%Y-%m-%d")
-    title_str = "Daily Energy Report" if is_en else "Tagesreport Energie"
+    title_str = "Daily Energy Report"
 
     # ------------------------------------------------------------------ Page 1: Overview
     y = _draw_header_band(c, pw, ph, title_str, date_str)
@@ -1527,10 +1527,10 @@ def export_pdf_email_daily(
     kpi_w   = (pw - 2 * margin - 2 * kpi_gap) / 3
     kpi_h   = 2.0 * cm
     _draw_kpi_box(c, margin,                         y, kpi_w, kpi_h,
-                  t(lang, "pdf.report.total_energy") or "Gesamt kWh",
+                  t(lang, "pdf.report.total_energy") or "Total kWh",
                   _fmt_kwh(total_kwh, lang), "kWh")
     _draw_kpi_box(c, margin + kpi_w + kpi_gap,       y, kpi_w, kpi_h,
-                  t(lang, "pdf.report.total_cost") or "Kosten",
+                  t(lang, "pdf.report.total_cost") or "Cost",
                   _fmt_money(total_eur, lang), "EUR")
     _draw_kpi_box(c, margin + 2 * (kpi_w + kpi_gap), y, kpi_w, kpi_h,
                   "CO\u2082",
@@ -1538,9 +1538,9 @@ def export_pdf_email_daily(
     y -= kpi_h + 0.3 * cm
 
     # Row 2 of KPIs: avg W | peak W | peak hour
-    avg_w_lbl  = "Mittl. Leistung" if not is_en else "Avg Power"
-    peak_w_lbl = "Spitzenleistung" if not is_en else "Peak Power"
-    peak_h_lbl = "Spitzenstunde"   if not is_en else "Peak Hour"
+    avg_w_lbl  = "Avg Power"
+    peak_w_lbl = "Peak Power"
+    peak_h_lbl = "Peak Hour"
     _draw_kpi_box(c, margin,                         y, kpi_w, kpi_h,
                   avg_w_lbl, _fmt_int(avg_w, lang), "W")
     _draw_kpi_box(c, margin + kpi_w + kpi_gap,       y, kpi_w, kpi_h,
@@ -1551,9 +1551,9 @@ def export_pdf_email_daily(
 
     # Row 3 of KPIs: Spot price (if enabled)
     if data.spot_enabled and data.spot_total_eur > 0:
-        _spot_lbl = "Dyn. Spotpreis" if not is_en else "Dynamic Spot"
-        _spot_avg_lbl = "\u00d8 Spotpreis" if not is_en else "\u00d8 Spot Price"
-        _spot_cur_lbl = "Aktuell" if not is_en else "Current"
+        _spot_lbl = "Dynamic Spot"
+        _spot_avg_lbl = "\u00d8 Spot Price"
+        _spot_cur_lbl = "Current"
         _delta_eur = data.spot_total_eur - total_eur
         _delta_sign = "+" if _delta_eur > 0 else ""
         _draw_kpi_box(c, margin,                         y, kpi_w, kpi_h,
@@ -1569,8 +1569,8 @@ def export_pdf_email_daily(
         y -= kpi_h + 0.3 * cm
 
     # Comparisons
-    prev_day_lbl = "vs. Vortag:" if not is_en else "vs. previous day:"
-    prev_wk_lbl  = "vs. gleicher Wochentag (Vorwoche):" if not is_en else "vs. same weekday last week:"
+    prev_day_lbl = "vs. previous day:"
+    prev_wk_lbl  = "vs. same weekday last week:"
     y = _draw_comparison_line(c, margin, y, prev_day_lbl, total_kwh, data.prev_kwh, lang)
     y = _draw_comparison_line(c, margin, y, prev_wk_lbl,  total_kwh, data.prev_same_weekday_kwh, lang)
     y -= 0.3 * cm
@@ -1584,7 +1584,7 @@ def export_pdf_email_daily(
     # Device table
     _rl_set_fill(c, _C_TEXT)
     c.setFont("Helvetica-Bold", 10)
-    sec_lbl = "Verbrauch je Gerat" if not is_en else "Consumption by Device"
+    sec_lbl = "Consumption by Device"
     c.drawString(margin, y, sec_lbl)
     y -= 0.6 * cm
 
@@ -1606,10 +1606,10 @@ def export_pdf_email_daily(
         y -= 0.45 * cm
         sorted_t = sorted(data.totals, key=lambda r: r.kwh_total, reverse=True)
         c.setFont("Helvetica", 8)
-        hl_high_lbl = "Spitzenverbraucher:" if not is_en else "Top consumer:"
-        hl_low_lbl  = "Sparsamster Verbraucher:" if not is_en else "Lowest consumer:"
-        ph_high_lbl = "Stunde mit h. Verbrauch:" if not is_en else "Highest-consumption hour:"
-        ph_low_lbl  = "Stunde mit n. Verbrauch:" if not is_en else "Lowest-consumption hour:"
+        hl_high_lbl = "Top consumer:"
+        hl_low_lbl  = "Lowest consumer:"
+        ph_high_lbl = "Highest-consumption hour:"
+        ph_low_lbl  = "Lowest-consumption hour:"
         _rl_set_fill(c, _C_TEXT)
         if sorted_t:
             best = sorted_t[0]
@@ -1634,7 +1634,7 @@ def export_pdf_email_daily(
 
     # ------------------------------------------------------------------ Overview chart: embed on page 1 if space allows
     if stacked_chart and stacked_chart.exists():
-        ch_title = "Stundenverbrauch (gestapelt)" if not is_en else "Hourly Consumption (stacked)"
+        ch_title = "Hourly Consumption (stacked)"
         if y > 7.0 * cm:
             # Enough room on page 1 – embed directly
             y -= 0.3 * cm
@@ -1674,7 +1674,7 @@ def export_pdf_email_daily(
             dirty_thresh=data.co2_dirty_thresh,
         )
     if co2_chart:
-        co2_title = "CO₂-Emissionen (ENTSO-E)" if not is_en else "CO₂ Emissions (ENTSO-E)"
+        co2_title = "CO₂ Emissions (ENTSO-E)"
         c.showPage()
         page_n += 1
         y2 = _draw_header_band(c, pw, ph, co2_title, date_str)
@@ -1729,7 +1729,7 @@ def export_pdf_email_daily(
                     kw3 = (col_w - 2 * kpi_gap2) / 3
                     _draw_kpi_box(c, col_x,                       y_col, kw3, kpi_h2, "kWh", _fmt_kwh(row.kwh_total, lang), "kWh")
                     _draw_kpi_box(c, col_x + kw3 + kpi_gap2,      y_col, kw3, kpi_h2, "EUR", _fmt_money(row.cost_eur, lang), "EUR")
-                    _draw_kpi_box(c, col_x + 2*(kw3 + kpi_gap2),  y_col, kw3, kpi_h2, "Ant." if not is_en else "Share", f"{pct:.1f}", "%")
+                    _draw_kpi_box(c, col_x + 2*(kw3 + kpi_gap2),  y_col, kw3, kpi_h2, "Share", f"{pct:.1f}", "%")
                     y_col -= kpi_h2 + 0.25 * cm
 
                 # Compact stats line
@@ -1738,8 +1738,8 @@ def export_pdf_email_daily(
                 if row:
                     _rl_set_fill(c, _C_NEUTRAL)
                     c.setFont("Helvetica", 7)
-                    op_lbl = "Betrieb" if not is_en else "Active"
-                    avg_lbl = "Ø" if not is_en else "Avg"
+                    op_lbl = "Active"
+                    avg_lbl = "Avg"
                     pk_lbl = "Max"
                     c.drawString(col_x, y_col,
                         f"{op_lbl}: {op_hours}h  ·  {avg_lbl}: {_fmt_int(row.avg_power_w, lang)} W  ·  {pk_lbl}: {_fmt_int(row.max_power_w, lang)} W")
@@ -1814,7 +1814,7 @@ def export_pdf_email_monthly(
     page_n  = 1
 
     period_str = f"{data.period_start.strftime('%Y-%m-%d')} \u2013 {data.period_end.strftime('%Y-%m-%d')}"
-    title_str  = "Monthly Energy Report" if is_en else "Monatsreport Energie"
+    title_str  = "Monthly Energy Report"
 
     # ------------------------------------------------------------------ Page 1: Overview
     y = _draw_header_band(c, pw, ph, title_str, period_str)
@@ -1825,10 +1825,10 @@ def export_pdf_email_monthly(
 
     # Row 1: kWh | EUR | CO2
     _draw_kpi_box(c, margin,                         y, kpi_w, kpi_h,
-                  "Gesamt kWh" if not is_en else "Total kWh",
+                  "Total kWh",
                   _fmt_kwh(total_kwh, lang), "kWh")
     _draw_kpi_box(c, margin + kpi_w + kpi_gap,       y, kpi_w, kpi_h,
-                  "Gesamt EUR" if not is_en else "Total Cost",
+                  "Total Cost",
                   _fmt_money(total_eur, lang), "EUR")
     _draw_kpi_box(c, margin + 2 * (kpi_w + kpi_gap), y, kpi_w, kpi_h,
                   "CO\u2082",
@@ -1837,21 +1837,21 @@ def export_pdf_email_monthly(
 
     # Row 2: day avg | worst day | best day
     _draw_kpi_box(c, margin,                         y, kpi_w, kpi_h,
-                  "Tagesdurchschnitt" if not is_en else "Daily avg",
+                  "Daily avg",
                   _fmt_kwh(day_avg, lang), "kWh/d")
     _draw_kpi_box(c, margin + kpi_w + kpi_gap,       y, kpi_w, kpi_h,
-                  "Teuerster Tag" if not is_en else "Peak day",
+                  "Peak day",
                   worst_day_str, "")
     _draw_kpi_box(c, margin + 2 * (kpi_w + kpi_gap), y, kpi_w, kpi_h,
-                  "Gunstigster Tag" if not is_en else "Best day",
+                  "Best day",
                   best_day_str, "")
     y -= kpi_h + 0.3 * cm
 
     # Row 3: Spot price (if enabled)
     if data.spot_enabled and data.spot_total_eur > 0:
-        _spot_lbl_m = "Dyn. Spotpreis" if not is_en else "Dynamic Spot"
-        _spot_avg_lbl_m = "\u00d8 Spotpreis" if not is_en else "\u00d8 Spot Price"
-        _spot_cur_lbl_m = "Aktuell" if not is_en else "Current"
+        _spot_lbl_m = "Dynamic Spot"
+        _spot_avg_lbl_m = "\u00d8 Spot Price"
+        _spot_cur_lbl_m = "Current"
         _delta_eur_m = data.spot_total_eur - total_eur
         _delta_sign_m = "+" if _delta_eur_m > 0 else ""
         _draw_kpi_box(c, margin,                         y, kpi_w, kpi_h,
@@ -1869,7 +1869,7 @@ def export_pdf_email_monthly(
     y -= 0.2 * cm
 
     # Comparisons
-    prev_mo_lbl = "vs. Vormonat:" if not is_en else "vs. previous month:"
+    prev_mo_lbl = "vs. previous month:"
     y = _draw_comparison_line(c, margin, y, prev_mo_lbl, total_kwh, data.prev_kwh, lang)
     # Absolute difference line
     if data.prev_kwh and data.prev_kwh > 0:
@@ -1888,8 +1888,8 @@ def export_pdf_email_monthly(
     if data.weekday_avg_kwh > 0 or data.weekend_avg_kwh > 0:
         _rl_set_fill(c, _C_NEUTRAL)
         c.setFont("Helvetica", 8)
-        wk_lbl = "Wochentag Ø:" if not is_en else "Weekday avg:"
-        we_lbl = "Wochenende Ø:" if not is_en else "Weekend avg:"
+        wk_lbl = "Weekday avg:"
+        we_lbl = "Weekend avg:"
         c.drawString(margin, y, f"{wk_lbl}  {_fmt_kwh(data.weekday_avg_kwh, lang)} kWh/d")
         c.drawString(margin + (pw - 2 * margin) / 2, y, f"{we_lbl}  {_fmt_kwh(data.weekend_avg_kwh, lang)} kWh/d")
         _rl_set_fill(c, _C_TEXT)
@@ -1905,7 +1905,7 @@ def export_pdf_email_monthly(
     # Enhanced device table
     _rl_set_fill(c, _C_TEXT)
     c.setFont("Helvetica-Bold", 10)
-    sec_lbl = "Verbrauch je Gerat" if not is_en else "Consumption by Device"
+    sec_lbl = "Consumption by Device"
     c.drawString(margin, y, sec_lbl)
     y -= 0.6 * cm
 
@@ -1915,7 +1915,7 @@ def export_pdf_email_monthly(
 
     # ------------------------------------------------------------------ Overview chart: embed on page 1 if space allows
     if stacked_chart and stacked_chart.exists():
-        ch_title = "Tagesverbrauch (gestapelt)" if not is_en else "Daily Consumption (stacked)"
+        ch_title = "Daily Consumption (stacked)"
         if y > 7.0 * cm:
             # Enough room on page 1 – embed directly
             y -= 0.3 * cm
@@ -1955,7 +1955,7 @@ def export_pdf_email_monthly(
             dirty_thresh=data.co2_dirty_thresh,
         )
     if co2_chart:
-        co2_title = "CO₂-Emissionen (ENTSO-E)" if not is_en else "CO₂ Emissions (ENTSO-E)"
+        co2_title = "CO₂ Emissions (ENTSO-E)"
         c.showPage()
         page_n += 1
         y2 = _draw_header_band(c, pw, ph, co2_title, period_str)
@@ -2010,7 +2010,7 @@ def export_pdf_email_monthly(
                     kw3 = (col_w - 2 * kpi_gap2) / 3
                     _draw_kpi_box(c, col_x,                       y_col, kw3, kpi_h2, "kWh", _fmt_kwh(row.kwh_total, lang), "kWh")
                     _draw_kpi_box(c, col_x + kw3 + kpi_gap2,      y_col, kw3, kpi_h2, "EUR", _fmt_money(row.cost_eur, lang), "EUR")
-                    _draw_kpi_box(c, col_x + 2*(kw3 + kpi_gap2),  y_col, kw3, kpi_h2, "Ant." if not is_en else "Share", f"{pct:.1f}", "%")
+                    _draw_kpi_box(c, col_x + 2*(kw3 + kpi_gap2),  y_col, kw3, kpi_h2, "Share", f"{pct:.1f}", "%")
                     y_col -= kpi_h2 + 0.25 * cm
 
                 # Compact day stats
@@ -2023,11 +2023,11 @@ def export_pdf_email_monthly(
                     fh_avg = sum(day_vals[:half]) / half
                     sh_avg = sum(day_vals[half:]) / max(1, len(day_vals) - half)
                     if sh_avg > fh_avg * 1.05:
-                        trend = "Steigend" if not is_en else "Rising"
+                        trend = "Rising"
                     elif sh_avg < fh_avg * 0.95:
-                        trend = "Fallend" if not is_en else "Falling"
+                        trend = "Falling"
                     else:
-                        trend = "Stabil" if not is_en else "Stable"
+                        trend = "Stable"
                     _rl_set_fill(c, _C_NEUTRAL)
                     c.setFont("Helvetica", 7)
                     c.drawString(col_x, y_col,
@@ -2061,7 +2061,7 @@ def export_pdf_email_monthly(
     if top5_chart and top5_chart.exists():
         c.showPage()
         page_n += 1
-        top_title = "Top-5 Verbraucher" if not is_en else "Top-5 Consumers"
+        top_title = "Top-5 Consumers"
         y3 = _draw_header_band(c, pw, ph, top_title, period_str)
         y3 -= 0.4 * cm
         _embed_chart(c, pw, y3, top5_chart, top_title, ph - 5.0 * cm)

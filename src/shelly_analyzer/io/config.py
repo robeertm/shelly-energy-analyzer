@@ -355,7 +355,7 @@ class BillingConfig:
 @dataclass(frozen=False)
 class UpdatesConfig:
     # GitHub repository in the form "owner/repo"
-    repo: str = "robertm/shelly-energy-analyzer"
+    repo: str = "robeertm/shelly-energy-analyzer"
     # Check for updates on startup (non-blocking)
     check_on_start: bool = True
     # Auto-install updates on startup (only if user enabled it)
