@@ -7360,7 +7360,7 @@ _loadLsSettings();
   function renderSmartSched(data, el) {{
     const durOpts = [1,2,3,4,6,8];
     let durSel = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">' +
-      '<span style="font-size:12px;color:var(--muted)">Dauer:</span>';
+      '<span style="font-size:12px;color:var(--muted)">Duration:</span>';
     durOpts.forEach(function(h){{
       const active = h === Number(window._ssDuration);
       durSel += '<button onclick="window._ssDuration=' + h + ';loadSmartSched()" style="padding:4px 10px;border-radius:6px;border:1px solid ' + (active?'#ff9800':'var(--border)') + ';background:' + (active?'#ff9800':'transparent') + ';color:' + (active?'#fff':'var(--fg)') + ';cursor:pointer;font-size:12px;font-weight:' + (active?'600':'400') + '">' + h + ' h</button>';
@@ -7577,7 +7577,7 @@ _loadLsSettings();
       '<div style="font-size:20px;font-weight:700;color:#4caf50;padding:8px 0">💰 ' +
       data.total_savings_potential_eur.toFixed(0) + ' €/year savings potential</div></div>';
     if (data.llm_summary) {{
-      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">🤖 KI-Zusammenfassung</div>' +
+      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">🤖 ' + t('web.advisor.llm_summary', 'AI summary') + '</div>' +
         '<div style="padding:4px 0">' + esc(data.llm_summary) + '</div></div>';
     }}
     (data.tips || []).forEach(function(tip) {{

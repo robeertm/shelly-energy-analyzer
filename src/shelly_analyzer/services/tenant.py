@@ -178,7 +178,7 @@ def generate_tenant_bills(
             total_kwh += kwh
             amount = kwh * price_eur_per_kwh
             line_items.append(TenantLineItem(
-                description=f"Stromverbrauch – {dev_names.get(dk, dk)}",
+                description=f"Electricity consumption – {dev_names.get(dk, dk)}",
                 kwh=round(kwh, 2),
                 unit_price=price_eur_per_kwh,
                 amount=round(amount, 2),
