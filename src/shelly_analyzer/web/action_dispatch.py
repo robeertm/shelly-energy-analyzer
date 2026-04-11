@@ -3272,10 +3272,30 @@ class ActionDispatcher:
                     except Exception:
                         pass
 
+                # Fall back to the forecast for the current hour if real
+                # data is missing or stale (>1h old). Real data overwrites
+                # this on the next fetch.
+                ci_source = "live" if ci > 0 else "forecast"
+                _now_hour_ts = (now_ts // 3600) * 3600
+                if (ci <= 0 or ci_hour_ts < _now_hour_ts) and forecast_points:
+                    for fp in forecast_points:
+                        if fp.get("hour_ts") == _now_hour_ts:
+                            ci = float(fp.get("intensity_g_per_kwh", 0) or 0)
+                            ci_hour_ts = _now_hour_ts
+                            ci_source = "forecast"
+                            break
+                    else:
+                        if forecast_points:
+                            fp0 = forecast_points[0]
+                            ci = float(fp0.get("intensity_g_per_kwh", 0) or 0)
+                            ci_hour_ts = int(fp0.get("hour_ts", _now_hour_ts) or _now_hour_ts)
+                            ci_source = "forecast"
+
                 return {
                     "ok": True,
                     "current_intensity": round(ci, 1),
                     "intensity_hour_ts": ci_hour_ts,
+                    "current_source": ci_source,
                     "green_threshold": green_thr,
                     "dirty_threshold": dirty_thr,
                     "device_rates": device_rates,
@@ -3479,6 +3499,23 @@ class ActionDispatcher:
                     current_intensity = float(last_row.get("intensity_g_per_kwh", 0))
                     current_source = str(last_row.get("source", ""))
                     current_hour_ts = int(last_row.get("hour_ts", 0))
+
+                # If real data is missing or stale, surface the forecast
+                # value as the live one (it gets overwritten by real data
+                # on the next provider fetch).
+                _now_hour_ts_co2 = (now_ts // 3600) * 3600
+                if (current_intensity <= 0 or current_hour_ts < _now_hour_ts_co2) and _forecast_points:
+                    for _fp in _forecast_points:
+                        if _fp.get("hour_ts") == _now_hour_ts_co2:
+                            current_intensity = float(_fp.get("intensity_g_per_kwh", 0) or 0)
+                            current_hour_ts = _now_hour_ts_co2
+                            current_source = "forecast"
+                            break
+                    else:
+                        _fp0 = _forecast_points[0]
+                        current_intensity = float(_fp0.get("intensity_g_per_kwh", 0) or 0)
+                        current_hour_ts = int(_fp0.get("hour_ts", _now_hour_ts_co2) or _now_hour_ts_co2)
+                        current_source = "forecast"
 
                 _solar_cfg = getattr(self.cfg, "solar", None)
                 _pv_key = getattr(_solar_cfg, "pv_meter_device_key", "") if _solar_cfg else ""

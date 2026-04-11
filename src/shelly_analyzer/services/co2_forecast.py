@@ -216,16 +216,23 @@ class ForecastPoint:
     precip_mm: float
 
 
-def _fetch_openmeteo(lat: float, lon: float, horizon_hours: int = _HORIZON_HOURS + 2) -> Optional[List[Dict[str, Any]]]:
+def _fetch_openmeteo(
+    lat: float,
+    lon: float,
+    horizon_hours: int = _HORIZON_HOURS + 2,
+    past_hours: int = 0,
+) -> Optional[List[Dict[str, Any]]]:
     try:
-        params = {
+        params: Dict[str, Any] = {
             "latitude": round(lat, 2),
             "longitude": round(lon, 2),
             "hourly": "temperature_2m,cloud_cover,wind_speed_10m,precipitation",
             "forecast_hours": max(6, min(horizon_hours, 24)),
             "timezone": "UTC",
         }
-        r = requests.get(_OPEN_METEO, params=params, timeout=10)
+        if past_hours > 0:
+            params["past_hours"] = min(past_hours, 168)
+        r = requests.get(_OPEN_METEO, params=params, timeout=15)
         r.raise_for_status()
         data = r.json()
         h = data.get("hourly", {})
@@ -392,6 +399,7 @@ class Co2ForecastService:
         zone = str(getattr(co2_cfg, "bidding_zone", "") or "").strip()
         if not zone:
             return
+        # 1) Forward forecast (in-memory cache for the chart continuation)
         points = self._compute_zone_forecast(zone)
         if points:
             with self._lock:
@@ -401,6 +409,77 @@ class Co2ForecastService:
             logger.info("CO2 forecast refreshed for %s: %d hours ahead", zone, len(points))
         else:
             self._last_error = "no forecast data"
+        # 2) Backward gap fill (writes smart estimates into DB so the historical
+        #    chart no longer shows flat 400 g/kWh spikes from the legacy fill).
+        try:
+            written = self.fill_recent_estimates(zone, lookback_hours=72)
+            if written:
+                logger.info("CO2 forecast backfill: %d hours estimated for %s", written, zone)
+        except Exception as e:
+            logger.warning("CO2 backfill failed for %s: %s", zone, e)
+
+    def fill_recent_estimates(self, zone: str, lookback_hours: int = 72) -> int:
+        """Backfill missing CO2 hours over the last *lookback_hours* with
+        trend+weather-based estimates. Writes to DB with source='forecast'
+        so real provider rows always overwrite them on the next fetch.
+
+        Returns the number of hours written.
+        """
+        centroid = _zone_centroid(zone)
+        if centroid is None:
+            return 0
+        lat, lon = centroid
+        profile = _zone_profile(zone)
+
+        baseline_by_hour = _compute_baseline_profile(self._db, zone, lookback_days=14)
+        if not baseline_by_hour:
+            return 0
+
+        now_hour_ts = (int(time.time()) // 3600) * 3600
+        start_ts = now_hour_ts - lookback_hours * 3600
+
+        gaps = self._db.find_co2_gaps(zone, start_ts, now_hour_ts + 3600, include_estimated=True)
+        if not gaps:
+            return 0
+
+        weather = _fetch_openmeteo(
+            lat, lon,
+            horizon_hours=_HORIZON_HOURS + 2,
+            past_hours=lookback_hours + 4,
+        )
+        if not weather:
+            return 0
+        weather_by_ts = {w["ts"]: w for w in weather}
+
+        gap_hours: List[int] = []
+        for s, e in gaps:
+            t = (s // 3600) * 3600
+            while t < e and t <= now_hour_ts:
+                gap_hours.append(t)
+                t += 3600
+        if not gap_hours:
+            return 0
+
+        rows = []
+        now_ts_w = int(time.time())
+        for hts in gap_hours:
+            w = weather_by_ts.get(hts)
+            if w is None:
+                continue
+            hour_of_day = (hts // 3600) % 24
+            baseline = baseline_by_hour.get(hour_of_day)
+            if baseline is None:
+                baseline = sum(baseline_by_hour.values()) / len(baseline_by_hour)
+            adjusted, _ = _weather_adjust(baseline, w, profile, lat, lon)
+            rows.append((hts, zone, round(adjusted, 1), "forecast", now_ts_w))
+
+        if not rows:
+            return 0
+        try:
+            return int(self._db.upsert_co2_intensity(rows))
+        except Exception as e:
+            logger.warning("CO2 backfill upsert failed: %s", e)
+            return 0
 
     def _compute_zone_forecast(self, zone: str) -> List[ForecastPoint]:
         centroid = _zone_centroid(zone)
@@ -434,7 +513,8 @@ class Co2ForecastService:
         out: List[ForecastPoint] = []
         for w in weather:
             ts = w["ts"]
-            if ts <= now_hour_ts or ts > horizon_ts:
+            # Include current hour + future, exclude past
+            if ts < now_hour_ts or ts > horizon_ts:
                 continue
             hour_of_day = (ts // 3600) % 24
             baseline = baseline_by_hour.get(hour_of_day)
