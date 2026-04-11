@@ -10,7 +10,9 @@
       "gen": 0,
       "model": "",
       "phases": 3,
-      "supports_emdata": true
+      "supports_emdata": true,
+      "username": "admin",
+      "password": ""
     },
     {
       "key": "device2",
@@ -21,7 +23,9 @@
       "gen": 0,
       "model": "",
       "phases": 3,
-      "supports_emdata": true
+      "supports_emdata": true,
+      "username": "admin",
+      "password": ""
     }
   ],
   "download": {
