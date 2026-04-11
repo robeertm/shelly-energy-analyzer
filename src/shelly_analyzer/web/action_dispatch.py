@@ -3770,19 +3770,28 @@ class ActionDispatcher:
 
         if action == "tariff_compare":
             try:
-                from shelly_analyzer.services.tariff_compare import compare_tariffs
+                from shelly_analyzer.services.tariff_compare import compare_tariffs, _country_from_zone
+                from shelly_analyzer.services.zones import spot_zone_currency
+                zone = getattr(self.cfg.spot_price, "bidding_zone", "") or ""
+                country = _country_from_zone(zone)
+                currency = spot_zone_currency(zone)
                 results = compare_tariffs(
                     self.storage.db, self.cfg,
                     current_price_eur_per_kwh=float(self.cfg.pricing.electricity_price_eur_per_kwh),
                     current_base_fee_eur_per_year=float(self.cfg.pricing.base_fee_eur_per_year),
                 )
-                return {"ok": True, "data": {"results": [
-                    {"name": r.name, "provider": r.provider, "tariff_type": r.tariff_type,
-                     "annual_cost_eur": r.annual_cost_eur, "monthly_avg_eur": r.monthly_avg_eur,
-                     "effective_price_ct": r.effective_price_ct,
-                     "savings_vs_current_eur": r.savings_vs_current_eur, "is_current": r.is_current}
-                    for r in results
-                ]}}
+                return {"ok": True, "data": {
+                    "country": country,
+                    "currency": currency,
+                    "zone": zone,
+                    "results": [
+                        {"name": r.name, "provider": r.provider, "tariff_type": r.tariff_type,
+                         "annual_cost_eur": r.annual_cost_eur, "monthly_avg_eur": r.monthly_avg_eur,
+                         "effective_price_ct": r.effective_price_ct,
+                         "savings_vs_current_eur": r.savings_vs_current_eur, "is_current": r.is_current}
+                        for r in results
+                    ],
+                }}
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 

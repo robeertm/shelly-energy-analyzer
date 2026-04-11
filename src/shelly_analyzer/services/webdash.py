@@ -7499,19 +7499,33 @@ _loadLsSettings();
       el.innerHTML = '<div class="card" style="padding:14px"><p class="info-msg">No consumption data available.</p></div>';
       return;
     }}
+    // Pick currency symbol from the API response so US / GB / CHF / AU users
+    // don't see € on every card. Fallback is € for the EU bidding zones.
+    const currency = (data.currency || 'EUR').toUpperCase();
+    const symMap = {{EUR:'€', USD:'$', GBP:'£', CHF:'CHF', AUD:'A$', NOK:'kr', SEK:'kr', DKK:'kr', PLN:'zł', CZK:'Kč'}};
+    const sym = symMap[currency] || currency;
+    const country = data.country || '';
+    const zone = data.zone || '';
     let html = '';
+    // Header: show which country's templates are being compared so the
+    // user knows why (e.g.) Octopus / Tibber / Holaluz are in the list.
+    if (country || zone) {{
+      html += '<div class="card" style="margin-bottom:10px;padding:10px;font-size:12px;color:var(--muted)">' +
+        t('web.tariff.country_hint', 'Comparing against representative {country} tariffs (currency: {currency})', {{country: country || zone, currency: currency}}) +
+        '</div>';
+    }}
     results.forEach(function(r) {{
       const border = r.is_current ? '2px solid #ff9800' : '1px solid var(--border)';
       const sav = r.is_current ? '' : (r.savings_vs_current_eur > 0
-        ? '<span style="color:#4caf50;font-weight:600">▼ ' + r.savings_vs_current_eur.toFixed(0) + ' €/year</span>'
-        : '<span style="color:#e53935">▲ ' + Math.abs(r.savings_vs_current_eur).toFixed(0) + ' €/year</span>');
-      const badge = r.is_current ? ' <span style="background:#ff9800;color:#fff;font-size:10px;padding:2px 6px;border-radius:8px">Aktuell</span>' : '';
+        ? '<span style="color:#4caf50;font-weight:600">▼ ' + r.savings_vs_current_eur.toFixed(0) + ' ' + sym + '/' + t('web.tariff.year', 'year') + '</span>'
+        : '<span style="color:#e53935">▲ ' + Math.abs(r.savings_vs_current_eur).toFixed(0) + ' ' + sym + '/' + t('web.tariff.year', 'year') + '</span>');
+      const badge = r.is_current ? ' <span style="background:#ff9800;color:#fff;font-size:10px;padding:2px 6px;border-radius:8px">' + t('web.tariff.current', 'Current') + '</span>' : '';
       html += '<div class="card" style="border:' + border + '">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">' +
         '<div><b style="font-size:14px">' + esc(r.name) + '</b>' + badge +
         '<br><span style="font-size:11px;color:var(--muted)">' + esc(r.provider) + ' · ' + r.tariff_type.toUpperCase() + '</span></div>' +
-        '<div style="text-align:right"><div style="font-size:17px;font-weight:700">' + r.annual_cost_eur.toFixed(0) +
-        ' €<span style="font-size:11px;font-weight:400;color:var(--muted)">/year</span></div>' + sav + '</div>' +
+        '<div style="text-align:right"><div style="font-size:17px;font-weight:700">' + r.annual_cost_eur.toFixed(0) + ' ' +
+        sym + '<span style="font-size:11px;font-weight:400;color:var(--muted)">/' + t('web.tariff.year', 'year') + '</span></div>' + sav + '</div>' +
         '</div></div>';
     }});
     el.innerHTML = html;
@@ -7532,14 +7546,14 @@ _loadLsSettings();
     }}
   }}
   function renderBattery(data, el) {{
-    const ml = {{charging:'Loading', discharging:'Entladen', idle:'Standby'}};
+    const ml = {{charging:'Charging', discharging:'Discharging', idle:'Standby'}};
     el.innerHTML = '<div class="card" style="margin-bottom:10px"><div class="card-title">🔋 Battery storage</div>' +
       '<div class="metric-grid">' +
       metricCardHtml('SOC', data.soc_pct.toFixed(0) + '%') +
-      metricCardHtml('Leistung', data.power_w.toFixed(0) + ' W') +
-      metricCardHtml('Modus', ml[data.mode] || data.mode) +
-      metricCardHtml('Zyklen', data.cycle_count) +
-      metricCardHtml('Effizienz', data.avg_efficiency_pct.toFixed(1) + '%') +
+      metricCardHtml('Power', data.power_w.toFixed(0) + ' W') +
+      metricCardHtml('Mode', ml[data.mode] || data.mode) +
+      metricCardHtml('Cycles', data.cycle_count) +
+      metricCardHtml('Efficiency', data.avg_efficiency_pct.toFixed(1) + '%') +
       '</div></div>';
   }}
 
