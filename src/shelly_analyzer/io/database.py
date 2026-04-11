@@ -1130,7 +1130,8 @@ class EnergyDB:
         return min(candidates) if candidates else None
 
     def delete_estimated_co2(self, zone: str, before_ts: int) -> int:
-        """Delete estimated-only CO₂ rows older than *before_ts*.
+        """Delete placeholder CO₂ rows (estimated or forecast-backfilled)
+        older than *before_ts*. Real provider rows are kept.
 
         Returns the number of rows deleted.
         """
@@ -1139,8 +1140,25 @@ class EnergyDB:
             with conn:
                 cur = conn.execute(
                     "DELETE FROM co2_intensity "
-                    "WHERE zone = ? AND source = 'estimated' AND hour_ts < ?",
+                    "WHERE zone = ? AND source IN ('estimated','forecast') "
+                    "AND hour_ts < ?",
                     (zone, before_ts),
+                )
+                return cur.rowcount
+
+    def delete_forecast_co2(self, zone: str, after_ts: int = 0) -> int:
+        """Delete forecast-source CO₂ rows for a zone (>= after_ts).
+
+        Used to refresh the rolling forecast window without touching real
+        provider rows.
+        """
+        conn = self._conn()
+        with self._write_lock:
+            with conn:
+                cur = conn.execute(
+                    "DELETE FROM co2_intensity "
+                    "WHERE zone = ? AND source = 'forecast' AND hour_ts >= ?",
+                    (zone, after_ts),
                 )
                 return cur.rowcount
 
@@ -1170,13 +1188,15 @@ class EnergyDB:
         """
         conn = self._conn()
         if include_estimated:
-            # Only count non-estimated rows as "present"
+            # Only count REAL provider rows as "present" — estimated AND
+            # forecast-backfill rows count as gaps so the next fetch tries
+            # to replace them with real data.
             existing = {
                 row[0]
                 for row in conn.execute(
                     "SELECT hour_ts FROM co2_intensity "
                     "WHERE zone = ? AND hour_ts >= ? AND hour_ts < ? "
-                    "AND source != 'estimated'",
+                    "AND source NOT IN ('estimated','forecast')",
                     (zone, start_ts, end_ts),
                 ).fetchall()
             }

@@ -1241,40 +1241,9 @@ class Co2FetchService:
             self._svc_log(f"CO₂ Import: {total_written} Werte gespeichert")
             logger.info("Co2FetchService: stored %d intensity points", total_written)
 
-        # ── Estimated-value fill for RECENT gaps only ────────────────────
-        # Only fill the last 48 hours with estimated values (the API may not
-        # have real data for very recent hours yet). Historical gaps are left
-        # empty so the next tick will try to fetch real data for them.
-        if not self._stop_event.is_set():
-            recent_start = max(range_start, now_ts - 48 * 3600)
-            recent_start = (recent_start // 3600) * 3600
-            remaining_gaps = self._db.find_co2_gaps(zone, recent_start, range_end)
-            if remaining_gaps:
-                total_missing = sum((e - s) // 3600 for s, e in remaining_gaps)
-
-                # Try to compute a fallback intensity from the data we do have
-                df = self._db.query_co2_intensity(zone, range_start, range_end)
-                if not df.empty:
-                    avg_intensity = float(df["intensity_g_per_kwh"].mean())
-                else:
-                    avg_intensity = 400.0
-
-                now_ts_fill = int(time.time())
-                estimated_rows = []
-                for gap_start, gap_end in remaining_gaps:
-                    ts = gap_start
-                    while ts < gap_end:
-                        estimated_rows.append(
-                            (ts, zone, round(avg_intensity, 1), "estimated", now_ts_fill)
-                        )
-                        ts += 3600
-
-                if estimated_rows:
-                    est_written = self._db.upsert_co2_intensity(estimated_rows)
-                    self._svc_log(
-                        f"CO₂ Lücken gefüllt: {est_written} geschätzte Werte "
-                        f"(letzte 48h, {avg_intensity:.0f} g/kWh Durchschnitt)"
-                    )
+        # Recent gaps are filled by Co2ForecastService (trend + Open-Meteo
+        # weather) on its own schedule, not here. The legacy flat-mean fill
+        # caused visible spikes in the chart.
 
         if cb is not None:
             try:

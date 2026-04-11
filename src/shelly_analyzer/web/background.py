@@ -649,7 +649,8 @@ class BackgroundServiceManager:
             logger.exception("CO2 fetcher failed to start: %s", e)
 
     def _start_co2_forecaster(self) -> None:
-        """Start the 6h CO2 forecast service (trend + Open-Meteo weather)."""
+        """Start the 6h CO2 forecast + recent-gap backfill service
+        (trend + Open-Meteo weather)."""
         co2_cfg = getattr(self.cfg, "co2", None)
         if co2_cfg is None or not getattr(co2_cfg, "enabled", False):
             return
@@ -660,6 +661,12 @@ class BackgroundServiceManager:
                 get_config=lambda: self.cfg,
             )
             self._co2_forecaster.start()
+            # Trigger an immediate run so backfill + forward forecast are
+            # populated within seconds of startup, not after the 25s warmup.
+            try:
+                threading.Timer(2.0, self._co2_forecaster.trigger_now).start()
+            except Exception:
+                pass
             logger.info("CO2 forecaster started (zone=%s)",
                         getattr(co2_cfg, "bidding_zone", "?"))
         except Exception as e:
