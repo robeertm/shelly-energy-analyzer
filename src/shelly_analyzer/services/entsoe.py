@@ -1125,7 +1125,7 @@ class Co2FetchService:
         d_to = datetime.fromtimestamp(fetch_ranges[-1][1], tz=timezone.utc).strftime("%Y-%m-%d")
         self._svc_log(
             f"CO₂ Import: {total_hours_missing} fehlende Stunden, "
-            f"{len(fetch_ranges)} Bereich(e), Zone {zone} ({d_from} → {d_to})"
+            f"{len(fetch_ranges)} range(s), zone {zone} ({d_from} → {d_to})"
         )
 
         # Split each fetch range into chunks of at most 7 days
