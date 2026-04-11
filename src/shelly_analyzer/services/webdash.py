@@ -2005,19 +2005,19 @@ _HTML_TEMPLATE = """<!doctype html>
 
     <!-- iOS Widget Section -->
     <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
-      <div style="font-size:12px;font-weight:650;color:#ff9800;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">📱 iOS Widget (Scriptable)</div>
+      <div style="font-size:12px;font-weight:650;color:#ff9800;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">📱 {web_widget_title}</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
-        1. Installiere <a href="https://apps.apple.com/app/scriptable/id1405459188" target="_blank" style="color:#ff9800">Scriptable</a> aus dem App Store<br>
-        2. Tippe auf den Button um das Script zu kopieren<br>
-        3. Erstelle ein neues Script in Scriptable und füge es ein<br>
-        4. Füge ein Scriptable-Widget zum Homescreen hinzu<br>
-        5. Wähle das Script und setze als Parameter: <code id="widget-addr" style="background:var(--card-bg,#f0f0f0);padding:2px 6px;border-radius:3px;font-size:11px;user-select:all"></code>
+        {web_widget_step1}<br>
+        {web_widget_step2}<br>
+        {web_widget_step3}<br>
+        {web_widget_step4}<br>
+        {web_widget_step5} <code id="widget-addr" style="background:var(--card-bg,#f0f0f0);padding:2px 6px;border-radius:3px;font-size:11px;user-select:all"></code>
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-accent" onclick="copyWidgetScript()" style="font-size:11px;padding:6px 12px">📋 Script kopieren</button>
-        <button class="btn" onclick="window.open('/widget.js','_blank')" style="font-size:11px;padding:6px 12px;background:var(--card-bg);color:var(--fg);border:1px solid var(--border)">⬇ Download .js</button>
+        <button class="btn btn-accent" onclick="copyWidgetScript()" style="font-size:11px;padding:6px 12px">📋 {web_widget_btn_copy}</button>
+        <button class="btn" onclick="window.open('/widget.js','_blank')" style="font-size:11px;padding:6px 12px;background:var(--card-bg);color:var(--fg);border:1px solid var(--border)">⬇ {web_widget_btn_download}</button>
       </div>
-      <div id="widget-copy-msg" style="font-size:10px;color:#4caf50;margin-top:4px;display:none">Kopiert!</div>
+      <div id="widget-copy-msg" style="font-size:10px;color:#4caf50;margin-top:4px;display:none">{web_widget_copied}</div>
     </div>
 
     <div style="text-align:right;margin-top:12px">

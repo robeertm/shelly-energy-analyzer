@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.16.1 - 2026-04-11
+### Fixed
+- **iOS widget instructions now translated.** The "📱 iOS Widget (Scriptable)" section in the live-settings modal (steps 1–5, the "Script kopieren" button, "⬇ Download .js", "Kopiert!" toast) was hard-coded German. All 10 strings are now `_t(lang, "web.widget.*")` placeholders fed into the template via the dashboard render dict. DE + EN both at 1850 keys, perfectly synced. Other languages fall back to English.
+- **`config.example.json` re-synced.** Devices in the example were missing the `username` and `password` fields added in 16.15.0 (the path-walker missed list children). Regenerated from current `AppConfig()` defaults, sanitized placeholders preserved (`<github-user>/<repo>`, `<Your Company>`, `X.Y.Z` etc.).
+
 ## 16.16.0 - 2026-04-11
 ### Fixed
 - **i18n leakage: hard-coded German strings now translated in all 9 languages.** Users on French / Italian / Polish / Czech / Russian / Portuguese reported untranslated German strings throughout the wizard and settings page. Audit + fix:
