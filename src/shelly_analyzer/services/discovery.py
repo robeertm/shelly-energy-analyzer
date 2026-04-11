@@ -103,17 +103,28 @@ def _detect_gen2_kind(status: Dict[str, Any]) -> Tuple[str, int, int]:
 
     return kind, component_id, phases
 
-def probe_device(host: str, timeout_seconds: float = 2.0) -> DiscoveredDevice:
+def probe_device(
+    host: str,
+    timeout_seconds: float = 2.0,
+    username: str = "",
+    password: str = "",
+) -> DiscoveredDevice:
     """Probe a host and return Shelly details.
 
     STRICT detection: if the host does not look like a Shelly (Gen1 or Gen2),
     this function raises ValueError to avoid false positives during scans.
+
+    If *password* is given, the probe authenticates against the device
+    (Digest first, Basic on 401 fallback). On HTTP 401 without credentials,
+    a ValueError("auth_required") is raised so callers can prompt the user.
     """
     host = str(host or "").strip()
     if not host:
         raise ValueError("empty host")
 
     http = ShellyHttp(HttpConfig(timeout_seconds=float(timeout_seconds), retries=1, backoff_base_seconds=0.1))
+    if password:
+        http.set_credentials(host, username or "admin", password)
     now = int(time.time())
 
     # --- Try Gen2 RPC device info ---
@@ -133,8 +144,18 @@ def probe_device(host: str, timeout_seconds: float = 2.0) -> DiscoveredDevice:
             # typical keys: id, mac, model, app, gen
             model = str(devinfo.get("model") or devinfo.get("app") or "")
             gen = 2
-    except Exception:
+    except Exception as _e:
         devinfo = None
+        # If the device responded with 401, signal so the caller can prompt
+        # for credentials instead of guessing the device isn't a Shelly.
+        try:
+            from requests.exceptions import HTTPError
+            if isinstance(_e, HTTPError) and _e.response is not None and _e.response.status_code == 401:
+                raise ValueError("auth_required")
+        except ValueError:
+            raise
+        except Exception:
+            pass
 
     if devinfo is not None:
         # It's very likely a Shelly Gen2 if we got a dict with some identifiers
@@ -178,8 +199,16 @@ def probe_device(host: str, timeout_seconds: float = 2.0) -> DiscoveredDevice:
             model = str(j.get("type") or j.get("model") or "Shelly").strip()
         else:
             j = None
-    except Exception:
+    except Exception as _e:
         j = None
+        try:
+            from requests.exceptions import HTTPError
+            if isinstance(_e, HTTPError) and _e.response is not None and _e.response.status_code == 401:
+                raise ValueError("auth_required")
+        except ValueError:
+            raise
+        except Exception:
+            pass
 
     if gen == 1:
         try:

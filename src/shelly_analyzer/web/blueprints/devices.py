@@ -39,6 +39,9 @@ def list_devices():
             "phases": getattr(d, "phases", 3),
             "supports_emdata": getattr(d, "supports_emdata", True),
             "online": d.key in snap and bool(snap[d.key]),
+            # Auth metadata: never expose the actual password to the browser.
+            "username": getattr(d, "username", "admin") or "admin",
+            "has_password": bool(getattr(d, "password", "") or ""),
         }
         devices.append(info)
     return jsonify({"devices": devices})
@@ -65,6 +68,8 @@ def add_device():
     gen = int(body.get("gen", 0) or 0)
     model = str(body.get("model", "") or "")
     phases = int(body.get("phases", 3) or 3)
+    username = str(body.get("username", "admin") or "admin")
+    password = str(body.get("password", "") or "")
 
     supports_emdata = True
     if not key:
@@ -72,7 +77,7 @@ def add_device():
         # and raises ValueError when the host is not a Shelly.
         try:
             from shelly_analyzer.services.discovery import probe_device
-            result = probe_device(host)
+            result = probe_device(host, username=username, password=password)
             key = host.replace(".", "_")
             name = name or (result.model or key)
             kind = result.kind or kind
@@ -81,7 +86,13 @@ def add_device():
             phases = int(result.phases or phases or 3)
             em_id = int(result.component_id or em_id or 0)
             supports_emdata = bool(result.supports_emdata)
-        except ValueError:
+        except ValueError as ve:
+            if str(ve) == "auth_required":
+                return jsonify({
+                    "ok": False,
+                    "error": "auth_required",
+                    "message": f"{host} is password-protected. Provide username and password.",
+                }), 401
             key = host.replace(".", "_")
         except Exception:
             key = host.replace(".", "_")
@@ -97,6 +108,7 @@ def add_device():
         key=key, name=name, host=host, em_id=em_id,
         kind=kind, gen=gen, model=model, phases=phases,
         supports_emdata=supports_emdata,
+        username=username, password=password,
     )
 
     # Add to config and save
@@ -134,6 +146,12 @@ def update_device(key: str):
         return jsonify({"ok": False, "error": f"Device '{key}' not found"}), 404
 
     d = state.cfg.devices[idx]
+    # Don't overwrite the stored password with the masked placeholder.
+    incoming_pw = body.get("password", None)
+    if incoming_pw == "***" or incoming_pw is None:
+        new_password = getattr(d, "password", "") or ""
+    else:
+        new_password = str(incoming_pw or "")
     updated = DeviceConfig(
         key=key,
         name=str(body.get("name", d.name)),
@@ -144,6 +162,8 @@ def update_device(key: str):
         model=str(body.get("model", getattr(d, "model", ""))),
         phases=int(body.get("phases", getattr(d, "phases", 3))),
         supports_emdata=bool(body.get("supports_emdata", getattr(d, "supports_emdata", True))),
+        username=str(body.get("username", getattr(d, "username", "admin")) or "admin"),
+        password=new_password,
     )
 
     new_devices = list(state.cfg.devices)
@@ -228,17 +248,30 @@ def discover_devices():
 
 @bp.route("/api/devices/probe", methods=["POST"])
 def probe_device_endpoint():
-    """Probe a specific IP/host for a Shelly device."""
+    """Probe a specific IP/host for a Shelly device.
+
+    Optionally accepts ``username`` + ``password`` for password-protected
+    devices. Returns ``{ok: false, error: 'auth_required'}`` with HTTP 401
+    when the device responded with a 401 and no credentials were supplied.
+    """
     try:
         body = request.get_json(silent=True) or {}
         host = str(body.get("host", "") or "").strip()
         if not host:
             return jsonify({"ok": False, "error": "host is required"}), 400
+        username = str(body.get("username", "admin") or "admin")
+        password = str(body.get("password", "") or "")
 
         from shelly_analyzer.services.discovery import probe_device
         try:
-            result = probe_device(host)
+            result = probe_device(host, username=username, password=password)
         except ValueError as ve:
+            if str(ve) == "auth_required":
+                return jsonify({
+                    "ok": False,
+                    "error": "auth_required",
+                    "message": f"{host} is password-protected. Provide username and password.",
+                }), 401
             return jsonify({"ok": False, "error": f"No Shelly at {host}: {ve}"})
         # DiscoveredDevice is a dataclass → expose as dict for the JSON response
         return jsonify({"ok": True, "device": {
@@ -263,14 +296,20 @@ def update_firmware(key: str):
         return jsonify({"ok": False, "error": f"Device '{key}' not found"}), 404
 
     try:
-        from shelly_analyzer.io.http import ShellyHttp, HttpConfig
+        from shelly_analyzer.io.http import ShellyHttp, HttpConfig, build_rpc_url
         http = ShellyHttp(HttpConfig(
             timeout_seconds=float(state.cfg.download.timeout_seconds),
             retries=1,
         ))
-        # Trigger OTA update
-        import requests as req
-        resp = req.get(f"http://{d.host}/rpc/Shelly.Update", timeout=10)
-        return jsonify({"ok": True, "response": resp.json() if resp.status_code == 200 else resp.text[:200]})
+        _pw = getattr(d, "password", "") or ""
+        if _pw:
+            http.set_credentials(d.host, getattr(d, "username", "admin") or "admin", _pw)
+        # Trigger OTA update via the centralized client (so auth is applied).
+        resp = http.get(build_rpc_url(d.host, "Shelly.Update"))
+        try:
+            payload = resp.json()
+        except Exception:
+            payload = resp.text[:200]
+        return jsonify({"ok": True, "response": payload})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
