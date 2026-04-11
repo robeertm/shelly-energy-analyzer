@@ -36,6 +36,27 @@ def _repo() -> str:
     return str(getattr(getattr(state.cfg, "updates", None), "repo", "") or "").strip()
 
 
+@bp.route("/api/updates/cached", methods=["GET"])
+def api_updates_cached():
+    """Return the cached update-check result written by the background
+    UpdateChecker thread. Lightweight (no network call) — used by the Live
+    tab to poll for a new-version banner without hitting GitHub on every
+    page load."""
+    state = _get_state()
+    bg = getattr(state, "_bg", None)
+    cached = getattr(bg, "_update_check_state", None) if bg is not None else None
+    if cached is None:
+        return jsonify({
+            "ok": True,
+            "checked": False,
+            "current": __version__,
+            "has_update": False,
+        })
+    out = dict(cached)
+    out["checked"] = True
+    return jsonify(out)
+
+
 @bp.route("/api/updates/status", methods=["GET"])
 def api_updates_status():
     """Return current version + latest release info (single fetch)."""

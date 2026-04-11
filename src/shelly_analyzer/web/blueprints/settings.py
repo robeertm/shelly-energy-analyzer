@@ -39,17 +39,35 @@ def _cfg_to_json(cfg: AppConfig) -> Dict[str, Any]:
 @bp.route("/api/zones", methods=["GET"])
 def get_zones():
     """Return the curated bidding-zone lists for the spot-price and CO₂
-    settings dropdowns. Uses the hyphen form for Energy-Charts (spot) and
-    the underscore form for ENTSO-E (CO₂)."""
+    settings dropdowns.
+
+    Each list is a plain ``[[value, label], ...]`` array. The UI renders
+    them as grouped ``<optgroup>`` elements. The ``spot_grouped`` and
+    ``co2_grouped`` fields expose pre-built region groups so the client
+    doesn't have to know which provider covers which region."""
     from shelly_analyzer.services.zones import (
         SPOT_ZONES_ENERGY_CHARTS,
         SPOT_ZONES_AWATTAR,
-        get_co2_zones,
+        SPOT_ZONES_AEMO,
+        SPOT_ZONES_EIA,
+        SPOT_ZONE_GROUPS,
+        CO2_ZONES_ELECTRICITY_MAPS,
+        get_co2_zones_entsoe,
     )
+    co2_entsoe = get_co2_zones_entsoe()
     resp = jsonify({
+        # Flat lists (kept for backward compat with older clients)
         "spot_energy_charts": SPOT_ZONES_ENERGY_CHARTS,
         "spot_awattar": SPOT_ZONES_AWATTAR,
-        "co2": get_co2_zones(),
+        "spot_aemo": SPOT_ZONES_AEMO,
+        "spot_eia": SPOT_ZONES_EIA,
+        "co2": co2_entsoe,
+        # Grouped lists (preferred for the UI)
+        "spot_grouped": [[name, zones] for name, zones in SPOT_ZONE_GROUPS],
+        "co2_grouped": [
+            ["ENTSO-E (Europa, API-Token)", co2_entsoe],
+            ["Electricity Maps (global, freier API-Key)", CO2_ZONES_ELECTRICITY_MAPS],
+        ],
     })
     # Zones are static; cache for an hour.
     resp.headers["Cache-Control"] = "public, max-age=3600"
@@ -91,6 +109,14 @@ def get_settings():
         advisor["openai_api_key"] = "***"
     if "anthropic_api_key" in advisor and advisor["anthropic_api_key"]:
         advisor["anthropic_api_key"] = "***"
+    co2 = data.get("co2", {})
+    if co2.get("entso_e_api_token"):
+        co2["entso_e_api_token"] = "***"
+    if co2.get("electricity_maps_api_key"):
+        co2["electricity_maps_api_key"] = "***"
+    sp = data.get("spot_price", {})
+    if sp.get("eia_api_key"):
+        sp["eia_api_key"] = "***"
     resp = jsonify(data)
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return resp
@@ -247,3 +273,11 @@ def _restore_secrets(merged: dict, cfg: AppConfig) -> None:
         advisor["openai_api_key"] = getattr(cfg.advisor, "openai_api_key", "")
     if advisor.get("anthropic_api_key") == "***":
         advisor["anthropic_api_key"] = getattr(cfg.advisor, "anthropic_api_key", "")
+    co2 = merged.get("co2", {})
+    if co2.get("entso_e_api_token") == "***":
+        co2["entso_e_api_token"] = getattr(cfg.co2, "entso_e_api_token", "")
+    if co2.get("electricity_maps_api_key") == "***":
+        co2["electricity_maps_api_key"] = getattr(cfg.co2, "electricity_maps_api_key", "")
+    sp = merged.get("spot_price", {})
+    if sp.get("eia_api_key") == "***":
+        sp["eia_api_key"] = getattr(cfg.spot_price, "eia_api_key", "")
