@@ -1,5 +1,20 @@
 # Changelog
 
+## 16.19.2 - 2026-04-11
+### Added
+- **Country-aware tariff comparison.** The Tariff tab used to hard-code eight German-market templates (Stadtwerke, Tibber, 1Komma5°, Ostrom, E.ON, Vattenfall, EnBW, Day/Night TOU) against every user regardless of where the app runs — so a UK user saw "E.ON Strom Basis in EUR" next to their actual British Gas bill, and Reddit users reported nonsense savings numbers. `services/tariff_compare.py` now ships representative 2025 residential rate cards for **19 countries** keyed by ISO country code: DE, AT, CH, FR, GB, NL, BE, ES, IT, SE, NO, DK, FI, PL, CZ, PT, IE, US, AU. Each set has 4–8 real providers covering fixed, dynamic (spot+markup) and day/night TOU models, priced in the country's native currency.
+- **Automatic country detection from the bidding zone.** `_country_from_zone()` resolves every zone id the app knows — hyphen forms (`DE-LU`, `IT-CSUD`), underscore forms (`DE_LU`, `SE_4`), trailing-digit suffixes (`SE4`, `NO2`, `DK1`), EIA US subregions (`US-CAL`, `US-TEX`), Electricity Maps subzones (`US-CAL-CISO`, `DK-DK1`, `JP-TK`), and aliases (`LU → DE`, `UK → GB`) — to a two-letter ISO code. Users don't need to configure anything: whichever bidding zone they already picked under Settings → Spot prices dictates which country's tariff list is used.
+- **Currency symbol in the Tariff tab UI.** `renderTariff()` in `services/webdash.py` now reads `data.currency` from the API response and picks the right symbol (€ / $ / £ / CHF / A$ / kr / zł / Kč) — no more stray € on US / UK / Swiss / Scandinavian installs. The cards and savings lines use the resolved symbol, and a hint banner at the top tells the user which country's tariffs they're being compared against (e.g. "Comparing against representative GB tariffs (currency: GBP)").
+- **Graceful fallback.** Zones that don't map to a curated country list (e.g. someone using a custom zone id, or JP-TK where we haven't yet written JP templates) fall through to a neutral `GENERIC_EU_TARIFF_TEMPLATES` set with 6 generic fixed / spot / TOU profiles at representative European prices. Better than crashing, better than showing German rates.
+
+### Fixed
+- **More German leftovers in the Tariff + Battery tabs.** The "Aktuell" badge on the current-tariff card and the "▼ N €/year" savings line were hard-coded German strings; they now route through `t('web.tariff.current', 'Current')` and `t('web.tariff.year', 'year')`. `renderBattery()` still had "Entladen" / "Leistung" / "Modus" / "Zyklen" / "Effizienz" labels in the mode map and metric cards — all translated to English (Discharging / Power / Mode / Cycles / Efficiency).
+
+### Notes
+- **How to try it**: open Settings → Spot prices, pick your zone (e.g. `GB` for Great Britain, `US-CAL` for California, `AU-NSW` for New South Wales), save, and reload the Tariff tab — you should now see your country's providers instead of the German lineup.
+- **Adding a country**: drop a new key into `TARIFF_TEMPLATES_BY_COUNTRY` in `services/tariff_compare.py` with 4–6 representative fixed / spot / TOU entries. No other code changes needed — detection, UI, and API response are all data-driven from the dict.
+- **Currency note**: the template price fields are still named `price_eur_per_kwh` / `base_fee_eur_per_year` for historical reasons, but they carry local-currency values. The comparison stays internally consistent because the current tariff in `cfg.pricing.electricity_price_eur_per_kwh` is also in local currency (users fill it in using their own bill).
+
 ## 16.19.1 - 2026-04-11
 ### Fixed
 - **In-app updater 404 — GitHub repo typo.** The default `updates.repo` in `io/config.py` was `robertm/shelly-energy-analyzer`, missing a letter. Existing installs that never overrode the field hit `HTTP 404 Not Found` against the GitHub releases API, so the Live-tab update banner never appeared and Settings → Updates → Check Now reported "GitHub not reachable (offline/timeout): HTTP Error 404: Not Found". Default is now `robeertm/shelly-energy-analyzer`. Reported via Reddit /r/shellycloud (BornObsolete).
