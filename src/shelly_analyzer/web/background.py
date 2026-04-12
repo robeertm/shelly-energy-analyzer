@@ -720,9 +720,8 @@ class BackgroundServiceManager:
         from shelly_analyzer import __version__
         from shelly_analyzer.services.updater import check_latest_release, is_newer
 
-        # Delay the first check so the app is fully up and /api/state is
-        # serving before we hit the network.
-        if self._stop_event.wait(15.0):
+        # Short delay so the app is up before we hit the network.
+        if self._stop_event.wait(5.0):
             return
 
         while not self._stop_event.is_set():

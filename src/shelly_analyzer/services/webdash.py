@@ -3372,12 +3372,10 @@ async function checkForUpdateBanner() {{
 let _updateBannerTimer = null;
 function startUpdateBannerPolling() {{
   if (_updateBannerTimer) return;
-  // First check after a short delay so the background thread has a
-  // chance to populate the cache (first check runs ~15s after start).
-  setTimeout(checkForUpdateBanner, 20000);
-  // Then re-poll every 30 minutes — the server cache refreshes every 6h
-  // so more frequent polling is pointless.
-  _updateBannerTimer = setInterval(checkForUpdateBanner, 30 * 60 * 1000);
+  // First check after 8s (background thread checks GitHub after 5s).
+  setTimeout(checkForUpdateBanner, 8000);
+  // Re-poll every 60s so the banner appears promptly.
+  _updateBannerTimer = setInterval(checkForUpdateBanner, 60 * 1000);
 }}
 
 /* ── Per-tab periodic refresh ─────────────────────────────────────────
