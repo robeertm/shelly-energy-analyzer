@@ -15,15 +15,16 @@
 body{margin:0;font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
 background:var(--bg);color:var(--fg);line-height:1.5;font-size:14px;min-height:100vh;
 display:flex;flex-direction:column;align-items:center;padding:20px}
-.wrap{max-width:720px;width:100%}
+.wrap{max-width:760px;width:100%}
 .hero{text-align:center;margin-bottom:20px}
 .hero h1{margin:0 0 8px;font-size:1.6rem}
 .hero p{margin:0;color:var(--muted)}
-.steps{display:flex;gap:6px;margin-bottom:20px;justify-content:center;flex-wrap:wrap}
-.step-dot{width:28px;height:28px;border-radius:50%;background:var(--input-bg);border:1px solid var(--border);
-display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:600;color:var(--muted)}
-.step-dot.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.steps{display:flex;gap:4px;margin-bottom:20px;justify-content:center;flex-wrap:wrap}
+.step-dot{width:26px;height:26px;border-radius:50%;background:var(--input-bg);border:1px solid var(--border);
+display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:600;color:var(--muted)}
+.step-dot.active{background:var(--accent);color:#fff;border-color:var(--accent);transform:scale(1.1)}
 .step-dot.done{background:var(--ok);color:#fff;border-color:var(--ok)}
+.step-sep{color:var(--muted);font-size:.72rem;align-self:center}
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:16px;
 box-shadow:0 2px 8px rgba(0,0,0,.1)}
 .card h2{margin:0 0 10px;font-size:1.15rem;color:var(--accent)}
@@ -44,8 +45,10 @@ button{padding:10px 18px;border:none;background:var(--accent);color:#fff;border-
 cursor:pointer;font-size:.9rem;font-weight:500}
 button:hover{opacity:.9}
 button.secondary{background:var(--input-bg);color:var(--fg);border:1px solid var(--border)}
+button.ghost{background:none;color:var(--muted);border:1px dashed var(--border)}
 button:disabled{opacity:.5;cursor:not-allowed}
-.actions{display:flex;justify-content:space-between;gap:8px;margin-top:16px}
+.actions{display:flex;justify-content:space-between;gap:8px;margin-top:16px;flex-wrap:wrap}
+.actions .spacer{flex:1}
 .hint{font-size:.78rem;color:var(--muted)}
 .devlist{display:flex;flex-direction:column;gap:6px;margin:10px 0}
 .devrow{display:flex;justify-content:space-between;align-items:center;gap:10px;
@@ -65,6 +68,20 @@ opacity:0;transform:translateY(10px);transition:all .2s}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);
 border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle}
 @keyframes spin{to{transform:rotate(360deg)}}
+.opt-card{padding:14px 16px;background:var(--input-bg);border:2px solid var(--border);border-radius:12px;
+cursor:pointer;transition:all .15s;margin-bottom:10px}
+.opt-card:hover{border-color:var(--accent);background:var(--hover-bg)}
+.opt-card.selected{border-color:var(--accent);background:var(--active-bg)}
+.opt-card h3{margin:0 0 4px;font-size:.95rem}
+.opt-card .opt-desc{font-size:.78rem;color:var(--muted);margin:0}
+.summary{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.sum-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--input-bg);border-radius:8px;font-size:.85rem}
+.sum-item .sum-ico{font-size:1.1rem}
+.sum-item .sum-ok{color:var(--ok);margin-left:auto;font-weight:600}
+.sum-item .sum-skip{color:var(--muted);margin-left:auto;font-size:.75rem}
+.test-msg{font-size:.78rem;margin-top:6px;min-height:1em}
+.test-msg.ok{color:var(--ok)}
+.test-msg.err{color:var(--danger)}
 </style>
 </head>
 <body>
@@ -75,8 +92,8 @@ document.documentElement.dataset.theme=th;}catch(e){}})();
 </script>
 <div class="wrap">
 <div class="hero">
-  <h1>⚡ Shelly Energy Analyzer</h1>
-  <p id="hero-sub">Setup – configure your Shellys and your tariff</p>
+  <h1>&#9889; Shelly Energy Analyzer</h1>
+  <p id="hero-sub">Setup</p>
 </div>
 <div class="steps" id="steps"></div>
 <div id="stage"></div>
@@ -92,16 +109,34 @@ function T(key, fallback, vars) {
 }
 
 let STEPS = [
-  {id:"welcome", titleKey:"setup.step.welcome", titleEn:"Welcome"},
-  {id:"devices", titleKey:"setup.step.devices", titleEn:"Add Shellys"},
-  {id:"pricing", titleKey:"setup.step.pricing", titleEn:"Electricity price"},
-  {id:"spot",    titleKey:"setup.step.spot",    titleEn:"Spot prices (optional)"},
-  {id:"done",    titleKey:"setup.step.done",    titleEn:"Done"},
+  {id:"welcome",    titleKey:"setup.step.welcome",      titleEn:"Welcome",     skippable:false},
+  {id:"language",   titleKey:"setup.step.language",     titleEn:"Language",    skippable:false},
+  {id:"mode",       titleKey:"setup.step.mode",         titleEn:"Mode",        skippable:false},
+  {id:"devices",    titleKey:"setup.step.devices",      titleEn:"Devices",     skippable:false},
+  {id:"pricing",    titleKey:"setup.step.pricing",      titleEn:"Tariff",      skippable:true},
+  {id:"spot",       titleKey:"setup.step.spot",         titleEn:"Spot prices", skippable:true},
+  {id:"co2",        titleKey:"setup.step.co2",          titleEn:"CO2",         skippable:true},
+  {id:"solar",      titleKey:"setup.step.solar",        titleEn:"Solar",       skippable:true},
+  {id:"notify",     titleKey:"setup.step.notify",       titleEn:"Notifications",skippable:true},
+  {id:"integrate",  titleKey:"setup.step.integrate",    titleEn:"Integrations",skippable:true},
+  {id:"widget",     titleKey:"setup.step.widget",       titleEn:"Widget",      skippable:true},
+  {id:"done",       titleKey:"setup.step.done",         titleEn:"Done",        skippable:false},
 ];
 let stepIdx = 0;
+let demoMode = false;
 let addedDevices = [];
+let skipped = {};
+let completed = {};
+let chosenLanguage = "en";
+let chosenTheme = "auto";
 let pricing = {price:0.32, base:120, vat:true};
 let spot = {enabled:false, zone:"DE-LU"};
+let co2 = {enabled:false, zone:"DE_LU", token:""};
+let solar = {enabled:false, kw_peak:0, feed_in:0.082, battery:0};
+let notify = {tg_enabled:false, tg_token:"", tg_chat:""};
+let integrate = {mqtt_enabled:false, mqtt_broker:"127.0.0.1", mqtt_port:1883, mqtt_user:"", mqtt_pass:"",
+                 influx_enabled:false, influx_url:"http://127.0.0.1:8086", influx_token:"", influx_bucket:"shelly",
+                 prom_enabled:false, prom_port:9090};
 
 function toast(msg, type){
   const el=document.getElementById('toast');
@@ -109,169 +144,353 @@ function toast(msg, type){
   el.textContent=msg;
   setTimeout(()=>{el.className='toast';},2600);
 }
+
 function renderSteps(){
   const el=document.getElementById('steps');
-  el.innerHTML=STEPS.map((s,i)=>{
+  const items = STEPS.map((s,i)=>{
     const cls=i<stepIdx?'done':(i===stepIdx?'active':'');
     const ttl=T(s.titleKey, s.titleEn);
-    return `<div class="step-dot ${cls}" title="${ttl}">${i<stepIdx?'✓':(i+1)}</div>`;
-  }).join('<span style="color:var(--muted);font-size:.78rem;align-self:center">›</span>');
+    return '<div class="step-dot '+cls+'" title="'+ttl+'">'+(i<stepIdx?'&#10003;':(i+1))+'</div>';
+  });
+  el.innerHTML = items.join('<span class="step-sep">&#8250;</span>');
 }
+
 function render(){
   renderSteps();
   const s=STEPS[stepIdx];
   const stage=document.getElementById('stage');
-  if(s.id==="welcome"){
-    stage.innerHTML = `<div class="card">
-      <h2>👋 ${T('setup.welcome.title','Welcome!')}</h2>
-      <p>${T('setup.welcome.intro1','This wizard helps you connect your Shelly devices and enter your electricity tariff. You can add more devices later from Settings.')}</p>
-      <p>${T('setup.welcome.intro2','Make sure your Shellys are on the same Wi-Fi network as this computer.')}</p>
-      <div class="actions">
-        <span></span>
-        <button onclick="next()">${T('setup.btn.start',"Let's go →")}</button>
-      </div>
-    </div>`;
-  }
+  if(s.id==="welcome") renderWelcome(stage);
+  else if(s.id==="language") renderLanguage(stage);
+  else if(s.id==="mode") renderMode(stage);
   else if(s.id==="devices") renderDevices(stage);
   else if(s.id==="pricing") renderPricing(stage);
   else if(s.id==="spot") renderSpot(stage);
+  else if(s.id==="co2") renderCo2(stage);
+  else if(s.id==="solar") renderSolar(stage);
+  else if(s.id==="notify") renderNotify(stage);
+  else if(s.id==="integrate") renderIntegrate(stage);
+  else if(s.id==="widget") renderWidget(stage);
   else if(s.id==="done") renderDone(stage);
+  window.scrollTo(0,0);
+}
+
+function renderWelcome(stage){
+  stage.innerHTML = '<div class="card">'
+    +'<h2>&#128075; '+T('setup.welcome.title','Welcome!')+'</h2>'
+    +'<p>'+T('setup.welcome.intro1','This wizard walks you through the initial setup. Every optional step can be skipped and configured later in Settings.')+'</p>'
+    +'<p>'+T('setup.welcome.intro2','You can run a 3-click minimum setup or take your time to configure tariff, solar, integrations, notifications and widgets right away.')+'</p>'
+    +'<div class="actions"><span></span>'
+    +'<button onclick="next()">'+T('setup.btn.start',"Let's go")+' &rarr;</button>'
+    +'</div></div>';
+}
+
+function renderLanguage(stage){
+  const langs = [
+    ["en","English"],["de","Deutsch"],["es","Espa&ntilde;ol"],
+    ["fr","Fran&ccedil;ais"],["it","Italiano"],["nl","Nederlands"],
+    ["pl","Polski"],["pt","Portugu&ecirc;s"],["cs","&Ccaron;e&scaron;tina"],
+  ];
+  const themes = [["auto","Auto"],["light","Light"],["dark","Dark"]];
+  stage.innerHTML = '<div class="card">'
+    +'<h2>&#127760; '+T('setup.lang.title','Language &amp; theme')+'</h2>'
+    +'<p>'+T('setup.lang.intro','Pick your interface language and theme. You can change this later.')+'</p>'
+    +'<div class="grid2">'
+    +'<div class="field"><label>'+T('setup.lang.language','Language')+'</label>'
+    +'<select id="lang-sel">'+langs.map(function(l){return '<option value="'+l[0]+'"'+(chosenLanguage===l[0]?' selected':'')+'>'+l[1]+'</option>';}).join('')+'</select></div>'
+    +'<div class="field"><label>'+T('setup.lang.theme','Theme')+'</label>'
+    +'<select id="theme-sel">'+themes.map(function(t){return '<option value="'+t[0]+'"'+(chosenTheme===t[0]?' selected':'')+'>'+t[1]+'</option>';}).join('')+'</select></div>'
+    +'</div>'
+    +'<div class="actions">'
+    +'<button class="secondary" onclick="back()">&larr; '+T('setup.btn.back','Back')+'</button>'
+    +'<button onclick="saveLangAndNext()">'+T('setup.btn.next','Next')+' &rarr;</button>'
+    +'</div></div>';
+}
+
+function renderMode(stage){
+  stage.innerHTML = '<div class="card">'
+    +'<h2>&#128302; '+T('setup.mode.title','How do you want to start?')+'</h2>'
+    +'<p>'+T('setup.mode.intro','Try the app with simulated data, or connect your real Shelly devices.')+'</p>'
+    +'<div class="opt-card'+(demoMode?' selected':'')+'" onclick="pickMode(true)">'
+    +'<h3>&#127918; '+T('setup.mode.demo','Demo mode')+'</h3>'
+    +'<p class="opt-desc">'+T('setup.mode.demo_desc','Generates two simulated Shellys with realistic consumption data. Perfect for testing all features without hardware. Can be disabled anytime in Settings.')+'</p>'
+    +'</div>'
+    +'<div class="opt-card'+(!demoMode?' selected':'')+'" onclick="pickMode(false)">'
+    +'<h3>&#128268; '+T('setup.mode.real','Real devices')+'</h3>'
+    +'<p class="opt-desc">'+T('setup.mode.real_desc','Discover your Shelly devices on the network (mDNS scan) or add them manually by IP. Supports Gen 1-4 with password protection.')+'</p>'
+    +'</div>'
+    +'<div class="actions">'
+    +'<button class="secondary" onclick="back()">&larr; '+T('setup.btn.back','Back')+'</button>'
+    +'<button onclick="confirmMode()">'+T('setup.btn.next','Next')+' &rarr;</button>'
+    +'</div></div>';
+}
+
+function pickMode(d){ demoMode=d; render(); }
+
+async function confirmMode(){
+  if(demoMode){
+    try{
+      const r = await fetch('/api/setup/enable-demo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario:'household'})});
+      const j = await r.json();
+      if(!j.ok){ toast(T('setup.toast.error','Error: {err}',{err:j.error||'unknown'}),'error'); return; }
+      toast('&#9989; '+T('setup.mode.demo_ready','Demo mode enabled'),'success');
+      const devR = await fetch('/api/devices').then(x=>x.json()).catch(_=>({devices:[]}));
+      addedDevices = (devR.devices||[]).map(d=>({key:d.key,name:d.name,host:d.host,kind:d.kind,model:d.model}));
+      stepIdx = STEPS.findIndex(s=>s.id==='pricing');
+      render();
+    }catch(e){ toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error'); }
+  } else {
+    next();
+  }
 }
 
 function renderDevices(stage){
-  const added = addedDevices.map(d=>`<div class="devrow">
-    <div class="meta"><div class="name"><span class="dot added"></span>${escape(d.name||d.key)}</div>
-    <div class="sub">${escape(d.host)} · ${escape(d.kind||'em')}${d.model?' · '+escape(d.model):''}</div></div>
-    <button class="secondary" onclick="removeDevice('${escape(d.key)}')">✕</button>
-  </div>`).join('');
-  stage.innerHTML = `<div class="card">
-    <h2>📡 ${T('setup.devices.title','Add Shelly devices')}</h2>
-    <p>${T('setup.devices.intro','Scan your network automatically or enter an IP address manually.')}</p>
-    <div class="grid2">
-      <div class="field">
-        <label>${T('setup.devices.scan_label','Auto-scan via mDNS')}</label>
-        <button class="secondary" style="width:100%" id="btn-scan" onclick="scanMdns()">🔍 ${T('setup.devices.scan_btn','Scan network')}</button>
-      </div>
-      <div class="field">
-        <label>${T('setup.devices.ip_label','Or enter IP / hostname')}</label>
-        <div style="display:flex;gap:8px"><input type="text" id="ip-input" placeholder="192.168.1.50">
-        <button onclick="addByIp()">➕</button></div>
-      </div>
-    </div>
-    <div id="scan-results"></div>
-    ${addedDevices.length?`<h3 style="font-size:.95rem;margin:14px 0 6px">${T('setup.devices.added_n','Added ({n})',{n:addedDevices.length})}</h3><div class="devlist">${added}</div>`:''}
-    <div class="actions">
-      <button class="secondary" onclick="back()">← ${T('setup.btn.back','Back')}</button>
-      <button onclick="next()" ${addedDevices.length===0?`disabled title="${T('setup.devices.need_one','Add at least one device')}"`:''}>${T('setup.btn.next','Next')} →</button>
-    </div>
-  </div>`;
-  setTimeout(()=>{const ip=document.getElementById('ip-input');if(ip){ip.addEventListener('keydown',e=>{if(e.key==='Enter')addByIp();});}},50);
+  const added = addedDevices.map(d=>'<div class="devrow">'
+    +'<div class="meta"><div class="name"><span class="dot added"></span>'+esc(d.name||d.key)+'</div>'
+    +'<div class="sub">'+esc(d.host)+' &middot; '+esc(d.kind||'em')+(d.model?' &middot; '+esc(d.model):'')+'</div></div>'
+    +'<button class="secondary" onclick="removeDevice(\''+esc(d.key)+'\')">&#10005;</button>'
+    +'</div>').join('');
+  stage.innerHTML = '<div class="card">'
+    +'<h2>&#128225; '+T('setup.devices.title','Add Shelly devices')+'</h2>'
+    +'<p>'+T('setup.devices.intro','Scan your network automatically or enter an IP address manually.')+'</p>'
+    +'<div class="grid2">'
+    +'<div class="field"><label>'+T('setup.devices.scan_label','Auto-scan via mDNS')+'</label>'
+    +'<button class="secondary" style="width:100%" id="btn-scan" onclick="scanMdns()">&#128269; '+T('setup.devices.scan_btn','Scan network')+'</button></div>'
+    +'<div class="field"><label>'+T('setup.devices.ip_label','Or enter IP / hostname')+'</label>'
+    +'<div style="display:flex;gap:8px"><input type="text" id="ip-input" placeholder="192.168.1.50">'
+    +'<button onclick="addByIp()">&#10133;</button></div></div>'
+    +'</div>'
+    +'<div id="scan-results"></div>'
+    +(addedDevices.length?'<h3 style="font-size:.95rem;margin:14px 0 6px">'+T('setup.devices.added_n','Added ({n})',{n:addedDevices.length})+'</h3><div class="devlist">'+added+'</div>':'')
+    +'<div class="actions">'
+    +'<button class="secondary" onclick="back()">&larr; '+T('setup.btn.back','Back')+'</button>'
+    +'<button onclick="next()"'+(addedDevices.length===0?' disabled title="'+T('setup.devices.need_one','Add at least one device')+'"':'')+'>'+T('setup.btn.next','Next')+' &rarr;</button>'
+    +'</div></div>';
+  setTimeout(function(){var ip=document.getElementById('ip-input');if(ip){ip.addEventListener('keydown',function(e){if(e.key==='Enter')addByIp();});}},50);
 }
 
 function renderPricing(stage){
-  stage.innerHTML = `<div class="card">
-    <h2>💰 ${T('setup.pricing.title','Electricity price')}</h2>
-    <p>${T('setup.pricing.intro','Your current tariff. You can change these values later in Settings.')}</p>
-    <div class="grid2">
-      <div class="field"><label>${T('setup.pricing.kwh','Price per kWh (€, gross)')}</label>
-        <input type="number" step="0.0001" id="p-price" value="${pricing.price}"></div>
-      <div class="field"><label>${T('setup.pricing.base','Base fee per year (€)')}</label>
-        <input type="number" step="0.01" id="p-base" value="${pricing.base}"></div>
-    </div>
-    <label class="row"><span>${T('setup.pricing.vat','Prices include VAT (gross)')}</span>
-      <input type="checkbox" id="p-vat" ${pricing.vat?'checked':''}></label>
-    <div class="actions">
-      <button class="secondary" onclick="back()">← ${T('setup.btn.back','Back')}</button>
-      <button onclick="savePricingAndNext()">${T('setup.btn.next','Next')} →</button>
-    </div>
-  </div>`;
+  stage.innerHTML = '<div class="card">'
+    +'<h2>&#128176; '+T('setup.pricing.title','Electricity price')+'</h2>'
+    +'<p>'+T('setup.pricing.intro','Your current tariff drives all cost calculations. You can change these values later in Settings.')+'</p>'
+    +'<div class="grid2">'
+    +'<div class="field"><label>'+T('setup.pricing.kwh','Price per kWh (EUR, gross)')+'</label>'
+    +'<input type="number" step="0.0001" id="p-price" value="'+pricing.price+'"></div>'
+    +'<div class="field"><label>'+T('setup.pricing.base','Base fee per year (EUR)')+'</label>'
+    +'<input type="number" step="0.01" id="p-base" value="'+pricing.base+'"></div>'
+    +'</div>'
+    +'<label class="row"><span>'+T('setup.pricing.vat','Prices include VAT (gross)')+'</span>'
+    +'<input type="checkbox" id="p-vat"'+(pricing.vat?' checked':'')+'></label>'
+    +renderActions('savePricingAndNext');
 }
 
 function renderSpot(stage){
-  stage.innerHTML = `<div class="card">
-    <h2>⚡ ${T('setup.spot.title','Spot prices (optional)')}</h2>
-    <p>${T('setup.spot.intro','Recommended for dynamic tariffs (e.g. Tibber, aWATTar). Free data from Energy-Charts / aWATTar. Skip this if you have a fixed-price contract.')}</p>
-    <label class="row"><span>${T('setup.spot.enable','Enable spot prices')}</span>
-      <input type="checkbox" id="s-enabled" ${spot.enabled?'checked':''}></label>
-    <div class="field"><label>${T('setup.spot.zone','Bidding zone')}</label>
-      <select id="s-zone">
-        <option value="DE-LU" ${spot.zone==="DE-LU"?"selected":""}>Germany / Luxembourg (DE-LU)</option>
-        <option value="AT" ${spot.zone==="AT"?"selected":""}>Austria (AT)</option>
-        <option value="CH" ${spot.zone==="CH"?"selected":""}>Switzerland (CH)</option>
-        <option value="FR" ${spot.zone==="FR"?"selected":""}>France (FR)</option>
-        <option value="NL" ${spot.zone==="NL"?"selected":""}>Netherlands (NL)</option>
-        <option value="BE" ${spot.zone==="BE"?"selected":""}>Belgium (BE)</option>
-      </select></div>
-    <div class="actions">
-      <button class="secondary" onclick="back()">← ${T('setup.btn.back','Back')}</button>
-      <button onclick="saveSpotAndNext()">${T('setup.btn.next','Next')} →</button>
-    </div>
-  </div>`;
+  stage.innerHTML = '<div class="card">'
+    +'<h2>&#9889; '+T('setup.spot.title','Spot prices (optional)')+'</h2>'
+    +'<p>'+T('setup.spot.intro','Recommended for dynamic tariffs (Tibber, aWATTar, Ostrom...). Free data from Energy-Charts. Skip if you have a fixed-price contract.')+'</p>'
+    +'<label class="row"><span>'+T('setup.spot.enable','Enable spot prices')+'</span>'
+    +'<input type="checkbox" id="s-enabled"'+(spot.enabled?' checked':'')+'></label>'
+    +'<div class="field"><label>'+T('setup.spot.zone','Bidding zone')+'</label>'
+    +'<select id="s-zone">'
+    +'<option value="DE-LU"'+(spot.zone==='DE-LU'?' selected':'')+'>Germany / Luxembourg (DE-LU)</option>'
+    +'<option value="AT"'+(spot.zone==='AT'?' selected':'')+'>Austria (AT)</option>'
+    +'<option value="CH"'+(spot.zone==='CH'?' selected':'')+'>Switzerland (CH)</option>'
+    +'<option value="FR"'+(spot.zone==='FR'?' selected':'')+'>France (FR)</option>'
+    +'<option value="NL"'+(spot.zone==='NL'?' selected':'')+'>Netherlands (NL)</option>'
+    +'<option value="BE"'+(spot.zone==='BE'?' selected':'')+'>Belgium (BE)</option>'
+    +'<option value="ES"'+(spot.zone==='ES'?' selected':'')+'>Spain (ES)</option>'
+    +'<option value="IT"'+(spot.zone==='IT'?' selected':'')+'>Italy (IT)</option>'
+    +'</select></div>'
+    +renderActions('saveSpotAndNext');
+}
+
+function renderCo2(stage){
+  stage.innerHTML = '<div class="card">'
+    +'<h2>&#127807; '+T('setup.co2.title','CO2 intensity (optional)')+'</h2>'
+    +'<p>'+T('setup.co2.intro','Show real-time grid CO2 intensity. Uses ENTSO-E (EU, free) or Electricity Maps (worldwide, free tier). Skip to use a static average.')+'</p>'
+    +'<label class="row"><span>'+T('setup.co2.enable','Enable CO2 tracking')+'</span>'
+    +'<input type="checkbox" id="c-enabled"'+(co2.enabled?' checked':'')+'></label>'
+    +'<div class="field"><label>'+T('setup.co2.zone','ENTSO-E zone')+'</label>'
+    +'<select id="c-zone">'
+    +'<option value="DE_LU"'+(co2.zone==='DE_LU'?' selected':'')+'>Germany / Luxembourg</option>'
+    +'<option value="AT"'+(co2.zone==='AT'?' selected':'')+'>Austria</option>'
+    +'<option value="CH"'+(co2.zone==='CH'?' selected':'')+'>Switzerland</option>'
+    +'<option value="FR"'+(co2.zone==='FR'?' selected':'')+'>France</option>'
+    +'<option value="NL"'+(co2.zone==='NL'?' selected':'')+'>Netherlands</option>'
+    +'</select></div>'
+    +'<div class="field"><label>'+T('setup.co2.token','ENTSO-E API token (optional)')+'</label>'
+    +'<input type="text" id="c-token" placeholder="'+T('setup.co2.token_hint','Free at transparency.entsoe.eu')+'" value="'+esc(co2.token)+'"></div>'
+    +renderActions('saveCo2AndNext');
+}
+
+function renderSolar(stage){
+  stage.innerHTML = '<div class="card">'
+    +'<h2>&#9728; '+T('setup.solar.title','Solar / PV (optional)')+'</h2>'
+    +'<p>'+T('setup.solar.intro','Skip this if you have no PV system. Enables self-consumption, autarky and feed-in tracking.')+'</p>'
+    +'<label class="row"><span>'+T('setup.solar.enable','I have a PV system')+'</span>'
+    +'<input type="checkbox" id="sol-enabled"'+(solar.enabled?' checked':'')+'></label>'
+    +'<div class="grid2">'
+    +'<div class="field"><label>'+T('setup.solar.kwp','Peak power (kWp)')+'</label>'
+    +'<input type="number" step="0.1" id="sol-kwp" value="'+solar.kw_peak+'"></div>'
+    +'<div class="field"><label>'+T('setup.solar.feedin','Feed-in tariff (EUR/kWh)')+'</label>'
+    +'<input type="number" step="0.001" id="sol-feed" value="'+solar.feed_in+'"></div>'
+    +'<div class="field"><label>'+T('setup.solar.battery','Battery capacity (kWh, 0 = none)')+'</label>'
+    +'<input type="number" step="0.1" id="sol-bat" value="'+solar.battery+'"></div>'
+    +'</div>'
+    +renderActions('saveSolarAndNext');
+}
+
+function renderNotify(stage){
+  stage.innerHTML = '<div class="card">'
+    +'<h2>&#128276; '+T('setup.notify.title','Notifications (optional)')+'</h2>'
+    +'<p>'+T('setup.notify.intro','Get Telegram alerts for high consumption, device offline, and daily/monthly summaries. Skip to set up later.')+'</p>'
+    +'<label class="row"><span>'+T('setup.notify.tg_enable','Enable Telegram')+'</span>'
+    +'<input type="checkbox" id="tg-enabled"'+(notify.tg_enabled?' checked':'')+'></label>'
+    +'<div class="field"><label>'+T('setup.notify.tg_token','Bot token')+'</label>'
+    +'<input type="text" id="tg-token" placeholder="123456:ABC-DEF..." value="'+esc(notify.tg_token)+'"></div>'
+    +'<div class="field"><label>'+T('setup.notify.tg_chat','Chat ID')+'</label>'
+    +'<input type="text" id="tg-chat" placeholder="@mychannel or 123456789" value="'+esc(notify.tg_chat)+'"></div>'
+    +'<button class="secondary" onclick="testTelegram()">&#128752; '+T('setup.btn.test','Send test message')+'</button>'
+    +'<div class="test-msg" id="tg-test"></div>'
+    +renderActions('saveNotifyAndNext');
+}
+
+function renderIntegrate(stage){
+  stage.innerHTML = '<div class="card">'
+    +'<h2>&#128279; '+T('setup.integrate.title','Integrations (optional)')+'</h2>'
+    +'<p>'+T('setup.integrate.intro','Push data to Home Assistant (MQTT), InfluxDB, or expose a Prometheus endpoint. All optional, all skippable.')+'</p>'
+    +'<h3 style="font-size:.95rem;margin:14px 0 6px">&#127968; '+T('setup.integrate.mqtt','MQTT / Home Assistant')+'</h3>'
+    +'<label class="row"><span>'+T('setup.integrate.enable','Enable')+'</span>'
+    +'<input type="checkbox" id="mq-en"'+(integrate.mqtt_enabled?' checked':'')+'></label>'
+    +'<div class="grid2">'
+    +'<div class="field"><label>'+T('setup.integrate.mqtt_broker','Broker')+'</label>'
+    +'<input type="text" id="mq-broker" value="'+esc(integrate.mqtt_broker)+'"></div>'
+    +'<div class="field"><label>'+T('setup.integrate.mqtt_port','Port')+'</label>'
+    +'<input type="number" id="mq-port" value="'+integrate.mqtt_port+'"></div>'
+    +'<div class="field"><label>'+T('setup.integrate.mqtt_user','Username')+'</label>'
+    +'<input type="text" id="mq-user" value="'+esc(integrate.mqtt_user)+'"></div>'
+    +'<div class="field"><label>'+T('setup.integrate.mqtt_pass','Password')+'</label>'
+    +'<input type="password" id="mq-pass" value="'+esc(integrate.mqtt_pass)+'"></div>'
+    +'</div>'
+    +'<button class="secondary" onclick="testMqtt()">&#128752; '+T('setup.btn.test','Test connection')+'</button>'
+    +'<div class="test-msg" id="mq-test"></div>'
+    +'<h3 style="font-size:.95rem;margin:18px 0 6px">&#128202; '+T('setup.integrate.influx','InfluxDB')+'</h3>'
+    +'<label class="row"><span>'+T('setup.integrate.enable','Enable')+'</span>'
+    +'<input type="checkbox" id="in-en"'+(integrate.influx_enabled?' checked':'')+'></label>'
+    +'<div class="grid2">'
+    +'<div class="field"><label>'+T('setup.integrate.influx_url','URL')+'</label>'
+    +'<input type="text" id="in-url" value="'+esc(integrate.influx_url)+'"></div>'
+    +'<div class="field"><label>'+T('setup.integrate.influx_bucket','Bucket')+'</label>'
+    +'<input type="text" id="in-bucket" value="'+esc(integrate.influx_bucket)+'"></div>'
+    +'<div class="field" style="grid-column:1/-1"><label>'+T('setup.integrate.influx_token','Token')+'</label>'
+    +'<input type="password" id="in-token" value="'+esc(integrate.influx_token)+'"></div>'
+    +'</div>'
+    +'<button class="secondary" onclick="testInflux()">&#128752; '+T('setup.btn.test','Test connection')+'</button>'
+    +'<div class="test-msg" id="in-test"></div>'
+    +'<h3 style="font-size:.95rem;margin:18px 0 6px">&#128200; '+T('setup.integrate.prom','Prometheus')+'</h3>'
+    +'<label class="row"><span>'+T('setup.integrate.prom_enable','Expose /metrics endpoint')+'</span>'
+    +'<input type="checkbox" id="pr-en"'+(integrate.prom_enabled?' checked':'')+'></label>'
+    +renderActions('saveIntegrateAndNext');
+}
+
+function renderWidget(stage){
+  const host = location.host;
+  stage.innerHTML = '<div class="card">'
+    +'<h2>&#128241; '+T('setup.widget.title','Home screen widget (optional)')+'</h2>'
+    +'<p>'+T('setup.widget.intro','Add a live energy widget to your phone or tablet. Configure and customize in Settings later.')+'</p>'
+    +'<div class="opt-card" onclick="window.open(\'/w\',\'_blank\')">'
+    +'<h3>&#127760; '+T('setup.widget.web','Android / Web widget')+'</h3>'
+    +'<p class="opt-desc">'+T('setup.widget.web_desc','Open the widget page in any browser, then "Add to home screen" for a native app experience.')+' <code style="background:var(--input-bg);padding:2px 6px;border-radius:4px;font-size:.8rem">'+esc(host)+'/w</code></p>'
+    +'</div>'
+    +'<div class="opt-card" onclick="window.open(\'/widget.js\',\'_blank\')">'
+    +'<h3>&#127957; '+T('setup.widget.ios','iOS (Scriptable)')+'</h3>'
+    +'<p class="opt-desc">'+T('setup.widget.ios_desc','Install Scriptable from the App Store, paste the script, then add the widget to your home screen. Full setup instructions in Settings.')+'</p>'
+    +'</div>'
+    +'<p class="hint" style="margin-top:12px">'+T('setup.widget.later','You can create widget profiles with custom data sections later in Settings.')+'</p>'
+    +renderActions('next',true);
 }
 
 function renderDone(stage){
-  const n = addedDevices.length;
-  const dev_word = n === 1 ? T('setup.done.shelly','Shelly') : T('setup.done.shellys','Shellys');
-  stage.innerHTML = `<div class="card">
-    <h2>✅ ${T('setup.done.title','All set!')}</h2>
-    <p>${T('setup.done.line1','You have added {n} {word}. Your settings have been saved.',{n:n,word:dev_word})}</p>
-    <p>${T('setup.done.line2','You can add more devices or change the tariff anytime in {link}.',{link:'<a href="/settings">'+T('setup.done.settings_link','Settings')+'</a>'})}</p>
-    <div class="actions">
-      <span></span>
-      <button onclick="window.location.href='/'">🚀 ${T('setup.done.cta','Go to dashboard')}</button>
-    </div>
-  </div>`;
+  const items = [];
+  items.push(sumItem('&#127760;', T('setup.step.language','Language')+': '+chosenLanguage+' / '+chosenTheme, true));
+  items.push(sumItem('&#128268;', demoMode?T('setup.done.demo','Demo mode: {n} devices',{n:addedDevices.length}):T('setup.done.real_devices','{n} real devices',{n:addedDevices.length}), true));
+  items.push(sumItem('&#128176;', T('setup.done.tariff','Tariff: {p} EUR/kWh + {b} EUR/year',{p:pricing.price.toFixed(4),b:pricing.base.toFixed(2)}), completed.pricing));
+  items.push(sumItem('&#9889;', T('setup.done.spot','Spot prices: {s}',{s: spot.enabled ? spot.zone : T('setup.done.off','off')}), completed.spot));
+  items.push(sumItem('&#127807;', T('setup.done.co2','CO2 tracking: {s}',{s: co2.enabled ? co2.zone : T('setup.done.off','off')}), completed.co2));
+  items.push(sumItem('&#9728;', T('setup.done.solar','Solar: {s}',{s: solar.enabled ? (solar.kw_peak+' kWp') : T('setup.done.off','off')}), completed.solar));
+  items.push(sumItem('&#128276;', T('setup.done.notify','Telegram: {s}',{s: notify.tg_enabled ? T('setup.done.on','on') : T('setup.done.off','off')}), completed.notify));
+  const intActive = integrate.mqtt_enabled || integrate.influx_enabled || integrate.prom_enabled;
+  items.push(sumItem('&#128279;', T('setup.done.integrate','Integrations: {s}',{s: intActive ? 'MQTT/Influx/Prom' : T('setup.done.off','off')}), completed.integrate));
+
+  stage.innerHTML = '<div class="card">'
+    +'<h2>&#9989; '+T('setup.done.title','All set!')+'</h2>'
+    +'<p>'+T('setup.done.intro','Here is a summary of what was configured. You can tweak everything in Settings later.')+'</p>'
+    +'<div class="summary">'+items.join('')+'</div>'
+    +'<div class="actions"><span></span>'
+    +'<button onclick="window.location.href=\'/\'">&#128640; '+T('setup.done.cta','Go to dashboard')+'</button>'
+    +'</div></div>';
 }
 
-function escape(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function sumItem(ico, text, done){
+  const tag = done ? '<span class="sum-ok">&#10003;</span>' : '<span class="sum-skip">'+T('setup.done.skipped','skipped')+'</span>';
+  return '<div class="sum-item"><span class="sum-ico">'+ico+'</span><span>'+text+'</span>'+tag+'</div>';
+}
+
+function renderActions(saveFn, noBack){
+  const step = STEPS[stepIdx];
+  let h = '<div class="actions">';
+  if(!noBack) h += '<button class="secondary" onclick="back()">&larr; '+T('setup.btn.back','Back')+'</button>';
+  else h += '<span></span>';
+  h += '<div class="spacer"></div>';
+  if(step.skippable) h += '<button class="ghost" onclick="skip()">'+T('setup.btn.skip','Skip')+' &rarr;</button>';
+  h += '<button onclick="'+saveFn+'()">'+T('setup.btn.next','Next')+' &rarr;</button>';
+  h += '</div>';
+  return h;
+}
+
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 function next(){stepIdx=Math.min(STEPS.length-1,stepIdx+1);render();}
 function back(){stepIdx=Math.max(0,stepIdx-1);render();}
+function skip(){
+  const s = STEPS[stepIdx];
+  skipped[s.id] = true;
+  completed[s.id] = false;
+  next();
+}
 
 async function scanMdns(){
   const btn=document.getElementById('btn-scan');
   const results=document.getElementById('scan-results');
-  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> '+T('setup.devices.scanning','Scanning…');
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> '+T('setup.devices.scanning','Scanning...');
   results.innerHTML='';
   try{
     const r=await fetch('/api/devices/discover?timeout=5',{method:'POST'});
     const j=await r.json();
-    btn.disabled=false;btn.textContent='🔍 '+T('setup.devices.scan_btn','Scan network');
+    btn.disabled=false;btn.textContent='\u{1F50D} '+T('setup.devices.scan_btn','Scan network');
     if(!j.ok){toast(T('setup.toast.scan_error','Scan error: {err}',{err:j.error}),'error');return;}
     if(!j.devices.length){results.innerHTML='<p class="hint" style="margin-top:10px">'+T('setup.devices.none_found','No Shellys found on the network. Try entering an IP address manually.')+'</p>';return;}
     results.innerHTML='<h3 style="font-size:.9rem;margin:12px 0 6px">'+T('setup.devices.found_n','Found: {n}',{n:j.devices.length})+'</h3><div class="devlist">'+
-      j.devices.map(d=>`<div class="devrow">
-        <div class="meta"><div class="name">${escape(d.name||d.host)}</div>
-        <div class="sub">${escape(d.host)} · ${escape(d.model||d.kind||'Shelly')}</div></div>
-        <button ${d.already_added?'disabled':''} onclick='addDiscovered(${JSON.stringify(d).replace(/'/g,"&#39;")})'>${d.already_added?'✓':'➕'}</button>
-      </div>`).join('')+'</div>';
-  }catch(e){btn.disabled=false;btn.textContent='🔍 '+T('setup.devices.scan_btn','Scan network');toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');}
+      j.devices.map(function(d){return '<div class="devrow">'
+        +'<div class="meta"><div class="name">'+esc(d.name||d.host)+'</div>'
+        +'<div class="sub">'+esc(d.host)+' &middot; '+esc(d.model||d.kind||'Shelly')+'</div></div>'
+        +'<button '+(d.already_added?'disabled':'')+" onclick='addDiscovered("+JSON.stringify(d).replace(/'/g,"&#39;")+")'>"+(d.already_added?'&#10003;':'&#10133;')+'</button>'
+        +'</div>';}).join('')+'</div>';
+  }catch(e){btn.disabled=false;btn.textContent='\u{1F50D} '+T('setup.devices.scan_btn','Scan network');toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');}
 }
 
 async function _postDevice(payload){
   return fetch('/api/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
 }
-
 async function _addWithAuthRetry(basePayload, label){
   try{
     let r=await _postDevice(basePayload);
     let j=await r.json();
-    if(j.ok){
-      addedDevices.push(j.device);
-      toast('✓ '+T('setup.toast.added','Added: {name}',{name:j.device.name||label}),'success');
-      render();
-      return true;
-    }
+    if(j.ok){addedDevices.push(j.device);toast('\u2713 '+T('setup.toast.added','Added: {name}',{name:j.device.name||label}),'success');render();return true;}
     if(j.error==='auth_required'){
       const pw=prompt(T('setup.auth.prompt','Device {host} is password-protected.\nEnter the admin password:',{host:label}));
       if(!pw){toast(T('setup.toast.skipped','Skipped (no password entered)'),'error');return false;}
       const r2=await _postDevice(Object.assign({},basePayload,{username:'admin',password:pw}));
       const j2=await r2.json();
-      if(j2.ok){
-        addedDevices.push(j2.device);
-        toast('✓ '+T('setup.toast.added_auth','Added with credentials: {name}',{name:j2.device.name||label}),'success');
-        render();
-        return true;
-      }
+      if(j2.ok){addedDevices.push(j2.device);toast('\u2713 '+T('setup.toast.added_auth','Added with credentials: {name}',{name:j2.device.name||label}),'success');render();return true;}
       toast(T('setup.toast.auth_failed','Auth failed: {err}',{err:j2.error||'unknown'}),'error');
       return false;
     }
@@ -279,25 +498,36 @@ async function _addWithAuthRetry(basePayload, label){
     return false;
   }catch(e){toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');return false;}
 }
-
 async function addByIp(){
   const ip=document.getElementById('ip-input').value.trim();
   if(!ip){toast(T('setup.toast.ip_empty','IP address empty'),'error');return;}
   const ok=await _addWithAuthRetry({host:ip},ip);
   if(ok)document.getElementById('ip-input').value='';
 }
-
 async function addDiscovered(d){
   const ok=await _addWithAuthRetry(d,d.host);
   if(ok)scanMdns();
 }
-
 async function removeDevice(key){
   try{
     const r=await fetch('/api/devices/'+encodeURIComponent(key),{method:'DELETE'});
     const j=await r.json();
-    if(j.ok){addedDevices=addedDevices.filter(d=>d.key!==key);render();}
+    if(j.ok){addedDevices=addedDevices.filter(function(d){return d.key!==key;});render();}
   }catch(e){}
+}
+
+async function saveLangAndNext(){
+  chosenLanguage = document.getElementById('lang-sel').value;
+  chosenTheme = document.getElementById('theme-sel').value;
+  try{
+    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ui:{language:chosenLanguage, theme:chosenTheme}})});
+    try{ localStorage.setItem('sea_theme', chosenTheme==='auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light') : chosenTheme); }catch(e){}
+    document.documentElement.dataset.theme = chosenTheme==='auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light') : chosenTheme;
+    const i18nR = await fetch('/api/i18n?prefix=setup.').then(x=>x.json()).catch(_=>({map:{}}));
+    I18N = (i18nR && i18nR.map) || {};
+    next();
+  }catch(e){toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');}
 }
 
 async function savePricingAndNext(){
@@ -307,6 +537,7 @@ async function savePricingAndNext(){
   try{
     await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({pricing:{electricity_price_eur_per_kwh:pricing.price,base_fee_eur_per_year:pricing.base,price_includes_vat:pricing.vat,base_fee_includes_vat:pricing.vat}})});
+    completed.pricing = true;
     next();
   }catch(e){toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');}
 }
@@ -317,22 +548,127 @@ async function saveSpotAndNext(){
   try{
     await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({spot_price:{enabled:spot.enabled,bidding_zone:spot.zone}})});
+    completed.spot = true;
     next();
   }catch(e){toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');}
 }
 
-// Load existing devices + i18n map (so wizard renders in the user's language)
+async function saveCo2AndNext(){
+  co2.enabled=document.getElementById('c-enabled').checked;
+  co2.zone=document.getElementById('c-zone').value;
+  co2.token=document.getElementById('c-token').value.trim();
+  try{
+    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({co2:{enabled:co2.enabled,bidding_zone:co2.zone,entso_e_api_token:co2.token}})});
+    completed.co2 = true;
+    next();
+  }catch(e){toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');}
+}
+
+async function saveSolarAndNext(){
+  solar.enabled=document.getElementById('sol-enabled').checked;
+  solar.kw_peak=Number(document.getElementById('sol-kwp').value)||0;
+  solar.feed_in=Number(document.getElementById('sol-feed').value)||0.082;
+  solar.battery=Number(document.getElementById('sol-bat').value)||0;
+  try{
+    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({solar:{enabled:solar.enabled,kw_peak:solar.kw_peak,feed_in_tariff_eur_per_kwh:solar.feed_in,battery_kwh:solar.battery}})});
+    completed.solar = true;
+    next();
+  }catch(e){toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');}
+}
+
+async function saveNotifyAndNext(){
+  notify.tg_enabled=document.getElementById('tg-enabled').checked;
+  notify.tg_token=document.getElementById('tg-token').value.trim();
+  notify.tg_chat=document.getElementById('tg-chat').value.trim();
+  try{
+    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ui:{telegram_enabled:notify.tg_enabled,telegram_bot_token:notify.tg_token,telegram_chat_id:notify.tg_chat}})});
+    completed.notify = true;
+    next();
+  }catch(e){toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');}
+}
+
+async function saveIntegrateAndNext(){
+  integrate.mqtt_enabled=document.getElementById('mq-en').checked;
+  integrate.mqtt_broker=document.getElementById('mq-broker').value.trim()||'127.0.0.1';
+  integrate.mqtt_port=Number(document.getElementById('mq-port').value)||1883;
+  integrate.mqtt_user=document.getElementById('mq-user').value;
+  integrate.mqtt_pass=document.getElementById('mq-pass').value;
+  integrate.influx_enabled=document.getElementById('in-en').checked;
+  integrate.influx_url=document.getElementById('in-url').value.trim()||'http://127.0.0.1:8086';
+  integrate.influx_bucket=document.getElementById('in-bucket').value.trim()||'shelly';
+  integrate.influx_token=document.getElementById('in-token').value;
+  integrate.prom_enabled=document.getElementById('pr-en').checked;
+  try{
+    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        mqtt:{enabled:integrate.mqtt_enabled,broker:integrate.mqtt_broker,port:integrate.mqtt_port,username:integrate.mqtt_user,password:integrate.mqtt_pass},
+        influxdb:{enabled:integrate.influx_enabled,url:integrate.influx_url,bucket:integrate.influx_bucket,token:integrate.influx_token},
+        prometheus:{enabled:integrate.prom_enabled}
+      })});
+    completed.integrate = true;
+    next();
+  }catch(e){toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');}
+}
+
+async function testTelegram(){
+  const msg = document.getElementById('tg-test');
+  msg.textContent = T('setup.test.running','Testing...'); msg.className='test-msg';
+  const body = {ui:{telegram_enabled:true,telegram_bot_token:document.getElementById('tg-token').value.trim(),telegram_chat_id:document.getElementById('tg-chat').value.trim()}};
+  try{
+    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const r = await fetch('/api/settings/test-telegram',{method:'POST'});
+    const j = await r.json();
+    if(j.ok){ msg.textContent='\u2713 '+T('setup.test.ok','Connection OK'); msg.className='test-msg ok'; }
+    else{ msg.textContent='\u2717 '+(j.error||'error'); msg.className='test-msg err'; }
+  }catch(e){ msg.textContent='\u2717 '+e.message; msg.className='test-msg err'; }
+}
+
+async function testMqtt(){
+  const msg = document.getElementById('mq-test');
+  msg.textContent = T('setup.test.running','Testing...'); msg.className='test-msg';
+  const body = {mqtt:{enabled:true,broker:document.getElementById('mq-broker').value.trim(),port:Number(document.getElementById('mq-port').value)||1883,username:document.getElementById('mq-user').value,password:document.getElementById('mq-pass').value}};
+  try{
+    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const r = await fetch('/api/settings/test-mqtt',{method:'POST'});
+    const j = await r.json();
+    if(j.ok){ msg.textContent='\u2713 '+T('setup.test.ok','Connection OK'); msg.className='test-msg ok'; }
+    else{ msg.textContent='\u2717 '+(j.error||'error'); msg.className='test-msg err'; }
+  }catch(e){ msg.textContent='\u2717 '+e.message; msg.className='test-msg err'; }
+}
+
+async function testInflux(){
+  const msg = document.getElementById('in-test');
+  msg.textContent = T('setup.test.running','Testing...'); msg.className='test-msg';
+  const body = {influxdb:{enabled:true,url:document.getElementById('in-url').value.trim(),bucket:document.getElementById('in-bucket').value.trim(),token:document.getElementById('in-token').value}};
+  try{
+    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const r = await fetch('/api/settings/test-influxdb',{method:'POST'});
+    const j = await r.json();
+    if(j.ok){ msg.textContent='\u2713 '+T('setup.test.ok','Connection OK'); msg.className='test-msg ok'; }
+    else{ msg.textContent='\u2717 '+(j.error||'error'); msg.className='test-msg err'; }
+  }catch(e){ msg.textContent='\u2717 '+e.message; msg.className='test-msg err'; }
+}
+
 async function init(){
   try{
-    const [devR, i18nR] = await Promise.all([
+    const [devR, i18nR, cfgR] = await Promise.all([
       fetch('/api/devices').then(x=>x.json()).catch(_=>({devices:[]})),
       fetch('/api/i18n?prefix=setup.').then(x=>x.json()).catch(_=>({map:{},lang:'en'})),
+      fetch('/api/settings').then(x=>x.json()).catch(_=>({})),
     ]);
-    addedDevices=(devR.devices||[]).map(d=>({key:d.key,name:d.name,host:d.host,kind:d.kind,model:d.model}));
+    addedDevices=(devR.devices||[]).map(function(d){return{key:d.key,name:d.name,host:d.host,kind:d.kind,model:d.model};});
     I18N = (i18nR && i18nR.map) || {};
     document.documentElement.lang = (i18nR && i18nR.lang) || 'en';
+    if(cfgR && cfgR.ui){
+      chosenLanguage = cfgR.ui.language || 'en';
+      chosenTheme = cfgR.ui.theme || 'auto';
+    }
+    demoMode = !!(cfgR && cfgR.demo && cfgR.demo.enabled);
     const sub = document.getElementById('hero-sub');
-    if (sub) sub.textContent = T('setup.hero.sub','Setup – configure your Shellys and your tariff');
+    if (sub) sub.textContent = T('setup.hero.sub','Initial setup - every optional step can be skipped');
   }catch(e){}
   render();
 }

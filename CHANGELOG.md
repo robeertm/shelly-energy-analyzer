@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.25.0 - 2026-04-12
+### Changed
+- **Complete setup wizard overhaul.** The first-run wizard now walks through 12 steps (Welcome, Language & theme, Mode, Devices, Tariff, Spot prices, CO₂, Solar, Notifications, Integrations, Widget, Summary) instead of just 4. Every optional step has a visible "Skip" button so you can race through the minimum setup in a few clicks or take your time for full configuration. The "Mode" step lets you pick between demo mode (two simulated Shellys with realistic data, zero hardware required) and real devices with mDNS discovery. Notification and integration steps include "Test connection" buttons for Telegram, MQTT and InfluxDB that hit the existing `/api/settings/test-*` endpoints directly from the wizard. The final summary page shows what was configured vs skipped, with status ticks per section.
+- **New endpoint:** `POST /api/setup/enable-demo` activates demo mode, adds two simulated devices (3-phase house meter + 1-phase garage switch), persists the config and reloads the in-memory state.
+
 ## 16.24.0 - 2026-04-12
 ### Added
 - **Configurable widget profiles.** Create multiple widget profiles in Settings, each with its own combination of 12 toggleable data sections (power, today, month, forecast, spot price, spot chart, CO₂, CO₂ chart, device list, power 24h chart, daily 7d chart, hourly today chart). Each profile has a device filter (checkbox grid), configurable refresh interval (1–60 min), and generates its own Scriptable script. Widget parameter format: `IP:PORT#profile_id`. The default widget (no profile) continues to work unchanged.

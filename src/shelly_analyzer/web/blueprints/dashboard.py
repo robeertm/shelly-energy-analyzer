@@ -94,6 +94,40 @@ def settings_page():
     return Response(b"<h1>Settings page not yet available</h1>", content_type="text/html")
 
 
+@bp.route("/api/setup/enable-demo", methods=["POST"])
+def setup_enable_demo():
+    """Activate demo mode: add demo devices, enable demo flag, save config, reload."""
+    from dataclasses import replace
+    from shelly_analyzer.io.config import save_config, DemoConfig
+    from shelly_analyzer.services.demo import default_demo_devices
+    state = _get_state()
+    try:
+        scenario = (request.get_json(silent=True) or {}).get("scenario", "household")
+        new_demo = DemoConfig(enabled=True, seed=1234, scenario=str(scenario or "household"))
+        existing_keys = {d.key for d in (state.cfg.devices or [])}
+        new_devices = list(state.cfg.devices or [])
+        for d in default_demo_devices():
+            if d.key not in existing_keys:
+                new_devices.append(d)
+        new_cfg = replace(state.cfg, demo=new_demo, devices=new_devices)
+        cfg_path = getattr(state, "_cfg_path", None)
+        if cfg_path:
+            save_config(new_cfg, cfg_path)
+        state.cfg = new_cfg
+        if hasattr(state, "reload_config"):
+            state.reload_config(new_cfg)
+        return Response(
+            '{"ok": true, "devices_added": ' + str(len(new_devices) - len(existing_keys)) + '}',
+            content_type="application/json",
+        )
+    except Exception as e:
+        return Response(
+            '{"ok": false, "error": "' + str(e).replace('"', "'") + '"}',
+            content_type="application/json",
+            status=500,
+        )
+
+
 @bp.route("/w")
 def widget_page():
     """Standalone mini widget page for Android/PWA home screen."""

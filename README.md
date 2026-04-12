@@ -68,7 +68,7 @@ chmod +x start.sh && ./start.sh
 start.bat
 ```
 
-Open <https://localhost:8765> and follow the 5-step setup wizard — it will discover your Shellys via mDNS, ask for your tariff, and you're live.
+Open <https://localhost:8765> and follow the 12-step setup wizard — pick demo mode for a zero-hardware tour, or connect real Shellys via mDNS, set your tariff, and you're live. Every optional step is skippable.
 
 > **No Shellys yet?** Enable **Demo Mode** in Settings → Advanced to explore the full UI with realistic generated data. Great for seeing what the tool can do before buying hardware.
 
@@ -319,16 +319,27 @@ Android / any browser: open `/w` and add to home screen — no app required.
 - Retention policy: raw data compressed to monthly aggregates after 2 years
 
 ### 🧙 First-Run Setup Wizard (Web)
-- Browser-based 5-step wizard at `/setup` (auto-redirected on first launch when no devices are configured)
-- Automatic discovery (mDNS)
-- Manual IP/host entry
-- Pricing / base fee / VAT setup
-- Optional spot-price bidding zone selection
+Browser-based 12-step wizard at `/setup` (auto-redirected on first launch when no devices are configured). Every optional step is skippable — you can race through the minimum setup in a handful of clicks or take your time and configure everything up-front:
+
+1. **Welcome** — intro
+2. **Language & theme** — 9 UI languages, dark/light/auto
+3. **Mode** — pick demo mode (2 simulated Shellys, zero hardware) or real devices
+4. **Devices** — mDNS auto-scan or manual IP (skipped in demo mode)
+5. **Tariff** — price per kWh, base fee, VAT
+6. **Spot prices** *(optional)* — bidding zone for Tibber/aWATTar/Ostrom
+7. **CO₂** *(optional)* — ENTSO-E / Electricity Maps zone and token
+8. **Solar** *(optional)* — peak kWp, feed-in tariff, battery capacity
+9. **Notifications** *(optional)* — Telegram bot token + chat ID, with live **test button**
+10. **Integrations** *(optional)* — MQTT (Home Assistant), InfluxDB, Prometheus, all with **test buttons**
+11. **Widget** *(optional)* — direct links to iOS (Scriptable) and Android/Web widget
+12. **Summary** — checklist of what was configured vs skipped
 
 ### 🎭 Demo Mode
-- No Shelly devices required
-- Realistic demo data (live + history CSVs)
-- Great for testing and screenshots
+- Activated with one click from the setup wizard ("Mode" step) or via `POST /api/setup/enable-demo`
+- Creates 2 simulated Shellys (3-phase house meter + 1-phase garage switch) with realistic consumption profiles (morning + evening peaks, base load, stochastic jitter)
+- Populates historical CSVs so the dashboard shows real patterns immediately
+- Great for testing all features, screenshots, and demos without Shelly hardware
+- Toggle off anytime in Settings
 
 ### 🌐 Web Dashboard (Mobile-Friendly SPA)
 - Full single-page app (SPA) accessible from any device on the local network — the **sole UI** of the application
@@ -499,7 +510,7 @@ The UI supports 9 languages. **The app always starts in English** — switch to 
 
 ## Password-Protected Shellys
 
-If you have set an admin password on your Shelly's web UI, the analyzer will reach it transparently — both the **5-step setup wizard** and the **Settings → Devices** page prompt for the password whenever a device responds `401 Unauthorized`.
+If you have set an admin password on your Shelly's web UI, the analyzer will reach it transparently — both the **setup wizard** and the **Settings → Devices** page prompt for the password whenever a device responds `401 Unauthorized`.
 
 | Generation | Models                                    | Auth scheme |
 |------------|-------------------------------------------|-------------|
