@@ -1,5 +1,14 @@
 # Changelog
 
+## 16.20.0 - 2026-04-12
+### Added
+- **Comprehensive Shelly device registry** (`services/device_registry.py`). A catalog of **115 Shelly models** spanning all generations (Gen 1 Classic, Gen 2 Plus, Gen 2 Pro, Gen 3, Gen 4) and all categories (energy meters, switches, plugs, dimmers, RGBW/lighting, covers, sensors, displays). Each entry carries: hardware model ID, product name, generation, series, category, power metering capability, phase count, channel count, EMData history support, and mDNS hostname prefix.
+- **Registry-enhanced device discovery.** `probe_device()` now cross-references probed model IDs against the registry to enrich detection results. Discovered devices get a `product_name`, `category`, and `series` field — so the UI can show "Shelly Pro 3EM" instead of "SPEM-003CEBEU (EM)". The registry also overrides kind/phases/emdata when it knows more than the firmware's status keys reveal (e.g. a new firmware that doesn't expose `b_voltage` in status but is a known 3-phase device).
+- **API endpoint `GET /api/supported-devices`** returns the full registry as JSON for the settings UI (model list + category labels + series labels).
+- **"Supported Shelly Devices" section in Settings** (under Advanced). A searchable, filterable catalog showing every recognized device grouped by generation. Filter by category (Energy Meter, Switch, Plug, Dimmer, etc.) or search by name/model ID. Each device card shows capability badges: ⚡ Power (has energy metering), 📊 EMData (supports historical CSV download), phase count, channel count. Lazy-loaded and cached — only fetches from the API on first open.
+- **`probe_device()` response enriched** with `product_name`, `category`, `series` fields so the "Add device" and "Probe" UI can display human-readable device names.
+- i18n keys for Supported Devices section in DE and EN.
+
 ## 16.19.3 - 2026-04-11
 ### Added
 - **Enhanced daily + monthly reports (Telegram / email / webhook).** User feedback: the scheduled reports sent via Telegram and email looked sparse — total kWh, a device list, and a single 2-panel chart. This release triples the content and adds a fully styled HTML email layout.

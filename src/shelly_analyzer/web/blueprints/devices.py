@@ -282,6 +282,9 @@ def probe_device_endpoint():
             "component_id": int(result.component_id),
             "phases": int(result.phases),
             "supports_emdata": bool(result.supports_emdata),
+            "product_name": getattr(result, "product_name", "") or "",
+            "category": getattr(result, "category", "") or "",
+            "series": getattr(result, "series", "") or "",
         }})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
@@ -313,3 +316,15 @@ def update_firmware(key: str):
         return jsonify({"ok": True, "response": payload})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
+
+
+@bp.route("/api/supported-devices", methods=["GET"])
+def supported_devices():
+    """Return the full Shelly device registry for the settings UI."""
+    from shelly_analyzer.services.device_registry import get_supported_summary, CATEGORY_LABELS, SERIES_LABELS
+    return jsonify({
+        "devices": get_supported_summary(),
+        "category_labels": CATEGORY_LABELS,
+        "series_labels": SERIES_LABELS,
+        "total": len(get_supported_summary()),
+    })
