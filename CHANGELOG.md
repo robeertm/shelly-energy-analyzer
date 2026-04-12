@@ -1,5 +1,22 @@
 # Changelog
 
+## 16.22.0 - 2026-04-12
+### Added
+- **Room assignment for device control.** Devices can now be organized into rooms (living room, kitchen, basement, …) in Settings → Features → Device Control. Each room has a name, a selectable emoji icon (58 icons in a scrollable picker), and a checkbox grid of all available devices. The Control tab groups devices by room with headers; unassigned devices appear under a separate "Unassigned" section.
+- **Per-tenant contact data.** TenantDef now carries `address`, `phone`, `email`, and `vat_id` fields. The Tenants settings section shows these as additional fields per tenant. Invoice generation automatically pulls customer data from the tenant profile when a device is assigned to a tenant — no more generic "Customer" in the Billing section.
+- **Invoice logo upload.** The Billing settings section replaces the manual "Logo path" text field with a file picker (PNG/JPG, max 1 MB). The file is uploaded to `data/logo/` via `POST /api/upload-logo`, and the path is auto-filled. Preview thumbnail shown after upload, with a clear button to remove.
+- **Device checkbox grid** for tenant device assignment — replaces the old comma-separated text input. Same checkbox grid used for room device assignment.
+
+### Fixed
+- **Issuer address disappeared after saving.** The settings UI writes `billing.issuer.address` as a string (from textarea), but the config parser only read `address_lines` (a list). Now the parser accepts both formats and auto-converts string → list. The serializer also writes both `address` and `address_lines` so the UI always has data to display.
+- **Control tab didn't show rooms.** The tab was reading from `/api/config` which only returns live-state data, not the full config. Now reads from `/api/settings` which contains the complete `device_control.rooms` array.
+- **Icon picker didn't work.** Template literals nested inside template literals weren't evaluated — rewritten with plain string concatenation.
+- **Customer fields removed from Invoicing section** — replaced by per-tenant contact data in the Tenants section.
+
+### Changed
+- **iOS Widget section title** — removed 📱 emoji prefix, now just "iOS Widget (Scriptable)".
+- README updated: room assignment, per-tenant contact data, invoice logo upload, device checkbox grid.
+
 ## 16.21.5 - 2026-04-12
 ### Fixed
 - **In-app updater robustness** — the updater helper now writes a detailed log to `logs/updater.log` (timestamps, what was copied/skipped, config.json existence before and after, restart command). Previously all output went to `/dev/null`, making update failures invisible.

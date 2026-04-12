@@ -242,12 +242,14 @@ All desktop shots are captured at native **4K (3840×2160)**, all mobile shots a
 
 ### 🏠 Tenant Utility Billing (Nebenkostenabrechnung)
 - **Multi-tenant support** — assign Shelly devices to tenants via checkbox UI in settings
+- **Per-tenant contact data** — address, phone, email, VAT ID stored per tenant; automatically used as invoice recipient (no separate "customer" field needed)
 - Per-tenant annual utility bill with line items, subtotal, VAT, and gross total
 - **Common area electricity** — split among all tenants by person count
 - Pro-rated base fee allocation
 - **Move-in date** — billing calculation starts from the configured move-in date
 - Device exclusivity — devices assigned to one tenant are grayed out for others
-- **PDF invoice export** per tenant
+- **PDF invoice export** per tenant — customer data pulled from tenant profile
+- **Invoice logo upload** — upload PNG/JPG directly from Settings, no manual path entry
 - Cost comparison bar chart and kWh share pie chart
 - Donut chart for single-tenant view
 
@@ -294,6 +296,7 @@ All desktop shots are captured at native **4K (3840×2160)**, all mobile shots a
 
 ### 🎛 Device Control
 - **Control tab** for directly operating Shelly devices from the dashboard (enable in Settings → Features)
+- **Room assignment** — organize devices into rooms (living room, kitchen, basement, …) with 58 selectable emoji icons; devices grouped by room in the Control tab, unassigned devices shown separately
 - **Switches & plugs** — on/off toggle with live power readout
 - **Dimmers** — brightness slider (0–100%) via `Light.Set` RPC (Gen 2+) with Gen 1 REST fallback
 - **RGBW lights** — colour picker (RGB), colour temperature slider (2700–6500 K), brightness

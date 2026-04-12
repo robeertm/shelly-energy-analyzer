@@ -190,7 +190,14 @@ function gatherListField(container) {
     $$('[data-k]', itemEl).forEach(inp => {
       const k = inp.dataset.k;
       let v;
-      if (inp.type === "checkbox") v = inp.checked;
+      if (inp.dataset.iconPicker === "1") {
+        v = inp.dataset.val || "🏠";
+      }
+      else if (inp.dataset.deviceChecks === "1") {
+        v = [];
+        $$('input[data-devkey]', inp).forEach(cb => { if (cb.checked) v.push(cb.dataset.devkey); });
+      }
+      else if (inp.type === "checkbox") v = inp.checked;
       else if (inp.type === "number") v = inp.value === "" ? 0 : Number(inp.value);
       else if (inp.dataset.csv === "1") {
         v = String(inp.value||"").split(",").map(s=>s.trim()).filter(Boolean);
@@ -222,6 +229,31 @@ function gatherSection(sectionId) {
     setPath(data, key, val);
   });
   return data;
+}
+
+async function uploadLogo(fileInput, settingsKey) {
+  if (!fileInput.files || !fileInput.files[0]) return;
+  const file = fileInput.files[0];
+  if (file.size > 1048576) { toast(T("settings.upload.too_large","File too large (max 1 MB)"), "error"); return; }
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const r = await fetch("/api/upload-logo", {method:"POST", body:fd});
+    const j = await r.json();
+    if (j.ok && j.path) {
+      const inp = document.querySelector('[data-key="' + settingsKey + '"]');
+      if (inp) inp.value = j.path;
+      toast("✓ " + T("settings.upload.success","Logo uploaded"));
+      reload();
+    } else {
+      toast(j.error || "Upload failed", "error");
+    }
+  } catch(e) { toast(e.message, "error"); }
+}
+function clearUpload(settingsKey) {
+  const inp = document.querySelector('[data-key="' + settingsKey + '"]');
+  if (inp) inp.value = "";
+  toast(T("settings.upload.cleared","Logo removed — save to apply"));
 }
 
 async function saveSection(sectionId) {
@@ -507,6 +539,11 @@ const SECTIONS = [
   ]},
   {id:"device_control", title:"Device control", group:"Features", fields:[
     {key:"device_control.enabled", label:"Device control active", type:"checkbox", hint:"Show the Control tab for switches, dimmers, RGB lights, and roller shutters"},
+    {key:"device_control.rooms", label:"Rooms", type:"list", itemLabel:"Room", hint:"Assign devices to rooms. Devices not assigned to any room appear under 'Unassigned'.", schema:[
+      {key:"name", label:"Name", type:"text", placeholder:"Living Room"},
+      {key:"icon", label:"Icon", type:"icon-picker"},
+      {key:"device_keys", label:"Devices", type:"device-checkboxes"},
+    ], defaults:{room_id:"",name:"",icon:"🏠",device_keys:[]}},
   ]},
   {id:"tariff_compare", title:"Tariff comparison", group:"Features", fields:[
     {key:"tariff_compare.enabled", label:"Tariff comparison active", type:"checkbox"},
@@ -541,7 +578,7 @@ const SECTIONS = [
   {id:"billing", title:"Invoicing", group:"Advanced", fields:[
     {key:"billing.invoice_prefix", label:"Invoice number prefix", type:"text"},
     {key:"billing.payment_terms_days", label:"Payment terms (days)", type:"number"},
-    {key:"billing.invoice_logo_path", label:"Logo path", type:"text"},
+    {key:"billing.invoice_logo_path", label:"Logo", type:"file-upload", accept:"image/*", hint:"PNG or JPG, max 1 MB"},
     {key:"billing.issuer.name", label:"Issuer name", type:"text"},
     {key:"billing.issuer.address", label:"Issuer address", type:"textarea", hint:"Street, ZIP city, country – multiline"},
     {key:"billing.issuer.vat_id", label:"Issuer VAT ID", type:"text"},
@@ -549,10 +586,6 @@ const SECTIONS = [
     {key:"billing.issuer.phone", label:"Issuer phone", type:"text"},
     {key:"billing.issuer.iban", label:"Issuer IBAN", type:"text"},
     {key:"billing.issuer.bic", label:"Issuer BIC", type:"text"},
-    {key:"billing.customer.name", label:"Customer name", type:"text"},
-    {key:"billing.customer.address", label:"Customer address", type:"textarea", hint:"Street, ZIP city, country – multiline"},
-    {key:"billing.customer.email", label:"Customer email", type:"email"},
-    {key:"billing.customer.vat_id", label:"Customer VAT ID", type:"text"},
   ]},
   {id:"tenant", title:"Tenants", group:"Advanced", fields:[
     {key:"tenant.enabled", label:"Tenant billing active", type:"checkbox"},
@@ -564,8 +597,12 @@ const SECTIONS = [
       {key:"persons", label:"Persons", type:"number", min:1},
       {key:"move_in", label:"Move-in (YYYY-MM-DD)", type:"text", placeholder:"2024-01-01"},
       {key:"move_out", label:"Move-out (YYYY-MM-DD)", type:"text", placeholder:"empty = current"},
-      {key:"device_keys", label:"Devices (comma-separated)", type:"csv-list"},
-    ], defaults:{tenant_id:"",name:"",unit:"",persons:1,move_in:"",move_out:"",device_keys:[]}},
+      {key:"address", label:"Address", type:"textarea", placeholder:"Street, ZIP City"},
+      {key:"phone", label:"Phone", type:"text"},
+      {key:"email", label:"Email", type:"email"},
+      {key:"vat_id", label:"VAT ID", type:"text"},
+      {key:"device_keys", label:"Devices", type:"device-checkboxes"},
+    ], defaults:{tenant_id:"",name:"",unit:"",persons:1,move_in:"",move_out:"",address:"",phone:"",email:"",vat_id:"",device_keys:[]}},
   ]},
   {id:"multi_location", title:"Multi-Location", group:"Advanced", fields:[
     {key:"multi_location.enabled", label:"Multi-location active", type:"checkbox"},
@@ -613,6 +650,35 @@ function renderListField(f, val) {
     if (sf.type === "csv-list") {
       const s = Array.isArray(v) ? v.join(", ") : String(v||"");
       return `<div class="field"><label>${esc(sf.label)}</label><input type="text" data-k="${sf.key}" data-csv="1" value="${esc(s)}"></div>`;
+    }
+    if (sf.type === "icon-picker") {
+      const icons = [
+        "🏠","🛋️","🛏️","🍳","🍽️","🚿","🛁","🪥","🏢","🏗️","🚗","🅿️","🌿","🌳","🏡",
+        "💡","🔌","📺","💻","🎮","🎵","🧺","🏋️","👶","🐕","🐈","🌡️","⚡","☀️","🔧",
+        "📦","❄️","🔥","💨","🚪","🪟","🛗","🗄️","🧹","🧊","👕","🎄","🏊","🧑‍💻",
+        "📚","🎨","🪴","🍷","☕","🛒","🏥","🔒","📡","🎯","🧸","🪑","🚰","🌙"
+      ];
+      const cur = v || "🏠";
+      var btns = "";
+      for (var _ii = 0; _ii < icons.length; _ii++) {
+        var _ic = icons[_ii];
+        var _act = _ic === cur ? " active" : "";
+        var _brd = _ic === cur ? "var(--accent)" : "transparent";
+        btns += '<button type="button" class="icon-pick-btn' + _act + '" onclick="this.parentNode.querySelectorAll(\'.icon-pick-btn\').forEach(function(b){b.classList.remove(\'active\');b.style.borderColor=\'transparent\'});this.classList.add(\'active\');this.style.borderColor=\'var(--accent)\';this.parentNode.dataset.val=this.textContent.trim()" style="font-size:1.3rem;padding:4px 6px;border:2px solid ' + _brd + ';border-radius:6px;background:var(--input-bg);cursor:pointer;min-width:36px;text-align:center">' + _ic + '</button>';
+      }
+      return '<div class="field" style="grid-column:1/-1"><label>' + esc(sf.label) + '</label>' +
+        '<div data-k="' + sf.key + '" data-icon-picker="1" data-val="' + esc(cur) + '" style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto;padding:6px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg)">' + btns + '</div></div>';
+    }
+    if (sf.type === "device-checkboxes") {
+      const selected = new Set(Array.isArray(v) ? v : (typeof v === "string" && v ? v.split(",").map(s=>s.trim()) : []));
+      const cbs = devices.map(d => {
+        const ck = selected.has(d.key) ? "checked" : "";
+        return `<label style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:.82rem;min-height:32px">
+          <input type="checkbox" data-devkey="${esc(d.key)}" ${ck} style="margin:0"> ${esc(d.name)} <span style="color:var(--muted);font-size:.72rem">(${esc(d.key)})</span></label>`;
+      }).join("");
+      return `<div class="field" style="grid-column:1/-1"><label>${esc(sf.label)}</label>
+        <div data-k="${sf.key}" data-device-checks="1" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px">${cbs || '<span class="hint">No devices</span>'}</div>
+        ${sf.hint ? '<div class="hint">' + esc(sf.hint) + '</div>' : ''}</div>`;
     }
     const step = sf.step ? `step="${sf.step}"` : "";
     const minA = sf.min!=null ? `min="${sf.min}"` : "";
@@ -698,6 +764,15 @@ function renderField(f) {
     input = `<textarea data-key="${f.key}">${(val===null||val===undefined)?"":String(val)}</textarea>`;
   } else if (f.type === "list") {
     return renderListField(f, val);
+  } else if (f.type === "file-upload") {
+    const accept = f.accept || "image/*";
+    const hasFile = val && String(val).trim();
+    const preview = hasFile ? '<img src="/files/' + esc(String(val)) + '?' + Date.now() + '" style="max-height:48px;max-width:160px;border-radius:4px;margin-top:4px;object-fit:contain" onerror="this.style.display=\'none\'">' : '';
+    input = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+      '<input type="file" accept="' + esc(accept) + '" style="font-size:.82rem" onchange="uploadLogo(this,\'' + esc(f.key) + '\')">' +
+      '<input type="text" data-key="' + f.key + '" value="' + (val===null||val===undefined?"":esc(String(val))) + '" placeholder="' + T("settings.upload.path_ph","auto-filled after upload") + '" style="flex:1;min-width:140px" readonly>' +
+      (hasFile ? '<button type="button" class="small danger" onclick="clearUpload(\'' + esc(f.key) + '\')">✕</button>' : '') +
+      '</div>' + preview;
   } else {
     const step = f.step ? `step="${f.step}"` : "";
     const tp = f.type === "password" ? "password" : f.type === "number" ? "number" : (f.type === "email"?"email":(f.type==="url"?"url":"text"));
