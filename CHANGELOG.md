@@ -1,5 +1,14 @@
 # Changelog
 
+## 16.25.3 - 2026-04-12
+### Fixed
+- **GitHub API rate limit exceeded (HTTP 403).** Three code paths were hitting the GitHub API unauthenticated (limit: 60 requests/hour/IP) without any cache: the background update checker every 5 minutes, `/api/updates/status`, and `/api/updates/releases`. Opening Settings → Updates fired two live API calls per page load on top of the background thread, burning through the quota during active use.
+  - `/api/updates/status` now reads from the background checker's cached result by default. Pass `?force=1` to bypass.
+  - `/api/updates/releases` gets a 10-minute in-memory TTL cache. Serves stale cache on error instead of empty list. Pass `?force=1` to bypass.
+  - Background update checker interval bumped from **5 minutes to 30 minutes** (12 req/h → 2 req/h). Still surfaces new releases within half an hour.
+  - Background checker now detects HTTP 403 / "rate limit" in the response and backs off exponentially (15 min → 30 min → 60 min max) instead of hammering GitHub on every retry.
+  - `_update_check_state` now carries a `rate_limited` flag so the UI can show a clearer message than "GitHub not reachable".
+
 ## 16.25.2 - 2026-04-12
 ### Fixed
 - **App failed to start on Python 3.10 / 3.11** with `SyntaxError: f-string expression part cannot include a backslash` in `web/action_dispatch.py` line 1845. The f-string used `'\u2026'` literals inside the expression parts, which only works on Python 3.12+ despite `pyproject.toml` declaring `requires-python = ">=3.10"`. Refactored to assign the ellipsis character to a local variable first. Reported by a user running v16.19.1 on Linux with Python 3.11.
