@@ -2225,8 +2225,8 @@ async function loadControl() {{
 
       html += '<div class="card" id="ctrl-' + d.key + '" style="padding:14px">';
       html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
-      html += '<div><div style="font-weight:600;font-size:.95rem">' + _esc(d.name) + '</div>';
-      html += '<div style="font-size:.72rem;color:var(--muted)">' + _esc(model || d.kind) + ' · ' + _esc(cat) + '</div></div>';
+      html += '<div><div style="font-weight:600;font-size:.95rem">' + esc(d.name) + '</div>';
+      html += '<div style="font-size:.72rem;color:var(--muted)">' + esc(model || d.kind) + ' · ' + esc(cat) + '</div></div>';
       html += '<div style="font-size:.85rem;font-weight:600;color:var(--accent)">' + powerW + ' W</div>';
       html += '</div>';
 
