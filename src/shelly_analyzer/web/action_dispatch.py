@@ -27,7 +27,11 @@ import numpy as np
 from shelly_analyzer import __version__
 from shelly_analyzer.io.config import AppConfig, save_config
 from shelly_analyzer.io.storage import Storage
-from shelly_analyzer.io.http import ShellyHttp, HttpConfig, get_shelly_status, get_switch_status, set_switch_state
+from shelly_analyzer.io.http import (
+    ShellyHttp, HttpConfig, get_shelly_status, get_switch_status, set_switch_state,
+    get_light_status, set_light_state, get_cover_status,
+    cover_open, cover_close, cover_stop, cover_go_to_position,
+)
 from shelly_analyzer.i18n import t as _t, format_date_local, format_number_local
 from shelly_analyzer.core.energy import filter_by_time, calculate_energy
 from shelly_analyzer.core.stats import daily_kwh, weekly_kwh, monthly_kwh
@@ -1504,6 +1508,90 @@ class ActionDispatcher:
                 st2 = get_switch_status(http, dev.host, int(dev.em_id))
                 on2 = _extract_switch_on(st2)
                 return {"ok": True, "on": bool(on2)}
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+
+        # --- Light / Dimmer control ---
+        if action in {"get_light", "set_light"}:
+            device_key = str(params.get("device_key") or "").strip()
+            dev = next((d for d in self.cfg.devices if d.key == device_key), None)
+            if dev is None:
+                return {"ok": False, "error": "unknown device"}
+
+            http = ShellyHttp(
+                HttpConfig(
+                    timeout_seconds=float(self.cfg.download.timeout_seconds),
+                    retries=int(self.cfg.download.retries),
+                    backoff_base_seconds=float(self.cfg.download.backoff_base_seconds),
+                )
+            )
+            _pw = getattr(dev, "password", "") or ""
+            if _pw:
+                http.set_credentials(dev.host, getattr(dev, "username", "admin") or "admin", _pw)
+
+            lid = int(params.get("light_id", dev.em_id) or 0)
+            if action == "get_light":
+                try:
+                    st = get_light_status(http, dev.host, lid)
+                    return {"ok": True, "status": st}
+                except Exception as e:
+                    return {"ok": False, "error": str(e)}
+
+            # set_light
+            kwargs: dict = {}
+            if "on" in params:
+                kwargs["on"] = bool(params["on"])
+            if "brightness" in params:
+                kwargs["brightness"] = int(params["brightness"])
+            if "rgb" in params:
+                rgb = params["rgb"]
+                if isinstance(rgb, (list, tuple)) and len(rgb) >= 3:
+                    kwargs["rgb"] = (int(rgb[0]), int(rgb[1]), int(rgb[2]))
+            if "white" in params:
+                kwargs["white"] = int(params["white"])
+            if "temp" in params:
+                kwargs["temp"] = int(params["temp"])
+            try:
+                set_light_state(http, dev.host, lid, **kwargs)
+                st = get_light_status(http, dev.host, lid)
+                return {"ok": True, "status": st}
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+
+        # --- Cover / Roller shutter control ---
+        if action in {"get_cover", "cover_open", "cover_close", "cover_stop", "cover_position"}:
+            device_key = str(params.get("device_key") or "").strip()
+            dev = next((d for d in self.cfg.devices if d.key == device_key), None)
+            if dev is None:
+                return {"ok": False, "error": "unknown device"}
+
+            http = ShellyHttp(
+                HttpConfig(
+                    timeout_seconds=float(self.cfg.download.timeout_seconds),
+                    retries=int(self.cfg.download.retries),
+                    backoff_base_seconds=float(self.cfg.download.backoff_base_seconds),
+                )
+            )
+            _pw = getattr(dev, "password", "") or ""
+            if _pw:
+                http.set_credentials(dev.host, getattr(dev, "username", "admin") or "admin", _pw)
+
+            cid = int(params.get("cover_id", dev.em_id) or 0)
+            try:
+                if action == "get_cover":
+                    st = get_cover_status(http, dev.host, cid)
+                    return {"ok": True, "status": st}
+                if action == "cover_open":
+                    cover_open(http, dev.host, cid)
+                elif action == "cover_close":
+                    cover_close(http, dev.host, cid)
+                elif action == "cover_stop":
+                    cover_stop(http, dev.host, cid)
+                elif action == "cover_position":
+                    pos = int(params.get("position", 50))
+                    cover_go_to_position(http, dev.host, cid, pos)
+                st = get_cover_status(http, dev.host, cid)
+                return {"ok": True, "status": st}
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 

@@ -1017,6 +1017,21 @@ _HTML_TEMPLATE = """<!doctype html>
       padding: 14px;
       margin-bottom: 10px;
     }}
+    /* ── Control tab toggle switch ── */
+    .ctrl-toggle {{ position:relative; display:inline-block; width:44px; height:24px; }}
+    .ctrl-toggle input {{ opacity:0; width:0; height:0; }}
+    .ctrl-slider {{ position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0;
+      background:var(--border); border-radius:24px; transition:.2s; }}
+    .ctrl-slider:before {{ content:""; position:absolute; height:18px; width:18px; left:3px; bottom:3px;
+      background:var(--fg); border-radius:50%; transition:.2s; }}
+    .ctrl-toggle input:checked + .ctrl-slider {{ background:var(--accent); }}
+    .ctrl-toggle input:checked + .ctrl-slider:before {{ transform:translateX(20px); }}
+    .ctrl-range {{ -webkit-appearance:none; width:100%; height:6px; background:var(--border);
+      border-radius:3px; outline:none; }}
+    .ctrl-range::-webkit-slider-thumb {{ -webkit-appearance:none; width:18px; height:18px;
+      background:var(--accent); border-radius:50%; cursor:pointer; }}
+    .ctrl-range::-moz-range-thumb {{ width:18px; height:18px;
+      background:var(--accent); border-radius:50%; cursor:pointer; border:none; }}
     .card-title {{
       font-size: 13px;
       font-weight: 700;
@@ -1823,6 +1838,10 @@ _HTML_TEMPLATE = """<!doctype html>
       <div id="nilm-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
 
+    <div id="pane-control" class="pane">
+      <div id="control-content"><p class="loading-msg">{web_loading}</p></div>
+    </div>
+
     <div id="pane-sync" class="pane">
       <div class="card" style="margin-bottom:8px">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
@@ -1933,6 +1952,10 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">🧠</span>
       <span class="nav-label">NILM</span>
     </button>
+    <button class="nav-btn" data-feature="device_control" onclick="switchPane('control',this)">
+      <span class="nav-icon">🎛</span>
+      <span class="nav-label">Control</span>
+    </button>
     <button class="nav-btn" onclick="switchPane('sync',this)">
       <span class="nav-icon">🔄</span>
       <span class="nav-label">Sync</span>
@@ -1964,6 +1987,7 @@ _HTML_TEMPLATE = """<!doctype html>
     <button class="drawer-item" data-feature="goals" onclick="switchPaneFromDrawer('goals',this)"><span class="drawer-ico">🏆</span>Goals</button>
     <button class="drawer-item" data-feature="tenants" onclick="switchPaneFromDrawer('tenants',this)"><span class="drawer-ico">🏘</span>Mieter</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('nilm',this)"><span class="drawer-ico">🧠</span>NILM</button>
+    <button class="drawer-item" data-feature="device_control" onclick="switchPaneFromDrawer('control',this)"><span class="drawer-ico">🎛</span>Control</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('sync',this)"><span class="drawer-ico">🔄</span>Sync</button>
   </aside>
 </div>
@@ -2149,10 +2173,245 @@ function onPaneActivated(name) {{
     else if (name === 'goals') loadGoals();
     else if (name === 'tenants') loadTenants();
     else if (name === 'nilm') loadNilm();
+    else if (name === 'control') loadControl();
     else if (name === 'sync') {{ initSync(); }}
     else {{ stopSyncPolling(); }}
   }}
   if (name !== 'sync') stopSyncPolling();
+}}
+
+/* ──────────────────────────────────────────────
+   DEVICE CONTROL TAB
+────────────────────────────────────────────── */
+let _ctrlRefreshTimer = null;
+
+async function loadControl() {{
+  const el = document.getElementById('control-content');
+  if (!el) return;
+  el.innerHTML = '<p class="loading-msg">' + t('control.loading', 'Loading devices…') + '</p>';
+
+  // Fetch device list from /api/state to know what's connected
+  try {{
+    const r = await fetch('/api/state');
+    const data = await r.json();
+    const devs = data.devices || [];
+    // Also pull config to get device kind/model info
+    const rc = await fetch('/api/config');
+    const cfgData = await rc.json();
+    const cfgDevs = (cfgData.config || {{}}).devices || [];
+    const cfgMap = {{}};
+    cfgDevs.forEach(d => {{ cfgMap[d.key] = d; }});
+
+    // Filter to controllable devices (switches, dimmers, covers, plugs)
+    const controllable = devs.filter(d => {{
+      const cd = cfgMap[d.key] || {{}};
+      return d.kind === 'switch' || cd.kind === 'switch';
+    }});
+
+    if (!controllable.length) {{
+      el.innerHTML = '<div class="card"><p style="color:var(--muted);text-align:center;padding:30px 0">' +
+        t('control.no_devices', 'No controllable devices found. Add switches, dimmers, plugs or covers in Settings.') + '</p></div>';
+      return;
+    }}
+
+    let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">';
+    controllable.forEach(d => {{
+      const cd = cfgMap[d.key] || {{}};
+      const model = cd.model || '';
+      const ml = model.toLowerCase();
+      const cat = _guessCategory(ml, cd);
+      const isOn = d.switch_on === true;
+      const powerW = (d.power_w || 0).toFixed(1);
+
+      html += '<div class="card" id="ctrl-' + d.key + '" style="padding:14px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+      html += '<div><div style="font-weight:600;font-size:.95rem">' + _esc(d.name) + '</div>';
+      html += '<div style="font-size:.72rem;color:var(--muted)">' + _esc(model || d.kind) + ' · ' + _esc(cat) + '</div></div>';
+      html += '<div style="font-size:.85rem;font-weight:600;color:var(--accent)">' + powerW + ' W</div>';
+      html += '</div>';
+
+      // Switch toggle (all controllable devices)
+      html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
+      html += '<span style="font-size:.82rem;color:var(--muted)">' + t('control.power', 'Power') + '</span>';
+      html += '<label class="ctrl-toggle" style="flex:0 0 auto">';
+      html += '<input type="checkbox" ' + (isOn ? 'checked' : '') + ' onchange="ctrlToggle(\'' + d.key + '\',this.checked)">';
+      html += '<span class="ctrl-slider"></span></label>';
+      html += '<span class="ctrl-state" id="ctrl-state-' + d.key + '" style="font-size:.82rem;font-weight:600;color:' + (isOn ? 'var(--ok)' : 'var(--muted)') + '">' + (isOn ? 'ON' : 'OFF') + '</span>';
+      html += '</div>';
+
+      // Dimmer slider (for dimmers/RGBW)
+      if (cat === 'Dimmer' || cat === 'RGBW') {{
+        html += '<div style="margin-bottom:10px">';
+        html += '<div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);margin-bottom:4px">';
+        html += '<span>' + t('control.brightness', 'Brightness') + '</span>';
+        html += '<span id="ctrl-bri-val-' + d.key + '">—</span></div>';
+        html += '<input type="range" min="0" max="100" value="50" class="ctrl-range" id="ctrl-bri-' + d.key + '" ';
+        html += 'onchange="ctrlSetBrightness(\'' + d.key + '\',this.value)" oninput="document.getElementById(\'ctrl-bri-val-' + d.key + '\').textContent=this.value+\'%\'">';
+        html += '</div>';
+      }}
+
+      // Color picker (for RGBW)
+      if (cat === 'RGBW') {{
+        html += '<div style="margin-bottom:10px">';
+        html += '<div style="font-size:.82rem;color:var(--muted);margin-bottom:4px">' + t('control.color', 'Color') + '</div>';
+        html += '<div style="display:flex;gap:8px;align-items:center">';
+        html += '<input type="color" value="#ff8800" id="ctrl-rgb-' + d.key + '" onchange="ctrlSetRgb(\'' + d.key + '\',this.value)" style="width:50px;height:36px;border:1px solid var(--border);border-radius:6px;cursor:pointer;background:var(--input-bg)">';
+        html += '<input type="range" min="2700" max="6500" value="4000" class="ctrl-range" id="ctrl-temp-' + d.key + '" style="flex:1" ';
+        html += 'onchange="ctrlSetTemp(\'' + d.key + '\',this.value)" oninput="document.getElementById(\'ctrl-temp-lbl-' + d.key + '\').textContent=this.value+\'K\'">';
+        html += '<span id="ctrl-temp-lbl-' + d.key + '" style="font-size:.78rem;color:var(--muted);min-width:45px">4000K</span>';
+        html += '</div></div>';
+      }}
+
+      // Cover controls
+      if (cat === 'Cover') {{
+        html += '<div style="margin-bottom:10px">';
+        html += '<div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);margin-bottom:4px">';
+        html += '<span>' + t('control.position', 'Position') + '</span>';
+        html += '<span id="ctrl-pos-val-' + d.key + '">—</span></div>';
+        html += '<input type="range" min="0" max="100" value="50" class="ctrl-range" id="ctrl-pos-' + d.key + '" ';
+        html += 'onchange="ctrlSetCoverPos(\'' + d.key + '\',this.value)" oninput="document.getElementById(\'ctrl-pos-val-' + d.key + '\').textContent=this.value+\'%\'">';
+        html += '<div style="display:flex;gap:6px;margin-top:6px">';
+        html += '<button class="btn" style="flex:1" onclick="ctrlCover(\'' + d.key + '\',\'open\')">▲ ' + t('control.open', 'Open') + '</button>';
+        html += '<button class="btn" style="flex:1" onclick="ctrlCover(\'' + d.key + '\',\'stop\')">⏹ ' + t('control.stop', 'Stop') + '</button>';
+        html += '<button class="btn" style="flex:1" onclick="ctrlCover(\'' + d.key + '\',\'close\')">▼ ' + t('control.close', 'Close') + '</button>';
+        html += '</div></div>';
+      }}
+
+      // Status bar
+      html += '<div id="ctrl-msg-' + d.key + '" style="font-size:.72rem;color:var(--muted);min-height:16px"></div>';
+      html += '</div>';
+    }});
+    html += '</div>';
+    el.innerHTML = html;
+
+    // Fetch initial status for dimmers/covers
+    controllable.forEach(d => {{
+      const cd = cfgMap[d.key] || {{}};
+      const cat = _guessCategory((cd.model||'').toLowerCase(), cd);
+      if (cat === 'Dimmer' || cat === 'RGBW') _ctrlFetchLight(d.key);
+      if (cat === 'Cover') _ctrlFetchCover(d.key);
+    }});
+
+  }} catch(e) {{
+    el.innerHTML = '<div class="card"><p style="color:var(--danger)">' + t('control.error', 'Failed to load: ') + e.message + '</p></div>';
+  }}
+}}
+
+function _guessCategory(ml, cd) {{
+  // Detect device category from model string
+  if (ml.includes('dimm') || ml.includes('shdm') || ml.includes('sndm') || ml.includes('spdm') || ml.includes('s3dm') || ml.includes('s4dm')) return 'Dimmer';
+  if (ml.includes('rgbw') || ml.includes('bulb') || ml.includes('duo') || ml.includes('color') || ml.includes('spot') || ml.includes('shbl') || ml.includes('s3bl')) return 'RGBW';
+  if (ml.includes('cover') || ml.includes('shutter') || ml.includes('roller') || ml.includes('spsh') || ml.includes('s3sh')) return 'Cover';
+  if (ml.includes('plug') || ml.includes('shplg') || ml.includes('snpl') || ml.includes('s3pl') || ml.includes('s4pl') || ml.includes('strip')) return 'Plug';
+  return 'Switch';
+}}
+
+async function ctrlToggle(key, on) {{
+  const msg = document.getElementById('ctrl-msg-' + key);
+  if (msg) msg.textContent = '…';
+  try {{
+    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+      body:JSON.stringify({{action:'set_switch',params:{{device_key:key,on:on}}}}) }});
+    const j = await r.json();
+    const st = document.getElementById('ctrl-state-' + key);
+    if (st) {{ st.textContent = j.on ? 'ON' : 'OFF'; st.style.color = j.on ? 'var(--ok)' : 'var(--muted)'; }}
+    if (msg) msg.textContent = j.ok ? '✓' : (j.error || '');
+  }} catch(e) {{ if (msg) msg.textContent = e.message; }}
+}}
+
+async function ctrlSetBrightness(key, val) {{
+  const msg = document.getElementById('ctrl-msg-' + key);
+  if (msg) msg.textContent = '…';
+  try {{
+    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+      body:JSON.stringify({{action:'set_light',params:{{device_key:key,on:true,brightness:parseInt(val)}}}}) }});
+    const j = await r.json();
+    if (msg) msg.textContent = j.ok ? '✓ ' + val + '%' : (j.error || '');
+  }} catch(e) {{ if (msg) msg.textContent = e.message; }}
+}}
+
+async function ctrlSetRgb(key, hex) {{
+  const r = parseInt(hex.substr(1,2),16), g = parseInt(hex.substr(3,2),16), b = parseInt(hex.substr(5,2),16);
+  const msg = document.getElementById('ctrl-msg-' + key);
+  if (msg) msg.textContent = '…';
+  try {{
+    const resp = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+      body:JSON.stringify({{action:'set_light',params:{{device_key:key,on:true,rgb:[r,g,b]}}}}) }});
+    const j = await resp.json();
+    if (msg) msg.textContent = j.ok ? '✓' : (j.error || '');
+  }} catch(e) {{ if (msg) msg.textContent = e.message; }}
+}}
+
+async function ctrlSetTemp(key, val) {{
+  const msg = document.getElementById('ctrl-msg-' + key);
+  if (msg) msg.textContent = '…';
+  try {{
+    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+      body:JSON.stringify({{action:'set_light',params:{{device_key:key,on:true,temp:parseInt(val)}}}}) }});
+    const j = await r.json();
+    if (msg) msg.textContent = j.ok ? '✓ ' + val + 'K' : (j.error || '');
+  }} catch(e) {{ if (msg) msg.textContent = e.message; }}
+}}
+
+async function ctrlCover(key, cmd) {{
+  const msg = document.getElementById('ctrl-msg-' + key);
+  if (msg) msg.textContent = '…';
+  try {{
+    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+      body:JSON.stringify({{action:'cover_' + cmd,params:{{device_key:key}}}}) }});
+    const j = await r.json();
+    if (msg) msg.textContent = j.ok ? '✓' : (j.error || '');
+    if (j.ok && j.status) _ctrlApplyCover(key, j.status);
+  }} catch(e) {{ if (msg) msg.textContent = e.message; }}
+}}
+
+async function ctrlSetCoverPos(key, val) {{
+  const msg = document.getElementById('ctrl-msg-' + key);
+  if (msg) msg.textContent = '…';
+  try {{
+    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+      body:JSON.stringify({{action:'cover_position',params:{{device_key:key,position:parseInt(val)}}}}) }});
+    const j = await r.json();
+    if (msg) msg.textContent = j.ok ? '✓ ' + val + '%' : (j.error || '');
+    if (j.ok && j.status) _ctrlApplyCover(key, j.status);
+  }} catch(e) {{ if (msg) msg.textContent = e.message; }}
+}}
+
+async function _ctrlFetchLight(key) {{
+  try {{
+    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+      body:JSON.stringify({{action:'get_light',params:{{device_key:key}}}}) }});
+    const j = await r.json();
+    if (j.ok && j.status) {{
+      const st = j.status;
+      const bri = st.brightness != null ? st.brightness : (st.gain != null ? st.gain : null);
+      if (bri != null) {{
+        const slider = document.getElementById('ctrl-bri-' + key);
+        const lbl = document.getElementById('ctrl-bri-val-' + key);
+        if (slider) slider.value = bri;
+        if (lbl) lbl.textContent = bri + '%';
+      }}
+    }}
+  }} catch(e) {{}}
+}}
+
+async function _ctrlFetchCover(key) {{
+  try {{
+    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+      body:JSON.stringify({{action:'get_cover',params:{{device_key:key}}}}) }});
+    const j = await r.json();
+    if (j.ok && j.status) _ctrlApplyCover(key, j.status);
+  }} catch(e) {{}}
+}}
+
+function _ctrlApplyCover(key, st) {{
+  const pos = st.current_pos != null ? st.current_pos : (st.roller_pos != null ? st.roller_pos : null);
+  if (pos != null) {{
+    const slider = document.getElementById('ctrl-pos-' + key);
+    const lbl = document.getElementById('ctrl-pos-val-' + key);
+    if (slider) slider.value = pos;
+    if (lbl) lbl.textContent = pos + '%';
+  }}
 }}
 
 /* ──────────────────────────────────────────────
@@ -7869,7 +8128,7 @@ _loadLsSettings();
         anomalies:'anomalies', forecast:'forecast',
         ev:'ev', ev_log:'ev_log', smart_sched:'smart_sched',
         tariff:'tariff', battery:'battery', advisor:'advisor',
-        goals:'goals', tenants:'tenants'
+        goals:'goals', tenants:'tenants', device_control:'control'
       }};
       Object.keys(map).forEach(function(fk) {{
         if (ft[fk]) return; // enabled → keep visible
