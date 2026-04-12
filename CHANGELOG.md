@@ -1,5 +1,26 @@
 # Changelog
 
+## 16.21.0 - 2026-04-12
+### Added
+- **Device Control tab** — a new dashboard tab (🎛 Control) for directly controlling Shelly switches, dimmers, RGB lights, and roller shutters from the web UI. Enable under Settings → Features → Device Control.
+  - **Switch/Plug control**: on/off toggle with live power readout and visual state indicator.
+  - **Dimmer control**: brightness slider (0–100%) that sends `Light.Set` RPC to Gen2+, with Gen1 `/light/<id>` fallback.
+  - **RGBW control**: color picker (hex → RGB values), color temperature slider (2700–6500K), and brightness slider.
+  - **Roller shutter / Cover control**: Open/Stop/Close buttons and a position slider (0–100%) using `Cover.Open`, `Cover.Close`, `Cover.Stop`, `Cover.GoToPosition` RPC with Gen1 `/roller/<id>` fallback.
+  - Auto-detects device category from model ID (dimmer, RGBW, cover, plug, switch) and shows the appropriate controls.
+  - All controls work with password-protected devices (credentials from device config).
+  - Initial status (brightness, position) is fetched on tab open via `get_light`/`get_cover` actions.
+- **RPC wrappers** in `io/http.py`: `get_light_status()`, `set_light_state()` (on/brightness/rgb/white/temp/transition), `get_cover_status()`, `cover_open()`, `cover_close()`, `cover_stop()`, `cover_go_to_position()` — all with Gen2+ RPC primary and Gen1 REST fallback.
+- **Action handlers** in `action_dispatch.py`: `get_light`, `set_light`, `get_cover`, `cover_open`, `cover_close`, `cover_stop`, `cover_position` — dispatched via existing `/api/run` POST endpoint.
+- **`DeviceControlConfig`** in `io/config.py` with `enabled` toggle, wired into the feature flag system so the Control tab hides when disabled.
+- **Settings section** "Device control" under Features group with enable checkbox.
+- CSS for toggle switches and range sliders (dark/light theme compatible).
+- i18n keys for Control tab (DE: Helligkeit, Farbe, Position, Auf/Stopp/Zu).
+
+### Fixed
+- **`get_switch_status()` fallback** now also searches `light:X` and `cover:X` components in `Shelly.GetStatus`, so dimmers, RGBW lights, and roller shutters return valid status even when `Switch.GetStatus` fails.
+- **`_detect_gen2_kind()`** now recognizes `cover:X` components as `kind="switch"` instead of leaving them as `"unknown"`.
+
 ## 16.20.0 - 2026-04-12
 ### Added
 - **Comprehensive Shelly device registry** (`services/device_registry.py`). A catalog of **115 Shelly models** spanning all generations (Gen 1 Classic, Gen 2 Plus, Gen 2 Pro, Gen 3, Gen 4) and all categories (energy meters, switches, plugs, dimmers, RGBW/lighting, covers, sensors, displays). Each entry carries: hardware model ID, product name, generation, series, category, power metering capability, phase count, channel count, EMData history support, and mDNS hostname prefix.

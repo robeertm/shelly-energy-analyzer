@@ -700,6 +700,12 @@ class LocationDef:
 
 
 @dataclass(frozen=True)
+class DeviceControlConfig:
+    """Device control panel — switches, dimmers, covers, RGB."""
+    enabled: bool = False
+
+
+@dataclass(frozen=True)
 class MultiLocationConfig:
     """Multi-location support settings."""
     enabled: bool = False
@@ -744,6 +750,7 @@ class AppConfig:
     advisor: AdvisorConfig = field(default_factory=AdvisorConfig)
     gamification: GamificationConfig = field(default_factory=GamificationConfig)
     multi_location: MultiLocationConfig = field(default_factory=MultiLocationConfig)
+    device_control: DeviceControlConfig = field(default_factory=DeviceControlConfig)
 
 
 def default_config_path(project_root: Optional[Path] = None) -> Path:
@@ -1363,6 +1370,11 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         active_location_id=str(ml_raw.get("active_location_id", "") or ""),
     )
 
+    dc_raw = raw.get("device_control", {}) if isinstance(raw.get("device_control"), dict) else {}
+    device_control_cfg = DeviceControlConfig(
+        enabled=bool(dc_raw.get("enabled", False)),
+    )
+
     cfg = AppConfig(
         version=str(raw.get("version", __version__)),
         devices=devices,
@@ -1396,6 +1408,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         advisor=advisor_cfg,
         gamification=gamification_cfg,
         multi_location=multi_location_cfg,
+        device_control=device_control_cfg,
     )
 
     # Write back migrated schema (and missing blocks) if needed
@@ -1823,6 +1836,9 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
                 for loc in (getattr(cfg.multi_location, "locations", []) or [])
             ],
             "active_location_id": str(getattr(cfg.multi_location, "active_location_id", "") or ""),
+        },
+        "device_control": {
+            "enabled": bool(getattr(cfg.device_control, "enabled", False)),
         },
     }
     path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

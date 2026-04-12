@@ -307,6 +307,7 @@ class AppState:
                 "advisor": bool(getattr(cfg.advisor, "enabled", False)),
                 "goals": bool(getattr(cfg.gamification, "enabled", False)),
                 "tenants": bool(getattr(cfg.tenant, "enabled", False)),
+                "device_control": bool(getattr(cfg.device_control, "enabled", False)),
             },
         }
 

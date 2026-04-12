@@ -505,6 +505,9 @@ const SECTIONS = [
     {key:"ev_charging.detection_threshold_w", label:"Detection threshold (W)", type:"number"},
     {key:"ev_charging.min_session_minutes", label:"Min Session (Min)", type:"number"},
   ]},
+  {id:"device_control", title:"Device control", group:"Features", fields:[
+    {key:"device_control.enabled", label:"Device control active", type:"checkbox", hint:"Show the Control tab for switches, dimmers, RGB lights, and roller shutters"},
+  ]},
   {id:"tariff_compare", title:"Tariff comparison", group:"Features", fields:[
     {key:"tariff_compare.enabled", label:"Tariff comparison active", type:"checkbox"},
     {key:"tariff_compare.custom_tariffs", label:"Custom tariffs", type:"list", itemLabel:"Tariff", schema:[
