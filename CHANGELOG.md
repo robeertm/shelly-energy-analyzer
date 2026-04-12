@@ -1,5 +1,12 @@
 # Changelog
 
+## 16.21.5 - 2026-04-12
+### Fixed
+- **In-app updater robustness** — the updater helper now writes a detailed log to `logs/updater.log` (timestamps, what was copied/skipped, config.json existence before and after, restart command). Previously all output went to `/dev/null`, making update failures invisible.
+- **Expanded EXCLUDE_NAMES** in updater_helper — now also skips `config.example.json`, `.claude/`, `.vscode/`, `docs/` from the release ZIP so dev/CI artifacts don't pollute the runtime install.
+- **Hidden dotfiles skipped** — updater no longer copies `.claude/`, `.vscode/`, `.gitignore` etc. from the release archive into the runtime directory.
+- **`__pycache__` cleared after update** — recursively removes all bytecode caches in the app directory after copying new files, preventing stale `.pyc` from masking new code.
+
 ## 16.21.4 - 2026-04-12
 ### Changed
 - **README updated** for v16.20–16.21 features: description line now mentions 115+ Shelly devices (Gen 1–4), new "Device Control" section (switches, dimmers, RGB, covers), new "Supported Device Registry" section (115 models, searchable UI), tab count 23 → 24 with Control tab listed, broader device list in "Who it's for".
