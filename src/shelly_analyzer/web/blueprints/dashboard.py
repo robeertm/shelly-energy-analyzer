@@ -92,3 +92,55 @@ def settings_page():
         resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         return resp
     return Response(b"<h1>Settings page not yet available</h1>", content_type="text/html")
+
+
+@bp.route("/w")
+def widget_page():
+    """Standalone mini widget page for Android/PWA home screen."""
+    profile = request.args.get("profile", "")
+    from pathlib import Path
+    tpl = Path(__file__).parent.parent / "templates" / "widget_page.html"
+    if tpl.exists():
+        html = tpl.read_text(encoding="utf-8")
+        resp = Response(html.encode("utf-8"), content_type="text/html; charset=utf-8")
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+    return Response(b"<h1>Widget page not available</h1>", content_type="text/html")
+
+
+@bp.route("/widget-manifest.json")
+def widget_manifest():
+    """PWA manifest for home screen installation."""
+    import json
+    profile = request.args.get("profile", "")
+    name = "Energy Widget"
+    if profile:
+        name += f" ({profile})"
+    start_url = f"/w?profile={profile}" if profile else "/w"
+    manifest = {
+        "name": name,
+        "short_name": "Energy",
+        "description": "Shelly Energy Analyzer Widget",
+        "start_url": start_url,
+        "display": "standalone",
+        "background_color": "#1a1a1a",
+        "theme_color": "#ff9800",
+        "icons": [
+            {"src": "/widget-icon.svg", "sizes": "any", "type": "image/svg+xml"},
+        ],
+    }
+    resp = Response(
+        json.dumps(manifest),
+        content_type="application/manifest+json",
+        headers={"Cache-Control": "no-store"},
+    )
+    return resp
+
+
+@bp.route("/widget-icon.svg")
+def widget_icon():
+    svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+<rect width="192" height="192" rx="40" fill="#1a1a1a"/>
+<text x="96" y="120" text-anchor="middle" font-size="100" fill="#ff9800">⚡</text>
+</svg>'''
+    return Response(svg, content_type="image/svg+xml")

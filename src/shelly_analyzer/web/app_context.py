@@ -362,11 +362,16 @@ class AppState:
 
     # ── Widget ─────────────────────────────────────────────────────────
 
-    def get_widget_script(self) -> str:
+    def get_widget_script(self, profile_id: str = "") -> str:
         script = _SCRIPTABLE_WIDGET_JS
         if self.widget_domain:
             default_addr = f"{self.widget_domain}:{self.port}"
             script = script.replace("192.168.1.50:8765", default_addr)
+        if profile_id:
+            script = script.replace(
+                'const PROFILE = "";',
+                f'const PROFILE = "{profile_id}";',
+            )
         return script
 
     def get_plotly_js(self) -> bytes:

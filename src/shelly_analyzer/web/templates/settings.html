@@ -1050,33 +1050,470 @@ async function probeAllDevices() {
 
 function renderIosWidget() {
   const host = location.host;
-  return `<section id="sec-ios_widget"><h2>${T("settings.section.ios_widget","📱 iOS Widget (Scriptable)")}</h2>
-    <p class="hint" style="margin-top:0">${T("settings.ios_widget.intro","Install the official Scriptable app to add a live home-screen widget showing your current power, today's cost, spot price and CO₂ intensity. Three sizes (small/medium/large), tap to open the dashboard.")}</p>
-    <ol style="margin:8px 0 12px 18px;padding:0;font-size:.88rem;line-height:1.6">
-      <li>${T('settings.ios_widget.step1','Install <a href="https://apps.apple.com/app/scriptable/id1405459188" target="_blank" style="color:var(--accent)">Scriptable</a> from the App Store')}</li>
-      <li>${T("settings.ios_widget.step2","Tap the button below to copy the script (or download the .js file)")}</li>
-      <li>${T("settings.ios_widget.step3","In Scriptable: tap +, paste, save")}</li>
-      <li>${T("settings.ios_widget.step4","Long-press your home screen → Add Widget → Scriptable → choose size")}</li>
-      <li>${T("settings.ios_widget.step5","Pick the script and set Parameter to:")} <code style="background:var(--input-bg);padding:2px 8px;border-radius:4px;font-size:.85rem;user-select:all">${esc(host)}</code></li>
-    </ol>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <button class="primary" onclick="copyWidgetScriptSettings()">📋 ${T("settings.ios_widget.btn_copy","Copy script")}</button>
-      <button class="secondary" onclick="window.open('/widget.js','_blank')">⬇ ${T("settings.ios_widget.btn_download","Download .js")}</button>
-      <span id="iw-copy-msg" style="font-size:.78rem;color:var(--ok);display:none">✓ ${T("settings.ios_widget.copied","Copied to clipboard")}</span>
-    </div>
-  </section>`;
+  const profiles = ((cfg.ui||{}).widget_profiles)||[];
+  let profilesHtml = "";
+  if (profiles.length > 0) {
+    profilesHtml = profiles.map((p, i) => {
+      const pid = esc(p.profile_id||"");
+      const pname = esc(p.name||pid);
+      const devStr = p.devices||"";
+      const toggles = [
+        ["show_power", T("settings.widget.power","Power")],
+        ["show_today", T("settings.widget.today","Today")],
+        ["show_month", T("settings.widget.month","Month")],
+        ["show_forecast", T("settings.widget.forecast","Forecast")],
+        ["show_spot_price", T("settings.widget.spot_price","Spot price")],
+        ["show_spot_chart", T("settings.widget.spot_chart","Spot chart")],
+        ["show_co2", T("settings.widget.co2","CO2")],
+        ["show_co2_chart", T("settings.widget.co2_chart","CO2 chart")],
+        ["show_devices", T("settings.widget.devices","Devices")],
+        ["show_power_chart", T("settings.widget.power_chart","Power 24h")],
+        ["show_daily_chart", T("settings.widget.daily_chart","Daily 7d")],
+        ["show_hourly_chart", T("settings.widget.hourly_chart","Hourly today")],
+      ];
+      const togglesHtml = toggles.map(([k,lbl])=>{
+        const checked = p[k]!==false?"checked":"";
+        return '<label style="display:inline-flex;align-items:center;gap:4px;font-size:.82rem;min-width:110px"><input type="checkbox" data-wp-idx="'+i+'" data-wp-key="'+k+'" '+checked+"> "+lbl+"</label>";
+      }).join("");
+      const devOpts = devices.map(d=>{
+        const sel = devStr.split(",").map(s=>s.trim()).includes(d.key);
+        return '<label style="display:inline-flex;align-items:center;gap:4px;font-size:.82rem"><input type="checkbox" data-wp-idx="'+i+'" data-wp-dev="'+esc(d.key)+'" '+(sel?"checked":"")+"> "+esc(d.name)+"</label>";
+      }).join(" ");
+      return '<div class="card" style="margin-bottom:10px" data-wp-card="'+i+'">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+        +'<div style="display:flex;gap:8px;align-items:center;flex:1">'
+        +'<input type="text" data-wp-idx="'+i+'" data-wp-key="name" value="'+pname+'" style="font-weight:600;font-size:.95rem;flex:1;max-width:200px" placeholder="'+T("settings.widget.profile_name","Profile name")+'">'
+        +'</div>'
+        +'<div style="display:flex;gap:6px;align-items:center">'
+        +'<button class="secondary" style="font-size:.75rem;padding:4px 8px" onclick="widgetPreview('+i+')">'+T("settings.widget.preview","Preview")+'</button>'
+        +'<button class="secondary" style="font-size:.75rem;padding:4px 8px" onclick="widgetCopyProfile('+i+')">'+T("settings.widget.copy_script","Copy script")+'</button>'
+        +'<button class="secondary" style="font-size:.75rem;padding:4px 8px" onclick="widgetDownloadProfile('+i+')">'+T("settings.widget.download","Download")+'</button>'
+        +'<button style="background:#e53935;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:.78rem;cursor:pointer" onclick="if(confirm(\'Delete this profile?\')){widgetRemoveProfile('+i+')}">✕ '+T("settings.widget.remove","Remove")+'</button>'
+        +'</div></div>'
+        +'<div style="display:flex;flex-wrap:wrap;gap:6px 12px;margin-bottom:8px">'+togglesHtml+'</div>'
+        +'<div style="margin-bottom:6px"><span style="font-size:.82rem;font-weight:500">'+T("settings.widget.filter_devices","Filter devices")+'</span>'
+        +'<span style="font-size:.75rem;color:var(--muted);margin-left:6px">'+T("settings.widget.filter_hint","(none selected = all devices)")+'</span></div>'
+        +'<div style="display:flex;flex-wrap:wrap;gap:4px 12px">'+devOpts+'</div>'
+        +'<div style="margin-top:8px;display:flex;gap:12px;align-items:center">'
+        +'<label style="font-size:.82rem">'+T("settings.widget.refresh","Refresh (min)")+'</label>'
+        +'<input type="number" data-wp-idx="'+i+'" data-wp-key="refresh_minutes" value="'+(p.refresh_minutes||5)+'" min="1" max="60" style="width:60px">'
+        +'</div>'
+        +'<div style="margin-top:6px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">'
+        +'<span style="font-size:.78rem;color:var(--muted)">'+T("settings.widget.param_hint","Parameter")+': <code style="user-select:all;background:var(--input-bg);padding:2px 6px;border-radius:4px">'+esc(host)+(pid?("#"+pid):"")+'</code></span>'
+        +'<a href="/w?profile='+encodeURIComponent(pid)+'" target="_blank" style="font-size:.78rem;color:var(--accent);text-decoration:none">'+T("settings.widget.open_web_widget","Open web widget")+" &#8599;</a>"
+        +'</div>'
+        +'</div>';
+    }).join("");
+  }
+  return '<section id="sec-ios_widget"><h2>'+T("settings.section.ios_widget","iOS Widget (Scriptable)")+'</h2>'
+    +'<p class="hint" style="margin-top:0">'+T("settings.ios_widget.intro","Install the official Scriptable app to add a live home-screen widget showing your current power, today's cost, spot price and CO2 intensity. Three sizes (small/medium/large), tap to open the dashboard.")+'</p>'
+    +'<ol style="margin:8px 0 12px 18px;padding:0;font-size:.88rem;line-height:1.6">'
+    +'<li>'+T('settings.ios_widget.step1','Install <a href="https://apps.apple.com/app/scriptable/id1405459188" target="_blank" style="color:var(--accent)">Scriptable</a> from the App Store')+'</li>'
+    +'<li>'+T("settings.ios_widget.step2","Tap the button below to copy the script (or download the .js file)")+'</li>'
+    +'<li>'+T("settings.ios_widget.step3","In Scriptable: tap +, paste, save")+'</li>'
+    +'<li>'+T("settings.ios_widget.step4","Long-press your home screen > Add Widget > Scriptable > choose size")+'</li>'
+    +'<li>'+T("settings.ios_widget.step5","Pick the script and set Parameter to:")
+    +' <code style="background:var(--input-bg);padding:2px 8px;border-radius:4px;font-size:.85rem;user-select:all">'+esc(host)+'</code></li>'
+    +'</ol>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'
+    +'<button class="primary" onclick="widgetCopyDefault()">'+T("settings.ios_widget.btn_copy","Copy default script")+'</button>'
+    +'<button class="secondary" onclick="widgetPreview(-1)">'+T("settings.widget.preview","Preview")+'</button>'
+    +'<button class="secondary" onclick="window.open(\'/widget.js\',\'_blank\')">'+T("settings.ios_widget.btn_download","Download .js")+'</button>'
+    +'<span id="iw-copy-msg" style="font-size:.78rem;color:var(--ok);display:none">'+T("settings.ios_widget.copied","Copied to clipboard")+'</span>'
+    +'</div>'
+    +'<h3 style="margin:18px 0 8px;font-size:1rem">'+T("settings.widget.android_title","Android / Web Widget")+'</h3>'
+    +'<p class="hint" style="margin-top:0">'+T("settings.widget.android_hint","Open the widget page in any browser and add it to your home screen. Works on Android, tablets, and desktops.")+'</p>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'
+    +'<a href="/w" target="_blank" class="primary" style="display:inline-block;padding:6px 14px;border-radius:8px;font-size:.85rem;text-decoration:none;color:#fff;background:var(--accent)">'+T("settings.widget.open_web_widget","Open widget page")+'</a>'
+    +(profiles.length>0 ? profiles.map(function(p){ return '<a href="/w?profile='+encodeURIComponent(p.profile_id)+'" target="_blank" class="secondary" style="display:inline-block;padding:5px 12px;border-radius:8px;font-size:.8rem;text-decoration:none;color:var(--fg);border:1px solid var(--border)">'+esc(p.name)+'</a>'; }).join("") : "")
+    +'</div>'
+    +'<h3 style="margin:18px 0 8px;font-size:1rem">'+T("settings.widget.profiles_title","Widget profiles")+'</h3>'
+    +'<p class="hint" style="margin-top:0">'+T("settings.widget.profiles_hint","Create multiple widget profiles with different data. Each profile generates its own Scriptable script.")+'</p>'
+    +'<div id="widget-profiles-list">'+profilesHtml+'</div>'
+    +'<button class="secondary" style="margin-top:8px" onclick="widgetAddProfile()">+ '+T("settings.widget.add_profile","Add profile")+'</button>'
+    +'</section>';
 }
 
-async function copyWidgetScriptSettings() {
+async function widgetCopyDefault() {
   try {
-    const r = await fetch('/widget.js');
+    const r = await fetch("/widget.js");
     const txt = await r.text();
     await navigator.clipboard.writeText(txt);
-    const msg = document.getElementById('iw-copy-msg');
-    if (msg) { msg.style.display = 'inline'; setTimeout(()=>msg.style.display='none', 2500); }
-  } catch(e) {
-    window.open('/widget.js','_blank');
+    const msg = document.getElementById("iw-copy-msg");
+    if (msg) { msg.style.display="inline"; setTimeout(()=>msg.style.display="none",2500); }
+  } catch(e) { window.open("/widget.js","_blank"); }
+}
+
+async function widgetCopyProfile(idx) {
+  const profiles = ((cfg.ui||{}).widget_profiles)||[];
+  const p = profiles[idx];
+  if (!p) return;
+  try {
+    const r = await fetch("/widget.js?profile="+encodeURIComponent(p.profile_id));
+    const txt = await r.text();
+    await navigator.clipboard.writeText(txt);
+    toast(T("settings.ios_widget.copied","Copied to clipboard"),"success");
+  } catch(e) { window.open("/widget.js?profile="+encodeURIComponent(p.profile_id),"_blank"); }
+}
+
+function widgetDownloadProfile(idx) {
+  const profiles = ((cfg.ui||{}).widget_profiles)||[];
+  const p = profiles[idx];
+  if (!p) return;
+  window.open("/widget.js?profile="+encodeURIComponent(p.profile_id),"_blank");
+}
+
+function widgetAddProfile() {
+  if (!cfg.ui) cfg.ui = {};
+  if (!cfg.ui.widget_profiles) cfg.ui.widget_profiles = [];
+  const n = cfg.ui.widget_profiles.length + 1;
+  const pid = "widget_" + n;
+  cfg.ui.widget_profiles.push({
+    profile_id: pid, name: "Widget " + n,
+    show_power: true, show_today: true, show_month: true, show_forecast: true,
+    show_spot_price: true, show_spot_chart: true, show_co2: true, show_co2_chart: true,
+    show_devices: true, show_power_chart: false, show_daily_chart: false, show_hourly_chart: false,
+    devices: "", refresh_minutes: 5,
+  });
+  widgetSaveProfiles();
+}
+
+function widgetRemoveProfile(idx) {
+  if (!cfg.ui || !cfg.ui.widget_profiles) return;
+  cfg.ui.widget_profiles.splice(idx, 1);
+  widgetSaveProfiles();
+}
+
+function widgetGatherProfiles() {
+  const profiles = ((cfg.ui||{}).widget_profiles)||[];
+  document.querySelectorAll("[data-wp-idx][data-wp-key]").forEach(el=>{
+    const i = parseInt(el.dataset.wpIdx);
+    const k = el.dataset.wpKey;
+    if (!profiles[i]) return;
+    if (el.type === "checkbox") profiles[i][k] = el.checked;
+    else if (el.type === "number") profiles[i][k] = parseInt(el.value)||5;
+    else profiles[i][k] = el.value;
+  });
+  profiles.forEach((p, i) => {
+    const devEls = document.querySelectorAll("[data-wp-idx='"+i+"'][data-wp-dev]");
+    const selected = [];
+    devEls.forEach(el=>{ if(el.checked) selected.push(el.dataset.wpDev); });
+    p.devices = selected.join(",");
+  });
+  return profiles;
+}
+
+async function widgetSaveProfiles() {
+  widgetGatherProfiles();
+  try {
+    const r = await fetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ui:{widget_profiles:cfg.ui.widget_profiles}})});
+    const d = await r.json();
+    if (d.ok) { toast(T("settings.saved","Saved"),"success"); reload(); }
+    else toast(d.error||"Error","error");
+  } catch(e) { toast(String(e),"error"); }
+}
+
+// ── Widget Preview ────────────────────────────────────────────────
+let _wpPreviewOpen = false;
+async function widgetPreview(idx) {
+  widgetGatherProfiles();
+  if (idx >= 0) {
+    try {
+      const sr = await fetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ui:{widget_profiles:cfg.ui.widget_profiles}})});
+      const sd = await sr.json();
+      if (!sd.ok) { toast(sd.error||"Save error","error"); return; }
+    } catch(e) { toast(String(e),"error"); return; }
   }
+  const profiles = ((cfg.ui||{}).widget_profiles)||[];
+  const pid = idx >= 0 && profiles[idx] ? profiles[idx].profile_id : "";
+  const qp = pid ? "?profile="+encodeURIComponent(pid) : "";
+  let d;
+  try {
+    const r = await fetch("/api/widget"+qp);
+    d = await r.json();
+    if (!d || !d.ok) { toast(d.error||"Error","error"); return; }
+  } catch(e) { toast(String(e),"error"); return; }
+
+  const pName = idx >= 0 && profiles[idx] ? profiles[idx].name : "Default";
+  const isDark = document.documentElement.dataset.theme === "dark";
+
+  let overlay = document.getElementById("wp-preview-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "wp-preview-overlay";
+    overlay.style.cssText = "position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:20px";
+    overlay.onclick = (e) => { if(e.target===overlay){ overlay.style.display="none"; _wpPreviewOpen=false; } };
+    document.body.appendChild(overlay);
+  }
+  overlay.style.display = "flex";
+  _wpPreviewOpen = true;
+
+  const S = d.show || {};
+  const sh = (k) => S[k] !== false;
+
+  overlay.innerHTML = '<div style="background:var(--card);border-radius:16px;padding:20px;max-width:720px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,0.3)">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+    +'<h3 style="margin:0;font-size:1.05rem">'+T("settings.widget.preview","Preview")+': '+esc(pName)+'</h3>'
+    +'<div style="display:flex;gap:6px;align-items:center">'
+    +'<button class="secondary wp-sz-btn" data-sz="small" style="font-size:.75rem;padding:3px 8px">Small</button>'
+    +'<button class="secondary wp-sz-btn active" data-sz="medium" style="font-size:.75rem;padding:3px 8px;font-weight:600">Medium</button>'
+    +'<button class="secondary wp-sz-btn" data-sz="large" style="font-size:.75rem;padding:3px 8px">Large</button>'
+    +'<button onclick="document.getElementById(\'wp-preview-overlay\').style.display=\'none\'" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--muted);padding:4px 8px">✕</button>'
+    +'</div></div>'
+    +'<div id="wp-preview-frame" style="display:flex;flex-direction:column;align-items:center"></div>'
+    +'</div>';
+
+  overlay.querySelectorAll(".wp-sz-btn").forEach(btn=>{
+    btn.onclick = ()=>{
+      overlay.querySelectorAll(".wp-sz-btn").forEach(b=>{ b.style.fontWeight="400"; b.classList.remove("active"); });
+      btn.style.fontWeight = "600"; btn.classList.add("active");
+      _wpRender(d, btn.dataset.sz, isDark, sh);
+    };
+  });
+
+  _wpRender(d, "medium", isDark, sh);
+}
+
+function _wpRender(d, size, isDark, sh) {
+  const frame = document.getElementById("wp-preview-frame");
+  if (!frame) return;
+  const bg = isDark ? "#1a1a1a" : "#ffffff";
+  const fg = isDark ? "#eeeeee" : "#222222";
+  const muted = isDark ? "#888888" : "#999999";
+  const accent = "#ff9800";
+
+  const dims = {small:"170px",medium:"340px",large:"340px"};
+  const minH = {small:"170px",medium:"170px",large:"360px"};
+  const w = dims[size]||dims.medium;
+  const h = minH[size]||minH.medium;
+
+  const fmt = (v,dec) => v==null ? "–" : Number(v).toFixed(dec);
+  const fmtTime = (ts) => { if(!ts) return ""; const dt=new Date(ts*1000); return ("0"+dt.getHours()).slice(-2)+":"+("0"+dt.getMinutes()).slice(-2); };
+
+  const spotDelta = (d.spot_enabled && d.spot_ct!=null) ? d.spot_ct - d.fixed_ct : null;
+  const spotCol = spotDelta!=null ? (spotDelta<=0?"#4caf50":"#e53935") : muted;
+  const spotArrow = spotDelta!=null ? (spotDelta>0?"▲":"▼") : "";
+  const spotSign = spotDelta!=null ? (spotDelta>0?"+":"") : "";
+
+  const co2Col = (v,g,r) => {
+    if(v==null) return muted;
+    if(v<=g) return "#4caf50";
+    if(v<=(g+r)/2) return "#8bc34a";
+    if(v<=r) return "#ff9800";
+    return "#e53935";
+  };
+  const co2c = co2Col(d.co2_current, d.co2_green_thr, d.co2_dirty_thr);
+
+  let html = '<div style="width:'+w+';min-height:'+h+';background:'+bg+';border-radius:22px;padding:14px 16px;font-family:-apple-system,system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,0.15);display:flex;flex-direction:column">';
+
+  if (size === "small") {
+    html += '<div style="font-size:11px;font-weight:700;color:'+accent+'">⚡ Energy</div>';
+    html += '<div style="height:6px"></div>';
+    if (sh("power")) html += '<div style="font-size:22px;font-weight:700;color:'+fg+'">'+fmt(d.power_w,0)+' W</div>';
+    if (sh("today")) html += '<div style="font-size:10px;color:'+muted+'">Today: '+fmt(d.today_kwh,1)+' kWh · '+fmt(d.today_eur,2)+' €</div><div style="height:4px"></div>';
+    if (sh("spot_price") && d.spot_enabled && d.spot_ct!=null)
+      html += '<div style="font-size:13px;font-weight:700;color:'+spotCol+'">'+d.spot_ct.toFixed(1)+' ct '+spotArrow+spotSign+(spotDelta!=null?spotDelta.toFixed(1):"")+'</div>';
+    if (sh("co2") && d.co2_enabled && d.co2_current!=null)
+      html += '<div style="height:2px"></div><div style="font-size:10px;font-weight:500;color:'+co2c+'">🌿 '+d.co2_current.toFixed(0)+' g/kWh</div>';
+    html += '<div style="flex:1"></div>';
+    html += '<div style="font-size:8px;color:'+muted+'">'+fmtTime(d.ts)+'</div>';
+  }
+
+  else if (size === "medium") {
+    html += '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;font-weight:700;color:'+accent+'">⚡ Shelly Analyzer</span><span style="font-size:9px;color:'+muted+'">'+fmtTime(d.ts)+'</span></div>';
+    html += '<div style="height:3px"></div>';
+    html += '<div style="display:flex;gap:8px">';
+    html += '<div style="flex:1">';
+    if (sh("power")) html += '<div style="font-size:18px;font-weight:700;color:'+fg+'">'+fmt(d.power_w,0)+' W</div>';
+    if (sh("spot_price") && d.spot_enabled && d.spot_ct!=null)
+      html += '<div style="font-size:11px;font-weight:700;color:'+spotCol+'">'+d.spot_ct.toFixed(1)+' ct '+spotArrow+spotSign+(spotDelta!=null?spotDelta.toFixed(1):"")+'</div>';
+    if (sh("co2") && d.co2_enabled && d.co2_current!=null)
+      html += '<div style="font-size:10px;font-weight:700;color:'+co2c+'">CO₂ '+d.co2_current.toFixed(0)+' g/kWh</div>';
+    html += '</div><div>';
+    if (sh("today")) html += '<div style="font-size:10px;font-weight:500;color:'+fg+'">'+fmt(d.today_kwh,1)+' kWh · '+fmt(d.today_eur,2)+' €</div><div style="font-size:8px;color:'+muted+'">Today</div><div style="height:2px"></div>';
+    if (sh("month")) html += '<div style="font-size:10px;font-weight:500;color:'+fg+'">'+fmt(d.month_kwh,1)+' kWh · '+fmt(d.month_eur,2)+' €</div><div style="font-size:8px;color:'+muted+'">Month</div>';
+    html += '</div></div>';
+    html += '<div style="flex:1"></div>';
+    if (sh("spot_chart") && d.spot_enabled && d.spot_chart && d.spot_chart.length>2)
+      html += _wpMiniChart(d.spot_chart, d.fixed_ct, 300, 32, "spot");
+    if (sh("co2_chart") && d.co2_enabled && d.co2_chart && d.co2_chart.length>2)
+      html += '<div style="height:2px"></div>'+_wpMiniChart(d.co2_chart, null, 300, 32, "co2", d.co2_green_thr, d.co2_dirty_thr);
+  }
+
+  else {
+    html += '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:700;color:'+accent+'">⚡ Shelly Energy Analyzer</span><span style="font-size:9px;color:'+muted+'">'+fmtTime(d.ts)+'</span></div>';
+    html += '<div style="height:6px"></div>';
+    if (sh("power")) html += '<div style="font-size:26px;font-weight:700;color:'+fg+'">'+fmt(d.power_w,0)+' W</div><div style="height:4px"></div>';
+    if (sh("spot_price") && d.spot_enabled && d.spot_ct!=null) {
+      html += '<div style="font-size:14px;font-weight:700;color:'+spotCol+'">Spot: '+d.spot_ct.toFixed(1)+' ct/kWh '+spotArrow+' '+spotSign+(spotDelta!=null?spotDelta.toFixed(1):"")+' ct</div>';
+      html += '<div style="font-size:10px;color:#2196F3">Fixed: '+d.fixed_ct.toFixed(1)+' ct/kWh</div><div style="height:4px"></div>';
+    }
+    if (sh("spot_chart") && d.spot_enabled && d.spot_chart && d.spot_chart.length>2)
+      html += _wpMiniChart(d.spot_chart, d.fixed_ct, 300, 55, "spot")+'<div style="height:4px"></div>';
+    if (sh("co2") && d.co2_enabled && d.co2_current!=null)
+      html += '<div style="font-size:12px;font-weight:700;color:'+co2c+'">🌿 CO₂: '+d.co2_current.toFixed(0)+' g/kWh</div><div style="height:2px"></div>';
+    if (sh("co2_chart") && d.co2_enabled && d.co2_chart && d.co2_chart.length>2)
+      html += _wpMiniChart(d.co2_chart, null, 300, 45, "co2", d.co2_green_thr, d.co2_dirty_thr)+'<div style="height:4px"></div>';
+    html += '<div style="display:flex;gap:12px">';
+    if (sh("today")) html += '<div><div style="font-size:9px;color:'+muted+'">Today</div><div style="font-size:11px;font-weight:500;color:'+fg+'">'+fmt(d.today_kwh,1)+' kWh</div><div style="font-size:12px;font-weight:700;color:'+fg+'">'+fmt(d.today_eur,2)+' €</div></div>';
+    if (sh("month")) html += '<div><div style="font-size:9px;color:'+muted+'">Month</div><div style="font-size:11px;font-weight:500;color:'+fg+'">'+fmt(d.month_kwh,1)+' kWh</div><div style="font-size:12px;font-weight:700;color:'+fg+'">'+fmt(d.month_eur,2)+' €</div></div>';
+    if (sh("forecast")) html += '<div><div style="font-size:9px;color:'+muted+'">Forecast</div><div style="font-size:11px;font-weight:500;color:'+fg+'">'+fmt(d.proj_kwh,0)+' kWh</div><div style="font-size:12px;font-weight:700;color:'+fg+'">'+fmt(d.proj_eur,2)+' €</div></div>';
+    html += '</div>';
+    if (sh("devices") && d.devices && d.devices.length>0) {
+      html += '<div style="height:6px"></div>';
+      d.devices.forEach(dev=>{
+        html += '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:10px;font-weight:500;color:'+fg+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">'+esc(dev.name)+'</span><span style="font-size:10px;color:'+muted+'">'+fmt(dev.power_w,0)+' W  '+fmt(dev.today_kwh,1)+' kWh  '+fmt(dev.today_eur,2)+' €</span></div>';
+      });
+    }
+  }
+
+  const chartIds = [];
+  if (sh("power_chart") && d.power_chart && d.power_chart.length > 0) {
+    const cid = "wp-pchart-"+Date.now();
+    chartIds.push({id:cid, type:"power_chart", data:d.power_chart});
+    html += '<div id="'+cid+'" style="width:100%;height:120px;margin-top:6px"></div>';
+  }
+  if (sh("daily_chart") && d.daily_chart && d.daily_chart.length > 0) {
+    const cid = "wp-dchart-"+(Date.now()+1);
+    chartIds.push({id:cid, type:"daily_chart", data:d.daily_chart});
+    html += '<div id="'+cid+'" style="width:100%;height:120px;margin-top:6px"></div>';
+  }
+  if (sh("hourly_chart") && d.hourly_chart && d.hourly_chart.length > 0) {
+    const cid = "wp-hchart-"+(Date.now()+2);
+    chartIds.push({id:cid, type:"hourly_chart", data:d.hourly_chart});
+    html += '<div id="'+cid+'" style="width:100%;height:120px;margin-top:6px"></div>';
+  }
+
+  html += '</div>';
+  frame.innerHTML = html;
+
+  const colors = ["#ff9800","#2196F3","#4caf50","#e53935","#9c27b0","#00bcd4"];
+  const labelCol = isDark ? "#888" : "#999";
+  const gridCol = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+  chartIds.forEach(c => {
+    const el = document.getElementById(c.id);
+    if (!el) return;
+    const W = el.clientWidth || 300;
+    const H = 110;
+    const pad = {l:38, r:8, t:18, b:22};
+    const pW = W - pad.l - pad.r;
+    const pH = H - pad.t - pad.b;
+
+    const byKey = {};
+    const allKeys = [];
+    c.data.forEach(p => {
+      const slot = c.type==="daily_chart" ? p[0] : p[0];
+      const dev = p[2];
+      if (!byKey[slot]) { byKey[slot] = {}; allKeys.push(slot); }
+      byKey[slot][dev] = (byKey[slot][dev]||0) + p[1];
+    });
+    const devNames = [...new Set(c.data.map(p=>p[2]))];
+    const slots = [...new Set(allKeys)].sort((a,b)=>a>b?1:-1);
+    if (!slots.length) return;
+
+    const stacked = slots.map(s => {
+      let total = 0;
+      return devNames.map(d => { const v = (byKey[s]||{})[d]||0; total += v; return {dev:d, v, base: total-v}; });
+    });
+    const maxV = Math.max(...stacked.map(s => s.reduce((a,b)=>a+b.v,0)), 0.01) * 1.1;
+
+    const barW = Math.max(3, pW / slots.length - 1);
+    const titles = {power_chart:"Power (24h)",daily_chart:"Daily consumption (7d)",hourly_chart:"Hourly consumption (today)"};
+    const units = {power_chart:"W",daily_chart:"kWh",hourly_chart:"kWh"};
+
+    let svg = '<svg width="'+W+'" height="'+H+'" style="display:block">';
+    svg += '<text x="'+pad.l+'" y="12" font-size="9" font-weight="600" fill="'+labelCol+'">'+titles[c.type]+' ('+units[c.type]+')</text>';
+
+    for (let g=0; g<4; g++) {
+      const gy = pad.t + pH * (1 - g/3);
+      svg += '<line x1="'+pad.l+'" y1="'+gy+'" x2="'+(W-pad.r)+'" y2="'+gy+'" stroke="'+gridCol+'" stroke-width="0.5"/>';
+      const lbl = (maxV * g / 3).toFixed(maxV<10?1:0);
+      svg += '<text x="'+(pad.l-3)+'" y="'+(gy+3)+'" font-size="7" fill="'+labelCol+'" text-anchor="end">'+lbl+'</text>';
+    }
+
+    slots.forEach((s, i) => {
+      const x = pad.l + (i / slots.length) * pW;
+      const parts = stacked[i];
+      parts.forEach((p, di) => {
+        const barH = Math.max(0, (p.v / maxV) * pH);
+        const baseH = (p.base / maxV) * pH;
+        const y = pad.t + pH - baseH - barH;
+        svg += '<rect x="'+x+'" y="'+y+'" width="'+barW+'" height="'+Math.max(0.5,barH)+'" fill="'+colors[di%colors.length]+'" opacity="0.85" rx="1"/>';
+      });
+      if (slots.length <= 14) {
+        let lbl;
+        if (c.type === "daily_chart") lbl = String(s).slice(5);
+        else if (typeof s === "number") { const dt = new Date(s*1000); lbl = ("0"+dt.getHours()).slice(-2); }
+        else lbl = String(s).slice(-5);
+        svg += '<text x="'+(x+barW/2)+'" y="'+(H-3)+'" font-size="7" fill="'+labelCol+'" text-anchor="middle">'+lbl+'</text>';
+      }
+    });
+
+    if (devNames.length > 1) {
+      let lx = pad.l;
+      devNames.forEach((dn, di) => {
+        svg += '<rect x="'+lx+'" y="'+(H-10)+'" width="6" height="6" fill="'+colors[di%colors.length]+'" rx="1"/>';
+        svg += '<text x="'+(lx+8)+'" y="'+(H-4)+'" font-size="7" fill="'+labelCol+'">'+dn+'</text>';
+        lx += dn.length * 5 + 16;
+      });
+    }
+
+    svg += '</svg>';
+    el.innerHTML = svg;
+  });
+}
+
+function _wpMiniChart(chart, fixedCt, W, H, type, greenThr, dirtyThr) {
+  if (!chart || chart.length < 2) return "";
+  const vals = chart.map(p=>p[1]);
+  let minV = Math.min(...vals);
+  let maxV = Math.max(...vals);
+  if (fixedCt!=null) { minV=Math.min(minV,fixedCt); maxV=Math.max(maxV,fixedCt); }
+  let rng = maxV - minV;
+  if (rng < (type==="co2"?10:1)) rng = type==="co2"?10:1;
+  minV = Math.max(0, minV - rng*0.1);
+  maxV = maxV + rng*0.15;
+  const vR = maxV - minV;
+  const now = Date.now()/1000;
+  const bw = Math.max(2, Math.floor(W/chart.length)-1);
+
+  let svg = '<svg width="'+W+'" height="'+H+'" style="display:block;border-radius:4px">';
+  chart.forEach((p,i)=>{
+    const v=p[1], ts=p[0];
+    const x = (i/chart.length)*W;
+    const barH = Math.max(1, ((v-minV)/vR)*H);
+    const y = H - barH;
+    const opacity = ts>now?0.4:0.85;
+    let hex;
+    if (type==="co2") {
+      if(v<=greenThr) hex="#4caf50";
+      else if(v<=(greenThr+dirtyThr)/2) hex="#8bc34a";
+      else if(v<=dirtyThr) hex="#ff9800";
+      else hex="#e53935";
+    } else {
+      const ratio = fixedCt>0?v/fixedCt:1;
+      if(ratio<=0.7) hex="#4caf50";
+      else if(ratio<=0.9) hex="#8bc34a";
+      else if(ratio<=1.0) hex="#ffeb3b";
+      else if(ratio<=1.2) hex="#ff9800";
+      else hex="#e53935";
+    }
+    svg += '<rect x="'+x+'" y="'+y+'" width="'+bw+'" height="'+barH+'" fill="'+hex+'" opacity="'+opacity+'"/>';
+  });
+  if (fixedCt!=null && type==="spot") {
+    const fY = H*(1-(fixedCt-minV)/vR);
+    svg += '<line x1="0" y1="'+fY+'" x2="'+W+'" y2="'+fY+'" stroke="#2196F3" stroke-width="1"/>';
+  }
+  if (type==="co2" && greenThr!=null) {
+    const gY = H*(1-(greenThr-minV)/vR);
+    svg += '<line x1="0" y1="'+gY+'" x2="'+W+'" y2="'+gY+'" stroke="#4caf50" stroke-width="0.5" opacity="0.6"/>';
+    if (dirtyThr!=null) {
+      const dY = H*(1-(dirtyThr-minV)/vR);
+      svg += '<line x1="0" y1="'+dY+'" x2="'+W+'" y2="'+dY+'" stroke="#e53935" stroke-width="0.5" opacity="0.6"/>';
+    }
+  }
+  svg += '</svg>';
+  return svg;
 }
 
 let _supportedDevicesCache = null;

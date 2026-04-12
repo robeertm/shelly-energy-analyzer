@@ -1,4 +1,5 @@
 {
+  "version": "16.24.0",
   "devices": [],
   "download": {
     "chunk_seconds": 43200,
@@ -36,6 +37,7 @@
     "live_web_ssl_renew_days": 30,
     "widget_domain": "",
     "widget_devices": "",
+    "widget_profiles": [],
     "live_web_token": "",
     "live_smoothing_enabled": false,
     "live_smoothing_seconds": 10,
