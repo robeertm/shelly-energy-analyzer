@@ -2234,7 +2234,7 @@ async function loadControl() {{
       html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
       html += '<span style="font-size:.82rem;color:var(--muted)">' + t('control.power', 'Power') + '</span>';
       html += '<label class="ctrl-toggle" style="flex:0 0 auto">';
-      html += '<input type="checkbox" ' + (isOn ? 'checked' : '') + ' onchange="ctrlToggle(\'' + d.key + '\',this.checked)">';
+      html += '<input type="checkbox" ' + (isOn ? 'checked' : '') + ' onchange="ctrlToggle(\\'' + d.key + '\\',this.checked)">';
       html += '<span class="ctrl-slider"></span></label>';
       html += '<span class="ctrl-state" id="ctrl-state-' + d.key + '" style="font-size:.82rem;font-weight:600;color:' + (isOn ? 'var(--ok)' : 'var(--muted)') + '">' + (isOn ? 'ON' : 'OFF') + '</span>';
       html += '</div>';
@@ -2246,7 +2246,7 @@ async function loadControl() {{
         html += '<span>' + t('control.brightness', 'Brightness') + '</span>';
         html += '<span id="ctrl-bri-val-' + d.key + '">—</span></div>';
         html += '<input type="range" min="0" max="100" value="50" class="ctrl-range" id="ctrl-bri-' + d.key + '" ';
-        html += 'onchange="ctrlSetBrightness(\'' + d.key + '\',this.value)" oninput="document.getElementById(\'ctrl-bri-val-' + d.key + '\').textContent=this.value+\'%\'">';
+        html += 'onchange="ctrlSetBrightness(\\'' + d.key + '\\',this.value)" oninput="document.getElementById(\\'ctrl-bri-val-' + d.key + '\\').textContent=this.value+\\'%\\'">';
         html += '</div>';
       }}
 
@@ -2255,9 +2255,9 @@ async function loadControl() {{
         html += '<div style="margin-bottom:10px">';
         html += '<div style="font-size:.82rem;color:var(--muted);margin-bottom:4px">' + t('control.color', 'Color') + '</div>';
         html += '<div style="display:flex;gap:8px;align-items:center">';
-        html += '<input type="color" value="#ff8800" id="ctrl-rgb-' + d.key + '" onchange="ctrlSetRgb(\'' + d.key + '\',this.value)" style="width:50px;height:36px;border:1px solid var(--border);border-radius:6px;cursor:pointer;background:var(--input-bg)">';
+        html += '<input type="color" value="#ff8800" id="ctrl-rgb-' + d.key + '" onchange="ctrlSetRgb(\\'' + d.key + '\\',this.value)" style="width:50px;height:36px;border:1px solid var(--border);border-radius:6px;cursor:pointer;background:var(--input-bg)">';
         html += '<input type="range" min="2700" max="6500" value="4000" class="ctrl-range" id="ctrl-temp-' + d.key + '" style="flex:1" ';
-        html += 'onchange="ctrlSetTemp(\'' + d.key + '\',this.value)" oninput="document.getElementById(\'ctrl-temp-lbl-' + d.key + '\').textContent=this.value+\'K\'">';
+        html += 'onchange="ctrlSetTemp(\\'' + d.key + '\\',this.value)" oninput="document.getElementById(\\'ctrl-temp-lbl-' + d.key + '\\').textContent=this.value+\\'K\\'">';
         html += '<span id="ctrl-temp-lbl-' + d.key + '" style="font-size:.78rem;color:var(--muted);min-width:45px">4000K</span>';
         html += '</div></div>';
       }}
@@ -2269,11 +2269,11 @@ async function loadControl() {{
         html += '<span>' + t('control.position', 'Position') + '</span>';
         html += '<span id="ctrl-pos-val-' + d.key + '">—</span></div>';
         html += '<input type="range" min="0" max="100" value="50" class="ctrl-range" id="ctrl-pos-' + d.key + '" ';
-        html += 'onchange="ctrlSetCoverPos(\'' + d.key + '\',this.value)" oninput="document.getElementById(\'ctrl-pos-val-' + d.key + '\').textContent=this.value+\'%\'">';
+        html += 'onchange="ctrlSetCoverPos(\\'' + d.key + '\\',this.value)" oninput="document.getElementById(\\'ctrl-pos-val-' + d.key + '\\').textContent=this.value+\\'%\\'">';
         html += '<div style="display:flex;gap:6px;margin-top:6px">';
-        html += '<button class="btn" style="flex:1" onclick="ctrlCover(\'' + d.key + '\',\'open\')">▲ ' + t('control.open', 'Open') + '</button>';
-        html += '<button class="btn" style="flex:1" onclick="ctrlCover(\'' + d.key + '\',\'stop\')">⏹ ' + t('control.stop', 'Stop') + '</button>';
-        html += '<button class="btn" style="flex:1" onclick="ctrlCover(\'' + d.key + '\',\'close\')">▼ ' + t('control.close', 'Close') + '</button>';
+        html += '<button class="btn" style="flex:1" onclick="ctrlCover(\\'' + d.key + '\\',\\'open\\')">▲ ' + t('control.open', 'Open') + '</button>';
+        html += '<button class="btn" style="flex:1" onclick="ctrlCover(\\'' + d.key + '\\',\\'stop\\')">⏹ ' + t('control.stop', 'Stop') + '</button>';
+        html += '<button class="btn" style="flex:1" onclick="ctrlCover(\\'' + d.key + '\\',\\'close\\')">▼ ' + t('control.close', 'Close') + '</button>';
         html += '</div></div>';
       }}
 
