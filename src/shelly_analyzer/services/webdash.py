@@ -321,15 +321,19 @@ def _compute_i_n(measured: float, ia: float, ib: float, ic: float,
 _SCRIPTABLE_WIDGET_JS = r"""
 // Shelly Energy Analyzer – iOS Scriptable Widget
 // Load this script in the Scriptable app.
-// Widget parameter: IP:PORT of your analyzer (e.g. 192.168.1.50:8765)
+// Widget parameter: IP:PORT (or IP:PORT#profile_id for a specific profile)
 //
 // Setup: when adding the widget, tap "Parameter"
 // and enter the address, e.g. "192.168.1.50:8765"
+// For a specific profile: "192.168.1.50:8765#spotprice"
 
-const PARAM = args.widgetParameter || "192.168.1.50:8765";
+const PROFILE = "";
+const RAW_PARAM = args.widgetParameter || "192.168.1.50:8765";
+const parts = RAW_PARAM.split("#");
+const PARAM = parts[0];
+const PROFILE_ID = PROFILE || parts[1] || "";
 const DARK = Device.isUsingDarkAppearance();
 
-// Colors
 const C = {
   bg:      DARK ? new Color("#1a1a1a") : new Color("#ffffff"),
   card:    DARK ? new Color("#252525") : new Color("#f5f5f5"),
@@ -339,18 +343,15 @@ const C = {
   green:   new Color("#4caf50"),
   red:     new Color("#e53935"),
   blue:    new Color("#2196F3"),
-  co2green: new Color("#4caf50"),
-  co2yellow: new Color("#ffeb3b"),
-  co2red:   new Color("#e53935"),
 };
 
-// Try HTTPS first (self-signed cert), fall back to HTTP
 let data;
 let BASE;
+const qp = PROFILE_ID ? "?profile=" + encodeURIComponent(PROFILE_ID) : "";
 for (const proto of ["https", "http"]) {
   BASE = proto + "://" + PARAM;
   try {
-    const req = new Request(BASE + "/api/widget");
+    const req = new Request(BASE + "/api/widget" + qp);
     req.timeoutInterval = 6;
     data = await req.loadJSON();
     if (data) break;
@@ -377,6 +378,9 @@ if (!data) {
   return;
 }
 
+const S = data.show || {};
+const sh = (k) => S[k] !== false;
+
 const family = config.widgetFamily || "medium";
 
 let widget;
@@ -384,11 +388,10 @@ if (family === "small")       widget = buildSmall(data);
 else if (family === "large")  widget = buildLarge(data);
 else                          widget = buildMedium(data);
 
-// Auto-refresh every 5 minutes
-widget.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000);
+const refreshMin = data.refresh_minutes || 5;
+widget.refreshAfterDate = new Date(Date.now() + refreshMin * 60 * 1000);
 Script.setWidget(widget);
 
-// When tapped (running in-app): show live table + open dashboard
 if (!config.runsInWidget) {
   const table = new UITable();
   table.showSeparators = true;
@@ -403,29 +406,28 @@ if (!config.runsInWidget) {
     table.addRow(r);
   }
 
-  addRow("⚡ Power", fmt(data.power_w, 0) + " W");
-  addRow("📅 Today", fmt(data.today_kwh, 2) + " kWh  ·  " + fmt(data.today_eur, 2) + " €");
-  addRow("📆 Month", fmt(data.month_kwh, 1) + " kWh  ·  " + fmt(data.month_eur, 2) + " €");
-  addRow("📊 Forecast", fmt(data.proj_kwh, 0) + " kWh  ·  " + fmt(data.proj_eur, 2) + " €");
-  if (data.spot_enabled && data.spot_ct != null) {
+  if (sh("power")) addRow("⚡ Power", fmt(data.power_w, 0) + " W");
+  if (sh("today")) addRow("📅 Today", fmt(data.today_kwh, 2) + " kWh  ·  " + fmt(data.today_eur, 2) + " €");
+  if (sh("month")) addRow("📆 Month", fmt(data.month_kwh, 1) + " kWh  ·  " + fmt(data.month_eur, 2) + " €");
+  if (sh("forecast")) addRow("📊 Forecast", fmt(data.proj_kwh, 0) + " kWh  ·  " + fmt(data.proj_eur, 2) + " €");
+  if (sh("spot_price") && data.spot_enabled && data.spot_ct != null) {
     const delta = data.spot_ct - data.fixed_ct;
     const sign = delta > 0 ? "+" : "";
     const col = delta <= 0 ? Color.green() : Color.red();
     addRow("💰 Spot price", data.spot_ct.toFixed(1) + " ct/kWh (" + sign + delta.toFixed(1) + " ct)", col);
     addRow("💰 Fixed price", data.fixed_ct.toFixed(1) + " ct/kWh", C.blue);
   }
-  if (data.co2_enabled && data.co2_current != null) {
+  if (sh("co2") && data.co2_enabled && data.co2_current != null) {
     const co2Col = co2Color(data.co2_current, data.co2_green_thr, data.co2_dirty_thr);
     addRow("🌿 CO₂ Intensity", data.co2_current.toFixed(0) + " g/kWh", co2Col);
   }
-  if (data.devices && data.devices.length > 0) {
+  if (sh("devices") && data.devices && data.devices.length > 0) {
     addRow("", "");
     for (const dev of data.devices) {
       addRow("🏠 " + dev.name, fmt(dev.power_w,0) + " W  ·  " + fmt(dev.today_kwh,2) + " kWh  ·  " + fmt(dev.today_eur,2) + " €");
     }
   }
 
-  // Open dashboard button
   const btnRow = new UITableRow();
   const btn = btnRow.addButton("🌐 Open Dashboard");
   btn.onTap = () => Safari.open(BASE);
@@ -436,32 +438,32 @@ if (!config.runsInWidget) {
 
 Script.complete();
 
-// ─── Small Widget: Current price + power ────────────────────────
+// ─── Small Widget ───────────────────────────────────────────────
 function buildSmall(d) {
   const w = new ListWidget();
   w.backgroundColor = C.bg;
   w.setPadding(12, 14, 12, 14);
   w.url = BASE;
 
-  // Title
   const title = w.addText("⚡ Energy");
   title.font = Font.boldSystemFont(11);
   title.textColor = C.accent;
   w.addSpacer(6);
 
-  // Current power
-  const pw = w.addText(fmt(d.power_w, 0) + " W");
-  pw.font = Font.boldSystemFont(22);
-  pw.textColor = C.text;
+  if (sh("power")) {
+    const pw = w.addText(fmt(d.power_w, 0) + " W");
+    pw.font = Font.boldSystemFont(22);
+    pw.textColor = C.text;
+  }
 
-  // Today
-  const tl = w.addText("Today: " + fmt(d.today_kwh, 1) + " kWh · " + fmt(d.today_eur, 2) + " €");
-  tl.font = Font.systemFont(10);
-  tl.textColor = C.muted;
-  w.addSpacer(4);
+  if (sh("today")) {
+    const tl = w.addText("Today: " + fmt(d.today_kwh, 1) + " kWh · " + fmt(d.today_eur, 2) + " €");
+    tl.font = Font.systemFont(10);
+    tl.textColor = C.muted;
+    w.addSpacer(4);
+  }
 
-  // Spot price
-  if (d.spot_enabled && d.spot_ct != null) {
+  if (sh("spot_price") && d.spot_enabled && d.spot_ct != null) {
     const delta = d.spot_ct - d.fixed_ct;
     const arrow = delta > 0 ? "▲" : "▼";
     const sign = delta > 0 ? "+" : "";
@@ -471,8 +473,7 @@ function buildSmall(d) {
     sp.textColor = col;
   }
 
-  // CO2 intensity
-  if (d.co2_enabled && d.co2_current != null) {
+  if (sh("co2") && d.co2_enabled && d.co2_current != null) {
     w.addSpacer(2);
     const co2 = w.addText("🌿 " + d.co2_current.toFixed(0) + " g/kWh");
     co2.font = Font.mediumSystemFont(10);
@@ -486,14 +487,13 @@ function buildSmall(d) {
   return w;
 }
 
-// ─── Medium Widget: Price + consumption + mini chart ────────────
+// ─── Medium Widget ──────────────────────────────────────────────
 function buildMedium(d) {
   const w = new ListWidget();
   w.backgroundColor = C.bg;
   w.setPadding(12, 14, 8, 14);
   w.url = BASE;
 
-  // Header row
   const hStack = w.addStack();
   hStack.layoutHorizontally();
   hStack.centerAlignContent();
@@ -506,19 +506,19 @@ function buildMedium(d) {
   ts.textColor = C.muted;
   w.addSpacer(3);
 
-  // Top row: power + spot + stats
   const topRow = w.addStack();
   topRow.layoutHorizontally();
 
-  // Left: power + spot
   const left = topRow.addStack();
   left.layoutVertically();
 
-  const pw = left.addText(fmt(d.power_w, 0) + " W");
-  pw.font = Font.boldSystemFont(18);
-  pw.textColor = C.text;
+  if (sh("power")) {
+    const pw = left.addText(fmt(d.power_w, 0) + " W");
+    pw.font = Font.boldSystemFont(18);
+    pw.textColor = C.text;
+  }
 
-  if (d.spot_enabled && d.spot_ct != null) {
+  if (sh("spot_price") && d.spot_enabled && d.spot_ct != null) {
     const delta = d.spot_ct - d.fixed_ct;
     const arrow = delta > 0 ? "▲" : "▼";
     const sign = delta > 0 ? "+" : "";
@@ -528,7 +528,7 @@ function buildMedium(d) {
     sp.textColor = col;
   }
 
-  if (d.co2_enabled && d.co2_current != null) {
+  if (sh("co2") && d.co2_enabled && d.co2_current != null) {
     const co2t = left.addText("CO₂ " + d.co2_current.toFixed(0) + " g/kWh");
     co2t.font = Font.boldSystemFont(10);
     co2t.textColor = co2Color(d.co2_current, d.co2_green_thr, d.co2_dirty_thr);
@@ -536,51 +536,65 @@ function buildMedium(d) {
 
   topRow.addSpacer();
 
-  // Right: today + month
   const right = topRow.addStack();
   right.layoutVertically();
-  const tVal = right.addText(fmt(d.today_kwh, 1) + " kWh · " + fmt(d.today_eur, 2) + " €");
-  tVal.font = Font.mediumSystemFont(10);
-  tVal.textColor = C.text;
-  const tLbl = right.addText("Today");
-  tLbl.font = Font.systemFont(8);
-  tLbl.textColor = C.muted;
-  right.addSpacer(2);
-  const mVal = right.addText(fmt(d.month_kwh, 1) + " kWh · " + fmt(d.month_eur, 2) + " €");
-  mVal.font = Font.mediumSystemFont(10);
-  mVal.textColor = C.text;
-  const mLbl = right.addText("Month");
-  mLbl.font = Font.systemFont(8);
-  mLbl.textColor = C.muted;
+  if (sh("today")) {
+    const tVal = right.addText(fmt(d.today_kwh, 1) + " kWh · " + fmt(d.today_eur, 2) + " €");
+    tVal.font = Font.mediumSystemFont(10);
+    tVal.textColor = C.text;
+    const tLbl = right.addText("Today");
+    tLbl.font = Font.systemFont(8);
+    tLbl.textColor = C.muted;
+    right.addSpacer(2);
+  }
+  if (sh("month")) {
+    const mVal = right.addText(fmt(d.month_kwh, 1) + " kWh · " + fmt(d.month_eur, 2) + " €");
+    mVal.font = Font.mediumSystemFont(10);
+    mVal.textColor = C.text;
+    const mLbl = right.addText("Month");
+    mLbl.font = Font.systemFont(8);
+    mLbl.textColor = C.muted;
+  }
 
   w.addSpacer(3);
 
-  // Charts – full width, fixed height
   const mCW = 290;
-  if (d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) {
+  if (sh("spot_chart") && d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) {
     const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, mCW, 40);
     const img = w.addImage(chartImg);
     img.imageSize = new Size(mCW, 40);
   }
 
-  if (d.co2_enabled && d.co2_chart && d.co2_chart.length > 2) {
+  if (sh("co2_chart") && d.co2_enabled && d.co2_chart && d.co2_chart.length > 2) {
     w.addSpacer(1);
     const co2Img = drawCo2Chart(d.co2_chart, d.co2_green_thr, d.co2_dirty_thr, mCW, 40);
     const img2 = w.addImage(co2Img);
     img2.imageSize = new Size(mCW, 40);
   }
 
+  if (sh("power_chart") && d.power_chart && d.power_chart.length > 2) {
+    w.addSpacer(1);
+    const pcImg = drawBarChart(d.power_chart, mCW, 36, "Power W", "#ff9800");
+    const pcW = w.addImage(pcImg);
+    pcW.imageSize = new Size(mCW, 36);
+  }
+  if (sh("hourly_chart") && d.hourly_chart && d.hourly_chart.length > 0) {
+    w.addSpacer(1);
+    const hcImg = drawBarChart(d.hourly_chart, mCW, 36, "Hourly kWh", "#2196F3");
+    const hcW = w.addImage(hcImg);
+    hcW.imageSize = new Size(mCW, 36);
+  }
+
   return w;
 }
 
-// ─── Large Widget: Full detail ──────────────────────────────────
+// ─── Large Widget ───────────────────────────────────────────────
 function buildLarge(d) {
   const w = new ListWidget();
   w.backgroundColor = C.bg;
   w.setPadding(14, 16, 10, 16);
   w.url = BASE;
 
-  // Header
   const hStack = w.addStack();
   hStack.layoutHorizontally();
   const title = hStack.addText("⚡ Shelly Energy Analyzer");
@@ -592,14 +606,14 @@ function buildLarge(d) {
   ts.textColor = C.muted;
   w.addSpacer(6);
 
-  // Power
-  const pw = w.addText(fmt(d.power_w, 0) + " W");
-  pw.font = Font.boldSystemFont(26);
-  pw.textColor = C.text;
-  w.addSpacer(4);
+  if (sh("power")) {
+    const pw = w.addText(fmt(d.power_w, 0) + " W");
+    pw.font = Font.boldSystemFont(26);
+    pw.textColor = C.text;
+    w.addSpacer(4);
+  }
 
-  // Spot price prominent
-  if (d.spot_enabled && d.spot_ct != null) {
+  if (sh("spot_price") && d.spot_enabled && d.spot_ct != null) {
     const delta = d.spot_ct - d.fixed_ct;
     const arrow = delta > 0 ? "▲" : "▼";
     const sign = delta > 0 ? "+" : "";
@@ -621,17 +635,15 @@ function buildLarge(d) {
     w.addSpacer(4);
   }
 
-  // Spot chart – full width, fixed height
   const lCW = 330;
-  if (d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) {
+  if (sh("spot_chart") && d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) {
     const chartImg = drawMiniChart(d.spot_chart, d.fixed_ct, lCW, 70);
     const img = w.addImage(chartImg);
     img.imageSize = new Size(lCW, 70);
     w.addSpacer(4);
   }
 
-  // CO2 section
-  if (d.co2_enabled && d.co2_current != null) {
+  if (sh("co2") && d.co2_enabled && d.co2_current != null) {
     const co2Row = w.addStack();
     co2Row.layoutHorizontally();
     co2Row.centerAlignContent();
@@ -641,25 +653,20 @@ function buildLarge(d) {
     w.addSpacer(2);
   }
 
-  // CO2 chart – full width, fixed height
-  if (d.co2_enabled && d.co2_chart && d.co2_chart.length > 2) {
+  if (sh("co2_chart") && d.co2_enabled && d.co2_chart && d.co2_chart.length > 2) {
     const co2Img = drawCo2Chart(d.co2_chart, d.co2_green_thr, d.co2_dirty_thr, lCW, 55);
     const co2ImgW = w.addImage(co2Img);
     co2ImgW.imageSize = new Size(lCW, 55);
     w.addSpacer(4);
   }
 
-  // Metrics grid
   const g = w.addStack();
   g.layoutHorizontally();
-  addMetric(g, "Today", fmt(d.today_kwh,1) + " kWh", fmt(d.today_eur,2) + " €");
-  g.addSpacer();
-  addMetric(g, "Month", fmt(d.month_kwh,1) + " kWh", fmt(d.month_eur,2) + " €");
-  g.addSpacer();
-  addMetric(g, "Forecast", fmt(d.proj_kwh,0) + " kWh", fmt(d.proj_eur,2) + " €");
+  if (sh("today")) { addMetric(g, "Today", fmt(d.today_kwh,1) + " kWh", fmt(d.today_eur,2) + " €"); g.addSpacer(); }
+  if (sh("month")) { addMetric(g, "Month", fmt(d.month_kwh,1) + " kWh", fmt(d.month_eur,2) + " €"); g.addSpacer(); }
+  if (sh("forecast")) { addMetric(g, "Forecast", fmt(d.proj_kwh,0) + " kWh", fmt(d.proj_eur,2) + " €"); }
 
-  // Spot today cost
-  if (d.spot_enabled && d.spot_today_eur != null) {
+  if (sh("spot_price") && d.spot_enabled && d.spot_today_eur != null) {
     w.addSpacer(4);
     const stRow = w.addStack();
     stRow.layoutHorizontally();
@@ -672,8 +679,7 @@ function buildLarge(d) {
     stVal.textColor = diff <= 0 ? C.green : C.red;
   }
 
-  // Per-device breakdown
-  if (d.devices && d.devices.length > 0) {
+  if (sh("devices") && d.devices && d.devices.length > 0) {
     w.addSpacer(6);
     for (const dev of d.devices) {
       const dr = w.addStack();
@@ -688,6 +694,25 @@ function buildLarge(d) {
       dv.font = Font.systemFont(10);
       dv.textColor = C.muted;
     }
+  }
+
+  if (sh("power_chart") && d.power_chart && d.power_chart.length > 2) {
+    w.addSpacer(4);
+    const pcImg = drawBarChart(d.power_chart, lCW, 55, "Power W", "#ff9800");
+    const pcW = w.addImage(pcImg);
+    pcW.imageSize = new Size(lCW, 55);
+  }
+  if (sh("daily_chart") && d.daily_chart && d.daily_chart.length > 0) {
+    w.addSpacer(4);
+    const dcImg = drawBarChart(d.daily_chart, lCW, 55, "Daily kWh", "#4caf50");
+    const dcW = w.addImage(dcImg);
+    dcW.imageSize = new Size(lCW, 55);
+  }
+  if (sh("hourly_chart") && d.hourly_chart && d.hourly_chart.length > 0) {
+    w.addSpacer(4);
+    const hcImg = drawBarChart(d.hourly_chart, lCW, 55, "Hourly kWh", "#2196F3");
+    const hcW = w.addImage(hcImg);
+    hcW.imageSize = new Size(lCW, 55);
   }
 
   w.addSpacer();
@@ -722,7 +747,50 @@ function addMetric(parent, label, line1, line2) {
   }
 }
 
-// ─── CO2 Color Helper ──────────────────────────────────────────
+function drawBarChart(data, W, H, unit, baseColor) {
+  const agg = {};
+  data.forEach(p => {
+    const k = typeof p[0] === "number" ? p[0] : p[0];
+    agg[k] = (agg[k] || 0) + p[1];
+  });
+  const keys = Object.keys(agg).sort();
+  const vals = keys.map(k => agg[k]);
+  if (vals.length === 0) return new DrawContext().getImage();
+
+  let minV = 0;
+  let maxV = Math.max(...vals);
+  if (maxV <= 0) maxV = 1;
+  maxV = maxV * 1.15;
+  const vR = maxV - minV;
+
+  const dc = new DrawContext();
+  dc.size = new Size(W, H);
+  dc.opaque = false;
+  dc.respectScreenScale = true;
+
+  const pad = {l: 2, r: 2, t: 10, b: 2};
+  const pW = W - pad.l - pad.r;
+  const pH = H - pad.t - pad.b;
+  const barW = Math.max(2, pW / keys.length - 1);
+
+  dc.setFont(Font.boldSystemFont(7));
+  dc.setTextColor(DARK ? new Color("#888888") : new Color("#999999"));
+  const lastVal = vals.length > 0 ? vals[vals.length-1] : null;
+  const lbl = unit + (lastVal != null ? " · " + (lastVal < 10 ? lastVal.toFixed(2) : lastVal.toFixed(0)) : "");
+  dc.drawTextInRect(lbl, new Rect(pad.l, 0, W, 10));
+
+  for (let i = 0; i < keys.length; i++) {
+    const v = vals[i];
+    const x = pad.l + (i / keys.length) * pW;
+    const barH = Math.max(1, (v / maxV) * pH);
+    const y = pad.t + pH - barH;
+    dc.setFillColor(new Color(baseColor, 0.85));
+    dc.fillRect(new Rect(x, y, barW, barH));
+  }
+
+  return dc.getImage();
+}
+
 function co2Color(val, green, dirty) {
   if (val <= green) return new Color("#4caf50");
   if (val <= (green + dirty) / 2) return new Color("#8bc34a");
@@ -730,7 +798,6 @@ function co2Color(val, green, dirty) {
   return new Color("#e53935");
 }
 
-// ─── Mini CO2 Chart (DrawContext) ──────────────────────────────
 function drawCo2Chart(chart, greenThr, dirtyThr, W, H) {
   const dc = new DrawContext();
   dc.size = new Size(W, H);
@@ -753,14 +820,12 @@ function drawCo2Chart(chart, greenThr, dirtyThr, W, H) {
 
   const now = Date.now() / 1000;
 
-  // Label (includes latest value if present)
   dc.setFont(Font.boldSystemFont(7));
   dc.setTextColor(DARK ? new Color("#888888") : new Color("#999999"));
   const _last = chart.length > 0 ? chart[chart.length-1][1] : null;
   const _lbl = "CO₂ g/kWh · 24h" + (_last != null ? " · " + _last.toFixed(0) : "");
   dc.drawTextInRect(_lbl, new Rect(pad.l, 0, W, 10));
 
-  // Bars
   for (let i = 0; i < chart.length; i++) {
     const v = chart[i][1];
     const ts = chart[i][0];
@@ -779,7 +844,6 @@ function drawCo2Chart(chart, greenThr, dirtyThr, W, H) {
     dc.fillRect(new Rect(x, y, barW, barH));
   }
 
-  // Green threshold line
   if (greenThr >= minV && greenThr <= maxV) {
     const gY = pad.t + pH * (1 - (greenThr - minV) / vR);
     dc.setStrokeColor(new Color("#4caf50", 0.6));
@@ -791,7 +855,6 @@ function drawCo2Chart(chart, greenThr, dirtyThr, W, H) {
     dc.strokePath();
   }
 
-  // Dirty threshold line
   if (dirtyThr >= minV && dirtyThr <= maxV) {
     const dY = pad.t + pH * (1 - (dirtyThr - minV) / vR);
     dc.setStrokeColor(new Color("#e53935", 0.6));
@@ -806,7 +869,6 @@ function drawCo2Chart(chart, greenThr, dirtyThr, W, H) {
   return dc.getImage();
 }
 
-// ─── Mini Spot Chart (DrawContext) ──────────────────────────────
 function drawMiniChart(chart, fixedCt, W, H) {
   const dc = new DrawContext();
   dc.size = new Size(W, H);
@@ -830,7 +892,6 @@ function drawMiniChart(chart, fixedCt, W, H) {
 
   const now = Date.now() / 1000;
 
-  // Bars
   for (let i = 0; i < chart.length; i++) {
     const v = chart[i][1];
     const ts = chart[i][0];
@@ -846,14 +907,12 @@ function drawMiniChart(chart, fixedCt, W, H) {
     else if (ratio <= 1.2) hex = "#ff9800";
     else hex = "#e53935";
 
-    // Bake alpha into color (Scriptable has no setAlpha)
     const a = ts > now ? 0.45 : 0.85;
     const col = new Color(hex, a);
     dc.setFillColor(col);
     dc.fillRect(new Rect(x, y, barW, barH));
   }
 
-  // Fixed price line (dashed = two thin lines)
   const fY = pad.t + pH * (1 - (fixedCt - minV) / vR);
   dc.setStrokeColor(new Color("#2196F3"));
   dc.setLineWidth(1);
@@ -11573,15 +11632,19 @@ class LiveWebDashboard:
             "lang": self.lang,
         }
 
-    def get_widget_script(self) -> str:
+    def get_widget_script(self, profile_id: str = "") -> str:
         """Return the Scriptable JS widget script with the server URL baked in."""
         script = _SCRIPTABLE_WIDGET_JS
-        # Bake in the known domain:port as default
         if self.widget_domain:
             default_addr = f"{self.widget_domain}:{self.port}"
             script = script.replace(
                 '192.168.1.50:8765',
                 default_addr,
+            )
+        if profile_id:
+            script = script.replace(
+                'const PROFILE = "";',
+                f'const PROFILE = "{profile_id}";',
             )
         return script
 

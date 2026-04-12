@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a1a1a" media="(prefers-color-scheme:dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme:light)">
+<link rel="manifest" id="pwa-manifest">
+<link rel="icon" href="/widget-icon.svg" type="image/svg+xml">
+<title>Energy Widget</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#fff;--fg:#222;--muted:#888;--card:#f5f5f5;--accent:#ff9800;--green:#4caf50;--red:#e53935;--blue:#2196F3;--border:rgba(0,0,0,0.08)}
+@media(prefers-color-scheme:dark){:root{--bg:#0f0f0f;--fg:#eee;--muted:#777;--card:#1a1a1a;--border:rgba(255,255,255,0.06)}}
+body{font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;padding:14px;padding-top:max(14px,env(safe-area-inset-top))}
+.widget{background:var(--card);border-radius:20px;padding:16px;margin-bottom:12px;border:1px solid var(--border)}
+.hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.hdr-title{font-size:13px;font-weight:700;color:var(--accent)}
+.hdr-time{font-size:10px;color:var(--muted)}
+.power{font-size:32px;font-weight:800;letter-spacing:-1px}
+.row{display:flex;gap:12px;margin-top:8px;flex-wrap:wrap}
+.metric{flex:1;min-width:80px}
+.metric-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px}
+.metric-val{font-size:14px;font-weight:600}
+.metric-sub{font-size:12px;font-weight:700}
+.spot{font-size:15px;font-weight:700;margin-top:4px}
+.co2{font-size:12px;font-weight:600;margin-top:2px}
+.dev-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)}
+.dev-row:last-child{border-bottom:none}
+.dev-name{font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.dev-val{font-size:11px;color:var(--muted);text-align:right}
+.chart-wrap{margin-top:10px;border-radius:10px;overflow:hidden}
+.offline{text-align:center;padding:40px 20px;color:var(--muted)}
+.offline h2{color:var(--red);margin-bottom:8px}
+.install-hint{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--border);padding:10px 16px;font-size:12px;color:var(--muted);text-align:center;display:none}
+.install-hint a{color:var(--accent);text-decoration:none;font-weight:600}
+</style>
+</head>
+<body>
+<div id="content"><div class="offline"><h2>Loading...</h2></div></div>
+<div class="install-hint" id="install-hint">
+  Add to home screen for a native widget experience
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const PROFILE = params.get("profile") || "";
+const qp = PROFILE ? "?profile=" + encodeURIComponent(PROFILE) : "";
+
+document.getElementById("pwa-manifest").href = "/widget-manifest.json" + qp;
+
+let refreshMs = 60000;
+
+async function load() {
+  try {
+    const r = await fetch("/api/widget" + qp);
+    const d = await r.json();
+    if (!d || !d.ok) throw new Error(d.error || "unavailable");
+    refreshMs = (d.refresh_minutes || 1) * 60000;
+    render(d);
+  } catch(e) {
+    document.getElementById("content").innerHTML =
+      '<div class="offline"><h2>Offline</h2><p>' + e.message + '</p><p style="margin-top:12px;font-size:11px">Retrying...</p></div>';
+  }
+  setTimeout(load, refreshMs);
+}
+
+function render(d) {
+  const S = d.show || {};
+  const sh = (k) => S[k] !== false;
+  const fmt = (v,n) => v == null ? "–" : Number(v).toFixed(n);
+  const fmtTime = (ts) => {
+    if (!ts) return "";
+    const dt = new Date(ts * 1000);
+    return ("0"+dt.getHours()).slice(-2) + ":" + ("0"+dt.getMinutes()).slice(-2);
+  };
+
+  let h = '<div class="widget">';
+  h += '<div class="hdr"><span class="hdr-title">&#9889; Energy</span><span class="hdr-time">' + fmtTime(d.ts) + '</span></div>';
+
+  if (sh("power")) {
+    h += '<div class="power">' + fmt(d.power_w, 0) + ' <span style="font-size:18px;font-weight:400">W</span></div>';
+  }
+
+  if (sh("spot_price") && d.spot_enabled && d.spot_ct != null) {
+    const delta = d.spot_ct - d.fixed_ct;
+    const col = delta <= 0 ? "var(--green)" : "var(--red)";
+    const arrow = delta > 0 ? "&#9650;" : "&#9660;";
+    const sign = delta > 0 ? "+" : "";
+    h += '<div class="spot" style="color:' + col + '">' + d.spot_ct.toFixed(1) + ' ct/kWh ' + arrow + ' ' + sign + delta.toFixed(1) + ' ct</div>';
+    h += '<div style="font-size:10px;color:var(--blue)">Fixed: ' + d.fixed_ct.toFixed(1) + ' ct/kWh</div>';
+  }
+
+  if (sh("co2") && d.co2_enabled && d.co2_current != null) {
+    const co2c = co2Color(d.co2_current, d.co2_green_thr, d.co2_dirty_thr);
+    h += '<div class="co2" style="color:' + co2c + '">&#127807; CO&#8322; ' + d.co2_current.toFixed(0) + ' g/kWh</div>';
+  }
+
+  h += '<div class="row">';
+  if (sh("today")) h += '<div class="metric"><div class="metric-label">Today</div><div class="metric-val">' + fmt(d.today_kwh,1) + ' kWh</div><div class="metric-sub">' + fmt(d.today_eur,2) + ' &euro;</div></div>';
+  if (sh("month")) h += '<div class="metric"><div class="metric-label">Month</div><div class="metric-val">' + fmt(d.month_kwh,1) + ' kWh</div><div class="metric-sub">' + fmt(d.month_eur,2) + ' &euro;</div></div>';
+  if (sh("forecast")) h += '<div class="metric"><div class="metric-label">Forecast</div><div class="metric-val">' + fmt(d.proj_kwh,0) + ' kWh</div><div class="metric-sub">' + fmt(d.proj_eur,2) + ' &euro;</div></div>';
+  h += '</div>';
+
+  if (sh("spot_chart") && d.spot_enabled && d.spot_chart && d.spot_chart.length > 2) {
+    h += '<div class="chart-wrap">' + miniChart(d.spot_chart, d.fixed_ct, "spot") + '</div>';
+  }
+  if (sh("co2_chart") && d.co2_enabled && d.co2_chart && d.co2_chart.length > 2) {
+    h += '<div class="chart-wrap">' + miniChart(d.co2_chart, null, "co2", d.co2_green_thr, d.co2_dirty_thr) + '</div>';
+  }
+
+  if (sh("power_chart") && d.power_chart && d.power_chart.length > 2) {
+    h += '<div class="chart-wrap">' + barChart(d.power_chart, "Power W", "#ff9800") + '</div>';
+  }
+  if (sh("daily_chart") && d.daily_chart && d.daily_chart.length > 0) {
+    h += '<div class="chart-wrap">' + barChart(d.daily_chart, "Daily kWh", "#4caf50") + '</div>';
+  }
+  if (sh("hourly_chart") && d.hourly_chart && d.hourly_chart.length > 0) {
+    h += '<div class="chart-wrap">' + barChart(d.hourly_chart, "Hourly kWh", "#2196F3") + '</div>';
+  }
+
+  if (sh("spot_price") && d.spot_enabled && d.spot_today_eur != null) {
+    const diff = d.spot_today_eur - d.today_eur;
+    const dc = diff <= 0 ? "var(--green)" : "var(--red)";
+    h += '<div style="font-size:11px;color:var(--muted);margin-top:8px">Spot cost today: <span style="color:' + dc + ';font-weight:600">' + fmt(d.spot_today_eur,2) + ' &euro; (' + (diff>=0?"+":"") + fmt(diff,2) + ' &euro;)</span></div>';
+  }
+
+  h += '</div>';
+
+  if (sh("devices") && d.devices && d.devices.length > 0) {
+    h += '<div class="widget">';
+    d.devices.forEach(dev => {
+      h += '<div class="dev-row"><span class="dev-name">' + esc(dev.name) + '</span><span class="dev-val">' + fmt(dev.power_w,0) + ' W &middot; ' + fmt(dev.today_kwh,1) + ' kWh &middot; ' + fmt(dev.today_eur,2) + ' &euro;</span></div>';
+    });
+    h += '</div>';
+  }
+
+  h += '<div style="text-align:center;margin-top:8px"><a href="/" style="font-size:11px;color:var(--accent);text-decoration:none">Open Dashboard</a></div>';
+
+  document.getElementById("content").innerHTML = h;
+}
+
+function esc(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+function co2Color(v, g, r) {
+  if (v <= g) return "#4caf50";
+  if (v <= (g+r)/2) return "#8bc34a";
+  if (v <= r) return "#ff9800";
+  return "#e53935";
+}
+
+function miniChart(chart, fixedCt, type, greenThr, dirtyThr) {
+  const W = 320, H = 50;
+  const vals = chart.map(p => p[1]);
+  let minV = Math.min(...vals), maxV = Math.max(...vals);
+  if (fixedCt != null) { minV = Math.min(minV, fixedCt); maxV = Math.max(maxV, fixedCt); }
+  let rng = maxV - minV;
+  if (rng < (type==="co2"?10:1)) rng = type==="co2"?10:1;
+  minV = Math.max(0, minV - rng*0.1);
+  maxV += rng*0.15;
+  const vR = maxV - minV;
+  const now = Date.now()/1000;
+  const bw = Math.max(2, Math.floor(W/chart.length)-1);
+  let svg = '<svg width="100%" viewBox="0 0 '+W+' '+H+'" style="display:block">';
+  chart.forEach((p,i) => {
+    const v=p[1], ts=p[0];
+    const x = (i/chart.length)*W;
+    const barH = Math.max(1, ((v-minV)/vR)*H);
+    const y = H - barH;
+    const op = ts>now?0.4:0.85;
+    let hex;
+    if (type==="co2") {
+      hex = v<=greenThr?"#4caf50":v<=(greenThr+dirtyThr)/2?"#8bc34a":v<=dirtyThr?"#ff9800":"#e53935";
+    } else {
+      const ratio = fixedCt>0?v/fixedCt:1;
+      hex = ratio<=0.7?"#4caf50":ratio<=0.9?"#8bc34a":ratio<=1.0?"#ffeb3b":ratio<=1.2?"#ff9800":"#e53935";
+    }
+    svg += '<rect x="'+x+'" y="'+y+'" width="'+bw+'" height="'+barH+'" fill="'+hex+'" opacity="'+op+'"/>';
+  });
+  if (fixedCt!=null && type==="spot") {
+    const fY = H*(1-(fixedCt-minV)/vR);
+    svg += '<line x1="0" y1="'+fY+'" x2="'+W+'" y2="'+fY+'" stroke="#2196F3" stroke-width="1.5"/>';
+  }
+  svg += '</svg>';
+  return svg;
+}
+
+function barChart(data, title, color) {
+  const W = 320, H = 70;
+  const agg = {};
+  data.forEach(p => { const k=p[0]; agg[k]=(agg[k]||0)+p[1]; });
+  const keys = Object.keys(agg).sort();
+  const vals = keys.map(k=>agg[k]);
+  if (!vals.length) return "";
+  const maxV = Math.max(...vals)*1.15 || 1;
+  const bw = Math.max(3, W/keys.length - 1);
+  const labelCol = getComputedStyle(document.documentElement).getPropertyValue("--muted").trim() || "#888";
+
+  let svg = '<svg width="100%" viewBox="0 0 '+W+' '+H+'" style="display:block">';
+  svg += '<text x="2" y="9" font-size="8" font-weight="600" fill="'+labelCol+'">'+title+'</text>';
+  keys.forEach((k,i) => {
+    const v = vals[i];
+    const x = (i/keys.length)*W;
+    const barH = Math.max(1, (v/maxV)*(H-14));
+    const y = H - 12 - barH;
+    svg += '<rect x="'+x+'" y="'+y+'" width="'+bw+'" height="'+barH+'" fill="'+color+'" opacity="0.85" rx="1"/>';
+    if (keys.length <= 24) {
+      let lbl;
+      if (typeof k === "string" && k.includes("-")) lbl = k.slice(5);
+      else if (!isNaN(k)) { const dt=new Date(Number(k)*1000); lbl=("0"+dt.getHours()).slice(-2); }
+      else lbl = k;
+      svg += '<text x="'+(x+bw/2)+'" y="'+(H-2)+'" font-size="6" fill="'+labelCol+'" text-anchor="middle">'+lbl+'</text>';
+    }
+  });
+  svg += '</svg>';
+  return svg;
+}
+
+// Show install hint on Android if not already installed
+if (!window.matchMedia("(display-mode: standalone)").matches && /android/i.test(navigator.userAgent)) {
+  document.getElementById("install-hint").style.display = "block";
+}
+
+load();
+</script>
+</body>
+</html>

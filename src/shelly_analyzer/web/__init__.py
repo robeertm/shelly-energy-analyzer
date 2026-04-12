@@ -369,7 +369,8 @@ def create_app(config_path: Optional[str] = None) -> Flask:
         @app.before_request
         def _check_auth():
             # Public endpoints (no auth required)
-            public = {"/api/widget", "/widget.js", "/metrics", "/static/plotly.min.js"}
+            public = {"/api/widget", "/widget.js", "/metrics", "/static/plotly.min.js",
+                      "/w", "/widget-manifest.json", "/widget-icon.svg"}
             path = flask_request.path
             if path in public or path.startswith("/static/"):
                 return None

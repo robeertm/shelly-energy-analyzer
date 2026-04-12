@@ -254,9 +254,11 @@ def api_job():
 
 @bp.route("/api/widget")
 def api_widget():
+    from flask import request as _req
     state = _get_state()
+    profile_id = _req.args.get("profile", "")
     try:
-        payload = state.on_action("widget", {}) if state.on_action else {"ok": False, "error": "not available"}
+        payload = state.on_action("widget", {"profile": profile_id}) if state.on_action else {"ok": False, "error": "not available"}
     except Exception as e:
         payload = {"ok": False, "error": str(e)}
     resp = jsonify(payload)
