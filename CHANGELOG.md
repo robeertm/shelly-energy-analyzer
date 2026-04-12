@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.22.5 - 2026-04-12
+### Fixed
+- **Update banner now appears reliably.** Background GitHub check interval reduced from 1 hour to 5 minutes. Combined with the 60s banner poll from v16.22.3, users see new releases within ~5 minutes of them being published.
+
 ## 16.22.4 - 2026-04-12
 ### Added
 - **Resizable chart detail modal.** The Live tab chart detail overlay can now be freely resized by dragging the bottom-right corner (CSS `resize: both`). A ⛶ fullscreen button in the header expands the modal to fill the entire viewport; click again (⊡) to return to normal size. The canvas automatically redraws on resize via `ResizeObserver`. Minimum size 320×250 px, no maximum — scales up to full screen on any monitor.
