@@ -2,7 +2,7 @@
 
 # ⚡ Shelly Energy Analyzer
 
-**Self-hosted energy monitoring, cost tracking and smart automation for Shelly EM / 3EM devices.**
+**Self-hosted energy monitoring, cost tracking and smart automation for 115+ Shelly devices (Gen 1–4).**
 No cloud. No subscription. No data lock-in.
 
 [![License: Proprietary – Free to use](https://img.shields.io/badge/license-Proprietary%20%7C%20Free%20to%20use-blue)](LICENSE)
@@ -43,7 +43,7 @@ Commercial energy dashboards lock you into subscriptions, truncate history after
 
 ### Who it's for
 
-- 🏠 **Home owners** with Shelly 1PM / Plus 1PM / EM / 3EM at the grid connection or per circuit
+- 🏠 **Home owners** with any Shelly device — EM / 3EM, Plus 1PM, Pro 4PM, Plug S, dimmers, RGBW lights, roller shutters, and 115+ more models (Gen 1 through Gen 4)
 - ☀️ **PV / solar prosumers** tracking self-consumption, autarky, feed-in and investment amortisation
 - 🏢 **Landlords** needing per-tenant sub-metering and Nebenkostenabrechnung PDFs
 - ⚡ **Dynamic-tariff customers worldwide** — Tibber, aWATTar, Ostrom, 1Komma5°, E.ON Spot in Europe; Griddy/Rhythm/ERCOT Retailers in Texas; Amber Electric in Australia; and anyone comparing their fixed contract against live wholesale prices
@@ -292,6 +292,22 @@ All desktop shots are captured at native **4K (3840×2160)**, all mobile shots a
 - Visual schedule editor (time slots, days-of-week)
 - Manage and delete existing schedules directly from the app
 
+### 🎛 Device Control
+- **Control tab** for directly operating Shelly devices from the dashboard (enable in Settings → Features)
+- **Switches & plugs** — on/off toggle with live power readout
+- **Dimmers** — brightness slider (0–100%) via `Light.Set` RPC (Gen 2+) with Gen 1 REST fallback
+- **RGBW lights** — colour picker (RGB), colour temperature slider (2700–6500 K), brightness
+- **Roller shutters / covers** — Open / Stop / Close buttons + position slider (0–100%) via `Cover.GoToPosition` RPC
+- Auto-detects device category from model ID and shows the appropriate controls
+- Works with password-protected devices (credentials from device config)
+
+### 🗂 Supported Device Registry
+- **115 Shelly models** catalogued across all generations: Gen 1 (Classic), Gen 2 (Plus & Pro), Gen 3, Gen 4
+- Categories: energy meters, switches, plugs, dimmers, RGBW / lighting, covers / shutters, sensors, displays
+- Each entry carries: model ID, product name, generation, series, category, power metering flag, phase count, channel count, EMData history support
+- **Searchable & filterable list** in Settings → Advanced → Supported Devices — browse every recognized model with capability badges (⚡ Power, 📊 EMData, phase count, channels)
+- Discovery enriched: `probe_device()` resolves model IDs to human-readable product names (e.g. "Shelly Pro 3EM" instead of "SPEM-003CEBEU")
+
 ### 🔄 Data Sync
 - Pull historical data from Shelly devices into the local SQLite database
 - Sync progress bar with real-time status (e.g. "Device 2/3 - Chunk 5/12")
@@ -311,7 +327,7 @@ All desktop shots are captured at native **4K (3840×2160)**, all mobile shots a
 
 ### 🌐 Web Dashboard (Mobile-Friendly SPA)
 - Full single-page app (SPA) accessible from any device on the local network — the **sole UI** of the application
-- **23 tabs**:
+- **24 tabs**:
   - **Live** — real-time device cards with colour-coded power, sparkline charts, collapsible detail rows, NILM appliance chips, freeze button, time-scale selector
   - **Plots** — interactive historical charts (W/V/A/VAR/cos φ) with phase selection, time ranges, and kWh totals (Plotly.js)
   - **Costs** — per-device cost overview with ENTSO-E CO2 tracking, dynamic spot price comparison, and 24h spot market price chart; current spot price prominently displayed with color-coded delta
@@ -334,6 +350,7 @@ All desktop shots are captured at native **4K (3840×2160)**, all mobile shots a
   - **Advisor** — AI energy advisor with personalised tips
   - **Goals** — energy saving goals with progress tracking
   - **Tenants** — multi-tenant sub-metering and utility cost allocation
+  - **Control** — direct device control: switch toggles, dimmer sliders, RGB colour picker, roller shutter open/stop/close with position slider
   - **Sync** — live data synchronisation log with status panel
 - **Dark / Light mode** toggle with auto-detection and localStorage persistence
 - **Full i18n** — all 9 supported languages
