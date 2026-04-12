@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.22.1 - 2026-04-12
+### Fixed
+- **Setup page shown after settings save.** When saving any settings section (e.g. Device Control, Billing), `PUT /api/settings` merged the partial update into the full config — but because the browser only sends the fields of the active section, top-level lists like `devices`, `groups`, `schedules`, and `alerts` could be overwritten with empty arrays. Now these lists are preserved unless the update explicitly includes them.
+- **Dashboard safety reload.** If `state.cfg.devices` is somehow empty but `config.json` on disk still has devices, the dashboard route now reloads the config from disk before redirecting to the setup wizard. This prevents a stale in-memory state from triggering the first-run wizard on a configured installation.
+
 ## 16.22.0 - 2026-04-12
 ### Added
 - **Room assignment for device control.** Devices can now be organized into rooms (living room, kitchen, basement, …) in Settings → Features → Device Control. Each room has a name, a selectable emoji icon (58 icons in a scrollable picker), and a checkbox grid of all available devices. The Control tab groups devices by room with headers; unassigned devices appear under a separate "Unassigned" section.
