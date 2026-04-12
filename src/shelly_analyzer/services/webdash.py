@@ -1813,25 +1813,25 @@ _HTML_TEMPLATE = """<!doctype html>
 
     <!-- New feature panes (same pattern as costs/forecast/standby) -->
     <div id="pane-smart_sched" class="pane">
-      <div id="ss-content"><p class="loading-msg">Lade…</p></div>
+      <div id="ss-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
     <div id="pane-ev_log" class="pane">
-      <div id="ev-content"><p class="loading-msg">Lade…</p></div>
+      <div id="ev-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
     <div id="pane-tariff" class="pane">
-      <div id="tariff-content"><p class="loading-msg">Lade…</p></div>
+      <div id="tariff-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
     <div id="pane-battery" class="pane">
-      <div id="bat-content"><p class="loading-msg">Lade…</p></div>
+      <div id="bat-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
     <div id="pane-advisor" class="pane">
-      <div id="advisor-content"><p class="loading-msg">Lade…</p></div>
+      <div id="advisor-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
     <div id="pane-goals" class="pane">
-      <div id="goals-content"><p class="loading-msg">Lade…</p></div>
+      <div id="goals-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
     <div id="pane-tenants" class="pane">
-      <div id="tenants-content"><p class="loading-msg">Lade…</p></div>
+      <div id="tenants-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
     <!-- NILM Statistics -->
     <div id="pane-nilm" class="pane">
@@ -1946,7 +1946,7 @@ _HTML_TEMPLATE = """<!doctype html>
     </button>
     <button class="nav-btn" data-feature="tenants" onclick="switchPane('tenants',this)">
       <span class="nav-icon">🏘</span>
-      <span class="nav-label">Mieter</span>
+      <span class="nav-label">{web_tab_tenants}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('nilm',this)">
       <span class="nav-icon">🧠</span>
@@ -1985,7 +1985,7 @@ _HTML_TEMPLATE = """<!doctype html>
     <button class="drawer-item" data-feature="battery" onclick="switchPaneFromDrawer('battery',this)"><span class="drawer-ico">🔋</span>Battery</button>
     <button class="drawer-item" data-feature="advisor" onclick="switchPaneFromDrawer('advisor',this)"><span class="drawer-ico">🤖</span>Advisor</button>
     <button class="drawer-item" data-feature="goals" onclick="switchPaneFromDrawer('goals',this)"><span class="drawer-ico">🏆</span>Goals</button>
-    <button class="drawer-item" data-feature="tenants" onclick="switchPaneFromDrawer('tenants',this)"><span class="drawer-ico">🏘</span>Mieter</button>
+    <button class="drawer-item" data-feature="tenants" onclick="switchPaneFromDrawer('tenants',this)"><span class="drawer-ico">🏘</span>{web_tab_tenants}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('nilm',this)"><span class="drawer-ico">🧠</span>NILM</button>
     <button class="drawer-item" data-feature="device_control" onclick="switchPaneFromDrawer('control',this)"><span class="drawer-ico">🎛</span>Control</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('sync',this)"><span class="drawer-ico">🔄</span>Sync</button>
@@ -2887,7 +2887,7 @@ function syncAll(mode) {{
     }}).catch(function(e) {{ if (el) el.textContent = t('web.sync.status.net_error', {{err: e}}); }});
 }}
 /* ──────────────────────────────────────────────
-   TENANTS (Mieter / Nebenkostenabrechnung)
+   TENANTS (Utility billing)
 ────────────────────────────────────────────── */
 let _tenantsCache = null;
 let _tenantsDevices = [];
@@ -6530,7 +6530,7 @@ function renderForecast(d) {{
   html += '</div></div>';
 
   // Cost projection card
-  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.cost_projection','Kostenprognose') + '</div>';
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.cost_projection','Cost projection') + '</div>';
   html += '<canvas id="fc-cost-bars" style="width:100%;height:160px"></canvas>';
   html += '</div></div>';
 
@@ -7832,7 +7832,7 @@ _loadLsSettings();
   }}
   function renderAdvisor(data, el) {{
     let html = '<div class="card" style="margin-bottom:10px;text-align:center">' +
-      '<div class="card-title">🤖 KI-Energieberater</div>' +
+      '<div class="card-title">🤖 ' + t('advisor.card_title','AI Energy Advisor') + '</div>' +
       '<div style="font-size:20px;font-weight:700;color:#4caf50;padding:8px 0">💰 ' +
       data.total_savings_potential_eur.toFixed(0) + ' €/year savings potential</div></div>';
     if (data.llm_summary) {{

@@ -1,5 +1,11 @@
 # Changelog
 
+## 16.21.2 - 2026-04-12
+### Fixed
+- **More hardcoded German strings** in dashboard template: 7× `Lade…` loading messages → use `{web_loading}` placeholder, `Mieter` tab label → `{web_tab_tenants}` i18n key, `Kostenprognose` forecast card title → `t('web.fc.cost_projection','Cost projection')`, `KI-Energieberater` advisor card title → `t('advisor.card_title','AI Energy Advisor')`.
+- **German fallback strings** in `web/__init__.py` template values: `Smart-Zeitplanung` → `Smart Schedule`, `E-Auto Ladeprotokoll` → `EV Charging Log`, `Tarifvergleich` → `Tariff Comparison`, `Batteriespeicher` → `Battery`, `KI-Energieberater` → `AI Advisor`, `Ziele & Erfolge` → `Goals & Badges`.
+- Added `web.tab.tenants` i18n key (DE: `Mieter`, EN: `Tenants`).
+
 ## 16.21.1 - 2026-04-12
 ### Fixed
 - **Dashboard blank page** — the Control tab's inline JS event handlers (`ctrlToggle`, `ctrlSetBrightness`, `ctrlCover`, etc.) used `\'` to escape single quotes inside HTML attribute strings, but Python triple-quoted strings interpret `\'` as just `'`, producing invalid JS (`ctrlToggle('' + d.key + '',...)`). Fixed by using `\\'` which renders as the correct `\'` in the browser. This broke the entire dashboard JS parser, causing a blank page with only header and nav visible.
