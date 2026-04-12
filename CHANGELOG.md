@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.25.1 - 2026-04-12
+### Fixed
+- **Stale devices in Costs / Plots / Widget tabs after device removal.** The `ActionDispatcher` held its own reference to `AppConfig` that was never updated when `state.reload_config()` was called. This meant removing a device from Settings (or activating/deactivating demo mode) left the old device visible in all tabs that go through the dispatcher (`/api/costs`, `/api/plots_data`, `/api/widget`, etc.) until the app was fully restarted. Now `reload_config()` propagates the new config to the dispatcher via its existing `reload()` method.
+
 ## 16.25.0 - 2026-04-12
 ### Changed
 - **Complete setup wizard overhaul.** The first-run wizard now walks through 12 steps (Welcome, Language & theme, Mode, Devices, Tariff, Spot prices, CO₂, Solar, Notifications, Integrations, Widget, Summary) instead of just 4. Every optional step has a visible "Skip" button so you can race through the minimum setup in a few clicks or take your time for full configuration. The "Mode" step lets you pick between demo mode (two simulated Shellys with realistic data, zero hardware required) and real devices with mDNS discovery. Notification and integration steps include "Test connection" buttons for Telegram, MQTT and InfluxDB that hit the existing `/api/settings/test-*` endpoints directly from the wizard. The final summary page shows what was configured vs skipped, with status ticks per section.
