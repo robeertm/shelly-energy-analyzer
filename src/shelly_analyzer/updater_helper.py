@@ -111,9 +111,13 @@ EXCLUDE_NAMES = {
     "data",
     "logs",
     "config.json",
+    "config.example.json",
     ".git",
-    ".github",  # not needed for runtime install
+    ".github",
+    ".claude",
+    ".vscode",
     "__pycache__",
+    "docs",
 }
 
 
@@ -187,14 +191,37 @@ def main() -> int:
     else:
         restart = (app_dir / restart_arg).resolve()
 
+    # Log file for debugging update issues
+    log_path = app_dir / "logs" / "updater.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _log(msg: str) -> None:
+        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        line = f"{ts} {msg}\n"
+        print(line, end="", file=sys.stderr)
+        try:
+            with open(log_path, "a") as f:
+                f.write(line)
+        except Exception:
+            pass
+
+    _log(f"[updater] waiting for PID {args.wait_pid} to exit")
     _wait_for_pid(int(args.wait_pid or 0))
 
+    _log(f"[updater] app_dir={app_dir}, staging={staging}")
+    _log(f"[updater] config.json exists: {(app_dir / 'config.json').exists()}")
+
     # Replace app files, preserve user data/config/venv.
+    copied = 0
     for item in _iter_items(staging):
         name = item.name
         if name in EXCLUDE_NAMES:
+            _log(f"[updater] skip (excluded): {name}")
             continue
         if name.endswith(".pyc") or name == ".DS_Store":
+            continue
+        if name.startswith(".") and name not in (".gitignore",):
+            _log(f"[updater] skip (hidden): {name}")
             continue
 
         dst = app_dir / name
@@ -203,24 +230,38 @@ def main() -> int:
                 _copy_tree(item, dst)
             else:
                 _copy_file(item, dst)
+            copied += 1
         except Exception as e:
-            print(f"[updater] Failed to copy {name}: {e}", file=sys.stderr)
+            _log(f"[updater] FAILED to copy {name}: {e}")
+
+    _log(f"[updater] copied {copied} items")
+
+    # Clear __pycache__ recursively to avoid stale bytecode
+    for cache_dir in app_dir.rglob("__pycache__"):
+        _safe_rmtree(cache_dir)
+    _log("[updater] cleared __pycache__")
+
+    _log(f"[updater] config.json still exists: {(app_dir / 'config.json').exists()}")
 
     # Update dependencies if venv exists and requirements.txt exists
     if int(args.update_deps or 0) == 1:
         req = app_dir / "requirements.txt"
         py = _venv_python(app_dir)
         if py and req.exists():
+            _log(f"[updater] installing deps via {py}")
             try:
-                subprocess.run([str(py), "-m", "pip", "install", "-r", str(req)], check=False)
+                subprocess.run([str(py), "-m", "pip", "install", "-r", str(req)],
+                               check=False, capture_output=True)
             except Exception as e:
-                print(f"[updater] pip install failed: {e}", file=sys.stderr)
+                _log(f"[updater] pip install failed: {e}")
 
     # Restart app
     try:
+        _log(f"[updater] restarting via {restart}")
         _restart_app(restart, app_dir)
+        _log("[updater] restart command issued")
     except Exception as e:
-        print(f"[updater] restart failed: {e}", file=sys.stderr)
+        _log(f"[updater] restart failed: {e}")
         return 2
     return 0
 
