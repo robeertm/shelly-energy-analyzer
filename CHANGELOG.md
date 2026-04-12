@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.22.3 - 2026-04-12
+### Changed
+- **Update banner appears within seconds.** Background update checker now queries GitHub after 5s (was 15s). The Live tab banner polls every 60s (was 30 min) and first checks after 8s (was 20s). Clicking the banner navigates directly to Settings → Updates.
+
 ## 16.22.2 - 2026-04-12
 ### Fixed
 - **Regenerated `config.example.json`** — was missing `device_control` section (rooms), new tenant contact fields (address, phone, email, vat_id), billing address string field, and other schema changes from v16.22.0.
