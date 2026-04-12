@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.21.3 - 2026-04-12
+### Fixed
+- **Control tab showed German** even when language is set to English. The `control.*` i18n keys were only defined in the DE dict — since `get_lang_map('en')` falls back to DE for missing keys, the German translations leaked through. Added all EN keys explicitly: Loading, Power, Brightness, Color, Position, Open/Stop/Close, error messages.
+- Added `advisor.card_title` i18n key (DE: `KI-Energieberater`, EN: `AI Energy Advisor`).
+
 ## 16.21.2 - 2026-04-12
 ### Fixed
 - **More hardcoded German strings** in dashboard template: 7× `Lade…` loading messages → use `{web_loading}` placeholder, `Mieter` tab label → `{web_tab_tenants}` i18n key, `Kostenprognose` forecast card title → `t('web.fc.cost_projection','Cost projection')`, `KI-Energieberater` advisor card title → `t('advisor.card_title','AI Energy Advisor')`.
