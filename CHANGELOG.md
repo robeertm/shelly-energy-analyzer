@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.21.1 - 2026-04-12
+### Fixed
+- **Dashboard blank page** — the Control tab's inline JS event handlers (`ctrlToggle`, `ctrlSetBrightness`, `ctrlCover`, etc.) used `\'` to escape single quotes inside HTML attribute strings, but Python triple-quoted strings interpret `\'` as just `'`, producing invalid JS (`ctrlToggle('' + d.key + '',...)`). Fixed by using `\\'` which renders as the correct `\'` in the browser. This broke the entire dashboard JS parser, causing a blank page with only header and nav visible.
+
 ## 16.21.0 - 2026-04-12
 ### Added
 - **Device Control tab** — a new dashboard tab (🎛 Control) for directly controlling Shelly switches, dimmers, RGB lights, and roller shutters from the web UI. Enable under Settings → Features → Device Control.
