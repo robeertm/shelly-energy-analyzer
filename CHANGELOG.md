@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.25.2 - 2026-04-12
+### Fixed
+- **App failed to start on Python 3.10 / 3.11** with `SyntaxError: f-string expression part cannot include a backslash` in `web/action_dispatch.py` line 1845. The f-string used `'\u2026'` literals inside the expression parts, which only works on Python 3.12+ despite `pyproject.toml` declaring `requires-python = ">=3.10"`. Refactored to assign the ellipsis character to a local variable first. Reported by a user running v16.19.1 on Linux with Python 3.11.
+
 ## 16.25.1 - 2026-04-12
 ### Fixed
 - **Stale devices in Costs / Plots / Widget tabs after device removal.** The `ActionDispatcher` held its own reference to `AppConfig` that was never updated when `state.reload_config()` was called. This meant removing a device from Settings (or activating/deactivating demo mode) left the old device visible in all tabs that go through the dispatcher (`/api/costs`, `/api/plots_data`, `/api/widget`, etc.) until the app was fully restarted. Now `reload_config()` propagates the new config to the dispatcher via its existing `reload()` method.
