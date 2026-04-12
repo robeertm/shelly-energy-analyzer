@@ -151,6 +151,13 @@ class AppState:
         bg = getattr(self, "_bg", None)
         if bg is not None:
             bg.cfg = cfg
+        # Propagate to the action dispatcher so /api/costs etc. see the new device list
+        dispatcher = getattr(self, "_dispatcher", None)
+        if dispatcher is not None:
+            try:
+                dispatcher.reload(cfg)
+            except Exception:
+                pass
 
         try:
             from shelly_analyzer.web import _render_dashboard_html, _render_plots_html, _render_control_html
