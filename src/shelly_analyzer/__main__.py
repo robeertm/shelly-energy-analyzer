@@ -55,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         cfg_path=cfg_path,
     )
     state.on_action = dispatcher.dispatch
+    state._dispatcher = dispatcher  # type: ignore[attr-defined]
 
     bg = BackgroundServiceManager(
         cfg=cfg,
