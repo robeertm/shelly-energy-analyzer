@@ -2185,24 +2185,81 @@ function onPaneActivated(name) {{
 ────────────────────────────────────────────── */
 let _ctrlRefreshTimer = null;
 
+function _ctrlDeviceCard(d, cfgMap) {{
+  const cd = cfgMap[d.key] || {{}};
+  const model = cd.model || '';
+  const ml = model.toLowerCase();
+  const cat = _guessCategory(ml, cd);
+  const isOn = d.switch_on === true;
+  const powerW = (d.power_w || 0).toFixed(1);
+  let h = '';
+  h += '<div class="card" id="ctrl-' + d.key + '" style="padding:14px">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  h += '<div><div style="font-weight:600;font-size:.95rem">' + esc(d.name) + '</div>';
+  h += '<div style="font-size:.72rem;color:var(--muted)">' + esc(model || d.kind) + ' · ' + esc(cat) + '</div></div>';
+  h += '<div style="font-size:.85rem;font-weight:600;color:var(--accent)">' + powerW + ' W</div>';
+  h += '</div>';
+  h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
+  h += '<span style="font-size:.82rem;color:var(--muted)">' + t('control.power', 'Power') + '</span>';
+  h += '<label class="ctrl-toggle" style="flex:0 0 auto">';
+  h += '<input type="checkbox" ' + (isOn ? 'checked' : '') + ' onchange="ctrlToggle(\\'' + d.key + '\\',this.checked)">';
+  h += '<span class="ctrl-slider"></span></label>';
+  h += '<span class="ctrl-state" id="ctrl-state-' + d.key + '" style="font-size:.82rem;font-weight:600;color:' + (isOn ? 'var(--ok)' : 'var(--muted)') + '">' + (isOn ? 'ON' : 'OFF') + '</span>';
+  h += '</div>';
+  if (cat === 'Dimmer' || cat === 'RGBW') {{
+    h += '<div style="margin-bottom:10px">';
+    h += '<div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);margin-bottom:4px">';
+    h += '<span>' + t('control.brightness', 'Brightness') + '</span>';
+    h += '<span id="ctrl-bri-val-' + d.key + '">—</span></div>';
+    h += '<input type="range" min="0" max="100" value="50" class="ctrl-range" id="ctrl-bri-' + d.key + '" ';
+    h += 'onchange="ctrlSetBrightness(\\'' + d.key + '\\',this.value)" oninput="document.getElementById(\\'ctrl-bri-val-' + d.key + '\\').textContent=this.value+\\'%\\'">';
+    h += '</div>';
+  }}
+  if (cat === 'RGBW') {{
+    h += '<div style="margin-bottom:10px">';
+    h += '<div style="font-size:.82rem;color:var(--muted);margin-bottom:4px">' + t('control.color', 'Color') + '</div>';
+    h += '<div style="display:flex;gap:8px;align-items:center">';
+    h += '<input type="color" value="#ff8800" id="ctrl-rgb-' + d.key + '" onchange="ctrlSetRgb(\\'' + d.key + '\\',this.value)" style="width:50px;height:36px;border:1px solid var(--border);border-radius:6px;cursor:pointer;background:var(--input-bg)">';
+    h += '<input type="range" min="2700" max="6500" value="4000" class="ctrl-range" id="ctrl-temp-' + d.key + '" style="flex:1" ';
+    h += 'onchange="ctrlSetTemp(\\'' + d.key + '\\',this.value)" oninput="document.getElementById(\\'ctrl-temp-lbl-' + d.key + '\\').textContent=this.value+\\'K\\'">';
+    h += '<span id="ctrl-temp-lbl-' + d.key + '" style="font-size:.78rem;color:var(--muted);min-width:45px">4000K</span>';
+    h += '</div></div>';
+  }}
+  if (cat === 'Cover') {{
+    h += '<div style="margin-bottom:10px">';
+    h += '<div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);margin-bottom:4px">';
+    h += '<span>' + t('control.position', 'Position') + '</span>';
+    h += '<span id="ctrl-pos-val-' + d.key + '">—</span></div>';
+    h += '<input type="range" min="0" max="100" value="50" class="ctrl-range" id="ctrl-pos-' + d.key + '" ';
+    h += 'onchange="ctrlSetCoverPos(\\'' + d.key + '\\',this.value)" oninput="document.getElementById(\\'ctrl-pos-val-' + d.key + '\\').textContent=this.value+\\'%\\'">';
+    h += '<div style="display:flex;gap:6px;margin-top:6px">';
+    h += '<button class="btn" style="flex:1" onclick="ctrlCover(\\'' + d.key + '\\',\\'open\\')">▲ ' + t('control.open', 'Open') + '</button>';
+    h += '<button class="btn" style="flex:1" onclick="ctrlCover(\\'' + d.key + '\\',\\'stop\\')">⏹ ' + t('control.stop', 'Stop') + '</button>';
+    h += '<button class="btn" style="flex:1" onclick="ctrlCover(\\'' + d.key + '\\',\\'close\\')">▼ ' + t('control.close', 'Close') + '</button>';
+    h += '</div></div>';
+  }}
+  h += '<div id="ctrl-msg-' + d.key + '" style="font-size:.72rem;color:var(--muted);min-height:16px"></div>';
+  h += '</div>';
+  return h;
+}}
+
 async function loadControl() {{
   const el = document.getElementById('control-content');
   if (!el) return;
   el.innerHTML = '<p class="loading-msg">' + t('control.loading', 'Loading devices…') + '</p>';
 
-  // Fetch device list from /api/state to know what's connected
   try {{
-    const r = await fetch('/api/state');
-    const data = await r.json();
+    const [stateResp, cfgResp, settingsResp] = await Promise.all([
+      fetch('/api/state'), fetch('/api/config'), fetch('/api/settings')
+    ]);
+    const data = await stateResp.json();
     const devs = data.devices || [];
-    // Also pull config to get device kind/model info
-    const rc = await fetch('/api/config');
-    const cfgData = await rc.json();
-    const cfgDevs = (cfgData.config || {{}}).devices || [];
+    const cfgData = await cfgResp.json();
+    const settings = await settingsResp.json();
+    const cfgDevs = (cfgData.devices_meta || settings.devices || []);
     const cfgMap = {{}};
     cfgDevs.forEach(d => {{ cfgMap[d.key] = d; }});
 
-    // Filter to controllable devices (switches, dimmers, covers, plugs)
     const controllable = devs.filter(d => {{
       const cd = cfgMap[d.key] || {{}};
       return d.kind === 'switch' || cd.kind === 'switch';
@@ -2214,74 +2271,46 @@ async function loadControl() {{
       return;
     }}
 
-    let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">';
-    controllable.forEach(d => {{
-      const cd = cfgMap[d.key] || {{}};
-      const model = cd.model || '';
-      const ml = model.toLowerCase();
-      const cat = _guessCategory(ml, cd);
-      const isOn = d.switch_on === true;
-      const powerW = (d.power_w || 0).toFixed(1);
+    // Room grouping from settings (full config)
+    const dcCfg = settings.device_control || {{}};
+    const rooms = dcCfg.rooms || [];
+    const assignedKeys = new Set();
+    rooms.forEach(rm => {{ (rm.device_keys || []).forEach(k => assignedKeys.add(k)); }});
+    const unassigned = controllable.filter(d => !assignedKeys.has(d.key));
+    const devByKey = {{}};
+    controllable.forEach(d => {{ devByKey[d.key] = d; }});
 
-      html += '<div class="card" id="ctrl-' + d.key + '" style="padding:14px">';
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
-      html += '<div><div style="font-weight:600;font-size:.95rem">' + esc(d.name) + '</div>';
-      html += '<div style="font-size:.72rem;color:var(--muted)">' + esc(model || d.kind) + ' · ' + esc(cat) + '</div></div>';
-      html += '<div style="font-size:.85rem;font-weight:600;color:var(--accent)">' + powerW + ' W</div>';
-      html += '</div>';
+    let html = '';
 
-      // Switch toggle (all controllable devices)
-      html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
-      html += '<span style="font-size:.82rem;color:var(--muted)">' + t('control.power', 'Power') + '</span>';
-      html += '<label class="ctrl-toggle" style="flex:0 0 auto">';
-      html += '<input type="checkbox" ' + (isOn ? 'checked' : '') + ' onchange="ctrlToggle(\\'' + d.key + '\\',this.checked)">';
-      html += '<span class="ctrl-slider"></span></label>';
-      html += '<span class="ctrl-state" id="ctrl-state-' + d.key + '" style="font-size:.82rem;font-weight:600;color:' + (isOn ? 'var(--ok)' : 'var(--muted)') + '">' + (isOn ? 'ON' : 'OFF') + '</span>';
-      html += '</div>';
-
-      // Dimmer slider (for dimmers/RGBW)
-      if (cat === 'Dimmer' || cat === 'RGBW') {{
-        html += '<div style="margin-bottom:10px">';
-        html += '<div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);margin-bottom:4px">';
-        html += '<span>' + t('control.brightness', 'Brightness') + '</span>';
-        html += '<span id="ctrl-bri-val-' + d.key + '">—</span></div>';
-        html += '<input type="range" min="0" max="100" value="50" class="ctrl-range" id="ctrl-bri-' + d.key + '" ';
-        html += 'onchange="ctrlSetBrightness(\\'' + d.key + '\\',this.value)" oninput="document.getElementById(\\'ctrl-bri-val-' + d.key + '\\').textContent=this.value+\\'%\\'">';
-        html += '</div>';
-      }}
-
-      // Color picker (for RGBW)
-      if (cat === 'RGBW') {{
-        html += '<div style="margin-bottom:10px">';
-        html += '<div style="font-size:.82rem;color:var(--muted);margin-bottom:4px">' + t('control.color', 'Color') + '</div>';
-        html += '<div style="display:flex;gap:8px;align-items:center">';
-        html += '<input type="color" value="#ff8800" id="ctrl-rgb-' + d.key + '" onchange="ctrlSetRgb(\\'' + d.key + '\\',this.value)" style="width:50px;height:36px;border:1px solid var(--border);border-radius:6px;cursor:pointer;background:var(--input-bg)">';
-        html += '<input type="range" min="2700" max="6500" value="4000" class="ctrl-range" id="ctrl-temp-' + d.key + '" style="flex:1" ';
-        html += 'onchange="ctrlSetTemp(\\'' + d.key + '\\',this.value)" oninput="document.getElementById(\\'ctrl-temp-lbl-' + d.key + '\\').textContent=this.value+\\'K\\'">';
-        html += '<span id="ctrl-temp-lbl-' + d.key + '" style="font-size:.78rem;color:var(--muted);min-width:45px">4000K</span>';
-        html += '</div></div>';
-      }}
-
-      // Cover controls
-      if (cat === 'Cover') {{
-        html += '<div style="margin-bottom:10px">';
-        html += '<div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--muted);margin-bottom:4px">';
-        html += '<span>' + t('control.position', 'Position') + '</span>';
-        html += '<span id="ctrl-pos-val-' + d.key + '">—</span></div>';
-        html += '<input type="range" min="0" max="100" value="50" class="ctrl-range" id="ctrl-pos-' + d.key + '" ';
-        html += 'onchange="ctrlSetCoverPos(\\'' + d.key + '\\',this.value)" oninput="document.getElementById(\\'ctrl-pos-val-' + d.key + '\\').textContent=this.value+\\'%\\'">';
-        html += '<div style="display:flex;gap:6px;margin-top:6px">';
-        html += '<button class="btn" style="flex:1" onclick="ctrlCover(\\'' + d.key + '\\',\\'open\\')">▲ ' + t('control.open', 'Open') + '</button>';
-        html += '<button class="btn" style="flex:1" onclick="ctrlCover(\\'' + d.key + '\\',\\'stop\\')">⏹ ' + t('control.stop', 'Stop') + '</button>';
-        html += '<button class="btn" style="flex:1" onclick="ctrlCover(\\'' + d.key + '\\',\\'close\\')">▼ ' + t('control.close', 'Close') + '</button>';
-        html += '</div></div>';
-      }}
-
-      // Status bar
-      html += '<div id="ctrl-msg-' + d.key + '" style="font-size:.72rem;color:var(--muted);min-height:16px"></div>';
-      html += '</div>';
+    // Render each room
+    rooms.forEach(rm => {{
+      const roomDevs = (rm.device_keys || []).map(k => devByKey[k]).filter(Boolean);
+      if (!roomDevs.length) return;
+      const icon = rm.icon || '🏠';
+      const name = rm.name || rm.room_id || t('control.room_unnamed', 'Unnamed room');
+      html += '<div style="margin-bottom:20px">';
+      html += '<h3 style="font-size:.95rem;margin:0 0 10px;color:var(--accent);display:flex;align-items:center;gap:6px">';
+      html += '<span style="font-size:1.2rem">' + esc(icon) + '</span> ' + esc(name);
+      html += '<span style="font-size:.75rem;color:var(--muted);font-weight:400">(' + roomDevs.length + ')</span></h3>';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">';
+      roomDevs.forEach(d => {{ html += _ctrlDeviceCard(d, cfgMap); }});
+      html += '</div></div>';
     }});
-    html += '</div>';
+
+    // Unassigned devices
+    if (unassigned.length) {{
+      if (rooms.length) {{
+        html += '<div style="margin-bottom:20px">';
+        html += '<h3 style="font-size:.95rem;margin:0 0 10px;color:var(--muted);display:flex;align-items:center;gap:6px">';
+        html += '<span style="font-size:1.2rem">📦</span> ' + t('control.unassigned', 'Unassigned');
+        html += '<span style="font-size:.75rem;font-weight:400">(' + unassigned.length + ')</span></h3>';
+      }}
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">';
+      unassigned.forEach(d => {{ html += _ctrlDeviceCard(d, cfgMap); }});
+      html += '</div>';
+      if (rooms.length) html += '</div>';
+    }}
+
     el.innerHTML = html;
 
     // Fetch initial status for dimmers/covers
