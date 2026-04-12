@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.21.4 - 2026-04-12
+### Changed
+- **README updated** for v16.20–16.21 features: description line now mentions 115+ Shelly devices (Gen 1–4), new "Device Control" section (switches, dimmers, RGB, covers), new "Supported Device Registry" section (115 models, searchable UI), tab count 23 → 24 with Control tab listed, broader device list in "Who it's for".
+
 ## 16.21.3 - 2026-04-12
 ### Fixed
 - **Control tab showed German** even when language is set to English. The `control.*` i18n keys were only defined in the DE dict — since `get_lang_map('en')` falls back to DE for missing keys, the German translations leaked through. Added all EN keys explicitly: Loading, Power, Brightness, Color, Position, Open/Stop/Close, error messages.
