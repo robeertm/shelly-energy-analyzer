@@ -1842,7 +1842,10 @@ class ActionDispatcher:
                     period_label = self.t("period.all")
                     suffix = "all"
                 else:
-                    period_label = f"{format_date_local(self.lang, start) if start is not None else '\u2026'} {self.t('common.to')} {format_date_local(self.lang, end) if end is not None else '\u2026'}"
+                    _ell = "\u2026"
+                    _start_lbl = format_date_local(self.lang, start) if start is not None else _ell
+                    _end_lbl = format_date_local(self.lang, end) if end is not None else _ell
+                    period_label = f"{_start_lbl} {self.t('common.to')} {_end_lbl}"
                     if period == "day" and start is not None:
                         suffix = start.strftime("%Y%m%d")
                     elif period == "week" and start is not None:
