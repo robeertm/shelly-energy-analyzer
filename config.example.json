@@ -1,33 +1,5 @@
 {
-  "version": "X.Y.Z",
-  "devices": [
-    {
-      "key": "device1",
-      "name": "Device 1",
-      "host": "192.0.2.10",
-      "em_id": 0,
-      "kind": "em",
-      "gen": 0,
-      "model": "",
-      "phases": 3,
-      "supports_emdata": true,
-      "username": "admin",
-      "password": ""
-    },
-    {
-      "key": "device2",
-      "name": "Device 2",
-      "host": "192.0.2.11",
-      "em_id": 0,
-      "kind": "em",
-      "gen": 0,
-      "model": "",
-      "phases": 3,
-      "supports_emdata": true,
-      "username": "admin",
-      "password": ""
-    }
-  ],
+  "devices": [],
   "download": {
     "chunk_seconds": 43200,
     "overlap_seconds": 60,
@@ -106,7 +78,7 @@
     "plot_theme_mode": "auto"
   },
   "updates": {
-    "repo": "<github-user>/<repo>",
+    "repo": "robeertm/shelly-energy-analyzer",
     "check_on_start": true,
     "auto_install": false
   },
@@ -158,22 +130,23 @@
   },
   "billing": {
     "issuer": {
-      "name": "<Your Company>",
+      "name": "Example Company Ltd",
       "address_lines": [
-        "<Street 1>",
-        "<12345 City>"
+        "Example Street 1",
+        "12345 Example City"
       ],
-      "vat_id": "",
+      "address": "Example Street 1\n12345 Example City",
+      "vat_id": "GB000000000",
       "email": "",
       "phone": "",
       "iban": "",
       "bic": ""
     },
     "customer": {
-      "name": "<Customer Name>",
+      "name": "Customer",
       "address_lines": [
-        "<Street 1>",
-        "<12345 City>"
+        "Customer Street 1",
+        "12345 Customer City"
       ],
       "vat_id": "",
       "email": "",
@@ -330,5 +303,9 @@
     "enabled": false,
     "locations": [],
     "active_location_id": ""
+  },
+  "device_control": {
+    "enabled": false,
+    "rooms": []
   }
 }
