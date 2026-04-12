@@ -762,8 +762,8 @@ class BackgroundServiceManager:
                     "checked_at": int(time.time()),
                 }
 
-            # Re-check every 6 hours. Break out immediately on shutdown.
-            if self._stop_event.wait(3600):
+            # Re-check every 5 minutes so users see new releases quickly.
+            if self._stop_event.wait(300):
                 return
 
     # ── Runtime metadata ───────────────────────────────────────────────
