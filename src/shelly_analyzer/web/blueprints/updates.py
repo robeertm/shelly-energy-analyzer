@@ -26,6 +26,11 @@ logger = logging.getLogger(__name__)
 
 bp = Blueprint("updates", __name__)
 
+# In-memory TTL cache for /api/updates/releases to avoid hitting GitHub
+# on every Settings → Updates page load (rate limit 60/h unauthenticated).
+_releases_cache: dict = {"ts": 0.0, "limit": 0, "data": None}
+_RELEASES_CACHE_TTL_S = 600  # 10 minutes
+
 
 def _get_state():
     return current_app.extensions["state"]
@@ -59,7 +64,25 @@ def api_updates_cached():
 
 @bp.route("/api/updates/status", methods=["GET"])
 def api_updates_status():
-    """Return current version + latest release info (single fetch)."""
+    """Return current version + latest release info.
+
+    Prefers the cached result from the background update checker to avoid
+    hitting GitHub on every call (rate limit: 60/h unauthenticated).
+    Only falls back to a live fetch if the cache is missing AND the caller
+    explicitly passes ?force=1.
+    """
+    import time
+    state = _get_state()
+    bg = getattr(state, "_bg", None)
+    cached = getattr(bg, "_update_check_state", None) if bg is not None else None
+    force = request.args.get("force") == "1"
+
+    if cached and cached.get("ok") and not force:
+        age = int(time.time()) - int(cached.get("checked_at", 0) or 0)
+        out = dict(cached)
+        out["cache_age_seconds"] = age
+        return jsonify(out)
+
     repo = _repo()
     if not repo:
         return jsonify({"ok": False, "error": "updates.repo not configured",
@@ -84,7 +107,12 @@ def api_updates_status():
 
 @bp.route("/api/updates/releases", methods=["GET"])
 def api_updates_releases():
-    """Return the last N GitHub releases (default 10) for rollback/install selection."""
+    """Return the last N GitHub releases (default 10) for rollback/install selection.
+
+    Uses a 10-minute in-memory TTL cache to avoid hitting GitHub on every
+    Settings → Updates page load. Pass ?force=1 to bypass the cache.
+    """
+    import time
     repo = _repo()
     if not repo:
         return jsonify({"ok": False, "error": "updates.repo not configured",
@@ -94,6 +122,17 @@ def api_updates_releases():
     except Exception:
         limit = 10
     limit = max(1, min(limit, 30))
+    force = request.args.get("force") == "1"
+
+    now = time.time()
+    cached = _releases_cache.get("data")
+    if (not force) and cached is not None and _releases_cache.get("limit", 0) >= limit:
+        age = now - _releases_cache.get("ts", 0)
+        if age < _RELEASES_CACHE_TTL_S:
+            out = [r for r in cached[:limit]]
+            return jsonify({"ok": True, "current": __version__, "repo": repo,
+                            "releases": out, "cache_age_seconds": int(age)})
+
     try:
         releases = fetch_releases(repo, limit=limit)
         out = []
@@ -107,9 +146,18 @@ def api_updates_releases():
                 "is_newer": bool(tag and is_newer(tag, __version__)),
                 "is_older": bool(tag and is_newer(__version__, tag)),
             })
-        return jsonify({"ok": True, "current": __version__, "repo": repo, "releases": out})
+        _releases_cache["ts"] = now
+        _releases_cache["limit"] = limit
+        _releases_cache["data"] = out
+        return jsonify({"ok": True, "current": __version__, "repo": repo,
+                        "releases": out, "cache_age_seconds": 0})
     except Exception as e:
         logger.exception("updates releases failed")
+        # Serve stale cache on failure rather than empty list
+        if cached is not None:
+            return jsonify({"ok": True, "current": __version__, "repo": repo,
+                            "releases": cached[:limit], "stale": True,
+                            "error": str(e)})
         return jsonify({"ok": False, "error": str(e), "current": __version__, "releases": []})
 
 

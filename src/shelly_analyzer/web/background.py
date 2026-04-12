@@ -716,15 +716,27 @@ class BackgroundServiceManager:
         logger.info("Update checker started")
 
     def _update_check_loop(self) -> None:
-        """Run an initial check ~15s after startup, then re-check every 6h."""
+        """Periodically query GitHub for the latest release.
+
+        - Default interval: 30 minutes (= 2 requests/hour, well under GitHub's
+          60/hour unauthenticated rate limit).
+        - On HTTP 403 (rate limit) or repeated failure, back off exponentially
+          up to 1 hour so we stop hammering GitHub.
+        """
         from shelly_analyzer import __version__
         from shelly_analyzer.services.updater import check_latest_release, is_newer
+
+        NORMAL_INTERVAL_S = 1800     # 30 min
+        MIN_BACKOFF_S = 900          # 15 min
+        MAX_BACKOFF_S = 3600         # 1 h
+        consecutive_failures = 0
 
         # Short delay so the app is up before we hit the network.
         if self._stop_event.wait(5.0):
             return
 
         while not self._stop_event.is_set():
+            rate_limited = False
             try:
                 repo = str(getattr(getattr(self.cfg, "updates", None), "repo", "") or "").strip()
                 if not repo:
@@ -735,6 +747,15 @@ class BackgroundServiceManager:
                     }
                 else:
                     info = check_latest_release(repo)
+                    # Detect 403 rate limit from the status message
+                    status_lower = (info.status or "").lower()
+                    if not info.reachable and ("403" in status_lower or "rate limit" in status_lower):
+                        rate_limited = True
+                        consecutive_failures += 1
+                    elif not info.reachable:
+                        consecutive_failures += 1
+                    else:
+                        consecutive_failures = 0
                     self._update_check_state = {
                         "ok": True,
                         "current": __version__,
@@ -748,6 +769,7 @@ class BackgroundServiceManager:
                         "asset_url": info.asset_url,
                         "asset_name": info.asset_name,
                         "checked_at": int(time.time()),
+                        "rate_limited": rate_limited,
                     }
                     if self._update_check_state.get("has_update"):
                         logger.info(
@@ -755,6 +777,7 @@ class BackgroundServiceManager:
                             info.latest_tag, __version__,
                         )
             except Exception as e:
+                consecutive_failures += 1
                 logger.warning("Update check failed: %s", e)
                 self._update_check_state = {
                     "ok": False, "error": str(e),
@@ -762,8 +785,15 @@ class BackgroundServiceManager:
                     "checked_at": int(time.time()),
                 }
 
-            # Re-check every 5 minutes so users see new releases quickly.
-            if self._stop_event.wait(300):
+            # Choose next interval: normal on success, exponential backoff otherwise.
+            if consecutive_failures == 0:
+                wait_s = NORMAL_INTERVAL_S
+            else:
+                wait_s = min(MAX_BACKOFF_S, MIN_BACKOFF_S * (2 ** min(consecutive_failures - 1, 3)))
+                if rate_limited:
+                    logger.info("GitHub rate limited; backing off %ds", wait_s)
+
+            if self._stop_event.wait(wait_s):
                 return
 
     # ── Runtime metadata ───────────────────────────────────────────────
