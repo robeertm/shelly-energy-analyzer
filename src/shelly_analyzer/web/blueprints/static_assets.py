@@ -29,8 +29,10 @@ def plotly_js():
 
 @bp.route("/widget.js")
 def widget_js():
+    from flask import request as _req
     state = _get_state()
-    body = state.get_widget_script().encode("utf-8")
+    profile_id = _req.args.get("profile", "")
+    body = state.get_widget_script(profile_id=profile_id).encode("utf-8")
     return Response(
         body,
         content_type="application/javascript; charset=utf-8",

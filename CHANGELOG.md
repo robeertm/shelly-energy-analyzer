@@ -1,5 +1,14 @@
 # Changelog
 
+## 16.24.0 - 2026-04-12
+### Added
+- **Configurable widget profiles.** Create multiple widget profiles in Settings, each with its own combination of 12 toggleable data sections (power, today, month, forecast, spot price, spot chart, CO₂, CO₂ chart, device list, power 24h chart, daily 7d chart, hourly today chart). Each profile has a device filter (checkbox grid), configurable refresh interval (1–60 min), and generates its own Scriptable script. Widget parameter format: `IP:PORT#profile_id`. The default widget (no profile) continues to work unchanged.
+- **Widget live preview in browser.** Each profile (and the default widget) has a "Preview" button that opens a modal showing exactly how the widget will look — with live data from the server. Three size tabs (Small / Medium / Large). SVG mini charts for spot price, CO₂, power, daily, and hourly data. Respects dark/light theme.
+- **Three new widget charts: Power 24h, Daily 7d, Hourly today.** Rendered as SVG bar charts in the browser preview (stacked per device, color-coded with legend) and as DrawContext mini bar charts in the iOS Scriptable widget. Data sourced from the `hourly_energy` database table.
+- **Android / Web Widget page (`/w`).** A standalone, auto-refreshing mini page that works as a home screen widget on Android, tablets, and desktops. Open `/w` (or `/w?profile=<id>` for a specific profile) in any browser, then "Add to Home Screen" for a native PWA experience. Dark/light auto-detection, all widget sections, SVG mini charts, and a link to the full dashboard. No third-party app required.
+- **Widget page links in Settings.** An "Android / Web Widget" subsection with direct links to open the widget page for each profile. Each profile card also shows an "Open web widget" link.
+- **`/api/widget?profile=<id>` parameter.** The widget API endpoint accepts an optional `profile` query parameter. The response includes a `show` object with per-section visibility flags and a `refresh_minutes` value.
+
 ## 16.22.5 - 2026-04-12
 ### Fixed
 - **Update banner now appears reliably.** Background GitHub check interval reduced from 1 hour to 5 minutes. Combined with the 60s banner poll from v16.22.3, users see new releases within ~5 minutes of them being published.

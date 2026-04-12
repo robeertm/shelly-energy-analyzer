@@ -1936,6 +1936,14 @@ class ActionDispatcher:
                 _today_start = _now.replace(hour=0, minute=0, second=0, microsecond=0)
                 _month_start = _today_start.replace(day=1)
 
+                _profile_id = str(params.get("profile", "") or "").strip()
+                _profile = None
+                if _profile_id:
+                    for wp in (getattr(self.cfg.ui, "widget_profiles", []) or []):
+                        if wp.profile_id == _profile_id:
+                            _profile = wp
+                            break
+
                 try:
                     _unit = float(self.cfg.pricing.effective_pricing_for_date(date.today()).unit_price_gross())
                 except Exception:
@@ -1944,7 +1952,7 @@ class ActionDispatcher:
 
                 _all_devs = [d for d in (self.cfg.devices or [])
                              if str(getattr(d, "kind", "em")) != "switch"]
-                _widget_keys = str(getattr(self.cfg.ui, "widget_devices", "") or "").strip()
+                _widget_keys = str(getattr(_profile, "devices", "") or getattr(self.cfg.ui, "widget_devices", "") or "").strip()
                 if _widget_keys:
                     _allowed = {k.strip() for k in _widget_keys.split(",") if k.strip()}
                     _three_phase = [d for d in _all_devs if d.key in _allowed]
@@ -2095,7 +2103,76 @@ class ActionDispatcher:
                 except Exception:
                     pass
 
-                return {
+                _show_power_chart = getattr(_profile, "show_power_chart", False) if _profile else False
+                _show_daily_chart = getattr(_profile, "show_daily_chart", False) if _profile else False
+                _show_hourly_chart = getattr(_profile, "show_hourly_chart", False) if _profile else False
+
+                _power_chart_data = []
+                _daily_chart_data = []
+                _hourly_chart_data = []
+
+                if _show_power_chart or _show_daily_chart or _show_hourly_chart:
+                    try:
+                        _h24_start = int((_now - timedelta(hours=24)).timestamp())
+                        _h7d_start = int((_now - timedelta(days=7)).timestamp())
+                        _now_ts_ch = int(_now.timestamp())
+
+                        for d in _three_phase:
+                            _df_h = self.storage.db.query_hourly(d.key, _h24_start, _now_ts_ch)
+                            if _df_h.empty:
+                                continue
+
+                            if _show_power_chart:
+                                for _, _rh in _df_h.iterrows():
+                                    _power_chart_data.append([
+                                        int(_rh["hour_ts"]),
+                                        round(float(_rh.get("avg_power_w", 0)), 1),
+                                        d.key,
+                                    ])
+
+                            if _show_hourly_chart:
+                                _today_ts = int(_today_start.timestamp())
+                                _df_ht = _df_h[_df_h["hour_ts"] >= _today_ts]
+                                for _, _rh in _df_ht.iterrows():
+                                    _hourly_chart_data.append([
+                                        int(_rh["hour_ts"]),
+                                        round(float(_rh.get("kwh", 0)), 3),
+                                        d.key,
+                                    ])
+
+                        if _show_daily_chart:
+                            for d in _three_phase:
+                                _df_h7 = self.storage.db.query_hourly(d.key, _h7d_start, _now_ts_ch)
+                                if _df_h7.empty:
+                                    continue
+                                _df_h7["day"] = pd.to_datetime(_df_h7["hour_ts"], unit="s").dt.date
+                                _agg = _df_h7.groupby("day").agg(kwh=("kwh", "sum")).reset_index()
+                                for _, _rd in _agg.iterrows():
+                                    _daily_chart_data.append([
+                                        str(_rd["day"]),
+                                        round(float(_rd["kwh"]), 3),
+                                        d.key,
+                                    ])
+                    except Exception:
+                        pass
+
+                _show = {
+                    "power": getattr(_profile, "show_power", True) if _profile else True,
+                    "today": getattr(_profile, "show_today", True) if _profile else True,
+                    "month": getattr(_profile, "show_month", True) if _profile else True,
+                    "forecast": getattr(_profile, "show_forecast", True) if _profile else True,
+                    "spot_price": getattr(_profile, "show_spot_price", True) if _profile else True,
+                    "spot_chart": getattr(_profile, "show_spot_chart", True) if _profile else True,
+                    "co2": getattr(_profile, "show_co2", True) if _profile else True,
+                    "co2_chart": getattr(_profile, "show_co2_chart", True) if _profile else True,
+                    "devices": getattr(_profile, "show_devices", True) if _profile else True,
+                    "power_chart": _show_power_chart,
+                    "daily_chart": _show_daily_chart,
+                    "hourly_chart": _show_hourly_chart,
+                }
+                _refresh = getattr(_profile, "refresh_minutes", 5) if _profile else 5
+
+                _result = {
                     "ok": True,
                     "ts": int(_now.timestamp()),
                     "power_w": round(_power_w, 0),
@@ -2116,7 +2193,17 @@ class ActionDispatcher:
                     "co2_chart": _co2_chart_mini,
                     "co2_green_thr": _co2_green_thr,
                     "co2_dirty_thr": _co2_dirty_thr,
+                    "show": _show,
+                    "refresh_minutes": _refresh,
+                    "profile_id": _profile_id or "",
                 }
+                if _power_chart_data:
+                    _result["power_chart"] = _power_chart_data
+                if _daily_chart_data:
+                    _result["daily_chart"] = _daily_chart_data
+                if _hourly_chart_data:
+                    _result["hourly_chart"] = _hourly_chart_data
+                return _result
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 

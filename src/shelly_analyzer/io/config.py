@@ -115,7 +115,8 @@ class UiConfig:
 
     # iOS Widget settings
     widget_domain: str = ""       # auto-detected from SSL cert CN, e.g. "energie.example.de"
-    widget_devices: str = ""      # comma-separated device keys, empty = all 3-phase devices
+    widget_devices: str = ""      # comma-separated device keys, empty = all 3-phase devices (legacy)
+    widget_profiles: List[WidgetProfile] = field(default_factory=list)
 
     # Optional token to protect the local web dashboard and remote actions.
     # If empty, the app may generate a random token on first start.
@@ -704,6 +705,27 @@ class LocationDef:
 
 
 @dataclass(frozen=True)
+class WidgetProfile:
+    """A configurable iOS widget profile."""
+    profile_id: str = "default"
+    name: str = "Default"
+    show_power: bool = True
+    show_today: bool = True
+    show_month: bool = True
+    show_forecast: bool = True
+    show_spot_price: bool = True
+    show_spot_chart: bool = True
+    show_co2: bool = True
+    show_co2_chart: bool = True
+    show_devices: bool = True
+    show_power_chart: bool = False
+    show_daily_chart: bool = False
+    show_hourly_chart: bool = False
+    devices: str = ""
+    refresh_minutes: int = 5
+
+
+@dataclass(frozen=True)
 class ControlRoom:
     """A room that devices can be assigned to."""
     room_id: str = ""
@@ -892,6 +914,39 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         remove_merged=bool(pack.get("remove_merged", CsvPackConfig.remove_merged)),
     )
 
+    def _parse_widget_profiles(raw_list):
+        profiles: List[WidgetProfile] = []
+        if not isinstance(raw_list, list):
+            return profiles
+        for p in raw_list:
+            if not isinstance(p, dict):
+                continue
+            pid = str(p.get("profile_id", "") or "").strip()
+            pname = str(p.get("name", "") or "").strip()
+            if not pid:
+                pid = pname.lower().replace(" ", "_").replace("/", "_") if pname else f"profile_{len(profiles) + 1}"
+            if not pname:
+                pname = pid.replace("_", " ").title()
+            profiles.append(WidgetProfile(
+                profile_id=pid,
+                name=pname,
+                show_power=bool(p.get("show_power", True)),
+                show_today=bool(p.get("show_today", True)),
+                show_month=bool(p.get("show_month", True)),
+                show_forecast=bool(p.get("show_forecast", True)),
+                show_spot_price=bool(p.get("show_spot_price", True)),
+                show_spot_chart=bool(p.get("show_spot_chart", True)),
+                show_co2=bool(p.get("show_co2", True)),
+                show_co2_chart=bool(p.get("show_co2_chart", True)),
+                show_devices=bool(p.get("show_devices", True)),
+                show_power_chart=bool(p.get("show_power_chart", False)),
+                show_daily_chart=bool(p.get("show_daily_chart", False)),
+                show_hourly_chart=bool(p.get("show_hourly_chart", False)),
+                devices=str(p.get("devices", "") or ""),
+                refresh_minutes=max(1, _coerce_int(p.get("refresh_minutes", 5), 5)),
+            ))
+        return profiles
+
     ui_raw = raw.get("ui", {}) if isinstance(raw.get("ui"), dict) else {}
     ui = UiConfig(
         live_poll_seconds=_coerce_float(ui_raw.get("live_poll_seconds", UiConfig.live_poll_seconds), UiConfig.live_poll_seconds),
@@ -910,6 +965,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         live_web_ssl_renew_days=_coerce_int(ui_raw.get("live_web_ssl_renew_days", UiConfig.live_web_ssl_renew_days), UiConfig.live_web_ssl_renew_days),
         widget_domain=str(ui_raw.get("widget_domain", UiConfig.widget_domain) or ""),
         widget_devices=str(ui_raw.get("widget_devices", UiConfig.widget_devices) or ""),
+        widget_profiles=_parse_widget_profiles(ui_raw.get("widget_profiles", [])),
         live_web_token=str(ui_raw.get("live_web_token", UiConfig.live_web_token) or ""),
         live_smoothing_enabled=bool(ui_raw.get("live_smoothing_enabled", UiConfig.live_smoothing_enabled)),
         live_smoothing_seconds=_coerce_int(ui_raw.get("live_smoothing_seconds", UiConfig.live_smoothing_seconds), UiConfig.live_smoothing_seconds),
@@ -1539,6 +1595,27 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "live_web_ssl_renew_days": getattr(cfg.ui, "live_web_ssl_renew_days", 30),
             "widget_domain": getattr(cfg.ui, "widget_domain", ""),
             "widget_devices": getattr(cfg.ui, "widget_devices", ""),
+            "widget_profiles": [
+                {
+                    "profile_id": wp.profile_id,
+                    "name": wp.name,
+                    "show_power": wp.show_power,
+                    "show_today": wp.show_today,
+                    "show_month": wp.show_month,
+                    "show_forecast": wp.show_forecast,
+                    "show_spot_price": wp.show_spot_price,
+                    "show_spot_chart": wp.show_spot_chart,
+                    "show_co2": wp.show_co2,
+                    "show_co2_chart": wp.show_co2_chart,
+                    "show_devices": wp.show_devices,
+                    "show_power_chart": wp.show_power_chart,
+                    "show_daily_chart": wp.show_daily_chart,
+                    "show_hourly_chart": wp.show_hourly_chart,
+                    "devices": wp.devices,
+                    "refresh_minutes": wp.refresh_minutes,
+                }
+                for wp in (getattr(cfg.ui, "widget_profiles", []) or [])
+            ],
             "live_web_token": cfg.ui.live_web_token,
             "live_smoothing_enabled": getattr(cfg.ui, "live_smoothing_enabled", False),
             "live_smoothing_seconds": getattr(cfg.ui, "live_smoothing_seconds", 10),

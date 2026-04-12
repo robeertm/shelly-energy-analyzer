@@ -35,7 +35,7 @@ Commercial energy dashboards lock you into subscriptions, truncate history after
 - ⏰ **Smart scheduling** — finds the cheapest 1–12 h time block tomorrow from day-ahead spot prices and can push the schedule to a Shelly Gen2 relay automatically
 - 🔐 **Password-protected Shellys supported** — Gen 1 (Basic auth), Gen 2 / 3 / 4 Plus / Pro (Digest auth), all on Windows / macOS / Linux. Per-host credentials with auto-detection of the correct scheme; setup wizard and device card prompt for the password whenever a device responds 401
 - 🏠 **Native Home Assistant integration** via MQTT auto-discovery — sensors appear automatically, no extra YAML
-- 📱 **Real iOS home-screen widget** via Scriptable (3 sizes) — live power, today's cost, spot price, CO₂ intensity, tap-to-open dashboard
+- 📱 **iOS & Android home-screen widgets** — iOS via Scriptable (3 sizes), Android/any browser via PWA web widget (`/w`). Configurable profiles: choose which data sections to show (power, cost, spot price, CO₂, charts), filter by device, set refresh interval. Live preview in Settings before deploying
 - 🌐 **Full REST API v1** + **InfluxDB line-protocol push** + **Prometheus `/metrics`** for your own stack
 - 🔒 **100 % self-hosted** — your energy data never leaves your LAN
 - 🆓 **Zero subscription** — no cloud, no accounts, no analytics
@@ -126,11 +126,13 @@ All desktop shots are captured at native **4K (3840×2160)**, all mobile shots a
 |------|-------|---------|-----|
 | ![Live Dark](docs/screenshots/mobile_01_live_dark.png) | ![Costs Dark](docs/screenshots/mobile_02_costs_dark.png) | ![Heatmap Dark](docs/screenshots/mobile_03_heatmap_dark.png) | ![CO2 Dark](docs/screenshots/mobile_06_co2_dark.png) |
 
-### iOS Widget (Scriptable)
+### Widgets (iOS Scriptable / Android PWA)
 
 | Small | Medium | Large |
 |-------|--------|-------|
 | ![Small](docs/screenshots/widget_small.png) | ![Medium](docs/screenshots/widget_medium.png) | ![Large](docs/screenshots/widget_large.png) |
+
+Android / any browser: open `/w` and add to home screen — no app required.
 
 ---
 
@@ -363,20 +365,33 @@ All desktop shots are captured at native **4K (3840×2160)**, all mobile shots a
 - Mobile-first design: bottom navigation, min 44px touch targets, 360px to 1920px viewport
 - **SSL/HTTPS support** — three modes: Auto (self-signed), Custom (Let's Encrypt / own certs), Off (plain HTTP)
 
-### 📱 iOS Widget (Scriptable)
-- Real iOS home screen widget via the **Scriptable** app for live energy data at a glance
-- **Three widget sizes**:
-  - **Small** — current power (W), today's consumption + cost, spot price with delta, CO₂ intensity
-  - **Medium** — all of small + month stats, full-width spot price chart + CO₂ intensity chart
-  - **Large** — full detail with spot chart, CO₂ chart, metrics grid (today/month/projection), spot cost comparison, per-device breakdown
-- **CO₂ intensity chart** — color-coded bars (green/yellow/orange/red) based on ENTSO-E thresholds, with green and dirty threshold reference lines
-- **Spot price chart** — 24h bar chart with color-coded bars relative to fixed tariff and fixed-price reference line
-- **Tap-to-refresh** — tapping the widget opens a live detail view in Scriptable with all metrics, per-device data, and a "Dashboard öffnen" button to open the full web dashboard in Safari
-- **Auto-refresh** — widget refreshes every 5 minutes via `refreshAfterDate`
-- **Device filter** — configurable which Shellys appear in the widget (`widget_devices` in Settings)
-- **Auto-domain** — server domain auto-detected from SSL certificate CN; baked into the downloadable script
-- **Widget setup UI** — step-by-step instructions, "Copy Script" and "Download .js" buttons in web dashboard settings
+### 📱 Widgets (iOS, Android, Web)
+
+#### Configurable Widget Profiles
+- **Multiple profiles** — create unlimited widget profiles in Settings, each with its own data sections, device filter, and refresh interval
+- **12 toggleable sections** — Power, Today, Month, Forecast, Spot price, Spot chart, CO₂, CO₂ chart, Device list, Power 24h chart, Daily 7d chart, Hourly today chart
+- **Device filter** — per-profile checkbox selection of which Shellys to include
+- **Live preview** — see exactly how the widget will look (Small / Medium / Large) before deploying, with real data from your server
+- **`/api/widget?profile=<id>`** — API returns only the data sections enabled in the profile
+
+#### iOS (Scriptable)
+- Native iOS home screen widget via the **Scriptable** app
+- **Three widget sizes** (small / medium / large) with progressively more detail
+- **Spot price chart** — color-coded bars relative to fixed tariff with reference line
+- **CO₂ intensity chart** — color-coded bars with green/dirty threshold lines
+- **Power / Daily / Hourly charts** — DrawContext mini bar charts on medium + large widgets
+- **Tap-to-refresh** — tapping opens a live detail view in Scriptable with per-device breakdown
+- **Auto-refresh** — configurable interval per profile (default 5 min)
+- **Per-profile scripts** — each profile generates its own Scriptable script (Copy / Download buttons)
 - Dark/Light mode support (follows iOS system appearance)
+
+#### Android / Web (`/w`)
+- **Standalone widget page** at `/w` (or `/w?profile=<id>`) — works in any browser
+- **PWA support** — "Add to Home Screen" on Android/Chrome for a native app-like experience with ⚡ icon
+- **Auto-refreshing** — updates at the profile's configured interval
+- **Dark/Light auto-detection** — follows system `prefers-color-scheme`
+- **All widget sections** — power, spot price, CO₂, SVG mini charts, device list, link to full dashboard
+- **No third-party app required** — just open the URL and bookmark it
 
 ### 🔒 SSL / Let's Encrypt
 - **SSL mode selector** in Settings → Web Dashboard: Auto (self-signed), Custom (own certs), Off (HTTP only)
