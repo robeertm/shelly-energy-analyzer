@@ -530,6 +530,10 @@ class TenantDef:
     persons: int = 1
     move_in: str = ""
     move_out: str = ""
+    address: str = ""
+    phone: str = ""
+    email: str = ""
+    vat_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -700,9 +704,19 @@ class LocationDef:
 
 
 @dataclass(frozen=True)
+class ControlRoom:
+    """A room that devices can be assigned to."""
+    room_id: str = ""
+    name: str = ""
+    icon: str = ""
+    device_keys: List[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class DeviceControlConfig:
     """Device control panel — switches, dimmers, covers, RGB."""
     enabled: bool = False
+    rooms: List[ControlRoom] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -992,7 +1006,11 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
             return defaults
         lines = obj.get("address_lines")
         if not isinstance(lines, list):
-            lines = defaults.address_lines
+            addr_str = obj.get("address", "")
+            if isinstance(addr_str, str) and addr_str.strip():
+                lines = [ln.strip() for ln in addr_str.split("\n") if ln.strip()]
+            else:
+                lines = defaults.address_lines
         return BillingParty(
             name=str(obj.get("name", defaults.name)),
             address_lines=[str(x) for x in lines],
@@ -1187,6 +1205,10 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
             persons=_coerce_int(t.get("persons", 1), 1),
             move_in=str(t.get("move_in", "") or ""),
             move_out=str(t.get("move_out", "") or ""),
+            address=str(t.get("address", "") or ""),
+            phone=str(t.get("phone", "") or ""),
+            email=str(t.get("email", "") or ""),
+            vat_id=str(t.get("vat_id", "") or ""),
         ))
     common_keys = tenant_raw.get("common_device_keys", [])
     if not isinstance(common_keys, list):
@@ -1371,8 +1393,27 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     )
 
     dc_raw = raw.get("device_control", {}) if isinstance(raw.get("device_control"), dict) else {}
+    dc_rooms: List[ControlRoom] = []
+    for rm in (dc_raw.get("rooms", []) if isinstance(dc_raw.get("rooms"), list) else []):
+        if isinstance(rm, dict):
+            rkeys = rm.get("device_keys", [])
+            if not isinstance(rkeys, list):
+                rkeys = []
+            rname = str(rm.get("name", "") or "")
+            rid = str(rm.get("room_id", "") or "")
+            if not rid and rname:
+                rid = rname.lower().replace(" ", "_").replace("/", "_")
+            if not rid:
+                rid = f"room_{len(dc_rooms) + 1}"
+            dc_rooms.append(ControlRoom(
+                room_id=rid,
+                name=rname,
+                icon=str(rm.get("icon", "") or ""),
+                device_keys=[str(k) for k in rkeys],
+            ))
     device_control_cfg = DeviceControlConfig(
         enabled=bool(dc_raw.get("enabled", False)),
+        rooms=dc_rooms,
     )
 
     cfg = AppConfig(
@@ -1615,6 +1656,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "issuer": {
                 "name": cfg.billing.issuer.name,
                 "address_lines": cfg.billing.issuer.address_lines,
+                "address": "\n".join(cfg.billing.issuer.address_lines),
                 "vat_id": cfg.billing.issuer.vat_id,
                 "email": cfg.billing.issuer.email,
                 "phone": cfg.billing.issuer.phone,
@@ -1735,6 +1777,10 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
                     "persons": t.persons,
                     "move_in": t.move_in,
                     "move_out": t.move_out,
+                    "address": t.address,
+                    "phone": t.phone,
+                    "email": t.email,
+                    "vat_id": t.vat_id,
                 }
                 for t in (getattr(cfg.tenant, "tenants", []) or [])
             ],
@@ -1839,6 +1885,15 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
         },
         "device_control": {
             "enabled": bool(getattr(cfg.device_control, "enabled", False)),
+            "rooms": [
+                {
+                    "room_id": rm.room_id,
+                    "name": rm.name,
+                    "icon": rm.icon,
+                    "device_keys": list(rm.device_keys),
+                }
+                for rm in (getattr(cfg.device_control, "rooms", []) or [])
+            ],
         },
     }
     path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

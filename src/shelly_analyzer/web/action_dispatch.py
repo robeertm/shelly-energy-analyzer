@@ -185,6 +185,23 @@ class ActionDispatcher:
         # Mapping text from last _wva_series call (debug aid)
         self._last_wva_mapping_text = ""
 
+    def _resolve_customer(self, device_key: str) -> Dict[str, object]:
+        """Return customer data for an invoice — tenant data if available, else billing.customer fallback."""
+        for tenant in (getattr(self.cfg.tenant, "tenants", []) or []):
+            if device_key in (getattr(tenant, "device_keys", []) or []):
+                addr = getattr(tenant, "address", "") or ""
+                return {
+                    "name": getattr(tenant, "name", "") or "",
+                    "address_lines": [ln.strip() for ln in addr.split("\n") if ln.strip()] if addr else [],
+                    "email": getattr(tenant, "email", "") or "",
+                    "phone": getattr(tenant, "phone", "") or "",
+                    "vat_id": getattr(tenant, "vat_id", "") or "",
+                }
+        return {
+            "name": self.cfg.billing.customer.name,
+            "address_lines": self.cfg.billing.customer.address_lines,
+        }
+
     # ------------------------------------------------------------------
     # Lazy computed device cache
     # ------------------------------------------------------------------
@@ -1881,10 +1898,7 @@ class ActionDispatcher:
                         "iban": self.cfg.billing.issuer.iban,
                         "bic": self.cfg.billing.issuer.bic,
                     },
-                    customer={
-                        "name": self.cfg.billing.customer.name,
-                        "address_lines": self.cfg.billing.customer.address_lines,
-                    },
+                    customer=self._resolve_customer(d.key),
                     lines=lines,
                     vat_rate_percent=float(self.cfg.pricing.vat_rate_percent),
                     vat_enabled=bool(self.cfg.pricing.vat_enabled),

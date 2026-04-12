@@ -294,3 +294,29 @@ def _restore_secrets(merged: dict, cfg: AppConfig) -> None:
     sp = merged.get("spot_price", {})
     if sp.get("eia_api_key") == "***":
         sp["eia_api_key"] = getattr(cfg.spot_price, "eia_api_key", "")
+
+
+@bp.route("/api/upload-logo", methods=["POST"])
+def upload_logo():
+    """Upload a logo image for invoices."""
+    if "file" not in request.files:
+        return jsonify({"ok": False, "error": "no file"}), 400
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"ok": False, "error": "empty filename"}), 400
+    if f.content_length and f.content_length > 1048576:
+        return jsonify({"ok": False, "error": "file too large (max 1 MB)"}), 413
+
+    import os
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in (".png", ".jpg", ".jpeg", ".svg", ".webp"):
+        return jsonify({"ok": False, "error": "unsupported format"}), 400
+
+    data_dir = Path.cwd() / "data" / "logo"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = "invoice_logo" + ext
+    dest = data_dir / safe_name
+    f.save(str(dest))
+    rel_path = str(dest)
+    logger.info("Logo uploaded to %s", rel_path)
+    return jsonify({"ok": True, "path": rel_path})
