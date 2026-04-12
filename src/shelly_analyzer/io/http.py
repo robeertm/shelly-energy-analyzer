@@ -434,7 +434,7 @@ def get_switch_status(client: ShellyHttp, host: str, switch_id: int) -> Dict[str
         full = get_shelly_status(client, host)
         if isinstance(full, dict):
             # Common component keys in Shelly.GetStatus
-            for comp_key in (f"switch:{sid}", f"relay:{sid}"):
+            for comp_key in (f"switch:{sid}", f"relay:{sid}", f"light:{sid}", f"cover:{sid}"):
                 block = full.get(comp_key)
                 if isinstance(block, dict):
                     merged = dict(block)
@@ -442,10 +442,10 @@ def get_switch_status(client: ShellyHttp, host: str, switch_id: int) -> Dict[str
                     return merged
 
             # If the configured id is wrong (common with mixed device types),
-            # but there is exactly ONE switch/relay component, use it.
+            # but there is exactly ONE switch/relay/light/cover component, use it.
             comp_blocks = []
             for k, v in full.items():
-                if isinstance(v, dict) and (isinstance(k, str) and (k.startswith("switch:") or k.startswith("relay:"))):
+                if isinstance(v, dict) and (isinstance(k, str) and (k.startswith("switch:") or k.startswith("relay:") or k.startswith("light:") or k.startswith("cover:"))):
                     comp_blocks.append((k, v))
             if len(comp_blocks) == 1:
                 merged = dict(comp_blocks[0][1])

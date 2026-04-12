@@ -100,9 +100,9 @@ def _detect_gen2_kind(status: Dict[str, Any]) -> Tuple[str, int, int]:
                         phases = 3
                 return kind, component_id, phases
 
-        # Then switch/relay/light components
+        # Then switch/relay/light/cover components
         for k in status.keys():
-            if isinstance(k, str) and (k.startswith("switch:") or k.startswith("relay:") or k.startswith("light:")):
+            if isinstance(k, str) and (k.startswith("switch:") or k.startswith("relay:") or k.startswith("light:") or k.startswith("cover:")):
                 kind = "switch"
                 component_id = _coerce_int(k.split(":", 1)[1], 0)
                 return kind, component_id, phases
