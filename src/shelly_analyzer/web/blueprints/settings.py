@@ -138,8 +138,24 @@ def put_settings():
         # Get current config as dict
         current = _cfg_to_json(state.cfg)
 
-        # Deep merge updates into current
+        # Deep merge updates into current — but never let a section save
+        # wipe out the devices list (sections only send their own fields).
+        saved_devices = current.get("devices", [])
+        saved_groups = current.get("groups", [])
+        saved_schedules = current.get("schedules", [])
+        saved_alerts = current.get("alerts", [])
+
         _deep_merge(current, updates)
+
+        # Restore lists that no section should overwrite
+        if "devices" not in updates:
+            current["devices"] = saved_devices
+        if "groups" not in updates:
+            current["groups"] = saved_groups
+        if "schedules" not in updates:
+            current["schedules"] = saved_schedules
+        if "alerts" not in updates:
+            current["alerts"] = saved_alerts
 
         # Don't overwrite masked secrets with "***"
         _restore_secrets(current, state.cfg)
