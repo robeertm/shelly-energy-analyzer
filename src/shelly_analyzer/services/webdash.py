@@ -1268,9 +1268,22 @@ _HTML_TEMPLATE = """<!doctype html>
       padding: 16px;
       width: min(96vw, 720px);
       height: min(85vh, 500px);
+      min-width: 320px;
+      min-height: 250px;
+      max-width: 100vw;
+      max-height: 100vh;
       display: flex;
       flex-direction: column;
       gap: 8px;
+      resize: both;
+      overflow: hidden;
+      transition: width 0.2s, height 0.2s, border-radius 0.2s;
+    }}
+    .chart-detail-panel.fullscreen {{
+      width: 100vw !important;
+      height: 100vh !important;
+      border-radius: 0;
+      resize: none;
     }}
     .chart-detail-legend {{
       display: flex;
@@ -2051,10 +2064,13 @@ _HTML_TEMPLATE = """<!doctype html>
 </div>
 
 <div id="chart-detail-modal" class="modal-overlay" onclick="closeDetailChartIfBg(event)">
-  <div class="chart-detail-panel">
+  <div class="chart-detail-panel" id="chart-detail-panel">
     <div class="modal-header">
       <span id="chart-detail-title"></span>
-      <button class="icon-btn" onclick="closeDetailChart()">✕</button>
+      <div style="display:flex;gap:6px">
+        <button class="icon-btn" id="chart-detail-fs-btn" onclick="toggleDetailFullscreen()" title="Fullscreen">⛶</button>
+        <button class="icon-btn" onclick="closeDetailChart()">✕</button>
+      </div>
     </div>
     <div class="chart-detail-legend" id="chart-detail-legend"></div>
     <canvas id="chart-detail-canvas"></canvas>
@@ -3797,13 +3813,33 @@ function openDetailChart(devKey, metric, title) {{
 }}
 
 function closeDetailChart() {{
+  const panel = document.getElementById('chart-detail-panel');
+  if (panel) panel.classList.remove('fullscreen');
   document.getElementById('chart-detail-modal').classList.remove('open');
+  const btn = document.getElementById('chart-detail-fs-btn');
+  if (btn) btn.textContent = '⛶';
   _cdState = null;
 }}
 
 function closeDetailChartIfBg(e) {{
   if (e.target.id === 'chart-detail-modal') closeDetailChart();
 }}
+
+function toggleDetailFullscreen() {{
+  const panel = document.getElementById('chart-detail-panel');
+  if (!panel) return;
+  const btn = document.getElementById('chart-detail-fs-btn');
+  panel.classList.toggle('fullscreen');
+  if (btn) btn.textContent = panel.classList.contains('fullscreen') ? '⊡' : '⛶';
+  requestAnimationFrame(_drawDetailChart);
+}}
+
+// Redraw chart when panel is resized (drag handle or fullscreen toggle)
+try {{
+  new ResizeObserver(function() {{
+    if (_cdState) requestAnimationFrame(_drawDetailChart);
+  }}).observe(document.getElementById('chart-detail-panel') || document.body);
+}} catch(e) {{}}
 
 function _buildDetailLegend(devKey, metric) {{
   const buf = sparkData[devKey];
