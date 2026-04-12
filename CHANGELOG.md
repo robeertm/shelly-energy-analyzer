@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.22.2 - 2026-04-12
+### Fixed
+- **Regenerated `config.example.json`** — was missing `device_control` section (rooms), new tenant contact fields (address, phone, email, vat_id), billing address string field, and other schema changes from v16.22.0.
+
 ## 16.22.1 - 2026-04-12
 ### Fixed
 - **Setup page shown after settings save.** When saving any settings section (e.g. Device Control, Billing), `PUT /api/settings` merged the partial update into the full config — but because the browser only sends the fields of the active section, top-level lists like `devices`, `groups`, `schedules`, and `alerts` could be overwritten with empty arrays. Now these lists are preserved unless the update explicitly includes them.
