@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
 from shelly_analyzer.io.http import HttpConfig, ShellyHttp, rpc_call
+from shelly_analyzer.services.device_registry import lookup_by_model_id, lookup_by_mdns
 
 
 @dataclass(frozen=True)
@@ -17,8 +18,13 @@ class DiscoveredDevice:
     phases: int
     supports_emdata: bool
     probed_at: int
+    product_name: str = ""
+    category: str = ""
+    series: str = ""
 
     def label(self) -> str:
+        if self.product_name:
+            return self.product_name
         base = (self.model or "").strip() or "Shelly"
         if self.kind == "em":
             return f"{base} (EM)"
@@ -169,18 +175,25 @@ def probe_device(
 
         if isinstance(status, dict):
             kind, component_id, phases = _detect_gen2_kind(status)
-            # Model heuristic: treat known 3-phase EM devices as 3-phase even if status lacks b_/c_ keys
-            if kind == "em" and int(phases) <= 1:
-                ml = (model or "").lower()
-                if ml.startswith("spem-003") or "3em" in ml:
-                    phases = 3
 
-            # Gen2+ EM devices (Pro 3EM, Pro EM-50) all support EMData history
-            # — either via the /emdata/<id>/data.csv endpoint, or via the
-            # EMData.GetData RPC fallback we synthesize into CSV. Non-EM
-            # devices (switches, plugs, relays) have no EMData at all.
-            supports_emdata = (kind == "em")
+            # Enrich from registry: override kind/phases/emdata if the
+            # registry knows more than the status keys revealed.
+            reg = lookup_by_model_id(model)
+            if reg:
+                if reg.category == "energy_meter" and kind != "em":
+                    kind = "em"
+                if reg.phases > phases:
+                    phases = reg.phases
+                supports_emdata = reg.has_emdata
+            else:
+                # Fallback heuristic for unknown models
+                if kind == "em" and int(phases) <= 1:
+                    ml = (model or "").lower()
+                    if ml.startswith("spem-003") or "3em" in ml:
+                        phases = 3
+                supports_emdata = (kind == "em")
 
+        reg = lookup_by_model_id(model)
         return DiscoveredDevice(
             host=host,
             gen=gen or 2,
@@ -190,6 +203,9 @@ def probe_device(
             phases=int(phases),
             supports_emdata=bool(supports_emdata),
             probed_at=now,
+            product_name=reg.name if reg else "",
+            category=reg.category if reg else "",
+            series=reg.series if reg else "",
         )
 
     # --- Try Gen1 endpoints: /shelly + /status ---
@@ -225,6 +241,7 @@ def probe_device(
 
         kind, component_id, phases, supports_emdata = _detect_gen1_kind(st)
 
+        reg = lookup_by_model_id(model)
         return DiscoveredDevice(
             host=host,
             gen=1,
@@ -234,6 +251,9 @@ def probe_device(
             phases=int(phases),
             supports_emdata=bool(supports_emdata),
             probed_at=now,
+            product_name=reg.name if reg else "",
+            category=reg.category if reg else "",
+            series=reg.series if reg else "",
         )
 
     # No Shelly signature matched

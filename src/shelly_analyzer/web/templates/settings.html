@@ -585,6 +585,7 @@ const SECTIONS = [
   ]},
   {id:"ios_widget", title:"iOS Widget", group:"Advanced", custom:true},
   {id:"updates", title:"Updates", group:"Advanced", custom:true},
+  {id:"supported_devices", title:"Supported devices", group:"Advanced", custom:true},
   {id:"about", title:"About", group:"Advanced", custom:true},
 ];
 
@@ -712,6 +713,7 @@ function renderSection(s) {
     if (s.id === "updates") return renderUpdates();
     if (s.id === "ssl") return renderSSL();
     if (s.id === "ios_widget") return renderIosWidget();
+    if (s.id === "supported_devices") return renderSupportedDevices();
   }
   const fieldsHtml = (s.fields||[]).map(renderField).join("");
   const hint = s.hint ? `<div class="hint" style="margin-bottom:10px">${s.hint}</div>` : "";
@@ -846,6 +848,7 @@ function renderDevices() {
           <option value="1" ${Number(d.gen)===1?"selected":""}>Gen 1</option>
           <option value="2" ${Number(d.gen)===2?"selected":""}>Gen 2</option>
           <option value="3" ${Number(d.gen)===3?"selected":""}>Gen 3</option>
+          <option value="4" ${Number(d.gen)===4?"selected":""}>Gen 4</option>
         </select></div>
         <div class="field"><label>${T("settings.devcard.phases","Phasen")}</label><select data-df="phases">
           <option value="1" ${Number(d.phases)===1?"selected":""}>${T("settings.devcard.phases_1","1-phasig")}</option>
@@ -996,6 +999,105 @@ async function copyWidgetScriptSettings() {
   } catch(e) {
     window.open('/widget.js','_blank');
   }
+}
+
+let _supportedDevicesCache = null;
+function renderSupportedDevices() {
+  const id = "sec-supported_devices";
+  setTimeout(async () => {
+    const container = document.getElementById("supported-devices-content");
+    if (!container) return;
+    try {
+      if (!_supportedDevicesCache) {
+        const r = await fetch("/api/supported-devices");
+        _supportedDevicesCache = await r.json();
+      }
+      const data = _supportedDevicesCache;
+      const devs = data.devices || [];
+      const catLabels = data.category_labels || {};
+      const serLabels = data.series_labels || {};
+
+      // Group by series
+      const bySeries = {};
+      devs.forEach(d => {
+        if (!bySeries[d.series]) bySeries[d.series] = [];
+        bySeries[d.series].push(d);
+      });
+
+      // Filter + search state
+      const filterEl = document.getElementById("sd-filter");
+      const searchEl = document.getElementById("sd-search");
+
+      function render() {
+        const filterVal = filterEl ? filterEl.value : "all";
+        const searchVal = (searchEl ? searchEl.value : "").toLowerCase().trim();
+        let html = "";
+        const seriesOrder = ["classic","plus","pro","gen3","gen4"];
+        let totalShown = 0;
+        seriesOrder.forEach(series => {
+          let items = bySeries[series] || [];
+          if (filterVal !== "all") items = items.filter(d => d.category === filterVal);
+          if (searchVal) items = items.filter(d =>
+            d.name.toLowerCase().includes(searchVal) ||
+            d.model_id.toLowerCase().includes(searchVal) ||
+            (catLabels[d.category]||"").toLowerCase().includes(searchVal)
+          );
+          if (!items.length) return;
+          totalShown += items.length;
+          html += `<div style="margin-bottom:16px">
+            <h3 style="font-size:.85rem;color:var(--accent);margin:0 0 8px;padding-bottom:4px;border-bottom:1px solid var(--border)">${esc(serLabels[series]||series)} <span style="color:var(--muted);font-weight:400">(${items.length})</span></h3>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">`;
+          items.forEach(d => {
+            const badges = [];
+            if (d.has_power_metering) badges.push('<span style="background:rgba(34,197,94,.15);color:#22c55e;padding:1px 6px;border-radius:4px;font-size:.7rem">⚡ Power</span>');
+            if (d.has_emdata) badges.push('<span style="background:rgba(106,167,255,.15);color:var(--accent);padding:1px 6px;border-radius:4px;font-size:.7rem">📊 EMData</span>');
+            if (d.phases > 1) badges.push('<span style="background:rgba(168,85,247,.15);color:#a855f7;padding:1px 6px;border-radius:4px;font-size:.7rem">' + d.phases + 'P</span>');
+            if (d.channels > 1) badges.push('<span style="background:rgba(251,191,36,.15);color:#f59e0b;padding:1px 6px;border-radius:4px;font-size:.7rem">' + d.channels + 'ch</span>');
+            html += `<div style="background:var(--card-inset);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+              <div style="display:flex;justify-content:space-between;align-items:start;gap:6px">
+                <div>
+                  <div style="font-size:.88rem;font-weight:600">${esc(d.name)}</div>
+                  <div style="font-size:.72rem;color:var(--muted);margin-top:1px">${esc(d.model_id)} · ${esc(catLabels[d.category]||d.category)}</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">${badges.join("")}</div>
+            </div>`;
+          });
+          html += `</div></div>`;
+        });
+        const countEl = document.getElementById("sd-count");
+        if (countEl) countEl.textContent = totalShown + " / " + devs.length;
+        document.getElementById("sd-list").innerHTML = html || '<p class="hint">No devices match your filter.</p>';
+      }
+
+      if (filterEl) filterEl.addEventListener("change", render);
+      if (searchEl) searchEl.addEventListener("input", render);
+      render();
+      container.style.display = "block";
+    } catch(e) {
+      container.innerHTML = '<p class="hint" style="color:var(--danger)">Failed to load device registry.</p>';
+      container.style.display = "block";
+    }
+  }, 0);
+
+  // Build category options from known categories
+  const catOpts = [["all","All"]];
+  ["energy_meter","switch","plug","dimmer","rgbw","cover","sensor","display","other"].forEach(c => {
+    catOpts.push([c, T("settings.sd.cat_"+c, c.replace(/_/g," ").replace(/\b\w/g,l=>l.toUpperCase()))]);
+  });
+  const optHtml = catOpts.map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join("");
+
+  return `<section id="${id}"><h2>${T("settings.sd.title","Supported Shelly Devices")}</h2>
+    <p class="hint" style="margin:-4px 0 10px">${T("settings.sd.hint","All Shelly devices recognized by the analyzer. Devices with ⚡ Power badge report energy consumption. Devices with 📊 EMData badge support historical energy data download.")}</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <select id="sd-filter" style="width:auto;min-width:140px">${optHtml}</select>
+      <input id="sd-search" type="text" placeholder="${T("settings.sd.search_ph","Search…")}" style="width:200px">
+      <span id="sd-count" class="hint"></span>
+    </div>
+    <div id="supported-devices-content" style="display:none">
+      <div id="sd-list"></div>
+    </div>
+  </section>`;
 }
 
 function renderAbout() {
