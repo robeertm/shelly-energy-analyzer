@@ -30,9 +30,25 @@ def index():
     state = _get_state()
     # First-run: no devices configured AND wizard not explicitly dismissed
     try:
-        if not list(getattr(state.cfg, "devices", []) or []) and request.args.get("skip_wizard") != "1":
-            from flask import redirect
-            return redirect("/setup")
+        devs = list(getattr(state.cfg, "devices", []) or [])
+        if not devs and request.args.get("skip_wizard") != "1":
+            # Safety: if config on disk has devices but state lost them (e.g. after
+            # a settings save that didn't preserve the devices list), reload first.
+            try:
+                from shelly_analyzer.io.config import load_config
+                cfg_path = getattr(state, "_cfg_path", None)
+                if cfg_path:
+                    from pathlib import Path
+                    fresh = load_config(str(cfg_path))
+                    if fresh.devices:
+                        state.cfg = fresh
+                        state.reload_config(fresh)
+                        devs = list(fresh.devices)
+            except Exception:
+                pass
+            if not devs:
+                from flask import redirect
+                return redirect("/setup")
     except Exception:
         pass
     return _gzip_response(state._dashboard_html, state._dashboard_html_gz)
