@@ -530,3 +530,133 @@ def set_switch_state(client: ShellyHttp, host: str, switch_id: int, on: bool) ->
         turn = "on" if on else "off"
         url = f"http://{host}/relay/{int(switch_id)}?turn={turn}"
         return client.get(url).json()
+
+
+# ---------------------------------------------------------------------------
+# Light / Dimmer control
+# ---------------------------------------------------------------------------
+
+def get_light_status(client: ShellyHttp, host: str, light_id: int) -> Dict[str, Any]:
+    """Get light/dimmer status (Gen2+ Light.GetStatus, Gen1 /light/N fallback)."""
+    try:
+        return rpc_call(client, host, "Light.GetStatus", {"id": int(light_id)})
+    except Exception:
+        pass
+    try:
+        full = get_shelly_status(client, host)
+        block = full.get(f"light:{int(light_id)}")
+        if isinstance(block, dict):
+            return block
+    except Exception:
+        pass
+    try:
+        r = client.get(f"http://{host}/light/{int(light_id)}")
+        return r.json()
+    except Exception:
+        return {}
+
+
+def set_light_state(client: ShellyHttp, host: str, light_id: int, *,
+                    on: Optional[bool] = None,
+                    brightness: Optional[int] = None,
+                    rgb: Optional[tuple] = None,
+                    white: Optional[int] = None,
+                    temp: Optional[int] = None,
+                    transition: Optional[int] = None) -> Dict[str, Any]:
+    """Control a light/dimmer device.
+
+    Gen2+: Light.Set RPC with on/brightness/rgb params.
+    Gen1 fallback: /light/<id>?turn=on&brightness=80&red=255&green=0&blue=0
+    """
+    params: Dict[str, Any] = {"id": int(light_id)}
+    if on is not None:
+        params["on"] = bool(on)
+    if brightness is not None:
+        params["brightness"] = max(0, min(100, int(brightness)))
+    if rgb is not None and len(rgb) >= 3:
+        params["red"] = max(0, min(255, int(rgb[0])))
+        params["green"] = max(0, min(255, int(rgb[1])))
+        params["blue"] = max(0, min(255, int(rgb[2])))
+    if white is not None:
+        params["white"] = max(0, min(255, int(white)))
+    if temp is not None:
+        params["temp"] = int(temp)
+    if transition is not None:
+        params["transition_duration"] = int(transition)
+
+    try:
+        return rpc_call(client, host, "Light.Set", params)
+    except Exception:
+        pass
+
+    # Gen1 fallback
+    qs = []
+    if on is not None:
+        qs.append(f"turn={'on' if on else 'off'}")
+    if brightness is not None:
+        qs.append(f"brightness={max(0, min(100, int(brightness)))}")
+    if rgb is not None and len(rgb) >= 3:
+        qs.append(f"red={int(rgb[0])}&green={int(rgb[1])}&blue={int(rgb[2])}")
+    if white is not None:
+        qs.append(f"white={int(white)}")
+    if temp is not None:
+        qs.append(f"temp={int(temp)}")
+    url = f"http://{host}/light/{int(light_id)}?{'&'.join(qs)}"
+    return client.get(url).json()
+
+
+# ---------------------------------------------------------------------------
+# Cover / Shutter control
+# ---------------------------------------------------------------------------
+
+def get_cover_status(client: ShellyHttp, host: str, cover_id: int) -> Dict[str, Any]:
+    """Get cover/roller status (Gen2+ Cover.GetStatus, Gen1 /roller/N fallback)."""
+    try:
+        return rpc_call(client, host, "Cover.GetStatus", {"id": int(cover_id)})
+    except Exception:
+        pass
+    try:
+        full = get_shelly_status(client, host)
+        block = full.get(f"cover:{int(cover_id)}")
+        if isinstance(block, dict):
+            return block
+    except Exception:
+        pass
+    try:
+        r = client.get(f"http://{host}/roller/{int(cover_id)}")
+        return r.json()
+    except Exception:
+        return {}
+
+
+def cover_open(client: ShellyHttp, host: str, cover_id: int) -> Dict[str, Any]:
+    """Open cover fully."""
+    try:
+        return rpc_call(client, host, "Cover.Open", {"id": int(cover_id)})
+    except Exception:
+        return client.get(f"http://{host}/roller/{int(cover_id)}?go=open").json()
+
+
+def cover_close(client: ShellyHttp, host: str, cover_id: int) -> Dict[str, Any]:
+    """Close cover fully."""
+    try:
+        return rpc_call(client, host, "Cover.Close", {"id": int(cover_id)})
+    except Exception:
+        return client.get(f"http://{host}/roller/{int(cover_id)}?go=close").json()
+
+
+def cover_stop(client: ShellyHttp, host: str, cover_id: int) -> Dict[str, Any]:
+    """Stop cover movement."""
+    try:
+        return rpc_call(client, host, "Cover.Stop", {"id": int(cover_id)})
+    except Exception:
+        return client.get(f"http://{host}/roller/{int(cover_id)}?go=stop").json()
+
+
+def cover_go_to_position(client: ShellyHttp, host: str, cover_id: int, pos: int) -> Dict[str, Any]:
+    """Move cover to a target position (0 = closed, 100 = open)."""
+    pos = max(0, min(100, int(pos)))
+    try:
+        return rpc_call(client, host, "Cover.GoToPosition", {"id": int(cover_id), "pos": pos})
+    except Exception:
+        return client.get(f"http://{host}/roller/{int(cover_id)}?go=to_pos&roller_pos={pos}").json()
