@@ -2411,41 +2411,71 @@ class BackgroundServiceManager:
                 if (tg_daily or em_daily or wh_daily) and today_str != self._summary_last_daily:
                     d_hh, d_mm = self._parse_hhmm(getattr(ui, "telegram_daily_summary_time", "00:00"))
                     if now.hour > d_hh or (now.hour == d_hh and now.minute >= d_mm):
-                        daily_data = self._build_daily_data()
-                        summary = self._format_daily_text(daily_data)
-                        chart_path = self._generate_summary_chart("daily", daily_data)
-                        if tg_daily:
-                            self._telegram_send(summary)
-                            if chart_path and chart_path.exists():
-                                self._telegram_send_photo(chart_path, "Daily report · charts")
-                        if em_daily:
-                            pdf_path = self._generate_summary_pdf("daily", summary)
-                            attachments = [pdf_path] if pdf_path and pdf_path.exists() else []
-                            inline = {}
-                            if chart_path and chart_path.exists():
-                                inline["daily-chart.png"] = chart_path
-                                attachments.append(chart_path)
-                            html_body = self._format_daily_html(
-                                daily_data,
-                                chart_cid="daily-chart.png" if inline else None,
-                            )
-                            self._email_send(
-                                "Shelly Energy – Daily Report",
-                                summary,
-                                attachments=attachments if attachments else None,
-                                html_body=html_body,
-                                inline_images=inline if inline else None,
-                            )
-                        if wh_daily:
-                            self._webhook_send({
-                                "type": "daily_summary",
-                                "timestamp": now.isoformat(),
-                                "text": summary,
-                                "source": "shelly-energy-analyzer",
-                            })
+                        # Mark as sent BEFORE any delivery so that a later
+                        # channel failure (photo, PDF, SMTP) cannot trigger
+                        # a full resend of the text message next minute.
+                        # Delivery is at-most-once by design.
                         self._summary_last_daily = today_str
-                        self._persist_summary_dates()
-                        logger.info("Daily summary sent")
+                        try:
+                            self._persist_summary_dates()
+                        except Exception:
+                            logger.exception("persist daily guard failed")
+
+                        try:
+                            daily_data = self._build_daily_data()
+                            summary = self._format_daily_text(daily_data)
+                        except Exception:
+                            logger.exception("build daily summary failed")
+                            daily_data = None
+                            summary = None
+                        try:
+                            chart_path = self._generate_summary_chart("daily", daily_data) if daily_data else None
+                        except Exception:
+                            logger.exception("daily chart failed")
+                            chart_path = None
+
+                        if tg_daily and summary:
+                            try:
+                                self._telegram_send(summary)
+                            except Exception:
+                                logger.exception("daily telegram text failed")
+                            if chart_path and chart_path.exists():
+                                try:
+                                    self._telegram_send_photo(chart_path, "Daily report · charts")
+                                except Exception:
+                                    logger.exception("daily telegram photo failed")
+                        if em_daily and summary:
+                            try:
+                                pdf_path = self._generate_summary_pdf("daily", summary)
+                                attachments = [pdf_path] if pdf_path and pdf_path.exists() else []
+                                inline = {}
+                                if chart_path and chart_path.exists():
+                                    inline["daily-chart.png"] = chart_path
+                                    attachments.append(chart_path)
+                                html_body = self._format_daily_html(
+                                    daily_data,
+                                    chart_cid="daily-chart.png" if inline else None,
+                                )
+                                self._email_send(
+                                    "Shelly Energy – Daily Report",
+                                    summary,
+                                    attachments=attachments if attachments else None,
+                                    html_body=html_body,
+                                    inline_images=inline if inline else None,
+                                )
+                            except Exception:
+                                logger.exception("daily email failed")
+                        if wh_daily and summary:
+                            try:
+                                self._webhook_send({
+                                    "type": "daily_summary",
+                                    "timestamp": now.isoformat(),
+                                    "text": summary,
+                                    "source": "shelly-energy-analyzer",
+                                })
+                            except Exception:
+                                logger.exception("daily webhook failed")
+                        logger.info("Daily summary sent (date=%s)", today_str)
 
                 # ── Monthly summary (on 1st of each month) ──
                 month_str = now.strftime("%Y-%m")
@@ -2455,44 +2485,71 @@ class BackgroundServiceManager:
                 if (tg_monthly or em_monthly or wh_monthly) and now.day <= 2 and month_str != self._summary_last_monthly:
                     m_hh, m_mm = self._parse_hhmm(getattr(ui, "telegram_monthly_summary_time", "00:00"))
                     if now.hour > m_hh or (now.hour == m_hh and now.minute >= m_mm):
-                        monthly_data = self._build_monthly_data()
-                        summary = self._format_monthly_text(monthly_data)
-                        chart_path = self._generate_summary_chart("monthly", monthly_data)
-                        if tg_monthly:
-                            self._telegram_send(summary)
-                            if chart_path and chart_path.exists():
-                                self._telegram_send_photo(chart_path, "Monthly report · charts")
-                        if em_monthly:
-                            pdf_path = self._generate_summary_pdf("monthly", summary)
-                            attachments = [pdf_path] if pdf_path and pdf_path.exists() else []
-                            inline = {}
-                            if chart_path and chart_path.exists():
-                                inline["monthly-chart.png"] = chart_path
-                                attachments.append(chart_path)
-                            html_body = self._format_monthly_html(
-                                monthly_data,
-                                chart_cid="monthly-chart.png" if inline else None,
-                            )
-                            self._email_send(
-                                "Shelly Energy – Monthly Report",
-                                summary,
-                                attachments=attachments if attachments else None,
-                                html_body=html_body,
-                                inline_images=inline if inline else None,
-                            )
-                        if wh_monthly:
-                            self._webhook_send({
-                                "type": "monthly_summary",
-                                "timestamp": now.isoformat(),
-                                "text": summary,
-                                "source": "shelly-energy-analyzer",
-                            })
+                        # Mark as sent BEFORE delivery (see daily block for rationale)
                         self._summary_last_monthly = month_str
-                        self._persist_summary_dates()
-                        logger.info("Monthly summary sent")
+                        try:
+                            self._persist_summary_dates()
+                        except Exception:
+                            logger.exception("persist monthly guard failed")
 
-            except Exception as e:
-                logger.debug("Summary loop error: %s", e)
+                        try:
+                            monthly_data = self._build_monthly_data()
+                            summary = self._format_monthly_text(monthly_data)
+                        except Exception:
+                            logger.exception("build monthly summary failed")
+                            monthly_data = None
+                            summary = None
+                        try:
+                            chart_path = self._generate_summary_chart("monthly", monthly_data) if monthly_data else None
+                        except Exception:
+                            logger.exception("monthly chart failed")
+                            chart_path = None
+
+                        if tg_monthly and summary:
+                            try:
+                                self._telegram_send(summary)
+                            except Exception:
+                                logger.exception("monthly telegram text failed")
+                            if chart_path and chart_path.exists():
+                                try:
+                                    self._telegram_send_photo(chart_path, "Monthly report · charts")
+                                except Exception:
+                                    logger.exception("monthly telegram photo failed")
+                        if em_monthly and summary:
+                            try:
+                                pdf_path = self._generate_summary_pdf("monthly", summary)
+                                attachments = [pdf_path] if pdf_path and pdf_path.exists() else []
+                                inline = {}
+                                if chart_path and chart_path.exists():
+                                    inline["monthly-chart.png"] = chart_path
+                                    attachments.append(chart_path)
+                                html_body = self._format_monthly_html(
+                                    monthly_data,
+                                    chart_cid="monthly-chart.png" if inline else None,
+                                )
+                                self._email_send(
+                                    "Shelly Energy – Monthly Report",
+                                    summary,
+                                    attachments=attachments if attachments else None,
+                                    html_body=html_body,
+                                    inline_images=inline if inline else None,
+                                )
+                            except Exception:
+                                logger.exception("monthly email failed")
+                        if wh_monthly and summary:
+                            try:
+                                self._webhook_send({
+                                    "type": "monthly_summary",
+                                    "timestamp": now.isoformat(),
+                                    "text": summary,
+                                    "source": "shelly-energy-analyzer",
+                                })
+                            except Exception:
+                                logger.exception("monthly webhook failed")
+                        logger.info("Monthly summary sent (month=%s)", month_str)
+
+            except Exception:
+                logger.exception("Summary loop outer error")
 
             # Check every 60 seconds
             self._stop_event.wait(60.0)

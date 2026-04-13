@@ -1,5 +1,12 @@
 # Changelog
 
+## 16.25.4 - 2026-04-13
+### Fixed
+- **Daily / monthly summary sent 14 times in a row (Telegram + email).** The summary scheduler marked the day as "sent" **after** all delivery channels finished. If any channel later in the chain threw an exception (e.g. photo upload, PDF generation, SMTP hiccup), the guard was never set — the text message had already gone out, but the loop retried a minute later and sent it all over again. Repeated every 60 seconds until the failing channel started working or the day rolled over.
+  - Guard (`_summary_last_daily` / `_summary_last_monthly`) is now set and persisted **before** any delivery. At-most-once semantics: if delivery fails you miss that day's summary rather than getting 14 copies.
+  - Each delivery channel (telegram text, telegram photo, email, webhook) is now wrapped in its own `try/except` so one failing channel cannot block the others or leave the guard unset.
+  - Outer exception handler upgraded from `logger.debug` to `logger.exception` so failures are actually visible in the log.
+
 ## 16.25.3 - 2026-04-12
 ### Fixed
 - **GitHub API rate limit exceeded (HTTP 403).** Three code paths were hitting the GitHub API unauthenticated (limit: 60 requests/hour/IP) without any cache: the background update checker every 5 minutes, `/api/updates/status`, and `/api/updates/releases`. Opening Settings → Updates fired two live API calls per page load on top of the background thread, burning through the quota during active use.
