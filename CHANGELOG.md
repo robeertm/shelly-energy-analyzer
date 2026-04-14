@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.25.5 - 2026-04-13
+### Added
+- **Single-instance lock.** The app now writes `.shelly_analyzer.lock` next to `config.json` containing its PID and refuses to start if another instance is already running with the same config. Stale lock files (PID no longer alive) are silently replaced. The lock is removed on graceful shutdown. **This prevents the duplicate-notification problem** where multiple parallel instances each fired their own daily/monthly summary at midnight, resulting in 10+ identical Telegram and email messages. The v16.25.4 fix prevented retry bombardments within a single process, but couldn't stop multi-process bombardments — this lock closes that gap.
+
 ## 16.25.4 - 2026-04-13
 ### Fixed
 - **Daily / monthly summary sent 14 times in a row (Telegram + email).** The summary scheduler marked the day as "sent" **after** all delivery channels finished. If any channel later in the chain threw an exception (e.g. photo upload, PDF generation, SMTP hiccup), the guard was never set — the text message had already gone out, but the loop retried a minute later and sent it all over again. Repeated every 60 seconds until the failing channel started working or the day rolled over.
