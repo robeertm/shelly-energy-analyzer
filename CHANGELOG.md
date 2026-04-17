@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.25.7 - 2026-04-17
+### Fixed
+- **Self-signed TLS cert now includes SubjectAlternativeName (SAN).** The auto-generated cert had only `CN=Shelly Energy Analyzer` with no SAN extension, so iOS (Safari, Scriptable widgets) and modern browsers rejected any connection where the hostname/IP in the URL didn't match the CN — which it never did. Every connection failed with an opaque "cannot verify server" error. The new cert now includes:
+  - All non-loopback IPv4 addresses discovered via `hostname -I`, `ip -4 addr`, `ifconfig` and `getaddrinfo()` — so LAN IPs, Tailscale IPs, Docker bridges etc. all match
+  - `localhost` + `127.0.0.1`
+  - The machine's own hostname + FQDN
+  - The `cn` is now set to the actual hostname (e.g. `shelly-energy-analyzer`) rather than the generic product name
+  - Optional `extra_dns` / `extra_ips` kwargs for callers that want to add more (e.g. Let's Encrypt domains)
+- **Works with iOS Scriptable widgets over Tailscale + LAN** after force-regenerating the cert (delete `data/runtime/ssl/server.crt` and `.key`, then restart — or use the existing `force_regenerate` helper).
+
 ## 16.25.6 - 2026-04-17
 ### Fixed
 - **Drag-to-reorder devices now works on mobile.** Settings → Devices used HTML5 drag-and-drop (`dragstart`/`dragover`/`drop`) which is not supported on mobile touch browsers. Added parallel `touchstart`/`touchmove`/`touchend` handlers that mirror the desktop behaviour: long-press the ⋮⋮ handle, drag to the target card, release. Visual indicators (`.dragging`, `.drop-before`, `.drop-after`) and the persist/toast flow are identical across desktop and mobile. The drag handle has `touch-action: none` so iOS won't scroll the page during the drag.
