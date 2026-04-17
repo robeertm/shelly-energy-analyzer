@@ -34,22 +34,133 @@ def _utcnow() -> _dt.datetime:
     return _dt.datetime.now(_dt.timezone.utc)
 
 
-def _generate_self_signed(cert_path: Path, key_path: Path, *, days: int = 3650) -> None:
+def _discover_local_hostnames_ips() -> tuple:
+    """Collect every DNS name and IP address that this host answers to.
+
+    Returned as (dns_names: list[str], ip_addresses: list[str]).
+    Always includes ``localhost`` + ``127.0.0.1``. On Linux/macOS it shells
+    out to ``ip``/``hostname``/``ifconfig`` to enumerate every network
+    interface (LAN, Tailscale, Docker bridges, …) so the self-signed cert
+    is valid for every address a browser / widget might use.
+    """
+    import socket
+    import subprocess
+    import re as _re
+
+    dns: set = {"localhost"}
+    ips: set = {"127.0.0.1"}
+
+    try:
+        host = socket.gethostname()
+        if host:
+            dns.add(host)
+            # Short name without domain
+            short = host.split(".")[0]
+            if short and short != host:
+                dns.add(short)
+    except Exception:
+        pass
+
+    try:
+        fqdn = socket.getfqdn()
+        if fqdn:
+            dns.add(fqdn)
+    except Exception:
+        pass
+
+    # Linux: hostname -I returns all non-loopback IPs
+    try:
+        out = subprocess.check_output(
+            ["hostname", "-I"], stderr=subprocess.DEVNULL, timeout=3
+        ).decode()
+        for ip in out.split():
+            if _re.match(r"^\d+\.\d+\.\d+\.\d+$", ip):
+                ips.add(ip)
+    except Exception:
+        pass
+
+    # Linux: `ip -4 addr` (covers all interfaces incl. tailscale0)
+    try:
+        out = subprocess.check_output(
+            ["ip", "-4", "addr"], stderr=subprocess.DEVNULL, timeout=3
+        ).decode()
+        for m in _re.finditer(r"inet (\d+\.\d+\.\d+\.\d+)", out):
+            ips.add(m.group(1))
+    except Exception:
+        pass
+
+    # macOS / BSD: ifconfig
+    try:
+        out = subprocess.check_output(
+            ["ifconfig"], stderr=subprocess.DEVNULL, timeout=3
+        ).decode()
+        for m in _re.finditer(r"inet (\d+\.\d+\.\d+\.\d+)", out):
+            ips.add(m.group(1))
+    except Exception:
+        pass
+
+    # Also resolve own hostname to catch anything else
+    try:
+        host = socket.gethostname()
+        for info in socket.getaddrinfo(host, None, socket.AF_INET):
+            ip = info[4][0]
+            if _re.match(r"^\d+\.\d+\.\d+\.\d+$", ip):
+                ips.add(ip)
+    except Exception:
+        pass
+
+    # Filter reverse-DNS PTR names (e.g. "1.0.168.192.in-addr.arpa") — never
+    # useful as a browsable hostname, only adds noise to the cert.
+    dns = {d for d in dns if not d.endswith(".arpa")}
+
+    return sorted(dns), sorted(ips)
+
+
+def _generate_self_signed(cert_path: Path, key_path: Path, *, days: int = 3650, extra_dns: list = None, extra_ips: list = None) -> None:
     """Generate a fresh self-signed cert/key pair at the given paths.
 
     Prefers the pure-Python ``cryptography`` library; falls back to the
     ``openssl`` CLI when the library is unavailable.
+
+    The cert includes a SubjectAlternativeName extension with every local
+    DNS name and IP address (LAN, Tailscale, loopback, hostname) — so it
+    validates correctly when reached via any of them. iOS in particular
+    (Scriptable widgets, Safari) rejects certs without proper SANs.
     """
     cert_path.parent.mkdir(parents=True, exist_ok=True)
+
+    dns_names, ip_addrs = _discover_local_hostnames_ips()
+    for d in (extra_dns or []):
+        if d and d not in dns_names:
+            dns_names.append(d)
+    for i in (extra_ips or []):
+        if i and i not in ip_addrs:
+            ip_addrs.append(i)
 
     try:
         from cryptography import x509
         from cryptography.x509.oid import NameOID
         from cryptography.hazmat.primitives import hashes, serialization
         from cryptography.hazmat.primitives.asymmetric import rsa
+        import ipaddress as _ipaddr
 
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Shelly Energy Analyzer")])
+        # Use a proper hostname as CN (first DNS name, falls back to the generic product name)
+        import socket as _socket
+        try:
+            cn_value = _socket.gethostname() or "shelly-energy-analyzer"
+        except Exception:
+            cn_value = "shelly-energy-analyzer"
+        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn_value)])
+
+        san_entries = [x509.DNSName(d) for d in dns_names]
+        for ip in ip_addrs:
+            try:
+                san_entries.append(x509.IPAddress(_ipaddr.ip_address(ip)))
+            except Exception:
+                pass
+        san = x509.SubjectAlternativeName(san_entries)
+
         now = _utcnow()
         cert = (
             x509.CertificateBuilder()
@@ -59,6 +170,8 @@ def _generate_self_signed(cert_path: Path, key_path: Path, *, days: int = 3650) 
             .serial_number(x509.random_serial_number())
             .not_valid_before(now)
             .not_valid_after(now + _dt.timedelta(days=days))
+            .add_extension(san, critical=False)
+            .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
             .sign(key, hashes.SHA256())
         )
         key_path.write_bytes(
@@ -73,7 +186,10 @@ def _generate_self_signed(cert_path: Path, key_path: Path, *, days: int = 3650) 
             key_path.chmod(0o600)
         except Exception:
             pass
-        logger.info("TLS certificate created (cryptography lib): %s", cert_path)
+        logger.info(
+            "TLS certificate created (cryptography lib): %s (SAN: %d DNS + %d IPs)",
+            cert_path, len(dns_names), len(ip_addrs),
+        )
         return
     except ImportError:
         logger.debug("cryptography library not available, trying openssl CLI")
@@ -89,6 +205,16 @@ def _generate_self_signed(cert_path: Path, key_path: Path, *, days: int = 3650) 
             "nor 'openssl' CLI found. Install one of them or provide your own "
             "certificate files."
         )
+
+    # Build -addext subjectAltName=... string for the openssl CLI fallback.
+    import socket as _socket
+    try:
+        cn_value = _socket.gethostname() or "shelly-energy-analyzer"
+    except Exception:
+        cn_value = "shelly-energy-analyzer"
+    san_parts = [f"DNS:{d}" for d in dns_names] + [f"IP:{i}" for i in ip_addrs]
+    san_arg = "subjectAltName=" + ",".join(san_parts)
+
     subprocess.run(
         [
             "openssl", "req", "-x509", "-newkey", "rsa:2048",
@@ -96,7 +222,8 @@ def _generate_self_signed(cert_path: Path, key_path: Path, *, days: int = 3650) 
             "-out", str(cert_path),
             "-days", str(int(days)),
             "-nodes",
-            "-subj", "/CN=Shelly Energy Analyzer",
+            "-subj", f"/CN={cn_value}",
+            "-addext", san_arg,
         ],
         check=True,
         capture_output=True,
@@ -106,7 +233,10 @@ def _generate_self_signed(cert_path: Path, key_path: Path, *, days: int = 3650) 
         key_path.chmod(0o600)
     except Exception:
         pass
-    logger.info("TLS certificate created (openssl CLI): %s", cert_path)
+    logger.info(
+        "TLS certificate created (openssl CLI): %s (SAN: %d DNS + %d IPs)",
+        cert_path, len(dns_names), len(ip_addrs),
+    )
 
 
 def _inspect_with_cryptography(cert_path: Path, info: CertInfo) -> bool:
