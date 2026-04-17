@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.25.6 - 2026-04-17
+### Fixed
+- **Drag-to-reorder devices now works on mobile.** Settings → Devices used HTML5 drag-and-drop (`dragstart`/`dragover`/`drop`) which is not supported on mobile touch browsers. Added parallel `touchstart`/`touchmove`/`touchend` handlers that mirror the desktop behaviour: long-press the ⋮⋮ handle, drag to the target card, release. Visual indicators (`.dragging`, `.drop-before`, `.drop-after`) and the persist/toast flow are identical across desktop and mobile. The drag handle has `touch-action: none` so iOS won't scroll the page during the drag.
+
 ## 16.25.5 - 2026-04-13
 ### Added
 - **Single-instance lock.** The app now writes `.shelly_analyzer.lock` next to `config.json` containing its PID and refuses to start if another instance is already running with the same config. Stale lock files (PID no longer alive) are silently replaced. The lock is removed on graceful shutdown. **This prevents the duplicate-notification problem** where multiple parallel instances each fired their own daily/monthly summary at midnight, resulting in 10+ identical Telegram and email messages. The v16.25.4 fix prevented retry bombardments within a single process, but couldn't stop multi-process bombardments — this lock closes that gap.

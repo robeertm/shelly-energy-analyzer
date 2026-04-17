@@ -890,6 +890,61 @@ function _onDragEnd(e) {
   });
 }
 
+// ── Touch-based drag (mobile) ─────────────────────────────────────────
+let _touchDragged = null;       // the .list-item being dragged
+let _touchOverCard = null;      // current .list-item under finger
+let _touchAfter = false;
+function _clearTouchIndicators() {
+  document.querySelectorAll('#devices-list .list-item').forEach(function(c){
+    c.classList.remove('drop-after','drop-before');
+  });
+}
+function _onTouchStart(e) {
+  const handle = e.currentTarget;
+  const card = handle.closest('.list-item');
+  if (!card) return;
+  e.preventDefault();  // prevent iOS magnifier / text selection
+  _touchDragged = card;
+  _draggingKey = card.dataset.devkey;
+  card.classList.add('dragging');
+  // Prevent page scroll while a drag is in progress.
+  document.addEventListener('touchmove', _onTouchMove, { passive: false });
+  document.addEventListener('touchend', _onTouchEnd, { passive: false });
+  document.addEventListener('touchcancel', _onTouchEnd, { passive: false });
+}
+function _onTouchMove(e) {
+  if (!_touchDragged) return;
+  e.preventDefault();
+  const t = e.touches[0];
+  if (!t) return;
+  const el = document.elementFromPoint(t.clientX, t.clientY);
+  const card = el ? el.closest('#devices-list .list-item') : null;
+  _clearTouchIndicators();
+  if (!card || card === _touchDragged) { _touchOverCard = null; return; }
+  const rect = card.getBoundingClientRect();
+  _touchAfter = (t.clientY - rect.top) > rect.height / 2;
+  card.classList.toggle('drop-after', _touchAfter);
+  card.classList.toggle('drop-before', !_touchAfter);
+  _touchOverCard = card;
+}
+function _onTouchEnd(e) {
+  document.removeEventListener('touchmove', _onTouchMove);
+  document.removeEventListener('touchend', _onTouchEnd);
+  document.removeEventListener('touchcancel', _onTouchEnd);
+  const dragged = _touchDragged;
+  const target = _touchOverCard;
+  _touchDragged = null;
+  _touchOverCard = null;
+  if (dragged) dragged.classList.remove('dragging');
+  _clearTouchIndicators();
+  if (!dragged || !target || dragged === target) { _draggingKey = null; return; }
+  if (_touchAfter) target.parentNode.insertBefore(dragged, target.nextSibling);
+  else target.parentNode.insertBefore(dragged, target);
+  _persistDevOrderFromDom();
+  _draggingKey = null;
+  toast(T("settings.devices.order_saved","Device order saved (live tab)"), "success");
+}
+
 function renderDevices() {
   const hidden = _loadHiddenDevs();
   const ordered = _orderedDevices(devices);
@@ -962,6 +1017,10 @@ function _wireDeviceDragHandlers() {
   document.querySelectorAll('#devices-list .drag-handle').forEach(function(h) {
     h.addEventListener('dragstart', _onDragStart);
     h.addEventListener('dragend', _onDragEnd);
+    // Mobile/touch: HTML5 drag-and-drop is not supported on touch devices,
+    // so mirror the drag behaviour with touch events.
+    h.addEventListener('touchstart', _onTouchStart, { passive: false });
+    h.style.touchAction = 'none';
   });
   document.querySelectorAll('#devices-list .list-item').forEach(function(c) {
     c.addEventListener('dragover', _onDragOver);
