@@ -21,7 +21,10 @@
 # Safe: config.json, data/, logs/, .venv/ are preserved. Uses your existing
 # virtualenv — nothing is installed system-wide.
 #
-# Usage:
+# Usage (Linux — systemd service):
+#   curl -sSL https://raw.githubusercontent.com/robeertm/shelly-energy-analyzer/main/scripts/rescue.sh | sudo -E bash
+#
+# Usage (macOS — launchd or plain terminal):
 #   curl -sSL https://raw.githubusercontent.com/robeertm/shelly-energy-analyzer/main/scripts/rescue.sh | bash
 #
 # Options via env vars:
@@ -30,6 +33,27 @@
 #   SEA_PORT=8765                   Override the expected port (default: 8765)
 #   SEA_NO_RESTART=1                Do everything but restart the service
 set -euo pipefail
+
+# If we were launched via `sudo ... bash`, HOME is root's. Restore the
+# calling user's HOME so install-dir detection finds their checkout, and
+# remember which user we should run pip/git as.
+if [[ -n "${SUDO_USER:-}" ]] && [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+  REAL_USER="$SUDO_USER"
+  REAL_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+  [[ -n "$REAL_HOME" ]] && export HOME="$REAL_HOME"
+else
+  REAL_USER="$(id -un)"
+fi
+
+# Helper: run a command as the install's owner (not as root). Falls back
+# to plain execution when we're not root.
+as_user() {
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]] && [[ "$REAL_USER" != "root" ]]; then
+    sudo -u "$REAL_USER" "$@"
+  else
+    "$@"
+  fi
+}
 
 RED=$'\033[31m'; YEL=$'\033[33m'; GRN=$'\033[32m'; BLU=$'\033[34m'; CLR=$'\033[0m'
 log()  { printf '%s[rescue]%s %s\n' "$BLU" "$CLR" "$*"; }
@@ -111,10 +135,15 @@ stop_service() {
   case "$SERVICE_KIND" in
     systemd)
       log "stopping systemd service $SERVICE_NAME"
-      sudo -n true 2>/dev/null && sudo systemctl stop "$SERVICE_NAME" || {
-        warn "need sudo to stop $SERVICE_NAME"
+      if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+        systemctl stop "$SERVICE_NAME"
+      elif sudo -n true 2>/dev/null; then
         sudo systemctl stop "$SERVICE_NAME"
-      }
+      else
+        err "need root for 'systemctl stop $SERVICE_NAME'. Re-run as:"
+        err "  curl -sSL https://raw.githubusercontent.com/robeertm/shelly-energy-analyzer/main/scripts/rescue.sh | sudo -E bash"
+        exit 2
+      fi
       ;;
     launchd)
       log "stopping launchd job $SERVICE_NAME"
@@ -144,7 +173,11 @@ start_service() {
   case "$SERVICE_KIND" in
     systemd)
       log "starting systemd service $SERVICE_NAME"
-      sudo systemctl start "$SERVICE_NAME"
+      if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+        systemctl start "$SERVICE_NAME"
+      else
+        sudo systemctl start "$SERVICE_NAME"
+      fi
       ;;
     launchd)
       log "starting launchd job $SERVICE_NAME"
@@ -182,8 +215,8 @@ fi
 log "target release: $TAG"
 
 if [[ -d "$APP_DIR/.git" ]]; then
-  log "using git to reset to $TAG"
-  (cd "$APP_DIR" && git fetch --tags --quiet origin && git reset --hard "$TAG" --quiet)
+  log "using git to reset to $TAG (as user $REAL_USER)"
+  as_user bash -c "cd '$APP_DIR' && git fetch --tags --quiet origin && git reset --hard '$TAG' --quiet"
 else
   log "no git checkout — downloading release ZIP"
   case "$(uname -s)" in
@@ -239,10 +272,10 @@ elif [[ -x "$APP_DIR/.venv/Scripts/python.exe" ]]; then
   VENV_PY="$APP_DIR/.venv/Scripts/python.exe"
 fi
 if [[ -n "$VENV_PY" ]]; then
-  log "refreshing venv editable install"
-  "$VENV_PY" -m pip install -q -e "$APP_DIR" >/dev/null 2>&1 || warn "pip install -e . warned (not fatal)"
+  log "refreshing venv editable install (as user $REAL_USER)"
+  as_user "$VENV_PY" -m pip install -q -e "$APP_DIR" >/dev/null 2>&1 || warn "pip install -e . warned (not fatal)"
   if [[ -f "$APP_DIR/requirements.txt" ]]; then
-    "$VENV_PY" -m pip install -q -r "$APP_DIR/requirements.txt" >/dev/null 2>&1 || warn "requirements install warned (not fatal)"
+    as_user "$VENV_PY" -m pip install -q -r "$APP_DIR/requirements.txt" >/dev/null 2>&1 || warn "requirements install warned (not fatal)"
   fi
 else
   warn "no .venv found in $APP_DIR — skipping pip"
