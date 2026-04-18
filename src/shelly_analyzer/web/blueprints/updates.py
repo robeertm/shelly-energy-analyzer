@@ -251,22 +251,41 @@ def api_updates_install():
     if not helper.exists():
         return jsonify({"ok": False, "error": f"updater_helper.py not found at {helper}"}), 500
 
-    cmd = [
-        sys.executable,
-        str(helper),
+    # Common helper arguments (the --wait-pid value differs per platform below).
+    helper_args = [
         "--app-dir", str(app_dir),
         "--staging-dir", str(staging),
         "--restart", str(restart),
-        "--wait-pid", str(os.getpid()),
         "--update-deps", "1",
     ]
-    logger.info("[updates] spawning updater: %s", " ".join(cmd))
+    logger.info("[updates] preparing updater handoff (app_dir=%s, staging=%s)", app_dir, staging)
 
-    def _spawn_and_exit():
-        try:
-            if os.name == "nt":
+    def _handoff_to_updater():
+        """Hand control to updater_helper.
+
+        POSIX (Linux/macOS): ``os.execv`` replaces the current process image
+        in-place with the helper, **keeping the same PID**. Under systemd this
+        means the service-MainPID never exits, so ``KillMode=mixed`` doesn't
+        tear down the cgroup and the helper survives to finish the job. Under
+        launchd the same logic applies (job stays ``alive``). Under Docker
+        (PID 1) the container keeps running throughout.
+
+        Windows: keep the historical detached-spawn + exit path — Windows has
+        no cgroup-style cleanup on SCM/NSSM service exit that would reach the
+        child, and ``os.execv`` on Windows doesn't replace in-place (it spawns
+        + terminates the current process), so detached spawn is strictly
+        safer there.
+        """
+        import time as _time
+        # Give Flask/werkzeug a beat to finish flushing the HTTP response
+        # before we yank the process away.
+        _time.sleep(1.2)
+
+        if os.name == "nt":
+            win_cmd = [sys.executable, str(helper), "--wait-pid", str(os.getpid())] + helper_args
+            try:
                 subprocess.Popen(
-                    cmd,
+                    win_cmd,
                     cwd=str(app_dir),
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
@@ -274,9 +293,32 @@ def api_updates_install():
                     creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
                     close_fds=False,
                 )
-            else:
+            except Exception:
+                logger.exception("[updates] failed to spawn Windows updater")
+                return
+            logger.info("[updates] (Windows) exiting so detached helper can take over")
+            os._exit(0)
+
+        # POSIX: execv in-place. --wait-pid=0 because we ARE the process the
+        # helper would otherwise be waiting for — we're about to become it.
+        posix_cmd = [sys.executable, str(helper), "--wait-pid", "0"] + helper_args
+        logger.info("[updates] execv into updater_helper (in-place, same PID %d)", os.getpid())
+        # Close any fds above std* to avoid leaking the listening HTTP socket
+        # / sqlite file handles into the helper image. Python-created sockets
+        # already carry FD_CLOEXEC on Linux, but be explicit.
+        try:
+            os.closerange(3, 256)
+        except Exception:
+            pass
+        try:
+            os.execv(sys.executable, posix_cmd)
+        except Exception:
+            logger.exception("[updates] execv failed; falling back to detached spawn")
+            # Last-resort fallback: detached spawn + exit. On systemd this may
+            # still die with the cgroup, but it's better than hanging the UI.
+            try:
                 subprocess.Popen(
-                    cmd,
+                    [sys.executable, str(helper), "--wait-pid", str(os.getpid())] + helper_args,
                     cwd=str(app_dir),
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
@@ -284,16 +326,11 @@ def api_updates_install():
                     start_new_session=True,
                     close_fds=True,
                 )
-        except Exception:
-            logger.exception("failed to spawn updater")
-            return
-        # Give the helper a moment to start, then exit so it can replace files.
-        import time as _time
-        _time.sleep(1.2)
-        logger.info("[updates] exiting current process for helper to take over")
-        os._exit(0)
+            except Exception:
+                logger.exception("[updates] fallback spawn also failed")
+            os._exit(1)
 
-    threading.Thread(target=_spawn_and_exit, daemon=True).start()
+    threading.Thread(target=_handoff_to_updater, daemon=True).start()
     return jsonify({
         "ok": True,
         "tag": tag,

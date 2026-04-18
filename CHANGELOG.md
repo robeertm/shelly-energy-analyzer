@@ -1,5 +1,13 @@
 # Changelog
 
+## 16.26.1 - 2026-04-18
+### Fixed
+- **In-app updater no longer leaves the service dead under systemd / launchd / Docker.** Previously, clicking "Install update" downloaded the new release, spawned `updater_helper.py` as a detached child, then the parent app called `os._exit(0)` — at which point systemd saw the service's MainPID exit cleanly, `KillMode=mixed` tore down the service cgroup, and the helper got SIGKILLed mid-copy. The service then stayed `inactive (dead)` with a stale lock file, because the clean-exit didn't trigger `Restart=on-failure`. Same failure pattern applied to launchd (macOS LaunchAgent/Daemon), Docker (PID 1 exits → container dies) and Windows Services that track child processes.
+  - **POSIX** (Linux/macOS/Docker): the install handler now calls `os.execv` to replace the running Python process image in-place with `updater_helper.py`. The helper, once it has copied the staged files and run `pip install`, does a second `os.execv` into `python -m shelly_analyzer`. The service MainPID is preserved end-to-end, so no init system ever sees the process "exit". No reliance on `Restart=` policies, no detached children to get reaped, no fragile sleep-and-hope.
+  - **Windows**: kept the historical detached-spawn + exit path (Windows has no cgroup-style teardown of service children, and `os.execv` on Windows is spawn-and-terminate semantically — not in-place). Improved `_wait_for_pid` to actually probe exit status via `OpenProcess` + `GetExitCodeProcess` instead of just sleeping.
+  - Helper now cleans up the `/tmp/sea_update_*` staging directory after a successful copy, and captures `pip install` stderr into `logs/updater.log` on failure.
+  - Verified via three-tier tests: unit test for POSIX `_restart_app` execv args, mocked Windows branch test, and an end-to-end test that forks a sentinel → execv helper → execv app and asserts PID preservation across both hops.
+
 ## 16.26.0 - 2026-04-18
 ### Performance
 - **Plots tab no longer times out on slow disks / VMs** — "Web Dashboard Error: Timeout (60s) — reduce time range" is gone for typical views. The `/api/plots_data` endpoint used to load a device's **entire** history (often hundreds of thousands of rows) into pandas and then filter in Python. Both the `kwh` and `timeseries` branches now push the time window into the SQLite query via the new `Database.max_timestamp()` helper — a 24-hour view pulls 24 h of rows instead of years of samples.
