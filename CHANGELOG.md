@@ -1,5 +1,13 @@
 # Changelog
 
+## 16.26.4 - 2026-04-18
+### Fixed
+- **Rescue script now works via `curl | sudo -E bash`** without a TTY. The previous version tried to call `sudo systemctl stop/start` from inside a non-interactive pipe, which failed with "sudo: a terminal is required" — exactly the situation users hit when pasting the one-liner from the README. The script now detects EUID=0 + SUDO_USER and:
+  - Runs systemd commands directly (already root, no further sudo needed)
+  - Runs `git` and `pip install` as the original user via `sudo -u` so file ownership stays with the install owner
+  - Restores `$HOME` from `SUDO_USER`'s passwd entry so install-dir auto-detection finds `/home/$USER/shelly-energy-analyzer` instead of `/root/...`
+- **Clearer error** when the script is invoked without privileges on a systemd install — prints the exact `curl | sudo -E bash` re-run command instead of a raw sudo prompt.
+
 ## 16.26.3 - 2026-04-18
 ### Added
 - **Auto-heal on startup for interrupted updates.** If a previous "Install update" click was killed mid-flight (pre-16.26.1 users hit this constantly under systemd/launchd/Docker), the release ZIP is still sitting extracted in `/tmp/sea_update_*`. `__main__.py` now scans that directory before anything else runs: if a staged release is strictly newer than what's installed, it hands off to `updater_helper.py` via `os.execv` (same PID), the helper copies the staged files + refreshes deps, then execs into the new app — all transparent to the user. If nothing's staged or the staged version is older, startup continues normally. The scanner never raises: a bad staging dir just gets skipped, so auto-heal can't brick a boot.
