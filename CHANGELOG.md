@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.26.2 - 2026-04-18
+### Fixed
+- **Single-instance lock no longer blocks the post-execv restart** after an in-app update. The v16.26.1 updater flow execs the helper → execs `python -m shelly_analyzer`, all keeping the same PID on POSIX. The new instance then read `.shelly_analyzer.lock` back and saw **its own PID** listed as "already running", logged "Another instance is already running", and exited with status 1. systemd then restarted under `Restart=on-failure` anyway, so users ended up with a working service on a fresh PID — but with a noisy ERROR line and one unnecessary restart cycle per update. The lock check now treats `lock_pid == os.getpid()` as a self-takeover (previous process image replaced via `execv`) and proceeds cleanly.
+
 ## 16.26.1 - 2026-04-18
 ### Fixed
 - **In-app updater no longer leaves the service dead under systemd / launchd / Docker.** Previously, clicking "Install update" downloaded the new release, spawned `updater_helper.py` as a detached child, then the parent app called `os._exit(0)` — at which point systemd saw the service's MainPID exit cleanly, `KillMode=mixed` tore down the service cgroup, and the helper got SIGKILLed mid-copy. The service then stayed `inactive (dead)` with a stale lock file, because the clean-exit didn't trigger `Restart=on-failure`. Same failure pattern applied to launchd (macOS LaunchAgent/Daemon), Docker (PID 1 exits → container dies) and Windows Services that track child processes.
