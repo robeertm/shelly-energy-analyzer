@@ -759,6 +759,20 @@ class EnergyDB:
         ).fetchone()
         return int(row[0]) if row else 0
 
+    def max_timestamp(self, device_key: str) -> Optional[int]:
+        """Return the latest sample timestamp (UTC epoch seconds) or None."""
+        conn = self._conn()
+        row = conn.execute(
+            "SELECT MAX(timestamp) FROM samples WHERE device_key = ?",
+            (device_key,),
+        ).fetchone()
+        if row is None or row[0] is None:
+            return None
+        try:
+            return int(row[0])
+        except Exception:
+            return None
+
     def needs_reimport(self) -> bool:
         """Check if the DB was created with an older schema or has unfilled columns.
 
