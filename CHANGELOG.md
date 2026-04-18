@@ -1,5 +1,13 @@
 # Changelog
 
+## 16.26.3 - 2026-04-18
+### Added
+- **Auto-heal on startup for interrupted updates.** If a previous "Install update" click was killed mid-flight (pre-16.26.1 users hit this constantly under systemd/launchd/Docker), the release ZIP is still sitting extracted in `/tmp/sea_update_*`. `__main__.py` now scans that directory before anything else runs: if a staged release is strictly newer than what's installed, it hands off to `updater_helper.py` via `os.execv` (same PID), the helper copies the staged files + refreshes deps, then execs into the new app — all transparent to the user. If nothing's staged or the staged version is older, startup continues normally. The scanner never raises: a bad staging dir just gets skipped, so auto-heal can't brick a boot.
+- **Rescue scripts for currently-stuck installs** (`scripts/rescue.sh`, `scripts/rescue.ps1`). Users still on 16.25.x / 16.26.0 whose in-app updater already killed the service can now run a single one-liner to detect the install, stop the service, pull the latest tag from GitHub (via git or the release ZIP), refresh the venv, and restart — all while preserving `config.json`, `data/`, `logs/`, `.venv/`. Supports systemd, launchd, Windows Services, and plain `start.*` launches. Invocation:
+  - Linux/macOS: `curl -sSL https://raw.githubusercontent.com/robeertm/shelly-energy-analyzer/main/scripts/rescue.sh | bash`
+  - Windows: `iwr https://raw.githubusercontent.com/robeertm/shelly-energy-analyzer/main/scripts/rescue.ps1 | iex`
+  - Override via `SEA_APP_DIR` / `SEA_TAG` / `SEA_PORT` / `SEA_NO_RESTART` env vars.
+
 ## 16.26.2 - 2026-04-18
 ### Fixed
 - **Single-instance lock no longer blocks the post-execv restart** after an in-app update. The v16.26.1 updater flow execs the helper → execs `python -m shelly_analyzer`, all keeping the same PID on POSIX. The new instance then read `.shelly_analyzer.lock` back and saw **its own PID** listed as "already running", logged "Another instance is already running", and exited with status 1. systemd then restarted under `Restart=on-failure` anyway, so users ended up with a working service on a fresh PID — but with a noisy ERROR line and one unnecessary restart cycle per update. The lock check now treats `lock_pid == os.getpid()` as a self-takeover (previous process image replaced via `execv`) and proceeds cleanly.

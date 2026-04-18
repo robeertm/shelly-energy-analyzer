@@ -2,7 +2,147 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
+import re
 import sys
+import tempfile
+from pathlib import Path
+
+
+def _parse_version_parts(v: str) -> list[int]:
+    """Extract dotted numeric parts from a version string. Missing = [0]."""
+    parts = [int(x) for x in re.findall(r"\d+", v)]
+    return parts or [0]
+
+
+def _is_strictly_newer(staged: str, current: str) -> bool:
+    """Return True iff ``staged`` is strictly newer than ``current`` by
+    dotted-numeric comparison. Tolerant of 'v' prefixes and suffixes like
+    '-dev'/'rc1' (non-numeric tail is ignored)."""
+    try:
+        return _parse_version_parts(staged) > _parse_version_parts(current)
+    except Exception:
+        return False
+
+
+def _autoheal_pending_update(logger: logging.Logger) -> None:
+    """Finish any interrupted in-app update before we boot the current code.
+
+    Scans ``tempfile.gettempdir()`` for ``sea_update_*`` directories left
+    behind by a failed install. If one contains a newer ``shelly_analyzer``
+    package, chain-handoff into ``updater_helper.py`` via ``os.execv`` so
+    the helper applies the copy, reinstalls deps and execs the new app —
+    all on the same PID so systemd / launchd / Docker stay happy.
+
+    Intentionally swallows every exception: auto-heal must NEVER block
+    normal startup. We'd rather boot the old (safe) code than crash here.
+    """
+    try:
+        from shelly_analyzer import __version__ as _current_version
+        tmp_root = Path(tempfile.gettempdir())
+        candidates = sorted(tmp_root.glob("sea_update_*"))
+        if not candidates:
+            return
+
+        app_dir = Path(__file__).resolve().parent.parent.parent
+        if not (app_dir / "src" / "shelly_analyzer").is_dir():
+            # Running from an unusual layout — don't try to patch.
+            return
+
+        for cand in candidates:
+            if not cand.is_dir():
+                continue
+            # Probe two layouts: (a) staging root IS the release root (the
+            # common case — /tmp/sea_update_XXX/src/...); (b) release is
+            # wrapped in a single top-level folder (/tmp/sea_update_XXX/
+            # shelly-energy-analyzer-X.Y.Z/src/...). Pick whichever has the
+            # package __init__.py at src/shelly_analyzer/__init__.py.
+            scan_root = None
+            for probe in (cand, *[p for p in cand.iterdir() if p.is_dir() and not p.name.startswith(".")]):
+                if (probe / "src" / "shelly_analyzer" / "__init__.py").is_file():
+                    scan_root = probe
+                    break
+            if scan_root is None:
+                continue  # not a release layout, skip
+
+            staged_init = scan_root / "src" / "shelly_analyzer" / "__init__.py"
+
+            try:
+                text = staged_init.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+            m = re.search(r'__version__\s*=\s*"([^"]+)"', text)
+            if not m:
+                continue
+            staged_v = m.group(1)
+
+            if not _is_strictly_newer(staged_v, _current_version):
+                logger.info(
+                    "Auto-heal: staged %s in %s is not newer than running %s, skipping",
+                    staged_v, cand, _current_version,
+                )
+                continue
+
+            # Newer release found — hand off to the helper.
+            helper = Path(__file__).resolve().parent / "updater_helper.py"
+            if not helper.is_file():
+                logger.warning("Auto-heal: updater_helper.py not found at %s — aborting heal", helper)
+                return
+
+            restart_name = "start.bat" if os.name == "nt" else "start.command"
+            restart = app_dir / restart_name
+
+            cmd = [
+                sys.executable, str(helper),
+                "--app-dir", str(app_dir),
+                "--staging-dir", str(scan_root),
+                "--restart", str(restart),
+                "--wait-pid", "0",
+                "--update-deps", "1",
+            ]
+            logger.warning(
+                "Auto-heal: staged update %s (current %s) detected in %s — applying now",
+                staged_v, _current_version, cand,
+            )
+
+            if os.name == "nt":
+                # Windows can't execv in-place reliably. Spawn detached +
+                # exit — on Windows services this works since there's no
+                # cgroup teardown of children.
+                try:
+                    import subprocess
+                    subprocess.Popen(
+                        cmd,
+                        cwd=str(app_dir),
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                        close_fds=False,
+                    )
+                    logger.info("Auto-heal: spawned detached helper on Windows, exiting")
+                    os._exit(0)
+                except Exception as e:
+                    logger.warning("Auto-heal: Windows spawn failed: %s — continuing normal startup", e)
+                    return
+
+            # POSIX — execv in place so we keep the MainPID.
+            try:
+                os.closerange(3, 256)
+            except Exception:
+                pass
+            try:
+                os.execv(sys.executable, cmd)
+                # execv does not return on success
+            except Exception as e:
+                logger.warning("Auto-heal: execv failed: %s — continuing normal startup", e)
+                return
+    except Exception as e:
+        # Must never block startup — log and return.
+        try:
+            logger.warning("Auto-heal scan failed (%s) — continuing normal startup", e)
+        except Exception:
+            pass
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,12 +178,23 @@ def main(argv: list[str] | None = None) -> int:
 
     port = args.port or int(cfg.ui.live_web_port) or 8765
 
+    # ── Auto-heal: finish an interrupted in-app update ─────────────────
+    # If a previous "Install update" click crashed partway (e.g. the
+    # pre-16.26.1 updater was killed by systemd's cgroup cleanup), the
+    # staged ZIP is still sitting in /tmp/sea_update_*. Pick it up and
+    # finish the job before we continue booting the old code.
+    #
+    # NOTE: this only kicks in for v16.26.3+. Users still stuck on 16.25.x
+    # / 16.26.0 need scripts/rescue.sh (or rescue.ps1) to reach 16.26.3 —
+    # after that they're self-healing against any future updater bug.
+    import os
+    _autoheal_pending_update(logger)
+
     # ── Single-instance lock ────────────────────────────────────────────
     # Prevent multiple parallel instances on the same config directory.
     # Multiple instances cause duplicate Telegram/email/webhook deliveries
     # because each runs its own background scheduler with its own in-memory
     # "already sent today" guard.
-    import os
     lock_path = out_dir / ".shelly_analyzer.lock"
     try:
         if lock_path.exists():
