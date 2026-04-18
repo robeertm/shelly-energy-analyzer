@@ -61,49 +61,86 @@ def _clear_quarantine(target: Path) -> None:
         pass
 
 
-def _restart_app(restart: Path, app_dir: Path) -> None:
-    """Restart using a robust method (bash for .command/.sh)."""
+def _restart_app(restart: Path, app_dir: Path, log) -> None:
+    """Launch the updated app, preserving the current PID wherever possible.
+
+    POSIX (Linux / macOS / Docker): ``os.execv`` replaces this helper process
+    image in-place with ``python -m shelly_analyzer``. Because PID 1 / the
+    service MainPID never dies, systemd (KillMode=mixed + cgroup), launchd
+    and Docker all keep the service alive throughout the update — no
+    surprise "deactivated successfully" events, no child-process kills.
+
+    Windows: no cgroup-style teardown to worry about. We keep the historical
+    detached-spawn path via ``cmd /c start start.bat``. ``os.execv`` on
+    Windows is spawn-and-exit semantically, not in-place, so it gives us
+    nothing extra there.
+    """
+    # Ensure exec bits on common start scripts (ZIP extraction may drop +x)
+    _ensure_executable(app_dir / "start.command")
+    _ensure_executable(app_dir / "start.sh")
+    _ensure_executable(restart)
+    _clear_quarantine(app_dir)
+
     if os.name == "nt":
         # Prefer start.bat inside app_dir if restart is missing
         if not restart.exists():
             cand = app_dir / "start.bat"
             if cand.exists():
                 restart = cand
-        subprocess.Popen(["cmd", "/c", "start", "", str(restart)], cwd=str(app_dir))
+        try:
+            subprocess.Popen(
+                ["cmd", "/c", "start", "", str(restart)],
+                cwd=str(app_dir),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                close_fds=False,
+            )
+            log(f"[updater] Windows: launched {restart}")
+        except Exception as e:
+            log(f"[updater] Windows restart failed: {e}")
+        # Give the child a moment to grab ownership before we exit
+        try:
+            time.sleep(0.5)
+        except Exception:
+            pass
         return
 
-    # Fallback to known start scripts if restart path is wrong/missing
-    if not restart.exists():
-        for cand_name in ("start.command", "start.sh"):  # macOS/Linux
-            cand = app_dir / cand_name
-            if cand.exists():
-                restart = cand
-                break
-
-    # Ensure exec bits on common start scripts (ZIP extraction may drop +x)
-    _ensure_executable(app_dir / "start.command")
-    _ensure_executable(app_dir / "start.sh")
-    _ensure_executable(restart)
-
-    # Remove quarantine best-effort
-    _clear_quarantine(app_dir)
-
-    # On macOS, .command/.sh are shell scripts; running via bash avoids relying on exec bit.
-    # IMPORTANT: spawn fully detached so the restart survives the app shutdown / terminal closing.
-    suffix = restart.suffix.lower()
-    if suffix in (".command", ".sh"):
-        if os.name == "nt":
-            _spawn_detached([str(restart)], cwd=app_dir)
-        else:
-            _spawn_detached(["/usr/bin/nohup", "/bin/bash", str(restart)], cwd=app_dir)
-    else:
-        _spawn_detached([str(restart)], cwd=app_dir)
-
-    # Give the child a moment to launch before we exit
+    # POSIX path — execv in-place.
+    py = _venv_python(app_dir) or Path(sys.executable)
+    new_cmd = [str(py), "-m", "shelly_analyzer"]
     try:
-        time.sleep(0.5)
+        os.chdir(str(app_dir))
     except Exception:
         pass
+    try:
+        os.closerange(3, 256)
+    except Exception:
+        pass
+    log(f"[updater] POSIX: execv -> {' '.join(new_cmd)} (keeping PID {os.getpid()})")
+    try:
+        os.execv(str(py), new_cmd)
+    except Exception as e:
+        # execv failure is rare (e.g. broken venv). Fall back to detached
+        # spawn via start.command so the user still ends up with a running
+        # app, even if systemd/launchd think the service exited.
+        log(f"[updater] execv failed: {e} — falling back to detached spawn")
+        if not restart.exists():
+            for cand_name in ("start.command", "start.sh"):
+                cand = app_dir / cand_name
+                if cand.exists():
+                    restart = cand
+                    break
+        suffix = restart.suffix.lower()
+        if suffix in (".command", ".sh"):
+            _spawn_detached(["/usr/bin/nohup", "/bin/bash", str(restart)], cwd=app_dir)
+        else:
+            _spawn_detached([str(restart)], cwd=app_dir)
+        try:
+            time.sleep(0.5)
+        except Exception:
+            pass
 
 
 EXCLUDE_NAMES = {
@@ -122,18 +159,45 @@ EXCLUDE_NAMES = {
 
 
 def _wait_for_pid(pid: int, timeout_s: float = 15.0) -> None:
+    """Block until the given PID exits or ``timeout_s`` elapses.
+
+    ``pid == 0`` is the sentinel used by the POSIX ``execv`` handoff path in
+    ``web/blueprints/updates.py``: there is no parent to wait for because we
+    *are* the same process (this helper replaced the app image in-place via
+    ``os.execv``). Return immediately in that case.
+    """
     if pid <= 0:
         return
     t0 = time.time()
     while time.time() - t0 < timeout_s:
         try:
-            # signal 0 checks existence on Unix
             if os.name != "nt":
+                # signal 0 probes existence on POSIX
                 os.kill(pid, 0)
+                time.sleep(0.25)
             else:
-                # On Windows: no reliable kill(0); just sleep a bit.
-                pass
-            time.sleep(0.25)
+                # Windows: use OpenProcess + STILL_ACTIVE to detect exit.
+                # Falls back to a fixed sleep if ctypes is unavailable.
+                try:
+                    import ctypes  # noqa: WPS433
+                    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+                    STILL_ACTIVE = 259
+                    k32 = ctypes.windll.kernel32
+                    h = k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+                    if not h:
+                        return
+                    try:
+                        ec = ctypes.c_ulong(0)
+                        if not k32.GetExitCodeProcess(h, ctypes.byref(ec)):
+                            return
+                        if ec.value != STILL_ACTIVE:
+                            return
+                    finally:
+                        k32.CloseHandle(h)
+                    time.sleep(0.25)
+                except Exception:
+                    time.sleep(2.0)
+                    return
         except Exception:
             return
     # timeout: proceed anyway
@@ -243,22 +307,42 @@ def main() -> int:
 
     _log(f"[updater] config.json still exists: {(app_dir / 'config.json').exists()}")
 
-    # Update dependencies if venv exists and requirements.txt exists
+    # Update dependencies if venv exists and requirements.txt exists.
     if int(args.update_deps or 0) == 1:
         req = app_dir / "requirements.txt"
         py = _venv_python(app_dir)
         if py and req.exists():
             _log(f"[updater] installing deps via {py}")
             try:
-                subprocess.run([str(py), "-m", "pip", "install", "-r", str(req)],
-                               check=False, capture_output=True)
+                proc = subprocess.run(
+                    [str(py), "-m", "pip", "install", "-r", str(req)],
+                    check=False, capture_output=True, text=True,
+                )
+                if proc.returncode != 0:
+                    _log(f"[updater] pip install returned {proc.returncode}")
+                    if proc.stderr:
+                        _log(f"[updater] pip stderr: {proc.stderr.strip()[:500]}")
+                else:
+                    _log("[updater] pip install completed")
             except Exception as e:
                 _log(f"[updater] pip install failed: {e}")
 
-    # Restart app
+    # Clean up staging dir and any leftover /tmp/*.zip from the download.
+    try:
+        # Ascend one level if the zip had a single top-level folder.
+        if staging.parent.name.startswith("sea_update_"):
+            _safe_rmtree(staging.parent)
+        else:
+            _safe_rmtree(staging)
+        _log(f"[updater] cleaned staging {staging}")
+    except Exception:
+        pass
+
+    # Restart app. On POSIX this does os.execv and never returns; on Windows
+    # it spawns detached and then we fall through to a clean exit.
     try:
         _log(f"[updater] restarting via {restart}")
-        _restart_app(restart, app_dir)
+        _restart_app(restart, app_dir, _log)
         _log("[updater] restart command issued")
     except Exception as e:
         _log(f"[updater] restart failed: {e}")
