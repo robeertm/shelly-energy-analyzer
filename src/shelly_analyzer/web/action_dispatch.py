@@ -181,7 +181,8 @@ class ActionDispatcher:
         self._computed: Dict[str, ComputedDevice] = {}
         self._computed_lock = threading.Lock()
         self._computed_ts: float = 0.0  # time.time() when cache was populated
-        self._computed_ttl: float = 120.0  # auto-refresh every 2 min
+        self._computed_ttl: float = 600.0  # auto-refresh every 10 min — full device history
+        # re-read is expensive on slower disks; live values still flow via background._today_state.
         # Mapping text from last _wva_series call (debug aid)
         self._last_wva_mapping_text = ""
 
@@ -2271,22 +2272,33 @@ class ActionDispatcher:
                 _has_schedule = bool(getattr(_pricing, "tariff_schedule", None))
 
                 def _calc_cost_with_schedule(df_slice, rng_start, rng_end):
-                    """Calculate cost using per-day effective pricing from tariff schedule."""
+                    """Calculate cost using per-day effective pricing from tariff schedule.
+
+                    ``df_slice`` carries tz-naive UTC timestamps; localize to Europe/Berlin
+                    so day buckets line up with the user's calendar before grouping.
+                    """
                     if df_slice.empty or "energy_kwh" not in df_slice.columns:
                         return 0.0
                     if not _has_schedule:
                         return float(pd.to_numeric(df_slice["energy_kwh"], errors="coerce").fillna(0).sum()) * _unit
-                    # Group by date and apply effective price per day
-                    df_tmp = df_slice.copy()
-                    df_tmp["_date"] = df_tmp["timestamp"].dt.date
+                    # Group by local date and apply effective price per day
+                    try:
+                        _local_ts = (
+                            pd.to_datetime(df_slice["timestamp"], errors="coerce")
+                            .dt.tz_localize("UTC", ambiguous="NaT", nonexistent="NaT")
+                            .dt.tz_convert(_tz)
+                        )
+                    except Exception:
+                        _local_ts = pd.to_datetime(df_slice["timestamp"], errors="coerce")
+                    _dates = _local_ts.dt.date
+                    _kwh = pd.to_numeric(df_slice["energy_kwh"], errors="coerce").fillna(0.0)
                     total_cost = 0.0
-                    for day, grp in df_tmp.groupby("_date"):
-                        day_kwh = float(pd.to_numeric(grp["energy_kwh"], errors="coerce").fillna(0).sum())
+                    for day, grp_kwh in _kwh.groupby(_dates).sum().items():
                         try:
                             day_price = float(_pricing.effective_pricing_for_date(day).unit_price_gross())
                         except Exception:
                             day_price = _unit
-                        total_cost += day_kwh * day_price
+                        total_cost += float(grp_kwh) * day_price
                     return total_cost
 
                 _cost_devices = [d for d in (self.cfg.devices or [])
@@ -2297,26 +2309,53 @@ class ActionDispatcher:
                     getattr(_spot_cfg, "enabled", False) if _spot_cfg else False
                 ) and str(getattr(_spot_cfg, "tariff_type", "fixed") or "fixed") == "dynamic"
 
+                # Per-request memo for spot-cost DB calls — dynamic tariff + spot-chart
+                # loops would otherwise ask the DB the same thing twice per range.
+                _spot_cache: Dict[Tuple[str, str], Tuple[float, float, float]] = {}
+                _sp_zone_cached = getattr(_spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
+                _sp_markup_cached = float(
+                    _spot_cfg.total_markup_ct() if (_spot_cfg and hasattr(_spot_cfg, "total_markup_ct")) else 16.0
+                ) / 100.0
+                _sp_vat_cached = self.cfg.pricing.vat_rate() if (_spot_cfg and getattr(_spot_cfg, "include_vat", True)) else 0.0
+
+                def _get_spot_cost(dev_key_: str, rng_key_: str, rs_: datetime, re_: datetime):
+                    _ck = (dev_key_, rng_key_)
+                    if _ck in _spot_cache:
+                        return _spot_cache[_ck]
+                    try:
+                        res = self.storage.db.calc_spot_cost(
+                            dev_key_, _sp_zone_cached,
+                            int(rs_.timestamp()), int(re_.timestamp()),
+                            _sp_markup_cached, _sp_vat_cached,
+                        )
+                    except Exception:
+                        res = (0.0, 0.0, 0.0)
+                    _spot_cache[_ck] = res
+                    return res
+
+                # Pre-compute tz-naive UTC bounds once — df timestamps live in UTC-naive,
+                # so we compare there instead of tz-converting every device frame.
+                _ranges_utc: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]] = {}
+                for _rk, (_rs, _re) in _ranges.items():
+                    try:
+                        _rs_u = pd.Timestamp(_rs).tz_convert("UTC").tz_localize(None)
+                        _re_u = pd.Timestamp(_re).tz_convert("UTC").tz_localize(None)
+                    except Exception:
+                        _rs_u, _re_u = pd.Timestamp(_rs), pd.Timestamp(_re)
+                    _ranges_utc[_rk] = (_rs_u, _re_u)
+
                 devices_out = []
                 for d in _cost_devices:
                     dev_data: Dict[str, Any] = {"key": d.key, "name": d.name, "host": d.host}
-                    # Pre-load device DataFrame once
+                    # Use the cached computed DataFrame as a view — no full copy/tz-conversion
+                    # per request, which was the main cost-tab hotspot.
                     _dev_df = None
                     try:
                         cd = self.computed.get(d.key)
-                        if cd is not None and cd.df is not None and not cd.df.empty:
-                            _dev_df = cd.df.copy()
-                            if "timestamp" in _dev_df.columns:
-                                _dev_df["timestamp"] = pd.to_datetime(_dev_df["timestamp"], errors="coerce")
-                                _dev_df = _dev_df.dropna(subset=["timestamp"])
-                                try:
-                                    if _dev_df["timestamp"].dt.tz is None:
-                                        _dev_df["timestamp"] = _dev_df["timestamp"].dt.tz_localize("UTC")
-                                    _dev_df["timestamp"] = _dev_df["timestamp"].dt.tz_convert(_tz)
-                                except Exception:
-                                    pass
+                        if cd is not None and cd.df is not None and not cd.df.empty and "timestamp" in cd.df.columns:
+                            _dev_df = cd.df
                     except Exception:
-                        pass
+                        _dev_df = None
 
                     for rng_key, (rng_start, rng_end) in _ranges.items():
                         kwh = 0.0
@@ -2324,24 +2363,16 @@ class ActionDispatcher:
                         _df_slice = None
                         try:
                             if _dev_df is not None:
-                                m = (_dev_df["timestamp"] >= rng_start) & (_dev_df["timestamp"] < rng_end)
+                                rs_u, re_u = _ranges_utc[rng_key]
+                                m = (_dev_df["timestamp"] >= rs_u) & (_dev_df["timestamp"] < re_u)
                                 _df_slice = _dev_df.loc[m]
                                 kwh = float(pd.to_numeric(_df_slice["energy_kwh"], errors="coerce").fillna(0.0).sum())
                         except Exception:
                             pass
                         dev_data[rng_key + "_kwh"] = round(kwh, 3)
                         if _use_dynamic_web:
-                            try:
-                                _sp_zone_d = getattr(_spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
-                                _sp_mk_d = float(_spot_cfg.total_markup_ct() if hasattr(_spot_cfg, "total_markup_ct") else 16.0) / 100.0
-                                _sp_vat_d = self.cfg.pricing.vat_rate() if getattr(_spot_cfg, "include_vat", True) else 0.0
-                                _dyn_c, _, _ = self.storage.db.calc_spot_cost(
-                                    d.key, _sp_zone_d, int(rng_start.timestamp()), int(rng_end.timestamp()),
-                                    _sp_mk_d, _sp_vat_d
-                                )
-                                dev_data[rng_key + "_eur"] = round(_dyn_c if _dyn_c > 0 else kwh * _unit, 2)
-                            except Exception:
-                                dev_data[rng_key + "_eur"] = round(kwh * _unit, 2)
+                            _dyn_c, _dyn_k, _dyn_a = _get_spot_cost(d.key, rng_key, rng_start, rng_end)
+                            dev_data[rng_key + "_eur"] = round(_dyn_c if _dyn_c > 0 else kwh * _unit, 2)
                         else:
                             # Use tariff-schedule-aware cost calculation
                             if _has_schedule and _df_slice is not None and not _df_slice.empty:
@@ -2423,20 +2454,10 @@ class ActionDispatcher:
 
                 _spot_enabled = getattr(_spot_cfg, "enabled", False) if _spot_cfg else False
                 if _spot_enabled:
-                    _sp_zone = getattr(_spot_cfg, "bidding_zone", "DE-LU") or "DE-LU"
-                    _sp_markup = float(_spot_cfg.total_markup_ct() if hasattr(_spot_cfg, "total_markup_ct") else getattr(_spot_cfg, "markup_ct_per_kwh", 16.0)) / 100.0
-                    _sp_vat = self.cfg.pricing.vat_rate() if getattr(_spot_cfg, "include_vat", True) else 0.0
                     for dev_data in devices_out:
                         for rng_key, (rng_start, rng_end) in _ranges.items():
-                            try:
-                                _sc, _sk, _sa = self.storage.db.calc_spot_cost(
-                                    dev_data["key"], _sp_zone,
-                                    int(rng_start.timestamp()), int(rng_end.timestamp()),
-                                    _sp_markup, _sp_vat
-                                )
-                                dev_data[rng_key + "_spot_eur"] = round(_sc, 2)
-                            except Exception:
-                                dev_data[rng_key + "_spot_eur"] = 0.0
+                            _sc, _sk, _sa = _get_spot_cost(dev_data["key"], rng_key, rng_start, rng_end)
+                            dev_data[rng_key + "_spot_eur"] = round(_sc, 2)
                         try:
                             _sp_month = dev_data.get("month_spot_eur", 0.0)
                             if _sp_month > 0:
@@ -4072,11 +4093,25 @@ class ActionDispatcher:
                 start = None
                 end = None
 
-            def _df_for(key: str) -> pd.DataFrame:
+            def _df_for(key: str, s_ts: Optional[int] = None, e_ts: Optional[int] = None) -> pd.DataFrame:
                 try:
-                    return self.storage.read_device_df(key)
+                    return self.storage.read_device_df(key, start_ts=s_ts, end_ts=e_ts)
                 except Exception:
                     return pd.DataFrame()
+
+            # Precompute DB-level range pushdown for explicit start/end.
+            _range_start_ts: Optional[int] = None
+            _range_end_ts: Optional[int] = None
+            if start is not None:
+                try:
+                    _range_start_ts = int(pd.Timestamp(start).timestamp())
+                except Exception:
+                    _range_start_ts = None
+            if end is not None:
+                try:
+                    _range_end_ts = int(pd.Timestamp(end).timestamp())
+                except Exception:
+                    _range_end_ts = None
 
             if view == "kwh":
                 mode = str(params.get("mode") or "days")
@@ -4107,23 +4142,24 @@ class ActionDispatcher:
                     "base_dir": str(getattr(self.storage, "base_dir", "")),
                 }
                 for k in dev_keys:
-                    df = _df_for(k)
+                    # Push time range into the DB query so we only pull relevant
+                    # rows (huge speed win on slow disks / VMs).
+                    _s_ts = _range_start_ts
+                    _e_ts = _range_end_ts
+                    if _s_ts is None and _e_ts is None and _kwh_preset is not None:
+                        try:
+                            _max_ts = self.storage.db.max_timestamp(k)
+                            if _max_ts is not None:
+                                _delta_s = int(_kwh_preset["delta"].total_seconds())
+                                _s_ts = _max_ts - _delta_s
+                                _e_ts = _max_ts
+                        except Exception:
+                            pass
+                    df = _df_for(k, _s_ts, _e_ts)
                     if df is None or len(df) == 0:
                         diag["counts"][k] = 0
                         continue
                     diag["counts"][k] = int(len(df))
-                    if start is not None or end is not None:
-                        df = filter_by_time(df, start, end)
-                    elif _kwh_preset is not None:
-                        try:
-                            col = "timestamp" if "timestamp" in df.columns else ("ts" if "ts" in df.columns else None)
-                            if col:
-                                end_i = pd.to_datetime(df[col], errors="coerce").max()
-                                if end_i is not pd.NaT and end_i == end_i:
-                                    start_i = end_i - _kwh_preset["delta"]
-                                    df = filter_by_time(df, start_i, end_i)
-                        except Exception:
-                            pass
                     lbls, vals = self._stats_series(df, mode)
                     s = pd.Series(vals, index=[str(x) for x in lbls], dtype="float64")
 
@@ -4363,22 +4399,24 @@ class ActionDispatcher:
                 "data": getattr(self.storage, "last_data_diag", {}),
                 "base_dir": str(getattr(self.storage, "base_dir", "")),
             }
+            _delta_s = int(delta.total_seconds())
             for k in dev_keys:
-                df = _df_for(k)
+                _s_ts = _range_start_ts
+                _e_ts = _range_end_ts
+                if _s_ts is None and _e_ts is None:
+                    try:
+                        _max_ts = self.storage.db.max_timestamp(k)
+                        if _max_ts is not None:
+                            _s_ts = _max_ts - _delta_s
+                            _e_ts = _max_ts
+                    except Exception:
+                        pass
+                df = _df_for(k, _s_ts, _e_ts)
                 if df is None or len(df) == 0:
                     diag_ts["counts"][k] = 0
                     continue
                 diag_ts["counts"][k] = int(len(df))
-                if start is None and end is None:
-                    try:
-                        _tcol = "timestamp" if "timestamp" in df.columns else ("ts" if "ts" in df.columns else None)
-                        end_i = pd.to_datetime(df[_tcol]).max() if _tcol else None
-                        start_i = end_i - delta
-                    except Exception:
-                        start_i, end_i = None, None
-                    dff = filter_by_time(df, start_i, end_i)
-                else:
-                    dff = filter_by_time(df, start, end)
+                dff = df
 
                 s_total, ylab = self._wva_series(dff, metric)
                 phases = self._wva_phase_series(dff, metric)

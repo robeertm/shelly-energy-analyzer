@@ -1,6 +1,10 @@
 # Changelog
 
-## 16.25.7 - 2026-04-17
+## 16.26.0 - 2026-04-18
+### Performance
+- **Plots tab no longer times out on slow disks / VMs** — "Web Dashboard Error: Timeout (60s) — reduce time range" is gone for typical views. The `/api/plots_data` endpoint used to load a device's **entire** history (often hundreds of thousands of rows) into pandas and then filter in Python. Both the `kwh` and `timeseries` branches now push the time window into the SQLite query via the new `Database.max_timestamp()` helper — a 24-hour view pulls 24 h of rows instead of years of samples.
+- **Costs tab much faster.** Removed the per-request full-DataFrame `.copy()` + `tz_localize` / `tz_convert` pass (was the main hotspot): filter the cached DataFrame as a view against pre-computed UTC range bounds, and localize only the tiny per-range slice when applying the tariff schedule. Dynamic-tariff + spot-enabled configs now share a per-request memo for `calc_spot_cost`, so the DB is hit once per (device, range) instead of twice.
+- **Computed-device cache TTL bumped from 2 min → 10 min.** Every expiry triggers a full re-read of every device's history from SQLite; 2 minutes was aggressive on slower storage. Live-tab freshness is unaffected — real-time values still flow through the background poller's `_today_state`, the costs tab already layers that delta on top.
 ### Fixed
 - **Self-signed TLS cert now includes SubjectAlternativeName (SAN).** The auto-generated cert had only `CN=Shelly Energy Analyzer` with no SAN extension, so iOS (Safari, Scriptable widgets) and modern browsers rejected any connection where the hostname/IP in the URL didn't match the CN — which it never did. Every connection failed with an opaque "cannot verify server" error. The new cert now includes:
   - All non-loopback IPv4 addresses discovered via `hostname -I`, `ip -4 addr`, `ifconfig` and `getaddrinfo()` — so LAN IPs, Tailscale IPs, Docker bridges etc. all match
