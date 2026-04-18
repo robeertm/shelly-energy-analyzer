@@ -49,26 +49,35 @@ def main(argv: list[str] | None = None) -> int:
         if lock_path.exists():
             try:
                 old_pid = int(lock_path.read_text().strip())
-                # Probe if old PID is still alive
-                try:
-                    os.kill(old_pid, 0)
-                    logger.error(
-                        "Another shelly_analyzer instance (PID %d) is already running with this config. "
-                        "Refusing to start to avoid duplicate notifications. "
-                        "Stop it first or remove %s if it's stale.",
-                        old_pid, lock_path,
+                # If the lock's PID is our own PID, the previous process image
+                # already exited (we just took its place via execv during an
+                # in-app update, or the OS recycled the PID). Treat as stale.
+                if old_pid == os.getpid():
+                    logger.info(
+                        "Lock file PID %d matches our own — previous image replaced via execv, taking over",
+                        old_pid,
                     )
-                    return 1
-                except ProcessLookupError:
-                    logger.info("Stale lock file from PID %d, replacing", old_pid)
-                except PermissionError:
-                    # Process exists but we can't signal it — assume alive
-                    logger.error(
-                        "Another shelly_analyzer instance (PID %d) appears to be running. "
-                        "Refusing to start. Remove %s manually if you're sure it's gone.",
-                        old_pid, lock_path,
-                    )
-                    return 1
+                else:
+                    # Probe if old PID is still alive
+                    try:
+                        os.kill(old_pid, 0)
+                        logger.error(
+                            "Another shelly_analyzer instance (PID %d) is already running with this config. "
+                            "Refusing to start to avoid duplicate notifications. "
+                            "Stop it first or remove %s if it's stale.",
+                            old_pid, lock_path,
+                        )
+                        return 1
+                    except ProcessLookupError:
+                        logger.info("Stale lock file from PID %d, replacing", old_pid)
+                    except PermissionError:
+                        # Process exists but we can't signal it — assume alive
+                        logger.error(
+                            "Another shelly_analyzer instance (PID %d) appears to be running. "
+                            "Refusing to start. Remove %s manually if you're sure it's gone.",
+                            old_pid, lock_path,
+                        )
+                        return 1
             except (ValueError, OSError):
                 logger.info("Lock file unreadable, replacing")
         lock_path.write_text(str(os.getpid()))
