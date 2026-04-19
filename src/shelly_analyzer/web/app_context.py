@@ -370,10 +370,44 @@ class AppState:
     # ── Widget ─────────────────────────────────────────────────────────
 
     def get_widget_script(self, profile_id: str = "") -> str:
+        """Return the iOS Scriptable widget script with server-specific hosts baked in.
+
+        The script body has ``const SERVER_HOSTS = "192.168.1.50:8765"`` as
+        a placeholder. We replace it with a comma-separated list of hosts
+        the widget should try in order. Scriptable enforces strict TLS, so
+        only hosts whose name matches the server cert will succeed — which
+        means the configured ``widget_domain`` (usually a Tailscale FQDN or
+        Let's Encrypt-signed DNS name) must come first. IP fallbacks are
+        still baked in for the rare LAN case where a user installed a cert
+        covering raw IPs themselves.
+        """
         script = _SCRIPTABLE_WIDGET_JS
+        hosts: list[str] = []
         if self.widget_domain:
-            default_addr = f"{self.widget_domain}:{self.port}"
-            script = script.replace("192.168.1.50:8765", default_addr)
+            hosts.append(f"{self.widget_domain.strip()}:{self.port}")
+        # Best-effort: surface any local/LAN addresses we can detect so
+        # widgets added before widget_domain was set still have something
+        # to probe. Scriptable will TLS-reject these unless the cert
+        # explicitly lists them, but failing fast is fine — the FQDN above
+        # will have already succeeded.
+        try:
+            import socket as _sock
+            local_ip = _sock.gethostbyname(_sock.gethostname())
+            cand = f"{local_ip}:{self.port}"
+            if local_ip and not local_ip.startswith("127.") and cand not in hosts:
+                hosts.append(cand)
+        except Exception:
+            pass
+        if hosts:
+            joined = ",".join(hosts)
+            script = script.replace(
+                'const SERVER_HOSTS = "192.168.1.50:8765";',
+                f'const SERVER_HOSTS = "{joined}";',
+            )
+            # Keep the legacy substitution point in sync so the inline
+            # example comment in the script still points at the real host
+            # users should enter.
+            script = script.replace("192.168.1.50:8765", hosts[0])
         if profile_id:
             script = script.replace(
                 'const PROFILE = "";',

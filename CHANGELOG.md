@@ -1,5 +1,12 @@
 # Changelog
 
+## 16.26.5 - 2026-04-19
+### Fixed
+- **iOS Scriptable widget no longer silently fails when the widget parameter is an IP address.** Tailscale / Let's Encrypt certs only include a DNS SAN, not raw IPs, and Scriptable enforces strict TLS — so a user who entered `10.50.1.14:8765` or the `100.x.y.z` Tailscale IP would hit "no alternative certificate subject name matches target" and see a generic "Offline" box with no hint of what went wrong.
+  - Widget JS now maintains a **host fallback list**: what the user typed first, then every server-configured host. If TLS fails on the user-typed host, it automatically retries against the server's `widget_domain` FQDN — which is the host the cert is actually valid for. Users who already added the widget with an IP parameter therefore recover without touching Scriptable.
+  - `/widget.js` server-side now bakes in both the configured FQDN and the detected LAN IP as a comma-separated `SERVER_HOSTS` list, so the widget has something to try even without a user-entered parameter.
+  - Offline card now surfaces the actual error category — "TLS error — use the FQDN, not an IP" / "Hostname not resolvable from phone" / "Timeout" — instead of the generic "Check WiFi & IP address" that told users nothing useful.
+
 ## 16.26.4 - 2026-04-18
 ### Fixed
 - **Rescue script now works via `curl | sudo -E bash`** without a TTY. The previous version tried to call `sudo systemctl stop/start` from inside a non-interactive pipe, which failed with "sudo: a terminal is required" — exactly the situation users hit when pasting the one-liner from the README. The script now detects EUID=0 + SUDO_USER and:
