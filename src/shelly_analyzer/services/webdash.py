@@ -321,16 +321,28 @@ def _compute_i_n(measured: float, ia: float, ib: float, ic: float,
 _SCRIPTABLE_WIDGET_JS = r"""
 // Shelly Energy Analyzer – iOS Scriptable Widget
 // Load this script in the Scriptable app.
-// Widget parameter: IP:PORT (or IP:PORT#profile_id for a specific profile)
+// Widget parameter: HOST[:PORT]  (or HOST[:PORT]#profile_id)
 //
-// Setup: when adding the widget, tap "Parameter"
-// and enter the address, e.g. "192.168.1.50:8765"
-// For a specific profile: "192.168.1.50:8765#spotprice"
+// IMPORTANT: iOS Scriptable enforces strict TLS validation. Certs issued by
+// Tailscale / Let's Encrypt only cover DNS names, not raw IPs. If you enter
+// an IP here the fetch will fail with a cert-validation error. Use the
+// Tailscale FQDN ("...tail...ts.net") or a regular DNS name instead.
+//
+// If the widget is saved without a parameter the server's configured
+// widget_domain is used automatically. If you enter an IP anyway, the
+// widget will fall back to the configured FQDN on TLS failure.
+//
+// Setup: when adding the widget, tap "Parameter" and enter the address,
+// e.g. "192.168.1.50:8765". For a specific profile: "host:8765#spotprice"
 
 const PROFILE = "";
-const RAW_PARAM = args.widgetParameter || "192.168.1.50:8765";
+// Comma-separated list of host fallbacks, baked in server-side. First entry
+// is the preferred FQDN (valid-cert host), later entries are IP fallbacks
+// for LAN-only users whose server has no public DNS name.
+const SERVER_HOSTS = "192.168.1.50:8765";
+const RAW_PARAM = args.widgetParameter || SERVER_HOSTS.split(",")[0];
 const parts = RAW_PARAM.split("#");
-const PARAM = parts[0];
+const USER_HOST = parts[0].trim();
 const PROFILE_ID = PROFILE || parts[1] || "";
 const DARK = Device.isUsingDarkAppearance();
 
@@ -345,19 +357,35 @@ const C = {
   blue:    new Color("#2196F3"),
 };
 
-let data;
-let BASE;
+// Build unique host list: user-typed first (wins if cert is valid there),
+// then whatever the server baked in (usually the FQDN).
+const HOSTS = [];
+for (const h of [USER_HOST].concat(SERVER_HOSTS.split(","))) {
+  const x = (h || "").trim();
+  if (x && HOSTS.indexOf(x) === -1) HOSTS.push(x);
+}
+
+let data = null;
+let BASE = null;
+let lastError = "";
 const qp = PROFILE_ID ? "?profile=" + encodeURIComponent(PROFILE_ID) : "";
-for (const proto of ["https", "http"]) {
-  BASE = proto + "://" + PARAM;
-  try {
-    const req = new Request(BASE + "/api/widget" + qp);
-    req.timeoutInterval = 6;
-    data = await req.loadJSON();
-    if (data) break;
-  } catch(e) {
-    data = null;
+for (const host of HOSTS) {
+  for (const proto of ["https", "http"]) {
+    const url = proto + "://" + host + "/api/widget" + qp;
+    try {
+      const req = new Request(url);
+      req.timeoutInterval = 6;
+      const j = await req.loadJSON();
+      if (j && typeof j === "object") {
+        data = j;
+        BASE = proto + "://" + host;
+        break;
+      }
+    } catch(e) {
+      lastError = (e && e.message) || String(e);
+    }
   }
+  if (data) break;
 }
 if (!data) {
   const w = new ListWidget();
@@ -366,11 +394,24 @@ if (!data) {
   t1.font = Font.boldSystemFont(14);
   t1.textColor = C.red;
   w.addSpacer(4);
-  const t2 = w.addText(PARAM);
+  const t2 = w.addText(USER_HOST);
   t2.font = Font.systemFont(11);
   t2.textColor = C.muted;
   w.addSpacer(2);
-  const t3 = w.addText("Check WiFi & IP address");
+  // Show the actual TLS / network error so users can debug instead of
+  // guessing. A "certificate" / "SSL" / "TLS" error usually means they
+  // entered an IP — the server cert only covers DNS names.
+  let hint = "Check WiFi & IP address";
+  if (/certificate|ssl|tls|trust/i.test(lastError)) {
+    hint = "TLS error — use the FQDN, not an IP";
+  } else if (/resolve|dns|host/i.test(lastError)) {
+    hint = "Hostname not resolvable from phone";
+  } else if (/timeout|timed out/i.test(lastError)) {
+    hint = "Timeout — server reachable on Wi-Fi / Tailscale?";
+  } else if (lastError) {
+    hint = lastError.slice(0, 40);
+  }
+  const t3 = w.addText(hint);
   t3.font = Font.systemFont(10);
   t3.textColor = C.muted;
   Script.setWidget(w);
