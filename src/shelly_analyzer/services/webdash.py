@@ -922,31 +922,52 @@ function drawMiniChart(chart, fixedCt, W, H) {
   let maxV = Math.max(...allV);
   let rng = maxV - minV;
   if (rng < 1) rng = 1;
-  minV = Math.max(0, minV - rng * 0.1);
+  minV = minV - rng * 0.1;
   maxV = maxV + rng * 0.15;
+  // Always include zero so positive bars sit on baseline; negative bars hang below
+  if (minV > 0) minV = 0;
+  if (maxV < 0) maxV = 0;
   const vR = maxV - minV;
 
   const pad = {l: 2, r: 2, t: 2, b: 2};
   const pW = W - pad.l - pad.r;
   const pH = H - pad.t - pad.b;
   const barW = Math.max(1, pW / chart.length - 1);
+  const zeroY = pad.t + pH * (1 - (0 - minV) / vR);
 
   const now = Date.now() / 1000;
+
+  // Zero line if range crosses zero
+  if (minV < 0 && maxV > 0) {
+    dc.setStrokeColor(new Color("#888888", 0.6));
+    dc.setLineWidth(0.5);
+    const zPath = new Path();
+    zPath.move(new Point(pad.l, zeroY));
+    zPath.addLine(new Point(W - pad.r, zeroY));
+    dc.addPath(zPath);
+    dc.strokePath();
+  }
 
   for (let i = 0; i < chart.length; i++) {
     const v = chart[i][1];
     const ts = chart[i][0];
     const x = pad.l + (i / chart.length) * pW;
-    const barH = Math.max(1, ((v - minV) / vR) * pH);
-    const y = pad.t + pH - barH;
+    const vY = pad.t + pH * (1 - (v - minV) / vR);
+    let barH, y;
+    if (v >= 0) { barH = Math.max(1, zeroY - vY); y = vY; }
+    else { barH = Math.max(1, vY - zeroY); y = zeroY; }
 
-    const ratio = fixedCt > 0 ? v / fixedCt : 1;
     let hex;
-    if (ratio <= 0.7) hex = "#4caf50";
-    else if (ratio <= 0.9) hex = "#8bc34a";
-    else if (ratio <= 1.0) hex = "#ffeb3b";
-    else if (ratio <= 1.2) hex = "#ff9800";
-    else hex = "#e53935";
+    if (v < 0) {
+      hex = "#7e57c2";
+    } else {
+      const ratio = fixedCt > 0 ? v / fixedCt : 1;
+      if (ratio <= 0.7) hex = "#4caf50";
+      else if (ratio <= 0.9) hex = "#8bc34a";
+      else if (ratio <= 1.0) hex = "#ffeb3b";
+      else if (ratio <= 1.2) hex = "#ff9800";
+      else hex = "#e53935";
+    }
 
     const a = ts > now ? 0.45 : 0.85;
     const col = new Color(hex, a);
@@ -4440,15 +4461,19 @@ function _drawSpotChart(hourly, fixedCt) {{
   var plotW = W - pad.left - pad.right;
   var plotH = H - pad.top - pad.bottom;
 
-  // Determine value range (ct/kWh)
+  // Determine value range (ct/kWh) – allow negative spot prices
   var vals = hourly.map(function(h) {{ return h.total_ct; }});
   var minV = Math.min.apply(null, vals.concat([fixedCt]));
   var maxV = Math.max.apply(null, vals.concat([fixedCt]));
   var range = maxV - minV;
   if (range < 1) range = 1;
-  minV = Math.max(0, minV - range * 0.1);
+  minV = minV - range * 0.1;
   maxV = maxV + range * 0.15;
+  // Always include zero in the visible range so positive bars sit on a baseline
+  if (minV > 0) minV = 0;
+  if (maxV < 0) maxV = 0;
   var vRange = maxV - minV;
+  var zeroY = pad.top + plotH * (1 - (0 - minV) / vRange);
 
   // Background
   var isDark = document.documentElement.dataset.theme === 'dark';
@@ -4490,23 +4515,35 @@ function _drawSpotChart(hourly, fixedCt) {{
   ctx.textAlign = 'left';
   ctx.fillText(t('plots.dynprice.fixed', 'Fixed') + ' ' + fixedCt.toFixed(1), pad.left + 4, fixedY - 4);
 
-  // Bars
+  // Zero baseline (only visible if range crosses zero)
+  if (minV < 0 && maxV > 0) {{
+    ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.left, zeroY); ctx.lineTo(W - pad.right, zeroY); ctx.stroke();
+  }}
+
+  // Bars (bidirectional: positive bars grow up from zero, negative grow down)
   var barW = Math.max(1, (plotW / hourly.length) - 1);
   var now = Date.now() / 1000;
   for (var i = 0; i < hourly.length; i++) {{
     var h = hourly[i];
     var x = pad.left + (i / hourly.length) * plotW;
     var v = h.total_ct;
-    var barH = Math.max(1, ((v - minV) / vRange) * plotH);
-    var y = pad.top + plotH - barH;
+    var vY = pad.top + plotH * (1 - (v - minV) / vRange);
+    var barH, y;
+    if (v >= 0) {{ barH = Math.max(1, zeroY - vY); y = vY; }}
+    else {{ barH = Math.max(1, vY - zeroY); y = zeroY; }}
 
-    // Color: green if cheaper than fixed, orange/red if more expensive
-    var ratio = fixedCt > 0 ? v / fixedCt : 1;
-    if (ratio <= 0.7) ctx.fillStyle = '#4caf50';
-    else if (ratio <= 0.9) ctx.fillStyle = '#8bc34a';
-    else if (ratio <= 1.0) ctx.fillStyle = '#ffeb3b';
-    else if (ratio <= 1.2) ctx.fillStyle = '#ff9800';
-    else ctx.fillStyle = '#e53935';
+    // Color: negative = special (purple, "you earn"), else by ratio vs fixed
+    if (v < 0) ctx.fillStyle = '#7e57c2';
+    else {{
+      var ratio = fixedCt > 0 ? v / fixedCt : 1;
+      if (ratio <= 0.7) ctx.fillStyle = '#4caf50';
+      else if (ratio <= 0.9) ctx.fillStyle = '#8bc34a';
+      else if (ratio <= 1.0) ctx.fillStyle = '#ffeb3b';
+      else if (ratio <= 1.2) ctx.fillStyle = '#ff9800';
+      else ctx.fillStyle = '#e53935';
+    }}
 
     // Future hours: slightly transparent
     if (h.ts > now) ctx.globalAlpha = 0.5;
