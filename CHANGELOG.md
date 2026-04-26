@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.26.7 - 2026-04-26
+### Fixed
+- **"Check now" button in Settings → Updates now actually re-checks GitHub.** Previously the background update checker ran every 30 minutes and cached the result; the manual button hit the same cache and returned the stale answer. Users who pushed a new release and then immediately tried to update saw "you are on the latest" until the next 30-min cycle. The button now passes `?force=1` to both `/api/updates/status` and `/api/updates/releases`, bypassing both caches. As a follow-up, a force-refreshed `/api/updates/status` now also writes the fresh result back into the background-checker's cache, so subsequent unforced callers (e.g. the Live-tab banner that polls every minute) see the new version immediately instead of having to wait for the next periodic cycle.
+
 ## 16.26.6 - 2026-04-19
 ### Fixed
 - **Spot-price charts now display negative prices.** All four hourly spot-price visualizations clamped the y-axis minimum to zero (`Math.max(0, …)`) when computing the value range, which silently hid every hour where the wholesale price went negative — so users on dynamic tariffs (Tibber, aWATTar) couldn't see exactly the slots they care most about. Affected: the dashboard 24h spot chart (`_drawSpotChart`), the iOS Scriptable home-screen widget mini-chart (`drawMiniChart`), the web widget mini-chart (`miniChart`), and the settings preview mini-chart (`_wpMiniChart`). All four now allow a negative minimum, force zero into the visible range, draw a zero baseline when prices straddle zero, render bidirectional bars (positive grow up from zero, negative hang down), and color negative hours purple (`#7e57c2`) to distinguish "you earn" hours from merely cheap ones. CO₂ intensity charts that share `miniChart`/`_wpMiniChart` keep their non-negative clamp since intensity can never be negative.

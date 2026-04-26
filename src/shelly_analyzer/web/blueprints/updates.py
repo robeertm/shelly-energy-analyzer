@@ -89,7 +89,7 @@ def api_updates_status():
                         "current": __version__})
     try:
         info = check_latest_release(repo)
-        return jsonify({
+        result = {
             "ok": True,
             "current": __version__,
             "repo": repo,
@@ -99,7 +99,14 @@ def api_updates_status():
             "has_update": bool(info.latest_tag and is_newer(info.latest_tag, __version__)),
             "asset_url": info.asset_url,
             "asset_name": info.asset_name,
-        })
+        }
+        # Promote a force-refresh into the background cache too, so the next
+        # caller (without force=1) sees the fresh result instead of the stale
+        # 30-min cache that a just-released version would otherwise be hidden by.
+        if force and bg is not None and info.reachable:
+            bg._update_check_state = {**result, "checked_at": int(time.time()),
+                                      "rate_limited": False}
+        return jsonify(result)
     except Exception as e:
         logger.exception("updates status failed")
         return jsonify({"ok": False, "error": str(e), "current": __version__})
