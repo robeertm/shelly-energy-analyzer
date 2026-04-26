@@ -1788,24 +1788,109 @@ async function installVersion(tag, assetUrl) {
   if (!tag) return;
   const msg = T("settings.updates.confirm_install","Version {v} wirklich installieren? Die App wird neu gestartet.",{v:tag});
   if (!confirm(msg)) return;
-  toast("⏳ " + T("settings.updates.installing","Installiere {v}…",{v:tag}));
+
+  // Replace the entire updates section with a persistent progress panel,
+  // so the user stays informed even when the toast fades and disables
+  // accidental double-installs.
+  const fromVer = (document.getElementById("about-version") || {}).textContent || "?";
+  const targetVer = String(tag).replace(/^v/, "");
+  const sec = document.getElementById("sec-updates");
+  if (sec) {
+    sec.innerHTML = `<h2>${T("settings.updates.title","Updates")}</h2>
+      <div id="install-panel" style="border:1px solid var(--accent,#3b82f6);border-radius:8px;padding:16px;background:var(--card-bg,rgba(59,130,246,0.05))">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div class="spinner" style="width:18px;height:18px;border:2px solid var(--muted,#888);border-top-color:var(--accent,#3b82f6);border-radius:50%;animation:sea-spin 0.8s linear infinite"></div>
+          <strong style="font-size:1.05em">${T("settings.updates.installing_title","Installation läuft …")}</strong>
+        </div>
+        <p style="margin:6px 0">${T("settings.updates.installing_target","Ziel-Version")}: <strong>${esc(tag)}</strong></p>
+        <ul id="install-steps" style="margin:8px 0;padding-left:20px;list-style:none">
+          <li id="step-download">⏳ ${T("settings.updates.step_download","Download von GitHub …")}</li>
+          <li id="step-extract" style="opacity:0.4">⏸ ${T("settings.updates.step_extract","Entpacken …")}</li>
+          <li id="step-restart" style="opacity:0.4">⏸ ${T("settings.updates.step_restart","Service-Neustart …")}</li>
+          <li id="step-verify"  style="opacity:0.4">⏸ ${T("settings.updates.step_verify","Versions-Verifikation …")}</li>
+        </ul>
+        <p id="install-detail" class="hint" style="margin:8px 0 0">${T("settings.updates.detail_starting","Vorgang gestartet …")}</p>
+      </div>
+      <style>@keyframes sea-spin { to { transform: rotate(360deg); } }</style>`;
+  }
+
+  function setStep(id, ok) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.opacity = "1";
+    el.innerHTML = (ok ? "✅" : "⏳") + el.innerHTML.replace(/^[⏳⏸✅❌]\s*/, " ");
+  }
+  function failStep(id, errMsg) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.opacity = "1";
+    el.innerHTML = "❌" + el.innerHTML.replace(/^[⏳⏸✅❌]\s*/, " ");
+    const det = document.getElementById("install-detail");
+    if (det) det.innerHTML = `<span style="color:var(--danger)">${esc(errMsg)}</span> · <button class="small" onclick="reload()">${T("settings.updates.btn_back","Zurück")}</button>`;
+  }
+  function setDetail(html) {
+    const det = document.getElementById("install-detail");
+    if (det) det.innerHTML = html;
+  }
+
+  // 1. Trigger the install
+  setDetail(T("settings.updates.detail_request","Sende Install-Anfrage an Server …"));
+  let resp;
   try {
-    const r = await fetch("/api/updates/install",{method:"POST",
+    const r = await fetch("/api/updates/install", {method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({tag:tag, asset_url:assetUrl||""})});
-    const j = await r.json();
-    if (j.ok) {
-      toast("✓ " + (j.message || T("settings.updates.install_started","Update gestartet")));
-      setTimeout(()=>{
-        const el = document.getElementById("updates-status");
-        if (el) el.innerHTML = `<strong>${T("settings.updates.restarting","App startet neu… Bitte Seite in ~10s neu laden.")}</strong>`;
-      }, 400);
-    } else {
-      toast(T("settings.toast.error","Error: {err}",{err:j.error||"?"}), "error");
-    }
+    resp = await r.json();
   } catch(e) {
-    toast(T("settings.toast.error","Error: {err}",{err:e.message}), "error");
+    failStep("step-download", e.message);
+    return;
   }
+  if (!resp.ok) {
+    failStep("step-download", resp.error || "?");
+    return;
+  }
+  setStep("step-download", true);
+  setStep("step-extract", true);
+  setDetail(T("settings.updates.detail_staged","Dateien entpackt nach {p}. App startet neu …",{p:resp.staging||"…"}));
+
+  // 2. Poll for the service to come back with the new version
+  // Timeline: server returns immediately after staging+execv-handoff. The
+  // helper copies + execvs into the new app, taking ~10–60s depending on
+  // pip-resolver mood. We poll every 2s, tolerant of fetch errors during
+  // the brief restart gap.
+  const startTs = Date.now();
+  const TIMEOUT_MS = 180000; // 3 min upper bound
+  let stepRestartMarked = false;
+
+  while (Date.now() - startTs < TIMEOUT_MS) {
+    await new Promise(r => setTimeout(r, 2000));
+    let s;
+    try {
+      const r = await fetch("/api/updates/status", {cache:"no-store"});
+      s = await r.json();
+    } catch(e) {
+      // Server probably mid-restart — keep polling
+      if (!stepRestartMarked) {
+        setStep("step-restart", true);
+        stepRestartMarked = true;
+        setDetail(T("settings.updates.detail_restarting","Service ist offline (Restart läuft) …"));
+      }
+      continue;
+    }
+    const cur = String(s.current || "").replace(/^v/, "");
+    if (!stepRestartMarked && cur && cur !== fromVer.replace(/^v/, "")) {
+      setStep("step-restart", true);
+      stepRestartMarked = true;
+    }
+    if (cur === targetVer) {
+      setStep("step-restart", true);
+      setStep("step-verify", true);
+      setDetail(`<strong style="color:var(--ok,#22c55e)">${T("settings.updates.detail_done","✓ Update abgeschlossen — lade Seite in 2 s neu …")}</strong>`);
+      setTimeout(() => window.location.reload(), 2000);
+      return;
+    }
+  }
+  failStep("step-verify", T("settings.updates.timeout","Zeitüberschreitung — Server kam nicht mit der neuen Version zurück. Bitte Seite manuell neu laden."));
 }
 
 function renderSSL() {
@@ -2182,6 +2267,7 @@ function renderAll() {
   // Auto-check update status if the updates section is rendered
   if (document.getElementById("sec-updates")) {
     checkUpdateStatus();
+    loadReleaseList();
   }
   // Auto-load SSL status if the SSL section is rendered
   if (document.getElementById("sec-ssl")) {
