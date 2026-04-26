@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.26.6 - 2026-04-19
+### Fixed
+- **Spot-price charts now display negative prices.** All four hourly spot-price visualizations clamped the y-axis minimum to zero (`Math.max(0, …)`) when computing the value range, which silently hid every hour where the wholesale price went negative — so users on dynamic tariffs (Tibber, aWATTar) couldn't see exactly the slots they care most about. Affected: the dashboard 24h spot chart (`_drawSpotChart`), the iOS Scriptable home-screen widget mini-chart (`drawMiniChart`), the web widget mini-chart (`miniChart`), and the settings preview mini-chart (`_wpMiniChart`). All four now allow a negative minimum, force zero into the visible range, draw a zero baseline when prices straddle zero, render bidirectional bars (positive grow up from zero, negative hang down), and color negative hours purple (`#7e57c2`) to distinguish "you earn" hours from merely cheap ones. CO₂ intensity charts that share `miniChart`/`_wpMiniChart` keep their non-negative clamp since intensity can never be negative.
+- Cost calculation (`calc_spot_cost`) was already correct — it has no `max(0, …)` clamp, so negative spot prices already flowed into total-cost reductions per kWh in line with how Tibber/aWATTar pass them through. Documenting here for completeness; no code change to the calculation path.
+
 ## 16.26.5 - 2026-04-19
 ### Fixed
 - **iOS Scriptable widget no longer silently fails when the widget parameter is an IP address.** Tailscale / Let's Encrypt certs only include a DNS SAN, not raw IPs, and Scriptable enforces strict TLS — so a user who entered `10.50.1.14:8765` or the `100.x.y.z` Tailscale IP would hit "no alternative certificate subject name matches target" and see a generic "Offline" box with no hint of what went wrong.
