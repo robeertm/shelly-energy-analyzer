@@ -1,5 +1,13 @@
 # Changelog
 
+## 16.26.8 - 2026-04-26
+### Fixed
+- **Update flow in Settings → Updates is now self-explanatory and self-completing.** Three UX defects fixed in one pass:
+  - **Releases list now loads automatically** when the Updates section is opened — previously the user had to click "Letzte 10 Versionen laden" before a freshly tagged release became visible. Both `checkUpdateStatus()` and `loadReleaseList()` now fire on section render.
+  - **Install progress is shown persistently** instead of only as a fading toast. Clicking install replaces the section with a panel that shows a 4-step checklist (Download → Extract → Restart → Verify) plus a live detail line, so the user can never accidentally double-install or close the tab thinking nothing happened.
+  - **Page auto-reloads when the new version comes online.** The UI polls `/api/updates/status` every 2 s after triggering install, tolerates the brief offline window during the systemd `execv` chain, and full-page-reloads automatically once `current` matches the requested tag. Hard timeout 3 min — if the version doesn't come back, the panel surfaces an error with a manual "Back" button instead of leaving the user stranded.
+- New i18n keys for the install progress panel are added to both DE and EN dicts.
+
 ## 16.26.7 - 2026-04-26
 ### Fixed
 - **"Check now" button in Settings → Updates now actually re-checks GitHub.** Previously the background update checker ran every 30 minutes and cached the result; the manual button hit the same cache and returned the stale answer. Users who pushed a new release and then immediately tried to update saw "you are on the latest" until the next 30-min cycle. The button now passes `?force=1` to both `/api/updates/status` and `/api/updates/releases`, bypassing both caches. As a follow-up, a force-refreshed `/api/updates/status` now also writes the fresh result back into the background-checker's cache, so subsequent unforced callers (e.g. the Live-tab banner that polls every minute) see the new version immediately instead of having to wait for the next periodic cycle.
