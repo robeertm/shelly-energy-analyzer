@@ -1530,18 +1530,27 @@ function _wpMiniChart(chart, fixedCt, W, H, type, greenThr, dirtyThr) {
   if (fixedCt!=null) { minV=Math.min(minV,fixedCt); maxV=Math.max(maxV,fixedCt); }
   let rng = maxV - minV;
   if (rng < (type==="co2"?10:1)) rng = type==="co2"?10:1;
-  minV = Math.max(0, minV - rng*0.1);
+  minV = minV - rng*0.1;
   maxV = maxV + rng*0.15;
+  // CO2 intensity is always >= 0; spot prices can go negative
+  if (type === "co2" && minV < 0) minV = 0;
+  if (type !== "co2" && minV > 0) minV = 0;
   const vR = maxV - minV;
+  const zeroY = H * (1 - (0 - minV)/vR);
   const now = Date.now()/1000;
   const bw = Math.max(2, Math.floor(W/chart.length)-1);
 
   let svg = '<svg width="'+W+'" height="'+H+'" style="display:block;border-radius:4px">';
+  if (type !== "co2" && minV < 0 && maxV > 0) {
+    svg += '<line x1="0" y1="'+zeroY+'" x2="'+W+'" y2="'+zeroY+'" stroke="rgba(0,0,0,0.35)" stroke-width="0.5"/>';
+  }
   chart.forEach((p,i)=>{
     const v=p[1], ts=p[0];
     const x = (i/chart.length)*W;
-    const barH = Math.max(1, ((v-minV)/vR)*H);
-    const y = H - barH;
+    const vY = H * (1 - (v - minV)/vR);
+    let barH, y;
+    if (v >= 0) { barH = Math.max(1, zeroY - vY); y = vY; }
+    else { barH = Math.max(1, vY - zeroY); y = zeroY; }
     const opacity = ts>now?0.4:0.85;
     let hex;
     if (type==="co2") {
@@ -1549,6 +1558,8 @@ function _wpMiniChart(chart, fixedCt, W, H, type, greenThr, dirtyThr) {
       else if(v<=(greenThr+dirtyThr)/2) hex="#8bc34a";
       else if(v<=dirtyThr) hex="#ff9800";
       else hex="#e53935";
+    } else if (v < 0) {
+      hex = "#7e57c2";
     } else {
       const ratio = fixedCt>0?v/fixedCt:1;
       if(ratio<=0.7) hex="#4caf50";
