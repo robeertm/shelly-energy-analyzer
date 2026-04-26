@@ -1709,7 +1709,7 @@ function renderUpdates() {
     </div>
     <div class="section-actions">
       <button onclick="saveSection('updates')">${T("settings.btn.save","💾 Speichern")}</button>
-      <button class="secondary" onclick="checkUpdateStatus()">🔄 ${T("settings.updates.check_now","Check now")}</button>
+      <button class="secondary" onclick="checkUpdateStatus(true); loadReleaseList(true);">🔄 ${T("settings.updates.check_now","Check now")}</button>
       <button class="secondary" onclick="loadReleaseList()">${T("settings.updates.load_releases","Letzte 10 Versionen laden")}</button>
     </div>
     <div id="updates-status" class="hint" style="margin-top:8px">${T("settings.updates.status_loading","Status wird geladen…")}</div>
@@ -1718,12 +1718,13 @@ function renderUpdates() {
   </section>`;
 }
 
-async function checkUpdateStatus() {
+async function checkUpdateStatus(force) {
   const el = document.getElementById("updates-status");
   if (!el) return;
   el.textContent = T("settings.updates.status_loading","Status wird geladen…");
   try {
-    const r = await fetch("/api/updates/status");
+    const url = force ? "/api/updates/status?force=1" : "/api/updates/status";
+    const r = await fetch(url);
     const j = await r.json();
     if (!j.ok && !j.current) {
       el.innerHTML = `<span style="color:var(--danger)">${esc(j.error||T("settings.err","Error"))}</span>`;
@@ -1745,12 +1746,13 @@ async function checkUpdateStatus() {
   }
 }
 
-async function loadReleaseList() {
+async function loadReleaseList(force) {
   const el = document.getElementById("updates-releases");
   if (!el) return;
   el.innerHTML = `<p class="hint">${T("settings.updates.loading_releases","Lade Versionen…")}</p>`;
   try {
-    const r = await fetch("/api/updates/releases?limit=10");
+    const url = force ? "/api/updates/releases?limit=10&force=1" : "/api/updates/releases?limit=10";
+    const r = await fetch(url);
     const j = await r.json();
     if (!j.ok) {
       el.innerHTML = `<p class="hint" style="color:var(--danger)">${esc(j.error||T("settings.err","Error"))}</p>`;
