@@ -93,6 +93,7 @@ class BackgroundServiceManager:
         self._start_spot_fetcher()
         self._start_summary_scheduler()
         self._start_update_checker()
+        self._start_live_history_saver()
         self._write_runtime_devices_meta()
         logger.info("All background services started")
 
@@ -145,6 +146,12 @@ class BackgroundServiceManager:
                 lrn.flush()
             except Exception:
                 pass
+        # Final live-history snapshot so an in-app update or clean shutdown
+        # captures everything the periodic saver may have missed.
+        try:
+            self._save_live_history()
+        except Exception as e:
+            logger.debug("Final live-history save failed: %s", e)
         logger.info("All background services stopped")
 
     def reload(self, cfg: AppConfig) -> None:
@@ -848,6 +855,44 @@ class BackgroundServiceManager:
 
             if self._stop_event.wait(wait_s):
                 return
+
+    # ── Live history persistence ──────────────────────────────────────
+
+    def _live_history_path(self) -> "Path":
+        return self.out_dir / "data" / "runtime" / "live_history.json"
+
+    def _save_live_history(self) -> None:
+        """Snapshot the rolling Live-tab buffer to disk.
+
+        Called both periodically by the saver thread and one final time
+        from `stop_all()` so an in-app update can't lose the last few
+        seconds of data captured after the previous periodic save."""
+        if self.live_store is None:
+            return
+        try:
+            self.live_store.dump_to_path(self._live_history_path())
+        except Exception as e:
+            logger.debug("Live history save failed: %s", e)
+
+    def _start_live_history_saver(self) -> None:
+        """Persist the live buffer every 30 s.
+
+        Cheap: ~150 KB JSON per device for the default 2 h retention.
+        Survival benefit: after an in-app update the Live tab comes back
+        with the full window pre-populated instead of an empty chart that
+        has to refill from scratch."""
+        def _loop():
+            # First save 5 s after start so we don't immediately write an
+            # empty file on a fresh boot (lets the load-on-startup path
+            # survive if the previous shutdown didn't get a chance to save).
+            if self._stop_event.wait(5.0):
+                return
+            while not self._stop_event.is_set():
+                self._save_live_history()
+                if self._stop_event.wait(30.0):
+                    return
+        t = threading.Thread(target=_loop, name="LiveHistorySaver", daemon=True)
+        t.start()
 
     # ── Runtime metadata ───────────────────────────────────────────────
 

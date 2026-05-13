@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.27.2 - 2026-05-13
+### Fixed
+- **Live tab keeps its rolling history across restarts and in-app updates.** The 2 h `LiveStateStore` deques are now snapshot to `data/runtime/live_history.json` every 30 s, on a clean `stop_all()`, AND one extra time right before the updater's `os.execv` handoff (since execv bypasses Python's atexit hooks). On startup `AppState.__init__` re-loads any points newer than the retention window (default 2 h) before the live poller starts. After updating from a previous version the user therefore sees the full pre-update window immediately instead of an empty chart that has to refill from scratch.
+- File writes are atomic (`tempfile` + `os.replace`) so a crash mid-save can't corrupt the persisted state; load is fault-tolerant and silently returns 0 points on any read/parse error.
+
 ## 16.27.1 - 2026-05-13
 ### Changed
 - **CO₂ plot on the Plots tab now uses a smooth 9-stop gradient** instead of the 3-bucket traffic-light coloring (green/yellow/red). Stops are tuned to typical EU grid intensities: teal-green at 0 g/kWh (hydro/nuclear), through light green / yellow-green at ~100–200, pale yellow ~300, orange ~400, red-orange ~500, red ~650, dark red at 850+ (coal-dominated). Inter-stop colors are linearly interpolated in RGB, so adjacent hours with a 30 g/kWh difference are now visibly distinguishable instead of all collapsing into the same yellow band. The spot-price plot keeps the traffic-light coloring since it uses dynamic percentile thresholds, not an absolute scale.

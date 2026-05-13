@@ -288,6 +288,18 @@ def api_updates_install():
         # before we yank the process away.
         _time.sleep(1.2)
 
+        # Snapshot the live-history buffer to disk so the Live tab comes
+        # back fully populated after the helper execvs the new app image.
+        # execv doesn't run atexit / stop_all, so without this the user
+        # would see an empty chart for ~2 h after every update.
+        try:
+            state = _get_state()
+            bg = getattr(state, "_bg", None)
+            if bg is not None:
+                bg._save_live_history()
+        except Exception:
+            logger.debug("Pre-update live-history save failed", exc_info=True)
+
         if os.name == "nt":
             win_cmd = [sys.executable, str(helper), "--wait-pid", str(os.getpid())] + helper_args
             try:

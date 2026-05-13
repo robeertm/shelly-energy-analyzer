@@ -58,6 +58,20 @@ class AppState:
         max_points = int((retention_m * 60.0) / poll_s) + 50
         self.live_store = LiveStateStore(max_points=max_points)
 
+        # Try to restore the rolling Live tab history from the last shutdown
+        # so the user sees the 2 h chart immediately instead of an empty graph
+        # that has to refill from scratch after every update / restart.
+        try:
+            hist_path = self.out_dir / "data" / "runtime" / "live_history.json"
+            loaded = self.live_store.load_from_path(hist_path,
+                                                   max_age_seconds=retention_m * 60)
+            if loaded:
+                import logging
+                logging.getLogger(__name__).info(
+                    "Restored %d live points from %s", loaded, hist_path)
+        except Exception:
+            pass
+
         # Device metadata
         self.devices_meta: List[Dict[str, Any]] = [
             {
