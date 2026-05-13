@@ -574,11 +574,39 @@ class DeviceSchedule:
 
 
 @dataclass(frozen=True)
+class AutoScheduleRule:
+    """Spot-price-driven auto-switching rule for a Shelly relay.
+
+    Each rule asks the scheduler: 'find the cheapest contiguous
+    `duration_hours`-long block within today's `earliest_hour..latest_hour`
+    window, on these `weekdays`, where avg-price <= `max_price_ct` if set;
+    then keep this relay ON during that block and OFF otherwise.'
+
+    `dry_run=True` (default) means the scheduler only logs decisions; no
+    actual relay switching happens. The user must explicitly set
+    `dry_run=False` per rule to enable live switching.
+    """
+    rule_id: str = ""
+    name: str = ""
+    enabled: bool = False
+    dry_run: bool = True
+    device_key: str = ""
+    switch_id: int = 0
+    duration_hours: float = 3.0
+    earliest_hour: int = 0           # 0..23
+    latest_hour: int = 24            # 1..24 (24 = end of day)
+    weekdays: List[int] = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6])
+    max_price_ct: float = -999.0     # ct/kWh sentinel: < -100 means "no limit"
+    max_runs_per_day: int = 1
+
+
+@dataclass(frozen=True)
 class SmartScheduleConfig:
     """Smart scheduling based on spot prices."""
     enabled: bool = False
     default_duration_hours: float = 3.0
-    auto_schedule_enabled: bool = False
+    auto_schedule_enabled: bool = False     # global kill switch for all auto rules
+    auto_rules: List[AutoScheduleRule] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -1320,10 +1348,33 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
 
     # ── New feature configs ──────────────────────────────────────────────
     ss_raw = raw.get("smart_schedule", {}) if isinstance(raw.get("smart_schedule"), dict) else {}
+    auto_rules: List[AutoScheduleRule] = []
+    for r in (ss_raw.get("auto_rules", []) if isinstance(ss_raw.get("auto_rules"), list) else []):
+        if not isinstance(r, dict):
+            continue
+        wd_raw = r.get("weekdays", [0, 1, 2, 3, 4, 5, 6])
+        if not isinstance(wd_raw, list):
+            wd_raw = [0, 1, 2, 3, 4, 5, 6]
+        wd = [int(x) for x in wd_raw if isinstance(x, (int, float)) and 0 <= int(x) <= 6]
+        auto_rules.append(AutoScheduleRule(
+            rule_id=str(r.get("rule_id", "") or ""),
+            name=str(r.get("name", "") or ""),
+            enabled=bool(r.get("enabled", False)),
+            dry_run=bool(r.get("dry_run", True)),
+            device_key=str(r.get("device_key", "") or ""),
+            switch_id=_coerce_int(r.get("switch_id", 0), 0),
+            duration_hours=_coerce_float(r.get("duration_hours", 3.0), 3.0),
+            earliest_hour=max(0, min(23, _coerce_int(r.get("earliest_hour", 0), 0))),
+            latest_hour=max(1, min(24, _coerce_int(r.get("latest_hour", 24), 24))),
+            weekdays=wd or [0, 1, 2, 3, 4, 5, 6],
+            max_price_ct=_coerce_float(r.get("max_price_ct", -999.0), -999.0),
+            max_runs_per_day=max(1, _coerce_int(r.get("max_runs_per_day", 1), 1)),
+        ))
     smart_schedule = SmartScheduleConfig(
         enabled=bool(ss_raw.get("enabled", False)),
         default_duration_hours=_coerce_float(ss_raw.get("default_duration_hours", 3.0), 3.0),
         auto_schedule_enabled=bool(ss_raw.get("auto_schedule_enabled", False)),
+        auto_rules=auto_rules,
     )
 
     pvs_raw = raw.get("pv_surplus", {}) if isinstance(raw.get("pv_surplus"), dict) else {}
@@ -1868,6 +1919,23 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "enabled": bool(getattr(cfg.smart_schedule, "enabled", False)),
             "default_duration_hours": float(getattr(cfg.smart_schedule, "default_duration_hours", 3.0)),
             "auto_schedule_enabled": bool(getattr(cfg.smart_schedule, "auto_schedule_enabled", False)),
+            "auto_rules": [
+                {
+                    "rule_id": r.rule_id,
+                    "name": r.name,
+                    "enabled": r.enabled,
+                    "dry_run": r.dry_run,
+                    "device_key": r.device_key,
+                    "switch_id": r.switch_id,
+                    "duration_hours": r.duration_hours,
+                    "earliest_hour": r.earliest_hour,
+                    "latest_hour": r.latest_hour,
+                    "weekdays": list(r.weekdays),
+                    "max_price_ct": r.max_price_ct,
+                    "max_runs_per_day": r.max_runs_per_day,
+                }
+                for r in (getattr(cfg.smart_schedule, "auto_rules", []) or [])
+            ],
         },
         "pv_surplus": {
             "enabled": bool(getattr(cfg.pv_surplus, "enabled", False)),

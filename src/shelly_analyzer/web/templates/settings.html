@@ -529,8 +529,9 @@ const SECTIONS = [
   {id:"smart_schedule", title:"Smart Schedule", group:"Features", fields:[
     {key:"smart_schedule.enabled", label:"Smart schedule active", type:"checkbox"},
     {key:"smart_schedule.default_duration_hours", label:"Default duration (h)", type:"number", step:"0.5"},
-    {key:"smart_schedule.auto_schedule_enabled", label:"Auto-Schedule", type:"checkbox"},
+    {key:"smart_schedule.auto_schedule_enabled", label:"Auto-Schaltung global aktiv (sonst Dry-Run)", type:"checkbox", hint:"Globaler Live-Schalter. Erst wenn dies AN ist UND eine Regel selbst auf 'Live' steht, schaltet die App wirklich. Solange aus = nur Logging."},
   ]},
+  {id:"auto_rules", title:"Auto-Schaltung Regeln", group:"Features", custom:true},
   {id:"ev_charging", title:"EV Charging", group:"Features", fields:[
     {key:"ev_charging.enabled", label:"EV detection active", type:"checkbox"},
     {key:"ev_charging.wallbox_device_key", label:"Wallbox device", type:"select-device"},
@@ -789,6 +790,7 @@ function renderSection(s) {
     if (s.id === "health") return renderHealth();
     if (s.id === "alerts") return renderAlerts();
     if (s.id === "updates") return renderUpdates();
+    if (s.id === "auto_rules") return renderAutoRules();
     if (s.id === "ssl") return renderSSL();
     if (s.id === "ios_widget") return renderIosWidget();
     if (s.id === "supported_devices") return renderSupportedDevices();
@@ -1893,6 +1895,206 @@ async function installVersion(tag, assetUrl) {
   failStep("step-verify", T("settings.updates.timeout","Zeitüberschreitung — Server kam nicht mit der neuen Version zurück. Bitte Seite manuell neu laden."));
 }
 
+// ── Auto-Schaltung (spot-price-driven) ────────────────────────────
+let _autoRulesPollTimer = null;
+
+function _autoRulesState() {
+  // Local working copy of cfg.smart_schedule.auto_rules; mutated as the user
+  // edits, written back on Save via PUT /api/settings.
+  if (!cfg.smart_schedule) cfg.smart_schedule = {};
+  if (!Array.isArray(cfg.smart_schedule.auto_rules)) cfg.smart_schedule.auto_rules = [];
+  return cfg.smart_schedule.auto_rules;
+}
+
+function renderAutoRules() {
+  const rules = _autoRulesState();
+  const globalOn = !!(cfg.smart_schedule && cfg.smart_schedule.auto_schedule_enabled);
+  const banner = globalOn
+    ? `<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:.9em">⚠️ ${T("settings.auto_rules.global_on","Globaler Live-Schalter ist AN. Regeln im Modus 'Live' schalten echte Relais.")}</div>`
+    : `<div style="background:rgba(34,197,94,0.1);border:1px solid #22c55e;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:.9em">✓ ${T("settings.auto_rules.global_off","Globaler Live-Schalter ist AUS — alle Regeln laufen im Dry-Run und schalten nichts.")}</div>`;
+  return `<section id="sec-auto_rules"><h2>${T("settings.auto_rules.title","Auto-Schaltung Regeln")}</h2>
+    <p class="hint">${T("settings.auto_rules.hint","Schaltet ein Shelly-Relais automatisch während des günstigsten Stromblocks. Jede Regel kennt einen Dry-Run-Modus, und der globale Live-Schalter sitzt eine Sicherheitsstufe darüber.")}</p>
+    ${banner}
+    <div id="auto-rules-list">${rules.map((r,i)=>_renderAutoRuleCard(r,i)).join("")}</div>
+    <div class="section-actions" style="margin-top:12px">
+      <button onclick="addAutoRule()">+ ${T("settings.auto_rules.add","Regel hinzufügen")}</button>
+      <button onclick="saveAutoRules()">${T("settings.btn.save","💾 Speichern")}</button>
+      <button class="secondary" onclick="refreshAutoRulesStatus()">🔄 ${T("settings.auto_rules.refresh","Status aktualisieren")}</button>
+    </div>
+    <p class="hint" style="margin-top:10px">${T("settings.auto_rules.poll_hint","Status wird alle 30 s automatisch aktualisiert.")}</p>
+  </section>`;
+}
+
+function _renderAutoRuleCard(r, idx) {
+  const devOpts = (cfg.devices||[]).map(d=>`<option value="${esc(d.key)}" ${d.key===r.device_key?"selected":""}>${esc(d.name||d.key)}</option>`).join("");
+  const wd = Array.isArray(r.weekdays) ? r.weekdays : [0,1,2,3,4,5,6];
+  const wdLabels = ["Mo","Di","Mi","Do","Fr","Sa","So"];
+  const wdHtml = wdLabels.map((lab,i)=>`<label style="display:inline-flex;align-items:center;gap:3px;margin-right:6px"><input type="checkbox" data-arule-wd="${idx}" data-wd="${i}" ${wd.includes(i)?"checked":""}> ${lab}</label>`).join("");
+  const maxPriceVal = (r.max_price_ct != null && r.max_price_ct >= -100) ? r.max_price_ct : "";
+  const dryBadge = r.dry_run
+    ? `<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:.8em;font-weight:600">DRY-RUN</span>`
+    : `<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:.8em;font-weight:600">LIVE</span>`;
+  return `<div class="devcard" data-arule-idx="${idx}" style="display:block;padding:12px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <input type="text" data-arule="name" data-idx="${idx}" value="${esc(r.name||"")}" placeholder="${T("settings.auto_rules.name_ph","z.B. Geschirrspüler nachts")}" style="flex:1;font-weight:600">
+      ${dryBadge}
+      <button class="small secondary" onclick="deleteAutoRule(${idx})">🗑</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;font-size:.9em">
+      <label>${T("settings.auto_rules.enabled","Aktiv")}: <input type="checkbox" data-arule="enabled" data-idx="${idx}" ${r.enabled?"checked":""}></label>
+      <label>${T("settings.auto_rules.dry_run","Dry-Run (kein echtes Schalten)")}: <input type="checkbox" data-arule="dry_run" data-idx="${idx}" ${r.dry_run!==false?"checked":""}></label>
+      <label>${T("settings.auto_rules.device","Gerät")}: <select data-arule="device_key" data-idx="${idx}"><option value="">—</option>${devOpts}</select></label>
+      <label>${T("settings.auto_rules.switch_id","Switch-ID")}: <input type="number" data-arule="switch_id" data-idx="${idx}" value="${r.switch_id||0}" min="0" max="3"></label>
+      <label>${T("settings.auto_rules.duration","Dauer (h)")}: <input type="number" data-arule="duration_hours" data-idx="${idx}" value="${r.duration_hours||3}" step="0.5" min="1" max="12"></label>
+      <label>${T("settings.auto_rules.max_price","Max. Preis (ct/kWh, leer = kein Limit)")}: <input type="number" data-arule="max_price_ct" data-idx="${idx}" value="${maxPriceVal}" step="0.1"></label>
+      <label>${T("settings.auto_rules.earliest","Frühestens ab Uhr")}: <input type="number" data-arule="earliest_hour" data-idx="${idx}" value="${r.earliest_hour||0}" min="0" max="23"></label>
+      <label>${T("settings.auto_rules.latest","Spätestens bis Uhr")}: <input type="number" data-arule="latest_hour" data-idx="${idx}" value="${r.latest_hour||24}" min="1" max="24"></label>
+      <label>${T("settings.auto_rules.max_runs","Max. Schaltungen pro Tag")}: <input type="number" data-arule="max_runs_per_day" data-idx="${idx}" value="${r.max_runs_per_day||1}" min="1" max="5"></label>
+      <div>${T("settings.auto_rules.weekdays","Wochentage")}: <span style="white-space:nowrap">${wdHtml}</span></div>
+    </div>
+    <div id="arule-status-${idx}" class="hint" style="margin-top:8px;padding:6px 8px;background:rgba(0,0,0,0.04);border-radius:4px;font-family:monospace;font-size:.85em">${T("settings.auto_rules.status_loading","Status wird geladen …")}</div>
+  </div>`;
+}
+
+function _gatherAutoRule(idx) {
+  const card = document.querySelector(`[data-arule-idx="${idx}"]`);
+  if (!card) return null;
+  const get = (k) => {
+    const el = card.querySelector(`[data-arule="${k}"][data-idx="${idx}"]`);
+    if (!el) return undefined;
+    if (el.type === "checkbox") return el.checked;
+    if (el.type === "number") {
+      const v = el.value.trim();
+      return v === "" ? null : Number(v);
+    }
+    return el.value;
+  };
+  const wds = [];
+  card.querySelectorAll(`[data-arule-wd="${idx}"]`).forEach(cb=>{
+    if (cb.checked) wds.push(Number(cb.dataset.wd));
+  });
+  const max_price_raw = get("max_price_ct");
+  const existing = _autoRulesState()[idx];
+  return {
+    rule_id: (existing && existing.rule_id) || ("rule_" + Date.now() + "_" + idx),
+    name: String(get("name")||""),
+    enabled: !!get("enabled"),
+    dry_run: !!get("dry_run"),
+    device_key: String(get("device_key")||""),
+    switch_id: Number(get("switch_id")||0),
+    duration_hours: Number(get("duration_hours")||3),
+    earliest_hour: Number(get("earliest_hour")||0),
+    latest_hour: Number(get("latest_hour")||24),
+    weekdays: wds.length ? wds : [0,1,2,3,4,5,6],
+    max_price_ct: (max_price_raw === null || max_price_raw === undefined) ? -999 : Number(max_price_raw),
+    max_runs_per_day: Number(get("max_runs_per_day")||1),
+  };
+}
+
+function addAutoRule() {
+  _autoRulesState().push({
+    rule_id: "rule_" + Date.now(),
+    name: "", enabled: false, dry_run: true,
+    device_key: "", switch_id: 0,
+    duration_hours: 3, earliest_hour: 0, latest_hour: 24,
+    weekdays: [0,1,2,3,4,5,6],
+    max_price_ct: -999, max_runs_per_day: 1,
+  });
+  document.getElementById("sec-auto_rules").outerHTML = renderAutoRules();
+  refreshAutoRulesStatus();
+}
+
+function deleteAutoRule(idx) {
+  if (!confirm(T("settings.auto_rules.confirm_delete","Regel wirklich löschen?"))) return;
+  const arr = _autoRulesState();
+  arr.splice(idx, 1);
+  document.getElementById("sec-auto_rules").outerHTML = renderAutoRules();
+  refreshAutoRulesStatus();
+}
+
+async function saveAutoRules() {
+  const arr = _autoRulesState();
+  const collected = arr.map((_, i) => _gatherAutoRule(i)).filter(x => x !== null);
+  // Validate basic constraints
+  for (const r of collected) {
+    if (r.enabled && !r.device_key) {
+      toast(T("settings.auto_rules.err_no_device","Aktive Regel braucht ein Gerät: {n}",{n:r.name||"?"}), "error");
+      return;
+    }
+    if (r.latest_hour <= r.earliest_hour) {
+      toast(T("settings.auto_rules.err_window","Spät-Uhrzeit muss nach Früh-Uhrzeit liegen: {n}",{n:r.name||"?"}), "error");
+      return;
+    }
+  }
+  cfg.smart_schedule.auto_rules = collected;
+  try {
+    const r = await fetch("/api/settings",{method:"PUT",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({smart_schedule: cfg.smart_schedule})});
+    const j = await r.json();
+    if (j.ok) {
+      toast("✓ " + T("settings.toast.saved","Saved"));
+      // Re-fetch + re-render to confirm round-trip
+      const fresh = await fetch("/api/settings").then(x=>x.json());
+      cfg = fresh;
+      document.getElementById("sec-auto_rules").outerHTML = renderAutoRules();
+      refreshAutoRulesStatus();
+    } else {
+      toast(T("settings.toast.error","Error: {err}",{err:j.error||"?"}), "error");
+    }
+  } catch(e) {
+    toast(T("settings.toast.error","Error: {err}",{err:e.message}), "error");
+  }
+}
+
+async function refreshAutoRulesStatus() {
+  try {
+    const r = await fetch("/api/auto_schedule/status");
+    const j = await r.json();
+    const byId = {};
+    (j.decisions || []).forEach(d => { byId[d.rule_id] = d; });
+    _autoRulesState().forEach((rule, idx) => {
+      const el = document.getElementById("arule-status-" + idx);
+      if (!el) return;
+      const d = byId[rule.rule_id];
+      if (!d) {
+        el.innerHTML = `<span style="color:var(--muted)">${T("settings.auto_rules.status_no_eval","noch nicht ausgewertet")}</span>`;
+        return;
+      }
+      const badge = {
+        "on":      `<span style="background:#22c55e;color:#fff;padding:1px 6px;border-radius:3px">AN</span>`,
+        "off":     `<span style="background:#6b7280;color:#fff;padding:1px 6px;border-radius:3px">AUS</span>`,
+        "idle":    `<span style="background:#9ca3af;color:#fff;padding:1px 6px;border-radius:3px">IDLE</span>`,
+        "skipped": `<span style="background:#fbbf24;color:#000;padding:1px 6px;border-radius:3px">SKIP</span>`,
+        "no_data": `<span style="background:#ef4444;color:#fff;padding:1px 6px;border-radius:3px">NO DATA</span>`,
+      }[d.decision] || d.decision;
+      let block = "";
+      if (d.block_start_ts && d.block_end_ts) {
+        const fmt = (ts) => { const t = new Date(ts*1000); return ("0"+t.getHours()).slice(-2)+":"+("0"+t.getMinutes()).slice(-2); };
+        const avg = (d.block_avg_ct != null) ? d.block_avg_ct.toFixed(2) : "?";
+        block = ` · Block ${fmt(d.block_start_ts)}–${fmt(d.block_end_ts)} @ ${avg} ct/kWh`;
+      }
+      const errInfo = d.last_error ? ` · <span style="color:var(--danger)">⚠ ${esc(d.last_error)}</span>` : "";
+      el.innerHTML = `${badge} · ${esc(d.reason||"")}${block} · ${T("settings.auto_rules.runs_today","Schaltungen heute")}: ${d.runs_today}${errInfo}`;
+    });
+  } catch(e) {
+    // Silent — endpoint may briefly be unavailable during config reload
+  }
+}
+
+function _startAutoRulesPolling() {
+  if (_autoRulesPollTimer) clearInterval(_autoRulesPollTimer);
+  _autoRulesPollTimer = setInterval(() => {
+    if (document.getElementById("sec-auto_rules")) {
+      refreshAutoRulesStatus();
+    } else {
+      // Section was unmounted — stop polling
+      clearInterval(_autoRulesPollTimer);
+      _autoRulesPollTimer = null;
+    }
+  }, 30000);
+}
+
 function renderSSL() {
   const ui = (cfg && cfg.ui) || {};
   const mode = ui.live_web_ssl_mode || "auto";
@@ -2268,6 +2470,11 @@ function renderAll() {
   if (document.getElementById("sec-updates")) {
     checkUpdateStatus();
     loadReleaseList();
+  }
+  // Auto-load auto-schedule decisions if that section is rendered
+  if (document.getElementById("sec-auto_rules")) {
+    refreshAutoRulesStatus();
+    _startAutoRulesPolling();
   }
   // Auto-load SSL status if the SSL section is rendered
   if (document.getElementById("sec-ssl")) {

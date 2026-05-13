@@ -239,7 +239,8 @@
   "smart_schedule": {
     "enabled": false,
     "default_duration_hours": 3.0,
-    "auto_schedule_enabled": false
+    "auto_schedule_enabled": false,
+    "auto_rules": []
   },
   "pv_surplus": {
     "enabled": false,

@@ -45,6 +45,7 @@ class BackgroundServiceManager:
 
         self._live_poller = None
         self._scheduler = None
+        self._auto_scheduler = None
         self._mqtt_publisher = None
         self._influxdb_exporter = None
         self._co2_fetcher = None
@@ -83,6 +84,7 @@ class BackgroundServiceManager:
         self._init_nilm_learners()
         self._start_live_poller()
         self._start_scheduler()
+        self._start_auto_scheduler()
         self._start_mqtt()
         self._start_influxdb()
         self._start_autosync()
@@ -105,6 +107,11 @@ class BackgroundServiceManager:
         if self._scheduler:
             try:
                 self._scheduler.stop()
+            except Exception:
+                pass
+        if self._auto_scheduler:
+            try:
+                self._auto_scheduler.stop()
             except Exception:
                 pass
         if self._mqtt_publisher:
@@ -512,6 +519,52 @@ class BackgroundServiceManager:
             self._scheduler.start()
         except Exception as e:
             logger.debug("Scheduler not started: %s", e)
+
+    # ── Auto-Scheduler (spot-price-driven) ─────────────────────────────
+
+    def _start_auto_scheduler(self) -> None:
+        """Start the spot-price auto-scheduler.
+
+        The scheduler always runs so the user can see decisions in dry-run
+        mode even without the global toggle on. The global toggle only
+        gates actual switching (handled inside the controller itself)."""
+        try:
+            from shelly_analyzer.services.auto_schedule import AutoSchedulerController
+            from shelly_analyzer.io.http import ShellyHttp, HttpConfig, set_switch_state
+
+            http_client = ShellyHttp(HttpConfig(
+                timeout_seconds=float(self.cfg.download.timeout_seconds),
+                retries=int(self.cfg.download.retries),
+                backoff_base_seconds=float(self.cfg.download.backoff_base_seconds),
+            ))
+            for _d in self.cfg.devices:
+                _pw = getattr(_d, "password", "") or ""
+                if _pw:
+                    http_client.set_credentials(
+                        _d.host,
+                        getattr(_d, "username", "admin") or "admin",
+                        _pw,
+                    )
+
+            dev_map = {d.key: d for d in self.cfg.devices}
+
+            def _switch(device_key: str, switch_id: int, on: bool) -> None:
+                dev = dev_map.get(device_key)
+                if dev is None or not getattr(dev, "host", ""):
+                    raise RuntimeError(f"device {device_key!r} not found or no host")
+                set_switch_state(http_client, dev.host, int(switch_id), bool(on))
+
+            def _get_prices(zone: str, start_ts: int, end_ts: int):
+                return self.storage.db.query_spot_prices(zone, start_ts, end_ts)
+
+            self._auto_scheduler = AutoSchedulerController(
+                get_config=lambda: self.cfg,
+                get_spot_prices=_get_prices,
+                switch_callback=_switch,
+            )
+            self._auto_scheduler.start()
+        except Exception as e:
+            logger.debug("AutoScheduler not started: %s", e)
 
     # ── MQTT ───────────────────────────────────────────────────────────
 
