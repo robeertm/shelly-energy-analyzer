@@ -239,6 +239,20 @@ def api_nilm_detail():
         except Exception:
             pass
 
+        # NILM-eligible devices (must match the gating in BackgroundServiceManager
+        # ._init_nilm_learners: 3-phase EM only — switch-class plugs don't see
+        # an aggregate household signal and 1-phase EMs see too little).
+        nilm_devices = []
+        try:
+            for d in state.cfg.devices:
+                if int(getattr(d, "phases", 3) or 3) < 3:
+                    continue
+                if str(getattr(d, "kind", "em")) == "switch":
+                    continue
+                nilm_devices.append({"key": d.key, "name": getattr(d, "name", "") or d.key})
+        except Exception:
+            pass
+
         payload = {
             "ok": True,
             "cluster_count": len(clusters),
@@ -249,6 +263,7 @@ def api_nilm_detail():
             "hourly_distribution": hourly,
             "device_stats": device_stats,
             "device_names": device_names,
+            "nilm_devices": nilm_devices,
             "categories": categories,
             "signatures": signatures,
         }
