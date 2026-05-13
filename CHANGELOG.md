@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.27.0 - 2026-05-13
+### Added
+- **Spot-price-driven auto-switching of Shelly relays.** New "Auto-Schaltung Regeln" section in Settings closes the loop between the existing `smart_schedule` price-discovery and actual hardware action: define one rule per device (name, switch ID, run duration, allowed time window, weekdays, optional max-price filter, max-runs-per-day safety cap), and a background scheduler ticks every 60 s to find the cheapest contiguous block in today's spot prices, drive the relay ON during that block and OFF outside it. New service `services/auto_schedule.py`, integrated into `web/background.py` alongside the existing local scheduler.
+- **Two safety layers before anything actually switches.** (1) Every rule defaults to **dry-run**: decisions are computed and logged + surfaced via `/api/auto_schedule/status`, but no relay is touched until the user explicitly flips the per-rule `Dry-Run` checkbox off. (2) A **global live switch** (`smart_schedule.auto_schedule_enabled`) sits above all rules; even with a rule on Live, switching is gated by this global toggle being on. Both default to off — installing 16.27.0 cannot accidentally start toggling hardware.
+- **The scheduler never fights manual user toggles.** It only turns a relay off if it itself turned it on; manual ON via the dashboard, an HA automation, or the Shelly app stays untouched. Combined with `max_runs_per_day` (default 1) this prevents oscillation and runaway switching.
+- **Live decision panel in Settings.** Each rule card shows its current decision badge (ON/OFF/IDLE/SKIP/NO DATA), the reason, the cheapest block discovered (start–end with avg ct/kWh), today's run counter, and any switching error. Status polls every 30 s so the user can verify in dry-run that the rule fires when expected before enabling live.
+- New API endpoint `GET /api/auto_schedule/status` returns the full decision state per rule.
+- Config schema: `AutoScheduleRule` dataclass + `smart_schedule.auto_rules: list[AutoScheduleRule]`. Existing `smart_schedule.auto_schedule_enabled` keeps its meaning as the global live switch.
+- i18n keys for the new UI added to both DE and EN dicts.
+
 ## 16.26.8 - 2026-04-26
 ### Fixed
 - **Update flow in Settings → Updates is now self-explanatory and self-completing.** Three UX defects fixed in one pass:

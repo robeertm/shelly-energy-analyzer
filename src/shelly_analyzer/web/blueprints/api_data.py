@@ -97,6 +97,44 @@ def api_smart_schedule():
     return _action_endpoint("smart_schedule")
 
 
+@bp.route("/api/auto_schedule/status")
+def api_auto_schedule_status():
+    """Live decisions of the spot-price auto-scheduler.
+
+    Returns one entry per configured rule with the latest decision
+    (on/off/idle/skipped/no_data), the cheapest block found, daily run
+    counter, and the last action taken. Mostly used by the Settings UI
+    to render the dry-run preview before the user enables live switching.
+    """
+    state = _get_state()
+    bg = getattr(state, "_bg", None)
+    auto = getattr(bg, "_auto_scheduler", None) if bg is not None else None
+    if auto is None:
+        return jsonify({"ok": True, "running": False, "decisions": []})
+    try:
+        decisions = auto.get_decisions()
+        return jsonify({
+            "ok": True,
+            "running": True,
+            "decisions": [
+                {
+                    "rule_id": d.rule_id, "rule_name": d.rule_name,
+                    "enabled": d.enabled, "dry_run": d.dry_run,
+                    "decision": d.decision, "reason": d.reason,
+                    "block_start_ts": d.block_start_ts, "block_end_ts": d.block_end_ts,
+                    "block_avg_ct": d.block_avg_ct,
+                    "last_evaluated_ts": d.last_evaluated_ts,
+                    "runs_today": d.runs_today, "last_run_day": d.last_run_day,
+                    "last_set_on": d.last_set_on, "last_action_ts": d.last_action_ts,
+                    "last_error": d.last_error,
+                }
+                for d in decisions
+            ],
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "decisions": []})
+
+
 @bp.route("/api/ev_sessions")
 def api_ev_sessions():
     return _action_endpoint("ev_sessions")
