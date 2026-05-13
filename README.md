@@ -146,6 +146,7 @@ Android / any browser: open `/w` and add to home screen — no app required.
 - Phase balance indicator for 3-phase devices (detects imbalance)
 - Interactive legend toggle on live plots (click L1/L2/L3/N to show/hide)
 - Day / Night / Auto theme switching — all tabs and charts respect the selected theme
+- **Rolling 2 h history survives restarts and in-app updates** — the live buffer is snapshotted every 30 s and restored on startup, so the chart comes back fully populated instead of refilling from scratch
 - **Tariff schedule** — define future price changes with start dates; the app automatically uses the correct price for any date range
 
 ### 💰 Cost Dashboard
@@ -168,6 +169,7 @@ Android / any browser: open `/w` and add to home screen — no app required.
 - VAT toggle — apply your configured VAT rate on top of spot price + markup
 - **Plots sub-tab "Dyn. Preis"** — grouped bar chart comparing fixed vs. dynamic tariff costs per hour/day/week/month
 - **Compare tab "vs. Dynamic Tariff"** — one-click toggle to compare your fixed tariff against spot prices for any period
+- **Negative wholesale hours are visible** — the spot-price chart renders bidirectional bars (positive bars grow up from a zero line, negative ones hang below in a distinct purple), so the "you earn money" slots on a dynamic tariff are obvious at a glance. Cost math passes negative prices through 1:1, in line with how Tibber / aWATTar bill them
 
 ### 💱 Time-of-Use (TOU) Tariffs
 - Define multiple time-based electricity price zones (peak, off-peak, etc.)
@@ -413,7 +415,13 @@ Browser-based 12-step wizard at `/setup` (auto-redirected on first launch when n
 ### ⏱ Smart Scheduling (Spot Price Optimizer)
 - **Find cheapest time blocks** from day-ahead spot market prices for running large appliances
 - Configurable duration (0.5–12 hours), shows average price and savings vs. daily average
-- Optional **auto-scheduling** via Shelly RPC relay control
+
+### 🎚 Auto-Switching Rules (Spot-Price-Driven)
+- **One rule per Shelly relay** — "find today's cheapest N-hour block within hours X..Y on these weekdays, drive this relay ON during it and OFF outside"
+- Optional **max-price filter** so the rule only fires when the cheapest block actually drops below your threshold
+- **Two safety layers** before anything switches: each rule defaults to *dry-run* (decisions logged + shown in UI, no relay touched), and a global *live switch* sits above all rules. Both off by default — upgrading can never start toggling hardware unexpectedly
+- **Never fights manual user toggles** — the controller only turns a relay off if it itself turned it on. Daily run cap (default 1) prevents oscillation
+- **Live decision panel in Settings** with current decision badge (ON / OFF / IDLE / SKIP / NO DATA), the cheapest block found, today's run counter and any switching errors — auto-polls every 30 s so you can verify in dry-run that a rule fires when expected before going live
 
 ### ☀️ PV Surplus Control
 - **Automatic relay switching** based on solar excess power with state machine (IDLE → PENDING_ON → ON → PENDING_OFF)

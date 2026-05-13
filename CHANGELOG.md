@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.27.3 - 2026-05-13
+### Docs
+- **README updated** to reflect features added since 16.26.x: dedicated "Auto-Switching Rules (Spot-Price-Driven)" section with the two-layer safety model (per-rule dry-run + global live switch) and dry-run preview panel; live-monitor section now mentions that the rolling 2 h history survives restarts and in-app updates; the spot-market section now mentions that negative wholesale hours are rendered as bidirectional bars and pass through cost math 1:1. No code changes.
+
 ## 16.27.2 - 2026-05-13
 ### Fixed
 - **Live tab keeps its rolling history across restarts and in-app updates.** The 2 h `LiveStateStore` deques are now snapshot to `data/runtime/live_history.json` every 30 s, on a clean `stop_all()`, AND one extra time right before the updater's `os.execv` handoff (since execv bypasses Python's atexit hooks). On startup `AppState.__init__` re-loads any points newer than the retention window (default 2 h) before the live poller starts. After updating from a previous version the user therefore sees the full pre-update window immediately instead of an empty chart that has to refill from scratch.
