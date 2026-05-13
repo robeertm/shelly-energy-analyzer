@@ -2714,9 +2714,11 @@ function _ctrlApplyCover(key, st) {{
 }}
 
 /* ──────────────────────────────────────────────
-   NILM STATISTICS TAB
+   NILM STATISTICS TAB (per-device, 3-phase EM only)
 ────────────────────────────────────────────── */
 let _nilmData = null;
+let _nilmCurrentDevice = null;   // device key currently selected in the dropdown
+
 async function loadNilm() {{
   const el = document.getElementById('nilm-content');
   if (!el) return;
@@ -2725,18 +2727,100 @@ async function loadNilm() {{
     const r = await fetch('/api/nilm_detail');
     if (!r.ok) throw new Error(r.status);
     _nilmData = await r.json();
+    // Auto-select the first NILM-eligible device on first load, or the
+    // remembered one if it still exists.
+    const eligible = (_nilmData.nilm_devices || []).map(function(d){{ return d.key; }});
+    if (!_nilmCurrentDevice || eligible.indexOf(_nilmCurrentDevice) < 0) {{
+      _nilmCurrentDevice = eligible.length > 0 ? eligible[0] : null;
+    }}
     renderNilm(_nilmData, el);
   }} catch(e) {{
     el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
   }}
 }}
 
-function renderNilm(data, el) {{
-  if (!data.ok) {{
-    el.innerHTML = '<p class="error-msg">' + esc(data.error || 'Unknown error') + '</p>';
+function _nilmOnDeviceChange(key) {{
+  _nilmCurrentDevice = key || null;
+  const el = document.getElementById('nilm-content');
+  if (el && _nilmData) renderNilm(_nilmData, el);
+}}
+
+function _nilmFilterData(raw) {{
+  /* Build a per-device view: keep only clusters + transitions for the
+     selected device, then recompute hourly_distribution, categories
+     and device_stats from the filtered subset so all downstream cards
+     reflect just that device. If no device is selected (no eligible
+     devices configured), return the raw data so the user sees a clear
+     "no 3-phase EM device" message via the existing empty branches. */
+  if (!_nilmCurrentDevice) return raw;
+  const sel = _nilmCurrentDevice;
+  const clusters = (raw.clusters || []).filter(function(c){{ return c.device_key === sel; }});
+  const transitions = (raw.transitions || []).filter(function(tr){{ return tr.device_key === sel; }});
+  const hourly = new Array(24).fill(0);
+  transitions.forEach(function(tr) {{
+    try {{ hourly[new Date(tr.ts * 1000).getHours()] += 1; }} catch(e) {{}}
+  }});
+  const cat_map = {{}};
+  (raw.signatures || []).forEach(function(s){{ cat_map[s.id] = s.category; }});
+  const categories = {{}};
+  clusters.forEach(function(c) {{
+    const cat = cat_map[c.matched_appliance || ''] || 'unknown';
+    categories[cat] = (categories[cat] || 0) + (c.count || 0);
+  }});
+  const device_stats = {{}};
+  const total_events = clusters.reduce(function(s, c){{ return s + (c.count || 0); }}, 0);
+  device_stats[sel] = {{
+    cluster_count: clusters.length, total_events: total_events,
+    top_appliances: clusters
+      .filter(function(c){{ return c.matched_appliance; }})
+      .map(function(c){{ return {{appliance: c.matched_appliance, icon: c.icon || '', centroid_w: c.centroid_w, count: c.count}}; }}),
+  }};
+  return Object.assign({{}}, raw, {{
+    clusters: clusters,
+    transitions: transitions,
+    cluster_count: clusters.length,
+    transition_count: transitions.length,
+    device_count: 1,
+    hourly_distribution: hourly,
+    device_stats: device_stats,
+    categories: categories,
+  }});
+}}
+
+function _nilmDeviceSelectorHtml(raw) {{
+  /* Sticky bar with the device dropdown, restricted to 3-phase EM devices
+     (the only ones the NILM service tracks). */
+  const list = raw.nilm_devices || [];
+  const namesMap = raw.device_names || {{}};
+  if (list.length === 0) {{
+    return '<div class="card" style="margin-bottom:12px;padding:14px;background:rgba(234,179,8,0.08);border-left:3px solid #eab308">' +
+      '<strong>' + t('web.nilm.no_eligible_title','No 3-phase EM device') + '</strong> · ' +
+      t('web.nilm.no_eligible_hint','NILM only works on 3-phase EM devices (e.g. Shelly 3EM/Pro 3EM). Configure one in Settings.') +
+      '</div>';
+  }}
+  let opts = '';
+  list.forEach(function(d) {{
+    const sel = (d.key === _nilmCurrentDevice) ? ' selected' : '';
+    opts += '<option value="' + esc(d.key) + '"' + sel + '>' + esc(namesMap[d.key] || d.name || d.key) + '</option>';
+  }});
+  return '<div class="card" style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+    '<label style="font-weight:600;font-size:13px">' + t('web.nilm.device_select','Device') + ':</label>' +
+    '<select onchange="_nilmOnDeviceChange(this.value)" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card-bg);color:var(--fg);font-size:13px">' + opts + '</select>' +
+    '<span class="hint" style="font-size:11px;color:var(--muted)">' + t('web.nilm.per_device_hint','NILM-statistics per 3-phase EM device. Single-phase / plug devices are filtered out.') + '</span>' +
+    '</div>';
+}}
+
+function renderNilm(raw, el) {{
+  if (!raw.ok) {{
+    el.innerHTML = '<p class="error-msg">' + esc(raw.error || 'Unknown error') + '</p>';
     return;
   }}
-  let html = '';
+  const data = _nilmFilterData(raw);
+  let html = _nilmDeviceSelectorHtml(raw);
+  if ((raw.nilm_devices || []).length === 0) {{
+    el.innerHTML = html;
+    return;
+  }}
 
   /* ── Status Badge Row ── */
   const learning = data.transition_count < 10;

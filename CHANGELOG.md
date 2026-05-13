@@ -1,5 +1,12 @@
 # Changelog
 
+## 16.28.0 - 2026-05-13
+### Changed
+- **NILM page is now per-Shelly instead of aggregated across all devices.** The previous version mixed clusters and transitions from every device into one giant Top-10 list, which made it impossible to tell which appliance signal belonged to which meter when more than one 3-phase EM was configured. A device selector now sits at the top of the NILM tab and scopes every panel (Top-10 patterns, hourly distribution, category donut, recent transitions, Device Overview) to a single Shelly. The selector lists only **3-phase EM devices** (matching the gating the background service already applies — single-phase EMs and plug-class switches don't produce useful NILM signal). If no eligible device is configured, the page shows a clear empty-state instead of an empty Top-10 grid that previously gave no hint why nothing appeared.
+- The `/api/nilm_detail` endpoint additionally returns a `nilm_devices` list so the frontend knows which Shellys to put in the dropdown without inferring it from raw cluster keys.
+- Frontend recomputes hourly distribution and category breakdown from the filtered cluster + transition subset, so all downstream metrics reflect just the selected device.
+- New i18n keys for the device selector and the "no eligible device" empty state in both DE and EN.
+
 ## 16.27.3 - 2026-05-13
 ### Docs
 - **README updated** to reflect features added since 16.26.x: dedicated "Auto-Switching Rules (Spot-Price-Driven)" section with the two-layer safety model (per-rule dry-run + global live switch) and dry-run preview panel; live-monitor section now mentions that the rolling 2 h history survives restarts and in-app updates; the spot-market section now mentions that negative wholesale hours are rendered as bidirectional bars and pass through cost math 1:1. No code changes.
