@@ -153,6 +153,139 @@ class LiveStateStore:
                 self._by_device[device_key] = deque(maxlen=self.max_points)
             self._by_device[device_key].append(point)
 
+    # ── Persistence (across restarts / in-app updates) ────────────────
+
+    def dump_to_path(self, path: "Any") -> None:
+        """Write all per-device deques to a JSON file atomically.
+
+        Used by the background service to persist the rolling 2 h live
+        window across restarts and in-app updates — otherwise the Live tab
+        starts empty after every update and the user has to wait for the
+        window to refill.
+        """
+        import json
+        import os
+        import tempfile
+        from pathlib import Path as _P
+
+        path = _P(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with self._lock:
+            snap = {k: list(dq) for k, dq in self._by_device.items()}
+        # Serialize outside the lock to keep the live path fast.
+        data = {
+            "version": 1,
+            "max_points": self.max_points,
+            "saved_at": int(time.time()),
+            "devices": {
+                k: [
+                    {
+                        "ts": p.ts,
+                        "power_total_w": _safe_f(p.power_total_w),
+                        "va": _safe_f(p.va), "vb": _safe_f(p.vb), "vc": _safe_f(p.vc),
+                        "ia": _safe_f(p.ia), "ib": _safe_f(p.ib), "ic": _safe_f(p.ic),
+                        "pa": _safe_f(p.pa), "pb": _safe_f(p.pb), "pc": _safe_f(p.pc),
+                        "q_total_var": _safe_f(p.q_total_var),
+                        "qa": _safe_f(p.qa), "qb": _safe_f(p.qb), "qc": _safe_f(p.qc),
+                        "cosphi_total": _safe_f(p.cosphi_total),
+                        "pfa": _safe_f(p.pfa), "pfb": _safe_f(p.pfb), "pfc": _safe_f(p.pfc),
+                        "kwh_today": _safe_f(p.kwh_today),
+                        "cost_today": _safe_f(p.cost_today),
+                        "freq_hz": _safe_f(p.freq_hz),
+                        "i_n": _safe_f(p.i_n),
+                    }
+                    for p in arr
+                ]
+                for k, arr in snap.items()
+            },
+        }
+        # Atomic write so a crash mid-save can never corrupt the file.
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            prefix=".live_history.", suffix=".json.tmp", dir=str(path.parent)
+        )
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, separators=(",", ":"))
+            os.replace(tmp_path, str(path))
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+            raise
+
+    def load_from_path(self, path: "Any", max_age_seconds: int = 7200) -> int:
+        """Restore deques from a JSON dump produced by `dump_to_path`.
+
+        Points older than `max_age_seconds` (default 2 h) are dropped so a
+        long-stopped service doesn't surface stale graphs as if they were
+        current. Returns the total number of points loaded across all
+        devices (0 if the file is missing or invalid).
+        """
+        import json
+        from pathlib import Path as _P
+
+        path = _P(path)
+        if not path.exists():
+            return 0
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return 0
+        if not isinstance(data, dict) or data.get("version") != 1:
+            return 0
+        devices = data.get("devices") or {}
+        if not isinstance(devices, dict):
+            return 0
+        cutoff_ts = int(time.time()) - int(max_age_seconds)
+        loaded = 0
+        with self._lock:
+            for k, arr in devices.items():
+                if not isinstance(arr, list):
+                    continue
+                dq = deque(maxlen=self.max_points)
+                for entry in arr:
+                    if not isinstance(entry, dict):
+                        continue
+                    try:
+                        ts = int(entry.get("ts", 0))
+                    except Exception:
+                        continue
+                    if ts <= 0 or ts < cutoff_ts:
+                        continue
+                    try:
+                        dq.append(LivePoint(
+                            ts=ts,
+                            power_total_w=float(entry.get("power_total_w", 0.0) or 0.0),
+                            va=float(entry.get("va", 0.0) or 0.0),
+                            vb=float(entry.get("vb", 0.0) or 0.0),
+                            vc=float(entry.get("vc", 0.0) or 0.0),
+                            ia=float(entry.get("ia", 0.0) or 0.0),
+                            ib=float(entry.get("ib", 0.0) or 0.0),
+                            ic=float(entry.get("ic", 0.0) or 0.0),
+                            pa=float(entry.get("pa", 0.0) or 0.0),
+                            pb=float(entry.get("pb", 0.0) or 0.0),
+                            pc=float(entry.get("pc", 0.0) or 0.0),
+                            q_total_var=float(entry.get("q_total_var", 0.0) or 0.0),
+                            qa=float(entry.get("qa", 0.0) or 0.0),
+                            qb=float(entry.get("qb", 0.0) or 0.0),
+                            qc=float(entry.get("qc", 0.0) or 0.0),
+                            cosphi_total=float(entry.get("cosphi_total", 0.0) or 0.0),
+                            pfa=float(entry.get("pfa", 0.0) or 0.0),
+                            pfb=float(entry.get("pfb", 0.0) or 0.0),
+                            pfc=float(entry.get("pfc", 0.0) or 0.0),
+                            kwh_today=float(entry.get("kwh_today", 0.0) or 0.0),
+                            cost_today=float(entry.get("cost_today", 0.0) or 0.0),
+                            freq_hz=float(entry.get("freq_hz", 50.0) or 50.0),
+                            i_n=float(entry.get("i_n", 0.0) or 0.0),
+                        ))
+                    except Exception:
+                        continue
+                if dq:
+                    self._by_device[k] = dq
+                    loaded += len(dq)
+        return loaded
+
     def snapshot(self) -> Dict[str, List[Dict[str, Any]]]:
         # Hold lock only long enough to copy references — serialize outside.
         with self._lock:
