@@ -9137,12 +9137,49 @@ async function loadData() {
       );
     }
 
-    // Traffic-light helper (green/yellow/red) by value with thresholds
+    // Traffic-light helper (green/yellow/red) by value with thresholds.
+    // Used for the spot-price plot where the only meaningful reference is
+    // the percentile-derived green/red boundaries.
     function tlColor(v, green_lt, red_ge) {
       if (v == null) return '#9ca3af';
       if (v < green_lt) return '#22c55e';   // green
       if (v >= red_ge) return '#ef4444';    // red
       return '#eab308';                       // yellow
+    }
+    // CO₂ intensity has a known absolute scale (g/kWh), so use a smooth
+    // 9-stop gradient inspired by Electricity Maps instead of just 3 colors.
+    // The stops are tuned to typical EU grid intensities: <50 g/kWh = nearly
+    // carbon-free (hydro/nuclear), 800+ g/kWh = coal-dominated.
+    const _CO2_STOPS = [
+      [   0, [ 30, 110,  85]],   // teal-green (very clean)
+      [  50, [ 60, 170,  80]],   // green
+      [ 100, [120, 200,  90]],   // light green
+      [ 200, [200, 220, 100]],   // yellow-green
+      [ 300, [250, 220, 110]],   // pale yellow
+      [ 400, [250, 180,  90]],   // orange
+      [ 500, [240, 130,  70]],   // red-orange
+      [ 650, [220,  60,  55]],   // red
+      [ 850, [140,  20,  40]],   // dark red (coal-heavy)
+    ];
+    function co2Color(v) {
+      if (v == null) return '#9ca3af';
+      if (v <= _CO2_STOPS[0][0]) {
+        const [_, c] = _CO2_STOPS[0];
+        return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+      }
+      for (let i = 0; i < _CO2_STOPS.length - 1; i++) {
+        const v0 = _CO2_STOPS[i][0], v1 = _CO2_STOPS[i+1][0];
+        if (v <= v1) {
+          const t = (v - v0) / (v1 - v0);
+          const c0 = _CO2_STOPS[i][1], c1 = _CO2_STOPS[i+1][1];
+          const r = Math.round(c0[0] + (c1[0] - c0[0]) * t);
+          const g = Math.round(c0[1] + (c1[1] - c0[1]) * t);
+          const b = Math.round(c0[2] + (c1[2] - c0[2]) * t);
+          return 'rgb(' + r + ',' + g + ',' + b + ')';
+        }
+      }
+      const last = _CO2_STOPS[_CO2_STOPS.length - 1][1];
+      return 'rgb(' + last[0] + ',' + last[1] + ',' + last[2] + ')';
     }
     // Percentile-based thresholds for arrays with no absolute scale (prices)
     function autoThresholds(arr) {
@@ -9185,7 +9222,9 @@ async function loadData() {
         green: gThr, dirty: dThr
       });
       const yArr = (devData.g || []).map(v => (v==null ? 0 : v));
-      const colors = co2Int.map(v => tlColor(v, gThr, dThr));
+      // Use the smooth 9-stop CO₂ gradient so users can read the intensity
+      // ramp at a glance instead of seeing only red/yellow/green buckets.
+      const colors = co2Int.map(co2Color);
       const custom = co2Int.map((v,i) => [v==null?'—':v, yArr[i]]);
       Plotly.newPlot(
         plotId,
