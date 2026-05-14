@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.28.3 - 2026-05-14
+### Docs
+- **Added desktop screenshots for nine more tabs** so the README now visually covers every major view in the app: Plots, Compare, Schedule (cheapest spot-price windows), Tariff comparison, Export, Control (relay/cover/dimmer remote), Sync, Settings, and a "Live tab with chart-zoom popup" detail. Three new 3-column rows appended under the existing Desktop grid in tab order.
+
 ## 16.28.2 - 2026-05-14
 ### Docs
 - **Refreshed desktop screenshots** (Live, Costs, Heatmap, Weather, CO₂, Anomalies, Forecast, Standby, Energy Flow, Goals, NILM) so the README hero + screenshot grids reflect the current UI on v16.28.x. Mobile screenshots and the four dark-mode variants are intentionally untouched in this pass.
