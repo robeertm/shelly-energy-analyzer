@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.28.2 - 2026-05-14
+### Docs
+- **Refreshed desktop screenshots** (Live, Costs, Heatmap, Weather, CO₂, Anomalies, Forecast, Standby, Energy Flow, Goals, NILM) so the README hero + screenshot grids reflect the current UI on v16.28.x. Mobile screenshots and the four dark-mode variants are intentionally untouched in this pass.
+
 ## 16.28.1 - 2026-05-13
 ### Chore
 - **Repository hygiene.** `.gitignore` extended to cover build artifacts (`*.egg-info/`, `build/`, `dist/`, `*.egg`), tool caches (`.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `.coverage`), editor/IDE state (`.idea/`, `.vscode/`), Claude Code's local session state (`.claude/`), the runtime `exports/` directory, and the usual transient suffixes (`*.bak`, `*.swp`, `*.orig`, `*.tmp`, `Thumbs.db`).
