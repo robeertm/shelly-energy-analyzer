@@ -96,6 +96,18 @@ All desktop shots are captured at native **4K (3840×2160)**, all mobile shots a
 |-------|------|
 | ![Goals](docs/screenshots/desktop_12_goals.png) | ![NILM](docs/screenshots/desktop_14_nilm.png) |
 
+| Plots | Compare | Schedule |
+|-------|---------|----------|
+| ![Plots](docs/screenshots/desktop_04_plots.png) | ![Compare](docs/screenshots/desktop_11_compare.png) | ![Schedule](docs/screenshots/desktop_13_schedule.png) |
+
+| Tariff comparison | Export | Control |
+|-------------------|--------|---------|
+| ![Tariff](docs/screenshots/desktop_16_tariff.png) | ![Export](docs/screenshots/desktop_15_export.png) | ![Control](docs/screenshots/desktop_17_control.png) |
+
+| Sync | Settings | Live (chart zoom) |
+|------|----------|-------------------|
+| ![Sync](docs/screenshots/desktop_18_sync.png) | ![Settings](docs/screenshots/desktop_19_settings.png) | ![Live detail](docs/screenshots/desktop_01_live_detail.png) |
+
 #### Dark theme
 
 | Live | Costs | Heatmap | CO₂ |
