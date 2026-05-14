@@ -1,2 +1,0 @@
-[console_scripts]
-shelly-analyzer = shelly_analyzer.__main__:main
