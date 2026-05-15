@@ -265,6 +265,34 @@ class BackgroundServiceManager:
                 )
                 self.live_store.update(sample.device_key, point)
 
+                # Wire the MqttPublisher into the live feed: publish each sample
+                # so Home Assistant MQTT auto-discovery actually receives data.
+                if self._mqtt_publisher is not None:
+                    try:
+                        _dn = sample.device_key
+                        for _d in (getattr(self.cfg, "devices", []) or []):
+                            _k = _d.get("key") if isinstance(_d, dict) else getattr(_d, "key", None)
+                            if _k == sample.device_key:
+                                _nm = _d.get("name") if isinstance(_d, dict) else getattr(_d, "name", None)
+                                _dn = _nm or sample.device_key
+                                break
+                        self._mqtt_publisher.publish_device_data(
+                            sample.device_key, _dn,
+                            {
+                                "power_w": point.power_total_w,
+                                "power_l1": point.pa, "power_l2": point.pb, "power_l3": point.pc,
+                                "voltage_v": point.va,
+                                "voltage_l1": point.va, "voltage_l2": point.vb, "voltage_l3": point.vc,
+                                "current_a": (point.ia + point.ib + point.ic),
+                                "current_l1": point.ia, "current_l2": point.ib, "current_l3": point.ic,
+                                "energy_kwh": point.kwh_today,
+                                "freq_hz": point.freq_hz,
+                                "cosphi": point.cosphi_total,
+                            },
+                        )
+                    except Exception:
+                        logger.debug("MQTT publish_device_data failed", exc_info=True)
+
                 # Evaluate alert rules against this sample
                 try:
                     self._alerts_process_sample(sample)
