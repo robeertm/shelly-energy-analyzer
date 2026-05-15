@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.28.4 - 2026-05-15
+### Fixed
+- **Home Assistant MQTT integration now actually publishes.** `MqttPublisher` connected to the broker but sent nothing because `publish_device_data()` was never called anywhere in the codebase — the advertised auto-discovery feature was effectively dead. The live feed loop (`_feed_loop`) now pushes every drained sample (per-phase + total power, voltage, current; today's kWh; frequency; power factor) to the publisher right after the `LiveStateStore` update, so HA auto-discovery creates the sensor entities and they refresh on the configured publish interval. The device display name is resolved from the configured device list with a graceful fallback to the device key. Publish errors are swallowed at debug level so a broker hiccup never stalls the live poller.
+
+
 ## 16.28.3 - 2026-05-14
 ### Docs
 - **Added desktop screenshots for nine more tabs** so the README now visually covers every major view in the app: Plots, Compare, Schedule (cheapest spot-price windows), Tariff comparison, Export, Control (relay/cover/dimmer remote), Sync, Settings, and a "Live tab with chart-zoom popup" detail. Three new 3-column rows appended under the existing Desktop grid in tab order.
