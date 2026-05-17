@@ -479,6 +479,9 @@ class SpotPriceConfig:
     # Tariff type: "fixed" = fixed tariff (dynamic as comparison only),
     # "dynamic" = dynamic spot tariff is the PRIMARY billing method
     tariff_type: str = "fixed"
+    # Granularity used for spot cost & dynamic-tariff comparison:
+    # "15min" (quarter-hourly, EPEX since Oct 2025) or "hour".
+    price_resolution: str = "15min"
 
     def total_markup_ct(self) -> float:
         """Sum of all surcharge components in ct/kWh (net)."""
@@ -1240,6 +1243,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         include_vat=bool(spot_raw.get("include_vat", SpotPriceConfig.include_vat)),
         show_as_comparison=bool(spot_raw.get("show_as_comparison", SpotPriceConfig.show_as_comparison)),
         tariff_type=str(spot_raw.get("tariff_type", SpotPriceConfig.tariff_type) or "fixed"),
+        price_resolution=("hour" if str(spot_raw.get("price_resolution", SpotPriceConfig.price_resolution) or "15min").lower() in ("hour", "hourly", "1h", "60min") else "15min"),
     )
 
     forecast_raw = raw.get("forecast", {}) if isinstance(raw.get("forecast"), dict) else {}
@@ -1868,6 +1872,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "include_vat": bool(getattr(cfg.spot_price, "include_vat", True)),
             "show_as_comparison": bool(getattr(cfg.spot_price, "show_as_comparison", True)),
             "tariff_type": str(getattr(cfg.spot_price, "tariff_type", "fixed") or "fixed"),
+            "price_resolution": str(getattr(cfg.spot_price, "price_resolution", "15min") or "15min"),
         },
         "forecast": {
             "enabled": bool(getattr(cfg.forecast, "enabled", False)),

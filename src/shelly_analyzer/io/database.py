@@ -1356,6 +1356,7 @@ class EnergyDB:
         end_ts: int,
         markup_eur_per_kwh: float,
         vat_rate: float,
+        resolution: str = "hour",
     ) -> Tuple[float, float, float]:
         """Calculate energy cost using spot market prices.
 
@@ -1367,6 +1368,35 @@ class EnergyDB:
         """
         conn = self._conn()
         try:
+            if str(resolution).lower() in ("15min", "15m", "quarter", "q"):
+                _dev = "AND device_key = ?" if device_key else ""
+                _ep = [start_ts, end_ts] + ([device_key] if device_key else [])
+                df_e = pd.read_sql_query(
+                    "SELECT (timestamp / 900) * 900 AS slot_ts, "
+                    "       COALESCE(SUM(energy_kwh), 0) AS kwh "
+                    "FROM samples WHERE timestamp >= ? AND timestamp < ? "
+                    f"{_dev} GROUP BY (timestamp / 900) * 900 ORDER BY slot_ts",
+                    conn, params=_ep,
+                )
+                df_sp = pd.read_sql_query(
+                    "SELECT slot_ts, price_eur_mwh FROM spot_prices "
+                    "WHERE zone = ? AND slot_ts >= ? AND slot_ts < ? ORDER BY slot_ts",
+                    conn, params=[zone, start_ts - 3600, end_ts],
+                )
+                if df_e.empty or df_sp.empty:
+                    return 0.0, 0.0, 0.0
+                df_e = df_e.sort_values("slot_ts")
+                df_sp = df_sp.sort_values("slot_ts")
+                m = pd.merge_asof(df_e, df_sp, on="slot_ts", direction="backward")
+                m = m.dropna(subset=["price_eur_mwh"])
+                if m.empty:
+                    return 0.0, 0.0, 0.0
+                _kwh = m["kwh"].astype(float)
+                _pk = m["price_eur_mwh"].astype(float) / 1000.0
+                _tk = float(_kwh.sum())
+                _tc = float(((_pk + markup_eur_per_kwh) * (1.0 + vat_rate) * _kwh).sum())
+                _ap = float((_pk * _kwh).sum() / _tk * 100.0) if _tk > 0 else 0.0
+                return _tc, _tk, _ap
             df_h = pd.read_sql_query(
                 "SELECT hour_ts, kwh FROM hourly_energy "
                 "WHERE device_key = ? AND hour_ts >= ? AND hour_ts < ?",

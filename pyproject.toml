@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shelly-energy-analyzer"
-version = "16.31.0"
+version = "16.32.0"
 description = "Shelly EM/3EM Energy Analyzer (Flask Web App)"
 readme = "README.md"
 requires-python = ">=3.10"
