@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.32.0 - 2026-05-17
+### Added
+- **Configurable spot-cost resolution + true 15-min spot costing.** New `spot_price.price_resolution` setting (`15min` default, or `hour`). In `15min` mode the spot cost / dynamic-tariff comparison no longer averages prices to the hour: it aggregates the 1-min `samples` into 15-min energy buckets (same `SUM(energy_kwh)` the hourly table uses) and matches each bucket to the spot slot in effect (`merge_asof`, so legacy hourly history still works) — past comparison costs are recomputed accurately on the fly. The fixed-tariff billing path is unchanged. Hourly mode keeps the previous behaviour for users on hourly dynamic tariffs.
+
+
 ## 16.31.0 - 2026-05-17
 ### Changed
 - **Spot price is now quarter-hourly (15-min), matching the EPEX data actually stored.** Since Oct 2025 prices arrive in 15-min slots, but the live price, the effective unit price (`_get_effective_unit_price`) and both spot-price charts still averaged each hour's four slots — so the displayed current price lagged the real 15-min price (and disagreed with downstream consumers reading the raw slot). All of these now use the **current 15-min slot** (most recent `slot_ts <= now`) and the charts plot every 15-min point. Historical spot cost (`calc_spot_cost`) is intentionally unchanged: energy is stored hourly, so per-hour cost = hourly kWh × hourly mean price is already exact (a 15-min split of hourly energy yields the identical total); only the live/current-hour price granularity changes.
