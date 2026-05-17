@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.29.0 - 2026-05-17
+### Fixed
+- **Live grid-CO₂ is now published over MQTT.** The HA auto-discovery config already declared a `CO₂ Rate` (g/h) sensor per device, but `_feed_loop` never put a `co2_g_per_h` value into the published state payload, so the sensor was stuck at its `default(0)` — even though the analyzer fetches real grid intensity (ENTSO-E / Electricity Maps) into the DB. Added `BackgroundManager._current_co2_intensity()` which reads the most recent `intensity_g_per_kwh` for the configured bidding zone from the co2_intensity table (60 s cache, graceful fallback to `pricing.co2_intensity_g_per_kwh`), and the feed loop now emits `co2_g_per_h = power_kW × intensity` for every device alongside the other metrics. Home Assistant CO₂-Rate sensors now show real values and update on the configured publish interval.
+
+
 ## 16.28.4 - 2026-05-15
 ### Fixed
 - **Home Assistant MQTT integration now actually publishes.** `MqttPublisher` connected to the broker but sent nothing because `publish_device_data()` was never called anywhere in the codebase — the advertised auto-discovery feature was effectively dead. The live feed loop (`_feed_loop`) now pushes every drained sample (per-phase + total power, voltage, current; today's kWh; frequency; power factor) to the publisher right after the `LiveStateStore` update, so HA auto-discovery creates the sensor entities and they refresh on the configured publish interval. The device display name is resolved from the configured device list with a graceful fallback to the device key. Publish errors are swallowed at debug level so a broker hiccup never stalls the live poller.

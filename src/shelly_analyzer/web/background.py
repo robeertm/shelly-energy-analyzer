@@ -288,6 +288,7 @@ class BackgroundServiceManager:
                                 "energy_kwh": point.kwh_today,
                                 "freq_hz": point.freq_hz,
                                 "cosphi": point.cosphi_total,
+                                "co2_g_per_h": round((point.power_total_w / 1000.0) * self._current_co2_intensity(), 1),
                             },
                         )
                     except Exception:
@@ -691,6 +692,39 @@ class BackgroundServiceManager:
             logger.info("Auto-sync disabled, but running one-shot initial sync on startup")
 
     # ── CO2 / Spot fetchers ────────────────────────────────────────────
+
+    def _current_co2_intensity(self) -> float:
+        """Most recent grid CO2 intensity (g/kWh) for the configured zone.
+
+        Cached for 60s. Falls back to pricing.co2_intensity_g_per_kwh (380).
+        """
+        import time as _t
+        now = _t.time()
+        cached = getattr(self, "_co2_intensity_cache", None)
+        if cached and (now - cached[0]) < 60:
+            return cached[1]
+        val = 0.0
+        try:
+            co2_cfg = getattr(self.cfg, "co2", None)
+            if co2_cfg and getattr(co2_cfg, "enabled", False):
+                zone = str(getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU")
+                db = getattr(self.storage, "db", None)
+                if db is not None:
+                    last = db.latest_co2_ts(zone)
+                    if last:
+                        df = db.query_co2_intensity(zone, last, last + 3600)
+                        if df is not None and not df.empty:
+                            val = float(df.iloc[-1]["intensity_g_per_kwh"])
+        except Exception:
+            logger.debug("co2 intensity lookup failed", exc_info=True)
+        if val <= 0:
+            try:
+                val = float(getattr(getattr(self.cfg, "pricing", None),
+                                    "co2_intensity_g_per_kwh", 380.0) or 380.0)
+            except Exception:
+                val = 380.0
+        self._co2_intensity_cache = (now, val)
+        return val
 
     def _start_co2_fetcher(self) -> None:
         """Start periodic CO₂ intensity fetch if enabled. Dispatches to
