@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.30.1 - 2026-05-17
+### Fixed
+- **Spot price now includes the configured surcharges & VAT.** The MQTT `Spotpreis` exposed only the raw EPEX wholesale price, ignoring the grid fee / electricity tax / concession / CHP / §19 / offshore / supplier-margin breakdown and VAT defined in Spot-price settings — so it read far below the real per-kWh price. `spot_price_eur_kwh` is now the **effective consumer price** = (raw + `total_markup_ct`/100) × (1.19 if `include_vat` else 1.0), matching the analyzer's own cost math. The raw exchange price is still available as the new `spot_price_net_eur_kwh` sensor.
+
+
 ## 16.30.0 - 2026-05-17
 ### Added
 - **Per-device daily cost + new synthetic "Netz" (grid) device over MQTT.** Each device now also publishes `cost_eur_today` (today's cost in EUR, already computed in the feed loop). A new auto-discovered **Netz** device exposes **Spotpreis** (`spot_price_eur_kwh`, current day-ahead price) and **Netz CO²-Intensität** (`co2_intensity_g_per_kwh`, current grid carbon intensity) — both read live from the analyzer's spot-price / CO² tables (60 s cache). Surfaces data the analyzer already had internally; no config change.
