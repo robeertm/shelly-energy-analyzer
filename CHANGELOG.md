@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.29.2 - 2026-05-17
+### Added
+- **Per-phase voltage & current now exposed as Home Assistant sensors.** The MQTT state payload already carried `voltage_l1..l3` and `current_l1..l3` for every device, but the HA auto-discovery list only declared the per-phase *power* sensors, so the per-phase voltage/current were published yet invisible in HA. Added the six discovery entries (Voltage L1/L2/L3 in V, Current L1/L2/L3 in A); no new data source, purely surfacing values already sent.
+
+
 ## 16.29.1 - 2026-05-17
 ### Fixed
 - **Hotfix: perpetual "update available" loop after updating to 16.29.0.** 16.29.0 bumped `pyproject.toml` and the changelog but forgot to bump `shelly_analyzer.__version__` (still `16.28.4`). Since the in-app updater compares the running `__version__` against the latest GitHub tag, every install of 16.29.0 kept reporting v16.29.0 as available and re-applied it endlessly. `__version__` is now bumped together with `pyproject.toml`; no functional change versus 16.29.0 (the live grid-CO₂ MQTT publishing from 16.29.0 is included).

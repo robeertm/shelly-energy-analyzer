@@ -180,6 +180,12 @@ class MqttPublisher:
             ("power_l1", "Power L1", "W", "power", "measurement"),
             ("power_l2", "Power L2", "W", "power", "measurement"),
             ("power_l3", "Power L3", "W", "power", "measurement"),
+            ("voltage_l1", "Voltage L1", "V", "voltage", "measurement"),
+            ("voltage_l2", "Voltage L2", "V", "voltage", "measurement"),
+            ("voltage_l3", "Voltage L3", "V", "voltage", "measurement"),
+            ("current_l1", "Current L1", "A", "current", "measurement"),
+            ("current_l2", "Current L2", "A", "current", "measurement"),
+            ("current_l3", "Current L3", "A", "current", "measurement"),
             ("co2_g_per_h", "CO₂ Rate", "g/h", None, "measurement"),
         ]
 
