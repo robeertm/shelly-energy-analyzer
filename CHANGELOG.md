@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.31.0 - 2026-05-17
+### Changed
+- **Spot price is now quarter-hourly (15-min), matching the EPEX data actually stored.** Since Oct 2025 prices arrive in 15-min slots, but the live price, the effective unit price (`_get_effective_unit_price`) and both spot-price charts still averaged each hour's four slots — so the displayed current price lagged the real 15-min price (and disagreed with downstream consumers reading the raw slot). All of these now use the **current 15-min slot** (most recent `slot_ts <= now`) and the charts plot every 15-min point. Historical spot cost (`calc_spot_cost`) is intentionally unchanged: energy is stored hourly, so per-hour cost = hourly kWh × hourly mean price is already exact (a 15-min split of hourly energy yields the identical total); only the live/current-hour price granularity changes.
+
+
 ## 16.30.2 - 2026-05-17
 ### Fixed
 - **Spot price & grid-CO² now use the *current* slot, not the last one in the DB.** Day-ahead prices (and the CO² forecaster) store many hours into the future, so `latest_spot_price_ts()` / `latest_co2_ts()` returned a *tomorrow* slot — the published `Spotpreis`/`CO²-Intensität` reflected a future hour instead of now (e.g. 30 ct shown while the real current price was ~19 ct). Both now pick the most recent slot with `ts <= now`, matching the analyzer's own live display.
