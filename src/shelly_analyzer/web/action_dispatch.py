@@ -360,7 +360,8 @@ class ActionDispatcher:
                 start_ts = int(datetime(d.year, d.month, d.day).timestamp())
                 end_ts = start_ts + 86400
                 cost, kwh, avg = db.calc_spot_cost(
-                    device_key, zone, start_ts, end_ts, markup, vat_rate
+                    device_key, zone, start_ts, end_ts, markup, vat_rate,
+                    resolution=str(getattr(self.cfg.spot_price, "price_resolution", "15min") or "15min"),
                 )
                 if cost > 0:
                     out[d.strftime("%Y-%m-%d")] = cost
@@ -2063,7 +2064,8 @@ class ActionDispatcher:
                             _sc, _, _ = self.storage.db.calc_spot_cost(
                                 "", _sp_zone,
                                 int(_today_start.timestamp()), int(_now.timestamp()),
-                                _sp_mk_eur, _sp_vat
+                                _sp_mk_eur, _sp_vat,
+                                resolution=str(getattr(self.cfg.spot_price, "price_resolution", "15min") or "15min"),
                             )
                             if _sc > 0:
                                 _spot_today_eur = round(_sc, 2)
@@ -2328,6 +2330,7 @@ class ActionDispatcher:
                             dev_key_, _sp_zone_cached,
                             int(rs_.timestamp()), int(re_.timestamp()),
                             _sp_markup_cached, _sp_vat_cached,
+                            resolution=str(getattr(self.cfg.spot_price, "price_resolution", "15min") or "15min"),
                         )
                     except Exception:
                         res = (0.0, 0.0, 0.0)
