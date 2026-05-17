@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.30.0 - 2026-05-17
+### Added
+- **Per-device daily cost + new synthetic "Netz" (grid) device over MQTT.** Each device now also publishes `cost_eur_today` (today's cost in EUR, already computed in the feed loop). A new auto-discovered **Netz** device exposes **Spotpreis** (`spot_price_eur_kwh`, current day-ahead price) and **Netz CO²-Intensität** (`co2_intensity_g_per_kwh`, current grid carbon intensity) — both read live from the analyzer's spot-price / CO² tables (60 s cache). Surfaces data the analyzer already had internally; no config change.
+
+
 ## 16.29.2 - 2026-05-17
 ### Added
 - **Per-phase voltage & current now exposed as Home Assistant sensors.** The MQTT state payload already carried `voltage_l1..l3` and `current_l1..l3` for every device, but the HA auto-discovery list only declared the per-phase *power* sensors, so the per-phase voltage/current were published yet invisible in HA. Added the six discovery entries (Voltage L1/L2/L3 in V, Current L1/L2/L3 in A); no new data source, purely surfacing values already sent.

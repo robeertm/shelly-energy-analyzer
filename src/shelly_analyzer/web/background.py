@@ -289,10 +289,21 @@ class BackgroundServiceManager:
                                 "freq_hz": point.freq_hz,
                                 "cosphi": point.cosphi_total,
                                 "co2_g_per_h": round((point.power_total_w / 1000.0) * self._current_co2_intensity(), 1),
+                                "cost_eur_today": round(point.cost_today, 2),
                             },
                         )
                     except Exception:
                         logger.debug("MQTT publish_device_data failed", exc_info=True)
+
+                if self._mqtt_publisher is not None:
+                    try:
+                        self._mqtt_publisher.publish_grid_data({
+                            "spot_price_eur_kwh": self._current_spot_price(),
+                            "co2_intensity_g_per_kwh": round(
+                                self._current_co2_intensity(), 1),
+                        })
+                    except Exception:
+                        logger.debug("MQTT publish_grid_data failed", exc_info=True)
 
                 # Evaluate alert rules against this sample
                 try:
@@ -725,6 +736,31 @@ class BackgroundServiceManager:
                 val = 380.0
         self._co2_intensity_cache = (now, val)
         return val
+
+    def _current_spot_price(self) -> float:
+        """Most recent day-ahead spot price (EUR/kWh) for the configured spot
+        zone. Cached 60s. Returns 0.0 if unavailable."""
+        import time as _t
+        now = _t.time()
+        cached = getattr(self, "_spot_price_cache", None)
+        if cached and (now - cached[0]) < 60:
+            return cached[1]
+        val = 0.0
+        try:
+            sp_cfg = getattr(self.cfg, "spot_price", None)
+            if sp_cfg and getattr(sp_cfg, "enabled", False):
+                zone = str(getattr(sp_cfg, "bidding_zone", "DE-LU") or "DE-LU")
+                db = getattr(self.storage, "db", None)
+                if db is not None:
+                    last = db.latest_spot_price_ts(zone)
+                    if last:
+                        df = db.query_spot_prices(zone, last, last + 3600)
+                        if df is not None and not df.empty:
+                            val = float(df.iloc[-1]["price_eur_mwh"]) / 1000.0
+        except Exception:
+            logger.debug("spot price lookup failed", exc_info=True)
+        self._spot_price_cache = (now, round(val, 4))
+        return self._spot_price_cache[1]
 
     def _start_co2_fetcher(self) -> None:
         """Start periodic CO₂ intensity fetch if enabled. Dispatches to
