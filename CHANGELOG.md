@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.30.2 - 2026-05-17
+### Fixed
+- **Spot price & grid-CO² now use the *current* slot, not the last one in the DB.** Day-ahead prices (and the CO² forecaster) store many hours into the future, so `latest_spot_price_ts()` / `latest_co2_ts()` returned a *tomorrow* slot — the published `Spotpreis`/`CO²-Intensität` reflected a future hour instead of now (e.g. 30 ct shown while the real current price was ~19 ct). Both now pick the most recent slot with `ts <= now`, matching the analyzer's own live display.
+
+
 ## 16.30.1 - 2026-05-17
 ### Fixed
 - **Spot price now includes the configured surcharges & VAT.** The MQTT `Spotpreis` exposed only the raw EPEX wholesale price, ignoring the grid fee / electricity tax / concession / CHP / §19 / offshore / supplier-margin breakdown and VAT defined in Spot-price settings — so it read far below the real per-kWh price. `spot_price_eur_kwh` is now the **effective consumer price** = (raw + `total_markup_ct`/100) × (1.19 if `include_vat` else 1.0), matching the analyzer's own cost math. The raw exchange price is still available as the new `spot_price_net_eur_kwh` sensor.
