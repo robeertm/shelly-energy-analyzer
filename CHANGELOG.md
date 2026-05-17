@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.29.1 - 2026-05-17
+### Fixed
+- **Hotfix: perpetual "update available" loop after updating to 16.29.0.** 16.29.0 bumped `pyproject.toml` and the changelog but forgot to bump `shelly_analyzer.__version__` (still `16.28.4`). Since the in-app updater compares the running `__version__` against the latest GitHub tag, every install of 16.29.0 kept reporting v16.29.0 as available and re-applied it endlessly. `__version__` is now bumped together with `pyproject.toml`; no functional change versus 16.29.0 (the live grid-CO₂ MQTT publishing from 16.29.0 is included).
+
+
 ## 16.29.0 - 2026-05-17
 ### Fixed
 - **Live grid-CO₂ is now published over MQTT.** The HA auto-discovery config already declared a `CO₂ Rate` (g/h) sensor per device, but `_feed_loop` never put a `co2_g_per_h` value into the published state payload, so the sensor was stuck at its `default(0)` — even though the analyzer fetches real grid intensity (ENTSO-E / Electricity Maps) into the DB. Added `BackgroundManager._current_co2_intensity()` which reads the most recent `intensity_g_per_kwh` for the configured bidding zone from the co2_intensity table (60 s cache, graceful fallback to `pricing.co2_intensity_g_per_kwh`), and the feed loop now emits `co2_g_per_h = power_kW × intensity` for every device alongside the other metrics. Home Assistant CO₂-Rate sensors now show real values and update on the configured publish interval.
