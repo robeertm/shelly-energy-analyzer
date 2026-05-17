@@ -187,6 +187,7 @@ class MqttPublisher:
             ("current_l2", "Current L2", "A", "current", "measurement"),
             ("current_l3", "Current L3", "A", "current", "measurement"),
             ("co2_g_per_h", "CO₂ Rate", "g/h", None, "measurement"),
+            ("cost_eur_today", "Cost Today", "EUR", "monetary", "total"),
         ]
 
         for value_key, name, unit, dev_class, state_class in sensors:
@@ -225,3 +226,67 @@ class MqttPublisher:
             self._client.publish(topic, json.dumps(data), qos=0, retain=True)
         except Exception:
             logger.debug("MQTT summary publish failed", exc_info=True)
+
+    def publish_grid_data(self, data: Dict[str, Any]) -> None:
+        """Publish grid-wide metrics (spot price, grid CO2 intensity) as a
+        synthetic 'Netz' device for Home Assistant auto-discovery."""
+        if not self._connected or self._client is None:
+            return
+        now = time.time()
+        last = self._last_publish.get("__netz__", 0)
+        if (now - last) < self.config.publish_interval_seconds:
+            return
+        self._last_publish["__netz__"] = now
+        if self.config.ha_discovery and "__netz__" not in self._discovery_sent:
+            self._send_grid_discovery()
+            self._discovery_sent.add("__netz__")
+        try:
+            prefix = self.config.topic_prefix
+            payload = json.dumps({
+                "timestamp": int(now),
+                **{k: round(v, 4) if isinstance(v, float) else v
+                   for k, v in data.items()},
+            })
+            self._client.publish(f"{prefix}/netz/state", payload, qos=0, retain=True)
+        except Exception:
+            logger.debug("MQTT grid publish failed", exc_info=True)
+
+    def _send_grid_discovery(self) -> None:
+        """Home Assistant MQTT discovery for the synthetic Netz device."""
+        if self._client is None:
+            return
+        prefix = self.config.ha_discovery_prefix
+        dev_topic = f"{self.config.topic_prefix}/netz"
+        dev_id = "shelly_analyzer_netz"
+        device_info = {
+            "identifiers": [dev_id],
+            "name": "Shelly Analyzer \u2013 Netz",
+            "manufacturer": "Shelly Energy Analyzer",
+            "model": "Grid",
+        }
+        sensors = [
+            ("spot_price_eur_kwh", "Spotpreis", "EUR/kWh", None, "measurement"),
+            ("co2_intensity_g_per_kwh", "Netz CO\u00b2-Intensit\u00e4t",
+             "g/kWh", None, "measurement"),
+        ]
+        for value_key, name, unit, dev_class, state_class in sensors:
+            uid = f"{dev_id}_{value_key}"
+            config_topic = f"{prefix}/sensor/{dev_id}/{value_key}/config"
+            config_payload: Dict[str, Any] = {
+                "name": name,
+                "unique_id": uid,
+                "state_topic": f"{dev_topic}/state",
+                "value_template": f"{{{{ value_json.{value_key} | default(0) }}}}",
+                "device": device_info,
+            }
+            if unit:
+                config_payload["unit_of_measurement"] = unit
+            if dev_class:
+                config_payload["device_class"] = dev_class
+            if state_class:
+                config_payload["state_class"] = state_class
+            try:
+                self._client.publish(config_topic, json.dumps(config_payload),
+                                     qos=1, retain=True)
+            except Exception:
+                logger.debug("HA grid discovery failed for %s", value_key)
