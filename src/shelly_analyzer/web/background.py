@@ -722,11 +722,12 @@ class BackgroundServiceManager:
                 zone = str(getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU")
                 db = getattr(self.storage, "db", None)
                 if db is not None:
-                    last = db.latest_co2_ts(zone)
-                    if last:
-                        df = db.query_co2_intensity(zone, last, last + 3600)
-                        if df is not None and not df.empty:
-                            val = float(df.iloc[-1]["intensity_g_per_kwh"])
+                    now_i = int(now)
+                    df = db.query_co2_intensity(zone, now_i - 10800, now_i + 3600)
+                    if df is not None and not df.empty:
+                        cur = df[df["hour_ts"] <= now_i]
+                        row = cur.iloc[-1] if not cur.empty else df.iloc[0]
+                        val = float(row["intensity_g_per_kwh"])
         except Exception:
             logger.debug("co2 intensity lookup failed", exc_info=True)
         if val <= 0:
@@ -754,11 +755,12 @@ class BackgroundServiceManager:
                 zone = str(getattr(sp_cfg, "bidding_zone", "DE-LU") or "DE-LU")
                 db = getattr(self.storage, "db", None)
                 if db is not None:
-                    last = db.latest_spot_price_ts(zone)
-                    if last:
-                        df = db.query_spot_prices(zone, last, last + 3600)
-                        if df is not None and not df.empty:
-                            net = float(df.iloc[-1]["price_eur_mwh"]) / 1000.0
+                    now_i = int(now)
+                    df = db.query_spot_prices(zone, now_i - 10800, now_i + 3600)
+                    if df is not None and not df.empty:
+                        cur = df[df["slot_ts"] <= now_i]
+                        row = cur.iloc[-1] if not cur.empty else df.iloc[0]
+                        net = float(row["price_eur_mwh"]) / 1000.0
         except Exception:
             logger.debug("spot price lookup failed", exc_info=True)
         eff = net
