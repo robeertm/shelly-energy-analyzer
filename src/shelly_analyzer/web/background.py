@@ -299,6 +299,7 @@ class BackgroundServiceManager:
                     try:
                         self._mqtt_publisher.publish_grid_data({
                             "spot_price_eur_kwh": self._current_spot_price(),
+                            "spot_price_net_eur_kwh": self._current_spot_price_net(),
                             "co2_intensity_g_per_kwh": round(
                                 self._current_co2_intensity(), 1),
                         })
@@ -737,17 +738,18 @@ class BackgroundServiceManager:
         self._co2_intensity_cache = (now, val)
         return val
 
-    def _current_spot_price(self) -> float:
-        """Most recent day-ahead spot price (EUR/kWh) for the configured spot
-        zone. Cached 60s. Returns 0.0 if unavailable."""
+    def _spot_prices(self):
+        """(net, effective) day-ahead price EUR/kWh, configured spot zone, 60s
+        cache. effective = (net + total_markup_ct/100) * (1.19 if include_vat
+        else 1.0) — mirrors the analyzer's own surcharge+VAT handling."""
         import time as _t
         now = _t.time()
         cached = getattr(self, "_spot_price_cache", None)
         if cached and (now - cached[0]) < 60:
-            return cached[1]
-        val = 0.0
+            return cached[1], cached[2]
+        net = 0.0
+        sp_cfg = getattr(self.cfg, "spot_price", None)
         try:
-            sp_cfg = getattr(self.cfg, "spot_price", None)
             if sp_cfg and getattr(sp_cfg, "enabled", False):
                 zone = str(getattr(sp_cfg, "bidding_zone", "DE-LU") or "DE-LU")
                 db = getattr(self.storage, "db", None)
@@ -756,11 +758,28 @@ class BackgroundServiceManager:
                     if last:
                         df = db.query_spot_prices(zone, last, last + 3600)
                         if df is not None and not df.empty:
-                            val = float(df.iloc[-1]["price_eur_mwh"]) / 1000.0
+                            net = float(df.iloc[-1]["price_eur_mwh"]) / 1000.0
         except Exception:
             logger.debug("spot price lookup failed", exc_info=True)
-        self._spot_price_cache = (now, round(val, 4))
-        return self._spot_price_cache[1]
+        eff = net
+        if net > 0 and sp_cfg is not None:
+            try:
+                markup = float(sp_cfg.total_markup_ct()) / 100.0
+                vat = 1.19 if bool(getattr(sp_cfg, "include_vat", True)) else 1.0
+                eff = (net + markup) * vat
+            except Exception:
+                eff = net
+        self._spot_price_cache = (now, round(net, 4), round(eff, 4))
+        return self._spot_price_cache[1], self._spot_price_cache[2]
+
+    def _current_spot_price(self) -> float:
+        """Effective consumer day-ahead price (EUR/kWh) incl. grid fee, taxes,
+        surcharges and VAT from the spot-price settings."""
+        return self._spot_prices()[1]
+
+    def _current_spot_price_net(self) -> float:
+        """Raw EPEX day-ahead exchange price (EUR/kWh, net, excl. surcharges)."""
+        return self._spot_prices()[0]
 
     def _start_co2_fetcher(self) -> None:
         """Start periodic CO₂ intensity fetch if enabled. Dispatches to

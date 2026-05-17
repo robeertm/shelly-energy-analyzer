@@ -265,7 +265,8 @@ class MqttPublisher:
             "model": "Grid",
         }
         sensors = [
-            ("spot_price_eur_kwh", "Spotpreis", "EUR/kWh", None, "measurement"),
+            ("spot_price_eur_kwh", "Spotpreis (inkl. Abgaben)", "EUR/kWh", None, "measurement"),
+            ("spot_price_net_eur_kwh", "Spotpreis (B\u00f6rse, netto)", "EUR/kWh", None, "measurement"),
             ("co2_intensity_g_per_kwh", "Netz CO\u00b2-Intensit\u00e4t",
              "g/kWh", None, "measurement"),
         ]
