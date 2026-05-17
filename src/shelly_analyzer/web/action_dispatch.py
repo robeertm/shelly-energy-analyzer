@@ -259,9 +259,11 @@ class ActionDispatcher:
             pricing = getattr(self.cfg, "pricing", None)
             vat_rate = pricing.vat_rate() if getattr(spot_cfg, "include_vat", True) and pricing else 0.0
             try:
-                df = self.storage.db.query_spot_prices(zone, hour_ts, hour_ts + 3600)
+                df = self.storage.db.query_spot_prices(zone, now_ts - 10800, now_ts + 3600)
                 if not df.empty:
-                    raw_eur = float(df["price_eur_mwh"].mean()) / 1000.0
+                    _cur = df[df["slot_ts"] <= now_ts]
+                    _row = _cur.iloc[-1] if not _cur.empty else df.iloc[0]
+                    raw_eur = float(_row["price_eur_mwh"]) / 1000.0
                     return (raw_eur + markup) * (1.0 + vat_rate)
             except Exception:
                 pass
@@ -2049,10 +2051,11 @@ class ActionDispatcher:
                         _sp_vat = self.cfg.pricing.vat_rate() if getattr(_spot_cfg, "include_vat", True) else 0.0
 
                         _now_ts_w = int(time.time())
-                        _cur_h = (_now_ts_w // 3600) * 3600
-                        _df_cur = self.storage.db.query_spot_prices(_sp_zone, _cur_h, _cur_h + 3600)
+                        _df_cur = self.storage.db.query_spot_prices(_sp_zone, _now_ts_w - 10800, _now_ts_w + 3600)
                         if not _df_cur.empty:
-                            _raw = float(_df_cur["price_eur_mwh"].mean()) / 10.0
+                            _cur2 = _df_cur[_df_cur["slot_ts"] <= _now_ts_w]
+                            _rowc = _cur2.iloc[-1] if not _cur2.empty else _df_cur.iloc[0]
+                            _raw = float(_rowc["price_eur_mwh"]) / 10.0
                             _current_spot_ct = round((_raw + _sp_markup) * (1.0 + _sp_vat), 1)
 
                         _sp_mk_eur = _sp_markup / 100.0
@@ -2071,13 +2074,11 @@ class ActionDispatcher:
                         _chart_e = int((_now + timedelta(hours=12)).timestamp())
                         _df_sp = self.storage.db.query_spot_prices(_sp_zone, _chart_s, _chart_e)
                         if not _df_sp.empty:
-                            _df_sp["hour_ts"] = (_df_sp["slot_ts"] // 3600) * 3600
-                            _df_h = _df_sp.groupby("hour_ts").agg(price=("price_eur_mwh", "mean")).reset_index()
-                            _df_h = _df_h.sort_values("hour_ts")
-                            for _, _r in _df_h.iterrows():
-                                _raw_ct = float(_r["price"]) / 10.0
+                            _df_sp = _df_sp.sort_values("slot_ts")
+                            for _, _r in _df_sp.iterrows():
+                                _raw_ct = float(_r["price_eur_mwh"]) / 10.0
                                 _total_ct = (_raw_ct + _sp_markup) * (1.0 + _sp_vat)
-                                _spot_chart_mini.append([int(_r["hour_ts"]), round(_total_ct, 1)])
+                                _spot_chart_mini.append([int(_r["slot_ts"]), round(_total_ct, 1)])
                     except Exception:
                         pass
 
@@ -2484,15 +2485,12 @@ class ActionDispatcher:
                         _chart_end = int((_now + timedelta(hours=24)).timestamp())
                         _df_sp = self.storage.db.query_spot_prices(_sp_zone2, _chart_start, _chart_end)
                         if not _df_sp.empty:
-                            _df_sp_h = _df_sp.copy()
-                            _df_sp_h["hour_ts"] = (_df_sp_h["slot_ts"] // 3600) * 3600
-                            _df_sp_h = _df_sp_h.groupby("hour_ts").agg(price=("price_eur_mwh", "mean")).reset_index()
-                            _df_sp_h = _df_sp_h.sort_values("hour_ts")
+                            _df_sp_h = _df_sp.sort_values("slot_ts")
                             for _, _r in _df_sp_h.iterrows():
-                                _raw_ct = float(_r["price"]) / 10.0
+                                _raw_ct = float(_r["price_eur_mwh"]) / 10.0
                                 _total_ct = (_raw_ct + _sp_markup2) * (1.0 + _sp_vat2)
                                 _spot_chart.append({
-                                    "ts": int(_r["hour_ts"]),
+                                    "ts": int(_r["slot_ts"]),
                                     "raw_ct": round(_raw_ct, 2),
                                     "total_ct": round(_total_ct, 2),
                                 })
@@ -2501,11 +2499,10 @@ class ActionDispatcher:
 
                 _current_spot_ct = None
                 if _spot_chart:
-                    _cur_hour_ts = int(_now.timestamp()) // 3600 * 3600
-                    for _sp_entry in _spot_chart:
-                        if int(_sp_entry["ts"]) == _cur_hour_ts:
-                            _current_spot_ct = _sp_entry["total_ct"]
-                            break
+                    _now_ts2 = int(_now.timestamp())
+                    _past = [_e for _e in _spot_chart if int(_e["ts"]) <= _now_ts2]
+                    if _past:
+                        _current_spot_ct = _past[-1]["total_ct"]
 
                 # Build summary from device totals
                 _s = {}
