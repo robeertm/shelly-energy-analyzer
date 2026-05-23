@@ -749,6 +749,7 @@ class BackgroundServiceManager:
         if cached and (now - cached[0]) < 60:
             return cached[1], cached[2]
         net = 0.0
+        have = False
         sp_cfg = getattr(self.cfg, "spot_price", None)
         try:
             if sp_cfg and getattr(sp_cfg, "enabled", False):
@@ -761,10 +762,11 @@ class BackgroundServiceManager:
                         cur = df[df["slot_ts"] <= now_i]
                         row = cur.iloc[-1] if not cur.empty else df.iloc[0]
                         net = float(row["price_eur_mwh"]) / 1000.0
+                        have = True
         except Exception:
             logger.debug("spot price lookup failed", exc_info=True)
         eff = net
-        if net > 0 and sp_cfg is not None:
+        if have and sp_cfg is not None:
             try:
                 markup = float(sp_cfg.total_markup_ct()) / 100.0
                 vat = 1.19 if bool(getattr(sp_cfg, "include_vat", True)) else 1.0
