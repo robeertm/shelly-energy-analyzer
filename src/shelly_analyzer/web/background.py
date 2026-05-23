@@ -285,7 +285,7 @@ class BackgroundServiceManager:
                                 "voltage_l1": point.va, "voltage_l2": point.vb, "voltage_l3": point.vc,
                                 "current_a": (point.ia + point.ib + point.ic),
                                 "current_l1": point.ia, "current_l2": point.ib, "current_l3": point.ic,
-                                "energy_kwh": point.kwh_today,
+                                "energy_kwh": self._mqtt_energy_today(sample.device_key, point.kwh_today),
                                 "freq_hz": point.freq_hz,
                                 "cosphi": point.cosphi_total,
                                 "co2_g_per_h": round((point.power_total_w / 1000.0) * self._current_co2_intensity(), 1),
@@ -313,6 +313,28 @@ class BackgroundServiceManager:
                     pass
             except Exception as e:
                 logger.debug("Feed loop error: %s", e)
+
+    def _mqtt_energy_today(self, device_key: str, raw: float) -> float:
+        """Clamp published daily energy to be monotonic within the day.
+        Daily energy only rises; the sole legitimate decrease is the
+        midnight reset to ~0. Small intraday backward re-syncs would be
+        seen by Home Assistant's total_increasing as a meter reset and
+        double-counted, so suppress them (keep the running high)."""
+        try:
+            raw = float(raw)
+        except (TypeError, ValueError):
+            return raw
+        highs = getattr(self, "_energy_today_high", None)
+        if highs is None:
+            highs = {}
+            self._energy_today_high = highs
+        hi = highs.get(device_key)
+        if hi is None or raw < 0.05:
+            hi = raw
+        elif raw > hi:
+            hi = raw
+        highs[device_key] = hi
+        return hi
 
     def _load_today_baseline(self, device_key: str, day_start_ts: int) -> tuple:
         """Read already-imported kWh for *today* from the computed cache

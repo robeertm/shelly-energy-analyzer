@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.32.2 - 2026-05-23
+### Fixed
+- **Daily energy double-counted in Home Assistant statistics.** The per-device `energy_kwh` (Energy Today) is published with `state_class: total_increasing`, but the live daily total occasionally steps slightly backward intraday (estimator re-sync) — HA treats every decrease as a meter reset and re-adds the whole accumulated value, inflating the daily/Energy-dashboard figures (≈ double). The published value is now clamped to be monotonic within the day (the only decrease that resets tracking is the midnight drop to ~0), so total_increasing sees no false resets. Live/raw analyzer values are unchanged.
+
+
 ## 16.32.1 - 2026-05-23
 ### Fixed
 - **MQTT `Spotpreis (inkl. Abgaben)` dropped to 0 during free/negative exchange hours.** The grid-data publisher applied surcharges + VAT only when the raw exchange price was `> 0`, so when the EPEX/energy-charts day-ahead price hit 0 €/MWh (or went negative) the effective consumer price published to MQTT/Home Assistant fell to 0 — even though the analyzer’s own UI still correctly showed the markup (grid fee, taxes, surcharges, VAT). The markup is now applied whenever a valid spot slot is found (including 0 and negative prices), matching the UI. The raw `Spotpreis (Börse, netto)` stays at the true exchange value.
