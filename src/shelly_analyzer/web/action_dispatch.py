@@ -3738,29 +3738,31 @@ class ActionDispatcher:
                 _pv_on = bool(getattr(_solar_cfg, "enabled", False)) if _solar_cfg else False
 
                 def _device_co2(start_ts_d, end_ts_d):
-                    grid_kwh_d = 0.0
-                    pv_saved_kwh = 0.0
                     df_co2 = self.storage.db.query_co2_intensity(zone, start_ts_d, end_ts_d + 3600)
                     if df_co2 is None or df_co2.empty:
                         return 0.0
-                    avg_int = float(pd.to_numeric(df_co2["intensity_g_per_kwh"], errors="coerce").mean())
+                    _ci = pd.to_numeric(df_co2["intensity_g_per_kwh"], errors="coerce")
+                    avg_int = float(_ci.mean())
                     if avg_int <= 0:
                         return 0.0
+                    ci_by_hour = {int(h): float(v) for h, v in zip(df_co2["hour_ts"], _ci.fillna(avg_int))}
+                    grid_g = 0.0
+                    pv_saved_g = 0.0
                     for d in self.cfg.devices:
                         try:
                             df_h = self.storage.db.query_hourly(d.key, start_ts=start_ts_d, end_ts=end_ts_d)
                             if df_h is None or df_h.empty or "kwh" not in df_h.columns:
                                 continue
-                            if _pv_on and d.key == _pv_key:
-                                kwh_vals = pd.to_numeric(df_h["kwh"], errors="coerce").fillna(0.0)
-                                grid_kwh_d += float(kwh_vals.clip(lower=0).sum())
-                                pv_saved_kwh += float(kwh_vals.clip(upper=0).abs().sum())
-                            else:
-                                grid_kwh_d += float(pd.to_numeric(df_h["kwh"], errors="coerce").fillna(0.0).clip(lower=0).sum())
+                            for _hts, _kwh in zip(df_h["hour_ts"], pd.to_numeric(df_h["kwh"], errors="coerce").fillna(0.0)):
+                                _ciH = ci_by_hour.get(int(_hts), avg_int)
+                                _k = float(_kwh)
+                                if _pv_on and d.key == _pv_key and _k < 0:
+                                    pv_saved_g += (-_k) * _ciH
+                                elif _k > 0:
+                                    grid_g += _k * _ciH
                         except Exception:
                             pass
-                    net_kg = max(0.0, (grid_kwh_d - pv_saved_kwh) * avg_int / 1000.0)
-                    return net_kg
+                    return max(0.0, (grid_g - pv_saved_g) / 1000.0)
 
                 co2_today = _device_co2(today_start_ts, now_ts)
                 co2_week = _device_co2(week_start_ts, now_ts)
