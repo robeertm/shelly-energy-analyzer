@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.32.3 - 2026-05-23
+### Fixed
+- **CO₂ Today/Week/Month/Year used average daily intensity instead of hour-weighted.** The CO₂ page headline figures (`_device_co2`) multiplied total grid energy by the period's *average* carbon intensity, while the per-hour CO₂ bars (and the cost/range `_calc_co2`) already summed `hourly_kWh × hourly_intensity`. This overstated CO₂ by ~1–6% (consumption mildly correlates with cleaner hours). `_device_co2` now uses the same hour-weighted sum, so headline, hourly bars and any external readers agree. Computed on the fly → all past values update automatically.
+
+
 ## 16.32.2 - 2026-05-23
 ### Fixed
 - **Daily energy double-counted in Home Assistant statistics.** The per-device `energy_kwh` (Energy Today) is published with `state_class: total_increasing`, but the live daily total occasionally steps slightly backward intraday (estimator re-sync) — HA treats every decrease as a meter reset and re-adds the whole accumulated value, inflating the daily/Energy-dashboard figures (≈ double). The published value is now clamped to be monotonic within the day (the only decrease that resets tracking is the midnight drop to ~0), so total_increasing sees no false resets. Live/raw analyzer values are unchanged.
