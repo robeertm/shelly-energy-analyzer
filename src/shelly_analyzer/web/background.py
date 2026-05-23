@@ -301,6 +301,7 @@ class BackgroundServiceManager:
                         self._mqtt_publisher.publish_grid_data({
                             "spot_price_eur_kwh": self._current_spot_price(),
                             "spot_price_net_eur_kwh": self._current_spot_price_net(),
+                            "tariff_price_eur_kwh": round(self._current_tariff_price(), 4),
                             "co2_intensity_g_per_kwh": round(
                                 self._current_co2_intensity(), 1),
                         })
@@ -821,6 +822,29 @@ class BackgroundServiceManager:
     def _current_spot_price_net(self) -> float:
         """Raw EPEX day-ahead exchange price (EUR/kWh, net, excl. surcharges)."""
         return self._spot_prices()[0]
+
+    def _current_tariff_price(self) -> float:
+        """Current effective consumer unit price (EUR/kWh, gross) the analyzer
+        actually bills with — published so Home Assistant can use it as the
+        Energy dashboard's ``entity_energy_price`` and always match the
+        analyzer. If a dynamic tariff is active it is the spot price of the
+        current hour, otherwise the fixed/scheduled tariff for today (mirrors
+        the Costs tab's ``_get_effective_unit_price``)."""
+        try:
+            sp = getattr(self.cfg, "spot_price", None)
+            if (sp and getattr(sp, "enabled", False)
+                    and str(getattr(sp, "tariff_type", "fixed")) == "dynamic"):
+                v = self._current_spot_price()
+                if v:
+                    return float(v)
+        except Exception:
+            pass
+        try:
+            return float(self.cfg.pricing.effective_pricing_for_date(
+                date.today()).unit_price_gross())
+        except Exception:
+            return float(getattr(self.cfg.pricing,
+                                 "electricity_price_eur_per_kwh", 0.30) or 0.30)
 
     def _start_co2_fetcher(self) -> None:
         """Start periodic CO₂ intensity fetch if enabled. Dispatches to
