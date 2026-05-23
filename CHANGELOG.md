@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.32.5 - 2026-05-23
+### Added
+- **MQTT grid sensor `tariff_price_eur_kwh` → HA `sensor.shelly_analyzer_netz_tarifpreis`.** Publishes the analyzer's *current effective consumer unit price* (EUR/kWh, gross): the fixed/scheduled tariff for today, or — if a dynamic tariff is active — the spot price of the current hour (mirrors the Costs tab's `_get_effective_unit_price`). Lets the Home Assistant Energy dashboard reference it via `entity_energy_price` so HA's cost always matches the analyzer, automatically following price changes (`tariff_schedule`) or a switch to a dynamic tariff — no manual price duplication.
+
 ## 16.32.4 - 2026-05-23
 ### Fixed
 - **Daily energy/cost double-counted for small intermittent loads (e.g. boiler).** The v16.32.2 monotonic clamp reset its running high on a value threshold (`raw < 0.05`), but small loads momentarily report a near-zero *daily* figure mid-day. The clamp mistook that for the midnight reset, collapsed the running high and then re-counted the day, so Home Assistant's `total_increasing` statistics (and the Energy dashboard) showed up to ~2× for those devices, while live tiles stayed correct. The clamp (`_mqtt_daily_monotonic`, used for both `energy_kwh` and now `cost_eur_today`) now resets strictly at the **calendar-day boundary** instead of on a value threshold — robust for any load size. Existing recorded statistics for affected days need a one-off rebuild; new days self-heal.
