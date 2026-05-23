@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.32.4 - 2026-05-23
+### Fixed
+- **Daily energy/cost double-counted for small intermittent loads (e.g. boiler).** The v16.32.2 monotonic clamp reset its running high on a value threshold (`raw < 0.05`), but small loads momentarily report a near-zero *daily* figure mid-day. The clamp mistook that for the midnight reset, collapsed the running high and then re-counted the day, so Home Assistant's `total_increasing` statistics (and the Energy dashboard) showed up to ~2× for those devices, while live tiles stayed correct. The clamp (`_mqtt_daily_monotonic`, used for both `energy_kwh` and now `cost_eur_today`) now resets strictly at the **calendar-day boundary** instead of on a value threshold — robust for any load size. Existing recorded statistics for affected days need a one-off rebuild; new days self-heal.
+
 ## 16.32.3 - 2026-05-23
 ### Fixed
 - **CO₂ Today/Week/Month/Year used average daily intensity instead of hour-weighted.** The CO₂ page headline figures (`_device_co2`) multiplied total grid energy by the period's *average* carbon intensity, while the per-hour CO₂ bars (and the cost/range `_calc_co2`) already summed `hourly_kWh × hourly_intensity`. This overstated CO₂ by ~1–6% (consumption mildly correlates with cleaner hours). `_device_co2` now uses the same hour-weighted sum, so headline, hourly bars and any external readers agree. Computed on the fly → all past values update automatically.

@@ -289,7 +289,8 @@ class BackgroundServiceManager:
                                 "freq_hz": point.freq_hz,
                                 "cosphi": point.cosphi_total,
                                 "co2_g_per_h": round((point.power_total_w / 1000.0) * self._current_co2_intensity(), 1),
-                                "cost_eur_today": round(point.cost_today, 2),
+                                "cost_eur_today": self._mqtt_daily_monotonic(
+                                    sample.device_key + "::cost", round(point.cost_today, 2)),
                             },
                         )
                     except Exception:
@@ -314,27 +315,41 @@ class BackgroundServiceManager:
             except Exception as e:
                 logger.debug("Feed loop error: %s", e)
 
-    def _mqtt_energy_today(self, device_key: str, raw: float) -> float:
-        """Clamp published daily energy to be monotonic within the day.
-        Daily energy only rises; the sole legitimate decrease is the
-        midnight reset to ~0. Small intraday backward re-syncs would be
-        seen by Home Assistant's total_increasing as a meter reset and
-        double-counted, so suppress them (keep the running high)."""
+    def _mqtt_daily_monotonic(self, key: str, raw: float) -> float:
+        """Clamp a daily-resetting cumulative value (energy or cost) so it is
+        monotonic non-decreasing *within the local day*, resetting only at the
+        calendar-day boundary.
+
+        Daily totals only rise; the sole legitimate decrease is the midnight
+        reset. Home Assistant's ``total_increasing`` treats *any* decrease as a
+        meter reset and re-adds the whole accumulated value, double-counting it.
+        v16.32.2 suppressed that with a value threshold (``raw < 0.05``), but
+        small / intermittent loads (e.g. the boiler) momentarily report a
+        near-zero daily figure mid-day, which the threshold mistook for the
+        midnight reset -> the running high collapsed and the day was counted
+        twice. We therefore reset strictly on a change of calendar day."""
         try:
             raw = float(raw)
         except (TypeError, ValueError):
             return raw
-        highs = getattr(self, "_energy_today_high", None)
-        if highs is None:
-            highs = {}
-            self._energy_today_high = highs
-        hi = highs.get(device_key)
-        if hi is None or raw < 0.05:
+        store = getattr(self, "_daily_mono", None)
+        if store is None:
+            store = {}
+            self._daily_mono = store
+        today = date.today()
+        rec = store.get(key)
+        if rec is None or rec[0] != today:
+            store[key] = (today, raw)
+            return raw
+        hi = rec[1]
+        if raw > hi:
             hi = raw
-        elif raw > hi:
-            hi = raw
-        highs[device_key] = hi
+        store[key] = (today, hi)
         return hi
+
+    def _mqtt_energy_today(self, device_key: str, raw: float) -> float:
+        """Monotonic daily energy per device (see _mqtt_daily_monotonic)."""
+        return self._mqtt_daily_monotonic(device_key, raw)
 
     def _load_today_baseline(self, device_key: str, day_start_ts: int) -> tuple:
         """Read already-imported kWh for *today* from the computed cache
