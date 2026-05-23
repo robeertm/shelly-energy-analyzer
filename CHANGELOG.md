@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.32.1 - 2026-05-23
+### Fixed
+- **MQTT `Spotpreis (inkl. Abgaben)` dropped to 0 during free/negative exchange hours.** The grid-data publisher applied surcharges + VAT only when the raw exchange price was `> 0`, so when the EPEX/energy-charts day-ahead price hit 0 €/MWh (or went negative) the effective consumer price published to MQTT/Home Assistant fell to 0 — even though the analyzer’s own UI still correctly showed the markup (grid fee, taxes, surcharges, VAT). The markup is now applied whenever a valid spot slot is found (including 0 and negative prices), matching the UI. The raw `Spotpreis (Börse, netto)` stays at the true exchange value.
+
+
 ## 16.32.0 - 2026-05-17
 ### Added
 - **Configurable spot-cost resolution + true 15-min spot costing.** New `spot_price.price_resolution` setting (`15min` default, or `hour`). In `15min` mode the spot cost / dynamic-tariff comparison no longer averages prices to the hour: it aggregates the 1-min `samples` into 15-min energy buckets (same `SUM(energy_kwh)` the hourly table uses) and matches each bucket to the spot slot in effect (`merge_asof`, so legacy hourly history still works) — past comparison costs are recomputed accurately on the fly. The fixed-tariff billing path is unchanged. Hourly mode keeps the previous behaviour for users on hourly dynamic tariffs.
