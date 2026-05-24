@@ -231,7 +231,8 @@ class BackgroundServiceManager:
                 # kWh-today: trapezoidal integration of power_w.total since start
                 # of local day. Reset accumulator at midnight.
                 ts_i = int(sample.ts or time.time())
-                power_total = float(p.get("total", 0) or 0)
+                _cf = self._comp_factor(sample.device_key)
+                power_total = float(p.get("total", 0) or 0) * _cf
                 kwh_today = self._accumulate_today_kwh(sample.device_key, ts_i, power_total)
                 cost_today = kwh_today * _price_for(datetime.fromtimestamp(ts_i).date())
                 # Feed NILM learner
@@ -239,16 +240,16 @@ class BackgroundServiceManager:
 
                 point = LivePoint(
                     ts=int(sample.ts or time.time()),
-                    power_total_w=float(p.get("total", 0) or 0),
+                    power_total_w=power_total,
                     va=float(v.get("a", 0) or 0),
                     vb=float(v.get("b", 0) or 0),
                     vc=float(v.get("c", 0) or 0),
                     ia=float(c.get("a", 0) or 0),
                     ib=float(c.get("b", 0) or 0),
                     ic=float(c.get("c", 0) or 0),
-                    pa=float(p.get("a", 0) or 0),
-                    pb=float(p.get("b", 0) or 0),
-                    pc=float(p.get("c", 0) or 0),
+                    pa=float(p.get("a", 0) or 0) * _cf,
+                    pb=float(p.get("b", 0) or 0) * _cf,
+                    pc=float(p.get("c", 0) or 0) * _cf,
                     q_total_var=float(r.get("total", 0) or 0),
                     qa=float(r.get("a", 0) or 0),
                     qb=float(r.get("b", 0) or 0),
@@ -315,6 +316,17 @@ class BackgroundServiceManager:
                     pass
             except Exception as e:
                 logger.debug("Feed loop error: %s", e)
+
+    def _comp_factor(self, device_key: str) -> float:
+        """Measurement-compensation factor for a device (1 + percent/100).
+        0 % -> 1.0 -> no-op. Mirrors the DB-side compensation for live data."""
+        try:
+            for d in (self.cfg.devices or []):
+                if d.key == device_key:
+                    return 1.0 + float(getattr(d, "compensation_percent", 0.0) or 0.0) / 100.0
+        except Exception:
+            pass
+        return 1.0
 
     def _mqtt_daily_monotonic(self, key: str, raw: float) -> float:
         """Clamp a daily-resetting cumulative value (energy or cost) so it is

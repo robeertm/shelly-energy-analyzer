@@ -309,6 +309,7 @@ async function saveSection(sectionId) {
 
 const SECTIONS = [
   {id:"devices", title:"Devices", group:"Basic", custom:true},
+  {id:"compensation", title:"Mess-Kompensation", group:"Basic", custom:true},
   {id:"health", title:"Health Check", group:"Basic", custom:true},
   {id:"ui", title:"Display", group:"Basic", fields:[
     {key:"ui.language", label:"Language", type:"select", opts:Object.entries(LANGS)},
@@ -787,6 +788,7 @@ function renderField(f) {
 function renderSection(s) {
   if (s.custom) {
     if (s.id === "devices") return renderDevices();
+    if (s.id === "compensation") return renderCompensation();
     if (s.id === "about") return renderAbout();
     if (s.id === "health") return renderHealth();
     if (s.id === "alerts") return renderAlerts();
@@ -1688,6 +1690,96 @@ function renderSupportedDevices() {
   </section>`;
 }
 
+function renderCompensation() {
+  return `<section id="sec-compensation"><h2>⚖️ Mess-Kompensation</h2>
+    <div class="hint" style="margin-bottom:10px">Korrigiert Messfehler der Z&auml;hler. Faktor = 1 + %/100 wird auf <b>Leistung &amp; Energie</b> angewendet &ndash; live, Historie, Kosten, CO&sup2;, MQTT. <b>0 % = aus</b>. Wirkt r&uuml;ckwirkend auf alle Werte.</div>
+    <div id="comp-current">Lade&hellip;</div>
+    <h3 style="margin-top:18px">Kalibrieren per Z&auml;hlerstand</h3>
+    <div class="hint" style="margin-bottom:8px">Zeitraum + abgelesene Z&auml;hlerst&auml;nde eingeben &rarr; der n&ouml;tige Korrekturwert wird berechnet, gespeichert und sofort r&uuml;ckwirkend angewendet. Ziel &bdquo;Global&ldquo; vergleicht gegen die Summe der 3EM.</div>
+    <div class="grid2">
+      <label>Ziel<select id="comp-target"></select></label>
+      <label>&nbsp;<span style="color:var(--muted);font-size:11px">Global = Haus + Wallbox</span></label>
+      <label>Zeitraum von<input type="datetime-local" id="comp-start"></label>
+      <label>bis<input type="datetime-local" id="comp-end"></label>
+      <label>Z&auml;hlerstand Beginn (kWh)<input type="number" step="0.001" id="comp-mstart"></label>
+      <label>Z&auml;hlerstand Ende (kWh)<input type="number" step="0.001" id="comp-mend"></label>
+    </div>
+    <div class="section-actions">
+      <button onclick="calibrateComp()">📐 Berechnen &amp; speichern</button>
+    </div>
+    <div id="comp-result" style="margin-top:8px"></div>
+    </section>`;
+}
+
+async function loadCompensation() {
+  const cur = document.getElementById("comp-current");
+  const sel = document.getElementById("comp-target");
+  try {
+    const r = await fetch("/api/compensation");
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || "?");
+    const rows = (d.devices || []).map(function(x) {
+      return `<tr><td style="padding:4px 8px">${x.name} <span style="color:var(--muted);font-size:11px">(${x.kind})</span></td>`
+        + `<td style="padding:4px 8px"><input type="number" step="0.01" style="width:90px" id="compv-${x.key}" value="${x.compensation_percent}"> %</td>`
+        + `<td style="padding:4px 8px"><button onclick="setCompManual('${x.key}')">💾</button></td></tr>`;
+    }).join("");
+    cur.innerHTML = `<table style="border-collapse:collapse"><thead><tr>`
+      + `<th style="text-align:left;padding:4px 8px;color:var(--muted)">Ger&auml;t</th>`
+      + `<th style="text-align:left;padding:4px 8px;color:var(--muted)">Kompensation</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+    if (sel) {
+      let opts = '<option value="global">Global (alle 3EM)</option>';
+      (d.devices || []).forEach(function(x) { opts += `<option value="${x.key}">${x.name}</option>`; });
+      sel.innerHTML = opts;
+    }
+  } catch (e) {
+    if (cur) cur.innerHTML = '<span class="error-msg">Fehler: ' + e.message + '</span>';
+  }
+}
+
+async function setCompManual(key) {
+  const inp = document.getElementById("compv-" + key);
+  if (!inp) return;
+  const percent = parseFloat(inp.value);
+  if (isNaN(percent)) { toast("Ungültiger Wert", "error"); return; }
+  try {
+    const r = await fetch("/api/compensation/set", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: key, percent: percent })
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || "?");
+    toast("Kompensation gespeichert (" + percent + " %)", "success");
+    loadCompensation();
+  } catch (e) { toast("Fehler: " + e.message, "error"); }
+}
+
+async function calibrateComp() {
+  const target = document.getElementById("comp-target").value;
+  const start = document.getElementById("comp-start").value;
+  const end = document.getElementById("comp-end").value;
+  const ms = document.getElementById("comp-mstart").value;
+  const me = document.getElementById("comp-mend").value;
+  const res = document.getElementById("comp-result");
+  if (!start || !end || ms === "" || me === "") {
+    res.innerHTML = '<span class="error-msg">Bitte Zeitraum und beide Zählerstände eingeben.</span>';
+    return;
+  }
+  res.innerHTML = "Berechne…";
+  try {
+    const r = await fetch("/api/compensation/calibrate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: target, start: start, end: end,
+        meter_start: parseFloat(ms), meter_end: parseFloat(me) })
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || "?");
+    res.innerHTML = '<div style="padding:8px;border:1px solid var(--border);border-radius:8px">'
+      + '✅ <b>' + (+d.percent).toFixed(3) + ' %</b> gesetzt (Faktor ' + d.factor + ').<br>'
+      + '<span style="color:var(--muted);font-size:12px">Zähler ' + d.meter_kwh + ' kWh vs. App ' + d.app_kwh_raw + ' kWh über den Zeitraum.</span></div>';
+    loadCompensation();
+  } catch (e) { res.innerHTML = '<span class="error-msg">Fehler: ' + e.message + '</span>'; }
+}
+
 function renderAbout() {
   return `<section id="sec-about"><h2>${T("settings.section.about","About")}</h2>
     <p>${T("settings.about.app_version","App-Version")}: <strong id="about-version">${T("settings.about.loading","Lade…")}</strong></p>
@@ -2467,6 +2559,8 @@ function renderAll() {
   }).catch(()=>{});
   // Load alert rules
   loadAlerts();
+  // Load measurement compensation values if that section is rendered
+  if (document.getElementById("sec-compensation")) loadCompensation();
   // Auto-check update status if the updates section is rendered
   if (document.getElementById("sec-updates")) {
     checkUpdateStatus();
