@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 from flask import Blueprint, current_app, jsonify, request
 
 from shelly_analyzer.io.config import AppConfig, DeviceConfig, load_config, save_config
+from shelly_analyzer.i18n import t as _t
 
 logger = logging.getLogger(__name__)
 
@@ -415,10 +416,11 @@ def calibrate_compensation():
         meter = float(body.get("meter_end")) - float(body.get("meter_start"))
     except Exception as e:
         return jsonify({"ok": False, "error": f"invalid input: {e}"}), 400
+    _lang = getattr(state, "lang", "en")
     if t1 <= t0:
-        return jsonify({"ok": False, "error": "Ende muss nach Beginn liegen"}), 400
+        return jsonify({"ok": False, "error": _t(_lang, "settings.compensation.err_end_after_start")}), 400
     if meter <= 0:
-        return jsonify({"ok": False, "error": "Zählerstand Ende muss größer als Beginn sein"}), 400
+        return jsonify({"ok": False, "error": _t(_lang, "settings.compensation.err_meter_order")}), 400
 
     db = state.storage.db
 
@@ -441,7 +443,7 @@ def calibrate_compensation():
         keys = [target]
     raw = sum(_raw_kwh(k) for k in keys)
     if raw <= 0:
-        return jsonify({"ok": False, "error": "Keine App-Messwerte in diesem Zeitraum"}), 400
+        return jsonify({"ok": False, "error": _t(_lang, "settings.compensation.err_no_data")}), 400
 
     factor = meter / raw
     percent = (factor - 1.0) * 100.0
