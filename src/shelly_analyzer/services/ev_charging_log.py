@@ -55,10 +55,16 @@ def detect_charging_sessions(
     # but the session logic below treats timestamps as integer epoch seconds
     # (int(row["timestamp"]), duration = ts - start). int() on a Timestamp
     # raises "int() argument must be ... not 'Timestamp'", so coerce once here.
-    if pd.api.types.is_datetime64_any_dtype(df["timestamp"]):
-        df["timestamp"] = df["timestamp"].astype("int64") // 1_000_000_000
+    _ts = df["timestamp"]
+    if pd.api.types.is_datetime64_any_dtype(_ts):
+        # Works for any datetime resolution (s/ms/us/ns) — casting to
+        # datetime64[s] first normalizes the unit, so this is NOT tied to a
+        # nanosecond assumption. Drop tz (-> UTC) if present.
+        if getattr(_ts.dt, "tz", None) is not None:
+            _ts = _ts.dt.tz_convert("UTC").dt.tz_localize(None)
+        df["timestamp"] = _ts.astype("datetime64[s]").astype("int64")
     else:
-        df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce").fillna(0).astype("int64")
+        df["timestamp"] = pd.to_numeric(_ts, errors="coerce").fillna(0).astype("int64")
 
     sessions: List[ChargingSession] = []
     in_session = False
