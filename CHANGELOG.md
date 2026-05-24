@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.32.10 - 2026-05-24
+### Fixed
+- **Web UI showed no data (blank SPA) — regression from v16.32.9.** The EV-log delete button used `\'` to escape a quote inside the dashboard HTML/JS template, but Python consumed the backslash so the served JS became `deleteEvSession('' ...)` — a syntax error that aborted the *entire* SPA script, so no panel rendered (the backend/API and live data were unaffected). The quote is now passed as the `&#39;` HTML entity (no escaping), and the full bundle is validated with `node --check`.
+
 ## 16.32.9 - 2026-05-24
 ### Added
 - **Delete EV charging entries.** Each row in the EV charge log now has a delete button; deleted sessions are kept in a persisted ignore-list (`data/ev_deleted_sessions.json`) and filtered out of the log and its totals. New action `ev_session_delete` (`/api/ev_session_delete?id=<session_id>`). Lets you remove false/erroneous entries (e.g. a non-charging high-power event) that auto-detection cannot know about.
