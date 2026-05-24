@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.32.7 - 2026-05-24
+### Fixed
+- **EV charging log detected 0 sessions (regression of the v16.32.6 fix).** The v16.32.6 timestamp normalization assumed nanosecond datetime resolution (`// 1_000_000_000`), but `read_device_df` returns `datetime64[s]` (second resolution), collapsing every timestamp to ~1 → zero-length sessions. Now normalized via `astype("datetime64[s]").astype("int64")`, which is correct for any datetime resolution (and handles tz-aware + numeric-epoch inputs).
+
 ## 16.32.6 - 2026-05-24
 ### Fixed
 - **EV charging log crashed: `int() argument must be ... not 'Timestamp'`.** `detect_charging_sessions` treats the `timestamp` column as integer epoch seconds (`int(row["timestamp"])`, duration math), but `read_device_df` can return it as a pandas `datetime64` column, so `int()` on a `Timestamp` raised. The column is now normalized to epoch seconds once after sorting (handles both datetime64 and numeric inputs).
