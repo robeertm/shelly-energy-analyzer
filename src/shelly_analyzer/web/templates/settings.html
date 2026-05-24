@@ -1691,21 +1691,21 @@ function renderSupportedDevices() {
 }
 
 function renderCompensation() {
-  return `<section id="sec-compensation"><h2>⚖️ Mess-Kompensation</h2>
-    <div class="hint" style="margin-bottom:10px">Korrigiert Messfehler der Z&auml;hler. Faktor = 1 + %/100 wird auf <b>Leistung &amp; Energie</b> angewendet &ndash; live, Historie, Kosten, CO&sup2;, MQTT. <b>0 % = aus</b>. Wirkt r&uuml;ckwirkend auf alle Werte.</div>
-    <div id="comp-current">Lade&hellip;</div>
-    <h3 style="margin-top:18px">Kalibrieren per Z&auml;hlerstand</h3>
-    <div class="hint" style="margin-bottom:8px">Zeitraum + abgelesene Z&auml;hlerst&auml;nde eingeben &rarr; der n&ouml;tige Korrekturwert wird berechnet, gespeichert und sofort r&uuml;ckwirkend angewendet. Ziel &bdquo;Global&ldquo; vergleicht gegen die Summe der 3EM.</div>
+  return `<section id="sec-compensation"><h2>⚖️ ${T("settings.section.compensation","Mess-Kompensation")}</h2>
+    <div class="hint" style="margin-bottom:10px">${T("settings.compensation.intro","Korrigiert Messfehler der Zähler. Faktor = 1 + %/100 wird auf <b>Leistung &amp; Energie</b> angewendet – live, Historie, Kosten, CO², MQTT. <b>0 % = aus</b>. Wirkt rückwirkend auf alle Werte.")}</div>
+    <div id="comp-current">${T("settings.about.loading","Lade…")}</div>
+    <h3 style="margin-top:18px">${T("settings.compensation.calib_title","Kalibrieren per Zählerstand")}</h3>
+    <div class="hint" style="margin-bottom:8px">${T("settings.compensation.calib_hint","Zeitraum + abgelesene Zählerstände eingeben → der nötige Korrekturwert wird berechnet, gespeichert und sofort rückwirkend angewendet. Ziel „Global“ vergleicht gegen die Summe der 3EM.")}</div>
     <div class="grid2">
-      <label>Ziel<select id="comp-target"></select></label>
-      <label>&nbsp;<span style="color:var(--muted);font-size:11px">Global = Haus + Wallbox</span></label>
-      <label>Zeitraum von<input type="datetime-local" id="comp-start"></label>
-      <label>bis<input type="datetime-local" id="comp-end"></label>
-      <label>Z&auml;hlerstand Beginn (kWh)<input type="number" step="0.001" id="comp-mstart"></label>
-      <label>Z&auml;hlerstand Ende (kWh)<input type="number" step="0.001" id="comp-mend"></label>
+      <label>${T("settings.compensation.target","Ziel")}<select id="comp-target"></select></label>
+      <label>&nbsp;<span style="color:var(--muted);font-size:11px">${T("settings.compensation.target_note","Global = alle 3EM-Zähler")}</span></label>
+      <label>${T("settings.compensation.period_from","Zeitraum von")}<input type="datetime-local" id="comp-start"></label>
+      <label>${T("settings.compensation.period_to","bis")}<input type="datetime-local" id="comp-end"></label>
+      <label>${T("settings.compensation.meter_start","Zählerstand Beginn (kWh)")}<input type="number" step="0.001" id="comp-mstart"></label>
+      <label>${T("settings.compensation.meter_end","Zählerstand Ende (kWh)")}<input type="number" step="0.001" id="comp-mend"></label>
     </div>
     <div class="section-actions">
-      <button onclick="calibrateComp()">📐 Berechnen &amp; speichern</button>
+      <button onclick="calibrateComp()">📐 ${T("settings.compensation.calc_btn","Berechnen &amp; speichern")}</button>
     </div>
     <div id="comp-result" style="margin-top:8px"></div>
     </section>`;
@@ -1724,15 +1724,15 @@ async function loadCompensation() {
         + `<td style="padding:4px 8px"><button onclick="setCompManual('${x.key}')">💾</button></td></tr>`;
     }).join("");
     cur.innerHTML = `<table style="border-collapse:collapse"><thead><tr>`
-      + `<th style="text-align:left;padding:4px 8px;color:var(--muted)">Ger&auml;t</th>`
-      + `<th style="text-align:left;padding:4px 8px;color:var(--muted)">Kompensation</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+      + `<th style="text-align:left;padding:4px 8px;color:var(--muted)">${T("settings.compensation.col_device","Gerät")}</th>`
+      + `<th style="text-align:left;padding:4px 8px;color:var(--muted)">${T("settings.compensation.col_comp","Kompensation")}</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
     if (sel) {
-      let opts = '<option value="global">Global (alle 3EM)</option>';
+      let opts = `<option value="global">${T("settings.compensation.global_opt","Global (alle 3EM)")}</option>`;
       (d.devices || []).forEach(function(x) { opts += `<option value="${x.key}">${x.name}</option>`; });
       sel.innerHTML = opts;
     }
   } catch (e) {
-    if (cur) cur.innerHTML = '<span class="error-msg">Fehler: ' + e.message + '</span>';
+    if (cur) cur.innerHTML = '<span class="error-msg">' + T("settings.toast.error","Fehler: {err}",{err:e.message}) + '</span>';
   }
 }
 
@@ -1740,7 +1740,7 @@ async function setCompManual(key) {
   const inp = document.getElementById("compv-" + key);
   if (!inp) return;
   const percent = parseFloat(inp.value);
-  if (isNaN(percent)) { toast("Ungültiger Wert", "error"); return; }
+  if (isNaN(percent)) { toast(T("settings.compensation.invalid","Ungültiger Wert"), "error"); return; }
   try {
     const r = await fetch("/api/compensation/set", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -1748,9 +1748,9 @@ async function setCompManual(key) {
     });
     const d = await r.json();
     if (!d.ok) throw new Error(d.error || "?");
-    toast("Kompensation gespeichert (" + percent + " %)", "success");
+    toast(T("settings.compensation.saved","Kompensation gespeichert ({percent} %)",{percent:percent}), "success");
     loadCompensation();
-  } catch (e) { toast("Fehler: " + e.message, "error"); }
+  } catch (e) { toast(T("settings.toast.error","Fehler: {err}",{err:e.message}), "error"); }
 }
 
 async function calibrateComp() {
@@ -1761,10 +1761,10 @@ async function calibrateComp() {
   const me = document.getElementById("comp-mend").value;
   const res = document.getElementById("comp-result");
   if (!start || !end || ms === "" || me === "") {
-    res.innerHTML = '<span class="error-msg">Bitte Zeitraum und beide Zählerstände eingeben.</span>';
+    res.innerHTML = '<span class="error-msg">' + T("settings.compensation.need_inputs","Bitte Zeitraum und beide Zählerstände eingeben.") + '</span>';
     return;
   }
-  res.innerHTML = "Berechne…";
+  res.innerHTML = T("settings.compensation.calculating","Berechne…");
   try {
     const r = await fetch("/api/compensation/calibrate", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -1774,10 +1774,10 @@ async function calibrateComp() {
     const d = await r.json();
     if (!d.ok) throw new Error(d.error || "?");
     res.innerHTML = '<div style="padding:8px;border:1px solid var(--border);border-radius:8px">'
-      + '✅ <b>' + (+d.percent).toFixed(3) + ' %</b> gesetzt (Faktor ' + d.factor + ').<br>'
-      + '<span style="color:var(--muted);font-size:12px">Zähler ' + d.meter_kwh + ' kWh vs. App ' + d.app_kwh_raw + ' kWh über den Zeitraum.</span></div>';
+      + '✅ ' + T("settings.compensation.result_set","<b>{percent} %</b> gesetzt (Faktor {factor}).",{percent:(+d.percent).toFixed(3),factor:d.factor}) + '<br>'
+      + '<span style="color:var(--muted);font-size:12px">' + T("settings.compensation.result_detail","Zähler {meter} kWh vs. App {app} kWh über den Zeitraum.",{meter:d.meter_kwh,app:d.app_kwh_raw}) + '</span></div>';
     loadCompensation();
-  } catch (e) { res.innerHTML = '<span class="error-msg">Fehler: ' + e.message + '</span>'; }
+  } catch (e) { res.innerHTML = '<span class="error-msg">' + T("settings.toast.error","Fehler: {err}",{err:e.message}) + '</span>'; }
 }
 
 function renderAbout() {

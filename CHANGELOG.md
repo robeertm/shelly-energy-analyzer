@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.33.1 - 2026-05-25
+### Fixed
+- **Measurement-compensation UI was hard-coded in German.** The new "Mess-Kompensation" settings section (v16.33.0) shipped with German literals instead of using the i18n system, so it stayed German in every other UI language. All of its strings — section title, intro, calibration helper, field labels, table headers, buttons, toasts, results — now go through `T()`/`t()` with full translations for all 9 supported languages (de, en, es, fr, pt, it, pl, cs, ru). The three calibration validation errors returned by the backend are localized too. No behaviour change.
+
 ## 16.33.0 - 2026-05-25
 ### Added
 - **Measurement compensation – calibrate against your utility meter.** New per-device `compensation_percent` (default 0 = off): a device's power & energy are multiplied by (1 + percent/100) at *read time*, so a changed value corrects everything retroactively (live, history, cost, CO2, MQTT) with no data migration. Settings -> "Mess-Kompensation": edit values per device, or use the meter-calibration helper – enter a period + utility-meter start/end reading, target a single device or "Global" (= all 3EM), and the needed % is computed, stored and applied. Defaults are a no-op, so behaviour is unchanged until you calibrate. New endpoints: GET /api/compensation, POST /api/compensation/set, POST /api/compensation/calibrate.
