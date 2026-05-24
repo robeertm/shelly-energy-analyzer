@@ -164,6 +164,8 @@ def update_device(key: str):
         supports_emdata=bool(body.get("supports_emdata", getattr(d, "supports_emdata", True))),
         username=str(body.get("username", getattr(d, "username", "admin")) or "admin"),
         password=new_password,
+        compensation_percent=float(body.get("compensation_percent",
+                                            getattr(d, "compensation_percent", 0.0)) or 0.0),
     )
 
     new_devices = list(state.cfg.devices)
@@ -328,3 +330,123 @@ def supported_devices():
         "series_labels": SERIES_LABELS,
         "total": len(get_supported_summary()),
     })
+
+
+# ── Measurement compensation ───────────────────────────────────────────────
+
+def _comp_save_reload(state, new_cfg) -> None:
+    cfg_path = getattr(state, "_cfg_path", None) or Path("config.json")
+    save_config(new_cfg, cfg_path)
+    state.cfg = new_cfg
+    state.reload_config(new_cfg)
+    try:
+        bg = getattr(state, "_bg", None)
+        if bg is not None:
+            bg.reload(new_cfg)
+    except Exception as e:
+        logger.warning("Background reload after compensation change failed: %s", e)
+
+
+def _comp_apply_percent(state, target: str, percent: float):
+    """Return a new cfg with compensation_percent set on the target.
+    target == 'global' -> all 3EM (kind 'em') devices; else a single device key."""
+    devs = list(state.cfg.devices)
+    for i, d in enumerate(devs):
+        if target == "global":
+            if str(getattr(d, "kind", "")) == "em":
+                devs[i] = replace(d, compensation_percent=float(percent))
+        elif d.key == target:
+            devs[i] = replace(d, compensation_percent=float(percent))
+    return replace(state.cfg, devices=devs)
+
+
+def _comp_parse_ts(v) -> int:
+    """Parse epoch seconds or an ISO/local datetime string to epoch seconds."""
+    if v is None or v == "":
+        raise ValueError("missing time")
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        pass
+    from datetime import datetime
+    s = str(v).strip().replace("Z", "")
+    return int(datetime.fromisoformat(s).timestamp())
+
+
+@bp.route("/api/compensation", methods=["GET"])
+def get_compensation():
+    state = _get_state()
+    return jsonify({"ok": True, "devices": [
+        {"key": d.key, "name": d.name, "kind": str(getattr(d, "kind", "em")),
+         "compensation_percent": float(getattr(d, "compensation_percent", 0.0) or 0.0)}
+        for d in state.cfg.devices
+    ]})
+
+
+@bp.route("/api/compensation/set", methods=["POST"])
+def set_compensation_manual():
+    state = _get_state()
+    body = request.get_json(silent=True) or {}
+    target = str(body.get("target", "")).strip()
+    if not target:
+        return jsonify({"ok": False, "error": "missing target"}), 400
+    try:
+        percent = float(body.get("percent"))
+    except Exception:
+        return jsonify({"ok": False, "error": "invalid percent"}), 400
+    _comp_save_reload(state, _comp_apply_percent(state, target, percent))
+    return jsonify({"ok": True, "target": target, "percent": percent})
+
+
+@bp.route("/api/compensation/calibrate", methods=["POST"])
+def calibrate_compensation():
+    """Compute a compensation % from a meter comparison and apply it.
+    Body: target ('global'|device_key), start, end (epoch or ISO), meter_start,
+    meter_end (kWh). factor = meter_consumed / raw_app_kwh_over_period."""
+    import pandas as pd
+    state = _get_state()
+    body = request.get_json(silent=True) or {}
+    target = str(body.get("target", "")).strip()
+    if not target:
+        return jsonify({"ok": False, "error": "missing target"}), 400
+    try:
+        t0 = _comp_parse_ts(body.get("start"))
+        t1 = _comp_parse_ts(body.get("end"))
+        meter = float(body.get("meter_end")) - float(body.get("meter_start"))
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"invalid input: {e}"}), 400
+    if t1 <= t0:
+        return jsonify({"ok": False, "error": "Ende muss nach Beginn liegen"}), 400
+    if meter <= 0:
+        return jsonify({"ok": False, "error": "Zählerstand Ende muss größer als Beginn sein"}), 400
+
+    db = state.storage.db
+
+    def _raw_kwh(dkey: str) -> float:
+        dev = next((x for x in state.cfg.devices if x.key == dkey), None)
+        cf = 1.0 + float(getattr(dev, "compensation_percent", 0.0) or 0.0) / 100.0 if dev else 1.0
+        try:
+            dfh = db.query_hourly(dkey, start_ts=t0, end_ts=t1)
+            if dfh is not None and not dfh.empty and "kwh" in dfh.columns:
+                comp_sum = float(pd.to_numeric(dfh["kwh"], errors="coerce").fillna(0).sum())
+            else:
+                comp_sum = 0.0
+        except Exception:
+            comp_sum = 0.0
+        return comp_sum / cf if cf else comp_sum
+
+    if target == "global":
+        keys = [d.key for d in state.cfg.devices if str(getattr(d, "kind", "")) == "em"]
+    else:
+        keys = [target]
+    raw = sum(_raw_kwh(k) for k in keys)
+    if raw <= 0:
+        return jsonify({"ok": False, "error": "Keine App-Messwerte in diesem Zeitraum"}), 400
+
+    factor = meter / raw
+    percent = (factor - 1.0) * 100.0
+    _comp_save_reload(state, _comp_apply_percent(state, target, percent))
+    return jsonify({"ok": True, "target": target,
+                    "percent": round(percent, 3), "factor": round(factor, 5),
+                    "app_kwh_raw": round(raw, 3), "meter_kwh": round(meter, 3),
+                    "keys": keys})

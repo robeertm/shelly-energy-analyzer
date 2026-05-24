@@ -58,6 +58,9 @@ class AppState:
         max_points = int((retention_m * 60.0) / poll_s) + 50
         self.live_store = LiveStateStore(max_points=max_points)
 
+        # Push measurement-compensation factors into the DB read layer.
+        self._apply_compensation()
+
         # Try to restore the rolling Live tab history from the last shutdown
         # so the user sees the 2 h chart immediately instead of an empty graph
         # that has to refill from scratch after every update / restart.
@@ -139,6 +142,21 @@ class AppState:
         except Exception as e:
             logger.warning("HTML re-render after language switch failed: %s", e)
 
+    def _apply_compensation(self) -> None:
+        """Push per-device measurement-compensation factors into the DB read
+        layer. factor = 1 + compensation_percent/100; 0 % -> 1.0 -> no-op."""
+        try:
+            db = getattr(self.storage, "db", None)
+            if db is None or not hasattr(db, "set_compensation"):
+                return
+            factors = {
+                d.key: 1.0 + float(getattr(d, "compensation_percent", 0.0) or 0.0) / 100.0
+                for d in self.cfg.devices
+            }
+            db.set_compensation(factors)
+        except Exception:
+            logger.debug("apply compensation failed", exc_info=True)
+
     def reload_config(self, cfg: AppConfig) -> None:
         """Hot-reload configuration.
 
@@ -150,6 +168,8 @@ class AppState:
         """
         import gzip
         self.cfg = cfg
+        # Re-push measurement-compensation factors after any config change.
+        self._apply_compensation()
         self.devices_meta = [
             {
                 "key": d.key,

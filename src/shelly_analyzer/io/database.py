@@ -283,6 +283,11 @@ class EnergyDB:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._write_lock = threading.Lock()
         self._local = threading.local()
+        # Per-device measurement-compensation factors {device_key: factor}.
+        # Empty / 1.0 == no-op (default). Set from config via set_compensation();
+        # applied at read time to power & energy columns so a changed factor
+        # corrects all past + future values on the fly (no data migration).
+        self._comp_factors: dict = {}
         # Ensure schema exists (uses the writer connection).
         conn = self._conn()
         with conn:
@@ -621,6 +626,38 @@ class EnergyDB:
 
         return len(rows)
 
+    # -- measurement compensation -------------------------------------------
+
+    def set_compensation(self, factors: dict) -> None:
+        """Set per-device compensation factors {device_key: factor}. A factor
+        of 1.0 (or missing) is a no-op. Applied at read time to power/energy."""
+        self._comp_factors = {str(k): float(v) for k, v in (factors or {}).items()}
+
+    def _comp_factor(self, device_key: str) -> float:
+        try:
+            return float(self._comp_factors.get(str(device_key), 1.0))
+        except Exception:
+            return 1.0
+
+    @staticmethod
+    def _comp_is_power_energy(col: str) -> bool:
+        c = col.lower()
+        return ("power" in c) or ("energy" in c) or c == "kwh" or c.endswith("_kwh")
+
+    def _apply_comp(self, df, device_key: str):
+        """Scale all power/energy columns of *df* by the device factor (in place).
+        No-op when the factor is 1.0 so default behaviour is unchanged."""
+        f = self._comp_factor(device_key)
+        if f == 1.0 or df is None or getattr(df, "empty", True):
+            return df
+        for col in df.columns:
+            if self._comp_is_power_energy(col):
+                try:
+                    df[col] = pd.to_numeric(df[col], errors="coerce") * f
+                except Exception:
+                    pass
+        return df
+
     # -- query methods -------------------------------------------------------
 
     def query_samples(
@@ -660,6 +697,11 @@ class EnergyDB:
         # Drop the device_key column (caller already knows it).
         if "device_key" in df.columns:
             df = df.drop(columns=["device_key"])
+
+        # Apply measurement compensation to the raw samples *before* merging the
+        # monthly rows (query_monthly compensates its own rows, so scaling here
+        # would otherwise double-count the compressed history).
+        self._apply_comp(df, device_key)
 
         # Merge monthly aggregated data if the query range covers compressed
         # periods.  Monthly data is included when no start_ts is given or when
@@ -712,6 +754,7 @@ class EnergyDB:
         df = pd.read_sql_query(sql, conn, params=params)
         if "device_key" in df.columns:
             df = df.drop(columns=["device_key"])
+        self._apply_comp(df, device_key)
         return df
 
     # -- meta ----------------------------------------------------------------
@@ -1028,6 +1071,7 @@ class EnergyDB:
             except Exception:
                 pass
 
+        self._apply_comp(df, device_key)
         return df
 
     # ── CO₂ intensity helpers ─────────────────────────────────────────────
@@ -1378,6 +1422,9 @@ class EnergyDB:
                     f"{_dev} GROUP BY (timestamp / 900) * 900 ORDER BY slot_ts",
                     conn, params=_ep,
                 )
+                _cf = self._comp_factor(device_key)
+                if _cf != 1.0 and not df_e.empty:
+                    df_e["kwh"] = pd.to_numeric(df_e["kwh"], errors="coerce") * _cf
                 df_sp = pd.read_sql_query(
                     "SELECT slot_ts, price_eur_mwh FROM spot_prices "
                     "WHERE zone = ? AND slot_ts >= ? AND slot_ts < ? ORDER BY slot_ts",
@@ -1405,6 +1452,9 @@ class EnergyDB:
             )
             if df_h.empty:
                 return 0.0, 0.0, 0.0
+            _cf = self._comp_factor(device_key)
+            if _cf != 1.0:
+                df_h["kwh"] = pd.to_numeric(df_h["kwh"], errors="coerce") * _cf
 
             # For spot prices, average 15-min slots per hour for joining
             df_sp = pd.read_sql_query(
