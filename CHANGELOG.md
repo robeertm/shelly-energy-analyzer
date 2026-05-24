@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.32.9 - 2026-05-24
+### Added
+- **Delete EV charging entries.** Each row in the EV charge log now has a delete button; deleted sessions are kept in a persisted ignore-list (`data/ev_deleted_sessions.json`) and filtered out of the log and its totals. New action `ev_session_delete` (`/api/ev_session_delete?id=<session_id>`). Lets you remove false/erroneous entries (e.g. a non-charging high-power event) that auto-detection cannot know about.
+
 ## 16.32.8 - 2026-05-24
 ### Fixed
 - **EV charging log split one continuous charge into several entries.** A session ended on the first sample below the hysteresis threshold, so brief dips / one-off zero-power samples (data artifacts — e.g. a recurring 0 W reading once per hour) cut a single charge into multiple sessions. `detect_charging_sessions` now *bridges* sub-threshold gaps up to `max_gap_s` (new `ev_charging.max_gap_minutes`, default 15) and ends a session only after the power stayed low longer than that, at the last active sample. Verified: a 78-min / 9.3 kWh charge that previously showed as 3 entries is now 1.
