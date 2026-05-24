@@ -140,6 +140,11 @@ def api_ev_sessions():
     return _action_endpoint("ev_sessions")
 
 
+@bp.route("/api/ev_session_delete")
+def api_ev_session_delete():
+    return _action_endpoint("ev_session_delete")
+
+
 @bp.route("/api/tariff_compare")
 def api_tariff_compare():
     return _action_endpoint("tariff_compare")

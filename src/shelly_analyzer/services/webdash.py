@@ -8140,7 +8140,7 @@ _loadLsSettings();
     }}
     html += '<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">' +
       '<thead><tr style="border-bottom:1px solid var(--border)">';
-    ['Date','Time','Duration','kWh','€'].forEach(function(c){{ html += '<th style="padding:6px;color:var(--muted)">'+c+'</th>'; }});
+    ['Date','Time','Duration','kWh','€',''].forEach(function(c){{ html += '<th style="padding:6px;color:var(--muted)">'+c+'</th>'; }});
     html += '</tr></thead><tbody>';
     data.sessions.slice(-20).reverse().forEach(function(se) {{
       const sd = new Date(se.start_ts*1000);
@@ -8149,10 +8149,21 @@ _loadLsSettings();
         '<td style="padding:4px;text-align:center">' + sd.toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}}) + '</td>' +
         '<td style="padding:4px;text-align:center">' + Math.round((se.end_ts-se.start_ts)/60) + 'm</td>' +
         '<td style="padding:4px;text-align:center">' + se.energy_kwh.toFixed(1) + '</td>' +
-        '<td style="padding:4px;text-align:center">' + se.cost_eur.toFixed(2) + '</td></tr>';
+        '<td style="padding:4px;text-align:center">' + se.cost_eur.toFixed(2) + '</td>' +
+        '<td style="padding:4px;text-align:center"><button onclick="deleteEvSession(\'' + (se.session_id||'') + '\')" title="Eintrag löschen" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px">🗑</button></td></tr>';
     }});
     html += '</tbody></table></div>';
     el.innerHTML = html;
+  }}
+  async function deleteEvSession(id) {{
+    if (!id) return;
+    if (!confirm('Diesen Ladeeintrag wirklich löschen?')) return;
+    try {{
+      const r = await fetch('/api/ev_session_delete?id=' + encodeURIComponent(id));
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'unknown');
+      loadEvLog();
+    }} catch(e) {{ alert('Löschen fehlgeschlagen: ' + e.message); }}
   }}
 
   /* ── Tariff Comparison ── */
@@ -11157,6 +11168,24 @@ class _Handler(BaseHTTPRequestHandler):
                     _sqs = parse_qs(_sp.query or "")
                     _sparams = {k: (v[0] if isinstance(v, list) and v else v) for k, v in _sqs.items()}
                     payload = self.dashboard.on_action("ev_sessions", _sparams)
+                except Exception as e:
+                    payload = {"ok": False, "error": str(e)}
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            # --- EV Session delete (manual ignore-list) ---
+            if path_only.startswith("/api/ev_session_delete"):
+                try:
+                    _sp = urlparse(self.path)
+                    _sqs = parse_qs(_sp.query or "")
+                    _sparams = {k: (v[0] if isinstance(v, list) and v else v) for k, v in _sqs.items()}
+                    payload = self.dashboard.on_action("ev_session_delete", _sparams)
                 except Exception as e:
                     payload = {"ok": False, "error": str(e)}
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")

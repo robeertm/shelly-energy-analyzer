@@ -3967,6 +3967,16 @@ class ActionDispatcher:
                     price_eur_per_kwh=float(self.cfg.pricing.electricity_price_eur_per_kwh),
                     max_gap_s=int(getattr(self.cfg.ev_charging, "max_gap_minutes", 15)) * 60,
                 )
+                # Drop sessions the user manually deleted (persisted ignore-list).
+                try:
+                    import json as _json
+                    from pathlib import Path as _Path
+                    _dp = _Path(getattr(self.storage, "base_dir", ".")) / "ev_deleted_sessions.json"
+                    _del = set(_json.loads(_dp.read_text())) if _dp.exists() else set()
+                except Exception:
+                    _del = set()
+                if _del:
+                    sessions = [s for s in sessions if s.session_id not in _del]
                 summary_ev = get_monthly_summary(sessions)
                 return {"ok": True, "data": {
                     "total_sessions": summary_ev.total_sessions,
@@ -3981,6 +3991,25 @@ class ActionDispatcher:
                         for s in sessions
                     ],
                 }}
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+
+        if action == "ev_session_delete":
+            try:
+                import json as _json
+                from pathlib import Path as _Path
+                sid = str((params.get("id") or params.get("session_id") or "")).strip()
+                if not sid:
+                    return {"ok": False, "error": "missing session id"}
+                _dp = _Path(getattr(self.storage, "base_dir", ".")) / "ev_deleted_sessions.json"
+                try:
+                    _ids = set(_json.loads(_dp.read_text())) if _dp.exists() else set()
+                except Exception:
+                    _ids = set()
+                _ids.add(sid)
+                _dp.parent.mkdir(parents=True, exist_ok=True)
+                _dp.write_text(_json.dumps(sorted(_ids)))
+                return {"ok": True, "data": {"deleted": sid, "count": len(_ids)}}
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 
