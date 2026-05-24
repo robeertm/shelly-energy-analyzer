@@ -59,6 +59,10 @@ class DeviceConfig:
     # Gen2+ uses Digest auth (admin user), Gen1 uses Basic. Empty password = no auth.
     username: str = "admin"
     password: str = ""
+    # Measurement compensation: corrects the device's metering error. The
+    # device's power & energy are multiplied by (1 + compensation_percent/100)
+    # everywhere (live, history, cost, CO2, MQTT). 0 = off (default, no-op).
+    compensation_percent: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -927,6 +931,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
                 supports_emdata=supports_emdata,
                 username=username,
                 password=password,
+                compensation_percent=_coerce_float(d.get("compensation_percent", 0.0), 0.0),
             )
         )
 
@@ -1613,6 +1618,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
                 "supports_emdata": getattr(d, "supports_emdata", True),
                 "username": getattr(d, "username", "admin") or "admin",
                 "password": getattr(d, "password", "") or "",
+                "compensation_percent": float(getattr(d, "compensation_percent", 0.0) or 0.0),
             }
             for d in cfg.devices
         ],
