@@ -8150,7 +8150,7 @@ _loadLsSettings();
         '<td style="padding:4px;text-align:center">' + Math.round((se.end_ts-se.start_ts)/60) + 'm</td>' +
         '<td style="padding:4px;text-align:center">' + se.energy_kwh.toFixed(1) + '</td>' +
         '<td style="padding:4px;text-align:center">' + se.cost_eur.toFixed(2) + '</td>' +
-        '<td style="padding:4px;text-align:center"><button onclick="deleteEvSession(\'' + (se.session_id||'') + '\')" title="Eintrag löschen" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px">🗑</button></td></tr>';
+        '<td style="padding:4px;text-align:center"><button onclick="deleteEvSession(&#39;' + (se.session_id||'') + '&#39;)" title="Eintrag löschen" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px">🗑</button></td></tr>';
     }});
     html += '</tbody></table></div>';
     el.innerHTML = html;
