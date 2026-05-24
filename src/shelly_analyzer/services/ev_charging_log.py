@@ -50,6 +50,16 @@ def detect_charging_sessions(
 
     df = df.sort_values("timestamp").reset_index(drop=True)
 
+    # Normalize the timestamp column to epoch seconds. read_device_df may
+    # return it as a pandas datetime64 column (depending on the storage path),
+    # but the session logic below treats timestamps as integer epoch seconds
+    # (int(row["timestamp"]), duration = ts - start). int() on a Timestamp
+    # raises "int() argument must be ... not 'Timestamp'", so coerce once here.
+    if pd.api.types.is_datetime64_any_dtype(df["timestamp"]):
+        df["timestamp"] = df["timestamp"].astype("int64") // 1_000_000_000
+    else:
+        df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce").fillna(0).astype("int64")
+
     sessions: List[ChargingSession] = []
     in_session = False
     session_start = 0
