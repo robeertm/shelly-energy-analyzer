@@ -639,6 +639,7 @@ class EvChargingConfig:
     wallbox_device_key: str = ""
     detection_threshold_w: float = 1500.0
     min_session_minutes: int = 5
+    max_gap_minutes: int = 15
 
 
 @dataclass(frozen=True)
@@ -1406,6 +1407,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         wallbox_device_key=str(evc_raw.get("wallbox_device_key", "") or ""),
         detection_threshold_w=_coerce_float(evc_raw.get("detection_threshold_w", 1500.0), 1500.0),
         min_session_minutes=_coerce_int(evc_raw.get("min_session_minutes", 5), 5),
+        max_gap_minutes=_coerce_int(evc_raw.get("max_gap_minutes", 15), 15),
     )
 
     tc_raw = raw.get("tariff_compare", {}) if isinstance(raw.get("tariff_compare"), dict) else {}
@@ -1963,6 +1965,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "wallbox_device_key": str(getattr(cfg.ev_charging, "wallbox_device_key", "") or ""),
             "detection_threshold_w": float(getattr(cfg.ev_charging, "detection_threshold_w", 1500.0)),
             "min_session_minutes": int(getattr(cfg.ev_charging, "min_session_minutes", 5)),
+            "max_gap_minutes": int(getattr(cfg.ev_charging, "max_gap_minutes", 15)),
         },
         "tariff_compare": {
             "enabled": bool(getattr(cfg.tariff_compare, "enabled", False)),
