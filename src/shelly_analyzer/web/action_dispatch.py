@@ -3965,6 +3965,7 @@ class ActionDispatcher:
                     threshold_w=float(getattr(self.cfg.ev_charging, "detection_threshold_w", 1500)),
                     min_duration_s=int(getattr(self.cfg.ev_charging, "min_session_minutes", 5)) * 60,
                     price_eur_per_kwh=float(self.cfg.pricing.electricity_price_eur_per_kwh),
+                    max_gap_s=int(getattr(self.cfg.ev_charging, "max_gap_minutes", 15)) * 60,
                 )
                 summary_ev = get_monthly_summary(sessions)
                 return {"ok": True, "data": {

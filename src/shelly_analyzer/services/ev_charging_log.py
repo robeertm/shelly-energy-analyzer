@@ -39,11 +39,17 @@ def detect_charging_sessions(
     threshold_w: float = 1500.0,
     min_duration_s: int = 300,
     price_eur_per_kwh: float = 0.30,
+    max_gap_s: int = 900,
 ) -> List[ChargingSession]:
     """Detect EV charging sessions from power time series.
 
-    A session starts when total_power exceeds threshold_w and ends when it drops below.
-    Sessions shorter than min_duration_s are discarded (brief spikes).
+    A session starts when total_power exceeds threshold_w and continues while it
+    stays above 50% of it (hysteresis). Brief drops below that — up to
+    ``max_gap_s`` seconds — are *bridged* so a single continuous charge is not
+    split into several entries by short dips or one-off zero-power samples
+    (data artifacts). The session ends only after the power has stayed low for
+    longer than ``max_gap_s``; its end is the last active sample. Sessions
+    shorter than ``min_duration_s`` are discarded (brief spikes).
     """
     if df is None or df.empty:
         return []
@@ -69,68 +75,60 @@ def detect_charging_sessions(
     sessions: List[ChargingSession] = []
     in_session = False
     session_start = 0
+    last_active_ts = 0
     session_rows: List[int] = []
 
     power_col = "total_power" if "total_power" in df.columns else "energy_kwh"
     if power_col not in df.columns:
         return []
 
+    def _finalize(end_ts: int) -> None:
+        duration_s = end_ts - session_start
+        if duration_s < min_duration_s or not session_rows:
+            return
+        sub = df.iloc[session_rows]
+        energy = float(sub["energy_kwh"].sum()) if "energy_kwh" in sub.columns else 0
+        if energy <= 0:
+            energy = float(sub[power_col].mean()) * duration_s / 3600 / 1000
+        sid = hashlib.md5(f"{device_key}:{session_start}:{end_ts}".encode()).hexdigest()[:12]
+        sessions.append(ChargingSession(
+            session_id=sid,
+            device_key=device_key,
+            start_ts=session_start,
+            end_ts=end_ts,
+            energy_kwh=round(energy, 3),
+            peak_power_w=round(float(sub[power_col].max()), 1),
+            avg_power_w=round(float(sub[power_col].mean()), 1),
+            cost_eur=round(energy * price_eur_per_kwh, 2),
+            cost_model="fixed",
+        ))
+
     for idx, row in df.iterrows():
         power = float(row.get(power_col, 0) or 0)
         ts = int(row["timestamp"])
 
-        if not in_session and power >= threshold_w:
-            in_session = True
-            session_start = ts
-            session_rows = [idx]
-        elif in_session and power >= threshold_w * 0.5:  # Hysteresis at 50%
-            session_rows.append(idx)
-        elif in_session and power < threshold_w * 0.5:
-            # End session
-            in_session = False
-            duration_s = ts - session_start
-            if duration_s >= min_duration_s and session_rows:
-                sub = df.iloc[session_rows]
-                energy = float(sub["energy_kwh"].sum()) if "energy_kwh" in sub.columns else 0
-                if energy <= 0:
-                    # Estimate from power
-                    avg_p = float(sub[power_col].mean())
-                    energy = avg_p * duration_s / 3600 / 1000
-
-                sid = hashlib.md5(f"{device_key}:{session_start}:{ts}".encode()).hexdigest()[:12]
-                sessions.append(ChargingSession(
-                    session_id=sid,
-                    device_key=device_key,
-                    start_ts=session_start,
-                    end_ts=ts,
-                    energy_kwh=round(energy, 3),
-                    peak_power_w=round(float(sub[power_col].max()), 1),
-                    avg_power_w=round(float(sub[power_col].mean()), 1),
-                    cost_eur=round(energy * price_eur_per_kwh, 2),
-                    cost_model="fixed",
-                ))
-            session_rows = []
+        if not in_session:
+            if power >= threshold_w:
+                in_session = True
+                session_start = ts
+                last_active_ts = ts
+                session_rows = [idx]
+        else:
+            if power >= threshold_w * 0.5:  # Hysteresis at 50% — still charging
+                session_rows.append(idx)
+                last_active_ts = ts
+            elif ts - last_active_ts > max_gap_s:
+                # Low for longer than the bridge tolerance -> close at the last
+                # active sample (excludes the trailing idle gap).
+                _finalize(last_active_ts)
+                in_session = False
+                session_rows = []
+            # else: brief dip within max_gap_s -> bridge it (keep session open,
+            # skip the low sample so its ~0 power doesn't skew peak/avg/energy).
 
     # Handle open session at end of data
-    if in_session and session_rows:
-        ts = int(df.iloc[-1]["timestamp"])
-        duration_s = ts - session_start
-        if duration_s >= min_duration_s:
-            sub = df.iloc[session_rows]
-            energy = float(sub["energy_kwh"].sum()) if "energy_kwh" in sub.columns else 0
-            if energy <= 0:
-                avg_p = float(sub[power_col].mean())
-                energy = avg_p * duration_s / 3600 / 1000
-            sid = hashlib.md5(f"{device_key}:{session_start}:{ts}".encode()).hexdigest()[:12]
-            sessions.append(ChargingSession(
-                session_id=sid, device_key=device_key,
-                start_ts=session_start, end_ts=ts,
-                energy_kwh=round(energy, 3),
-                peak_power_w=round(float(sub[power_col].max()), 1),
-                avg_power_w=round(float(sub[power_col].mean()), 1),
-                cost_eur=round(energy * price_eur_per_kwh, 2),
-                cost_model="fixed",
-            ))
+    if in_session:
+        _finalize(last_active_ts)
 
     return sessions
 

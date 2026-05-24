@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.32.8 - 2026-05-24
+### Fixed
+- **EV charging log split one continuous charge into several entries.** A session ended on the first sample below the hysteresis threshold, so brief dips / one-off zero-power samples (data artifacts — e.g. a recurring 0 W reading once per hour) cut a single charge into multiple sessions. `detect_charging_sessions` now *bridges* sub-threshold gaps up to `max_gap_s` (new `ev_charging.max_gap_minutes`, default 15) and ends a session only after the power stayed low longer than that, at the last active sample. Verified: a 78-min / 9.3 kWh charge that previously showed as 3 entries is now 1.
+
 ## 16.32.7 - 2026-05-24
 ### Fixed
 - **EV charging log detected 0 sessions (regression of the v16.32.6 fix).** The v16.32.6 timestamp normalization assumed nanosecond datetime resolution (`// 1_000_000_000`), but `read_device_df` returns `datetime64[s]` (second resolution), collapsing every timestamp to ~1 → zero-length sessions. Now normalized via `astype("datetime64[s]").astype("int64")`, which is correct for any datetime resolution (and handles tz-aware + numeric-epoch inputs).
