@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.32.6 - 2026-05-24
+### Fixed
+- **EV charging log crashed: `int() argument must be ... not 'Timestamp'`.** `detect_charging_sessions` treats the `timestamp` column as integer epoch seconds (`int(row["timestamp"])`, duration math), but `read_device_df` can return it as a pandas `datetime64` column, so `int()` on a `Timestamp` raised. The column is now normalized to epoch seconds once after sorting (handles both datetime64 and numeric inputs).
+
 ## 16.32.5 - 2026-05-23
 ### Added
 - **MQTT grid sensor `tariff_price_eur_kwh` → HA `sensor.shelly_analyzer_netz_tarifpreis`.** Publishes the analyzer's *current effective consumer unit price* (EUR/kWh, gross): the fixed/scheduled tariff for today, or — if a dynamic tariff is active — the spot price of the current hour (mirrors the Costs tab's `_get_effective_unit_price`). Lets the Home Assistant Energy dashboard reference it via `entity_energy_price` so HA's cost always matches the analyzer, automatically following price changes (`tariff_schedule`) or a switch to a dynamic tariff — no manual price duplication.
