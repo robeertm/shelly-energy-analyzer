@@ -351,10 +351,21 @@ class BackgroundServiceManager:
             self._daily_mono = store
         today = date.today()
         rec = store.get(key)
-        if rec is None or rec[0] != today:
+        if rec is None:
             store[key] = (today, raw)
             return raw
-        hi = rec[1]
+        prev_date, hi = rec
+        if prev_date != today:
+            # New calendar day. Refuse to carry yesterday's high water mark
+            # into today even if the upstream accumulator briefly returns a
+            # stale value (see _accumulate_today_kwh midnight rollover). If
+            # raw still looks like yesterday's running total (>= 50 % of the
+            # prior high), suppress the publish by returning hi unchanged so
+            # the upstream gets a chance to reset before we lock in a value.
+            if hi > 0.05 and raw >= hi * 0.5:
+                return hi
+            store[key] = (today, raw)
+            return raw
         if raw > hi:
             hi = raw
         store[key] = (today, hi)
@@ -441,7 +452,22 @@ class BackgroundServiceManager:
         with self._today_kwh_lock:
             st = self._today_state.get(device_key)
             if not st or st.get("date") != day:
-                base_kwh, base_last_ts = self._load_today_baseline(device_key, day_start)
+                # When we cross midnight while running, the DB baseline can still
+                # contain hourly buckets that belong to yesterday's tail (hour rows
+                # are timestamped at hour-start and the 23:00 row gets written
+                # after the auto-sync that follows midnight). Treat the first hour
+                # of a new day as zero-baseline; the periodic refresh will pick up
+                # the real DB once today's 00:00 bucket is settled.
+                live_rollover = (
+                    st is not None
+                    and st.get("date") is not None
+                    and st.get("date") != day
+                    and (ts_dt - datetime(day.year, day.month, day.day)).total_seconds() < 3600
+                )
+                if live_rollover:
+                    base_kwh, base_last_ts = 0.0, day_start
+                else:
+                    base_kwh, base_last_ts = self._load_today_baseline(device_key, day_start)
                 st = {
                     "date": day,
                     "base_kwh": float(base_kwh),

@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.33.2 - 2026-05-28
+### Fixed
+- **MQTT `energy_kwh` per device froze at yesterday's value after midnight rollover.** When the analyzer process ran across local midnight, the very first samples after 00:00 could re-publish yesterday's day-end accumulation (e.g. Haus = 9.72 kWh) instead of resetting to ~0. The monotonic clamp then pinned every subsequent MQTT publish at that value all day — Home Assistant's Energy dashboard showed *no* device consumption for the new day. Two hardenings: (1) `_accumulate_today_kwh` now treats the first hour of a new day as zero-baseline when crossing midnight live (the DB baseline can still contain yesterday's 23:00 bucket because hour-rows are stamped at hour-start and the post-midnight auto-sync hadn't run yet); the periodic baseline refresh picks up the real DB once today's 00:00 bucket is settled. (2) `_mqtt_daily_monotonic` now refuses to carry yesterday's high-water mark forward — if the first raw value on a new day is ≥ 50 % of yesterday's high, the publish is suppressed (returns the previous hi unchanged, no MQTT delta) until the upstream resets. Affected every restart-less midnight; the only workaround had been a manual service restart.
+
 ## 16.33.1 - 2026-05-25
 ### Fixed
 - **Measurement-compensation UI was hard-coded in German.** The new "Mess-Kompensation" settings section (v16.33.0) shipped with German literals instead of using the i18n system, so it stayed German in every other UI language. All of its strings — section title, intro, calibration helper, field labels, table headers, buttons, toasts, results — now go through `T()`/`t()` with full translations for all 9 supported languages (de, en, es, fr, pt, it, pl, cs, ru). The three calibration validation errors returned by the backend are localized too. No behaviour change.
