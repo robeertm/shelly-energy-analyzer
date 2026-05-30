@@ -3955,11 +3955,21 @@ class ActionDispatcher:
 
         if action == "ev_sessions":
             try:
+                import time as _t
                 from shelly_analyzer.services.ev_charging_log import detect_charging_sessions, get_monthly_summary
                 dev_key = str(getattr(self.cfg.ev_charging, "wallbox_device_key", "") or "")
                 if not dev_key:
-                    return {"ok": True, "data": {"total_sessions": 0, "total_kwh": 0, "total_cost": 0, "sessions": []}}
-                df_ev = self.storage.read_device_df(dev_key)
+                    return {"ok": True, "data": {"total_sessions": 0, "total_kwh": 0, "total_cost": 0, "sessions": [], "window_days": 0}}
+                # Time window: default last 30 days; ?days=N overrides (capped 1..730).
+                # 30d keeps the DB query under ~300 ms on Pi; longer windows are
+                # available via the UI's filter bar (7d / 30d / 90d / 1y).
+                try:
+                    days = int((params or {}).get("days", 30))
+                except (TypeError, ValueError):
+                    days = 30
+                days = max(1, min(days, 730))
+                start_ts = int(_t.time()) - days * 86400
+                df_ev = self.storage.read_device_df(dev_key, start_ts=start_ts)
                 sessions = detect_charging_sessions(
                     df_ev, dev_key,
                     threshold_w=float(getattr(self.cfg.ev_charging, "detection_threshold_w", 1500)),
@@ -3984,6 +3994,7 @@ class ActionDispatcher:
                     "total_cost": summary_ev.total_cost,
                     "avg_kwh_per_session": summary_ev.avg_kwh_per_session,
                     "avg_duration_min": summary_ev.avg_duration_min,
+                    "window_days": days,
                     "sessions": [
                         {"session_id": s.session_id, "start_ts": s.start_ts, "end_ts": s.end_ts,
                          "energy_kwh": s.energy_kwh, "peak_power_w": s.peak_power_w,
