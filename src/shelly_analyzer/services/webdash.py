@@ -8187,7 +8187,7 @@ _loadLsSettings();
     const delTitle = t('web.ev.delete_entry', 'Delete entry');
     const idAttr = esc(se.session_id || '');
     return '<div class="card" style="padding:12px;margin-bottom:8px;position:relative">' +
-      '<button onclick="deleteEvSession(\'' + idAttr + '\')" title="' + esc(delTitle) +
+      '<button onclick="deleteEvSession(&#39;' + idAttr + '&#39;)" title="' + esc(delTitle) +
         '" style="position:absolute;top:8px;right:8px;background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:4px;line-height:1">🗑</button>' +
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-right:24px">' +
         '<div>' +

@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.34.1 - 2026-05-30
+### Fixed
+- **v16.34.0 rendered a blank page in every tab.** The new EV-Log session card embedded the session id with `\'` quote-escapes; the HTML template renderer collapses backslashes early, so what reached the browser was `deleteEvSession('' + idAttr + '')` — a JavaScript syntax error in the inline `onclick`, which aborted the entire bundled `<script>` and left the whole page empty. Replaced with the `&#39;` HTML entity (matching the pattern used elsewhere in this file) so the rendered JS parses cleanly.
+
 ## 16.34.0 - 2026-05-30
 ### Changed
 - **EV charging log — dramatically faster and prettier.**
