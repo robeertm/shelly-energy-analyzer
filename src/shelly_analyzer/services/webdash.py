@@ -1853,6 +1853,25 @@ _HTML_TEMPLATE = """<!doctype html>
     .exp-info-card {{ display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid rgba(106,167,255,0.25); border-radius: 12px; background: rgba(106,167,255,0.06); margin-bottom: 6px; color: var(--accent); font-size: 12px; }}
     .error-msg {{ color: var(--pwr-high); font-size: 13px; padding: 20px 0; text-align: center; }}
     .info-msg {{ color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }}
+    /* ── Generic filter button bar (EV log et al.) ── */
+    .filter-bar {{ display: flex; gap: 6px; flex-wrap: wrap; }}
+    .filter-btn {{
+      background: var(--chipbg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 5px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.12s ease, border-color 0.12s ease;
+    }}
+    .filter-btn:hover {{ background: var(--border); }}
+    .filter-btn.active {{
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }}
     /* ── Compare delta ── */
     .delta-grid {{ display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-bottom: 10px; }}
     @media (min-width: 500px) {{ .delta-grid {{ grid-template-columns: repeat(4,1fr); }} }}
@@ -8112,11 +8131,12 @@ _loadLsSettings();
   }}
 
   /* ── EV Log ── */
+  let _evWindowDays = 30;
   async function loadEvLog() {{
     const el = document.getElementById('ev-content');
     if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Loading…</p>';
     try {{
-      const r = await fetch('/api/ev_sessions');
+      const r = await fetch('/api/ev_sessions?days=' + _evWindowDays);
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
@@ -8125,45 +8145,122 @@ _loadLsSettings();
       el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
     }}
   }}
+  window.evSetWindow = function(days, btn) {{
+    _evWindowDays = days;
+    const bar = btn && btn.parentElement;
+    if (bar) bar.querySelectorAll('button').forEach(function(b) {{ b.classList.toggle('active', b === btn); }});
+    loadEvLog();
+  }};
+  function _evHeatmap(sessions, days) {{
+    const today = new Date(); today.setHours(0,0,0,0);
+    const byDay = {{}};
+    let maxKwh = 0;
+    sessions.forEach(function(se) {{
+      const d = new Date(se.start_ts*1000); d.setHours(0,0,0,0);
+      const k = d.getTime();
+      byDay[k] = (byDay[k] || 0) + se.energy_kwh;
+      if (byDay[k] > maxKwh) maxKwh = byDay[k];
+    }});
+    const cells = [];
+    for (let i = days - 1; i >= 0; i--) {{
+      const d = new Date(today.getTime() - i*86400000);
+      const k = d.getTime();
+      const kwh = byDay[k] || 0;
+      const ratio = maxKwh > 0 ? Math.min(1, kwh / maxKwh) : 0;
+      const bg = kwh > 0
+        ? 'rgba(76,175,80,' + (0.18 + ratio*0.72).toFixed(2) + ')'
+        : 'rgba(255,255,255,0.04)';
+      const lbl = d.toLocaleDateString([], {{day:'2-digit', month:'2-digit'}}) + ': ' + kwh.toFixed(1) + ' kWh';
+      cells.push('<div title="' + esc(lbl) + '" style="aspect-ratio:1;border-radius:4px;background:' + bg + ';border:1px solid var(--border)"></div>');
+    }}
+    return '<div style="display:grid;grid-template-columns:repeat(' + Math.min(days, 30) + ',1fr);gap:3px">' + cells.join('') + '</div>';
+  }}
+  function _evSessionCard(se) {{
+    const sd = new Date(se.start_ts*1000);
+    const dur = Math.max(1, Math.round((se.end_ts - se.start_ts) / 60));
+    const hh = dur >= 60 ? Math.floor(dur/60) + 'h ' + (dur%60) + 'm' : dur + ' min';
+    const peakKw = (se.peak_power_w/1000).toFixed(1);
+    const avgKw  = (se.avg_power_w/1000).toFixed(1);
+    const dateStr = sd.toLocaleDateString([], {{weekday:'short', day:'2-digit', month:'short'}});
+    const timeStr = sd.toLocaleTimeString([], {{hour:'2-digit', minute:'2-digit'}});
+    const fillPct = Math.min(100, (se.energy_kwh / 30) * 100);
+    const delTitle = t('web.ev.delete_entry', 'Delete entry');
+    const idAttr = esc(se.session_id || '');
+    return '<div class="card" style="padding:12px;margin-bottom:8px;position:relative">' +
+      '<button onclick="deleteEvSession(\'' + idAttr + '\')" title="' + esc(delTitle) +
+        '" style="position:absolute;top:8px;right:8px;background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:4px;line-height:1">🗑</button>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-right:24px">' +
+        '<div>' +
+          '<div style="font-weight:600;font-size:13px">' + esc(dateStr) + ' · ' + esc(timeStr) + '</div>' +
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + hh + ' · ⌀ ' + avgKw + ' kW · peak ' + peakKw + ' kW</div>' +
+        '</div>' +
+        '<div style="text-align:right">' +
+          '<div style="font-size:18px;font-weight:700">' + se.energy_kwh.toFixed(1) + ' <span style="font-size:11px;color:var(--muted);font-weight:400">kWh</span></div>' +
+          '<div style="font-size:12px;color:var(--muted)">' + se.cost_eur.toFixed(2) + ' €</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="margin-top:8px;height:5px;background:var(--border);border-radius:3px;overflow:hidden">' +
+        '<div style="height:100%;width:' + fillPct.toFixed(1) + '%;background:linear-gradient(90deg,#4caf50,#81c784);border-radius:3px"></div>' +
+      '</div>' +
+    '</div>';
+  }}
   function renderEvLog(data, el) {{
-    let html = '<div class="card" style="margin-bottom:10px"><div class="card-title">🚗 Charging overview</div>' +
+    const win = data.window_days || _evWindowDays;
+    const sessions = data.sessions || [];
+    const winBtn = function(d, label) {{
+      const active = d === _evWindowDays ? ' active' : '';
+      return '<button class="filter-btn' + active + '" onclick="evSetWindow(' + d + ',this)">' + label + '</button>';
+    }};
+    let html = '<div class="filter-bar" style="margin-bottom:10px">' +
+      winBtn(7,'7d') + winBtn(30,'30d') + winBtn(90,'90d') + winBtn(365,'1y') +
+    '</div>';
+
+    html += '<div class="card" style="margin-bottom:10px"><div class="card-title">🚗 ' +
+      t('web.ev.overview', 'Charging overview') + ' · ' +
+      t('web.ev.last_n_days', 'last {n} days', {{n: win}}) + '</div>' +
       '<div class="metric-grid">' +
-      metricCardHtml('Charge sessions', data.total_sessions || 0) +
-      metricCardHtml('Total', (data.total_kwh||0).toFixed(1) + ' kWh') +
-      metricCardHtml('Cost', (data.total_cost||0).toFixed(2) + ' €') +
-      metricCardHtml('Ø duration', (data.avg_duration_min||0).toFixed(0) + ' min') +
+      metricCardHtml(t('web.ev.sessions', 'Sessions'), String(data.total_sessions || 0)) +
+      metricCardHtml(t('web.ev.total_energy', 'Total energy'), (data.total_kwh || 0).toFixed(1) + ' kWh') +
+      metricCardHtml(t('web.ev.total_cost', 'Total cost'), (data.total_cost || 0).toFixed(2) + ' €') +
+      metricCardHtml(t('web.ev.avg_per_session', '⌀ per session'), (data.avg_kwh_per_session || 0).toFixed(1) + ' kWh') +
+      metricCardHtml(t('web.ev.avg_duration', '⌀ duration'), (data.avg_duration_min || 0).toFixed(0) + ' min') +
       '</div></div>';
-    if (!data.sessions || !data.sessions.length) {{
-      html += '<div class="card" style="padding:14px"><p class="info-msg">No charge sessions detected. Configure wallbox device in settings.</p></div>';
+
+    if (!sessions.length) {{
+      html += '<div class="card" style="padding:14px"><p class="info-msg">' +
+        t('web.ev.none_in_window', 'No charge sessions detected in this window.') + '</p></div>';
       el.innerHTML = html;
       return;
     }}
-    html += '<div class="card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">' +
-      '<thead><tr style="border-bottom:1px solid var(--border)">';
-    ['Date','Time','Duration','kWh','€',''].forEach(function(c){{ html += '<th style="padding:6px;color:var(--muted)">'+c+'</th>'; }});
-    html += '</tr></thead><tbody>';
-    data.sessions.slice(-20).reverse().forEach(function(se) {{
-      const sd = new Date(se.start_ts*1000);
-      html += '<tr style="border-bottom:1px solid var(--border)">' +
-        '<td style="padding:4px;text-align:center">' + sd.toLocaleDateString([],{{day:'2-digit',month:'2-digit'}}) + '</td>' +
-        '<td style="padding:4px;text-align:center">' + sd.toLocaleTimeString([],{{hour:'2-digit',minute:'2-digit'}}) + '</td>' +
-        '<td style="padding:4px;text-align:center">' + Math.round((se.end_ts-se.start_ts)/60) + 'm</td>' +
-        '<td style="padding:4px;text-align:center">' + se.energy_kwh.toFixed(1) + '</td>' +
-        '<td style="padding:4px;text-align:center">' + se.cost_eur.toFixed(2) + '</td>' +
-        '<td style="padding:4px;text-align:center"><button onclick="deleteEvSession(&#39;' + (se.session_id||'') + '&#39;)" title="Eintrag löschen" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px">🗑</button></td></tr>';
-    }});
-    html += '</tbody></table></div>';
+
+    const heatDays = Math.min(30, win);
+    html += '<div class="card" style="margin-bottom:10px"><div class="card-title">' +
+      t('web.ev.daily_energy', 'Daily energy') + ' · ' +
+      t('web.ev.last_n_days', 'last {n} days', {{n: heatDays}}) + '</div>' +
+      _evHeatmap(sessions, heatDays) +
+    '</div>';
+
+    const head = '<div class="card-title" style="display:flex;justify-content:space-between;align-items:baseline">' +
+      '<span>' + t('web.ev.sessions', 'Sessions') + '</span>' +
+      '<span style="font-size:11px;color:var(--muted);font-weight:400">' +
+        t('web.ev.n_total', '{n} total', {{n: sessions.length}}) + '</span>' +
+    '</div>';
+    const list = sessions.slice().reverse().slice(0, 50).map(_evSessionCard).join('');
+    html += '<div>' + head + list + '</div>';
+
     el.innerHTML = html;
   }}
   async function deleteEvSession(id) {{
     if (!id) return;
-    if (!confirm('Diesen Ladeeintrag wirklich löschen?')) return;
+    if (!confirm(t('web.ev.confirm_delete', 'Really delete this charging entry?'))) return;
     try {{
       const r = await fetch('/api/ev_session_delete?id=' + encodeURIComponent(id));
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
       loadEvLog();
-    }} catch(e) {{ alert('Löschen fehlgeschlagen: ' + e.message); }}
+    }} catch(e) {{
+      alert(t('web.ev.delete_failed', 'Deletion failed:') + ' ' + e.message);
+    }}
   }}
 
   /* ── Tariff Comparison ── */
