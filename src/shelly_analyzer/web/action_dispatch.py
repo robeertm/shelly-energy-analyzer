@@ -185,6 +185,53 @@ class ActionDispatcher:
         # re-read is expensive on slower disks; live values still flow via background._today_state.
         # Mapping text from last _wva_series call (debug aid)
         self._last_wva_mapping_text = ""
+        # EV-Log 24-month consumption cache: dev_key -> (built_at, monthly_kwh).
+        # Sub-second response on filter-bar toggles in the EV-Log tab.
+        self._ev_monthly_cache: Dict[str, tuple] = {}
+        self._ev_monthly_lock = threading.Lock()
+        self._ev_monthly_ttl: float = 600.0  # 10 min — hourly_energy grows once per hour
+
+    def _ev_monthly_kwh(self, device_key: str) -> List[Dict[str, object]]:
+        """24 most recent calendar months of wallbox energy, oldest first.
+
+        Months without samples come back with kwh=0 — the UI shows a flat
+        bar so the gap is visible rather than silently dropped.
+        """
+        import time as _t
+        with self._ev_monthly_lock:
+            cached = self._ev_monthly_cache.get(device_key)
+            if cached and (_t.time() - cached[0]) < self._ev_monthly_ttl:
+                return list(cached[1])
+        try:
+            from datetime import date as _date, datetime as _dt, timezone as _tz
+            import pandas as _pd
+            today = _date.today()
+            month_labels: List[str] = []
+            for i in range(23, -1, -1):
+                y, m = today.year, today.month - i
+                while m <= 0:
+                    y -= 1
+                    m += 12
+                month_labels.append(f"{y:04d}-{m:02d}")
+            fy, fm = int(month_labels[0][:4]), int(month_labels[0][5:])
+            range_start = int(_dt(fy, fm, 1, tzinfo=_tz.utc).timestamp())
+            df_h = self.storage.db.query_hourly(
+                device_key, start_ts=range_start, end_ts=int(_t.time())
+            )
+            by_month: Dict[str, float] = {}
+            if df_h is not None and not df_h.empty and "kwh" in df_h.columns:
+                ts = _pd.to_datetime(df_h["hour_ts"], unit="s", utc=True)
+                df_h = df_h.assign(_ym=ts.dt.strftime("%Y-%m"))
+                by_month = df_h.groupby("_ym")["kwh"].sum().to_dict()
+            result = [
+                {"month": m, "kwh": round(float(by_month.get(m, 0.0)), 2)}
+                for m in month_labels
+            ]
+        except Exception:
+            result = []
+        with self._ev_monthly_lock:
+            self._ev_monthly_cache[device_key] = (_t.time(), result)
+        return result
 
     def _resolve_customer(self, device_key: str) -> Dict[str, object]:
         """Return customer data for an invoice — tenant data if available, else billing.customer fallback."""
@@ -3988,6 +4035,13 @@ class ActionDispatcher:
                 if _del:
                     sessions = [s for s in sessions if s.session_id not in _del]
                 summary_ev = get_monthly_summary(sessions)
+
+                # Wallbox consumption per month, last 24 calendar months.
+                # Sourced from hourly_energy (pre-aggregated) which keeps the
+                # query under a second even on the Pi. Cached 5 min per device
+                # so filter-bar toggles (7d/30d/90d/1y) don't re-pay the cost.
+                monthly_kwh = self._ev_monthly_kwh(dev_key)
+
                 return {"ok": True, "data": {
                     "total_sessions": summary_ev.total_sessions,
                     "total_kwh": summary_ev.total_kwh,
@@ -3995,6 +4049,7 @@ class ActionDispatcher:
                     "avg_kwh_per_session": summary_ev.avg_kwh_per_session,
                     "avg_duration_min": summary_ev.avg_duration_min,
                     "window_days": days,
+                    "monthly_kwh": monthly_kwh,
                     "sessions": [
                         {"session_id": s.session_id, "start_ts": s.start_ts, "end_ts": s.end_ts,
                          "energy_kwh": s.energy_kwh, "peak_power_w": s.peak_power_w,

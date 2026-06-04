@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.35.0 - 2026-06-04
+### Added
+- **EV-Log: 24-month wallbox consumption chart.** New card between the overview and the daily heatmap shows monthly kWh totals for the last 24 calendar months as a bar chart with y-axis ticks, x-axis labels (year tag on each January), per-bar hover tooltips, and a footer summary (`N months with data · X.X kWh total`). Months without data render as a flat baseline so the gap is visible instead of silently dropped. Sourced from the pre-aggregated `hourly_energy` table on the analyzer DB, with a per-device 10-minute cache so filter-bar toggles (7d/30d/90d/1y) stay sub-second after the first call. Independent of the session-window filter — the chart always shows the whole tracked history.
+
 ## 16.34.1 - 2026-05-30
 ### Fixed
 - **v16.34.0 rendered a blank page in every tab.** The new EV-Log session card embedded the session id with `\'` quote-escapes; the HTML template renderer collapses backslashes early, so what reached the browser was `deleteEvSession('' + idAttr + '')` — a JavaScript syntax error in the inline `onclick`, which aborted the entire bundled `<script>` and left the whole page empty. Replaced with the `&#39;` HTML entity (matching the pattern used elsewhere in this file) so the rendered JS parses cleanly.
