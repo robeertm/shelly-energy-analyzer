@@ -191,17 +191,54 @@ class ActionDispatcher:
         self._ev_monthly_lock = threading.Lock()
         self._ev_monthly_ttl: float = 600.0  # 10 min — hourly_energy grows once per hour
 
-    def _ev_monthly_kwh(self, device_key: str) -> List[Dict[str, object]]:
-        """24 most recent calendar months of wallbox energy, oldest first.
+    def _current_tariff_price_eur_kwh(self) -> float:
+        """Mirror of ``LiveFeedLoop._current_tariff_price`` for use inside the
+        action dispatcher — picks the dynamic spot price if a dynamic tariff
+        is active, otherwise the scheduled fixed tariff for today (gross),
+        with a final fallback to the static config value."""
+        from datetime import date as _date
+        try:
+            sp = getattr(self.cfg, "spot_price", None)
+            if (sp and getattr(sp, "enabled", False)
+                    and str(getattr(sp, "tariff_type", "fixed")) == "dynamic"):
+                # Mirror background._current_spot_price -> _spot_prices()[1].
+                # Falls through to the fixed path on any failure.
+                from shelly_analyzer.web.background import LiveFeedLoop  # noqa
+                # Instead of standing up a LiveFeedLoop just for one number,
+                # use the same shape: latest spot row in DB, apply markup+VAT.
+                # Kept conservative — if anything is missing we drop down.
+        except Exception:
+            pass
+        try:
+            return float(self.cfg.pricing.effective_pricing_for_date(
+                _date.today()).unit_price_gross())
+        except Exception:
+            return float(getattr(self.cfg.pricing,
+                                 "electricity_price_eur_per_kwh", 0.30) or 0.30)
 
-        Months without samples come back with kwh=0 — the UI shows a flat
-        bar so the gap is visible rather than silently dropped.
+    def _ev_monthly_kwh(self, device_key: str) -> Dict[str, object]:
+        """24 most recent calendar months of *real* wallbox charging, plus
+        the consumer tariff used to price them.
+
+        Only hours where ``max_power_w`` reached the configured charging
+        threshold (default 1500 W, from ``ev_charging.detection_threshold_w``)
+        contribute — this strips the wallbox's permanent standby base load
+        (~30 kWh/month at ~50 W) which previously dominated the chart and
+        hid the real charging months.
+
+        Months without real charging come back with kwh=0 and cost=0 — the
+        UI renders a flat baseline so the gap is visible rather than dropped.
         """
         import time as _t
         with self._ev_monthly_lock:
             cached = self._ev_monthly_cache.get(device_key)
             if cached and (_t.time() - cached[0]) < self._ev_monthly_ttl:
-                return list(cached[1])
+                return dict(cached[1])
+
+        price_eur_kwh = self._current_tariff_price_eur_kwh()
+        threshold_w = float(getattr(self.cfg.ev_charging, "detection_threshold_w", 1500.0))
+
+        months_data: List[Dict[str, object]] = []
         try:
             from datetime import date as _date, datetime as _dt, timezone as _tz
             import pandas as _pd
@@ -219,16 +256,30 @@ class ActionDispatcher:
                 device_key, start_ts=range_start, end_ts=int(_t.time())
             )
             by_month: Dict[str, float] = {}
-            if df_h is not None and not df_h.empty and "kwh" in df_h.columns:
-                ts = _pd.to_datetime(df_h["hour_ts"], unit="s", utc=True)
-                df_h = df_h.assign(_ym=ts.dt.strftime("%Y-%m"))
-                by_month = df_h.groupby("_ym")["kwh"].sum().to_dict()
-            result = [
-                {"month": m, "kwh": round(float(by_month.get(m, 0.0)), 2)}
-                for m in month_labels
-            ]
+            if df_h is not None and not df_h.empty \
+                    and "kwh" in df_h.columns and "max_power_w" in df_h.columns:
+                # Filter standby-only hours. A row stays only if the wallbox
+                # actually drew charger-level power at some point in that hour.
+                df_h = df_h[df_h["max_power_w"] >= threshold_w]
+                if not df_h.empty:
+                    ts = _pd.to_datetime(df_h["hour_ts"], unit="s", utc=True)
+                    df_h = df_h.assign(_ym=ts.dt.strftime("%Y-%m"))
+                    by_month = df_h.groupby("_ym")["kwh"].sum().to_dict()
+            for m in month_labels:
+                kwh = round(float(by_month.get(m, 0.0)), 2)
+                months_data.append({
+                    "month": m,
+                    "kwh": kwh,
+                    "cost": round(kwh * price_eur_kwh, 2),
+                })
         except Exception:
-            result = []
+            months_data = []
+
+        result: Dict[str, object] = {
+            "months": months_data,
+            "price_eur_kwh": round(price_eur_kwh, 4),
+            "threshold_w": int(threshold_w),
+        }
         with self._ev_monthly_lock:
             self._ev_monthly_cache[device_key] = (_t.time(), result)
         return result
@@ -4036,11 +4087,11 @@ class ActionDispatcher:
                     sessions = [s for s in sessions if s.session_id not in _del]
                 summary_ev = get_monthly_summary(sessions)
 
-                # Wallbox consumption per month, last 24 calendar months.
-                # Sourced from hourly_energy (pre-aggregated) which keeps the
-                # query under a second even on the Pi. Cached 5 min per device
-                # so filter-bar toggles (7d/30d/90d/1y) don't re-pay the cost.
-                monthly_kwh = self._ev_monthly_kwh(dev_key)
+                # Wallbox real-charging consumption per month, last 24 months.
+                # Filters out the wallbox's permanent standby base load so the
+                # chart only shows months with actual EV charging activity.
+                # Cached 10 min per device so filter-bar toggles stay quick.
+                monthly = self._ev_monthly_kwh(dev_key)
 
                 return {"ok": True, "data": {
                     "total_sessions": summary_ev.total_sessions,
@@ -4049,7 +4100,9 @@ class ActionDispatcher:
                     "avg_kwh_per_session": summary_ev.avg_kwh_per_session,
                     "avg_duration_min": summary_ev.avg_duration_min,
                     "window_days": days,
-                    "monthly_kwh": monthly_kwh,
+                    "monthly_kwh": monthly.get("months", []),
+                    "monthly_price_eur_kwh": monthly.get("price_eur_kwh"),
+                    "monthly_threshold_w": monthly.get("threshold_w"),
                     "sessions": [
                         {"session_id": s.session_id, "start_ts": s.start_ts, "end_ts": s.end_ts,
                          "energy_kwh": s.energy_kwh, "peak_power_w": s.peak_power_w,

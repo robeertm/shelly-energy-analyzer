@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.36.0 - 2026-06-04
+### Changed
+- **EV-Log 24-month chart: strip wallbox standby + show price/cost.** The chart now only counts hours where the wallbox actually drew charger-level power (≥ `ev_charging.detection_threshold_w`, default 1500 W), filtering out the permanent ~50 W standby load that previously inflated every month to ~30 kWh and made real charging months barely stand out. Months without real charging now correctly render as a flat baseline. Each bar carries its kWh value as an inline label above the rectangle (skipped when the bar already touches the top), and the hover tooltip shows kWh + €. The card header displays the currently configured consumer tariff (`pricing.effective_pricing_for_date(today).unit_price_gross()` — falls back to `electricity_price_eur_per_kwh`) and the threshold used. Footer line now adds the total cost alongside the total kWh.
+
 ## 16.35.0 - 2026-06-04
 ### Added
 - **EV-Log: 24-month wallbox consumption chart.** New card between the overview and the daily heatmap shows monthly kWh totals for the last 24 calendar months as a bar chart with y-axis ticks, x-axis labels (year tag on each January), per-bar hover tooltips, and a footer summary (`N months with data · X.X kWh total`). Months without data render as a flat baseline so the gap is visible instead of silently dropped. Sourced from the pre-aggregated `hourly_energy` table on the analyzer DB, with a per-device 10-minute cache so filter-bar toggles (7d/30d/90d/1y) stay sub-second after the first call. Independent of the session-window filter — the chart always shows the whole tracked history.
