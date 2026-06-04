@@ -8175,6 +8175,52 @@ _loadLsSettings();
     }}
     return '<div style="display:grid;grid-template-columns:repeat(' + Math.min(days, 30) + ',1fr);gap:3px">' + cells.join('') + '</div>';
   }}
+  function _evMonthlyBars(monthlyKwh) {{
+    if (!monthlyKwh || !monthlyKwh.length) return '';
+    const maxKwh = Math.max.apply(null, monthlyKwh.map(function(m){{ return m.kwh; }}).concat([1]));
+    const W = 800, H = 220;
+    const padL = 40, padR = 8, padT = 18, padB = 34;
+    const innerW = W - padL - padR;
+    const innerH = H - padT - padB;
+    const n = monthlyKwh.length;
+    const barW = innerW / n;
+    const monthAbbr = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" preserveAspectRatio="xMidYMid meet" style="display:block">';
+    svg += '<defs><linearGradient id="evbar-grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#66bb6a"/><stop offset="100%" stop-color="#2e7d32"/></linearGradient></defs>';
+    [0, 0.25, 0.5, 0.75, 1].forEach(function(f) {{
+      const v = f * maxKwh;
+      const y = padT + innerH - f * innerH;
+      svg += '<line x1="' + padL + '" y1="' + y + '" x2="' + (W - padR) + '" y2="' + y + '" stroke="var(--border)" stroke-width="0.5" opacity="0.4"/>';
+      svg += '<text x="' + (padL - 4) + '" y="' + (y + 3) + '" font-size="9" text-anchor="end" fill="var(--muted)">' + (v >= 100 ? v.toFixed(0) : v.toFixed(1)) + '</text>';
+    }});
+    monthlyKwh.forEach(function(item, i) {{
+      const x = padL + i * barW;
+      const w = Math.max(2, barW * 0.7);
+      const dx = (barW - w) / 2;
+      const h = item.kwh > 0 ? (item.kwh / maxKwh) * innerH : 0;
+      const y = padT + innerH - h;
+      const isEmpty = item.kwh === 0;
+      if (isEmpty) {{
+        svg += '<rect x="' + (x + dx) + '" y="' + (padT + innerH - 1) + '" width="' + w + '" height="2" fill="var(--border)" opacity="0.5"><title>' + esc(item.month + ': ' + t('web.ev.monthly_no_data', 'no data')) + '</title></rect>';
+      }} else {{
+        svg += '<rect x="' + (x + dx) + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="url(#evbar-grad)" rx="2"><title>' + esc(item.month + ': ' + item.kwh.toFixed(1) + ' kWh') + '</title></rect>';
+      }}
+      const ym = item.month.split('-');
+      const mIdx = parseInt(ym[1], 10) - 1;
+      if (i === 0 || i === n - 1 || mIdx === 0 || (n - 1 - i) % 3 === 0) {{
+        const label = monthAbbr[mIdx];
+        const yearTag = mIdx === 0 ? " '" + ym[0].substring(2) : '';
+        svg += '<text x="' + (x + barW/2) + '" y="' + (H - padB + 14) + '" font-size="9" text-anchor="middle" fill="var(--muted)">' + label + yearTag + '</text>';
+      }}
+    }});
+    svg += '</svg>';
+    const total = monthlyKwh.reduce(function(s, m){{ return s + m.kwh; }}, 0);
+    const filled = monthlyKwh.filter(function(m){{ return m.kwh > 0; }}).length;
+    return svg + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;font-size:11px;color:var(--muted)">' +
+      '<span>' + t('web.ev.monthly_filled', '{{n}} months with data', {{n: filled}}) + '</span>' +
+      '<span><b style="color:var(--text)">' + total.toFixed(1) + ' kWh</b> ' + t('web.ev.monthly_total_suffix', 'total') + '</span>' +
+    '</div>';
+  }}
   function _evSessionCard(se) {{
     const sd = new Date(se.start_ts*1000);
     const dur = Math.max(1, Math.round((se.end_ts - se.start_ts) / 60));
@@ -8225,6 +8271,17 @@ _loadLsSettings();
       metricCardHtml(t('web.ev.avg_per_session', '⌀ per session'), (data.avg_kwh_per_session || 0).toFixed(1) + ' kWh') +
       metricCardHtml(t('web.ev.avg_duration', '⌀ duration'), (data.avg_duration_min || 0).toFixed(0) + ' min') +
       '</div></div>';
+
+    // 24-month wallbox consumption chart (independent of the days-filter — shows
+    // the whole tracked history regardless of how the session window is set).
+    const monthlyKwh = data.monthly_kwh || [];
+    if (monthlyKwh.length) {{
+      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">📊 ' +
+        t('web.ev.monthly_chart', 'Wallbox usage') + ' · ' +
+        t('web.ev.last_n_months', 'last {{n}} months', {{n: monthlyKwh.length}}) + '</div>' +
+        _evMonthlyBars(monthlyKwh) +
+      '</div>';
+    }}
 
     if (!sessions.length) {{
       html += '<div class="card" style="padding:14px"><p class="info-msg">' +
