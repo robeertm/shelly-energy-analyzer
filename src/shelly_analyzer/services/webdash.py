@@ -8175,11 +8175,11 @@ _loadLsSettings();
     }}
     return '<div style="display:grid;grid-template-columns:repeat(' + Math.min(days, 30) + ',1fr);gap:3px">' + cells.join('') + '</div>';
   }}
-  function _evMonthlyBars(monthlyKwh) {{
+  function _evMonthlyBars(monthlyKwh, priceEurKwh) {{
     if (!monthlyKwh || !monthlyKwh.length) return '';
     const maxKwh = Math.max.apply(null, monthlyKwh.map(function(m){{ return m.kwh; }}).concat([1]));
-    const W = 800, H = 220;
-    const padL = 40, padR = 8, padT = 18, padB = 34;
+    const W = 800, H = 240;
+    const padL = 40, padR = 8, padT = 28, padB = 34;
     const innerW = W - padL - padR;
     const innerH = H - padT - padB;
     const n = monthlyKwh.length;
@@ -8200,10 +8200,16 @@ _loadLsSettings();
       const h = item.kwh > 0 ? (item.kwh / maxKwh) * innerH : 0;
       const y = padT + innerH - h;
       const isEmpty = item.kwh === 0;
+      const tipKwh = item.month + ': ' + item.kwh.toFixed(1) + ' kWh' + (item.cost != null ? ' · ' + item.cost.toFixed(2) + ' €' : '');
       if (isEmpty) {{
-        svg += '<rect x="' + (x + dx) + '" y="' + (padT + innerH - 1) + '" width="' + w + '" height="2" fill="var(--border)" opacity="0.5"><title>' + esc(item.month + ': ' + t('web.ev.monthly_no_data', 'no data')) + '</title></rect>';
+        svg += '<rect x="' + (x + dx) + '" y="' + (padT + innerH - 1) + '" width="' + w + '" height="2" fill="var(--border)" opacity="0.5"><title>' + esc(item.month + ': ' + t('web.ev.monthly_no_data', 'no charging')) + '</title></rect>';
       }} else {{
-        svg += '<rect x="' + (x + dx) + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="url(#evbar-grad)" rx="2"><title>' + esc(item.month + ': ' + item.kwh.toFixed(1) + ' kWh') + '</title></rect>';
+        svg += '<rect x="' + (x + dx) + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="url(#evbar-grad)" rx="2"><title>' + esc(tipKwh) + '</title></rect>';
+        // kWh value label above the bar — only when there's vertical headroom
+        // for it (skip when the bar already reaches the top of the chart).
+        if (h > 4 && y > padT + 10) {{
+          svg += '<text x="' + (x + barW/2) + '" y="' + (y - 4) + '" font-size="9" text-anchor="middle" fill="var(--text)" font-weight="600">' + item.kwh.toFixed(item.kwh >= 100 ? 0 : 1) + '</text>';
+        }}
       }}
       const ym = item.month.split('-');
       const mIdx = parseInt(ym[1], 10) - 1;
@@ -8215,10 +8221,14 @@ _loadLsSettings();
     }});
     svg += '</svg>';
     const total = monthlyKwh.reduce(function(s, m){{ return s + m.kwh; }}, 0);
+    const totalCost = monthlyKwh.reduce(function(s, m){{ return s + (m.cost || 0); }}, 0);
     const filled = monthlyKwh.filter(function(m){{ return m.kwh > 0; }}).length;
     return svg + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px;font-size:11px;color:var(--muted)">' +
-      '<span>' + t('web.ev.monthly_filled', '{{n}} months with data', {{n: filled}}) + '</span>' +
-      '<span><b style="color:var(--text)">' + total.toFixed(1) + ' kWh</b> ' + t('web.ev.monthly_total_suffix', 'total') + '</span>' +
+      '<span>' + t('web.ev.monthly_filled', '{{n}} months with charging', {{n: filled}}) + '</span>' +
+      '<span><b style="color:var(--text)">' + total.toFixed(1) + ' kWh</b>' +
+        (totalCost > 0 ? ' · <b style="color:var(--text)">' + totalCost.toFixed(2) + ' €</b>' : '') +
+        ' ' + t('web.ev.monthly_total_suffix', 'total') +
+      '</span>' +
     '</div>';
   }}
   function _evSessionCard(se) {{
@@ -8275,11 +8285,22 @@ _loadLsSettings();
     // 24-month wallbox consumption chart (independent of the days-filter — shows
     // the whole tracked history regardless of how the session window is set).
     const monthlyKwh = data.monthly_kwh || [];
+    const monthlyPrice = data.monthly_price_eur_kwh;
+    const monthlyThreshold = data.monthly_threshold_w;
     if (monthlyKwh.length) {{
-      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">📊 ' +
-        t('web.ev.monthly_chart', 'Wallbox usage') + ' · ' +
-        t('web.ev.last_n_months', 'last {{n}} months', {{n: monthlyKwh.length}}) + '</div>' +
-        _evMonthlyBars(monthlyKwh) +
+      const titleLeft = '📊 ' + t('web.ev.monthly_chart', 'Wallbox usage') + ' · ' +
+        t('web.ev.last_n_months', 'last {{n}} months', {{n: monthlyKwh.length}});
+      const titleRight = (monthlyPrice != null && monthlyPrice > 0)
+        ? '<span style="font-size:11px;color:var(--muted);font-weight:400">' +
+          monthlyPrice.toFixed(2).replace('.', ',') + ' €/kWh' +
+          (monthlyThreshold ? ' · ≥' + monthlyThreshold + ' W' : '') +
+          '</span>'
+        : '';
+      html += '<div class="card" style="margin-bottom:10px">' +
+        '<div class="card-title" style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px">' +
+          '<span>' + titleLeft + '</span>' + titleRight +
+        '</div>' +
+        _evMonthlyBars(monthlyKwh, monthlyPrice) +
       '</div>';
     }}
 
