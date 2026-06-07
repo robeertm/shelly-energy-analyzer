@@ -44,6 +44,20 @@ class TouConfig:
 
 
 @dataclass(frozen=True)
+class CompensationEntry:
+    """One time-stamped calibration entry. The given percent becomes the
+    compensation factor for every sample with timestamp >= effective_from_ts,
+    until a later entry overrides it (step function, forward-looking)."""
+    effective_from_ts: int  # epoch seconds (UTC)
+    percent: float
+    note: str = ""
+    # Optional bookkeeping fields filled in when the entry was computed from
+    # a real meter reading; purely informational, not used in lookup.
+    meter_kwh: float = 0.0
+    raw_kwh: float = 0.0
+
+
+@dataclass(frozen=True)
 class DeviceConfig:
     key: str
     name: str
@@ -59,10 +73,14 @@ class DeviceConfig:
     # Gen2+ uses Digest auth (admin user), Gen1 uses Basic. Empty password = no auth.
     username: str = "admin"
     password: str = ""
-    # Measurement compensation: corrects the device's metering error. The
-    # device's power & energy are multiplied by (1 + compensation_percent/100)
-    # everywhere (live, history, cost, CO2, MQTT). 0 = off (default, no-op).
+    # Legacy single compensation value. Used as the *pre-history* baseline:
+    # samples whose timestamp is older than the first compensation_history
+    # entry are scaled by (1 + compensation_percent/100). 0 = off (no-op).
     compensation_percent: float = 0.0
+    # Time-stamped calibration history. Tuple (frozen-dataclass friendly).
+    # Each entry's percent applies from its effective_from_ts forward until
+    # the next entry. Order must be ascending by effective_from_ts.
+    compensation_history: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -918,6 +936,27 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         supports_emdata = bool(d.get("supports_emdata", True if kind == "em" else False))
         username = str(d.get("username", "admin") or "admin")
         password = str(d.get("password", "") or "")
+        history_raw = d.get("compensation_history", []) or []
+        history_entries: List[CompensationEntry] = []
+        if isinstance(history_raw, list):
+            for h in history_raw:
+                if not isinstance(h, dict):
+                    continue
+                try:
+                    eff_ts = _coerce_int(h.get("effective_from_ts", 0), 0)
+                    pct = _coerce_float(h.get("percent", 0.0), 0.0)
+                except Exception:
+                    continue
+                if eff_ts <= 0:
+                    continue
+                history_entries.append(CompensationEntry(
+                    effective_from_ts=eff_ts,
+                    percent=pct,
+                    note=str(h.get("note", "") or "")[:200],
+                    meter_kwh=_coerce_float(h.get("meter_kwh", 0.0), 0.0),
+                    raw_kwh=_coerce_float(h.get("raw_kwh", 0.0), 0.0),
+                ))
+        history_entries.sort(key=lambda e: e.effective_from_ts)
         devices.append(
             DeviceConfig(
                 key=key,
@@ -932,6 +971,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
                 username=username,
                 password=password,
                 compensation_percent=_coerce_float(d.get("compensation_percent", 0.0), 0.0),
+                compensation_history=tuple(history_entries),
             )
         )
 
@@ -1619,6 +1659,16 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
                 "username": getattr(d, "username", "admin") or "admin",
                 "password": getattr(d, "password", "") or "",
                 "compensation_percent": float(getattr(d, "compensation_percent", 0.0) or 0.0),
+                "compensation_history": [
+                    {
+                        "effective_from_ts": int(getattr(h, "effective_from_ts", 0) or 0),
+                        "percent": float(getattr(h, "percent", 0.0) or 0.0),
+                        "note": str(getattr(h, "note", "") or ""),
+                        "meter_kwh": float(getattr(h, "meter_kwh", 0.0) or 0.0),
+                        "raw_kwh": float(getattr(h, "raw_kwh", 0.0) or 0.0),
+                    }
+                    for h in (getattr(d, "compensation_history", ()) or ())
+                ],
             }
             for d in cfg.devices
         ],
