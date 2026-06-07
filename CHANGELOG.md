@@ -1,5 +1,12 @@
 # Changelog
 
+## 16.37.1 - 2026-06-07
+### Fixed
+- **Calibration tab nav-label rendered as `{web_tab_calibration}`** instead of "Calibration". The i18n key was added to the dict in `services/webdash.py`, but the dashboard HTML on `/` is rendered by `web/__init__.py::_render_dashboard_html`, not by the `_HTML_TEMPLATE` block in `webdash.py` (that path is only used by the dead BaseHTTPRequestHandler). Added the key to the right render dict so the tab label now reads "Calibration".
+
+### Removed
+- **Old "Mess-Kompensation" section in Settings.** With the dedicated Calibration tab (📏) covering all editing, the Settings-side block was redundant. Removed the section from the section list, dropped the `renderCompensation` / `loadCompensation` / `setCompManual` / `calibrateComp` helpers, and stopped dispatching `s.id === "compensation"`. The backend `/api/compensation`, `/api/compensation/set` and `/api/compensation/calibrate` endpoints are kept for scripted use.
+
 ## 16.37.0 - 2026-06-07
 ### Added
 - **Time-stamped calibration history (per device) + new Calibration tab.** Measurement compensation is no longer a single scalar that retroactively rewrites the entire history — every device now carries a `compensation_history` list of time-stamped entries (`effective_from_ts`, `percent`, `note`, plus the meter reading the entry was derived from when available). The DB read layer applies the right factor for each sample row using a vectorized step-function lookup (`numpy.searchsorted` against the entry boundaries), so reading any historical range automatically picks up the calibration that was in force at that moment. Samples whose timestamp is older than the first history entry fall back to the legacy `compensation_percent` scalar, so existing configs keep working unchanged.

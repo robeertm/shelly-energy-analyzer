@@ -151,6 +151,7 @@ def _render_dashboard_html(state: "AppState") -> bytes:
         "t_waiting": _t(lang, "web.nilm.waiting"),
         "web_tab_export": _t(lang, "web.tab.export"),
         "web_tab_tenants": _t(lang, "web.tab.tenants"),
+        "web_tab_calibration": _t(lang, "web.tab.calibration") if _t(lang, "web.tab.calibration") != "web.tab.calibration" else "Calibration",
         "smart_sched_title": _t(lang, "smart_sched.title") if _t(lang, "smart_sched.title") != "smart_sched.title" else "Smart Schedule",
         "ev_log_title": _t(lang, "ev_log.title") if _t(lang, "ev_log.title") != "ev_log.title" else "EV Charging Log",
         "tariff_title": _t(lang, "tariff.title") if _t(lang, "tariff.title") != "tariff.title" else "Tariff Comparison",
