@@ -9,7 +9,13 @@ from typing import Any, Dict, List
 
 from flask import Blueprint, current_app, jsonify, request
 
-from shelly_analyzer.io.config import AppConfig, DeviceConfig, load_config, save_config
+from shelly_analyzer.io.config import (
+    AppConfig,
+    CompensationEntry,
+    DeviceConfig,
+    load_config,
+    save_config,
+)
 from shelly_analyzer.i18n import t as _t
 
 logger = logging.getLogger(__name__)
@@ -452,3 +458,182 @@ def calibrate_compensation():
                     "percent": round(percent, 3), "factor": round(factor, 5),
                     "app_kwh_raw": round(raw, 3), "meter_kwh": round(meter, 3),
                     "keys": keys})
+
+
+# ── Time-stamped calibration history ──────────────────────────────────────
+
+def _comp_history_for_device(state, device_key: str) -> List[CompensationEntry]:
+    d = next((x for x in state.cfg.devices if x.key == device_key), None)
+    if d is None:
+        return []
+    return list(getattr(d, "compensation_history", ()) or ())
+
+
+def _comp_set_history(state, device_key: str, entries: List[CompensationEntry]):
+    """Return a new cfg with ``compensation_history`` replaced on the device.
+    Also updates the legacy ``compensation_percent`` to mirror the *latest*
+    entry so paths that haven't been migrated keep the right ‘current’ value."""
+    entries = sorted(entries, key=lambda e: int(e.effective_from_ts))
+    latest_pct = float(entries[-1].percent) if entries else None
+    devs = list(state.cfg.devices)
+    for i, d in enumerate(devs):
+        if d.key == device_key:
+            updates = {"compensation_history": tuple(entries)}
+            if latest_pct is not None:
+                updates["compensation_percent"] = latest_pct
+            devs[i] = replace(d, **updates)
+    return replace(state.cfg, devices=devs)
+
+
+@bp.route("/api/compensation/history", methods=["GET"])
+def get_compensation_history():
+    """Return the calibration history for one device or all devices.
+    Query: ?device=<key> (optional)."""
+    state = _get_state()
+    dev_key = (request.args.get("device") or "").strip()
+    out = []
+    for d in state.cfg.devices:
+        if dev_key and d.key != dev_key:
+            continue
+        hist = getattr(d, "compensation_history", ()) or ()
+        out.append({
+            "key": d.key,
+            "name": d.name,
+            "kind": str(getattr(d, "kind", "em")),
+            "compensation_percent": float(getattr(d, "compensation_percent", 0.0) or 0.0),
+            "history": [
+                {
+                    "effective_from_ts": int(getattr(h, "effective_from_ts", 0) or 0),
+                    "percent": float(getattr(h, "percent", 0.0) or 0.0),
+                    "note": str(getattr(h, "note", "") or ""),
+                    "meter_kwh": float(getattr(h, "meter_kwh", 0.0) or 0.0),
+                    "raw_kwh": float(getattr(h, "raw_kwh", 0.0) or 0.0),
+                }
+                for h in hist
+            ],
+        })
+    return jsonify({"ok": True, "devices": out})
+
+
+@bp.route("/api/compensation/history", methods=["POST"])
+def add_compensation_history():
+    """Add a calibration entry.
+    Body: {device, effective_from (epoch|ISO), percent, note?,
+           meter_start?, meter_end?, raw_start_ts?, raw_end_ts?}.
+    If meter_start/meter_end (+ raw_start_ts/raw_end_ts) are given, the
+    percent is *computed* from raw vs. meter; otherwise the supplied percent
+    is used verbatim."""
+    import pandas as pd
+    state = _get_state()
+    body = request.get_json(silent=True) or {}
+    device_key = str(body.get("device", "")).strip()
+    if not device_key:
+        return jsonify({"ok": False, "error": "missing device"}), 400
+    dev = next((x for x in state.cfg.devices if x.key == device_key), None)
+    if dev is None:
+        return jsonify({"ok": False, "error": f"unknown device {device_key}"}), 404
+
+    try:
+        eff_ts = _comp_parse_ts(body.get("effective_from"))
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"invalid effective_from: {e}"}), 400
+    if eff_ts <= 0:
+        return jsonify({"ok": False, "error": "effective_from must be a positive timestamp"}), 400
+
+    note = str(body.get("note", "") or "")[:200]
+    meter_kwh = 0.0
+    raw_kwh = 0.0
+    percent = None
+
+    has_meter = body.get("meter_start") is not None and body.get("meter_end") is not None
+    if has_meter:
+        try:
+            m_start = float(body.get("meter_start"))
+            m_end = float(body.get("meter_end"))
+        except Exception:
+            return jsonify({"ok": False, "error": "invalid meter_start/meter_end"}), 400
+        if m_end <= m_start:
+            _lang = getattr(state, "lang", "en")
+            return jsonify({"ok": False, "error": _t(_lang, "settings.compensation.err_meter_order")}), 400
+        meter_kwh = m_end - m_start
+
+        # Time range over which the meter delta was observed. Defaults to
+        # ``effective_from`` minus 24h up to ``effective_from`` if unspecified.
+        try:
+            r_start = _comp_parse_ts(body.get("raw_start_ts")) if body.get("raw_start_ts") else eff_ts - 86400
+            r_end = _comp_parse_ts(body.get("raw_end_ts")) if body.get("raw_end_ts") else eff_ts
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"invalid raw range: {e}"}), 400
+        if r_end <= r_start:
+            _lang = getattr(state, "lang", "en")
+            return jsonify({"ok": False, "error": _t(_lang, "settings.compensation.err_end_after_start")}), 400
+
+        db = state.storage.db
+        try:
+            dfh = db.query_hourly(device_key, start_ts=r_start, end_ts=r_end)
+        except Exception:
+            dfh = None
+        if dfh is None or dfh.empty or "kwh" not in dfh.columns:
+            _lang = getattr(state, "lang", "en")
+            return jsonify({"ok": False, "error": _t(_lang, "settings.compensation.err_no_data")}), 400
+        comp_sum = float(pd.to_numeric(dfh["kwh"], errors="coerce").fillna(0).sum())
+        # query_hourly applies the *current* compensation; un-do it to get raw.
+        cf_now = 1.0 + float(getattr(dev, "compensation_percent", 0.0) or 0.0) / 100.0
+        raw_kwh = comp_sum / cf_now if cf_now else comp_sum
+        if raw_kwh <= 0:
+            _lang = getattr(state, "lang", "en")
+            return jsonify({"ok": False, "error": _t(_lang, "settings.compensation.err_no_data")}), 400
+        factor = meter_kwh / raw_kwh
+        percent = (factor - 1.0) * 100.0
+    else:
+        try:
+            percent = float(body.get("percent"))
+        except Exception:
+            return jsonify({"ok": False, "error": "invalid percent"}), 400
+
+    new_entry = CompensationEntry(
+        effective_from_ts=int(eff_ts),
+        percent=float(percent),
+        note=note,
+        meter_kwh=float(meter_kwh),
+        raw_kwh=float(raw_kwh),
+    )
+    existing = _comp_history_for_device(state, device_key)
+    # Replace an existing entry with the exact same effective_from_ts.
+    existing = [e for e in existing if int(e.effective_from_ts) != int(eff_ts)]
+    existing.append(new_entry)
+    _comp_save_reload(state, _comp_set_history(state, device_key, existing))
+
+    return jsonify({
+        "ok": True,
+        "device": device_key,
+        "entry": {
+            "effective_from_ts": int(eff_ts),
+            "percent": round(float(percent), 3),
+            "note": note,
+            "meter_kwh": round(float(meter_kwh), 3),
+            "raw_kwh": round(float(raw_kwh), 3),
+        },
+    })
+
+
+@bp.route("/api/compensation/history", methods=["DELETE"])
+def delete_compensation_history():
+    """Delete one entry by ``effective_from_ts``.
+    Body or query: {device, effective_from_ts}."""
+    state = _get_state()
+    body = request.get_json(silent=True) or {}
+    device_key = str(body.get("device", "") or request.args.get("device", "")).strip()
+    ts_raw = body.get("effective_from_ts", request.args.get("effective_from_ts"))
+    try:
+        ts_i = int(float(ts_raw))
+    except Exception:
+        return jsonify({"ok": False, "error": "invalid effective_from_ts"}), 400
+    if not device_key:
+        return jsonify({"ok": False, "error": "missing device"}), 400
+    existing = _comp_history_for_device(state, device_key)
+    new_list = [e for e in existing if int(e.effective_from_ts) != ts_i]
+    if len(new_list) == len(existing):
+        return jsonify({"ok": False, "error": "entry not found"}), 404
+    _comp_save_reload(state, _comp_set_history(state, device_key, new_list))
+    return jsonify({"ok": True, "device": device_key, "remaining": len(new_list)})
