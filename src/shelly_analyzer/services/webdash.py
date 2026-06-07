@@ -2128,6 +2128,10 @@ _HTML_TEMPLATE = """<!doctype html>
       <div id="control-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
 
+    <div id="pane-calibration" class="pane">
+      <div id="cal-content"><p class="loading-msg">{web_loading}</p></div>
+    </div>
+
     <div id="pane-sync" class="pane">
       <div class="card" style="margin-bottom:8px">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
@@ -2242,6 +2246,10 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">🎛</span>
       <span class="nav-label">Control</span>
     </button>
+    <button class="nav-btn" onclick="switchPane('calibration',this)">
+      <span class="nav-icon">📏</span>
+      <span class="nav-label">{web_tab_calibration}</span>
+    </button>
     <button class="nav-btn" onclick="switchPane('sync',this)">
       <span class="nav-icon">🔄</span>
       <span class="nav-label">Sync</span>
@@ -2274,6 +2282,7 @@ _HTML_TEMPLATE = """<!doctype html>
     <button class="drawer-item" data-feature="tenants" onclick="switchPaneFromDrawer('tenants',this)"><span class="drawer-ico">🏘</span>{web_tab_tenants}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('nilm',this)"><span class="drawer-ico">🧠</span>NILM</button>
     <button class="drawer-item" data-feature="device_control" onclick="switchPaneFromDrawer('control',this)"><span class="drawer-ico">🎛</span>Control</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('calibration',this)"><span class="drawer-ico">📏</span>{web_tab_calibration}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('sync',this)"><span class="drawer-ico">🔄</span>Sync</button>
   </aside>
 </div>
@@ -2463,6 +2472,7 @@ function onPaneActivated(name) {{
     else if (name === 'tenants') loadTenants();
     else if (name === 'nilm') loadNilm();
     else if (name === 'control') loadControl();
+    else if (name === 'calibration') loadCalibration();
     else if (name === 'sync') {{ initSync(); }}
     else {{ stopSyncPolling(); }}
   }}
@@ -8341,6 +8351,270 @@ _loadLsSettings();
     }}
   }}
 
+  /* ── Calibration (time-stamped measurement compensation) ── */
+  function _calFmtDate(ts) {{
+    if (!ts) return '';
+    try {{
+      const d = new Date(ts * 1000);
+      const pad = (n) => String(n).padStart(2, '0');
+      return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) +
+        ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }} catch(e) {{ return String(ts); }}
+  }}
+  function _calFmtPct(p) {{
+    const n = Number(p) || 0;
+    return (n >= 0 ? '+' : '') + n.toFixed(2) + ' %';
+  }}
+  function _calLocalISOInputValue(d) {{
+    const pad = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) +
+      'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }}
+  function _calChartSvg(history) {{
+    const W = 520, H = 180, padL = 44, padR = 12, padT = 14, padB = 28;
+    if (!history.length) {{
+      return '<div style="color:var(--muted);font-size:12px;text-align:center;padding:30px 0">' +
+        t('calibration.no_data', 'No calibration entries yet.') + '</div>';
+    }}
+    const pts = history.slice().sort((a,b) => a.effective_from_ts - b.effective_from_ts);
+    const nowTs = Math.floor(Date.now() / 1000);
+    const t0 = pts[0].effective_from_ts;
+    const t1 = Math.max(nowTs, pts[pts.length - 1].effective_from_ts + 86400);
+    const span = Math.max(1, t1 - t0);
+    const vals = pts.map(p => Number(p.percent) || 0);
+    let vMin = Math.min(...vals, 0);
+    let vMax = Math.max(...vals, 0);
+    if (vMin === vMax) {{ vMin -= 1; vMax += 1; }}
+    const pad = (vMax - vMin) * 0.15;
+    vMin -= pad; vMax += pad;
+    const vSpan = vMax - vMin;
+    const xOf = (ts) => padL + ((ts - t0) / span) * (W - padL - padR);
+    const yOf = (v)  => padT + ((vMax - v) / vSpan) * (H - padT - padB);
+    let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" preserveAspectRatio="none" style="display:block">';
+    // axes
+    svg += '<line x1="' + padL + '" y1="' + (H - padB) + '" x2="' + (W - padR) + '" y2="' + (H - padB) +
+      '" stroke="var(--border, #444)" stroke-width="1"/>';
+    svg += '<line x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (H - padB) +
+      '" stroke="var(--border, #444)" stroke-width="1"/>';
+    // zero line
+    if (vMin < 0 && vMax > 0) {{
+      const y0 = yOf(0);
+      svg += '<line x1="' + padL + '" y1="' + y0 + '" x2="' + (W - padR) + '" y2="' + y0 +
+        '" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 4" opacity="0.5"/>';
+    }}
+    // y ticks
+    for (let i = 0; i <= 4; i++) {{
+      const v = vMin + (vSpan * i / 4);
+      const y = yOf(v);
+      svg += '<text x="' + (padL - 4) + '" y="' + (y + 3) + '" font-size="9" fill="var(--muted)" text-anchor="end">' +
+        v.toFixed(1) + '</text>';
+    }}
+    // step-function path
+    let d = '';
+    for (let i = 0; i < pts.length; i++) {{
+      const x = xOf(pts[i].effective_from_ts);
+      const y = yOf(Number(pts[i].percent) || 0);
+      if (i === 0) {{ d += 'M ' + x + ' ' + y; }}
+      else {{
+        const yPrev = yOf(Number(pts[i-1].percent) || 0);
+        d += ' L ' + x + ' ' + yPrev + ' L ' + x + ' ' + y;
+      }}
+    }}
+    // extend to now (or last + 1d if all future)
+    const xLast = xOf(t1);
+    const yLast = yOf(Number(pts[pts.length-1].percent) || 0);
+    d += ' L ' + xLast + ' ' + yLast;
+    svg += '<path d="' + d + '" fill="none" stroke="var(--accent, #38bdf8)" stroke-width="2"/>';
+    // points
+    pts.forEach(p => {{
+      const x = xOf(p.effective_from_ts);
+      const y = yOf(Number(p.percent) || 0);
+      svg += '<circle cx="' + x + '" cy="' + y + '" r="3.5" fill="var(--accent, #38bdf8)" stroke="var(--bg, #111)" stroke-width="1.5">' +
+        '<title>' + _calFmtDate(p.effective_from_ts) + ': ' + _calFmtPct(p.percent) +
+        (p.note ? '  ·  ' + p.note : '') + '</title></circle>';
+    }});
+    // x-axis labels (first + last)
+    svg += '<text x="' + padL + '" y="' + (H - 8) + '" font-size="9" fill="var(--muted)" text-anchor="start">' +
+      _calFmtDate(t0).slice(0,10) + '</text>';
+    svg += '<text x="' + (W - padR) + '" y="' + (H - 8) + '" font-size="9" fill="var(--muted)" text-anchor="end">' +
+      t('calibration.x_now', 'now') + '</text>';
+    svg += '</svg>';
+    return svg;
+  }}
+  function _calRenderDeviceCard(dev) {{
+    const formId = 'cal-form-' + dev.key;
+    const tableId = 'cal-tbl-' + dev.key;
+    const chartId = 'cal-chart-' + dev.key;
+    const nowLocal = _calLocalISOInputValue(new Date());
+    const fallbackBadge = (dev.compensation_percent || 0) !== 0
+      ? '<span style="font-size:11px;color:var(--muted);font-weight:400"> · ' +
+        t('calibration.pre_history', 'pre-history') + ' ' + _calFmtPct(dev.compensation_percent) + '</span>'
+      : '';
+
+    let html = '<div class="card" style="margin-bottom:14px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;flex-wrap:wrap;gap:6px">';
+    html += '<h3 style="margin:0">' + esc(dev.name) + ' <span style="font-size:11px;color:var(--muted);font-weight:400">' + esc(dev.key) + '</span>' + fallbackBadge + '</h3>';
+    html += '<button class="btn btn-sm" onclick="document.getElementById(\\u0027' + formId + '\\u0027).style.display=\\u0027block\\u0027">+ ' +
+      t('calibration.add', 'New entry') + '</button>';
+    html += '</div>';
+
+    // Chart
+    html += '<div id="' + chartId + '" style="margin-bottom:10px">' + _calChartSvg(dev.history || []) + '</div>';
+
+    // Table
+    html += '<div id="' + tableId + '">';
+    if (!dev.history || !dev.history.length) {{
+      html += '<p style="color:var(--muted);font-size:12px;margin:0">' +
+        t('calibration.empty', 'No calibration entries yet.') + '</p>';
+    }} else {{
+      html += '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+      html += '<thead><tr style="text-align:left;color:var(--muted)">' +
+        '<th style="padding:4px 6px">' + t('calibration.col_when', 'Effective from') + '</th>' +
+        '<th style="padding:4px 6px;text-align:right">' + t('calibration.col_pct', 'Factor') + '</th>' +
+        '<th style="padding:4px 6px;text-align:right">' + t('calibration.col_delta', 'Δ') + '</th>' +
+        '<th style="padding:4px 6px">' + t('calibration.col_meter', 'Meter Δ kWh') + '</th>' +
+        '<th style="padding:4px 6px">' + t('calibration.col_note', 'Note') + '</th>' +
+        '<th style="padding:4px 6px"></th></tr></thead><tbody>';
+      const sorted = dev.history.slice().sort((a,b) => b.effective_from_ts - a.effective_from_ts);
+      for (let i = 0; i < sorted.length; i++) {{
+        const h = sorted[i];
+        const prev = sorted[i + 1];
+        const delta = prev ? (Number(h.percent) - Number(prev.percent)) : null;
+        const deltaStr = delta == null ? '—' :
+          ((delta >= 0 ? '+' : '') + delta.toFixed(2));
+        const meterStr = (h.meter_kwh && h.meter_kwh > 0)
+          ? (Number(h.meter_kwh).toFixed(2) + ' / ' + Number(h.raw_kwh || 0).toFixed(2))
+          : '—';
+        html += '<tr style="border-top:1px solid var(--border,#333)">';
+        html += '<td style="padding:4px 6px">' + esc(_calFmtDate(h.effective_from_ts)) + '</td>';
+        html += '<td style="padding:4px 6px;text-align:right;font-variant-numeric:tabular-nums">' + esc(_calFmtPct(h.percent)) + '</td>';
+        html += '<td style="padding:4px 6px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums">' + esc(deltaStr) + '</td>';
+        html += '<td style="padding:4px 6px;color:var(--muted)">' + esc(meterStr) + '</td>';
+        html += '<td style="padding:4px 6px">' + esc(h.note || '') + '</td>';
+        html += '<td style="padding:4px 6px;text-align:right"><button class="btn btn-sm btn-danger" ' +
+          'onclick="deleteCalibrationEntry(\\u0027' + dev.key + '\\u0027, ' + h.effective_from_ts + ')">×</button></td>';
+        html += '</tr>';
+      }}
+      html += '</tbody></table>';
+    }}
+    html += '</div>';
+
+    // Add form (hidden by default)
+    html += '<div id="' + formId + '" style="display:none;margin-top:12px;padding:10px;border:1px solid var(--border,#333);border-radius:6px">';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">';
+    html += '<label style="display:flex;flex-direction:column;font-size:11px;color:var(--muted)">' +
+      t('calibration.field_effective', 'Effective from') +
+      '<input type="datetime-local" id="' + formId + '-eff" value="' + nowLocal + '" style="font-size:13px;padding:4px"></label>';
+    html += '<label style="display:flex;flex-direction:column;font-size:11px;color:var(--muted)">' +
+      t('calibration.field_mode', 'Mode') +
+      '<select id="' + formId + '-mode" onchange="_calToggleMode(\\u0027' + formId + '\\u0027)" style="font-size:13px;padding:4px">' +
+      '<option value="percent">' + t('calibration.mode_percent', 'Direct % value') + '</option>' +
+      '<option value="meter">' + t('calibration.mode_meter', 'Compute from meter reading') + '</option>' +
+      '</select></label>';
+    html += '<label class="cal-pct-only" style="display:flex;flex-direction:column;font-size:11px;color:var(--muted)">' +
+      t('calibration.field_percent', 'Percent (e.g. 2.5 for +2.5 %)') +
+      '<input type="number" step="0.01" id="' + formId + '-pct" value="0" style="font-size:13px;padding:4px;width:120px"></label>';
+    html += '<label class="cal-meter-only" style="display:none;flex-direction:column;font-size:11px;color:var(--muted)">' +
+      t('calibration.field_meter_start', 'Meter start (kWh)') +
+      '<input type="number" step="0.001" id="' + formId + '-mstart" style="font-size:13px;padding:4px;width:120px"></label>';
+    html += '<label class="cal-meter-only" style="display:none;flex-direction:column;font-size:11px;color:var(--muted)">' +
+      t('calibration.field_meter_end', 'Meter end (kWh)') +
+      '<input type="number" step="0.001" id="' + formId + '-mend" style="font-size:13px;padding:4px;width:120px"></label>';
+    html += '<label class="cal-meter-only" style="display:none;flex-direction:column;font-size:11px;color:var(--muted)">' +
+      t('calibration.field_range_start', 'Range start') +
+      '<input type="datetime-local" id="' + formId + '-rstart" style="font-size:13px;padding:4px"></label>';
+    html += '<label class="cal-meter-only" style="display:none;flex-direction:column;font-size:11px;color:var(--muted)">' +
+      t('calibration.field_range_end', 'Range end') +
+      '<input type="datetime-local" id="' + formId + '-rend" value="' + nowLocal + '" style="font-size:13px;padding:4px"></label>';
+    html += '<label style="display:flex;flex-direction:column;font-size:11px;color:var(--muted);flex:1;min-width:200px">' +
+      t('calibration.field_note', 'Note (optional)') +
+      '<input type="text" id="' + formId + '-note" maxlength="200" style="font-size:13px;padding:4px"></label>';
+    html += '</div>';
+    html += '<div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">';
+    html += '<button class="btn btn-sm" onclick="document.getElementById(\\u0027' + formId + '\\u0027).style.display=\\u0027none\\u0027">' +
+      t('calibration.cancel', 'Cancel') + '</button>';
+    html += '<button class="btn btn-sm btn-primary" onclick="addCalibrationEntry(\\u0027' + dev.key + '\\u0027, \\u0027' + formId + '\\u0027)">' +
+      t('calibration.save', 'Save entry') + '</button>';
+    html += '</div></div>';
+
+    html += '</div>';
+    return html;
+  }}
+  function _calToggleMode(formId) {{
+    const sel = document.getElementById(formId + '-mode');
+    const form = document.getElementById(formId);
+    if (!sel || !form) return;
+    const mode = sel.value;
+    form.querySelectorAll('.cal-pct-only').forEach(e => {{ e.style.display = (mode === 'percent') ? 'flex' : 'none'; }});
+    form.querySelectorAll('.cal-meter-only').forEach(e => {{ e.style.display = (mode === 'meter') ? 'flex' : 'none'; }});
+  }}
+  async function loadCalibration() {{
+    const el = document.getElementById('cal-content');
+    if (!el) return;
+    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+    try {{
+      const r = await fetch('/api/compensation/history');
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'unknown');
+      const devs = d.devices || [];
+      if (!devs.length) {{
+        el.innerHTML = '<div class="card"><p style="color:var(--muted);text-align:center;padding:30px 0">' +
+          t('calibration.no_devices', 'No devices configured yet.') + '</p></div>';
+        return;
+      }}
+      let html = '<div class="card" style="margin-bottom:14px">';
+      html += '<h2 style="margin:0 0 6px">📏 ' + t('calibration.title', 'Measurement calibration') + '</h2>';
+      html += '<p style="margin:0;color:var(--muted);font-size:12px">' +
+        t('calibration.intro', 'Add a calibration entry whenever you compare the device against a reference meter. Each entry sets the compensation factor for all samples from that moment forward, until the next entry overrides it.') +
+        '</p></div>';
+      devs.forEach(dev => {{ html += _calRenderDeviceCard(dev); }});
+      el.innerHTML = html;
+    }} catch(e) {{
+      el.innerHTML = '<p class="error-msg">' + t('calibration.error', 'Error:') + ' ' + e.message + '</p>';
+    }}
+  }}
+  async function addCalibrationEntry(deviceKey, formId) {{
+    const eff = document.getElementById(formId + '-eff').value;
+    const mode = document.getElementById(formId + '-mode').value;
+    const note = document.getElementById(formId + '-note').value || '';
+    if (!eff) {{ alert(t('calibration.err_effective', 'Please pick an effective date.')); return; }}
+    const payload = {{ device: deviceKey, effective_from: eff, note: note }};
+    if (mode === 'meter') {{
+      const mstart = document.getElementById(formId + '-mstart').value;
+      const mend = document.getElementById(formId + '-mend').value;
+      const rstart = document.getElementById(formId + '-rstart').value;
+      const rend = document.getElementById(formId + '-rend').value;
+      if (mstart === '' || mend === '') {{ alert(t('calibration.err_meter_missing', 'Meter readings are required for meter-comparison mode.')); return; }}
+      payload.meter_start = parseFloat(mstart);
+      payload.meter_end = parseFloat(mend);
+      if (rstart) payload.raw_start_ts = rstart;
+      if (rend) payload.raw_end_ts = rend;
+    }} else {{
+      payload.percent = parseFloat(document.getElementById(formId + '-pct').value || '0');
+    }}
+    try {{
+      const r = await fetch('/api/compensation/history', {{
+        method: 'POST', headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify(payload)
+      }});
+      const d = await r.json();
+      if (!d.ok) {{ alert((t('calibration.err_save', 'Save failed:') + ' ' + (d.error || ''))); return; }}
+      await loadCalibration();
+    }} catch(e) {{ alert(t('calibration.err_save', 'Save failed:') + ' ' + e.message); }}
+  }}
+  async function deleteCalibrationEntry(deviceKey, ts) {{
+    if (!confirm(t('calibration.confirm_delete', 'Delete this calibration entry?'))) return;
+    try {{
+      const r = await fetch('/api/compensation/history', {{
+        method: 'DELETE', headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{ device: deviceKey, effective_from_ts: ts }})
+      }});
+      const d = await r.json();
+      if (!d.ok) {{ alert(t('calibration.err_delete', 'Delete failed:') + ' ' + (d.error || '')); return; }}
+      await loadCalibration();
+    }} catch(e) {{ alert(t('calibration.err_delete', 'Delete failed:') + ' ' + e.message); }}
+  }}
+
   /* ── Tariff Comparison ── */
   async function loadTariff() {{
     const el = document.getElementById('tariff-content');
@@ -11915,6 +12189,7 @@ class LiveWebDashboard:
                 "web_ev_apikey_hint": _t(self.lang, "web.ev.apikey_hint"),
                 "web_ev_save": _t(self.lang, "web.ev.save"),
                 "web_tab_export": _t(self.lang, "web.tab.export"),
+                "web_tab_calibration": _t(self.lang, "web.tab.calibration") if _t(self.lang, "web.tab.calibration") != "web.tab.calibration" else "Calibration",
                 # New feature pane titles
                 "smart_sched_title": _t(self.lang, "smart_sched.title") if _t(self.lang, "smart_sched.title") != "smart_sched.title" else "Smart scheduling",
                 "ev_log_title": _t(self.lang, "ev_log.title") if _t(self.lang, "ev_log.title") != "ev_log.title" else "EV charge log",

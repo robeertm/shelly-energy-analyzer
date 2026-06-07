@@ -318,12 +318,18 @@ class BackgroundServiceManager:
                 logger.debug("Feed loop error: %s", e)
 
     def _comp_factor(self, device_key: str) -> float:
-        """Measurement-compensation factor for a device (1 + percent/100).
-        0 % -> 1.0 -> no-op. Mirrors the DB-side compensation for live data."""
+        """Measurement-compensation factor for a device (1 + percent/100) at
+        the *current* time. 0 % -> 1.0 -> no-op. With a calibration history,
+        the latest history entry wins; without it, the legacy scalar applies."""
         try:
             for d in (self.cfg.devices or []):
-                if d.key == device_key:
-                    return 1.0 + float(getattr(d, "compensation_percent", 0.0) or 0.0) / 100.0
+                if d.key != device_key:
+                    continue
+                hist = getattr(d, "compensation_history", ()) or ()
+                if hist:
+                    last = hist[-1]
+                    return 1.0 + float(getattr(last, "percent", 0.0) or 0.0) / 100.0
+                return 1.0 + float(getattr(d, "compensation_percent", 0.0) or 0.0) / 100.0
         except Exception:
             pass
         return 1.0

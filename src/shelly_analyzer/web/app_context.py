@@ -144,7 +144,12 @@ class AppState:
 
     def _apply_compensation(self) -> None:
         """Push per-device measurement-compensation factors into the DB read
-        layer. factor = 1 + compensation_percent/100; 0 % -> 1.0 -> no-op."""
+        layer. factor = 1 + percent/100; 0 % -> 1.0 -> no-op.
+
+        Pushes both the scalar *fallback* (legacy ``compensation_percent``) and
+        the time-stamped step function (``compensation_history``). The DB layer
+        applies whichever fits the sample timestamp (history wins, fallback
+        covers pre-history samples)."""
         try:
             db = getattr(self.storage, "db", None)
             if db is None or not hasattr(db, "set_compensation"):
@@ -154,6 +159,17 @@ class AppState:
                 for d in self.cfg.devices
             }
             db.set_compensation(factors)
+            if hasattr(db, "set_compensation_history"):
+                history = {
+                    d.key: [
+                        (int(getattr(h, "effective_from_ts", 0) or 0),
+                         1.0 + float(getattr(h, "percent", 0.0) or 0.0) / 100.0)
+                        for h in (getattr(d, "compensation_history", ()) or ())
+                        if int(getattr(h, "effective_from_ts", 0) or 0) > 0
+                    ]
+                    for d in self.cfg.devices
+                }
+                db.set_compensation_history(history)
         except Exception:
             logger.debug("apply compensation failed", exc_info=True)
 

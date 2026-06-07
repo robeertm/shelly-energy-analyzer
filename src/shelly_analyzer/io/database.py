@@ -287,7 +287,14 @@ class EnergyDB:
         # Empty / 1.0 == no-op (default). Set from config via set_compensation();
         # applied at read time to power & energy columns so a changed factor
         # corrects all past + future values on the fly (no data migration).
+        #
+        # ``_comp_factors`` holds the *fallback* factor used for samples whose
+        # timestamp is older than the first history entry (and as the only
+        # factor when no history exists). ``_comp_history`` holds the time-
+        # stamped step function: {device_key: list[(effective_from_ts, factor)]}
+        # sorted ascending. _comp_factor_at(key, ts) returns the right value.
         self._comp_factors: dict = {}
+        self._comp_history: dict = {}
         # Ensure schema exists (uses the writer connection).
         conn = self._conn()
         with conn:
@@ -629,11 +636,64 @@ class EnergyDB:
     # -- measurement compensation -------------------------------------------
 
     def set_compensation(self, factors: dict) -> None:
-        """Set per-device compensation factors {device_key: factor}. A factor
-        of 1.0 (or missing) is a no-op. Applied at read time to power/energy."""
+        """Set per-device *fallback* compensation factors {device_key: factor}.
+
+        The fallback applies to samples older than the first history entry,
+        and is the only factor used when no history exists. A factor of 1.0
+        (or missing) is a no-op."""
         self._comp_factors = {str(k): float(v) for k, v in (factors or {}).items()}
 
+    def set_compensation_history(self, history: dict) -> None:
+        """Set per-device time-stamped compensation step function.
+
+        ``history`` maps device_key → list[(effective_from_ts, factor)]. Entries
+        may be unsorted; we sort here. Once set, samples are scaled with the
+        latest entry whose ``effective_from_ts <= sample_ts``; samples older
+        than the first entry use the fallback from ``set_compensation()``."""
+        cleaned: dict = {}
+        for k, entries in (history or {}).items():
+            try:
+                rows = [(int(ts), float(f)) for (ts, f) in entries]
+            except Exception:
+                continue
+            rows.sort(key=lambda r: r[0])
+            cleaned[str(k)] = rows
+        self._comp_history = cleaned
+
     def _comp_factor(self, device_key: str) -> float:
+        """Return the *current* factor — the latest history entry, or the
+        fallback if there is no history. Used by live/MQTT paths."""
+        hist = self._comp_history.get(str(device_key))
+        if hist:
+            return float(hist[-1][1])
+        try:
+            return float(self._comp_factors.get(str(device_key), 1.0))
+        except Exception:
+            return 1.0
+
+    def _comp_factor_at(self, device_key: str, ts: int) -> float:
+        """Return the factor that applies at epoch second ``ts``."""
+        hist = self._comp_history.get(str(device_key))
+        if hist:
+            try:
+                ts_i = int(ts)
+            except Exception:
+                return float(hist[-1][1])
+            # last entry with effective_from_ts <= ts_i
+            lo, hi = 0, len(hist)
+            while lo < hi:
+                mid = (lo + hi) // 2
+                if hist[mid][0] <= ts_i:
+                    lo = mid + 1
+                else:
+                    hi = mid
+            if lo == 0:
+                # before first history entry → fallback
+                try:
+                    return float(self._comp_factors.get(str(device_key), 1.0))
+                except Exception:
+                    return 1.0
+            return float(hist[lo - 1][1])
         try:
             return float(self._comp_factors.get(str(device_key), 1.0))
         except Exception:
@@ -644,16 +704,76 @@ class EnergyDB:
         c = col.lower()
         return ("power" in c) or ("energy" in c) or c == "kwh" or c.endswith("_kwh")
 
+    @staticmethod
+    def _comp_ts_column(df) -> Optional[str]:
+        for c in ("timestamp", "hour_ts", "slot_ts", "ts"):
+            if c in df.columns:
+                return c
+        return None
+
+    def _comp_factor_series(self, device_key: str, ts_series) -> Optional["pd.Series"]:
+        """Return a per-row factor Series aligned to ``ts_series`` (epoch seconds
+        as int OR pandas datetime). Returns None if no compensation applies and
+        the caller can skip multiplication entirely."""
+        hist = self._comp_history.get(str(device_key))
+        fallback = 1.0
+        try:
+            fallback = float(self._comp_factors.get(str(device_key), 1.0))
+        except Exception:
+            fallback = 1.0
+        if not hist:
+            if fallback == 1.0:
+                return None
+            return pd.Series([fallback] * len(ts_series), index=ts_series.index)
+
+        try:
+            import numpy as _np
+            # Normalise ts → epoch seconds int64
+            if pd.api.types.is_datetime64_any_dtype(ts_series):
+                ts_arr = ts_series.astype("datetime64[s]").astype("int64").to_numpy()
+            else:
+                ts_arr = pd.to_numeric(ts_series, errors="coerce").fillna(0).astype("int64").to_numpy()
+            boundaries = _np.array([h[0] for h in hist], dtype="int64")
+            factors = _np.array([h[1] for h in hist], dtype="float64")
+            idx = _np.searchsorted(boundaries, ts_arr, side="right") - 1
+            # idx == -1 → before first entry → fallback
+            out = _np.where(idx >= 0, factors[idx.clip(0)], fallback)
+            return pd.Series(out, index=ts_series.index)
+        except Exception:
+            # Fallback to scalar last-entry factor
+            f = float(hist[-1][1])
+            if f == 1.0:
+                return None
+            return pd.Series([f] * len(ts_series), index=ts_series.index)
+
     def _apply_comp(self, df, device_key: str):
-        """Scale all power/energy columns of *df* by the device factor (in place).
-        No-op when the factor is 1.0 so default behaviour is unchanged."""
-        f = self._comp_factor(device_key)
-        if f == 1.0 or df is None or getattr(df, "empty", True):
+        """Scale all power/energy columns of *df* by the device factor.
+
+        With history: per-row factor by looking up each row's timestamp in the
+        step function (vectorized via searchsorted). Without history: scalar
+        fallback factor (legacy behaviour)."""
+        if df is None or getattr(df, "empty", True):
+            return df
+        ts_col = self._comp_ts_column(df)
+        if ts_col is None:
+            # No timestamp column — fall back to scalar (current factor).
+            f = self._comp_factor(device_key)
+            if f == 1.0:
+                return df
+            for col in df.columns:
+                if self._comp_is_power_energy(col):
+                    try:
+                        df[col] = pd.to_numeric(df[col], errors="coerce") * f
+                    except Exception:
+                        pass
+            return df
+        factors = self._comp_factor_series(device_key, df[ts_col])
+        if factors is None:
             return df
         for col in df.columns:
             if self._comp_is_power_energy(col):
                 try:
-                    df[col] = pd.to_numeric(df[col], errors="coerce") * f
+                    df.loc[:, col] = pd.to_numeric(df[col], errors="coerce") * factors
                 except Exception:
                     pass
         return df
