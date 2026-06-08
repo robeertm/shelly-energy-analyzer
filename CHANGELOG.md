@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.38.0 - 2026-06-08
+### Changed
+- **EV-Log wallbox chart: dynamic month range + always-on kWh labels.** The 24-month bar chart no longer always renders 24 months — it now starts at the *first* month in the last 24 where the wallbox actually charged and rolls forward to the current month. Months with no detected charging history at all give an empty chart instead of 24 flat baselines. Every non-empty bar also gets its kWh value rendered as a label now: bars with vertical headroom keep the label above the rectangle as before, but bars that already touch the top of the chart (the tallest month) get the label drawn inside the top of the bar in white, so the value is never silently dropped. Visual: instead of a near-empty 24-month strip with one big bar and one smaller bar (only the smaller one labelled), the chart now zooms to just the months that have charging data and labels every bar.
+
 ## 16.37.1 - 2026-06-07
 ### Fixed
 - **Calibration tab nav-label rendered as `{web_tab_calibration}`** instead of "Calibration". The i18n key was added to the dict in `services/webdash.py`, but the dashboard HTML on `/` is rendered by `web/__init__.py::_render_dashboard_html`, not by the `_HTML_TEMPLATE` block in `webdash.py` (that path is only used by the dead BaseHTTPRequestHandler). Added the key to the right render dict so the tab label now reads "Calibration".

@@ -8215,10 +8215,13 @@ _loadLsSettings();
         svg += '<rect x="' + (x + dx) + '" y="' + (padT + innerH - 1) + '" width="' + w + '" height="2" fill="var(--border)" opacity="0.5"><title>' + esc(item.month + ': ' + t('web.ev.monthly_no_data', 'no charging')) + '</title></rect>';
       }} else {{
         svg += '<rect x="' + (x + dx) + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="url(#evbar-grad)" rx="2"><title>' + esc(tipKwh) + '</title></rect>';
-        // kWh value label above the bar — only when there's vertical headroom
-        // for it (skip when the bar already reaches the top of the chart).
-        if (h > 4 && y > padT + 10) {{
-          svg += '<text x="' + (x + barW/2) + '" y="' + (y - 4) + '" font-size="9" text-anchor="middle" fill="var(--text)" font-weight="600">' + item.kwh.toFixed(item.kwh >= 100 ? 0 : 1) + '</text>';
+        // kWh value label: above the bar when there is headroom, otherwise
+        // inside the top of the bar (white) so tall bars are still labelled.
+        if (h > 4) {{
+          const hasHeadroom = y > padT + 10;
+          const labelY = hasHeadroom ? (y - 4) : (y + 11);
+          const labelFill = hasHeadroom ? 'var(--text)' : '#fff';
+          svg += '<text x="' + (x + barW/2) + '" y="' + labelY + '" font-size="9" text-anchor="middle" fill="' + labelFill + '" font-weight="600">' + item.kwh.toFixed(item.kwh >= 100 ? 0 : 1) + '</text>';
         }}
       }}
       const ym = item.month.split('-');
