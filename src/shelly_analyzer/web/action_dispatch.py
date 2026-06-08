@@ -217,17 +217,18 @@ class ActionDispatcher:
                                  "electricity_price_eur_per_kwh", 0.30) or 0.30)
 
     def _ev_monthly_kwh(self, device_key: str) -> Dict[str, object]:
-        """24 most recent calendar months of *real* wallbox charging, plus
-        the consumer tariff used to price them.
+        """Rolling window of *real* wallbox charging, plus the consumer tariff
+        used to price them.
 
         Only hours where ``max_power_w`` reached the configured charging
         threshold (default 1500 W, from ``ev_charging.detection_threshold_w``)
         contribute — this strips the wallbox's permanent standby base load
-        (~30 kWh/month at ~50 W) which previously dominated the chart and
-        hid the real charging months.
+        (~30 kWh/month at ~50 W).
 
-        Months without real charging come back with kwh=0 and cost=0 — the
-        UI renders a flat baseline so the gap is visible rather than dropped.
+        Window: starts at the first month with detected charging within the
+        last 24 months, ends at the current month, max 24 months. If charging
+        history is older than 24 months the window rolls to the most recent
+        24; if there's no charging at all the result is empty.
         """
         import time as _t
         with self._ev_monthly_lock:
@@ -243,14 +244,15 @@ class ActionDispatcher:
             from datetime import date as _date, datetime as _dt, timezone as _tz
             import pandas as _pd
             today = _date.today()
-            month_labels: List[str] = []
+            # 24-month candidate range, oldest first.
+            candidate_labels: List[str] = []
             for i in range(23, -1, -1):
                 y, m = today.year, today.month - i
                 while m <= 0:
                     y -= 1
                     m += 12
-                month_labels.append(f"{y:04d}-{m:02d}")
-            fy, fm = int(month_labels[0][:4]), int(month_labels[0][5:])
+                candidate_labels.append(f"{y:04d}-{m:02d}")
+            fy, fm = int(candidate_labels[0][:4]), int(candidate_labels[0][5:])
             range_start = int(_dt(fy, fm, 1, tzinfo=_tz.utc).timestamp())
             df_h = self.storage.db.query_hourly(
                 device_key, start_ts=range_start, end_ts=int(_t.time())
@@ -258,13 +260,19 @@ class ActionDispatcher:
             by_month: Dict[str, float] = {}
             if df_h is not None and not df_h.empty \
                     and "kwh" in df_h.columns and "max_power_w" in df_h.columns:
-                # Filter standby-only hours. A row stays only if the wallbox
-                # actually drew charger-level power at some point in that hour.
                 df_h = df_h[df_h["max_power_w"] >= threshold_w]
                 if not df_h.empty:
                     ts = _pd.to_datetime(df_h["hour_ts"], unit="s", utc=True)
                     df_h = df_h.assign(_ym=ts.dt.strftime("%Y-%m"))
                     by_month = df_h.groupby("_ym")["kwh"].sum().to_dict()
+            # Trim leading zero-months: window starts at the first month with
+            # actual charging within the candidate range. If no month qualifies
+            # the chart stays empty rather than showing 24 flat baselines.
+            first_idx = next(
+                (i for i, m in enumerate(candidate_labels) if by_month.get(m, 0.0) > 0.0),
+                None,
+            )
+            month_labels = candidate_labels[first_idx:] if first_idx is not None else []
             for m in month_labels:
                 kwh = round(float(by_month.get(m, 0.0)), 2)
                 months_data.append({
