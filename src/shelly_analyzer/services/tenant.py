@@ -28,6 +28,12 @@ class TenantDef:
     # Move-in / move-out dates (ISO format, empty = full period)
     move_in: str = ""
     move_out: str = ""
+    # Postal address — multi-line string, used as customer address in the
+    # invoice PDF. Empty falls back to just the name + unit.
+    address: str = ""
+    email: str = ""
+    phone: str = ""
+    vat_id: str = ""
 
 
 @dataclass
@@ -83,6 +89,9 @@ def generate_tenant_bills(
     period_start: Optional[str] = None,
     period_end: Optional[str] = None,
     common_device_keys: Optional[List[str]] = None,
+    lang: str = "en",
+    base_fee_split_mode: str = "off",
+    base_fee_split_manual_shares: Optional[Dict[str, float]] = None,
 ) -> TenantReport:
     """Generate utility bills for all tenants.
 
@@ -95,7 +104,19 @@ def generate_tenant_bills(
         vat_rate: VAT rate (0.19 = 19%)
         period_start/end: ISO dates (YYYY-MM-DD), defaults to last 12 months
         common_device_keys: devices whose cost is split among all tenants by person count
+        lang: i18n language code for line-item descriptions ("en"|"de"|...)
+        base_fee_split_mode: how the base fee is attributed across tenants.
+            "off"     → equal split (legacy).
+            "manual"  → use ``base_fee_split_manual_shares`` (device-key → %),
+                       each tenant's share = sum of shares of devices they own.
+            "by_kwh"  → tenant share = their kWh / total tenant kWh in the
+                       period. Bigger consumer pays more of the base fee.
+        base_fee_split_manual_shares: per-device-key percentages (0..100).
+            Only consulted when ``base_fee_split_mode == "manual"``.
     """
+    from shelly_analyzer.i18n import t as _t
+    manual_shares_map: Dict[str, float] = dict(base_fee_split_manual_shares or {})
+    split_mode = (base_fee_split_mode or "off").lower()
     now = datetime.datetime.now()
 
     if period_end:
@@ -139,10 +160,13 @@ def generate_tenant_bills(
     base_fee_daily = base_fee_eur_per_year / 365.0
     total_base_fee = base_fee_daily * period_days
 
-    bills: List[TenantBill] = []
+    # ── Pass 1: determine each tenant's active window + their period kWh ──
+    # We need everyone's kWh before we can compute by_kwh base-fee shares,
+    # so this pass collects raw numbers; pass 2 below builds the line items.
+    tenant_window: Dict[str, tuple] = {}   # tenant_id -> (t_start, t_end, tenant_days, t_start_ts, t_end_ts)
+    tenant_kwh_map: Dict[str, float] = {}  # tenant_id -> own-device kWh in window
 
     for tenant in tenants:
-        # Determine tenant's active days
         t_start = start_dt
         t_end = end_dt
         if tenant.move_in:
@@ -159,10 +183,40 @@ def generate_tenant_bills(
                     t_end = mo
             except ValueError:
                 pass
-
         tenant_days = max(1, (t_end - t_start).days)
         t_start_ts = int(t_start.timestamp())
         t_end_ts = int(t_end.timestamp())
+        tenant_window[tenant.tenant_id] = (t_start, t_end, tenant_days, t_start_ts, t_end_ts)
+
+        own_kwh = 0.0
+        for dk in tenant.device_keys:
+            hourly = db.query_hourly(dk, start_ts=t_start_ts, end_ts=t_end_ts)
+            if not hourly.empty and "kwh" in hourly.columns:
+                own_kwh += float(hourly["kwh"].sum())
+        tenant_kwh_map[tenant.tenant_id] = own_kwh
+
+    sum_tenant_kwh = sum(tenant_kwh_map.values())
+    total_manual_shares = sum(max(0.0, float(v)) for v in manual_shares_map.values())
+
+    def _base_fee_share_fraction(tenant: TenantDef) -> float:
+        """Return the fraction (0..1) of the period's total base fee this
+        tenant should pay. Sum across all tenants ≤ 1 — any remainder
+        (e.g. a vacant-tenant period) is absorbed by the landlord."""
+        if split_mode == "by_kwh":
+            if sum_tenant_kwh > 0:
+                return tenant_kwh_map.get(tenant.tenant_id, 0.0) / sum_tenant_kwh
+            return 1.0 / max(len(tenants), 1)
+        if split_mode == "manual" and total_manual_shares > 0:
+            own = sum(max(0.0, float(manual_shares_map.get(dk, 0.0))) for dk in tenant.device_keys)
+            return own / total_manual_shares
+        # "off" — equal split among configured tenants (legacy).
+        return 1.0 / max(len(tenants), 1)
+
+    # ── Pass 2: build the actual bills and line items ──
+    bills: List[TenantBill] = []
+
+    for tenant in tenants:
+        t_start, t_end, tenant_days, t_start_ts, t_end_ts = tenant_window[tenant.tenant_id]
 
         line_items: List[TenantLineItem] = []
         total_kwh = 0.0
@@ -178,7 +232,7 @@ def generate_tenant_bills(
             total_kwh += kwh
             amount = kwh * price_eur_per_kwh
             line_items.append(TenantLineItem(
-                description=f"Electricity consumption – {dev_names.get(dk, dk)}",
+                description=_t(lang, "tenant.bill.line_energy", device=dev_names.get(dk, dk)),
                 kwh=round(kwh, 2),
                 unit_price=price_eur_per_kwh,
                 amount=round(amount, 2),
@@ -193,17 +247,30 @@ def generate_tenant_bills(
         if tenant_common_kwh > 0.01:
             total_kwh += tenant_common_kwh
             line_items.append(TenantLineItem(
-                description=f"Allgemeinstrom (Anteil {tenant.persons}/{total_persons} Pers.)",
+                description=_t(
+                    lang,
+                    "tenant.bill.line_common",
+                    persons=tenant.persons,
+                    total=total_persons,
+                ),
                 kwh=round(tenant_common_kwh, 2),
                 unit_price=price_eur_per_kwh,
                 amount=round(tenant_common_cost, 2),
             ))
 
-        # Base fee share (proportional by days)
-        base_share = total_base_fee * (tenant_days / period_days) / max(len(tenants), 1)
+        # Base fee share — respects pricing.base_fee_split mode.
+        # tenant_days/period_days handles partial occupancy on top of the
+        # cross-tenant share fraction; sum across tenants ≤ 1.
+        tenant_share_frac = _base_fee_share_fraction(tenant)
+        base_share = total_base_fee * (tenant_days / period_days) * tenant_share_frac
         if base_share > 0.01:
             line_items.append(TenantLineItem(
-                description=f"Grundpreis (anteilig {tenant_days} Tage)",
+                description=_t(
+                    lang,
+                    "tenant.bill.line_base_fee",
+                    days=tenant_days,
+                    pct=round(tenant_share_frac * 100, 1),
+                ),
                 kwh=0,
                 unit_price=0,
                 amount=round(base_share, 2),

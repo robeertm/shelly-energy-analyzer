@@ -3274,36 +3274,21 @@ function loadTenants() {{
     el.innerHTML = '<p style="color:var(--red)">Error: ' + (e && e.message || '?') + '</p>';
   }});
 }}
-function _tenantsDeviceOptions(selectedKeys) {{
-  const sel = new Set(selectedKeys || []);
-  return _tenantsDevices.map(function(d) {{
-    return '<label style="display:inline-flex;gap:4px;align-items:center;margin:2px 6px 2px 0;font-size:11px">' +
-      '<input type="checkbox" class="t-dev" value="' + esc(d.key) + '"' + (sel.has(d.key)?' checked':'') + '> ' + esc(d.name) + '</label>';
-  }}).join('');
-}}
 function renderTenants() {{
   const el = document.getElementById('tenants-content');
   if (!el || !_tenantsCache) return;
   const td = _tenantsCache;
   let h = '';
-  // Config card
-  h += '<div class="card" style="margin-bottom:8px">';
-  h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px">';
-  h += '<label style="display:flex;gap:4px;align-items:center;font-size:12px"><input type="checkbox" id="t-enabled"' + (td.enabled?' checked':'') + '> Tenant billing active</label>';
-  h += '<label style="font-size:12px">Billing period (months): <input type="number" id="t-period" value="' + (td.billing_period_months||12) + '" style="width:60px"></label>';
-  h += '<span style="flex:1"></span>';
-  h += '<button class="btn" onclick="addTenantRow()">+ Tenant</button>';
-  h += '<button class="btn btn-accent" onclick="saveTenants()">💾 Save</button>';
+  // Slim status strip + link to Settings (tenant configuration lives there).
+  const tCount = (td.tenants || []).length;
+  const commonCount = (td.common_device_keys || []).length;
+  h += '<div class="card" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
+  h += '<div style="font-size:12px;color:var(--muted)">';
+  h += '🏘 <b style="color:var(--text)">' + tCount + '</b> tenant' + (tCount === 1 ? '' : 's') +
+       (td.enabled ? '' : ' · <span style="color:var(--warn,#eab308)">billing inactive</span>') +
+       (commonCount ? ' · ' + commonCount + ' common-area device' + (commonCount === 1 ? '' : 's') : '');
   h += '</div>';
-  h += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Common areas (shared meter)</div>';
-  h += '<div id="t-common" style="display:flex;flex-wrap:wrap">' + _tenantsDeviceOptions(td.common_device_keys) + '</div>';
-  h += '</div>';
-  // Tenants list
-  h += '<div id="t-list">';
-  (td.tenants || []).forEach(function(t, i) {{ h += _tenantRowHtml(t, i); }});
-  if (!td.tenants || !td.tenants.length) {{
-    h += '<div class="card" style="color:var(--muted);font-size:12px">No tenants yet. Click "+ Tenant" to add one.</div>';
-  }}
+  h += '<a class="btn small" href="/settings#sec-tenant">⚙ Configure in Settings</a>';
   h += '</div>';
   // Invoice export — period pills + per-tenant preview/PDF cards
   const preset = _tenantsPresetForBoot();
@@ -3523,65 +3508,8 @@ function _tenantsPostInvoice(body) {{
       el.innerHTML = h;
     }}).catch(function(e) {{ el.innerHTML = '<p style="color:var(--red)">Error: ' + e + '</p>'; }});
 }}
-function _tenantRowHtml(t, i) {{
-  const tid = esc(t.tenant_id || '');
-  return '<div class="card" data-idx="' + i + '" style="margin-bottom:6px">' +
-    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' +
-    '<input class="t-name" placeholder="Name" value="' + esc(t.name||'') + '" style="flex:2;min-width:120px">' +
-    '<input class="t-unit" placeholder="Unit" value="' + esc(t.unit||'') + '" style="flex:1;min-width:80px">' +
-    '<input class="t-id" placeholder="ID" value="' + tid + '" style="width:80px">' +
-    '<input class="t-persons" type="number" min="1" placeholder="Pers." value="' + (t.persons||1) + '" style="width:60px">' +
-    '<input class="t-in" type="date" value="' + esc(t.move_in||'') + '" style="width:140px" title="Move-in">' +
-    '<input class="t-out" type="date" value="' + esc(t.move_out||'') + '" style="width:140px" title="Move-out">' +
-    '<button class="btn" onclick="removeTenantRow(' + i + ')" title="Delete">🗑</button>' +
-    '</div>' +
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:2px">Assigned devices:</div>' +
-    '<div class="t-devs" style="display:flex;flex-wrap:wrap">' + _tenantsDeviceOptions(t.device_keys) + '</div>' +
-    '</div>';
-}}
-function addTenantRow() {{
-  if (!_tenantsCache) return;
-  _tenantsCache.tenants = _tenantsCache.tenants || [];
-  _tenantsCache.tenants.push({{tenant_id:'t' + (_tenantsCache.tenants.length+1), name:'', persons:1, device_keys:[]}});
-  renderTenants();
-}}
-function removeTenantRow(idx) {{
-  if (!_tenantsCache || !_tenantsCache.tenants) return;
-  _tenantsCache.tenants.splice(idx, 1);
-  renderTenants();
-}}
-function _collectTenantsFromDom() {{
-  const list = document.querySelectorAll('#t-list > [data-idx]');
-  const tenants = [];
-  list.forEach(function(row) {{
-    const dk = Array.from(row.querySelectorAll('.t-devs .t-dev:checked')).map(function(x) {{ return x.value; }});
-    tenants.push({{
-      tenant_id: (row.querySelector('.t-id')||{{}}).value || '',
-      name: (row.querySelector('.t-name')||{{}}).value || '',
-      unit: (row.querySelector('.t-unit')||{{}}).value || '',
-      persons: parseInt((row.querySelector('.t-persons')||{{}}).value || '1', 10),
-      move_in: (row.querySelector('.t-in')||{{}}).value || '',
-      move_out: (row.querySelector('.t-out')||{{}}).value || '',
-      device_keys: dk,
-    }});
-  }});
-  const common = Array.from(document.querySelectorAll('#t-common .t-dev:checked')).map(function(x) {{ return x.value; }});
-  return {{
-    enabled: !!(document.getElementById('t-enabled')||{{}}).checked,
-    billing_period_months: parseInt((document.getElementById('t-period')||{{}}).value || '12', 10),
-    tenants: tenants,
-    common_device_keys: common,
-  }};
-}}
-function saveTenants() {{
-  const body = _collectTenantsFromDom();
-  fetch('/api/tenants', {{method:'PUT',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}})
-    .then(function(r) {{ return r.json(); }})
-    .then(function(d) {{
-      if (d.ok) {{ _tenantsCache = Object.assign(_tenantsCache||{{}}, body); renderTenants(); alert('Saved'); }}
-      else alert('Error: ' + (d.error||'?'));
-    }}).catch(function(e) {{ alert('Error: ' + e); }});
-}}
+// Tenant editor functions removed in v16.41.0 — config now lives exclusively in
+// Settings → Tenants (settings.html). Tenants tab is read-only invoice export.
 function computeBills() {{
   const s = (document.getElementById('t-start')||{{}}).value || '';
   const e = (document.getElementById('t-end')||{{}}).value || '';

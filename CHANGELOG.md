@@ -1,5 +1,18 @@
 # Changelog
 
+## 16.41.0 - 2026-06-09
+### Fixed
+- **Hardcoded German strings in tenant bills.** `services/tenant.py` was emitting `"Allgemeinstrom (Anteil X/Y Pers.)"` and `"Grundpreis (anteilig X Tage)"` directly even with English UI. New i18n keys `tenant.bill.line_energy` / `line_common` / `line_base_fee` (EN+DE), `generate_tenant_bills` now takes a `lang` argument that both `/api/tenants/bill` and `/api/tenants/invoice` thread through from `state.lang`.
+- **Tenant invoice base fee ignored the new `pricing.base_fee_split` config.** Old code: equal split among tenants (`/ max(len(tenants), 1)`), regardless of who consumed what. New code: respects the configured mode — `off` keeps equal-split (legacy), `manual` sums each tenant's per-device share percentages, `by_kwh` weights by the tenant's actual kWh in the period. A two-pass walk over the tenant list computes everyone's period kWh first so the `by_kwh` allocation is consistent and stable.
+- **Tenant address missing from invoice PDFs.** The Settings tenant editor had `address` / `phone` / `email` / `vat_id` fields but `services.tenant.TenantDef`, `GET /api/tenants`, the `SvcTenantDef` mapper in both bill endpoints, and the PDF-customer dict all dropped them on the floor. Now plumbed end-to-end: address is rendered into the PDF customer block as multi-line, prefixed with unit if set.
+
+### Added
+- **`GET /api/exports/list` + `POST /api/exports/delete`** — file-tree browser over the export root (respects `ui.export_directory`). List returns `{root, files:[{rel_path,name,size,mtime,ext}], total_size, exists}`. Delete takes `{rel_paths:[...]}` and refuses anything that escapes the root (`..` or symlinks); empty parent dirs are intentionally kept so the next export doesn't have to re-create them.
+- **Settings → Tools / Exports → 📁 Export folder browser** with auto-load: sortable file table (modified-time desc), per-row download + delete buttons, multi-select with bulk-delete, root path + total size in the header. Lets you tidy up exports remotely when the analyzer is in a data center with web-only access.
+
+### Changed
+- **Tenants tab is now read-only invoice export.** All editor controls (enable, billing period, common areas, tenant rows with name/unit/persons/devices, add/save buttons) are gone — tenant configuration lives exclusively in **Settings → Tenants** as it always did, and the duplicate editor in the Tenants tab from v16.40.0 was confusing. The tab now shows a slim status strip (🏘 N tenants · …) with a `⚙ Configure in Settings` link, then the existing period-pills + per-tenant export cards.
+
 ## 16.40.0 - 2026-06-09
 ### Removed
 - **Export tab.** The standalone Export tab is gone — its six action buttons (PDF summary, per-device invoices, Excel, day report, month report, bundle ZIP) have moved to **Settings → Tools / Exports**, and tenant-specific invoice PDFs are now handled by the redesigned Tenants tab. The underlying backend actions (`export_summary`, `export_invoices`, `export_excel`, `report`, `bundle`) are unchanged; only the UI entry points moved.

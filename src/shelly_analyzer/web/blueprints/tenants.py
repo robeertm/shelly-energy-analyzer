@@ -33,6 +33,10 @@ def list_tenants():
             "persons": int(t.persons or 1),
             "move_in": t.move_in,
             "move_out": t.move_out,
+            "address": getattr(t, "address", "") or "",
+            "phone": getattr(t, "phone", "") or "",
+            "email": getattr(t, "email", "") or "",
+            "vat_id": getattr(t, "vat_id", "") or "",
         })
     return jsonify({
         "ok": True,
@@ -65,6 +69,10 @@ def update_tenants():
                 persons=int(t.get("persons") or 1),
                 move_in=str(t.get("move_in") or "").strip(),
                 move_out=str(t.get("move_out") or "").strip(),
+                address=str(t.get("address") or ""),
+                phone=str(t.get("phone") or "").strip(),
+                email=str(t.get("email") or "").strip(),
+                vat_id=str(t.get("vat_id") or "").strip(),
             ))
         new_tc = TenantConfig(
             enabled=bool(body.get("enabled", True)),
@@ -97,7 +105,7 @@ def compute_bills():
         if tc is None or not tc.tenants:
             return jsonify({"ok": False, "error": "No tenants configured"}), 400
 
-        # Map config TenantDef → service TenantDef (same fields)
+        # Map config TenantDef → service TenantDef (same fields, incl. address).
         svc_tenants = [
             SvcTenantDef(
                 tenant_id=t.tenant_id,
@@ -107,6 +115,10 @@ def compute_bills():
                 persons=int(t.persons or 1),
                 move_in=t.move_in,
                 move_out=t.move_out,
+                address=getattr(t, "address", "") or "",
+                email=getattr(t, "email", "") or "",
+                phone=getattr(t, "phone", "") or "",
+                vat_id=getattr(t, "vat_id", "") or "",
             )
             for t in tc.tenants
         ]
@@ -164,6 +176,10 @@ def compute_bills():
                 price_eur_per_kwh = unit_price_net
                 tariff_mode = "fixed"
 
+        split = getattr(state.cfg.pricing, "base_fee_split", None)
+        split_mode = (getattr(split, "mode", "off") or "off").lower() if split else "off"
+        manual_shares = {str(k): float(v) for k, v in (getattr(split, "manual_shares", ()) or ())} if split else {}
+
         report = generate_tenant_bills(
             db=state.storage.db,
             tenants=svc_tenants,
@@ -174,6 +190,9 @@ def compute_bills():
             period_start=period_start,
             period_end=period_end,
             common_device_keys=list(tc.common_device_keys or []),
+            lang=getattr(state, "lang", None) or "en",
+            base_fee_split_mode=split_mode,
+            base_fee_split_manual_shares=manual_shares,
         )
 
         bills = []
@@ -273,6 +292,10 @@ def export_tenant_invoice():
                 persons=int(t.persons or 1),
                 move_in=t.move_in,
                 move_out=t.move_out,
+                address=getattr(t, "address", "") or "",
+                email=getattr(t, "email", "") or "",
+                phone=getattr(t, "phone", "") or "",
+                vat_id=getattr(t, "vat_id", "") or "",
             )
             for t in tc.tenants
         ]
@@ -294,6 +317,10 @@ def export_tenant_invoice():
         except Exception:
             base_fee_net = float(getattr(state.cfg.pricing, "base_fee_eur_per_year", 0.0) or 0.0)
 
+        split = getattr(state.cfg.pricing, "base_fee_split", None)
+        split_mode = (getattr(split, "mode", "off") or "off").lower() if split else "off"
+        manual_shares = {str(k): float(v) for k, v in (getattr(split, "manual_shares", ()) or ())} if split else {}
+
         report = generate_tenant_bills(
             db=state.storage.db,
             tenants=svc_tenants,
@@ -304,6 +331,9 @@ def export_tenant_invoice():
             period_start=period_start or None,
             period_end=period_end or None,
             common_device_keys=list(tc.common_device_keys or []),
+            lang=getattr(state, "lang", None) or "en",
+            base_fee_split_mode=split_mode,
+            base_fee_split_manual_shares=manual_shares,
         )
 
         # Resolve export root via the same logic as action_dispatch so the
@@ -345,12 +375,19 @@ def export_tenant_invoice():
                     unit_price_net=unit_price,
                 ))
 
+            # Customer address — split tenant.address by newlines (multi-line
+            # input from Settings textarea). Unit identifier prepends if set.
+            addr_lines = []
+            if tn.unit:
+                addr_lines.append(tn.unit)
+            if tn.address:
+                addr_lines.extend([ln.strip() for ln in tn.address.splitlines() if ln.strip()])
             customer = {
                 "name": tn.name or tn.tenant_id,
-                "address_lines": [tn.unit] if tn.unit else [],
-                "vat_id": "",
-                "email": "",
-                "phone": "",
+                "address_lines": addr_lines,
+                "vat_id": tn.vat_id or "",
+                "email": tn.email or "",
+                "phone": tn.phone or "",
             }
             issuer = {
                 "name": state.cfg.billing.issuer.name,

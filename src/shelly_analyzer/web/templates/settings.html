@@ -2327,7 +2327,140 @@ function renderToolsExports() {
     </div>
 
     <p class="hint" style="font-size:11px;margin-top:8px">${T("settings.tools.invoice_note","Per-device invoices use ALL configured devices and the base-fee split mode set above. For tenant-specific invoices use the Tenants tab.")}</p>
+
+    <hr style="margin:18px 0 12px 0;border:none;border-top:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+      <div>
+        <div style="font-size:14px;font-weight:600">📁 ${T("settings.tools.browser_title","Export folder browser")}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px" id="tools-browser-root">${T("settings.tools.browser_loading","Loading…")}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="secondary small" onclick="toolsRefreshBrowser()">🔄 ${T("settings.tools.refresh","Refresh")}</button>
+        <button class="small danger" onclick="toolsBulkDelete()" id="tools-bulk-del" style="display:none">🗑 ${T("settings.tools.delete_selected","Delete selected")}</button>
+      </div>
+    </div>
+    <div id="tools-browser" style="border:1px solid var(--border);border-radius:6px;max-height:360px;overflow:auto"></div>
   </section>`;
+}
+
+var _toolsFiles = [];
+var _toolsSelected = new Set();
+
+function _toolsFmtSize(b) {
+  b = Number(b) || 0;
+  if (b < 1024) return b + ' B';
+  if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+  if (b < 1024*1024*1024) return (b/1024/1024).toFixed(1) + ' MB';
+  return (b/1024/1024/1024).toFixed(2) + ' GB';
+}
+function _toolsFmtMtime(ts) {
+  if (!ts) return '–';
+  try {
+    const d = new Date(ts * 1000);
+    const pad = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  } catch(e) { return String(ts); }
+}
+function _toolsFileIcon(ext) {
+  if (ext === 'pdf') return '📄';
+  if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') return '📊';
+  if (ext === 'zip') return '📦';
+  if (['png','jpg','jpeg','svg','gif'].indexOf(ext) >= 0) return '🖼';
+  if (ext === 'json') return '📋';
+  return '📎';
+}
+async function toolsRefreshBrowser() {
+  const rootEl = document.getElementById("tools-browser-root");
+  const listEl = document.getElementById("tools-browser");
+  if (!listEl) return;
+  listEl.innerHTML = `<div style="padding:14px;text-align:center;color:var(--muted)">${T("settings.tools.browser_loading","Loading…")}</div>`;
+  try {
+    const r = await fetch("/api/exports/list");
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || "?");
+    _toolsFiles = d.files || [];
+    _toolsSelected = new Set();
+    if (rootEl) {
+      const flag = d.exists ? "" : ` · <span style="color:var(--warn,#eab308)">(${T("settings.tools.browser_missing","does not exist")})</span>`;
+      rootEl.innerHTML = `<code>${esc(d.root)}</code>${flag} · ${_toolsFiles.length} file${_toolsFiles.length===1?"":"s"} · ${_toolsFmtSize(d.total_size||0)}`;
+    }
+    _toolsRenderBrowser();
+  } catch(e) {
+    listEl.innerHTML = `<div style="padding:14px;color:var(--danger)">${T("settings.toast.error","Error: {err}",{err: e.message})}</div>`;
+  }
+}
+function _toolsRenderBrowser() {
+  const listEl = document.getElementById("tools-browser");
+  const bulkBtn = document.getElementById("tools-bulk-del");
+  if (!listEl) return;
+  if (!_toolsFiles.length) {
+    listEl.innerHTML = `<div style="padding:14px;text-align:center;color:var(--muted)">${T("settings.tools.browser_empty","No exported files yet.")}</div>`;
+    if (bulkBtn) bulkBtn.style.display = "none";
+    return;
+  }
+  let h = `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border)">
+      <th style="padding:6px 8px;width:30px"><input type="checkbox" id="tools-sel-all" onchange="toolsToggleAll(this.checked)"></th>
+      <th style="text-align:left;padding:6px 8px">${T("settings.tools.col_file","File")}</th>
+      <th style="text-align:right;padding:6px 8px;width:80px">${T("settings.tools.col_size","Size")}</th>
+      <th style="text-align:right;padding:6px 8px;width:130px">${T("settings.tools.col_mtime","Modified")}</th>
+      <th style="padding:6px 8px;width:90px"></th>
+    </tr></thead><tbody>`;
+  _toolsFiles.forEach(function(f, i) {
+    const sel = _toolsSelected.has(f.rel_path) ? ' checked' : '';
+    h += `<tr style="border-bottom:1px solid var(--border)" data-tools-rel="${esc(f.rel_path)}">
+      <td style="padding:6px 8px"><input type="checkbox" class="tools-sel"${sel} onchange="toolsToggleOne('${esc(f.rel_path).replace(/'/g,"\\'")}',this.checked)"></td>
+      <td style="padding:6px 8px;font-family:monospace;font-size:11px">
+        <span style="margin-right:6px">${_toolsFileIcon(f.ext)}</span><span title="${esc(f.rel_path)}">${esc(f.rel_path)}</span>
+      </td>
+      <td style="padding:6px 8px;text-align:right;color:var(--muted)">${_toolsFmtSize(f.size)}</td>
+      <td style="padding:6px 8px;text-align:right;color:var(--muted)">${_toolsFmtMtime(f.mtime)}</td>
+      <td style="padding:6px 8px;text-align:right">
+        <a class="btn small" href="/files/${encodeURI(f.rel_path)}" download title="${T("settings.tools.download","Download")}">⬇</a>
+        <button class="small danger" onclick="toolsDeleteOne('${esc(f.rel_path).replace(/'/g,"\\'")}')">🗑</button>
+      </td>
+    </tr>`;
+  });
+  h += "</tbody></table>";
+  listEl.innerHTML = h;
+  if (bulkBtn) bulkBtn.style.display = _toolsSelected.size ? "" : "none";
+}
+function toolsToggleOne(rel, on) {
+  if (on) _toolsSelected.add(rel); else _toolsSelected.delete(rel);
+  const bulkBtn = document.getElementById("tools-bulk-del");
+  if (bulkBtn) bulkBtn.style.display = _toolsSelected.size ? "" : "none";
+}
+function toolsToggleAll(on) {
+  _toolsSelected = on ? new Set(_toolsFiles.map(function(f) { return f.rel_path; })) : new Set();
+  _toolsRenderBrowser();
+}
+async function toolsDeleteOne(rel) {
+  if (!confirm(T("settings.tools.confirm_delete_one","Delete this file?\n\n{rel}",{rel: rel}))) return;
+  await _toolsDelete([rel]);
+}
+async function toolsBulkDelete() {
+  const sel = Array.from(_toolsSelected);
+  if (!sel.length) return;
+  if (!confirm(T("settings.tools.confirm_delete_n","Delete {n} files?",{n: sel.length}))) return;
+  await _toolsDelete(sel);
+}
+async function _toolsDelete(rels) {
+  try {
+    const r = await fetch("/api/exports/delete", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({rel_paths: rels}),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || "?");
+    toast(T("settings.tools.deleted","Deleted {n} files · freed {size}",{n: (d.deleted||[]).length, size: _toolsFmtSize(d.freed_bytes||0)}), "ok");
+    if ((d.errors||[]).length) {
+      console.warn("exports delete errors:", d.errors);
+    }
+    toolsRefreshBrowser();
+  } catch(e) {
+    toast(T("settings.toast.error","Error: {err}",{err: e.message}), "error");
+  }
 }
 
 async function saveToolsExports() {
@@ -2756,6 +2889,10 @@ function renderAll() {
   // Recompute the base-fee-split normalized %/€ columns after re-render
   if (document.getElementById("sec-base_fee_split")) {
     _bfsRecompute();
+  }
+  // Auto-load export folder contents when the Tools section is mounted
+  if (document.getElementById("sec-tools_exports")) {
+    toolsRefreshBrowser();
   }
   // Keep the spot-zone dropdown in sync with the spot API selector: when
   // the user flips primary_api, re-render the spot_price section so the
