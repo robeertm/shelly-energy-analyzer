@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.41.1 - 2026-06-09
+### Fixed
+- **Single-tenant PDF showed 100 % base-fee share regardless of split mode.** The `/api/tenants/invoice` endpoint pre-filtered `svc_tenants` to just the requested tenant before calling `generate_tenant_bills`. With one tenant in the pool, `by_kwh` computes `tenant_kwh / tenant_kwh = 1.0` and `off` computes `1 / max(len(tenants), 1) = 1.0` — i.e. the lone tenant always pays the full base fee. The preview endpoint (`/api/tenants/bill`) was unaffected because it always passes the full pool. Fix: build bills for the full pool, then filter `report.bills` by `tenant_id` only when rendering PDFs. Per-tenant PDFs now match what the preview shows.
+
 ## 16.41.0 - 2026-06-09
 ### Fixed
 - **Hardcoded German strings in tenant bills.** `services/tenant.py` was emitting `"Allgemeinstrom (Anteil X/Y Pers.)"` and `"Grundpreis (anteilig X Tage)"` directly even with English UI. New i18n keys `tenant.bill.line_energy` / `line_common` / `line_base_fee` (EN+DE), `generate_tenant_bills` now takes a `lang` argument that both `/api/tenants/bill` and `/api/tenants/invoice` thread through from `state.lang`.
