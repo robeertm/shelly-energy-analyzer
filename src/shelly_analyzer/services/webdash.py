@@ -1872,6 +1872,25 @@ _HTML_TEMPLATE = """<!doctype html>
       color: #fff;
       font-weight: 600;
     }}
+    /* ── Tenants invoice period pills ── */
+    .t-pill {{
+      background: var(--chipbg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 16px;
+      padding: 5px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }}
+    .t-pill:hover {{ background: var(--border); transform: translateY(-1px); }}
+    .t-pill-active {{
+      background: linear-gradient(135deg, #4caf50, #2e7d32);
+      border-color: #2e7d32;
+      color: #fff;
+      box-shadow: 0 2px 6px rgba(76,175,80,0.35);
+    }}
     /* ── Compare delta ── */
     .delta-grid {{ display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-bottom: 10px; }}
     @media (min-width: 500px) {{ .delta-grid {{ grid-template-columns: repeat(4,1fr); }} }}
@@ -2035,67 +2054,10 @@ _HTML_TEMPLATE = """<!doctype html>
     </div>
 
     <!-- Export -->
-    <div id="pane-export" class="pane">
-      <div class="exp-sections">
-        <div class="exp-section">
-          <h3>{exp_daterange}</h3>
-          <div class="exp-quick" id="exp-quick-dates"></div>
-          <div class="exp-field">
-            <label for="exp-start">{exp_from}</label>
-            <input id="exp-start" type="date" />
-          </div>
-          <div class="exp-field">
-            <label for="exp-end">{exp_to}</label>
-            <input id="exp-end" type="date" />
-          </div>
-        </div>
-        <div class="exp-section">
-          <h3>{exp_invoice_settings}</h3>
-          <div class="exp-field">
-            <label for="exp-inv-period">{exp_invoice}</label>
-            <select id="exp-inv-period">
-              <option value="custom">custom</option>
-              <option value="day">day</option>
-              <option value="week">week</option>
-              <option value="month" selected>month</option>
-              <option value="year">year</option>
-            </select>
-          </div>
-          <div class="exp-field">
-            <label for="exp-inv-anchor">{exp_anchor}</label>
-            <input id="exp-inv-anchor" type="date" />
-          </div>
-          <span style="font-size:11px;color:var(--muted)">{exp_custom_note}</span>
-          <div class="exp-field" style="margin-top:6px">
-            <label for="exp-bundle-h">{exp_bundle_hours}</label>
-            <input id="exp-bundle-h" type="number" value="48" min="1" max="8760" style="width:80px;flex:0 0 80px;" />
-          </div>
-        </div>
-      </div>
-      <div class="exp-section" style="margin-top:10px">
-        <h3>{exp_actions}</h3>
-        <div class="exp-actions">
-          <button id="exp-btn-summary"><span class="eico">📄</span><span class="elbl">{exp_btn_pdf}</span></button>
-          <button id="exp-btn-invoices"><span class="eico">🧾</span><span class="elbl">{exp_btn_invoices}</span></button>
-          <button id="exp-btn-excel"><span class="eico">📊</span><span class="elbl">{exp_btn_excel}</span></button>
-          <button id="exp-btn-report-day"><span class="eico">📅</span><span class="elbl">{exp_btn_report_day}</span></button>
-          <button id="exp-btn-report-month"><span class="eico">📆</span><span class="elbl">{exp_btn_report_month}</span></button>
-          <button id="exp-btn-bundle"><span class="eico">📦</span><span class="elbl">{exp_btn_bundle}</span></button>
-        </div>
-      </div>
-      <div class="exp-section" style="margin-top:10px" id="exp-results-section">
-        <h3>{exp_results}</h3>
-        <div id="exp-results">
-          <div class="exp-placeholder" id="exp-results-ph">{exp_no_results}</div>
-        </div>
-      </div>
-      <div class="exp-section" style="margin-top:10px" id="exp-jobs-section">
-        <h3>{exp_jobs}</h3>
-        <div id="exp-jobs-list">
-          <div class="exp-placeholder">–</div>
-        </div>
-      </div>
-    </div>
+    <!-- v16.40.0: Export tab removed. The 5 generic export buttons (PDF
+         summary, Excel, day-report, month-report, bundle, per-device
+         invoices) moved into Settings → Tools / Exports. Tenant-specific
+         invoice PDFs live in the redesigned Tenants tab. -->
 
     <!-- New feature panes (same pattern as costs/forecast/standby) -->
     <div id="pane-smart_sched" class="pane">
@@ -2206,10 +2168,6 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">🔌</span>
       <span class="nav-label">{web_tab_ev}</span>
     </button>
-    <button class="nav-btn" onclick="switchPane('export',this)">
-      <span class="nav-icon">📥</span>
-      <span class="nav-label">{web_tab_export}</span>
-    </button>
     <button class="nav-btn" data-feature="smart_sched" onclick="switchPane('smart_sched',this)">
       <span class="nav-icon">⏱</span>
       <span class="nav-label">Schedule</span>
@@ -2272,7 +2230,6 @@ _HTML_TEMPLATE = """<!doctype html>
     <button class="drawer-item" onclick="switchPaneFromDrawer('standby',this)"><span class="drawer-ico">🔌</span>{web_tab_standby}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('sankey',this)"><span class="drawer-ico">⚡</span>{web_tab_sankey}</button>
     <button class="drawer-item" data-feature="ev" onclick="switchPaneFromDrawer('ev',this)"><span class="drawer-ico">🔌</span>{web_tab_ev}</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('export',this)"><span class="drawer-ico">📥</span>{web_tab_export}</button>
     <button class="drawer-item" data-feature="smart_sched" onclick="switchPaneFromDrawer('smart_sched',this)"><span class="drawer-ico">⏱</span>Schedule</button>
     <button class="drawer-item" data-feature="ev_log" onclick="switchPaneFromDrawer('ev_log',this)"><span class="drawer-ico">🚗</span>EV Log</button>
     <button class="drawer-item" data-feature="tariff" onclick="switchPaneFromDrawer('tariff',this)"><span class="drawer-ico">💱</span>Tariff</button>
@@ -2432,8 +2389,6 @@ function switchPane(name, btn) {{
 }}
 
 function onPaneActivated(name) {{
-  // Stop polling when leaving export tab
-  if (name !== 'export' && typeof _expStopJobsPolling === 'function') _expStopJobsPolling();
   if (name !== 'co2' && typeof _stopCo2LiveRates === 'function') _stopCo2LiveRates();
   // Always (re)arm the per-tab live refresh based on the new pane
   startTabLiveRefresh(name);
@@ -2462,7 +2417,6 @@ function onPaneActivated(name) {{
     else if (name === 'standby') loadStandby();
     else if (name === 'sankey') loadSankey();
     else if (name === 'ev') {{ _evInitKeyRow(); loadEv(); }}
-    else if (name === 'export') initExport();
     else if (name === 'smart_sched') loadSmartSched();
     else if (name === 'ev_log') loadEvLog();
     else if (name === 'tariff') loadTariff();
@@ -3351,17 +3305,223 @@ function renderTenants() {{
     h += '<div class="card" style="color:var(--muted);font-size:12px">No tenants yet. Click "+ Tenant" to add one.</div>';
   }}
   h += '</div>';
-  // Billing computation
-  h += '<div class="card" style="margin-top:8px">';
-  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">';
-  h += '<label style="font-size:12px">From: <input type="date" id="t-start"></label>';
-  h += '<label style="font-size:12px">To: <input type="date" id="t-end"></label>';
-  h += '<label style="font-size:12px">Tariff: <select id="t-tariff"><option value="">Auto (Settings)</option><option value="fixed">Fixed</option><option value="dynamic">Dynamic</option></select></label>';
-  h += '<button class="btn btn-accent" onclick="computeBills()">📊 Compute bills</button>';
+  // Invoice export — period pills + per-tenant preview/PDF cards
+  const preset = _tenantsPresetForBoot();
+  h += '<div class="card" style="margin-top:10px;background:linear-gradient(135deg,rgba(76,175,80,0.08),rgba(33,150,243,0.05));border:1px solid rgba(76,175,80,0.25)">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;margin-bottom:10px">';
+  h += '<div><div style="font-size:18px;font-weight:700;letter-spacing:0.2px">🧾 Invoice export</div>';
+  h += '<div style="font-size:11px;color:var(--muted);margin-top:2px">Generate a PDF invoice per tenant for a chosen period.</div></div>';
+  h += '<div id="t-period-label" style="font-size:13px;font-weight:600;text-align:right"></div>';
   h += '</div>';
-  h += '<div id="t-bills"></div>';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px" id="t-period-pills">';
+  ['last_month','last_quarter','last_half','last_year'].forEach(function(p) {{
+    const lbl = ({{last_month:'Letzter Monat',last_quarter:'Letztes Quartal',last_half:'Letztes Halbjahr',last_year:'Letztes Jahr'}})[p];
+    const active = (p === preset) ? ' t-pill-active' : '';
+    h += '<button class="t-pill' + active + '" data-tpreset="' + p + '" onclick="tenantsApplyPreset(\\u0027' + p + '\\u0027)">' + lbl + '</button>';
+  }});
   h += '</div>';
+  h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted)">';
+  h += '<span>Custom:</span>';
+  h += '<label>From <input type="date" id="t-start" onchange="tenantsClearPreset();tenantsUpdatePeriodLabel()"></label>';
+  h += '<label>To <input type="date" id="t-end" onchange="tenantsClearPreset();tenantsUpdatePeriodLabel()"></label>';
+  h += '<label>Tariff <select id="t-tariff" style="font-size:12px"><option value="">Auto (Settings)</option><option value="fixed">Fixed</option><option value="dynamic">Dynamic</option></select></label>';
+  h += '<span style="flex:1"></span>';
+  h += '<button class="btn" onclick="tenantsPreviewAll()">📊 Preview</button>';
+  h += '<button class="btn btn-accent" onclick="tenantsExportAllPdf()">📦 PDFs (all)</button>';
+  h += '</div>';
+  h += '</div>';
+
+  // Per-tenant export cards
+  h += '<div id="t-export-cards" style="margin-top:8px"></div>';
+
+  // Inline preview/results
+  h += '<div id="t-bills" style="margin-top:8px"></div>';
+
   el.innerHTML = h;
+  // Apply the default preset right after DOM is in place.
+  tenantsApplyPreset(preset);
+  // Render the per-tenant cards (empty hint included if no tenants).
+  _tenantsRenderExportCards();
+}}
+
+/* ── Tenant invoice export: presets + per-tenant cards ───────────────── */
+function _tenantsPresetForBoot() {{ return 'last_month'; }}
+function _tenantsPad(n) {{ return (n < 10 ? '0' : '') + n; }}
+function _tenantsIso(d) {{ return d.getFullYear() + '-' + _tenantsPad(d.getMonth()+1) + '-' + _tenantsPad(d.getDate()); }}
+function _tenantsLastFullPeriod(name) {{
+  // Always returns the most recently completed period in local time. Result:
+  // {{start: ISO, end: ISO, label: human-readable}}.
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth(); // 0..11
+  if (name === 'last_month') {{
+    const start = new Date(y, m - 1, 1);
+    const end   = new Date(y, m, 0);
+    const monthNames = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+    return {{start: _tenantsIso(start), end: _tenantsIso(end), label: monthNames[start.getMonth()] + ' ' + start.getFullYear()}};
+  }}
+  if (name === 'last_quarter') {{
+    // Current quarter index 0..3; "last" = previous quarter.
+    const qNow = Math.floor(m / 3);
+    let qLast = qNow - 1; let qy = y;
+    if (qLast < 0) {{ qLast = 3; qy = y - 1; }}
+    const start = new Date(qy, qLast * 3, 1);
+    const end   = new Date(qy, qLast * 3 + 3, 0);
+    return {{start: _tenantsIso(start), end: _tenantsIso(end), label: 'Q' + (qLast + 1) + ' ' + qy}};
+  }}
+  if (name === 'last_half') {{
+    // H1 = Jan-Jun, H2 = Jul-Dec; last = previous half.
+    const hNow = (m < 6) ? 0 : 1;
+    let hLast = hNow - 1; let hy = y;
+    if (hLast < 0) {{ hLast = 1; hy = y - 1; }}
+    const start = new Date(hy, hLast * 6, 1);
+    const end   = new Date(hy, hLast * 6 + 6, 0);
+    return {{start: _tenantsIso(start), end: _tenantsIso(end), label: 'H' + (hLast + 1) + ' ' + hy}};
+  }}
+  if (name === 'last_year') {{
+    const start = new Date(y - 1, 0, 1);
+    const end   = new Date(y - 1, 11, 31);
+    return {{start: _tenantsIso(start), end: _tenantsIso(end), label: String(y - 1)}};
+  }}
+  return null;
+}}
+function tenantsUpdatePeriodLabel() {{
+  const sEl = document.getElementById('t-start');
+  const eEl = document.getElementById('t-end');
+  const lbl = document.getElementById('t-period-label');
+  if (!lbl) return;
+  const s = sEl && sEl.value, e = eEl && eEl.value;
+  if (s && e) lbl.textContent = s + ' → ' + e;
+  else        lbl.textContent = '';
+}}
+function tenantsApplyPreset(name) {{
+  const p = _tenantsLastFullPeriod(name);
+  if (!p) return;
+  const s = document.getElementById('t-start');
+  const e = document.getElementById('t-end');
+  if (s) s.value = p.start;
+  if (e) e.value = p.end;
+  // Toggle pill states
+  document.querySelectorAll('#t-period-pills [data-tpreset]').forEach(function(b) {{
+    b.classList.toggle('t-pill-active', b.getAttribute('data-tpreset') === name);
+  }});
+  const lbl = document.getElementById('t-period-label');
+  if (lbl) lbl.textContent = p.label + ' · ' + p.start + ' → ' + p.end;
+}}
+function tenantsClearPreset() {{
+  document.querySelectorAll('#t-period-pills [data-tpreset]').forEach(function(b) {{
+    b.classList.remove('t-pill-active');
+  }});
+}}
+function _tenantsRenderExportCards() {{
+  const root = document.getElementById('t-export-cards');
+  if (!root) return;
+  const ts = (_tenantsCache && _tenantsCache.tenants) || [];
+  if (!ts.length) {{
+    root.innerHTML = '<div class="card" style="color:var(--muted);font-size:12px;text-align:center;padding:18px">' +
+      'No tenants yet. Add one above to generate invoices.' +
+      '</div>';
+    return;
+  }}
+  let h = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px">';
+  ts.forEach(function(t) {{
+    const tid = esc(t.tenant_id || '');
+    const tname = esc(t.name || t.tenant_id || '–');
+    const unit = t.unit ? ' · ' + esc(t.unit) : '';
+    h += '<div class="card" style="padding:12px;border-left:3px solid #4caf50">';
+    h += '<div style="font-weight:650;font-size:13px;margin-bottom:6px">🏠 ' + tname + unit + '</div>';
+    h += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + (t.persons||1) + ' Pers. · ' + ((t.device_keys||[]).length) + ' device(s)</div>';
+    h += '<div style="display:flex;gap:4px;flex-wrap:wrap">';
+    h += '<button class="btn small" onclick="tenantsPreviewOne(\\u0027' + tid + '\\u0027)">📊 Preview</button>';
+    h += '<button class="btn small btn-accent" onclick="tenantsExportPdf(\\u0027' + tid + '\\u0027)">🧾 PDF</button>';
+    h += '</div></div>';
+  }});
+  h += '</div>';
+  root.innerHTML = h;
+}}
+function _tenantsCurrentQuery() {{
+  const s = (document.getElementById('t-start')||{{}}).value || '';
+  const e = (document.getElementById('t-end')||{{}}).value || '';
+  const tm = (document.getElementById('t-tariff')||{{}}).value || '';
+  const q = new URLSearchParams();
+  if (s) q.set('period_start', s);
+  if (e) q.set('period_end', e);
+  if (tm) q.set('tariff_mode', tm);
+  return {{qs: q.toString(), s: s, e: e, tariff_mode: tm}};
+}}
+function tenantsPreviewAll() {{ computeBills(); }}
+function tenantsPreviewOne(tid) {{
+  const q = _tenantsCurrentQuery();
+  const el = document.getElementById('t-bills');
+  if (el && !_quietRefresh) el.innerHTML = '<p class="loading-msg">Computing…</p>';
+  fetch('/api/tenants/bill?' + q.qs).then(function(r) {{ return r.json(); }}).then(function(d) {{
+    if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||'No data') + '</p>'; return; }}
+    const rep = d.report;
+    const bills = (rep.bills || []).filter(function(b) {{ return (b.tenant.tenant_id || '') === tid; }});
+    if (!bills.length) {{ el.innerHTML = '<p style="color:var(--muted)">No data for this tenant in the selected period.</p>'; return; }}
+    let h = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Period: ' + esc(rep.period_start) + ' to ' + esc(rep.period_end) + '</div>';
+    bills.forEach(function(b) {{
+      h += _tenantsBillCardHtml(b);
+    }});
+    el.innerHTML = h;
+  }}).catch(function(e) {{ el.innerHTML = '<p style="color:var(--red)">Error: ' + e + '</p>'; }});
+}}
+function _tenantsBillCardHtml(b) {{
+  let h = '<div class="card" style="margin-bottom:6px">';
+  h += '<div style="font-weight:650;margin-bottom:4px">' + esc(b.tenant.name) + (b.tenant.unit ? ' (' + esc(b.tenant.unit) + ')' : '') + ' · ' + b.tenant.persons + ' Pers.</div>';
+  h += '<table style="width:100%;font-size:11px;border-collapse:collapse">';
+  h += '<tr style="border-bottom:1px solid var(--border);color:var(--muted)"><th style="text-align:left;padding:3px">Item</th><th style="text-align:right">kWh</th><th style="text-align:right">€/kWh</th><th style="text-align:right">€</th></tr>';
+  (b.line_items || []).forEach(function(li) {{
+    var kwhCell = (li.kwh && li.kwh > 0) ? li.kwh.toFixed(1) : '–';
+    var priceCell = (li.unit_price && li.unit_price > 0) ? li.unit_price.toFixed(4) : '–';
+    h += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px">' + esc(li.description) + '</td><td style="text-align:right">' + kwhCell + '</td><td style="text-align:right">' + priceCell + '</td><td style="text-align:right">' + li.amount.toFixed(2) + '</td></tr>';
+  }});
+  h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">Net</td><td style="text-align:right">' + b.subtotal_net.toFixed(2) + '</td></tr>';
+  h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">VAT</td><td style="text-align:right">' + b.vat_amount.toFixed(2) + '</td></tr>';
+  h += '<tr style="font-weight:700"><td colspan="3" style="padding:3px;text-align:right">Total gross</td><td style="text-align:right">' + b.total_gross.toFixed(2) + ' €</td></tr>';
+  h += '</table></div>';
+  return h;
+}}
+function _tenantsPdfBody(tid) {{
+  const q = _tenantsCurrentQuery();
+  return {{
+    tenant_id: tid || 'all',
+    period_start: q.s,
+    period_end: q.e,
+    tariff_mode: q.tariff_mode,
+  }};
+}}
+function tenantsExportPdf(tid) {{
+  if (!tid) return;
+  _tenantsPostInvoice(_tenantsPdfBody(tid));
+}}
+function tenantsExportAllPdf() {{
+  _tenantsPostInvoice(_tenantsPdfBody('all'));
+}}
+function _tenantsPostInvoice(body) {{
+  const el = document.getElementById('t-bills');
+  if (el && !_quietRefresh) el.innerHTML = '<p class="loading-msg">Generating PDF…</p>';
+  fetch('/api/tenants/invoice', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify(body)}})
+    .then(function(r) {{ return r.json(); }})
+    .then(function(d) {{
+      if (!d.ok) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||'?') + '</p>'; return; }}
+      const files = d.files || [];
+      if (!files.length) {{ el.innerHTML = '<p style="color:var(--muted)">No invoice produced (no consumption?).</p>'; return; }}
+      let h = '<div class="card" style="background:rgba(76,175,80,0.08);border-left:3px solid #4caf50">';
+      h += '<div style="font-weight:650;margin-bottom:6px">✅ ' + files.length + ' invoice' + (files.length === 1 ? '' : 's') + ' generated</div>';
+      h += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Period: ' + esc(d.period_start || '?') + ' → ' + esc(d.period_end || '?') + '</div>';
+      files.forEach(function(f) {{
+        const head = esc(f.tenant_name || f.name);
+        const meta = (f.total_gross != null) ? (' · ' + Number(f.total_gross).toFixed(2) + ' € gross') : '';
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--border)">';
+        h += '<div><div style="font-weight:600;font-size:12px">' + head + meta + '</div>';
+        h += '<div style="font-size:10px;color:var(--muted)">' + esc(f.name) + '</div></div>';
+        h += '<a class="btn small btn-accent" href="' + esc(f.url) + '" download>⬇ Download</a>';
+        h += '</div>';
+      }});
+      h += '</div>';
+      el.innerHTML = h;
+    }}).catch(function(e) {{ el.innerHTML = '<p style="color:var(--red)">Error: ' + e + '</p>'; }});
 }}
 function _tenantRowHtml(t, i) {{
   const tid = esc(t.tenant_id || '');
@@ -7813,219 +7973,6 @@ function _evShowDetail(stationId) {{
 
   document.getElementById('ev-detail-body').innerHTML = body;
   document.getElementById('ev-detail-modal').classList.add('open');
-}}
-
-/* ──────────────────────────────────────────────
-   EXPORT PANE
-────────────────────────────────────────────── */
-let _expInited = false;
-let _expJobsTimer = null;
-
-function _expFileIcon(name) {{
-  const n = (name||'').toLowerCase();
-  if (n.endsWith('.pdf')) return '📄';
-  if (n.endsWith('.xlsx') || n.endsWith('.xls')) return '📊';
-  if (n.endsWith('.zip')) return '📦';
-  if (n.endsWith('.png') || n.endsWith('.jpg') || n.endsWith('.jpeg') || n.endsWith('.svg')) return '🖼️';
-  return '📎';
-}}
-
-function _expRenderFileCard(f) {{
-  const icon = _expFileIcon(f.name);
-  const url = f.url || '';
-  const name = f.name || 'file';
-  const ext = name.split('.').pop().toUpperCase();
-  return `<div class="exp-file-card">
-    <div class="exp-file-icon">${{icon}}</div>
-    <div class="exp-file-info">
-      <div class="exp-file-name">${{name}}</div>
-      <div class="exp-file-meta">${{ext}}</div>
-    </div>
-    <a class="exp-file-btn" href="${{url}}" target="_blank">{exp_open_file}</a>
-  </div>`;
-}}
-
-function _expShowResults(files) {{
-  const el = document.getElementById('exp-results');
-  const ph = document.getElementById('exp-results-ph');
-  if (!files || !files.length) return;
-  if (ph) ph.style.display = 'none';
-  const html = files.map(f => _expRenderFileCard(f)).join('');
-  el.insertAdjacentHTML('afterbegin', html);
-}}
-
-function _expShowJobAccepted(jobId) {{
-  const el = document.getElementById('exp-results');
-  const ph = document.getElementById('exp-results-ph');
-  if (ph) ph.style.display = 'none';
-  el.insertAdjacentHTML('afterbegin', `<div class="exp-info-card">{t_job_started}</div>`);
-}}
-
-function _expShowError(msg) {{
-  const el = document.getElementById('exp-results');
-  const ph = document.getElementById('exp-results-ph');
-  if (ph) ph.style.display = 'none';
-  el.insertAdjacentHTML('afterbegin', `<div class="exp-file-card">
-    <div class="exp-file-icon">⚠️</div>
-    <div class="exp-file-info">
-      <div class="exp-file-name" style="color:#ef4444">{exp_job_error}</div>
-      <div class="exp-file-meta">${{msg}}</div>
-    </div>
-  </div>`);
-}}
-
-function _expHandleResult(res) {{
-  if (res && res.files && res.files.length) _expShowResults(res.files);
-  else if (res && res.job && res.job.id) _expShowJobAccepted(res.job.id);
-  else if (res && res.ok) _expShowJobAccepted(res.job ? res.job.id : '?');
-  else if (res && res.error) _expShowError(res.error);
-  else _expShowError(JSON.stringify(res));
-}}
-
-async function _expRefreshJobs() {{
-  try {{
-    const r = await fetch('/api/jobs', {{cache:'no-store'}});
-    const data = await r.json();
-    const arr = (data && data.jobs) ? data.jobs : [];
-    const el = document.getElementById('exp-jobs-list');
-    if (!el) return;
-    if (!arr.length) {{
-      el.innerHTML = '<div class="exp-placeholder">–</div>';
-      return;
-    }}
-    let html = '';
-    arr.forEach(j => {{
-      const st = j.status || '';
-      const pct = (j.progress_overall !== undefined && j.progress_overall !== null) ? parseInt(j.progress_overall,10) : 0;
-      const action = j.action || '';
-      const started = j.started_at ? new Date(j.started_at*1000).toLocaleString() : '';
-      let stClass = 'running', stLabel = '{exp_job_running}';
-      if (st === 'done' || st === 'completed') {{ stClass = 'done'; stLabel = '{exp_job_done}'; }}
-      else if (st === 'error' || st === 'failed') {{ stClass = 'error'; stLabel = '{exp_job_error}'; }}
-      let progHtml = '';
-      const prog = j.progress || {{}};
-      const keys = Object.keys(prog);
-      if (keys.length) {{
-        progHtml = keys.map(k => {{
-          const p = prog[k] || {{}};
-          const pp = parseInt(p.percent||0,10);
-          const pm = p.message || '';
-          return `<div class="exp-job-msg">${{k}}: ${{pp}}% ${{pm ? '– '+pm : ''}}</div>`;
-        }}).join('');
-      }}
-      let filesHtml = '';
-      const res = j.result || {{}};
-      if (res.files && Array.isArray(res.files) && res.files.length) {{
-        filesHtml = '<div class="exp-job-files">' + res.files.map(f => {{
-          const url = f.url || '';
-          const name = f.name || 'file';
-          return `<a class="exp-job-file-link" href="${{url}}" target="_blank">${{_expFileIcon(name)}}<span>${{name}}</span></a>`;
-        }}).join('') + '</div>';
-      }}
-      let errHtml = '';
-      if (j.error) {{
-        errHtml = `<div class="exp-job-msg" style="color:#ef4444">${{j.error}}</div>`;
-      }}
-      html += `<div class="exp-job-card">
-        <div class="exp-job-head">
-          <div class="exp-job-title">#${{j.id}} · ${{action}}</div>
-          <span class="exp-job-status ${{stClass}}">${{stLabel}}</span>
-        </div>
-        <progress class="exp-job-progress" max="100" value="${{isNaN(pct)?0:pct}}"></progress>
-        <div class="exp-job-msg">${{pct}}% · ${{started}}</div>
-        ${{progHtml}}
-        ${{errHtml}}
-        ${{filesHtml}}
-      </div>`;
-    }});
-    el.innerHTML = html;
-  }} catch(e) {{}}
-}}
-
-function _expStartJobsPolling() {{
-  if (_expJobsTimer) return;
-  _expRefreshJobs();
-  _expJobsTimer = setInterval(_expRefreshJobs, 2000);
-}}
-
-function _expStopJobsPolling() {{
-  if (_expJobsTimer) {{ clearInterval(_expJobsTimer); _expJobsTimer = null; }}
-}}
-
-function initExport() {{
-  if (!_expInited) {{
-    _expInited = true;
-
-    // Quick date presets
-    const qd = document.getElementById('exp-quick-dates');
-    const presets = [
-      ['today', '{exp_today}'],
-      ['week', '{exp_this_week}'],
-      ['month', '{exp_this_month}'],
-      ['year', '{exp_this_year}'],
-      ['all', '{exp_all}'],
-    ];
-    presets.forEach(([k, lbl]) => {{
-      const b = document.createElement('button');
-      b.textContent = lbl;
-      b.addEventListener('click', () => {{
-        const now = new Date();
-        const fmt = d => d.toISOString().slice(0,10);
-        const eS = document.getElementById('exp-start');
-        const eE = document.getElementById('exp-end');
-        if (k==='today') {{ eS.value=fmt(now); eE.value=fmt(now); }}
-        else if (k==='week') {{ const m=new Date(now); m.setDate(now.getDate()-now.getDay()+(now.getDay()===0?-6:1)); eS.value=fmt(m); eE.value=fmt(now); }}
-        else if (k==='month') {{ eS.value=fmt(new Date(now.getFullYear(),now.getMonth(),1)); eE.value=fmt(now); }}
-        else if (k==='year') {{ eS.value=fmt(new Date(now.getFullYear(),0,1)); eE.value=fmt(now); }}
-        else {{ eS.value=''; eE.value=''; }}
-      }});
-      qd.appendChild(b);
-    }});
-
-    function setBusy(btn, on) {{
-      if (on) {{ btn.disabled=true; btn.classList.add('busy'); }}
-      else {{ btn.disabled=false; btn.classList.remove('busy'); }}
-    }}
-
-    async function expRun(action, params) {{
-      const r = await fetch('/api/run', {{
-        method: 'POST',
-        headers: {{'Content-Type':'application/json'}},
-        body: JSON.stringify({{action, params: params||{{}}}})
-      }});
-      if (!r.ok) throw new Error('HTTP '+r.status);
-      return r.json();
-    }}
-
-    // Button handlers – all use _expHandleResult which handles files, jobs, and errors
-    async function expClick(btn, action, params) {{
-      setBusy(btn, true);
-      try {{ _expHandleResult(await expRun(action, params)); }}
-      catch(e) {{ _expShowError(e.message||String(e)); }}
-      setBusy(btn, false);
-    }}
-
-    document.getElementById('exp-btn-summary').addEventListener('click', function() {{
-      expClick(this, 'export_summary', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value}});
-    }});
-    document.getElementById('exp-btn-invoices').addEventListener('click', function() {{
-      expClick(this, 'export_invoices', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value, period: document.getElementById('exp-inv-period').value, anchor: document.getElementById('exp-inv-anchor').value}});
-    }});
-    document.getElementById('exp-btn-excel').addEventListener('click', function() {{
-      expClick(this, 'export_excel', {{start: document.getElementById('exp-start').value, end: document.getElementById('exp-end').value}});
-    }});
-    document.getElementById('exp-btn-bundle').addEventListener('click', function() {{
-      expClick(this, 'bundle', {{hours: parseInt(document.getElementById('exp-bundle-h').value)||48}});
-    }});
-    document.getElementById('exp-btn-report-day').addEventListener('click', function() {{
-      expClick(this, 'report', {{period:'day', anchor: document.getElementById('exp-inv-anchor').value}});
-    }});
-    document.getElementById('exp-btn-report-month').addEventListener('click', function() {{
-      expClick(this, 'report', {{period:'month', anchor: document.getElementById('exp-inv-anchor').value}});
-    }});
-  }}
-  // Start jobs polling when export tab is active
-  _expStartJobsPolling();
 }}
 
 /* ──────────────────────────────────────────────

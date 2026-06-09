@@ -1552,8 +1552,22 @@ class ActionDispatcher:
         """Handle a web action -- direct copy of _web_action_dispatch logic."""
         action = str(action or "").strip()
         params = params if isinstance(params, dict) else {}
-        out_root = (self.out_dir / "exports").resolve()
-        out_root.mkdir(parents=True, exist_ok=True)
+        # Export root: ui.export_directory (absolute path) overrides the
+        # legacy ``out_dir/exports`` default if set. Falls back silently if
+        # the configured path can't be created (no surprise crashes on a
+        # disconnected NAS mount — exports land in the default dir instead).
+        configured = str(getattr(self.cfg.ui, "export_directory", "") or "").strip()
+        if configured:
+            try:
+                _candidate = Path(configured).expanduser().resolve()
+                _candidate.mkdir(parents=True, exist_ok=True)
+                out_root = _candidate
+            except Exception:
+                out_root = (self.out_dir / "exports").resolve()
+                out_root.mkdir(parents=True, exist_ok=True)
+        else:
+            out_root = (self.out_dir / "exports").resolve()
+            out_root.mkdir(parents=True, exist_ok=True)
 
         def _pdate(x: Any) -> Optional[pd.Timestamp]:
             try:
