@@ -349,6 +349,7 @@ const SECTIONS = [
     ], defaults:{start_date:"",electricity_price_eur_per_kwh:0.3265,base_fee_eur_per_year:127.51}},
   ]},
   {id:"base_fee_split", title:"Base fee split", group:"Basic", custom:true},
+  {id:"tools_exports", title:"Tools / Exports", group:"Advanced", custom:true},
   {id:"tou", title:"TOU (time-of-use)", group:"Basic", fields:[
     {key:"tou.enabled", label:"TOU tariff active", type:"checkbox"},
     {key:"tou.rates", label:"Time periods", type:"list", itemLabel:"Rate", schema:[
@@ -795,6 +796,7 @@ function renderSection(s) {
     if (s.id === "auto_rules") return renderAutoRules();
     if (s.id === "ssl") return renderSSL();
     if (s.id === "base_fee_split") return renderBaseFeeSplit();
+    if (s.id === "tools_exports") return renderToolsExports();
     if (s.id === "ios_widget") return renderIosWidget();
     if (s.id === "supported_devices") return renderSupportedDevices();
   }
@@ -2284,6 +2286,118 @@ async function saveBaseFeeSplit() {
   } catch(e) {
     toast(T("settings.toast.error","Error: {err}",{err: e.message}), "error");
   }
+}
+
+function renderToolsExports() {
+  const ui = (cfg && cfg.ui) || {};
+  const exportDir = ui.export_directory || "";
+  return `<section id="sec-tools_exports"><h2>${T("settings.tools.title","Tools / Exports")}</h2>
+    <p class="hint" style="margin-bottom:10px">${T("settings.tools.hint","Manual exports — PDFs, Excel, daily/monthly reports, bundles. Generated files land in the configured export directory below; download links appear after the action runs.")}</p>
+
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="field" style="grid-column:1/-1">
+        <label>${T("settings.tools.export_dir","Export directory")}</label>
+        <input type="text" id="tools-export-dir" value="${esc(exportDir)}"
+          placeholder="${T("settings.tools.export_dir_placeholder","leave empty for default (= config-dir/exports)")}"
+          style="font-family:monospace">
+        <div class="hint" style="font-size:11px;margin-top:2px">${T("settings.tools.export_dir_hint","Absolute path. If unreachable, exports fall back to the default location silently. Restart not required.")}</div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="field"><label>${T("settings.tools.from","From")}</label><input type="date" id="tools-start"></div>
+      <div class="field"><label>${T("settings.tools.to","To")}</label><input type="date" id="tools-end"></div>
+      <div class="field"><label>${T("settings.tools.anchor","Anchor date (day/month report)")}</label><input type="date" id="tools-anchor"></div>
+      <div class="field"><label>${T("settings.tools.bundle_hours","Bundle hours")}</label><input type="number" id="tools-bundle-h" value="48" min="1" max="8760"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-bottom:12px">
+      <button class="secondary" onclick="toolsRun('export_summary')">📄 ${T("settings.tools.btn_pdf","PDF Summary")}</button>
+      <button class="secondary" onclick="toolsRun('export_invoices')">🧾 ${T("settings.tools.btn_per_device_inv","Per-device invoices")}</button>
+      <button class="secondary" onclick="toolsRun('export_excel')">📊 ${T("settings.tools.btn_excel","Excel")}</button>
+      <button class="secondary" onclick="toolsRun('report','day')">📅 ${T("settings.tools.btn_day_report","Day report")}</button>
+      <button class="secondary" onclick="toolsRun('report','month')">📆 ${T("settings.tools.btn_month_report","Month report")}</button>
+      <button class="secondary" onclick="toolsRun('bundle')">📦 ${T("settings.tools.btn_bundle","Bundle ZIP")}</button>
+    </div>
+
+    <div id="tools-results"></div>
+
+    <div class="section-actions">
+      <button onclick="saveToolsExports()">${T("settings.btn.save","💾 Save export directory")}</button>
+    </div>
+
+    <p class="hint" style="font-size:11px;margin-top:8px">${T("settings.tools.invoice_note","Per-device invoices use ALL configured devices and the base-fee split mode set above. For tenant-specific invoices use the Tenants tab.")}</p>
+  </section>`;
+}
+
+async function saveToolsExports() {
+  const dir = (document.getElementById("tools-export-dir") || {}).value || "";
+  try {
+    const r = await fetch("/api/settings", {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ ui: { export_directory: dir.trim() } }),
+    });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || "save failed");
+    toast(T("settings.toast.saved","Saved."), "ok");
+    const fresh = await fetch("/api/settings").then(x => x.json());
+    cfg = fresh;
+  } catch(e) {
+    toast(T("settings.toast.error","Error: {err}",{err: e.message}), "error");
+  }
+}
+
+async function toolsRun(action, period) {
+  const params = {};
+  const s = (document.getElementById("tools-start") || {}).value || "";
+  const e = (document.getElementById("tools-end") || {}).value || "";
+  const a = (document.getElementById("tools-anchor") || {}).value || "";
+  const bh = parseInt((document.getElementById("tools-bundle-h") || {}).value || "48", 10);
+  if (s) params.start = s;
+  if (e) params.end = e;
+  if (a) params.anchor = a;
+  if (action === "report") params.period = period || "day";
+  if (action === "export_invoices") {
+    params.period = "month";
+    if (a) params.anchor = a;
+  }
+  if (action === "bundle") params.hours = bh;
+  const out = document.getElementById("tools-results");
+  if (out) out.innerHTML = `<div class="hint">⏳ ${T("settings.tools.running","Running…")}</div>`;
+  try {
+    const r = await fetch("/api/run", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ action: action, params: params }),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || "?");
+    _toolsRenderResults(d, action);
+  } catch(err) {
+    if (out) out.innerHTML = `<div class="hint" style="color:var(--danger)">${T("settings.toast.error","Error: {err}",{err: err.message})}</div>`;
+  }
+}
+
+function _toolsRenderResults(d, action) {
+  const out = document.getElementById("tools-results");
+  if (!out) return;
+  const files = d.files || [];
+  if (!files.length && !d.message) {
+    out.innerHTML = `<div class="hint">${T("settings.tools.no_files","Done — no files produced.")}</div>`;
+    return;
+  }
+  let h = '<div class="card" style="margin-top:6px;padding:10px">';
+  h += `<div style="font-weight:650;margin-bottom:6px">✅ ${esc(action)} — ${files.length} file${files.length===1?"":"s"}</div>`;
+  files.forEach(function(f) {
+    h += `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--border)">
+      <div style="font-family:monospace;font-size:11px">${esc(f.name || "?")}</div>
+      <a class="btn small" href="${esc(f.url)}" download>⬇ ${T("settings.tools.download","Download")}</a>
+    </div>`;
+  });
+  if (d.message) h += `<div class="hint" style="margin-top:4px">${esc(d.message)}</div>`;
+  h += '</div>';
+  out.innerHTML = h;
 }
 
 function _sslDaysBadge(days) {

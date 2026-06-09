@@ -119,6 +119,12 @@ class UiConfig:
     # shows the full history again.
     live_retention_minutes: int = 120
 
+    # Where exported reports/invoices/Excel/bundles are written. Empty string
+    # = legacy default (= ``cfg_path.parent / "exports"``). Set to an absolute
+    # path to redirect all export artifacts to a chosen location (e.g. a NAS
+    # mount or an Obsidian-vault subfolder).
+    export_directory: str = ""
+
     # Optional web dashboard for Live (served locally, viewable on phone/desktop).
     # Default True so the phone dashboard works out-of-the-box.
     live_web_enabled: bool = True
@@ -1086,6 +1092,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         theme=str(ui_raw.get("theme", UiConfig.theme) or "auto"),
         live_retention_minutes=_coerce_int(ui_raw.get("live_retention_minutes", UiConfig.live_retention_minutes), UiConfig.live_retention_minutes),
         live_window_minutes=_coerce_int(ui_raw.get("live_window_minutes", UiConfig.live_window_minutes), UiConfig.live_window_minutes),
+        export_directory=str(ui_raw.get("export_directory", UiConfig.export_directory) or ""),
         live_web_enabled=bool(ui_raw.get("live_web_enabled", UiConfig.live_web_enabled)),
         live_web_port=_coerce_int(ui_raw.get("live_web_port", UiConfig.live_web_port), UiConfig.live_web_port),
         live_web_refresh_seconds=_coerce_float(ui_raw.get("live_web_refresh_seconds", UiConfig.live_web_refresh_seconds), UiConfig.live_web_refresh_seconds),
@@ -1776,6 +1783,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "autosync_interval_hours": cfg.ui.autosync_interval_hours,
             "autosync_interval_minutes": cfg.ui.autosync_interval_minutes,
             "autosync_mode": cfg.ui.autosync_mode,
+            "export_directory": getattr(cfg.ui, "export_directory", ""),
             "live_web_enabled": cfg.ui.live_web_enabled,
             "live_web_port": cfg.ui.live_web_port,
             "live_web_refresh_seconds": cfg.ui.live_web_refresh_seconds,

@@ -388,9 +388,24 @@ class AppState:
     # ── File serving ───────────────────────────────────────────────────
 
     def read_file_bytes(self, rel_path: str) -> Tuple[bytes, str]:
-        """Read a file below out_dir/exports and return (bytes, content_type)."""
+        """Read a file below the configured export root and return (bytes, ctype).
+
+        The root mirrors action_dispatch: ``ui.export_directory`` overrides
+        the legacy ``out_dir/exports`` default if set, with a silent fallback
+        when the configured path is unreachable.
+        """
         rel = str(rel_path).lstrip("/")
-        root = (self.out_dir / "exports").resolve()
+        configured = str(getattr(getattr(self, "cfg", None), "ui", None) and
+                         getattr(self.cfg.ui, "export_directory", "") or "").strip()
+        if configured:
+            try:
+                root = Path(configured).expanduser().resolve()
+                if not root.exists():
+                    root = (self.out_dir / "exports").resolve()
+            except Exception:
+                root = (self.out_dir / "exports").resolve()
+        else:
+            root = (self.out_dir / "exports").resolve()
         path = (root / rel).resolve()
         if root not in path.parents and path != root:
             raise FileNotFoundError(rel)
