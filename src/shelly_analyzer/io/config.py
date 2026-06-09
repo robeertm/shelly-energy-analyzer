@@ -255,6 +255,16 @@ class AlertRule:
     message: str = ""
 
 @dataclass(frozen=True)
+class BaseFeeSplitConfig:
+    # "off"     = each device invoice charges the full base fee (legacy default)
+    # "manual"  = use ``manual_shares`` (device_key → share_percent)
+    # "by_kwh"  = pro-rate base fee by each device's actual kWh in the period
+    mode: str = "off"
+    # device_key -> share_percent (0..100). Only consulted when mode == "manual".
+    # Stored as a tuple of (key, percent) pairs so the frozen dataclass stays hashable.
+    manual_shares: tuple = ()
+
+@dataclass(frozen=True)
 class PricingConfig:
     electricity_price_eur_per_kwh: float = 0.3265
 
@@ -277,6 +287,11 @@ class PricingConfig:
 
     # Future tariff periods. Each overrides price/base_fee from its start_date onward.
     tariff_schedule: List[TariffPeriod] = field(default_factory=list)
+
+    # How the yearly base fee is attributed across sub-meter devices on
+    # per-device invoices. Default "off" keeps the legacy behaviour where each
+    # device invoice is billed the full base fee.
+    base_fee_split: BaseFeeSplitConfig = field(default_factory=BaseFeeSplitConfig)
 
     def vat_rate(self) -> float:
         if not self.vat_enabled:
@@ -336,6 +351,45 @@ class PricingConfig:
                 except ValueError:
                     continue
         return self.base_fee_eur_per_year
+
+    def base_fee_share_for_device(
+        self,
+        device_key: str,
+        period_kwh_by_device: Optional[Dict[str, float]] = None,
+    ) -> float:
+        """Return the fraction (0..1) of the yearly base fee attributed to
+        *device_key*. Caller multiplies ``base_fee_day_net()`` by this fraction.
+
+        Mode behaviour:
+        - ``off``     → 1.0 (legacy: each invoice carries the full base fee).
+        - ``manual``  → ``manual_shares[device_key] / sum(manual_shares.values())``.
+          A zero or missing entry yields 0. If the configured shares sum to
+          zero the result is also 0 (no normalization out of thin air).
+        - ``by_kwh``  → ``period_kwh_by_device[device_key] / sum(period_kwh_by_device.values())``.
+          If no kWh map is supplied or all devices recorded zero kWh the
+          function falls back to an equal split across the supplied keys
+          (or 1.0 when no map is supplied at all).
+        """
+        split = getattr(self, "base_fee_split", None) or BaseFeeSplitConfig()
+        mode = (split.mode or "off").lower()
+        if mode == "manual":
+            shares = {str(k): float(v) for k, v in (split.manual_shares or ())}
+            total = sum(max(0.0, v) for v in shares.values())
+            if total <= 0:
+                return 0.0
+            return max(0.0, shares.get(str(device_key), 0.0)) / total
+        if mode == "by_kwh":
+            if not period_kwh_by_device:
+                return 1.0
+            cleaned = {str(k): max(0.0, float(v)) for k, v in period_kwh_by_device.items()}
+            total_kwh = sum(cleaned.values())
+            if total_kwh <= 0:
+                # All-zero period → equal split, every configured device pays
+                # the same fraction. Keeps the total base fee billed = 100%.
+                n = max(1, len(cleaned))
+                return 1.0 / n if str(device_key) in cleaned else 0.0
+            return cleaned.get(str(device_key), 0.0) / total_kwh
+        return 1.0  # "off" and any unknown value
 
     def effective_pricing_for_date(self, dt) -> "PricingConfig":
         """Return a PricingConfig with price/base_fee overridden for the given date.
@@ -1107,6 +1161,29 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     )
 
 
+    def _parse_base_fee_split(raw_split: Any) -> BaseFeeSplitConfig:
+        if not isinstance(raw_split, dict):
+            return BaseFeeSplitConfig()
+        mode = str(raw_split.get("mode", "off") or "off").lower()
+        if mode not in ("off", "manual", "by_kwh"):
+            mode = "off"
+        shares_raw = raw_split.get("manual_shares") or {}
+        pairs: List[tuple] = []
+        if isinstance(shares_raw, dict):
+            for k, v in shares_raw.items():
+                try:
+                    pairs.append((str(k), float(v)))
+                except (TypeError, ValueError):
+                    continue
+        elif isinstance(shares_raw, list):
+            for item in shares_raw:
+                if isinstance(item, (list, tuple)) and len(item) == 2:
+                    try:
+                        pairs.append((str(item[0]), float(item[1])))
+                    except (TypeError, ValueError):
+                        continue
+        return BaseFeeSplitConfig(mode=mode, manual_shares=tuple(pairs))
+
     pricing_raw = raw.get("pricing", {}) if isinstance(raw.get("pricing"), dict) else {}
     pricing = PricingConfig(
         base_fee_eur_per_year=_coerce_float(pricing_raw.get("base_fee_eur_per_year", PricingConfig.base_fee_eur_per_year), PricingConfig.base_fee_eur_per_year),
@@ -1132,6 +1209,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
             for tp in (pricing_raw.get("tariff_schedule") or [])
             if isinstance(tp, dict)
         ],
+        base_fee_split=_parse_base_fee_split(pricing_raw.get("base_fee_split")),
     )
 
     def _party_from_raw(obj: Any, defaults: BillingParty) -> BillingParty:
@@ -1828,6 +1906,13 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
                 }
                 for tp in (cfg.pricing.tariff_schedule or [])
             ],
+            "base_fee_split": {
+                "mode": getattr(cfg.pricing.base_fee_split, "mode", "off"),
+                "manual_shares": {
+                    str(k): float(v)
+                    for k, v in (getattr(cfg.pricing.base_fee_split, "manual_shares", ()) or ())
+                },
+            },
         },
         "tou": {
             "enabled": bool(getattr(cfg.tou, "enabled", False)),

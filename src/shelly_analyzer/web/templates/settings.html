@@ -348,6 +348,7 @@ const SECTIONS = [
       {key:"base_fee_eur_per_year", label:"Base fee €/year", type:"number", step:"0.01"},
     ], defaults:{start_date:"",electricity_price_eur_per_kwh:0.3265,base_fee_eur_per_year:127.51}},
   ]},
+  {id:"base_fee_split", title:"Base fee split", group:"Basic", custom:true},
   {id:"tou", title:"TOU (time-of-use)", group:"Basic", fields:[
     {key:"tou.enabled", label:"TOU tariff active", type:"checkbox"},
     {key:"tou.rates", label:"Time periods", type:"list", itemLabel:"Rate", schema:[
@@ -793,6 +794,7 @@ function renderSection(s) {
     if (s.id === "updates") return renderUpdates();
     if (s.id === "auto_rules") return renderAutoRules();
     if (s.id === "ssl") return renderSSL();
+    if (s.id === "base_fee_split") return renderBaseFeeSplit();
     if (s.id === "ios_widget") return renderIosWidget();
     if (s.id === "supported_devices") return renderSupportedDevices();
   }
@@ -2130,6 +2132,160 @@ function renderSSL() {
   </section>`;
 }
 
+function renderBaseFeeSplit() {
+  const pricing = (cfg && cfg.pricing) || {};
+  const split = pricing.base_fee_split || {};
+  const mode = (split.mode || "off").toLowerCase();
+  const shares = split.manual_shares || {};
+  const baseYear = Number(pricing.base_fee_eur_per_year || 0).toFixed(2);
+  const orderedDevs = _orderedDevices(devices);
+
+  let manualRows = "";
+  if (orderedDevs.length) {
+    manualRows = orderedDevs.map(d => {
+      const v = shares[d.key];
+      const pct = (v == null) ? "" : Number(v);
+      return `<tr data-bfs-row="${esc(d.key)}">
+        <td style="padding:4px 8px">${esc(d.name || d.key)}</td>
+        <td style="padding:4px 8px;color:var(--muted);font-size:11px">${esc(d.key)}</td>
+        <td style="padding:4px 8px;text-align:right">
+          <input type="number" min="0" step="0.1" value="${pct}" data-bfs-pct="${esc(d.key)}"
+            style="width:80px;text-align:right" oninput="_bfsRecompute()"></td>
+        <td style="padding:4px 8px;text-align:right;color:var(--muted);font-size:11px" data-bfs-norm="${esc(d.key)}">–</td>
+        <td style="padding:4px 8px;text-align:right;color:var(--muted);font-size:11px" data-bfs-eur="${esc(d.key)}">–</td>
+      </tr>`;
+    }).join("");
+  } else {
+    manualRows = `<tr><td colspan="5" style="padding:8px;color:var(--muted)">${T("settings.base_fee_split.no_devices","No devices configured.")}</td></tr>`;
+  }
+
+  return `<section id="sec-base_fee_split"><h2>${T("settings.base_fee_split.title","Base fee split across sub-meters")}</h2>
+    <p class="hint" style="margin-bottom:10px">${T("settings.base_fee_split.hint","If you have one main meter and several Shellys behind it, the yearly base fee ({eur} € net/year) is attributed across the devices instead of charging the full base fee on every per-device invoice.",{eur:baseYear})}</p>
+    <div class="grid2">
+      <div class="field"><label>${T("settings.base_fee_split.mode","Mode")}</label>
+        <select id="bfs-mode" onchange="_bfsToggleMode()">
+          <option value="off" ${mode==="off"?"selected":""}>${T("settings.base_fee_split.mode_off","Off — full base fee per invoice (legacy)")}</option>
+          <option value="manual" ${mode==="manual"?"selected":""}>${T("settings.base_fee_split.mode_manual","Manual — fixed percentage per device")}</option>
+          <option value="by_kwh" ${mode==="by_kwh"?"selected":""}>${T("settings.base_fee_split.mode_by_kwh","By kWh — pro-rated by each device's consumption in the invoice period")}</option>
+        </select></div>
+    </div>
+    <div id="bfs-manual" style="margin-top:10px;${mode==="manual"?"":"display:none"}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+        <strong style="font-size:13px">${T("settings.base_fee_split.shares","Shares per device")}</strong>
+        <div>
+          <button type="button" class="secondary small" onclick="_bfsEvenSplit()">${T("settings.base_fee_split.even","Even split")}</button>
+          <button type="button" class="secondary small" onclick="_bfsByLast30d()" title="${T("settings.base_fee_split.by_30d_hint","Prefill with each device's share of consumed kWh over the last 30 days")}">${T("settings.base_fee_split.by_30d","From last 30d kWh")}</button>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="border-bottom:1px solid var(--border);text-align:left">
+          <th style="padding:4px 8px">${T("settings.base_fee_split.device","Device")}</th>
+          <th style="padding:4px 8px">${T("settings.base_fee_split.key","Key")}</th>
+          <th style="padding:4px 8px;text-align:right">${T("settings.base_fee_split.pct_input","% input")}</th>
+          <th style="padding:4px 8px;text-align:right">${T("settings.base_fee_split.pct_norm","% normalized")}</th>
+          <th style="padding:4px 8px;text-align:right">${T("settings.base_fee_split.eur_year","€/year (net)")}</th>
+        </tr></thead>
+        <tbody>${manualRows}</tbody>
+      </table>
+      <p class="hint" style="margin-top:6px">${T("settings.base_fee_split.normalize_hint","Inputs are normalized to 100 % across all devices. Empty or zero rows pay nothing; the rest split the base fee proportionally.")}</p>
+    </div>
+    <div id="bfs-by_kwh" style="margin-top:10px;${mode==="by_kwh"?"":"display:none"}">
+      <p class="hint">${T("settings.base_fee_split.by_kwh_hint","On each invoice export the device's share is computed from its actual kWh in the chosen period. A device with zero consumption in that period pays zero; if all devices are zero the base fee is split equally.")}</p>
+    </div>
+    <div class="section-actions">
+      <button onclick="saveBaseFeeSplit()">${T("settings.btn.save","💾 Save")}</button>
+    </div>
+  </section>`;
+}
+
+function _bfsToggleMode() {
+  const m = (document.getElementById("bfs-mode") || {}).value || "off";
+  const man = document.getElementById("bfs-manual");
+  const bk  = document.getElementById("bfs-by_kwh");
+  if (man) man.style.display = (m === "manual") ? "" : "none";
+  if (bk)  bk.style.display  = (m === "by_kwh") ? "" : "none";
+  _bfsRecompute();
+}
+
+function _bfsRecompute() {
+  const baseNet = Number((cfg && cfg.pricing && cfg.pricing.base_fee_eur_per_year) || 0);
+  const inputs = document.querySelectorAll('[data-bfs-pct]');
+  let total = 0;
+  inputs.forEach(inp => { total += Math.max(0, Number(inp.value || 0)); });
+  inputs.forEach(inp => {
+    const key = inp.getAttribute("data-bfs-pct");
+    const v = Math.max(0, Number(inp.value || 0));
+    const frac = total > 0 ? (v / total) : 0;
+    const normCell = document.querySelector('[data-bfs-norm="' + key.replace(/"/g, '\\"') + '"]');
+    const eurCell  = document.querySelector('[data-bfs-eur="'  + key.replace(/"/g, '\\"') + '"]');
+    if (normCell) normCell.textContent = (frac * 100).toFixed(1) + " %";
+    if (eurCell)  eurCell.textContent  = (frac * baseNet).toFixed(2) + " €";
+  });
+}
+
+function _bfsEvenSplit() {
+  const inputs = document.querySelectorAll('[data-bfs-pct]');
+  if (!inputs.length) return;
+  const per = (100 / inputs.length).toFixed(1);
+  inputs.forEach(inp => { inp.value = per; });
+  _bfsRecompute();
+}
+
+async function _bfsByLast30d() {
+  try {
+    const r = await fetch("/api/devices_kwh?days=30");
+    const d = await r.json();
+    if (!d || !d.ok || !d.kwh_by_device) {
+      toast(T("settings.base_fee_split.by_30d_failed","Could not load 30-day kWh"), "error");
+      return;
+    }
+    const inputs = document.querySelectorAll('[data-bfs-pct]');
+    const totals = {};
+    inputs.forEach(inp => {
+      const k = inp.getAttribute("data-bfs-pct");
+      totals[k] = Number(d.kwh_by_device[k] || 0);
+    });
+    let sum = 0;
+    Object.values(totals).forEach(v => { sum += Math.max(0, v); });
+    inputs.forEach(inp => {
+      const k = inp.getAttribute("data-bfs-pct");
+      const v = totals[k] || 0;
+      inp.value = sum > 0 ? ((v / sum) * 100).toFixed(1) : "0.0";
+    });
+    _bfsRecompute();
+  } catch (e) {
+    toast(T("settings.base_fee_split.by_30d_failed","Could not load 30-day kWh") + ": " + e.message, "error");
+  }
+}
+
+async function saveBaseFeeSplit() {
+  const mode = (document.getElementById("bfs-mode") || {}).value || "off";
+  const shares = {};
+  if (mode === "manual") {
+    document.querySelectorAll('[data-bfs-pct]').forEach(inp => {
+      const k = inp.getAttribute("data-bfs-pct");
+      const v = Number(inp.value || 0);
+      if (v > 0) shares[k] = v;
+    });
+  }
+  const body = { pricing: { base_fee_split: { mode: mode, manual_shares: shares } } };
+  try {
+    const r = await fetch("/api/settings", {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || "save failed");
+    toast(T("settings.toast.saved","Saved."), "ok");
+    const fresh = await fetch("/api/settings").then(x => x.json());
+    cfg = fresh;
+    renderAll();
+  } catch(e) {
+    toast(T("settings.toast.error","Error: {err}",{err: e.message}), "error");
+  }
+}
+
 function _sslDaysBadge(days) {
   if (days == null) return `<span class="hint">${T("settings.ssl.unknown","unbekannt")}</span>`;
   if (days < 0) return `<strong style="color:var(--danger,#ef4444)">${T("settings.ssl.expired","abgelaufen vor {n} Tagen",{n:-days})}</strong>`;
@@ -2482,6 +2638,10 @@ function renderAll() {
   // Auto-load SSL status if the SSL section is rendered
   if (document.getElementById("sec-ssl")) {
     loadSSLStatus();
+  }
+  // Recompute the base-fee-split normalized %/€ columns after re-render
+  if (document.getElementById("sec-base_fee_split")) {
+    _bfsRecompute();
   }
   // Keep the spot-zone dropdown in sync with the spot API selector: when
   // the user flips primary_api, re-render the spot_price section so the
