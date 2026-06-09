@@ -1,5 +1,19 @@
 # Changelog
 
+## 16.40.0 - 2026-06-09
+### Removed
+- **Export tab.** The standalone Export tab is gone — its six action buttons (PDF summary, per-device invoices, Excel, day report, month report, bundle ZIP) have moved to **Settings → Tools / Exports**, and tenant-specific invoice PDFs are now handled by the redesigned Tenants tab. The underlying backend actions (`export_summary`, `export_invoices`, `export_excel`, `report`, `bundle`) are unchanged; only the UI entry points moved.
+
+### Added
+- **`ui.export_directory` config field** — absolute path that overrides where every export action writes its output (previously hard-wired to `cfg-dir/exports`). Empty string keeps the legacy default. If the configured path can't be created at run time the export silently falls back to the default location so a disconnected NAS mount never causes a hard error. The `/files/<rel>` download route honours the same override so download links work without restart.
+- **Settings → Tools / Exports** custom section with the relocated 6 buttons, date-range inputs (start/end/anchor), bundle-hours input, and an "Export directory" text field with a `💾 Save export directory` button. Results show inline as a card with download links.
+- **Tenants tab — redesigned invoice export.**
+  - Period preset pills: `Letzter Monat` / `Letztes Quartal` / `Letztes Halbjahr` / `Letztes Jahr` — all four resolve to the most recently *completed* period (e.g. on 2026-06-09 → May 2026, Q1 2026, H2 2025, 2025).
+  - Free date range with auto-clear of the active preset when either date is edited; a header label shows the resolved period (`Mai 2026 · 2026-05-01 → 2026-05-31`).
+  - One card per configured tenant with "📊 Preview" (inline line-item breakdown) and "🧾 PDF" (download) buttons.
+  - Bulk actions: "📊 Preview" (all tenants) and "📦 PDFs (all)".
+  - New `POST /api/tenants/invoice` endpoint: takes `{tenant_id|"all", period_start, period_end, tariff_mode}`, runs the same `generate_tenant_bills` pipeline as `/api/tenants/bill`, and renders each bill through `services.export.export_pdf_invoice`. Returns `{files: [{name, url, tenant_id, tenant_name, total_gross, total_kwh}]}`.
+
 ## 16.39.0 - 2026-06-09
 ### Added
 - **Base fee split across sub-meter devices on per-device invoices.** When several Shellys sit behind a single main meter, the yearly base fee (`pricing.base_fee_eur_per_year`) is no longer charged in full on every per-device invoice. New `pricing.base_fee_split` block controls how it's attributed:
