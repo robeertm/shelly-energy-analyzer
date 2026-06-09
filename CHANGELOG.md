@@ -1,5 +1,14 @@
 # Changelog
 
+## 16.39.0 - 2026-06-09
+### Added
+- **Base fee split across sub-meter devices on per-device invoices.** When several Shellys sit behind a single main meter, the yearly base fee (`pricing.base_fee_eur_per_year`) is no longer charged in full on every per-device invoice. New `pricing.base_fee_split` block controls how it's attributed:
+  - `mode: "off"` — legacy behaviour, each device invoice carries the full base fee. Default for backwards-compat.
+  - `mode: "manual"` — fixed percentage per device (`manual_shares: {device_key: pct}`). Inputs are normalized to 100 % across all configured devices on read, so a 50/50 entered as 50/50 stays 50/50, and 60/40 stays 60/40, but 60/60 normalises to 50/50 — total billed base fee always equals the configured `base_fee_eur_per_year`.
+  - `mode: "by_kwh"` — pro-rate by each device's actual kWh in the resolved invoice period. A device with zero consumption pays zero; if all devices had zero consumption the split falls back to equal.
+  - New helper `PricingConfig.base_fee_share_for_device(device_key, period_kwh_by_device=None) -> float` (0..1). Invoice path multiplies `base_fee_day_net()` by this share before adding it as a PDF line item.
+- **Settings → Base fee split section (right below Pricing).** Mode selector with three options, live-normalized percentage and €/year columns next to each device input, "Even split" and "From last 30d kWh" quick-fill buttons. The 30d-kWh button hits the new `GET /api/devices_kwh?days=N` endpoint which pulls totals from `hourly_energy` for every configured device.
+
 ## 16.38.0 - 2026-06-08
 ### Changed
 - **EV-Log wallbox chart: dynamic month range + always-on kWh labels.** The 24-month bar chart no longer always renders 24 months — it now starts at the *first* month in the last 24 where the wallbox actually charged and rolls forward to the current month. Months with no detected charging history at all give an empty chart instead of 24 flat baselines. Every non-empty bar also gets its kWh value rendered as a label now: bars with vertical headroom keep the label above the rectangle as before, but bars that already touch the top of the chart (the tallest month) get the label drawn inside the top of the bar in white, so the value is never silently dropped. Visual: instead of a near-empty 24-month strip with one big bar and one smaller bar (only the smaller one labelled), the chart now zooms to just the months that have charging data and labels every bar.

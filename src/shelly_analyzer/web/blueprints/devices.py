@@ -299,6 +299,40 @@ def probe_device_endpoint():
         return jsonify({"ok": False, "error": str(e)})
 
 
+@bp.route("/api/devices_kwh", methods=["GET"])
+def devices_kwh():
+    """Return per-device kWh totals over the last ?days=N days.
+
+    Used by the Settings → Base fee split UI to prefill manual shares from
+    actual consumption. Sourced from the pre-aggregated ``hourly_energy``
+    table, so even multi-year totals stay cheap.
+    """
+    state = _get_state()
+    try:
+        import time as _t
+        try:
+            days = int(request.args.get("days", 30))
+        except (TypeError, ValueError):
+            days = 30
+        days = max(1, min(days, 730))
+        end_ts = int(_t.time())
+        start_ts = end_ts - days * 86400
+        out: Dict[str, float] = {}
+        for d in state.cfg.devices:
+            try:
+                df = state.storage.db.query_hourly(d.key, start_ts=start_ts, end_ts=end_ts)
+                if df is None or df.empty or "kwh" not in df.columns:
+                    out[d.key] = 0.0
+                else:
+                    out[d.key] = round(float(df["kwh"].sum()), 3)
+            except Exception:
+                out[d.key] = 0.0
+        return jsonify({"ok": True, "days": days, "kwh_by_device": out})
+    except Exception as e:
+        logger.exception("devices_kwh failed")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @bp.route("/api/devices/<key>/firmware", methods=["POST"])
 def update_firmware(key: str):
     """Trigger firmware update for a device."""
