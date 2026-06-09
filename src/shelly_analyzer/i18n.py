@@ -6182,6 +6182,10 @@ _I18N.setdefault("en", {}).update({
     "pdf.invoice.line_energy": "Electricity consumption {device} ({period})",
     "pdf.invoice.line_base_fee": "Base fee ({days} days)",
 
+    "tenant.bill.line_energy": "Electricity consumption – {device}",
+    "tenant.bill.line_common": "Common area (share {persons}/{total} pers.)",
+    "tenant.bill.line_base_fee": "Base fee ({days} days · {pct} %)",
+
     "unit.days": "days",
     "period.all": "(entire period)",
     "msg.report_written": "Report written",
@@ -6246,6 +6250,10 @@ _I18N.setdefault("de", {}).update({
 
     "pdf.invoice.line_energy": "Stromverbrauch {device} ({period})",
     "pdf.invoice.line_base_fee": "Grundpreis ({days} Tage)",
+
+    "tenant.bill.line_energy": "Stromverbrauch – {device}",
+    "tenant.bill.line_common": "Allgemeinstrom (Anteil {persons}/{total} Pers.)",
+    "tenant.bill.line_base_fee": "Grundpreis ({days} Tage · {pct} %)",
 
     "unit.days": "Tage",
     "period.all": "(gesamter Zeitraum)",
