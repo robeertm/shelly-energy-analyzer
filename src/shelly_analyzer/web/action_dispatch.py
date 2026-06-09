@@ -1944,6 +1944,26 @@ class ActionDispatcher:
             due = issue + timedelta(days=int(self.cfg.billing.payment_terms_days))
             ts_str = time.strftime("%Y%m%d")
             files: List[Dict[str, str]] = []
+
+            # Base-fee split: pre-compute the per-device kWh map once for the
+            # whole batch so a single by_kwh invoice run sees the same totals
+            # across all generated invoices (otherwise each PDF's "fairness"
+            # would depend on the order they're processed in).
+            split_mode = (getattr(self.cfg.pricing.base_fee_split, "mode", "off") or "off").lower()
+            period_kwh_by_device: Dict[str, float] = {}
+            if split_mode == "by_kwh":
+                s_ts = int(pd.Timestamp(start).timestamp()) if start is not None else None
+                e_ts = int(pd.Timestamp(end).timestamp()) if end is not None else None
+                for _d in self.cfg.devices[:2]:
+                    try:
+                        df_h = self.storage.db.query_hourly(_d.key, start_ts=s_ts, end_ts=e_ts)
+                        if df_h is not None and not df_h.empty and "kwh" in df_h.columns:
+                            period_kwh_by_device[_d.key] = float(df_h["kwh"].sum())
+                        else:
+                            period_kwh_by_device[_d.key] = 0.0
+                    except Exception:
+                        period_kwh_by_device[_d.key] = 0.0
+
             for d in self.cfg.devices[:2]:
                 cd = load_device(self.storage, d)
                 df_inv = filter_by_time(cd.df, start=start, end=end)
@@ -1995,8 +2015,16 @@ class ActionDispatcher:
                         e_eff = pd.Timestamp(end).normalize() if end is not None else pd.Timestamp(df_inv['timestamp'].max()).normalize()
                     days = int((e_eff.date() - s_eff.date()).days) + 1
                     days = max(1, days)
-                    base_day_net = float(self.cfg.pricing.base_fee_day_net())
-                    lines.append(InvoiceLine(description=self.t("pdf.invoice.line_base_fee", days=days), quantity=float(days), unit=self.t("unit.days"), unit_price_net=base_day_net))
+                    base_day_net_full = float(self.cfg.pricing.base_fee_day_net())
+                    # Apply the configured per-device share (1.0 in "off" mode →
+                    # legacy behaviour, full base fee on each invoice).
+                    share = float(self.cfg.pricing.base_fee_share_for_device(
+                        d.key,
+                        period_kwh_by_device if split_mode == "by_kwh" else None,
+                    ))
+                    base_day_net = base_day_net_full * share
+                    if base_day_net > 0:
+                        lines.append(InvoiceLine(description=self.t("pdf.invoice.line_base_fee", days=days), quantity=float(days), unit=self.t("unit.days"), unit_price_net=base_day_net))
                 export_pdf_invoice(
                     out_path=out_inv,
                     invoice_no=invoice_no,
