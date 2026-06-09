@@ -283,6 +283,12 @@ def export_tenant_invoice():
         if tc is None or not tc.tenants:
             return jsonify({"ok": False, "error": "No tenants configured"}), 400
 
+        # NOTE: always pass the FULL tenant list to generate_tenant_bills so
+        # the base-fee split (by_kwh / manual / off) sees the complete pool.
+        # If we pre-filtered to a single tenant here, by_kwh would compute
+        # tenant_kwh / tenant_kwh = 100 % for any one-tenant PDF — which is
+        # the bug that hit the v16.41.0 invoice path. Filtering happens
+        # AFTER the bills are computed, only when rendering PDFs.
         svc_tenants = [
             SvcTenantDef(
                 tenant_id=t.tenant_id,
@@ -300,8 +306,7 @@ def export_tenant_invoice():
             for t in tc.tenants
         ]
         if tenant_id and tenant_id != "all":
-            svc_tenants = [t for t in svc_tenants if t.tenant_id == tenant_id]
-            if not svc_tenants:
+            if not any(t.tenant_id == tenant_id for t in svc_tenants):
                 return jsonify({"ok": False, "error": f"Unknown tenant_id '{tenant_id}'"}), 400
 
         try:
@@ -353,11 +358,17 @@ def export_tenant_invoice():
         inv_dir = out_root / "web" / "invoices"
         inv_dir.mkdir(parents=True, exist_ok=True)
 
+        # Filter bills to the requested tenant_id AFTER the bill compute so
+        # the base-fee split saw the full pool. "all" or empty → all bills.
+        bills_to_render = report.bills
+        if tenant_id and tenant_id != "all":
+            bills_to_render = [b for b in report.bills if b.tenant.tenant_id == tenant_id]
+
         issue = _date.today()
         due = issue + _td(days=int(state.cfg.billing.payment_terms_days))
         prefix = str(state.cfg.billing.invoice_prefix or "INV")
         files = []
-        for bill in report.bills:
+        for bill in bills_to_render:
             tn = bill.tenant
             invoice_no = f"{prefix}-{issue.strftime('%Y%m%d')}-{tn.tenant_id or 'tenant'}-{bill.period_start}-{bill.period_end}"
             safe = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in (tn.name or tn.tenant_id or "tenant")).strip("_")
