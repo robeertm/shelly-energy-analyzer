@@ -1,5 +1,11 @@
 # Changelog
 
+## 16.41.3 - 2026-06-10
+### Fixed
+- **Saved UI language reset to English on every restart.** A leftover guard in `web/app_context.py` overwrote `cfg.ui.language` with `"en"` on boot ("per user request" from an earlier release). The setting was persisted to disk correctly, just ignored at startup — so picking Spanish/French/etc. in Settings looked like it worked until the next process restart. Removed the override; `state.lang` now reflects the saved `cfg.ui.language` (normalised against the supported list, falls back to `en` if unset/invalid).
+- **"Base fee split" and "Tools / Exports" section headers were hardcoded English in every language.** The two new sections from v16.41.0 didn't carry `settings.section.*` translation keys at all, so `T("settings.section.base_fee_split", "Base fee split")` always fell through to the literal English fallback even in German mode. Added section-title keys for both, plus `settings.section.auto_rules` (also missing), in all 9 supported languages. Filled the remaining DE+EN-only gaps (`demo`, `ssl`, `device_control`, `ios_widget`, `supported_devices`) so the Settings navigator reads cleanly in es/fr/pt/it/pl/cs/ru as well.
+- **v16.41.x tenant / base-fee / tools / Tenants-tab strings only existed in DE+EN.** The seven extra languages relied on the `t()` English fallback for ~80 keys — coherent but inconsistent (a Spanish UI suddenly switching to English mid-section). Added full translations for `tenant.bill.*`, `settings.base_fee_split.*`, `settings.tools.*` and `web.tenants.*` to es/fr/pt/it/pl/cs/ru.
+
 ## 16.41.2 - 2026-06-10
 ### Fixed
 - **Stray "1"/"2" between tenant name and address in invoice PDF.** v16.41.0 prepended `tenant.unit` as its own line into the customer block, so the unit identifier rendered as a bare number under the name. Dropped — `unit` is kept in config (Settings → Tenants) for tenant identification but no longer appears in the PDF address area. The proper place for "Apt 1A" / "Whg 1" stays the tenant name itself.

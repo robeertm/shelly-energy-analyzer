@@ -40,17 +40,10 @@ class AppState:
         self.cfg = cfg
         self.storage = storage
         self.out_dir = Path(out_dir) if out_dir else Path.cwd()
-        # The app must always start in English (per user request). The
-        # saved cfg.ui.language is overridden in memory only — disk is not
-        # touched. The user can pick another language via settings during
-        # the session; the next restart will reset back to English.
-        try:
-            from dataclasses import replace as _replace
-            cfg = _replace(cfg, ui=_replace(cfg.ui, language="en"))
-            self.cfg = cfg
-        except Exception:
-            pass
-        self.lang = "en"
+        # Honour the saved language from disk (v16.41.3). Earlier releases
+        # forced English on every boot; the user now wants the chosen
+        # language to persist across restarts.
+        self.lang = normalize_lang(getattr(cfg.ui, "language", "en"))
 
         # Live data store
         poll_s = max(0.2, float(cfg.ui.live_poll_seconds))
