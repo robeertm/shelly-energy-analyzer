@@ -2899,6 +2899,21 @@ function renderAll() {
   // zone dropdown switches between Energy-Charts zones and aWATTar zones.
   // Rebind after re-render (old select node is gone).
   _bindSpotApiChange();
+  // If the URL had a hash (e.g. /settings#sec-tenant), scroll to it
+  // explicitly — the browser doesn't re-trigger anchor jumps after we
+  // replace #main innerHTML async via reload().
+  if (location.hash && location.hash.length > 1) {
+    setTimeout(() => {
+      const target = document.querySelector(location.hash);
+      if (target) {
+        target.scrollIntoView({behavior: "smooth", block: "start"});
+        target.style.transition = "background 0.3s ease";
+        const oldBg = target.style.background;
+        target.style.background = "rgba(76,175,80,0.12)";
+        setTimeout(() => { target.style.background = oldBg; }, 1500);
+      }
+    }, 50);
+  }
 }
 
 function _bindSpotApiChange() {

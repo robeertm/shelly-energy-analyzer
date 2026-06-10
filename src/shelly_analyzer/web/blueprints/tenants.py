@@ -387,10 +387,11 @@ def export_tenant_invoice():
                 ))
 
             # Customer address — split tenant.address by newlines (multi-line
-            # input from Settings textarea). Unit identifier prepends if set.
+            # input from Settings textarea). The unit identifier is kept in
+            # the bill_to header only via the tenant name; it is NOT
+            # prepended as its own address line (would render as a stray
+            # number under the name, see v16.41.2 hotfix).
             addr_lines = []
-            if tn.unit:
-                addr_lines.append(tn.unit)
             if tn.address:
                 addr_lines.extend([ln.strip() for ln in tn.address.splitlines() if ln.strip()])
             customer = {
