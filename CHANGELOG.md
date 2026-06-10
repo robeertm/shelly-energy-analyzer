@@ -1,5 +1,11 @@
 # Changelog
 
+## 16.41.2 - 2026-06-10
+### Fixed
+- **Stray "1"/"2" between tenant name and address in invoice PDF.** v16.41.0 prepended `tenant.unit` as its own line into the customer block, so the unit identifier rendered as a bare number under the name. Dropped — `unit` is kept in config (Settings → Tenants) for tenant identification but no longer appears in the PDF address area. The proper place for "Apt 1A" / "Whg 1" stays the tenant name itself.
+- **"Configure in Settings" link from the Tenants tab didn't actually jump to the tenant section.** `/settings#sec-tenant` triggers a browser hash, but the settings page replaces `#main` async on load — the native anchor jump fires before the section exists. Added explicit `scrollIntoView` after `renderAll()` plus a brief green highlight so it's clear what was navigated to.
+- **Hardcoded English in the Tenants tab and base-fee-split / Tools sections.** Many strings (`Base fee split across sub-meters`, period pills `Letzter Monat` / `Letztes Quartal`, table headers `Item`/`Net`/`VAT`/`Total gross`, etc.) bypassed the i18n layer. New translation keys `settings.base_fee_split.*`, `settings.tools.*`, `web.tenants.*` in EN + DE; webdash uses the runtime `t()` helper, settings page uses `T()` against `/api/i18n`. Tenants tab period pills now respect the configured UI language — DE shows "Letzter Monat", EN shows "Last month".
+
 ## 16.41.1 - 2026-06-09
 ### Fixed
 - **Single-tenant PDF showed 100 % base-fee share regardless of split mode.** The `/api/tenants/invoice` endpoint pre-filtered `svc_tenants` to just the requested tenant before calling `generate_tenant_bills`. With one tenant in the pool, `by_kwh` computes `tenant_kwh / tenant_kwh = 1.0` and `off` computes `1 / max(len(tenants), 1) = 1.0` — i.e. the lone tenant always pays the full base fee. The preview endpoint (`/api/tenants/bill`) was unaffected because it always passes the full pool. Fix: build bills for the full pool, then filter `report.bills` by `tenant_id` only when rendering PDFs. Per-tenant PDFs now match what the preview shows.

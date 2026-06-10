@@ -3284,35 +3284,41 @@ function renderTenants() {{
   const commonCount = (td.common_device_keys || []).length;
   h += '<div class="card" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">';
   h += '<div style="font-size:12px;color:var(--muted)">';
-  h += '🏘 <b style="color:var(--text)">' + tCount + '</b> tenant' + (tCount === 1 ? '' : 's') +
-       (td.enabled ? '' : ' · <span style="color:var(--warn,#eab308)">billing inactive</span>') +
-       (commonCount ? ' · ' + commonCount + ' common-area device' + (commonCount === 1 ? '' : 's') : '');
+  h += '🏘 <b style="color:var(--text)">' + tCount + '</b> ' + t('web.tenants.tenant_count', tCount === 1 ? 'tenant' : 'tenants') +
+       (td.enabled ? '' : ' · <span style="color:var(--warn,#eab308)">' + t('web.tenants.billing_inactive','billing inactive') + '</span>') +
+       (commonCount ? ' · ' + commonCount + ' ' + t('web.tenants.common_area', commonCount === 1 ? 'common-area device' : 'common-area devices') : '');
   h += '</div>';
-  h += '<a class="btn small" href="/settings#sec-tenant">⚙ Configure in Settings</a>';
+  h += '<a class="btn small" href="/settings#sec-tenant">⚙ ' + t('web.tenants.configure_in_settings','Configure in Settings') + '</a>';
   h += '</div>';
   // Invoice export — period pills + per-tenant preview/PDF cards
   const preset = _tenantsPresetForBoot();
   h += '<div class="card" style="margin-top:10px;background:linear-gradient(135deg,rgba(76,175,80,0.08),rgba(33,150,243,0.05));border:1px solid rgba(76,175,80,0.25)">';
   h += '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;margin-bottom:10px">';
-  h += '<div><div style="font-size:18px;font-weight:700;letter-spacing:0.2px">🧾 Invoice export</div>';
-  h += '<div style="font-size:11px;color:var(--muted);margin-top:2px">Generate a PDF invoice per tenant for a chosen period.</div></div>';
+  h += '<div><div style="font-size:18px;font-weight:700;letter-spacing:0.2px">🧾 ' + t('web.tenants.invoice_export','Invoice export') + '</div>';
+  h += '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + t('web.tenants.export_hint','Generate a PDF invoice per tenant for a chosen period.') + '</div></div>';
   h += '<div id="t-period-label" style="font-size:13px;font-weight:600;text-align:right"></div>';
   h += '</div>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px" id="t-period-pills">';
+  const presetLabels = {{
+    last_month: t('web.tenants.preset_last_month','Last month'),
+    last_quarter: t('web.tenants.preset_last_quarter','Last quarter'),
+    last_half: t('web.tenants.preset_last_half','Last half-year'),
+    last_year: t('web.tenants.preset_last_year','Last year'),
+  }};
   ['last_month','last_quarter','last_half','last_year'].forEach(function(p) {{
-    const lbl = ({{last_month:'Letzter Monat',last_quarter:'Letztes Quartal',last_half:'Letztes Halbjahr',last_year:'Letztes Jahr'}})[p];
+    const lbl = presetLabels[p];
     const active = (p === preset) ? ' t-pill-active' : '';
     h += '<button class="t-pill' + active + '" data-tpreset="' + p + '" onclick="tenantsApplyPreset(\\u0027' + p + '\\u0027)">' + lbl + '</button>';
   }});
   h += '</div>';
   h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted)">';
-  h += '<span>Custom:</span>';
-  h += '<label>From <input type="date" id="t-start" onchange="tenantsClearPreset();tenantsUpdatePeriodLabel()"></label>';
-  h += '<label>To <input type="date" id="t-end" onchange="tenantsClearPreset();tenantsUpdatePeriodLabel()"></label>';
-  h += '<label>Tariff <select id="t-tariff" style="font-size:12px"><option value="">Auto (Settings)</option><option value="fixed">Fixed</option><option value="dynamic">Dynamic</option></select></label>';
+  h += '<span>' + t('web.tenants.custom','Custom:') + '</span>';
+  h += '<label>' + t('web.tenants.from','From') + ' <input type="date" id="t-start" onchange="tenantsClearPreset();tenantsUpdatePeriodLabel()"></label>';
+  h += '<label>' + t('web.tenants.to','To') + ' <input type="date" id="t-end" onchange="tenantsClearPreset();tenantsUpdatePeriodLabel()"></label>';
+  h += '<label>' + t('web.tenants.tariff','Tariff') + ' <select id="t-tariff" style="font-size:12px"><option value="">' + t('web.tenants.tariff_auto','Auto (Settings)') + '</option><option value="fixed">' + t('web.tenants.tariff_fixed','Fixed') + '</option><option value="dynamic">' + t('web.tenants.tariff_dynamic','Dynamic') + '</option></select></label>';
   h += '<span style="flex:1"></span>';
-  h += '<button class="btn" onclick="tenantsPreviewAll()">📊 Preview</button>';
-  h += '<button class="btn btn-accent" onclick="tenantsExportAllPdf()">📦 PDFs (all)</button>';
+  h += '<button class="btn" onclick="tenantsPreviewAll()">📊 ' + t('web.tenants.preview','Preview') + '</button>';
+  h += '<button class="btn btn-accent" onclick="tenantsExportAllPdf()">📦 ' + t('web.tenants.pdfs_all','PDFs (all)') + '</button>';
   h += '</div>';
   h += '</div>';
 
@@ -3404,21 +3410,25 @@ function _tenantsRenderExportCards() {{
   const ts = (_tenantsCache && _tenantsCache.tenants) || [];
   if (!ts.length) {{
     root.innerHTML = '<div class="card" style="color:var(--muted);font-size:12px;text-align:center;padding:18px">' +
-      'No tenants yet. Add one above to generate invoices.' +
+      t('web.tenants.none_configured','No tenants configured. Add one in Settings → Tenants.') +
       '</div>';
     return;
   }}
+  const personsLbl = t('web.tenants.persons','pers.');
+  const devicesLbl = t('web.tenants.devices','device(s)');
+  const previewLbl = t('web.tenants.preview','Preview');
+  const pdfLbl = t('web.tenants.pdf','PDF');
   let h = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px">';
-  ts.forEach(function(t) {{
-    const tid = esc(t.tenant_id || '');
-    const tname = esc(t.name || t.tenant_id || '–');
-    const unit = t.unit ? ' · ' + esc(t.unit) : '';
+  ts.forEach(function(te) {{
+    const tid = esc(te.tenant_id || '');
+    const tname = esc(te.name || te.tenant_id || '–');
+    const unit = te.unit ? ' · ' + esc(te.unit) : '';
     h += '<div class="card" style="padding:12px;border-left:3px solid #4caf50">';
     h += '<div style="font-weight:650;font-size:13px;margin-bottom:6px">🏠 ' + tname + unit + '</div>';
-    h += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + (t.persons||1) + ' Pers. · ' + ((t.device_keys||[]).length) + ' device(s)</div>';
+    h += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + (te.persons||1) + ' ' + personsLbl + ' · ' + ((te.device_keys||[]).length) + ' ' + devicesLbl + '</div>';
     h += '<div style="display:flex;gap:4px;flex-wrap:wrap">';
-    h += '<button class="btn small" onclick="tenantsPreviewOne(\\u0027' + tid + '\\u0027)">📊 Preview</button>';
-    h += '<button class="btn small btn-accent" onclick="tenantsExportPdf(\\u0027' + tid + '\\u0027)">🧾 PDF</button>';
+    h += '<button class="btn small" onclick="tenantsPreviewOne(\\u0027' + tid + '\\u0027)">📊 ' + previewLbl + '</button>';
+    h += '<button class="btn small btn-accent" onclick="tenantsExportPdf(\\u0027' + tid + '\\u0027)">🧾 ' + pdfLbl + '</button>';
     h += '</div></div>';
   }});
   h += '</div>';
@@ -3453,17 +3463,17 @@ function tenantsPreviewOne(tid) {{
 }}
 function _tenantsBillCardHtml(b) {{
   let h = '<div class="card" style="margin-bottom:6px">';
-  h += '<div style="font-weight:650;margin-bottom:4px">' + esc(b.tenant.name) + (b.tenant.unit ? ' (' + esc(b.tenant.unit) + ')' : '') + ' · ' + b.tenant.persons + ' Pers.</div>';
+  h += '<div style="font-weight:650;margin-bottom:4px">' + esc(b.tenant.name) + (b.tenant.unit ? ' (' + esc(b.tenant.unit) + ')' : '') + ' · ' + b.tenant.persons + ' ' + t('web.tenants.persons','pers.') + '</div>';
   h += '<table style="width:100%;font-size:11px;border-collapse:collapse">';
-  h += '<tr style="border-bottom:1px solid var(--border);color:var(--muted)"><th style="text-align:left;padding:3px">Item</th><th style="text-align:right">kWh</th><th style="text-align:right">€/kWh</th><th style="text-align:right">€</th></tr>';
+  h += '<tr style="border-bottom:1px solid var(--border);color:var(--muted)"><th style="text-align:left;padding:3px">' + t('web.tenants.item','Item') + '</th><th style="text-align:right">kWh</th><th style="text-align:right">€/kWh</th><th style="text-align:right">€</th></tr>';
   (b.line_items || []).forEach(function(li) {{
     var kwhCell = (li.kwh && li.kwh > 0) ? li.kwh.toFixed(1) : '–';
     var priceCell = (li.unit_price && li.unit_price > 0) ? li.unit_price.toFixed(4) : '–';
     h += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px">' + esc(li.description) + '</td><td style="text-align:right">' + kwhCell + '</td><td style="text-align:right">' + priceCell + '</td><td style="text-align:right">' + li.amount.toFixed(2) + '</td></tr>';
   }});
-  h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">Net</td><td style="text-align:right">' + b.subtotal_net.toFixed(2) + '</td></tr>';
-  h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">VAT</td><td style="text-align:right">' + b.vat_amount.toFixed(2) + '</td></tr>';
-  h += '<tr style="font-weight:700"><td colspan="3" style="padding:3px;text-align:right">Total gross</td><td style="text-align:right">' + b.total_gross.toFixed(2) + ' €</td></tr>';
+  h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">' + t('web.tenants.net','Net') + '</td><td style="text-align:right">' + b.subtotal_net.toFixed(2) + '</td></tr>';
+  h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">' + t('web.tenants.vat','VAT') + '</td><td style="text-align:right">' + b.vat_amount.toFixed(2) + '</td></tr>';
+  h += '<tr style="font-weight:700"><td colspan="3" style="padding:3px;text-align:right">' + t('web.tenants.total_gross','Total gross') + '</td><td style="text-align:right">' + b.total_gross.toFixed(2) + ' €</td></tr>';
   h += '</table></div>';
   return h;
 }}
@@ -3491,17 +3501,19 @@ function _tenantsPostInvoice(body) {{
     .then(function(d) {{
       if (!d.ok) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||'?') + '</p>'; return; }}
       const files = d.files || [];
-      if (!files.length) {{ el.innerHTML = '<p style="color:var(--muted)">No invoice produced (no consumption?).</p>'; return; }}
+      if (!files.length) {{ el.innerHTML = '<p style="color:var(--muted)">' + t('web.tenants.no_invoice','No invoice produced (no consumption?).') + '</p>'; return; }}
       let h = '<div class="card" style="background:rgba(76,175,80,0.08);border-left:3px solid #4caf50">';
-      h += '<div style="font-weight:650;margin-bottom:6px">✅ ' + files.length + ' invoice' + (files.length === 1 ? '' : 's') + ' generated</div>';
-      h += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Period: ' + esc(d.period_start || '?') + ' → ' + esc(d.period_end || '?') + '</div>';
+      h += '<div style="font-weight:650;margin-bottom:6px">✅ ' + t('web.tenants.invoices_generated', files.length === 1 ? '{{n}} invoice generated' : '{{n}} invoices generated', {{n: files.length}}) + '</div>';
+      h += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + t('web.tenants.period','Period') + ': ' + esc(d.period_start || '?') + ' → ' + esc(d.period_end || '?') + '</div>';
+      const grossLbl = t('web.tenants.gross_suffix','€ gross');
+      const dlLbl = t('web.tenants.download','Download');
       files.forEach(function(f) {{
         const head = esc(f.tenant_name || f.name);
-        const meta = (f.total_gross != null) ? (' · ' + Number(f.total_gross).toFixed(2) + ' € gross') : '';
+        const meta = (f.total_gross != null) ? (' · ' + Number(f.total_gross).toFixed(2) + ' ' + grossLbl) : '';
         h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--border)">';
         h += '<div><div style="font-weight:600;font-size:12px">' + head + meta + '</div>';
         h += '<div style="font-size:10px;color:var(--muted)">' + esc(f.name) + '</div></div>';
-        h += '<a class="btn small btn-accent" href="' + esc(f.url) + '" download>⬇ Download</a>';
+        h += '<a class="btn small btn-accent" href="' + esc(f.url) + '" download>⬇ ' + dlLbl + '</a>';
         h += '</div>';
       }});
       h += '</div>';
@@ -3523,26 +3535,30 @@ function computeBills() {{
   fetch('/api/tenants/bill?' + q.toString()).then(function(r) {{ return r.json(); }}).then(function(d) {{
     if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||'No data') + '</p>'; return; }}
     const rep = d.report;
-    const tariffLabel = rep.tariff_mode === 'dynamic' ? '⚡ Dynamic tariff' : '💲 Fixed tariff';
-    let h = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Period: ' + esc(rep.period_start) + ' to ' + esc(rep.period_end)
-      + ' · ' + tariffLabel + ' · ' + (rep.price_eur_per_kwh_net*100).toFixed(2) + ' ct/kWh net'
-      + ' · Base fee: ' + (rep.base_fee_eur_per_year_net||0).toFixed(2) + ' €/year net'
+    const tariffLabel = rep.tariff_mode === 'dynamic' ? '⚡ ' + t('web.tenants.tariff_dynamic','Dynamic') : '💲 ' + t('web.tenants.tariff_fixed','Fixed');
+    const personsLbl = t('web.tenants.persons','pers.');
+    const itemLbl = t('web.tenants.item','Item');
+    const netLbl = t('web.tenants.net','Net');
+    const vatLbl = t('web.tenants.vat','VAT');
+    const totalLbl = t('web.tenants.total_gross','Total gross');
+    let h = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">' + t('web.tenants.period','Period') + ': ' + esc(rep.period_start) + ' → ' + esc(rep.period_end)
+      + ' · ' + tariffLabel + ' · ' + (rep.price_eur_per_kwh_net*100).toFixed(2) + ' ct/kWh'
+      + ' · ' + t('web.tenants.base_fee_year','Base fee') + ': ' + (rep.base_fee_eur_per_year_net||0).toFixed(2) + ' €/year'
       + ' · VAT ' + (rep.vat_rate_percent||19).toFixed(0) + '%'
-      + ' · Total: ' + rep.total_kwh.toFixed(1) + ' kWh · ' + rep.total_cost.toFixed(2) + ' €</div>';
+      + ' · ' + t('web.tenants.total','Total') + ': ' + rep.total_kwh.toFixed(1) + ' kWh · ' + rep.total_cost.toFixed(2) + ' €</div>';
     (rep.bills || []).forEach(function(b) {{
       h += '<div class="card" style="margin-bottom:6px">';
-      h += '<div style="font-weight:650;margin-bottom:4px">' + esc(b.tenant.name) + (b.tenant.unit ? ' (' + esc(b.tenant.unit) + ')' : '') + ' · ' + b.tenant.persons + ' Pers.</div>';
+      h += '<div style="font-weight:650;margin-bottom:4px">' + esc(b.tenant.name) + (b.tenant.unit ? ' (' + esc(b.tenant.unit) + ')' : '') + ' · ' + b.tenant.persons + ' ' + personsLbl + '</div>';
       h += '<table style="width:100%;font-size:11px;border-collapse:collapse">';
-      h += '<tr style="border-bottom:1px solid var(--border);color:var(--muted)"><th style="text-align:left;padding:3px">Item</th><th style="text-align:right">kWh</th><th style="text-align:right">€/kWh</th><th style="text-align:right">€</th></tr>';
+      h += '<tr style="border-bottom:1px solid var(--border);color:var(--muted)"><th style="text-align:left;padding:3px">' + itemLbl + '</th><th style="text-align:right">kWh</th><th style="text-align:right">€/kWh</th><th style="text-align:right">€</th></tr>';
       (b.line_items || []).forEach(function(li) {{
-        // Grundpreis / base-fee lines have kwh=0 and unit_price=0 — show them as "–"
         var kwhCell = (li.kwh && li.kwh > 0) ? li.kwh.toFixed(1) : '–';
         var priceCell = (li.unit_price && li.unit_price > 0) ? li.unit_price.toFixed(4) : '–';
         h += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:3px">' + esc(li.description) + '</td><td style="text-align:right">' + kwhCell + '</td><td style="text-align:right">' + priceCell + '</td><td style="text-align:right">' + li.amount.toFixed(2) + '</td></tr>';
       }});
-      h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">Net</td><td style="text-align:right">' + b.subtotal_net.toFixed(2) + '</td></tr>';
-      h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">VAT</td><td style="text-align:right">' + b.vat_amount.toFixed(2) + '</td></tr>';
-      h += '<tr style="font-weight:700"><td colspan="3" style="padding:3px;text-align:right">Total gross</td><td style="text-align:right">' + b.total_gross.toFixed(2) + ' €</td></tr>';
+      h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">' + netLbl + '</td><td style="text-align:right">' + b.subtotal_net.toFixed(2) + '</td></tr>';
+      h += '<tr><td colspan="3" style="padding:3px;text-align:right;color:var(--muted)">' + vatLbl + '</td><td style="text-align:right">' + b.vat_amount.toFixed(2) + '</td></tr>';
+      h += '<tr style="font-weight:700"><td colspan="3" style="padding:3px;text-align:right">' + totalLbl + '</td><td style="text-align:right">' + b.total_gross.toFixed(2) + ' €</td></tr>';
       h += '</table>';
       h += '</div>';
     }});
