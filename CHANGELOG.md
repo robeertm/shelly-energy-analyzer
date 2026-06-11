@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.41.4 - 2026-06-11
+### Fixed
+- **EV log understated the current/just-ended charging session.** `detect_charging_sessions` reads from the `samples` table, which only grows on the autosync cadence (default 1 h). A user looking 35 min into a 68-min, 10.5 kW session saw ~6.2 kWh instead of ~11.9 kWh — and a session that started after the last sync was invisible altogether. The high-frequency live-store points (~2 s spacing) were already in memory but never fed into the detector. New `_ev_extend_with_live(df, dev_key)` in `web/action_dispatch.py` projects the post-cutoff live slice into synthetic `(timestamp, total_power, energy_kwh)` rows (trapezoid-integrated, 10-min delta cap to mirror DB ingest), then `ev_sessions` runs detection over the merged frame. Unit-tested with a synthetic DB-standby + live-charging scenario: 30 min × 10.5 kW correctly reports 5.25 kWh; without the extension the same scenario detected 0 sessions.
+
 ## 16.41.3 - 2026-06-10
 ### Fixed
 - **Saved UI language reset to English on every restart.** A leftover guard in `web/app_context.py` overwrote `cfg.ui.language` with `"en"` on boot ("per user request" from an earlier release). The setting was persisted to disk correctly, just ignored at startup — so picking Spanish/French/etc. in Settings looked like it worked until the next process restart. Removed the override; `state.lang` now reflects the saved `cfg.ui.language` (normalised against the supported list, falls back to `en` if unset/invalid).
