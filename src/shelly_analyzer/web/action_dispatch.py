@@ -292,6 +292,84 @@ class ActionDispatcher:
             self._ev_monthly_cache[device_key] = (_t.time(), result)
         return result
 
+    def _ev_extend_with_live(self, df: pd.DataFrame, dev_key: str) -> pd.DataFrame:
+        """Append in-memory live-store points after the last persisted sample.
+
+        The ``samples`` table only grows on the autosync cadence (default 1 h),
+        so a session in progress — or one that ended in the last sync window —
+        is invisible to ``detect_charging_sessions`` until the next CSV pull.
+        That made the EV log understate the latest session by exactly the
+        unsynced minutes (e.g. a 68-min, 10.5 kW charge displayed as ~6 kWh
+        when the user looked 35 min in). The live store carries ~2 s
+        resolution power readings; we project the post-cutoff slice into
+        synthetic ``(timestamp, total_power, energy_kwh)`` rows so the
+        detector sees the whole story.
+        """
+        if self.live_store is None:
+            return df
+        try:
+            snap = self.live_store.snapshot()
+            pts = snap.get(dev_key) or []
+            if not pts:
+                return df
+        except Exception:
+            return df
+
+        cutoff_ts: Optional[int] = None
+        if df is not None and not df.empty and "timestamp" in df.columns:
+            try:
+                ts_col = df["timestamp"]
+                if pd.api.types.is_datetime64_any_dtype(ts_col):
+                    last = ts_col.max()
+                    cutoff_ts = int(pd.Timestamp(last).timestamp())
+                else:
+                    cutoff_ts = int(pd.to_numeric(ts_col, errors="coerce").fillna(0).max())
+            except Exception:
+                cutoff_ts = None
+
+        new_pts = []
+        for p in pts:
+            try:
+                ts_i = int(p.get("ts") or 0)
+            except Exception:
+                continue
+            if ts_i <= 0:
+                continue
+            if cutoff_ts is not None and ts_i <= cutoff_ts:
+                continue
+            try:
+                pw = float(p.get("power_total_w") or 0.0)
+            except Exception:
+                pw = 0.0
+            new_pts.append((ts_i, pw))
+        if not new_pts:
+            return df
+        new_pts.sort(key=lambda r: r[0])
+
+        ts_arr = np.array([r[0] for r in new_pts], dtype="int64")
+        power_arr = np.array([r[1] for r in new_pts], dtype="float64")
+        prev_ts_seed = cutoff_ts if cutoff_ts is not None else int(ts_arr[0])
+        # Seed prev_power with the first live power so the leading trapezoid
+        # is a rectangle (avg == power). The DB tail's total_power is often
+        # NaN for the wallbox after a sync, so deriving from there is brittle.
+        prev_ts = np.concatenate([[prev_ts_seed], ts_arr[:-1]])
+        prev_power = np.concatenate([[power_arr[0]], power_arr[:-1]])
+        # Cap at 10 min so a long gap to the last DB sample (or a missed live
+        # window) cannot inflate energy. Matches _compute_energy_row's
+        # _MAX_DELTA_S guard at ingest time.
+        delta_s = np.clip(ts_arr - prev_ts, 0, 600).astype("float64")
+        avg_p = (power_arr + prev_power) / 2.0
+        energy_kwh = (avg_p * (delta_s / 3600.0)) / 1000.0
+
+        tail_df = pd.DataFrame({
+            "timestamp": pd.to_datetime(ts_arr, unit="s"),
+            "total_power": power_arr,
+            "energy_kwh": energy_kwh,
+        })
+        if df is None or df.empty:
+            return tail_df
+        return pd.concat([df, tail_df], ignore_index=True)
+
     def _resolve_customer(self, device_key: str) -> Dict[str, object]:
         """Return customer data for an invoice — tenant data if available, else billing.customer fallback."""
         for tenant in (getattr(self.cfg.tenant, "tenants", []) or []):
@@ -4118,6 +4196,7 @@ class ActionDispatcher:
                 days = max(1, min(days, 730))
                 start_ts = int(_t.time()) - days * 86400
                 df_ev = self.storage.read_device_df(dev_key, start_ts=start_ts)
+                df_ev = self._ev_extend_with_live(df_ev, dev_key)
                 sessions = detect_charging_sessions(
                     df_ev, dev_key,
                     threshold_w=float(getattr(self.cfg.ev_charging, "detection_threshold_w", 1500)),
