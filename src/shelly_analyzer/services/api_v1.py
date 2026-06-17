@@ -61,6 +61,9 @@ def handle_v1_request(path: str, params: Dict[str, str], db, cfg) -> Dict[str, A
     if route == "/openapi.json":
         return {"ok": True, "data": OPENAPI_SPEC}
 
+    if route in ("/health", "/healthz"):
+        return {"ok": True, "data": {"status": "ok"}}
+
     if route == "/devices":
         return _list_devices(cfg)
 

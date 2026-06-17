@@ -308,7 +308,12 @@ def api_v1(subpath=""):
     state = _get_state()
     try:
         from shelly_analyzer.services import api_v1 as api_v1_mod
-        payload = api_v1_mod.handle_v1_request("/api/v1/" + subpath, state)
+        payload = api_v1_mod.handle_v1_request(
+            "/api/v1/" + subpath,
+            dict(request.args),
+            state.storage,
+            state.cfg,
+        )
     except Exception as e:
         payload = {"ok": False, "error": str(e)}
     return jsonify(payload)
