@@ -1,0 +1,4 @@
+recursive-include src/shelly_analyzer/web/templates *.html
+recursive-include src/shelly_analyzer/web/static *
+recursive-include src/shelly_analyzer/i18n *.json
+include README.md LICENSE CHANGELOG.md
