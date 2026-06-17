@@ -13,18 +13,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set version
         id: ver
         run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Pull the section between the matching "## VERSION ..." heading and
+          # the next "## " heading. Tolerates "## 16.41.5", "## 16.41.5 - 2026-06-17",
+          # "## 16.41.5 — note", "## 16.41.5 - ...", etc.
+          awk -v v="$VERSION" '
+            $0 ~ "^## " v "($| |\\t|-|—)" { found=1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release_notes.md
+          if [ ! -s release_notes.md ]; then
+            echo "Release ${VERSION} — see CHANGELOG.md for details." > release_notes.md
+          fi
+          echo "--- release notes preview ---"
+          head -20 release_notes.md
 
       - name: Create release ZIPs
         run: |
           VERSION="${{ steps.ver.outputs.version }}"
           echo "Building ZIPs for ${VERSION}"
 
-          # Common exclude patterns (no secrets, no venv, no caches, no data)
           EXCLUDES=(
             ".git/*"
             ".github/*"
@@ -38,16 +55,21 @@ jobs:
             "*.sqlite"
             "*.db"
             ".DS_Store"
+            "release_notes.md"
           )
 
           # Build one source bundle and name it per platform (same content, different start script)
-          zip -r "shelly_energy_analyzer_${VERSION}_macos.zip" . -x "${EXCLUDES[@]}"
+          zip -r "shelly_energy_analyzer_${VERSION}_macos.zip"   . -x "${EXCLUDES[@]}"
           zip -r "shelly_energy_analyzer_${VERSION}_windows.zip" . -x "${EXCLUDES[@]}"
-          zip -r "shelly_energy_analyzer_${VERSION}_linux.zip" . -x "${EXCLUDES[@]}"
+          zip -r "shelly_energy_analyzer_${VERSION}_linux.zip"   . -x "${EXCLUDES[@]}"
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
+          name: ${{ steps.ver.outputs.version }}
+          body_path: release_notes.md
+          fail_on_unmatched_files: true
+          make_latest: "true"
           files: |
             shelly_energy_analyzer_${{ steps.ver.outputs.version }}_macos.zip
             shelly_energy_analyzer_${{ steps.ver.outputs.version }}_windows.zip
