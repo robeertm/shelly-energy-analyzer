@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shelly-energy-analyzer"
-version = "16.41.4"
+version = "16.41.5"
 description = "Shelly EM/3EM Energy Analyzer (Flask Web App)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -34,6 +34,14 @@ shelly-analyzer = "shelly_analyzer.__main__:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"shelly_analyzer" = [
+  "web/templates/*.html",
+  "web/static/**/*",
+  "i18n/**/*.json",
+]
