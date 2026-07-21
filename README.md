@@ -561,6 +561,12 @@ python -m shelly_analyzer
 
 ---
 
+## Maintenance via CI
+
+Änderungen an diesem Analyzer können jetzt über die **CI** beauftragt werden: Ein Auftrag wird als GitHub-Issue geschrieben, der CI-Agent setzt ihn im Code um, und der Deploy läuft anschließend automatisch auf Roberts eigene VM — **ausdrücklich ohne ein neues Release** (Releases veröffentlicht Robert weiterhin bewusst von Hand).
+
+---
+
 ## Updates (GitHub Releases)
 
 The built-in updater checks the latest release on GitHub automatically.
