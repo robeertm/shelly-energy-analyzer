@@ -1,0 +1,187 @@
+name: Shelly Energy Analyzer — Dev + Deploy (Werkstatt)
+
+# Den Analyzer ueber die Werkstatt beauftragen.
+#   * Der Agent laeuft ISOLIERT auf dem Pi (User wk-shelly-analyzer, kein Docker).
+#   * Die App bleibt auf der NAS-VM (systemd-Dienst shelly-analyzer, HTTPS :8765).
+#   * Der Deploy geht per SSH-Key mit ERZWUNGENEM Kommando in die VM: der Key kann dort
+#     ausschliesslich /usr/local/sbin/shelly-deploy.sh ausloesen — keine Shell, keine
+#     freien Befehle. Die Abrechnungsdaten (data -> separate 100-GB-Platte) sind
+#     strukturell unerreichbar; das Skript prueft den Symlink vor UND nach dem Sync.
+#   * ⚠️ DIESER DEPLOY IST KEIN RELEASE. Der Analyzer ist ein oeffentliches Produkt mit
+#     fremden Nutzern; releast wird bewusst von Robert (Version 3x + Tag). Hier wird nur
+#     Roberts eigene VM auf main gebracht = der "live testen BEVOR releasen"-Schritt.
+#   * ⚠️ OEFFENTLICHES Repo: der Job laeuft NUR, wenn Robert ihn ausloest.
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: proj-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  dev:
+    # ⚠️ SICHERHEITSGATTER (oeffentliches Repo!): nur Robert darf einen Lauf ausloesen.
+    # Ohne diese Zeile koennte ein beliebiger GitHub-Nutzer per Issue einen Agenten auf
+    # Roberts Pi starten (Token-Verbrauch + Prompt-Injektion).
+    if: >
+      github.actor == 'robeertm' &&
+      github.actor != 'github-actions[bot]' &&
+      github.actor != 'claude[bot]' &&
+      !contains(github.event.comment.body, 'proj-bot-reply') &&
+      !contains(github.event.issue.body, 'proj-bot-reply')
+    runs-on: [self-hosted, shelly-analyzer]
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      # 1) Sofort-Ack + Lebenszeichen-Herzschlag (curl gegen REST-API; gh nicht auf dem Pi).
+      - name: Empfang bestaetigen (Sofort-Ack)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          R="${{ github.repository }}"; NUM="${{ github.event.issue.number }}"
+          API="https://api.github.com"
+          H_AUTH="Authorization: Bearer $GH_TOKEN"; H_ACC="Accept: application/vnd.github+json"
+          CID="${{ github.event.comment.id }}"
+          if [ -n "$CID" ]; then
+            curl -s --retry 2 -X POST -H "$H_AUTH" -H "$H_ACC" \
+              "$API/repos/$R/issues/comments/$CID/reactions" -d '{"content":"eyes"}' >/dev/null 2>&1 || true
+          fi
+          BODY=$'🛠️ **Dran…** — an deinem Projekt wird gearbeitet, das Ergebnis (inkl. Live-Update) kommt gleich als Kommentar (kann 1–3 Min dauern).\n\n<!-- proj-bot-reply -->\n<!-- proj-ack -->'
+          jq -n --arg b "$BODY" '{body:$b}' \
+            | curl -s --retry 2 -X POST -H "$H_AUTH" -H "$H_ACC" "$API/repos/$R/issues/$NUM/comments" -d @- >/dev/null 2>&1 || true
+          RID="${{ github.run_id }}"; HB="/tmp/proj_hb_${RID}"; touch "$HB"
+          export HB R NUM GH_TOKEN
+          setsid bash -c '
+            API="https://api.github.com"
+            for i in $(seq 1 30); do
+              sleep 240
+              [ -f "$HB" ] || exit 0
+              n=$(( i * 4 ))
+              printf "⏳ **Läuft noch…** (~%s min) — ich arbeite an deinem Projekt.\n\n<!-- proj-bot-reply -->\n<!-- proj-heartbeat -->\n" "$n" > "$HB.body"
+              jq -Rs "{body: .}" < "$HB.body" \
+                | curl -s --max-time 15 -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+                    "$API/repos/$R/issues/$NUM/comments" -d @- >/dev/null 2>&1 || true
+            done
+          ' "PROJHB_${RID}" >/dev/null 2>&1 &
+          disown 2>/dev/null || true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Startzeitpunkt merken: der Vault-Nachweis unten wertet NUR Agenten-Protokolle
+      # aus, die nach dieser Marke geschrieben wurden (sonst zaehlten alte Laeufe mit).
+      # Roberts Wissensstand VOR den ersten Gedanken legen. Bitten hat nachweislich nicht
+      # gewirkt (3 von 5 Projekten lasen beim letzten Lauf gar nichts) — also einfuellen
+      # statt auffordern. Faellt es aus, erfaehrt der Agent das ausdruecklich.
+      - name: Vault-Briefing laden
+        continue-on-error: true
+        run: |
+          S="/srv/wk/shared/scripts/vault_briefing.py"
+          if [ -f "$S" ] && python3 "$S"; then
+            echo "Briefing steht im Prompt."
+            # Dem Nachweis mitteilen, dass der Wissensstand geliefert wurde — sonst
+            # meldet er "nicht gelesen", obwohl der Agent alles im Prompt hatte.
+            echo "VAULT_PROOF_BRIEFED=1" >> "$GITHUB_ENV"
+          else
+            {
+              echo "VAULT_BRIEFING<<VB_FALLBACK_EOF"
+              echo "WARNUNG: Roberts Vault-Wissensstand konnte nicht geladen werden."
+              echo "Lies ihn selbst unter ~/vault-mirror/ (v.a. '02 - Projekte/') und"
+              echo "sag in deiner Antwort ausdruecklich, dass das Briefing gefehlt hat."
+              echo "VB_FALLBACK_EOF"
+            } >> "$GITHUB_ENV"
+          fi
+
+      - name: Vault-Nachweis vorbereiten
+        run: echo "VAULT_PROOF_SINCE=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            ## Roberts Wissensstand aus seinem Vault — VORAB EINGEFÜGT, verbindlich
+            ${{ env.VAULT_BRIEFING }}
+
+            ## Deine Aufgabe
+            Du bist der Entwickler-Agent für den **Shelly Energy Analyzer** (Roberts
+            Strommess-/Abrechnungs-App). Halte dich strikt an CLAUDE.md im Repo. Ausgelöst
+            durch die neueste Nachricht im Issue. Lies den GESAMTEN Thread und arbeite ALLE
+            seit deiner letzten echten Antwort (`<!-- proj-bot-reply -->` ohne `proj-ack`)
+            offenen Wünsche ab — nicht nur den neuesten.
+
+            ### 🔴 DU VERÖFFENTLICHST KEIN RELEASE
+            Das ist ein **öffentliches Produkt mit fremden Nutzern**.
+            * **Niemals** taggen, releasen oder den Release-Workflow auslösen.
+            * **Niemals** die Version bumpen (`__init__.py __version__`, `pyproject.toml`) —
+              ein Versionssprung ohne Release löst bei allen Nutzern einen Endlos-Update-Loop
+              aus (echter Vorfall v16.29.0).
+            * CHANGELOG-Eintrag nur unter **„Unreleased"**.
+            * Dein Deploy geht nur auf Roberts eigene VM = der „live testen BEVOR releasen"-
+              Schritt. Das Releasen macht Robert danach selbst.
+
+            ### 🔒 ABRECHNUNGSDATEN
+            `energy.db` + `csv_archive/` sind Grundlage echter Abrechnungen und liegen NICHT
+            im Repo (Symlink auf eine separate Platte der VM).
+            * Kein Code, der Messwerte löscht/überschreibt/rückwirkend korrigiert, ohne
+              ausdrücklichen Auftrag. DB-Migrationen nur **additiv**, nie `DROP`/`DELETE`.
+            * Energiezähler sind `total_increasing` — **nie** rückwärts springen lassen
+              (HA verdoppelt sonst die Statistik-Summe, echter Vorfall v16.32.2).
+            * `config.json` nicht anfassen (VM-spezifisch, wird beim Deploy übersprungen).
+            * `unique_id`-Schema der MQTT-Discovery nicht ändern — sonst verlieren alle
+              ~76 HA-Entities ihre Historie.
+
+            ### Vor dem Abliefern
+            Geänderte Python-Dateien per `ast.parse` gegenprüfen, bei Frontend-Änderungen
+            `node --check`. Kaputter Code = Home Assistant bekommt keine Energiedaten mehr.
+
+            Ablauf: Dateien ändern → committen + nach `main` pushen (mit Co-Authored-By-Trailer).
+            **Der Deploy passiert AUTOMATISCH im nächsten Schritt — du deployst nicht selbst.**
+
+            KEIN hartes Limit — führ zu Ende, aber effizient. Bei längeren Aufgaben poste kurze
+            Zwischenstände mit `<!-- proj-bot-reply -->` UND `<!-- proj-progress -->`. Poste dein
+            Ergebnis am Ende als NEUEN Kommentar (endend mit `<!-- proj-bot-reply -->`, OHNE `proj-ack`),
+            in einfachen Worten: was ist jetzt neu und wo sieht man es.
+          claude_args: |
+            --model claude-opus-4-8
+            --max-turns 300
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep,WebFetch,WebSearch,TodoWrite"
+
+      # 2) Auto-Deploy auf Roberts NAS-VM — KEIN Release, nur sein eigener Live-Test.
+      # Der Key (nur auf dem Pi, Home von wk-shelly-analyzer) kann auf der VM nichts
+      # anderes ausloesen als /usr/local/sbin/shelly-deploy.sh. Das Skript prueft den
+      # Daten-Symlink vor und nach dem Sync und laesst data/config.json/logs unberuehrt.
+      - name: Deploy auf die NAS-VM (fester Deploy-Befehl)
+        if: success()
+        env:
+          VM: robeertm@100.118.74.3
+          KEY: /srv/wk/shelly-analyzer/.ssh/id_ed25519
+        run: |
+          set -uo pipefail
+          if [ ! -f "$KEY" ]; then
+            echo "HINWEIS: Deploy-Key nicht gefunden ($KEY) — Deploy uebersprungen."
+            exit 0
+          fi
+          echo "→ Deploy wird auf der VM ausgeloest (fester Befehl, keine Shell)…"
+          ssh -i "$KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+              -o ConnectTimeout=15 "$VM" 2>&1 | tail -25
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" = "0" ]; then
+            echo "✅ Analyzer ist wieder live → https://100.118.74.3:8765"
+          else
+            echo "⚠️ Deploy meldete einen Fehler (Exitcode $rc) — Dienst-Status siehe oben."
+            exit 1
+          fi
