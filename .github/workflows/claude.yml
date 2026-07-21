@@ -151,6 +151,12 @@ jobs:
             Ablauf: Dateien ändern → committen + nach `main` pushen (mit Co-Authored-By-Trailer).
             **Der Deploy passiert AUTOMATISCH im nächsten Schritt — du deployst nicht selbst.**
 
+            ⚠️ **Erledige die Aufgabe SELBST in diesem Lauf.** Wenn du Hilfs-Agenten
+            startest, warte SYNCHRON auf ihr Ergebnis. Starte sie NIE im Hintergrund und
+            beende dann deinen Zug ("ich warte, bis die Agenten sich melden") — mit dem Ende
+            deines Zuges endet der ganze Lauf, die Ergebnisse gehen verloren und Robert
+            bekommt eine LEERE Antwort. Poste immer erst dein Ergebnis, dann bist du fertig.
+
             KEIN hartes Limit — führ zu Ende, aber effizient. Bei längeren Aufgaben poste kurze
             Zwischenstände mit `<!-- proj-bot-reply -->` UND `<!-- proj-progress -->`. Poste dein
             Ergebnis am Ende als NEUEN Kommentar (endend mit `<!-- proj-bot-reply -->`, OHNE `proj-ack`),
@@ -185,3 +191,45 @@ jobs:
             echo "⚠️ Deploy meldete einen Fehler (Exitcode $rc) — Dienst-Status siehe oben."
             exit 1
           fi
+
+      # 3) Garantie-Antwort (nie stumm) + Herzschlag stoppen/aufraeumen.
+      # Belegt aus dem Sitzungsprotokoll des Agenten, WAS er vor der Arbeit im
+      # Vault-Spiegel gelesen hat (keine Selbstauskunft — echte Werkzeugaufrufe), und
+      # postet das Ergebnis als Abzeichen in die Werkstatt. Darf den Lauf nie kippen.
+      - name: Vault-Nachweis posten
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VAULT_PROOF_ISSUE: ${{ github.event.issue.number }}
+          VAULT_PROOF_SLUG: proj
+        run: |
+          S="/srv/wk/shared/scripts/vault_proof.py"
+          [ -f "$S" ] || { echo "Nachweis-Skript fehlt (Werkstatt nicht deployt) - uebersprungen."; exit 0; }
+          python3 "$S" --post || true
+
+      - name: Antwort sicherstellen (nie stumm)
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          R="${{ github.repository }}"; NUM="${{ github.event.issue.number }}"
+          API="https://api.github.com"
+          H_AUTH="Authorization: Bearer $GH_TOKEN"; H_ACC="Accept: application/vnd.github+json"
+          RID="${{ github.run_id }}"
+          rm -f "/tmp/proj_hb_${RID}" "/tmp/proj_hb_${RID}.body" 2>/dev/null || true
+          pkill -f "PROJHB_${RID}" 2>/dev/null || true
+          BASE="${{ github.event.comment.id }}"; BASE="${BASE:-0}"
+          SINCE="${{ github.event.comment.created_at }}"; [ -z "$SINCE" ] && SINCE="${{ github.event.issue.created_at }}"
+          COMMENTS=$(curl -s --retry 2 -H "$H_AUTH" -H "$H_ACC" "$API/repos/$R/issues/$NUM/comments?since=$SINCE&per_page=100")
+          ANSWERED=$(printf '%s' "$COMMENTS" | jq --argjson b "${BASE:-0}" '[.[] | select(.user.login=="github-actions[bot]") | select(.id > $b) | select(.body|test("proj-bot-reply")) | select((.body|test("proj-ack"))|not) | select((.body|test("proj-heartbeat"))|not) | select((.body|test("proj-progress"))|not) | select((.body|test("proj-vault"))|not)] | length' 2>/dev/null || echo 0)
+          ANSWERED="${ANSWERED:-0}"
+          if [ "$ANSWERED" -eq 0 ]; then
+            URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            BODY=$'⚠️ **Konnte die Anfrage nicht sauber abschließen** (Status: '"${{ job.status }}"$').\n\nWar ein Fehler/Abbruch, nicht deine Eingabe. Bitte nochmal schicken.\n\nLog: '"$URL"$'\n<!-- proj-bot-reply -->'
+            jq -n --arg b "$BODY" '{body:$b}' | curl -s --retry 2 -X POST -H "$H_AUTH" -H "$H_ACC" "$API/repos/$R/issues/$NUM/comments" -d @- >/dev/null 2>&1 || true
+          fi
+          printf '%s' "$COMMENTS" | jq -r --argjson b "${BASE:-0}" '.[] | select(.user.login=="github-actions[bot]") | select(.id > $b) | select(.body|test("proj-heartbeat")) | .id' 2>/dev/null \
+            | while read -r hid; do [ -n "$hid" ] && curl -s --max-time 15 -X DELETE -H "$H_AUTH" -H "$H_ACC" "$API/repos/$R/issues/comments/$hid" >/dev/null 2>&1 || true; done
