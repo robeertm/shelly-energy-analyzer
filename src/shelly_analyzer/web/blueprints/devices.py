@@ -13,6 +13,7 @@ from shelly_analyzer.io.config import (
     AppConfig,
     CompensationEntry,
     DeviceConfig,
+    MainMeter,
     load_config,
     save_config,
 )
@@ -173,6 +174,12 @@ def update_device(key: str):
         password=new_password,
         compensation_percent=float(body.get("compensation_percent",
                                             getattr(d, "compensation_percent", 0.0)) or 0.0),
+        # Preserve the dated calibration history — rebuilding DeviceConfig without
+        # it silently wiped every calibration entry on any device edit.
+        compensation_history=getattr(d, "compensation_history", ()) or (),
+        # Meter cascade: which meter this device hangs under (main-meter id or
+        # device key). Falls back to the existing value when not supplied.
+        parent=str(body.get("parent", getattr(d, "parent", "")) or "").strip(),
     )
 
     new_devices = list(state.cfg.devices)
@@ -671,3 +678,194 @@ def delete_compensation_history():
         return jsonify({"ok": False, "error": "entry not found"}), 404
     _comp_save_reload(state, _comp_set_history(state, device_key, new_list))
     return jsonify({"ok": True, "device": device_key, "remaining": len(new_list)})
+
+
+# ── Meter cascade (Hauptzähler / Zwischenzähler) ────────────────────────────
+#
+# A generic meter hierarchy: any number of physical reference meters
+# (``main_meters``), each Shelly device attached to a parent (a main-meter id or
+# another device key) via ``DeviceConfig.parent``. Calibration compares a meter's
+# hand-read value against the SUM of its DIRECT measured children — so a house
+# meter that covers e.g. "Haus" + "Wallbox" is calibrated once against both,
+# instead of the meaningless "whole meter vs. one sub-meter". Sub-sub meters
+# (switches behind a sub-meter) are NOT direct children of the main meter and are
+# therefore never double-counted.
+
+def _raw_kwh_over(state, db, dkey: str, t0: int, t1: int) -> float:
+    """Uncompensated measured kWh of a device over [t0, t1]. Divides out the
+    device's current compensation factor so a fresh calibration is computed from
+    the raw measurement (same approach as the legacy global calibrate)."""
+    import pandas as pd
+    dev = next((x for x in state.cfg.devices if x.key == dkey), None)
+    cf = 1.0 + float(getattr(dev, "compensation_percent", 0.0) or 0.0) / 100.0 if dev else 1.0
+    try:
+        dfh = db.query_hourly(dkey, start_ts=t0, end_ts=t1)
+        if dfh is not None and not dfh.empty and "kwh" in dfh.columns:
+            comp_sum = float(pd.to_numeric(dfh["kwh"], errors="coerce").fillna(0).sum())
+        else:
+            comp_sum = 0.0
+    except Exception:
+        comp_sum = 0.0
+    return comp_sum / cf if cf else comp_sum
+
+
+def _set_history_on_cfg(cfg, device_key: str, entries):
+    """Like ``_comp_set_history`` but operating on an arbitrary cfg, so several
+    devices can be updated before a single save."""
+    entries = sorted(entries, key=lambda e: int(e.effective_from_ts))
+    latest_pct = float(entries[-1].percent) if entries else None
+    devs = list(cfg.devices)
+    for i, d in enumerate(devs):
+        if d.key == device_key:
+            updates = {"compensation_history": tuple(entries)}
+            if latest_pct is not None:
+                updates["compensation_percent"] = latest_pct
+            devs[i] = replace(d, **updates)
+    return replace(cfg, devices=devs)
+
+
+def _slug(text: str) -> str:
+    keep = [c.lower() if (c.isalnum()) else "-" for c in str(text)]
+    s = "".join(keep).strip("-")
+    while "--" in s:
+        s = s.replace("--", "-")
+    return s or "meter"
+
+
+@bp.route("/api/meters", methods=["GET"])
+def list_meters():
+    """Return the meter tree: main meters plus every device with its parent, so
+    the UI can render and edit the cascade."""
+    state = _get_state()
+    meters = [
+        {"id": m.id, "name": m.name, "serial": m.serial}
+        for m in (getattr(state.cfg, "main_meters", []) or [])
+    ]
+    devices = [
+        {
+            "key": d.key,
+            "name": d.name,
+            "kind": str(getattr(d, "kind", "em")),
+            "parent": str(getattr(d, "parent", "") or ""),
+            "compensation_percent": float(getattr(d, "compensation_percent", 0.0) or 0.0),
+        }
+        for d in state.cfg.devices
+    ]
+    return jsonify({"ok": True, "main_meters": meters, "devices": devices})
+
+
+@bp.route("/api/meters", methods=["POST"])
+def upsert_meter():
+    """Add or update a main meter. Body: {id?, name, serial?}. Without id a new
+    one is created (id derived from the name, uniquified)."""
+    state = _get_state()
+    body = request.get_json(silent=True) or {}
+    name = str(body.get("name", "") or "").strip()
+    serial = str(body.get("serial", "") or "").strip()
+    mid = str(body.get("id", "") or "").strip()
+    meters = list(getattr(state.cfg, "main_meters", []) or [])
+    existing_ids = {m.id for m in meters}
+    if mid:
+        # update in place
+        found = False
+        for i, m in enumerate(meters):
+            if m.id == mid:
+                meters[i] = MainMeter(id=mid, name=name or m.name, serial=serial or m.serial)
+                found = True
+                break
+        if not found:
+            meters.append(MainMeter(id=mid, name=name, serial=serial))
+    else:
+        base = _slug(name or "meter")
+        mid = base
+        n = 2
+        while mid in existing_ids:
+            mid = f"{base}-{n}"
+            n += 1
+        meters.append(MainMeter(id=mid, name=name, serial=serial))
+    _comp_save_reload(state, replace(state.cfg, main_meters=meters))
+    return jsonify({"ok": True, "id": mid})
+
+
+@bp.route("/api/meters/<mid>", methods=["DELETE"])
+def delete_meter(mid: str):
+    """Remove a main meter and detach any device that pointed at it (parent → '')."""
+    state = _get_state()
+    mid = str(mid or "").strip()
+    meters = [m for m in (getattr(state.cfg, "main_meters", []) or []) if m.id != mid]
+    devs = list(state.cfg.devices)
+    for i, d in enumerate(devs):
+        if str(getattr(d, "parent", "") or "") == mid:
+            devs[i] = replace(d, parent="")
+    _comp_save_reload(state, replace(state.cfg, main_meters=meters, devices=devs))
+    return jsonify({"ok": True, "id": mid})
+
+
+@bp.route("/api/compensation/calibrate_meter", methods=["POST"])
+def calibrate_meter():
+    """Calibrate a main meter against the SUM of its direct measured (``em``)
+    children. Body: {meter_id, start, end, meter_start, meter_end,
+    effective_from?}. Writes one dated calibration entry (same percent) to every
+    direct em child. Switches and deeper sub-sub meters are excluded → no double
+    counting."""
+    state = _get_state()
+    body = request.get_json(silent=True) or {}
+    _lang = getattr(state, "lang", "en")
+    meter_id = str(body.get("meter_id", "") or "").strip()
+    if not meter_id:
+        return jsonify({"ok": False, "error": "missing meter_id"}), 400
+    try:
+        t0 = _comp_parse_ts(body.get("start"))
+        t1 = _comp_parse_ts(body.get("end"))
+        meter = float(body.get("meter_end")) - float(body.get("meter_start"))
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"invalid input: {e}"}), 400
+    if t1 <= t0:
+        return jsonify({"ok": False, "error": _t(_lang, "settings.compensation.err_end_after_start")}), 400
+    if meter <= 0:
+        return jsonify({"ok": False, "error": _t(_lang, "settings.compensation.err_meter_order")}), 400
+    try:
+        eff_raw = body.get("effective_from")
+        eff_ts = _comp_parse_ts(eff_raw) if eff_raw not in (None, "") else t0
+    except Exception:
+        eff_ts = t0
+
+    children = [
+        d for d in state.cfg.devices
+        if str(getattr(d, "parent", "") or "") == meter_id
+        and str(getattr(d, "kind", "")) == "em"
+    ]
+    if not children:
+        return jsonify({"ok": False,
+                        "error": _t(_lang, "settings.compensation.err_no_children")}), 400
+
+    db = state.storage.db
+    per = {d.key: _raw_kwh_over(state, db, d.key, t0, t1) for d in children}
+    raw = sum(per.values())
+    if raw <= 0:
+        return jsonify({"ok": False, "error": _t(_lang, "settings.compensation.err_no_data")}), 400
+
+    factor = meter / raw
+    percent = (factor - 1.0) * 100.0
+
+    new_cfg = state.cfg
+    for d in children:
+        hist = [e for e in (getattr(d, "compensation_history", ()) or ())
+                if int(e.effective_from_ts) != int(eff_ts)]
+        hist.append(CompensationEntry(
+            effective_from_ts=int(eff_ts),
+            percent=percent,
+            note=f"meter:{meter_id}",
+            meter_kwh=meter,
+            raw_kwh=per[d.key],
+        ))
+        new_cfg = _set_history_on_cfg(new_cfg, d.key, hist)
+    _comp_save_reload(state, new_cfg)
+
+    return jsonify({
+        "ok": True, "meter_id": meter_id,
+        "percent": round(percent, 3), "factor": round(factor, 5),
+        "meter_kwh": round(meter, 3), "raw_kwh": round(raw, 3),
+        "children": [d.key for d in children],
+        "per_child_raw": {k: round(v, 3) for k, v in per.items()},
+    })
