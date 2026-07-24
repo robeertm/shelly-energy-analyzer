@@ -11946,6 +11946,7 @@ _I18N.setdefault("de", {}).update({
     "cal.add_reading": "Ablesung hinzufügen",
     "cal.err_reading": "Bitte Datum und Zählerstand eingeben.",
     "cal.confirm_del_reading": "Diese Ablesung löschen? Die betroffenen Zeiträume werden neu berechnet.",
+    "cal.pre_factor": "Vor der ersten Ablesung (gewichteter Gesamtfaktor)",
 })
 _I18N.setdefault("en", {}).update({
     "cal.reading_log": "Meter readings",
@@ -11958,4 +11959,5 @@ _I18N.setdefault("en", {}).update({
     "cal.add_reading": "Add reading",
     "cal.err_reading": "Please enter date and meter reading.",
     "cal.confirm_del_reading": "Delete this reading? The affected periods are recomputed.",
+    "cal.pre_factor": "Before the first reading (weighted overall factor)",
 })

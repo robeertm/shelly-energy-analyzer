@@ -163,14 +163,23 @@ def test_reading_log():
         for d in state.cfg.devices:
             e = [x for x in d.compensation_history if int(x.effective_from_ts) == 100]
             assert len(e) == 1 and abs(e[0].percent - 5.0) < 0.01, (d.key, d.compensation_history)
+            # single interval → weighted pre-factor equals that interval (+5 %), at ts=1
+            pre = [x for x in d.compensation_history if str(x.note).endswith(":pre")]
+            assert len(pre) == 1 and int(pre[0].effective_from_ts) == 1, (d.key, pre)
+            assert abs(pre[0].percent - 5.0) < 0.01, pre[0].percent
         # 3) insert an OLDER reading at 50: meter delta 1000-900=100 vs raw 100 → 0 %
         j = c.post("/api/meters/grid/reading", json={"ts": 50, "kwh": 900.0}).get_json()
         assert j["ok"] and j["readings"] == 3, j
         for d in state.cfg.devices:
-            got = sorted(int(x.effective_from_ts) for x in d.compensation_history)
+            real = [x for x in d.compensation_history if not str(x.note).endswith(":pre")]
+            got = sorted(int(x.effective_from_ts) for x in real)
             assert got == [50, 100], ("both intervals present", d.key, got)
-            e0 = [x for x in d.compensation_history if int(x.effective_from_ts) == 50][0]
+            e0 = [x for x in real if int(x.effective_from_ts) == 50][0]
             assert abs(e0.percent - 0.0) < 0.01, e0.percent
+            # weighted overall: total meter Δ (1210-900=310) / total raw (100+200=300) → +3.333 %
+            pre = [x for x in d.compensation_history if str(x.note).endswith(":pre")][0]
+            assert int(pre.effective_from_ts) == 1, pre.effective_from_ts
+            assert abs(pre.percent - (310.0 / 300.0 - 1.0) * 100.0) < 0.01, pre.percent
         # readings survive save + reload
         cfg2 = load_config(state._cfg_path)
         rd = {int(r.ts): r.kwh for r in cfg2.main_meters[0].readings}

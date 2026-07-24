@@ -8266,11 +8266,14 @@ _loadLsSettings();
   }}
   function _calChartSvg(history) {{
     const W = 520, H = 180, padL = 44, padR = 12, padT = 14, padB = 28;
-    if (!history.length) {{
+    // Die synthetische Vorzeit-Stufe (Notiz ":pre", ts=1) gehoert nicht in die
+    // Kurve — sie wuerde die Zeitachse bis 1970 aufziehen.
+    const real = (history || []).filter(h => !String(h.note || '').endsWith(':pre'));
+    if (!real.length) {{
       return '<div style="color:var(--muted);font-size:12px;text-align:center;padding:30px 0">' +
         t('calibration.no_data', 'No calibration entries yet.') + '</div>';
     }}
-    const pts = history.slice().sort((a,b) => a.effective_from_ts - b.effective_from_ts);
+    const pts = real.slice().sort((a,b) => a.effective_from_ts - b.effective_from_ts);
     const nowTs = Math.floor(Date.now() / 1000);
     const t0 = pts[0].effective_from_ts;
     const t1 = Math.max(nowTs, pts[pts.length - 1].effective_from_ts + 86400);
@@ -8448,6 +8451,14 @@ _loadLsSettings();
         html += '</tbody></table>';
       }} else {{
         html += '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">' + t('cal.no_readings', 'Noch keine Ablesung — trage den aktuellen Zählerstand als Startwert ein.') + '</div>';
+      }}
+      // Faktor für Verbrauch VOR der ersten Ablesung (gewichteter Gesamtfaktor)
+      const preEntry = sharedHist.find(h => String(h.note || '').endsWith(':pre'));
+      if (preEntry) {{
+        const pp = Number(preEntry.percent) || 0;
+        html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">↤ ' +
+          t('cal.pre_factor', 'Vor der ersten Ablesung (gewichteter Gesamtfaktor)') + ': <b>' +
+          (pp >= 0 ? '+' : '') + pp.toFixed(2) + ' %</b></div>';
       }}
       // Neue Ablesung
       html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">';

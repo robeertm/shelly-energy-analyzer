@@ -904,6 +904,7 @@ def _recompute_meter_from_readings(state, meter_id):
                 if str(getattr(d, "parent", "") or "") == meter_id
                 and str(getattr(d, "kind", "")) == "em"]
     tag = "meter:" + str(meter_id)
+    pre_tag = tag + ":pre"  # synthetic pre-first-reading step (weighted overall)
     derived = []  # (eff_ts, percent, meter_delta, raw_delta)
     for i in range(len(readings) - 1):
         t0, t1 = int(readings[i].ts), int(readings[i + 1].ts)
@@ -915,13 +916,29 @@ def _recompute_meter_from_readings(state, meter_id):
             continue
         pct = (meter_d / raw_d - 1.0) * 100.0
         derived.append((t0, pct, meter_d, raw_d))
+    # Verbrauch VOR der ersten Ablesung hat keine eigene Messung → extrapolieren
+    # mit dem verbrauchsgewichteten Gesamtfaktor (Gesamt-Zähler-Δ / Gesamt-roh-Δ).
+    # Als synthetische Stufe ganz links (ts=1) abgelegt, sodass die Step-Funktion
+    # sie automatisch für alle Samples vor der ersten echten Ablesung anwendet.
+    # Notiz-Suffix ":pre" macht sie im Chart/Log identifizierbar (und ausblendbar).
+    pre_entry = None
+    if derived:
+        sum_md = sum(md for (_t, _p, md, _r) in derived)
+        sum_rd = sum(rd for (_t, _p, _m, rd) in derived)
+        if sum_rd > 0:
+            pct_overall = (sum_md / sum_rd - 1.0) * 100.0
+            pre_entry = (1, pct_overall, sum_md, sum_rd)
     new_cfg = state.cfg
     for c in children:
         kept = [e for e in (getattr(c, "compensation_history", ()) or ())
-                if str(getattr(e, "note", "")) != tag]
+                if not str(getattr(e, "note", "")).startswith(tag)]
         made = [CompensationEntry(effective_from_ts=t0, percent=pct, note=tag,
                                   meter_kwh=md, raw_kwh=rd)
                 for (t0, pct, md, rd) in derived]
+        if pre_entry is not None:
+            made.append(CompensationEntry(
+                effective_from_ts=pre_entry[0], percent=pre_entry[1], note=pre_tag,
+                meter_kwh=pre_entry[2], raw_kwh=pre_entry[3]))
         new_cfg = _set_history_on_cfg(new_cfg, c.key, kept + made)
     return new_cfg
 
