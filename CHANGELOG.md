@@ -12,9 +12,6 @@
 ### Fixed
 - **`update_device` (PUT /api/devices/<key>) silently discarded the calibration history.** Rebuilding `DeviceConfig` dropped `compensation_history` → every device edit wiped all dated calibration entries. The history (and the new `parent`) are now preserved.
 
-### Docs
-- **README:** New "Maintenance via Werkstatt" section — changes are requested via GitHub issue and deploy automatically to the reference VM, explicitly without cutting a new release.
-
 ## 16.41.5 - 2026-06-17
 ### Fixed
 - **`pip install` shipped only Python files, not the HTML templates / static assets / i18n JSON.** `pyproject.toml` had no `package_data` / `include-package-data`, so installing the wheel into a fresh environment (typical for Docker / Home Assistant add-ons / venvs) left `web/templates/setup.html`, `web/templates/settings.html`, `web/templates/widget_page.html` and any future `web/static/**` + `i18n/**` resources out of the installed package. The first user-visible symptom was `/setup` returning the literal string `Setup wizard not available` (the fallback when `templates/setup.html` cannot be found at runtime) — but `/settings` and `/widget_page` would have failed the same way. Added `include-package-data = true` + an explicit `[tool.setuptools.package-data]` glob for the three resource trees, plus a `MANIFEST.in` so the sdist carries the same files. A fresh `pip install .` followed by `python -c "import shelly_analyzer, pathlib; p = pathlib.Path(shelly_analyzer.__file__).parent / 'web' / 'templates' / 'setup.html'; assert p.exists()"` now succeeds.
