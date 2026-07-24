@@ -11935,3 +11935,27 @@ _I18N.setdefault("en", {}).update({
     "cal.standalone_title": "Standalone devices (no main meter)",
     "cal.standalone_intro": "These devices are not attached to any main meter and are calibrated individually here.",
 })
+_I18N.setdefault("de", {}).update({
+    "cal.reading_log": "Zählerstände",
+    "cal.log_intro": "Trage von Zeit zu Zeit den abgelesenen Zählerstand ein. Die Abweichung zwischen zwei Ablesungen wird automatisch berechnet und rückwirkend auf genau diesen Zeitraum angewendet. Eine einzelne Ablesung ist der Startwert (noch kein Faktor).",
+    "cal.reading_date": "Ablesung",
+    "cal.reading_value": "Zählerstand (kWh)",
+    "cal.factor_from": "Faktor ab hier",
+    "cal.no_readings": "Noch keine Ablesung — trage den aktuellen Zählerstand als Startwert ein.",
+    "cal.reading_when": "Datum/Zeit der Ablesung",
+    "cal.add_reading": "Ablesung hinzufügen",
+    "cal.err_reading": "Bitte Datum und Zählerstand eingeben.",
+    "cal.confirm_del_reading": "Diese Ablesung löschen? Die betroffenen Zeiträume werden neu berechnet.",
+})
+_I18N.setdefault("en", {}).update({
+    "cal.reading_log": "Meter readings",
+    "cal.log_intro": "Log the meter reading from time to time. The deviation between two readings is computed automatically and applied retroactively to exactly that period. A single reading is the starting value (no factor yet).",
+    "cal.reading_date": "Reading",
+    "cal.reading_value": "Meter reading (kWh)",
+    "cal.factor_from": "Factor from here",
+    "cal.no_readings": "No reading yet — enter the current meter reading as a starting value.",
+    "cal.reading_when": "Reading date/time",
+    "cal.add_reading": "Add reading",
+    "cal.err_reading": "Please enter date and meter reading.",
+    "cal.confirm_del_reading": "Delete this reading? The affected periods are recomputed.",
+})

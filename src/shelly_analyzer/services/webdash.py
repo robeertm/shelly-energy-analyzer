@@ -8345,11 +8345,12 @@ _loadLsSettings();
     }} catch(e) {{ /* keep last */ }}
     return _calMeters;
   }}
-  function _calField(id, label, type, step) {{
+  function _calField(id, label, type, step, val) {{
     // datetime-local braucht mehr Breite, sonst wird das Datum abgeschnitten.
     const w = (type === 'datetime-local') ? 200 : 130;
     return '<label style="display:flex;flex-direction:column;font-size:10px;color:var(--muted)">' + label +
-      '<input type="' + type + '"' + (step ? (' step="' + step + '"') : '') + ' id="' + id +
+      '<input type="' + type + '"' + (step ? (' step="' + step + '"') : '') +
+      (val ? (' value="' + esc(val) + '"') : '') + ' id="' + id +
       '" style="font-size:13px;padding:4px;width:' + w + 'px"></label>';
   }}
   function _calParentOptions(dev) {{
@@ -8411,30 +8412,56 @@ _loadLsSettings();
       const kids = devs.filter(x => x.parent === m.id && x.kind === 'em');
       if (!kids.length) return;
       const fid = 'calm-' + m.id;
+      const readings = (m.readings || []).slice().sort((a,b) => a.ts - b.ts);
+      // Alle Kinder tragen dieselben abgeleiteten Einträge → Historie eines Kindes reicht.
+      const sharedHist = (histByKey[kids[0].key] && histByKey[kids[0].key].history) ? histByKey[kids[0].key].history : [];
       html += '<div style="margin-top:12px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">';
-      html += '<div style="font-weight:600;margin-bottom:2px">📏 ' + esc(m.name || m.id) + ' — ' + t('cal.calibrate_against', 'gegen Zählerstand kalibrieren') + '</div>';
-      html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + t('cal.will_sum', 'Summiert') + ': ' + kids.map(k => esc(k.name)).join(' + ') + '</div>';
+      html += '<div style="font-weight:600;margin-bottom:2px">📏 ' + esc(m.name || m.id) + ' — ' + t('cal.reading_log', 'Zählerstände') + '</div>';
+      html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' +
+        t('cal.log_intro', 'Trage von Zeit zu Zeit den abgelesenen Zählerstand ein. Die Abweichung zwischen zwei Ablesungen wird automatisch berechnet und rückwirkend auf genau diesen Zeitraum angewendet. Eine einzelne Ablesung ist der Startwert (noch kein Faktor).') +
+        ' ' + t('cal.will_sum', 'Summiert') + ': ' + kids.map(k => esc(k.name)).join(' + ') + '</div>';
+      // Trend der Abweichung über die Zeit
+      if (sharedHist.length) {{
+        html += '<div style="margin:6px 0 10px">' + _calChartSvg(sharedHist) + '</div>';
+      }}
+      // Ablesungen-Tabelle (mit Faktor je Intervall + löschen)
+      if (readings.length) {{
+        html += '<table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:8px">';
+        html += '<thead><tr style="text-align:left;color:var(--muted)">' +
+          '<th style="padding:3px 6px">' + t('cal.reading_date', 'Ablesung') + '</th>' +
+          '<th style="padding:3px 6px;text-align:right">' + t('cal.reading_value', 'Zählerstand (kWh)') + '</th>' +
+          '<th style="padding:3px 6px;text-align:right">' + t('cal.factor_from', 'Faktor ab hier') + '</th><th></th></tr></thead><tbody>';
+        for (let i = 0; i < readings.length; i++) {{
+          const r = readings[i];
+          let fpct = null;
+          if (i < readings.length - 1) {{
+            const e = sharedHist.find(h => Number(h.effective_from_ts) === Number(r.ts));
+            if (e) fpct = Number(e.percent);
+          }}
+          html += '<tr style="border-top:1px solid var(--border)">';
+          html += '<td style="padding:3px 6px">' + esc(_calFmtDate(r.ts)) + '</td>';
+          html += '<td style="padding:3px 6px;text-align:right;font-variant-numeric:tabular-nums">' + Number(r.kwh).toFixed(2) + '</td>';
+          html += '<td style="padding:3px 6px;text-align:right;font-variant-numeric:tabular-nums">' + (fpct === null ? '—' : ((fpct >= 0 ? '+' : '') + fpct.toFixed(2) + ' %')) + '</td>';
+          html += '<td style="padding:3px 6px;text-align:right"><button class="btn btn-sm btn-danger" onclick="deleteMeterReading(\\u0027' + esc(m.id) + '\\u0027, ' + Number(r.ts) + ')">×</button></td>';
+          html += '</tr>';
+        }}
+        html += '</tbody></table>';
+      }} else {{
+        html += '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">' + t('cal.no_readings', 'Noch keine Ablesung — trage den aktuellen Zählerstand als Startwert ein.') + '</div>';
+      }}
+      // Neue Ablesung
       html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">';
-      html += _calField(fid + '-ms', t('cal.meter_start', 'Zähler Start (kWh)'), 'number', '0.001');
-      html += _calField(fid + '-me', t('cal.meter_end', 'Zähler Ende (kWh)'), 'number', '0.001');
-      html += _calField(fid + '-ps', t('cal.period_start', 'Zeitraum von'), 'datetime-local', '');
-      html += _calField(fid + '-pe', t('cal.period_end', 'Zeitraum bis'), 'datetime-local', '');
-      html += '<button class="btn btn-sm btn-primary" onclick="calibrateMeter(\\u0027' + esc(m.id) + '\\u0027, \\u0027' + fid + '\\u0027)">' + t('cal.compute', 'Berechnen & anwenden') + '</button>';
+      html += _calField(fid + '-rt', t('cal.reading_when', 'Datum/Zeit der Ablesung'), 'datetime-local', '', _calLocalISOInputValue(new Date()));
+      html += _calField(fid + '-rv', t('cal.reading_value', 'Zählerstand (kWh)'), 'number', '0.001', '');
+      html += '<button class="btn btn-sm btn-primary" onclick="addMeterReading(\\u0027' + esc(m.id) + '\\u0027, \\u0027' + fid + '\\u0027)">' + t('cal.add_reading', 'Ablesung hinzufügen') + '</button>';
       html += '</div><div id="' + fid + '-res" style="font-size:12px;margin-top:8px"></div>';
-      // Ist-Faktor je Unterzähler (read-only) — so sieht man den zentral gesetzten
-      // Wert, ohne die früheren Einzel-Karten pro Gerät zu brauchen.
+      // Ist-Faktor je Unterzähler (read-only)
       html += '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">';
       kids.forEach(k => {{
         const h = histByKey[k.key];
         const pct = h ? (Number(h.compensation_percent) || 0) : 0;
-        let last = null;
-        if (h && h.history && h.history.length) {{
-          last = h.history.slice().sort((a,b) => b.effective_from_ts - a.effective_from_ts)[0];
-        }}
         html += '<span style="display:inline-block;margin-right:14px">' + esc(k.name) + ': <b>' +
-          (pct >= 0 ? '+' : '') + pct.toFixed(2) + ' %</b>' +
-          (last ? (' <span style="opacity:.7">(' + t('cal.since', 'seit') + ' ' + esc(_calFmtDate(last.effective_from_ts)) + ')</span>') : '') +
-          '</span>';
+          (pct >= 0 ? '+' : '') + pct.toFixed(2) + ' %</b></span>';
       }});
       html += '</div>';
       html += '</div>';
@@ -8461,6 +8488,28 @@ _loadLsSettings();
   async function setDeviceParent(key, parent) {{
     try {{
       await fetch('/api/devices/' + encodeURIComponent(key), {{method:'PUT', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{parent: parent}})}});
+      await loadCalibration();
+    }} catch(e) {{ alert(e.message); }}
+  }}
+  async function addMeterReading(meterId, fid) {{
+    const t0 = document.getElementById(fid + '-rt').value;
+    const v = document.getElementById(fid + '-rv').value;
+    const res = document.getElementById(fid + '-res');
+    if (!t0 || v === '') {{
+      if (res) res.innerHTML = '<span style="color:var(--danger)">' + t('cal.err_reading', 'Bitte Datum und Zählerstand eingeben.') + '</span>';
+      return;
+    }}
+    try {{
+      const r = await fetch('/api/meters/' + encodeURIComponent(meterId) + '/reading', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{ts: t0, kwh: parseFloat(v)}})}});
+      const d = await r.json();
+      if (!d.ok) {{ if (res) res.innerHTML = '<span style="color:var(--danger)">' + (d.error || 'Fehler') + '</span>'; return; }}
+      await loadCalibration();
+    }} catch(e) {{ if (res) res.innerHTML = '<span style="color:var(--danger)">' + e.message + '</span>'; }}
+  }}
+  async function deleteMeterReading(meterId, ts) {{
+    if (!confirm(t('cal.confirm_del_reading', 'Diese Ablesung löschen? Die betroffenen Zeiträume werden neu berechnet.'))) return;
+    try {{
+      await fetch('/api/meters/' + encodeURIComponent(meterId) + '/reading/' + encodeURIComponent(ts), {{method:'DELETE'}});
       await loadCalibration();
     }} catch(e) {{ alert(e.message); }}
   }}
