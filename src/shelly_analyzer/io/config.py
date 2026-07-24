@@ -58,6 +58,16 @@ class CompensationEntry:
 
 
 @dataclass(frozen=True)
+class MeterReading:
+    """One hand-read absolute meter value at a point in time (kWh @ ts). The app
+    derives calibration factors from the consumption BETWEEN consecutive readings,
+    so the user just logs readings over time (a fresh start = a single reading =
+    baseline, no factor yet). Older readings can be inserted at any time."""
+    ts: int
+    kwh: float
+
+
+@dataclass(frozen=True)
 class MainMeter:
     """A physical reference meter the user reads by hand — the grid main meter
     (``Hauptzähler``) or an intermediate meter (``Zwischenzähler``). It measures
@@ -71,6 +81,9 @@ class MainMeter:
     id: str
     name: str = ""
     serial: str = ""
+    # Hand-read meter values over time (ascending by ts). Calibration factors are
+    # derived from the deltas between consecutive readings. Empty = none yet.
+    readings: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -1073,10 +1086,22 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
             if not mid or mid in seen_mm:
                 continue
             seen_mm.add(mid)
+            rd_raw = m.get("readings", []) or []
+            readings = []
+            if isinstance(rd_raw, list):
+                for r in rd_raw:
+                    if not isinstance(r, dict):
+                        continue
+                    ts = _coerce_int(r.get("ts", 0), 0)
+                    if ts <= 0:
+                        continue
+                    readings.append(MeterReading(ts=ts, kwh=_coerce_float(r.get("kwh", 0.0), 0.0)))
+            readings.sort(key=lambda r: r.ts)
             main_meters.append(MainMeter(
                 id=mid,
                 name=str(m.get("name", "") or "").strip(),
                 serial=str(m.get("serial", "") or "").strip(),
+                readings=tuple(readings),
             ))
 
     dwn = raw.get("download", {}) if isinstance(raw.get("download"), dict) else {}
@@ -1804,7 +1829,13 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             for d in cfg.devices
         ],
         "main_meters": [
-            {"id": m.id, "name": m.name, "serial": m.serial}
+            {
+                "id": m.id, "name": m.name, "serial": m.serial,
+                "readings": [
+                    {"ts": int(getattr(r, "ts", 0) or 0), "kwh": float(getattr(r, "kwh", 0.0) or 0.0)}
+                    for r in (getattr(m, "readings", ()) or ())
+                ],
+            }
             for m in getattr(cfg, "main_meters", []) or []
         ],
         "download": {

@@ -857,8 +857,14 @@ class EnergyDB:
         device_key: str,
         start_ts: Optional[int] = None,
         end_ts: Optional[int] = None,
+        compensate: bool = True,
     ) -> pd.DataFrame:
-        """Read pre-aggregated hourly stats."""
+        """Read pre-aggregated hourly stats.
+
+        ``compensate=False`` returns the RAW, uncompensated measurement — used by
+        meter calibration, which must derive its factor from the physical reading
+        (dividing out the current compensation would otherwise make repeated
+        calibration drift once a dated history exists)."""
         conn = self._conn()
         conditions = ["device_key = ?"]
         params: list = [device_key]
@@ -874,7 +880,8 @@ class EnergyDB:
         df = pd.read_sql_query(sql, conn, params=params)
         if "device_key" in df.columns:
             df = df.drop(columns=["device_key"])
-        self._apply_comp(df, device_key)
+        if compensate:
+            self._apply_comp(df, device_key)
         return df
 
     # -- meta ----------------------------------------------------------------
