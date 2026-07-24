@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+### Added
+- **Zähler-Kaskade (Meter hierarchy) im Calibration-Tab.** Bisher war die Kalibrierung rein pro Gerät. Wer mehrere Unterzähler an EINEM Hauptzähler hat (z. B. „Haus" + „Wallbox"), verglich den Hauptzähler-Stand gegen ein EINZELNES Untergerät — das ergibt einen unsinnigen Faktor (der Hauptzähler misst ja beide zusammen). Neu kann man eine beliebige Zähler-Struktur abbilden: beliebig viele **Hauptzähler** (mit Name + Seriennummer), jedes Shelly-Gerät wird per Dropdown seinem übergeordneten Zähler zugeordnet (Hauptzähler oder ein anderes Messgerät → beliebige Kaskadentiefe). Pro Hauptzähler gibt es ein Kalibrier-Formular: **Zählerstand einmal eingeben** (Start/Ende + Zeitraum) → die App summiert die **direkten** Untermesser (`em`) dieses Hauptzählers und schreibt EINEN Faktor als datierten Eintrag auf jedes davon. Schalter und tiefer liegende Unter-Unter-Zähler werden nicht mitgezählt → keine Doppelzählung.
+  - Backend: neues `MainMeter` (id/name/serial) + `AppConfig.main_meters`, `DeviceConfig.parent`; Endpunkte `GET/POST /api/meters`, `DELETE /api/meters/<id>` (löst zugeordnete Geräte statt sie zu verwaisen), `POST /api/compensation/calibrate_meter`. Vollständig **rückwärtskompatibel**: bestehende (flache) Konfigurationen laden unverändert (`parent=""`, `main_meters=[]`).
+  - Tests: `tests/test_meter_cascade.py` (Config-Roundtrip inkl. Legacy-Defaults, Kalibrier-Rechnung, CRUD, Detach-on-Delete).
+- Neue UI-Texte laufen zunächst auf deutschen Fallbacks (Primärnutzer DE); der Backend-Fehlerschlüssel `settings.compensation.err_no_children` ist DE+EN, restliche Sprachen via Server-Fallback. Voller 9-Sprachen-Sweep der neuen `cal.*`-Texte als Follow-up.
+
+### Fixed
+- **`update_device` (PUT /api/devices/<key>) verwarf still die Kalibrier-Historie.** Das Neu-Bauen von `DeviceConfig` ließ `compensation_history` weg → jede Geräte-Bearbeitung löschte alle datierten Kalibrier-Einträge. Historie (und das neue `parent`) bleiben jetzt erhalten.
+
 ### Docs
 - **README:** Neuer Abschnitt „Maintenance via Werkstatt" — beschreibt, dass Änderungen per GitHub-Issue beauftragt werden und der Deploy automatisch auf Roberts VM läuft, ausdrücklich ohne ein neues Release.
 
