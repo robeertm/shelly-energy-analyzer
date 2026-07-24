@@ -58,6 +58,22 @@ class CompensationEntry:
 
 
 @dataclass(frozen=True)
+class MainMeter:
+    """A physical reference meter the user reads by hand — the grid main meter
+    (``Hauptzähler``) or an intermediate meter (``Zwischenzähler``). It measures
+    nothing itself; Shelly devices are attached to it via ``DeviceConfig.parent``.
+
+    Calibration compares this meter's manual reading against the SUM of its direct
+    measured children — so with several sub-meters on one main meter you enter the
+    reading once and the app sums the children instead of comparing against a
+    single sub-meter (which is meaningless). Fully generic: any number of main
+    meters, any number of sub-meters, arbitrary cascade depth."""
+    id: str
+    name: str = ""
+    serial: str = ""
+
+
+@dataclass(frozen=True)
 class DeviceConfig:
     key: str
     name: str
@@ -81,6 +97,12 @@ class DeviceConfig:
     # Each entry's percent applies from its effective_from_ts forward until
     # the next entry. Order must be ascending by effective_from_ts.
     compensation_history: tuple = ()
+    # Meter cascade: key of the parent node this device hangs under — either a
+    # main-meter id (see ``AppConfig.main_meters``) or another device's ``key``.
+    # Empty = unassigned (flat topology = legacy behaviour). Lets calibration
+    # compare a meter against the SUM of its direct children rather than a single
+    # sub-meter. Backward compatible: absent in old configs → "".
+    parent: str = ""
 
 
 @dataclass(frozen=True)
@@ -868,6 +890,9 @@ class AppConfig:
     version: str = __version__
     devices: List[DeviceConfig] = field(default_factory=list)
     groups: List[DeviceGroup] = field(default_factory=list)
+    # Physical reference meters (Hauptzähler/Zwischenzähler) the user reads by hand.
+    # Empty by default → flat topology (legacy). Devices attach via DeviceConfig.parent.
+    main_meters: List[MainMeter] = field(default_factory=list)
 
     download: DownloadConfig = field(default_factory=DownloadConfig)
     csv_pack: CsvPackConfig = field(default_factory=CsvPackConfig)
@@ -1032,8 +1057,27 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
                 password=password,
                 compensation_percent=_coerce_float(d.get("compensation_percent", 0.0), 0.0),
                 compensation_history=tuple(history_entries),
+                parent=str(d.get("parent", "") or "").strip(),
             )
         )
+
+    # Main meters (Hauptzähler/Zwischenzähler) — optional, empty in legacy configs.
+    main_meters: List[MainMeter] = []
+    mm_raw = raw.get("main_meters", [])
+    if isinstance(mm_raw, list):
+        seen_mm: set = set()
+        for m in mm_raw:
+            if not isinstance(m, dict):
+                continue
+            mid = str(m.get("id", "") or "").strip()
+            if not mid or mid in seen_mm:
+                continue
+            seen_mm.add(mid)
+            main_meters.append(MainMeter(
+                id=mid,
+                name=str(m.get("name", "") or "").strip(),
+                serial=str(m.get("serial", "") or "").strip(),
+            ))
 
     dwn = raw.get("download", {}) if isinstance(raw.get("download"), dict) else {}
     download = DownloadConfig(
@@ -1662,6 +1706,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     cfg = AppConfig(
         version=str(raw.get("version", __version__)),
         devices=devices,
+        main_meters=main_meters,
         download=download,
         csv_pack=csv_pack,
         ui=ui,
@@ -1754,8 +1799,13 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
                     }
                     for h in (getattr(d, "compensation_history", ()) or ())
                 ],
+                "parent": getattr(d, "parent", "") or "",
             }
             for d in cfg.devices
+        ],
+        "main_meters": [
+            {"id": m.id, "name": m.name, "serial": m.serial}
+            for m in getattr(cfg, "main_meters", []) or []
         ],
         "download": {
             "chunk_seconds": cfg.download.chunk_seconds,
