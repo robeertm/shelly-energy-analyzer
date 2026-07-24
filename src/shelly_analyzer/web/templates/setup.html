@@ -113,6 +113,7 @@ let STEPS = [
   {id:"language",   titleKey:"setup.step.language",     titleEn:"Language",    skippable:false},
   {id:"mode",       titleKey:"setup.step.mode",         titleEn:"Mode",        skippable:false},
   {id:"devices",    titleKey:"setup.step.devices",      titleEn:"Devices",     skippable:false},
+  {id:"mainmeter",  titleKey:"setup.step.mainmeter",    titleEn:"Main meter",  skippable:true},
   {id:"pricing",    titleKey:"setup.step.pricing",      titleEn:"Tariff",      skippable:true},
   {id:"spot",       titleKey:"setup.step.spot",         titleEn:"Spot prices", skippable:true},
   {id:"co2",        titleKey:"setup.step.co2",          titleEn:"CO2",         skippable:true},
@@ -129,6 +130,7 @@ let skipped = {};
 let completed = {};
 let chosenLanguage = "en";
 let chosenTheme = "auto";
+let mainMeter = {saved:false, name:"", serial:"", kwh:null, children:0};
 let pricing = {price:0.32, base:120, vat:true};
 let spot = {enabled:false, zone:"DE-LU"};
 let co2 = {enabled:false, zone:"DE_LU", token:""};
@@ -163,6 +165,7 @@ function render(){
   else if(s.id==="language") renderLanguage(stage);
   else if(s.id==="mode") renderMode(stage);
   else if(s.id==="devices") renderDevices(stage);
+  else if(s.id==="mainmeter") renderMainMeter(stage);
   else if(s.id==="pricing") renderPricing(stage);
   else if(s.id==="spot") renderSpot(stage);
   else if(s.id==="co2") renderCo2(stage);
@@ -266,6 +269,67 @@ function renderDevices(stage){
     +'<button onclick="next()"'+(addedDevices.length===0?' disabled title="'+T('setup.devices.need_one','Add at least one device')+'"':'')+'>'+T('setup.btn.next','Next')+' &rarr;</button>'
     +'</div></div>';
   setTimeout(function(){var ip=document.getElementById('ip-input');if(ip){ip.addEventListener('keydown',function(e){if(e.key==='Enter')addByIp();});}},50);
+}
+
+function renderMainMeter(stage){
+  const ems = addedDevices.filter(function(d){return (d.kind||'em')==='em';});
+  const defName = mainMeter.name || T('setup.mainmeter.default_name','Grid meter');
+  let devHtml;
+  if(ems.length){
+    devHtml = '<div class="devlist">'+ems.map(function(d){
+      return '<label class="row" style="cursor:pointer">'
+        +'<span><span class="dot added"></span>'+esc(d.name||d.key)+' <span class="hint">'+esc(d.host)+'</span></span>'
+        +'<input type="checkbox" class="mm-child" value="'+esc(d.key)+'" checked></label>';
+    }).join('')+'</div>';
+  } else {
+    devHtml = '<p class="hint">'+T('setup.mainmeter.no_em','No measuring (em) devices added yet — you can still create the meter and assign devices later in Settings.')+'</p>';
+  }
+  stage.innerHTML = '<div class="card">'
+    +'<h2>&#9878;&#65039; '+T('setup.mainmeter.title','Calibrated main meter')+'</h2>'
+    +'<p>'+T('setup.mainmeter.intro','Enter your official (calibrated) grid meter and the sub-meters that together add up to it. The current reading is your starting value — at your next reading the app derives the calibration factor automatically.')+'</p>'
+    +'<div class="grid2">'
+    +'<div class="field"><label>'+T('setup.mainmeter.name','Meter name')+'</label>'
+    +'<input type="text" id="mm-name" value="'+esc(defName)+'"></div>'
+    +'<div class="field"><label>'+T('setup.mainmeter.serial','Serial number (on the meter)')+'</label>'
+    +'<input type="text" id="mm-serial" value="'+esc(mainMeter.serial)+'" placeholder="1ZPA..."></div>'
+    +'</div>'
+    +'<div class="field"><label>'+T('setup.mainmeter.reading','Current meter reading (kWh) — your calibrated starting value')+'</label>'
+    +'<input type="number" step="0.001" id="mm-kwh" value="'+(mainMeter.kwh==null?'':mainMeter.kwh)+'" placeholder="1373"></div>'
+    +'<h3 style="font-size:.9rem;margin:14px 0 6px">'+T('setup.mainmeter.assign','Which meters add up to this main meter?')+'</h3>'
+    +'<p class="hint" style="margin:0 0 8px">'+T('setup.mainmeter.assign_hint','Tick the sub-meters whose consumption the main meter totals. Exclude feed-in / PV production meters.')+'</p>'
+    +devHtml
+    +renderActions('saveMainMeterAndNext');
+}
+
+async function saveMainMeterAndNext(){
+  const name=(document.getElementById('mm-name').value||'').trim();
+  const serial=(document.getElementById('mm-serial').value||'').trim();
+  const kwhRaw=(document.getElementById('mm-kwh').value||'').trim();
+  const children=Array.prototype.slice.call(document.querySelectorAll('.mm-child:checked')).map(function(c){return c.value;});
+  if(!name){toast(T('setup.mainmeter.err_name','Please enter a meter name.'),'error');return;}
+  try{
+    const r=await fetch('/api/meters',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,serial:serial})});
+    const j=await r.json();
+    if(!j.ok){toast(T('setup.toast.error','Error: {err}',{err:j.error||'meters'}),'error');return;}
+    const mid=j.id;
+    let kwh=null;
+    if(kwhRaw!==''){
+      const v=Number(kwhRaw);
+      if(!isNaN(v)){
+        kwh=v;
+        await fetch('/api/meters/'+encodeURIComponent(mid)+'/reading',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ts:Math.floor(Date.now()/1000),kwh:v})});
+      }
+    }
+    for(let i=0;i<children.length;i++){
+      await fetch('/api/devices/'+encodeURIComponent(children[i]),{method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({parent:mid})});
+    }
+    mainMeter={saved:true,name:name,serial:serial,kwh:kwh,children:children.length};
+    completed.mainmeter=true;
+    toast('✓ '+T('setup.mainmeter.saved','Main meter saved'),'success');
+    next();
+  }catch(e){toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');}
 }
 
 function renderPricing(stage){
@@ -413,6 +477,7 @@ function renderDone(stage){
   const items = [];
   items.push(sumItem('&#127760;', T('setup.step.language','Language')+': '+chosenLanguage+' / '+chosenTheme, true));
   items.push(sumItem('&#128268;', demoMode?T('setup.done.demo','Demo mode: {n} devices',{n:addedDevices.length}):T('setup.done.real_devices','{n} real devices',{n:addedDevices.length}), true));
+  items.push(sumItem('&#9878;&#65039;', mainMeter.saved ? T('setup.done.mainmeter','Main meter: {name}{r}',{name:mainMeter.name, r:(mainMeter.kwh!=null?(' &middot; '+mainMeter.kwh+' kWh'):'')}) : T('setup.done.mainmeter_off','Main meter: not set'), completed.mainmeter));
   items.push(sumItem('&#128176;', T('setup.done.tariff','Tariff: {p} EUR/kWh + {b} EUR/year',{p:pricing.price.toFixed(4),b:pricing.base.toFixed(2)}), completed.pricing));
   items.push(sumItem('&#9889;', T('setup.done.spot','Spot prices: {s}',{s: spot.enabled ? spot.zone : T('setup.done.off','off')}), completed.spot));
   items.push(sumItem('&#127807;', T('setup.done.co2','CO2 tracking: {s}',{s: co2.enabled ? co2.zone : T('setup.done.off','off')}), completed.co2));
