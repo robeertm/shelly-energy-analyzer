@@ -10847,6 +10847,7 @@ _I18N.setdefault("de", {}).update({
     "settings.compensation.err_end_after_start": "Ende muss nach Beginn liegen",
     "settings.compensation.err_meter_order": "Zählerstand Ende muss größer als Beginn sein",
     "settings.compensation.err_no_data": "Keine App-Messwerte in diesem Zeitraum",
+    "settings.compensation.err_no_children": "Dieser Hauptzähler hat keine zugeordneten Unterzähler (Messgeräte).",
 })
 _I18N.setdefault("en", {}).update({
     "settings.section.compensation": "Measurement compensation",
@@ -10872,6 +10873,7 @@ _I18N.setdefault("en", {}).update({
     "settings.compensation.err_end_after_start": "End must be after start",
     "settings.compensation.err_meter_order": "End meter reading must be greater than start",
     "settings.compensation.err_no_data": "No app measurements in this period",
+    "settings.compensation.err_no_children": "This main meter has no assigned sub-meters (energy meters).",
 })
 _I18N.setdefault("es", {}).update({
     "settings.section.compensation": "Compensación de medición",

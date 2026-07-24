@@ -8335,6 +8335,136 @@ _loadLsSettings();
     svg += '</svg>';
     return svg;
   }}
+  /* ── Meter cascade (Hauptzähler / Unterzähler) ── */
+  let _calMeters = {{ main_meters: [], devices: [] }};
+  async function _calLoadMeters() {{
+    try {{
+      const r = await fetch('/api/meters');
+      const d = await r.json();
+      if (d && d.ok) _calMeters = d;
+    }} catch(e) {{ /* keep last */ }}
+    return _calMeters;
+  }}
+  function _calField(id, label, type, step) {{
+    return '<label style="display:flex;flex-direction:column;font-size:10px;color:var(--muted)">' + label +
+      '<input type="' + type + '"' + (step ? (' step="' + step + '"') : '') + ' id="' + id +
+      '" style="font-size:13px;padding:4px;width:130px"></label>';
+  }}
+  function _calParentOptions(dev) {{
+    let opts = '<option value="">' + t('cal.parent_none', '— nicht zugeordnet') + '</option>';
+    (_calMeters.main_meters || []).forEach(m => {{
+      const sel = (dev.parent === m.id) ? ' selected' : '';
+      opts += '<option value="' + esc(m.id) + '"' + sel + '>' + esc(m.name || m.id) + '</option>';
+    }});
+    (_calMeters.devices || []).forEach(o => {{
+      if (o.key === dev.key || o.kind !== 'em') return;
+      const sel = (dev.parent === o.key) ? ' selected' : '';
+      opts += '<option value="' + esc(o.key) + '"' + sel + '>↳ ' + esc(o.name) + '</option>';
+    }});
+    return opts;
+  }}
+  function _calRenderHierarchy() {{
+    const meters = _calMeters.main_meters || [];
+    const devs = _calMeters.devices || [];
+    let html = '<div class="card" style="margin-bottom:14px">';
+    html += '<h3 style="margin:0 0 4px">🔌 ' + t('cal.structure_title', 'Zähler-Struktur') + '</h3>';
+    html += '<p style="margin:0 0 10px;color:var(--muted);font-size:12px">' +
+      t('cal.structure_intro', 'Lege deine Hauptzähler an und ordne jedem Shelly zu, an welchem Zähler er hängt. Die Kalibrierung vergleicht einen Hauptzähler mit der SUMME seiner direkten Unterzähler.') + '</p>';
+    if (meters.length) {{
+      html += '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px">';
+      meters.forEach(m => {{
+        const kids = devs.filter(x => x.parent === m.id && x.kind === 'em');
+        html += '<tr style="border-bottom:1px solid var(--border)">';
+        html += '<td style="padding:5px 6px;font-weight:600">🏠 ' + esc(m.name || m.id) + '</td>';
+        html += '<td style="padding:5px 6px;color:var(--muted)">' + (m.serial ? ('SN ' + esc(m.serial)) : '') + '</td>';
+        html += '<td style="padding:5px 6px;color:var(--muted)">' + kids.length + ' ' + t('cal.direct_children', 'Unterzähler') + '</td>';
+        html += '<td style="padding:5px 6px;text-align:right"><button class="btn btn-sm btn-danger" onclick="deleteMainMeter(\\u0027' + esc(m.id) + '\\u0027)">🗑</button></td>';
+        html += '</tr>';
+      }});
+      html += '</table>';
+    }}
+    html += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:14px">';
+    html += '<input id="cal-mm-name" placeholder="' + t('cal.meter_name', 'Hauptzähler-Name') + '" style="font-size:13px;padding:4px;flex:1;min-width:120px">';
+    html += '<input id="cal-mm-serial" placeholder="' + t('cal.meter_serial', 'Seriennummer (optional)') + '" style="font-size:13px;padding:4px;flex:1;min-width:120px">';
+    html += '<button class="btn btn-sm" onclick="addMainMeter()">➕ ' + t('cal.add_meter', 'Hauptzähler hinzufügen') + '</button>';
+    html += '</div>';
+    if (devs.length) {{
+      html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+      html += '<tr style="color:var(--muted);font-size:11px;text-transform:uppercase">' +
+        '<th style="text-align:left;padding:4px 6px">' + t('cal.device', 'Gerät') + '</th>' +
+        '<th style="text-align:left;padding:4px 6px">' + t('cal.type', 'Typ') + '</th>' +
+        '<th style="text-align:left;padding:4px 6px">' + t('cal.hangs_on', 'hängt an') + '</th></tr>';
+      devs.forEach(dev => {{
+        html += '<tr style="border-top:1px solid var(--border)">';
+        html += '<td style="padding:4px 6px">' + esc(dev.name) + '</td>';
+        html += '<td style="padding:4px 6px;color:var(--muted)">' + (dev.kind === 'em' ? ('⚡ ' + t('cal.kind_meter', 'Messgerät')) : ('🔌 ' + t('cal.kind_switch', 'Schalter'))) + '</td>';
+        html += '<td style="padding:4px 6px"><select onchange="setDeviceParent(\\u0027' + esc(dev.key) + '\\u0027, this.value)" style="font-size:13px;padding:3px">' + _calParentOptions(dev) + '</select></td>';
+        html += '</tr>';
+      }});
+      html += '</table>';
+    }}
+    meters.forEach(m => {{
+      const kids = devs.filter(x => x.parent === m.id && x.kind === 'em');
+      if (!kids.length) return;
+      const fid = 'calm-' + m.id;
+      html += '<div style="margin-top:12px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">';
+      html += '<div style="font-weight:600;margin-bottom:2px">📏 ' + esc(m.name || m.id) + ' — ' + t('cal.calibrate_against', 'gegen Zählerstand kalibrieren') + '</div>';
+      html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + t('cal.will_sum', 'Summiert') + ': ' + kids.map(k => esc(k.name)).join(' + ') + '</div>';
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">';
+      html += _calField(fid + '-ms', t('cal.meter_start', 'Zähler Start (kWh)'), 'number', '0.001');
+      html += _calField(fid + '-me', t('cal.meter_end', 'Zähler Ende (kWh)'), 'number', '0.001');
+      html += _calField(fid + '-ps', t('cal.period_start', 'Zeitraum von'), 'datetime-local', '');
+      html += _calField(fid + '-pe', t('cal.period_end', 'Zeitraum bis'), 'datetime-local', '');
+      html += '<button class="btn btn-sm btn-primary" onclick="calibrateMeter(\\u0027' + esc(m.id) + '\\u0027, \\u0027' + fid + '\\u0027)">' + t('cal.compute', 'Berechnen & anwenden') + '</button>';
+      html += '</div><div id="' + fid + '-res" style="font-size:12px;margin-top:8px"></div>';
+      html += '</div>';
+    }});
+    html += '</div>';
+    return html;
+  }}
+  async function addMainMeter() {{
+    const name = (document.getElementById('cal-mm-name').value || '').trim();
+    const serial = (document.getElementById('cal-mm-serial').value || '').trim();
+    if (!name) {{ alert(t('cal.err_name', 'Bitte einen Namen eingeben.')); return; }}
+    try {{
+      await fetch('/api/meters', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{name:name, serial:serial}})}});
+      await loadCalibration();
+    }} catch(e) {{ alert(e.message); }}
+  }}
+  async function deleteMainMeter(id) {{
+    if (!confirm(t('cal.confirm_del_meter', 'Diesen Hauptzähler löschen? Zugeordnete Geräte werden nur gelöst, nicht gelöscht.'))) return;
+    try {{
+      await fetch('/api/meters/' + encodeURIComponent(id), {{method:'DELETE'}});
+      await loadCalibration();
+    }} catch(e) {{ alert(e.message); }}
+  }}
+  async function setDeviceParent(key, parent) {{
+    try {{
+      await fetch('/api/devices/' + encodeURIComponent(key), {{method:'PUT', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{parent: parent}})}});
+      await loadCalibration();
+    }} catch(e) {{ alert(e.message); }}
+  }}
+  async function calibrateMeter(meterId, fid) {{
+    const ms = document.getElementById(fid + '-ms').value;
+    const me = document.getElementById(fid + '-me').value;
+    const ps = document.getElementById(fid + '-ps').value;
+    const pe = document.getElementById(fid + '-pe').value;
+    const res = document.getElementById(fid + '-res');
+    if (ms === '' || me === '' || !ps || !pe) {{
+      if (res) res.innerHTML = '<span style="color:var(--danger)">' + t('cal.err_fields', 'Bitte alle Felder ausfüllen.') + '</span>';
+      return;
+    }}
+    try {{
+      const r = await fetch('/api/compensation/calibrate_meter', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{
+        meter_id: meterId, meter_start: parseFloat(ms), meter_end: parseFloat(me), start: ps, end: pe, effective_from: ps
+      }})}});
+      const d = await r.json();
+      if (!d.ok) {{ if (res) res.innerHTML = '<span style="color:var(--danger)">' + (d.error || 'Fehler') + '</span>'; return; }}
+      if (res) res.innerHTML = '<span style="color:#22c55e">✓ ' + t('cal.applied', 'Faktor') + ' ' + Number(d.percent).toFixed(2) +
+        ' % (' + t('cal.meter', 'Zähler') + ' ' + d.meter_kwh + ' / ' + t('cal.measured', 'gemessen') + ' ' + d.raw_kwh + ' kWh) → ' + (d.children || []).join(', ') + '</span>';
+      setTimeout(loadCalibration, 1800);
+    }} catch(e) {{ if (res) res.innerHTML = '<span style="color:var(--danger)">' + e.message + '</span>'; }}
+  }}
   function _calRenderDeviceCard(dev) {{
     const formId = 'cal-form-' + dev.key;
     const tableId = 'cal-tbl-' + dev.key;
@@ -8451,6 +8581,7 @@ _loadLsSettings();
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
       const devs = d.devices || [];
+      await _calLoadMeters();
       if (!devs.length) {{
         el.innerHTML = '<div class="card"><p style="color:var(--muted);text-align:center;padding:30px 0">' +
           t('calibration.no_devices', 'No devices configured yet.') + '</p></div>';
@@ -8461,6 +8592,10 @@ _loadLsSettings();
       html += '<p style="margin:0;color:var(--muted);font-size:12px">' +
         t('calibration.intro', 'Add a calibration entry whenever you compare the device against a reference meter. Each entry sets the compensation factor for all samples from that moment forward, until the next entry overrides it.') +
         '</p></div>';
+      // Meter cascade first: define main meters + assign devices, then calibrate a
+      // main meter against the SUM of its direct sub-meters (the correct way when
+      // several sub-meters share one meter). Per-device cards follow for fine control.
+      html += _calRenderHierarchy();
       devs.forEach(dev => {{ html += _calRenderDeviceCard(dev); }});
       el.innerHTML = html;
     }} catch(e) {{
