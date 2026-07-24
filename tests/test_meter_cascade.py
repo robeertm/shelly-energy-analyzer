@@ -50,11 +50,16 @@ def test_config_roundtrip():
 
 
 class _FakeDB:
+    """Raw kWh per device, optionally per-interval: kwh[dkey] is either a scalar
+    (same for any interval) or a dict {(t0, t1): kwh}."""
     def __init__(self, kwh):
         self.kwh = kwh
 
-    def query_hourly(self, dkey, start_ts=None, end_ts=None):
-        return pd.DataFrame({"kwh": [self.kwh.get(dkey, 0.0)]})
+    def query_hourly(self, dkey, start_ts=None, end_ts=None, compensate=True):
+        v = self.kwh.get(dkey, 0.0)
+        if isinstance(v, dict):
+            v = v.get((start_ts, end_ts), 0.0)
+        return pd.DataFrame({"kwh": [v]})
 
 
 class _FakeState:
@@ -128,8 +133,57 @@ def test_meter_crud():
     print("OK  meter CRUD + parent assignment + detach-on-delete")
 
 
+def test_reading_log():
+    """Reading log: single reading = baseline (no factor); a second reading derives
+    a factor for the interval on both em children; an OLDER reading inserted later
+    creates a factor for the earlier interval too. Config roundtrips readings."""
+    from shelly_analyzer.io.config import MeterReading
+    cfg = AppConfig(
+        main_meters=[MainMeter(id="grid", name="Hauptzähler")],
+        devices=[
+            DeviceConfig(key="s1", name="Haus", host="", kind="em", parent="grid"),
+            DeviceConfig(key="s2", name="Wallbox", host="", kind="em", parent="grid"),
+        ],
+    )
+    # Interval (100,200): Haus 120 + Wallbox 80 = 200 raw. (50,100): 50+50 = 100 raw.
+    db = _FakeDB({
+        "s1": {(100, 200): 120.0, (50, 100): 50.0},
+        "s2": {(100, 200): 80.0, (50, 100): 50.0},
+    })
+    app, state = _app(cfg, db)
+    with app.test_client() as c:
+        # 1) single reading = baseline, no factor
+        j = c.post("/api/meters/grid/reading", json={"ts": 100, "kwh": 1000.0}).get_json()
+        assert j["ok"] and j["readings"] == 1, j
+        comp = {d.key: d.compensation_percent for d in state.cfg.devices}
+        assert comp["s1"] == 0.0 and comp["s2"] == 0.0, ("baseline should not set a factor", comp)
+        # 2) second reading at 200: meter delta 1210-1000=210 vs raw 200 → +5 %
+        j = c.post("/api/meters/grid/reading", json={"ts": 200, "kwh": 1210.0}).get_json()
+        assert j["ok"] and j["readings"] == 2, j
+        for d in state.cfg.devices:
+            e = [x for x in d.compensation_history if int(x.effective_from_ts) == 100]
+            assert len(e) == 1 and abs(e[0].percent - 5.0) < 0.01, (d.key, d.compensation_history)
+        # 3) insert an OLDER reading at 50: meter delta 1000-900=100 vs raw 100 → 0 %
+        j = c.post("/api/meters/grid/reading", json={"ts": 50, "kwh": 900.0}).get_json()
+        assert j["ok"] and j["readings"] == 3, j
+        for d in state.cfg.devices:
+            got = sorted(int(x.effective_from_ts) for x in d.compensation_history)
+            assert got == [50, 100], ("both intervals present", d.key, got)
+            e0 = [x for x in d.compensation_history if int(x.effective_from_ts) == 50][0]
+            assert abs(e0.percent - 0.0) < 0.01, e0.percent
+        # readings survive save + reload
+        cfg2 = load_config(state._cfg_path)
+        rd = {int(r.ts): r.kwh for r in cfg2.main_meters[0].readings}
+        assert rd == {50: 900.0, 100: 1000.0, 200: 1210.0}, rd
+        # delete the middle reading → intervals recompute (now just [50,200])
+        j = c.delete("/api/meters/grid/reading/100").get_json()
+        assert j["ok"] and j["readings"] == 2, j
+    print("OK  reading log: baseline, derived factor, back-dated insert, roundtrip, delete")
+
+
 if __name__ == "__main__":
     test_config_roundtrip()
     test_calibrate_meter_sums_direct_children()
     test_meter_crud()
+    test_reading_log()
     print("\nALL METER-CASCADE TESTS PASSED")

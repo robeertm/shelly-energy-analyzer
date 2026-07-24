@@ -14,6 +14,7 @@ from shelly_analyzer.io.config import (
     CompensationEntry,
     DeviceConfig,
     MainMeter,
+    MeterReading,
     load_config,
     save_config,
 )
@@ -692,21 +693,27 @@ def delete_compensation_history():
 # therefore never double-counted.
 
 def _raw_kwh_over(state, db, dkey: str, t0: int, t1: int) -> float:
-    """Uncompensated measured kWh of a device over [t0, t1]. Divides out the
-    device's current compensation factor so a fresh calibration is computed from
-    the raw measurement (same approach as the legacy global calibrate)."""
+    """RAW, uncompensated measured kWh of a device over [t0, t1]. Uses
+    ``compensate=False`` so calibration derives its factor from the physical
+    measurement — stable no matter what dated compensation history already exists
+    (dividing out the scalar factor drifted once a step-function history was set)."""
     import pandas as pd
-    dev = next((x for x in state.cfg.devices if x.key == dkey), None)
-    cf = 1.0 + float(getattr(dev, "compensation_percent", 0.0) or 0.0) / 100.0 if dev else 1.0
     try:
-        dfh = db.query_hourly(dkey, start_ts=t0, end_ts=t1)
+        try:
+            dfh = db.query_hourly(dkey, start_ts=t0, end_ts=t1, compensate=False)
+        except TypeError:
+            # DB without the compensate kwarg → undo the current scalar factor.
+            dev = next((x for x in state.cfg.devices if x.key == dkey), None)
+            cf = 1.0 + float(getattr(dev, "compensation_percent", 0.0) or 0.0) / 100.0 if dev else 1.0
+            dfh = db.query_hourly(dkey, start_ts=t0, end_ts=t1)
+            if dfh is not None and not dfh.empty and "kwh" in dfh.columns:
+                return float(pd.to_numeric(dfh["kwh"], errors="coerce").fillna(0).sum()) / (cf or 1.0)
+            return 0.0
         if dfh is not None and not dfh.empty and "kwh" in dfh.columns:
-            comp_sum = float(pd.to_numeric(dfh["kwh"], errors="coerce").fillna(0).sum())
-        else:
-            comp_sum = 0.0
+            return float(pd.to_numeric(dfh["kwh"], errors="coerce").fillna(0).sum())
     except Exception:
-        comp_sum = 0.0
-    return comp_sum / cf if cf else comp_sum
+        pass
+    return 0.0
 
 
 def _set_history_on_cfg(cfg, device_key: str, entries):
@@ -738,7 +745,13 @@ def list_meters():
     the UI can render and edit the cascade."""
     state = _get_state()
     meters = [
-        {"id": m.id, "name": m.name, "serial": m.serial}
+        {
+            "id": m.id, "name": m.name, "serial": m.serial,
+            "readings": [
+                {"ts": int(getattr(r, "ts", 0) or 0), "kwh": float(getattr(r, "kwh", 0.0) or 0.0)}
+                for r in sorted((getattr(m, "readings", ()) or ()), key=lambda r: int(getattr(r, "ts", 0) or 0))
+            ],
+        }
         for m in (getattr(state.cfg, "main_meters", []) or [])
     ]
     devices = [
@@ -869,3 +882,94 @@ def calibrate_meter():
         "children": [d.key for d in children],
         "per_child_raw": {k: round(v, 3) for k, v in per.items()},
     })
+
+
+# ── Meter reading log (Zählerstand-Logbuch) ─────────────────────────────────
+# The user logs hand-read meter values over time; calibration factors are derived
+# from consumption BETWEEN consecutive readings. A single reading = baseline (no
+# factor yet). Readings can be inserted at any date (older too) — the affected
+# intervals are recomputed. Raw (uncompensated) app measurement is used so
+# repeated recompute never drifts.
+
+def _recompute_meter_from_readings(state, meter_id):
+    """Derive dated calibration factors from a main meter's reading log and write
+    them to its direct em children. Manual per-device entries (note != meter tag)
+    are preserved. Returns the new cfg."""
+    db = state.storage.db
+    meter = next((m for m in (getattr(state.cfg, "main_meters", []) or []) if m.id == meter_id), None)
+    if meter is None:
+        return state.cfg
+    readings = sorted((getattr(meter, "readings", ()) or ()), key=lambda r: int(r.ts))
+    children = [d for d in state.cfg.devices
+                if str(getattr(d, "parent", "") or "") == meter_id
+                and str(getattr(d, "kind", "")) == "em"]
+    tag = "meter:" + str(meter_id)
+    derived = []  # (eff_ts, percent, meter_delta, raw_delta)
+    for i in range(len(readings) - 1):
+        t0, t1 = int(readings[i].ts), int(readings[i + 1].ts)
+        if t1 <= t0:
+            continue
+        meter_d = float(readings[i + 1].kwh) - float(readings[i].kwh)
+        raw_d = sum(_raw_kwh_over(state, db, c.key, t0, t1) for c in children)
+        if meter_d <= 0 or raw_d <= 0:
+            continue
+        pct = (meter_d / raw_d - 1.0) * 100.0
+        derived.append((t0, pct, meter_d, raw_d))
+    new_cfg = state.cfg
+    for c in children:
+        kept = [e for e in (getattr(c, "compensation_history", ()) or ())
+                if str(getattr(e, "note", "")) != tag]
+        made = [CompensationEntry(effective_from_ts=t0, percent=pct, note=tag,
+                                  meter_kwh=md, raw_kwh=rd)
+                for (t0, pct, md, rd) in derived]
+        new_cfg = _set_history_on_cfg(new_cfg, c.key, kept + made)
+    return new_cfg
+
+
+@bp.route("/api/meters/<mid>/reading", methods=["POST"])
+def add_meter_reading(mid):
+    """Add (or replace at the same ts) a hand-read meter value, then recompute.
+    Body: {ts, kwh}. ts may be older than existing readings."""
+    state = _get_state()
+    body = request.get_json(silent=True) or {}
+    mid = str(mid or "").strip()
+    try:
+        ts = _comp_parse_ts(body.get("ts"))
+        kwh = float(body.get("kwh"))
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"invalid input: {e}"}), 400
+    meters = list(getattr(state.cfg, "main_meters", []) or [])
+    idx = next((i for i, m in enumerate(meters) if m.id == mid), None)
+    if idx is None:
+        return jsonify({"ok": False, "error": "meter not found"}), 404
+    m = meters[idx]
+    rd = [r for r in (getattr(m, "readings", ()) or ()) if int(r.ts) != int(ts)]
+    rd.append(MeterReading(ts=int(ts), kwh=kwh))
+    rd.sort(key=lambda r: int(r.ts))
+    meters[idx] = replace(m, readings=tuple(rd))
+    state.cfg = replace(state.cfg, main_meters=meters)  # recompute must see new readings
+    new_cfg = _recompute_meter_from_readings(state, mid)
+    _comp_save_reload(state, new_cfg)
+    return jsonify({"ok": True, "meter_id": mid, "readings": len(rd)})
+
+
+@bp.route("/api/meters/<mid>/reading/<ts>", methods=["DELETE"])
+def delete_meter_reading(mid, ts):
+    """Remove a reading by timestamp and recompute the cascade."""
+    state = _get_state()
+    mid = str(mid or "").strip()
+    try:
+        ts_i = int(float(ts))
+    except Exception:
+        return jsonify({"ok": False, "error": "invalid ts"}), 400
+    meters = list(getattr(state.cfg, "main_meters", []) or [])
+    idx = next((i for i, m in enumerate(meters) if m.id == mid), None)
+    if idx is None:
+        return jsonify({"ok": False, "error": "meter not found"}), 404
+    m = meters[idx]
+    rd = [r for r in (getattr(m, "readings", ()) or ()) if int(r.ts) != ts_i]
+    meters[idx] = replace(m, readings=tuple(rd))
+    state.cfg = replace(state.cfg, main_meters=meters)
+    new_cfg = _recompute_meter_from_readings(state, mid)
+    _comp_save_reload(state, new_cfg)
+    return jsonify({"ok": True, "meter_id": mid, "readings": len(rd)})
