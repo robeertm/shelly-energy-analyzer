@@ -11865,3 +11865,73 @@ def format_number_local(lang: str, x: float, decimals: int = 2) -> str:
     if lang == "en":
         return s
     return s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+# ── Meter cascade / calibration page (2026-07) ──────────────────────────────
+# Served to the browser via /api/i18n (prefixes calibration. / cal.). Only DE+EN
+# here; the other 7 languages fall back to EN via the server t() chain. A full
+# 9-language sweep of these strings is a documented follow-up.
+_I18N.setdefault("de", {}).update({
+    "calibration.title": "Messgenauigkeit kalibrieren",
+    "calibration.intro": "Lege unten deine Zähler-Struktur an und kalibriere jeden Hauptzähler EINMAL zentral gegen seinen abgelesenen Zählerstand — die App verteilt den Faktor auf seine Unterzähler. Du musst also nicht jeden Zähler einzeln eingeben. Einzelne Geräte ohne Hauptzähler kannst du weiter unten separat kalibrieren.",
+    "cal.structure_title": "Zähler-Struktur",
+    "cal.structure_intro": "Lege deine Hauptzähler an und ordne jedem Shelly zu, an welchem Zähler er hängt. Die Kalibrierung vergleicht einen Hauptzähler mit der SUMME seiner direkten Unterzähler.",
+    "cal.parent_none": "— nicht zugeordnet",
+    "cal.direct_children": "Unterzähler",
+    "cal.meter_name": "Hauptzähler-Name",
+    "cal.meter_serial": "Seriennummer (optional)",
+    "cal.add_meter": "Hauptzähler hinzufügen",
+    "cal.device": "Gerät",
+    "cal.type": "Typ",
+    "cal.hangs_on": "hängt an",
+    "cal.kind_meter": "Messgerät",
+    "cal.kind_switch": "Schalter",
+    "cal.calibrate_against": "gegen Zählerstand kalibrieren",
+    "cal.will_sum": "Summiert",
+    "cal.meter_start": "Zähler Start (kWh)",
+    "cal.meter_end": "Zähler Ende (kWh)",
+    "cal.period_start": "Zeitraum von",
+    "cal.period_end": "Zeitraum bis",
+    "cal.compute": "Berechnen & anwenden",
+    "cal.err_name": "Bitte einen Namen eingeben.",
+    "cal.confirm_del_meter": "Diesen Hauptzähler löschen? Zugeordnete Geräte werden nur gelöst, nicht gelöscht.",
+    "cal.err_fields": "Bitte alle Felder ausfüllen.",
+    "cal.applied": "Faktor",
+    "cal.meter": "Zähler",
+    "cal.measured": "gemessen",
+    "cal.since": "seit",
+    "cal.standalone_title": "Einzelne Geräte (ohne Hauptzähler)",
+    "cal.standalone_intro": "Diese Geräte hängen an keinem Hauptzähler und werden hier einzeln kalibriert.",
+})
+_I18N.setdefault("en", {}).update({
+    "calibration.title": "Measurement calibration",
+    "calibration.intro": "Set up your meter structure below and calibrate each main meter ONCE, centrally, against its reading — the app distributes the factor to its sub-meters, so you don't enter each meter individually. Standalone devices without a main meter can be calibrated separately further down.",
+    "cal.structure_title": "Meter structure",
+    "cal.structure_intro": "Add your main meters and assign each Shelly to the meter it hangs on. Calibration compares a main meter against the SUM of its direct sub-meters.",
+    "cal.parent_none": "— not assigned",
+    "cal.direct_children": "sub-meters",
+    "cal.meter_name": "Main meter name",
+    "cal.meter_serial": "Serial number (optional)",
+    "cal.add_meter": "Add main meter",
+    "cal.device": "Device",
+    "cal.type": "Type",
+    "cal.hangs_on": "hangs on",
+    "cal.kind_meter": "Meter",
+    "cal.kind_switch": "Switch",
+    "cal.calibrate_against": "calibrate against meter reading",
+    "cal.will_sum": "Sums",
+    "cal.meter_start": "Meter start (kWh)",
+    "cal.meter_end": "Meter end (kWh)",
+    "cal.period_start": "Period from",
+    "cal.period_end": "Period to",
+    "cal.compute": "Compute & apply",
+    "cal.err_name": "Please enter a name.",
+    "cal.confirm_del_meter": "Delete this main meter? Assigned devices are only detached, not deleted.",
+    "cal.err_fields": "Please fill in all fields.",
+    "cal.applied": "Factor",
+    "cal.meter": "Meter",
+    "cal.measured": "measured",
+    "cal.since": "since",
+    "cal.standalone_title": "Standalone devices (no main meter)",
+    "cal.standalone_intro": "These devices are not attached to any main meter and are calibrated individually here.",
+})

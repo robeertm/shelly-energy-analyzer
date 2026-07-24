@@ -8346,9 +8346,11 @@ _loadLsSettings();
     return _calMeters;
   }}
   function _calField(id, label, type, step) {{
+    // datetime-local braucht mehr Breite, sonst wird das Datum abgeschnitten.
+    const w = (type === 'datetime-local') ? 200 : 130;
     return '<label style="display:flex;flex-direction:column;font-size:10px;color:var(--muted)">' + label +
       '<input type="' + type + '"' + (step ? (' step="' + step + '"') : '') + ' id="' + id +
-      '" style="font-size:13px;padding:4px;width:130px"></label>';
+      '" style="font-size:13px;padding:4px;width:' + w + 'px"></label>';
   }}
   function _calParentOptions(dev) {{
     let opts = '<option value="">' + t('cal.parent_none', '— nicht zugeordnet') + '</option>';
@@ -8363,9 +8365,11 @@ _loadLsSettings();
     }});
     return opts;
   }}
-  function _calRenderHierarchy() {{
+  function _calRenderHierarchy(histDevs) {{
     const meters = _calMeters.main_meters || [];
     const devs = _calMeters.devices || [];
+    const histByKey = {{}};
+    (histDevs || []).forEach(h => {{ histByKey[h.key] = h; }});
     let html = '<div class="card" style="margin-bottom:14px">';
     html += '<h3 style="margin:0 0 4px">🔌 ' + t('cal.structure_title', 'Zähler-Struktur') + '</h3>';
     html += '<p style="margin:0 0 10px;color:var(--muted);font-size:12px">' +
@@ -8417,6 +8421,22 @@ _loadLsSettings();
       html += _calField(fid + '-pe', t('cal.period_end', 'Zeitraum bis'), 'datetime-local', '');
       html += '<button class="btn btn-sm btn-primary" onclick="calibrateMeter(\\u0027' + esc(m.id) + '\\u0027, \\u0027' + fid + '\\u0027)">' + t('cal.compute', 'Berechnen & anwenden') + '</button>';
       html += '</div><div id="' + fid + '-res" style="font-size:12px;margin-top:8px"></div>';
+      // Ist-Faktor je Unterzähler (read-only) — so sieht man den zentral gesetzten
+      // Wert, ohne die früheren Einzel-Karten pro Gerät zu brauchen.
+      html += '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">';
+      kids.forEach(k => {{
+        const h = histByKey[k.key];
+        const pct = h ? (Number(h.compensation_percent) || 0) : 0;
+        let last = null;
+        if (h && h.history && h.history.length) {{
+          last = h.history.slice().sort((a,b) => b.effective_from_ts - a.effective_from_ts)[0];
+        }}
+        html += '<span style="display:inline-block;margin-right:14px">' + esc(k.name) + ': <b>' +
+          (pct >= 0 ? '+' : '') + pct.toFixed(2) + ' %</b>' +
+          (last ? (' <span style="opacity:.7">(' + t('cal.since', 'seit') + ' ' + esc(_calFmtDate(last.effective_from_ts)) + ')</span>') : '') +
+          '</span>';
+      }});
+      html += '</div>';
       html += '</div>';
     }});
     html += '</div>';
@@ -8588,15 +8608,26 @@ _loadLsSettings();
         return;
       }}
       let html = '<div class="card" style="margin-bottom:14px">';
-      html += '<h2 style="margin:0 0 6px">📏 ' + t('calibration.title', 'Measurement calibration') + '</h2>';
+      html += '<h2 style="margin:0 0 6px">📏 ' + t('calibration.title', 'Messgenauigkeit kalibrieren') + '</h2>';
       html += '<p style="margin:0;color:var(--muted);font-size:12px">' +
-        t('calibration.intro', 'Add a calibration entry whenever you compare the device against a reference meter. Each entry sets the compensation factor for all samples from that moment forward, until the next entry overrides it.') +
+        t('calibration.intro', 'Lege unten deine Zähler-Struktur an und kalibriere jeden Hauptzähler EINMAL zentral gegen seinen abgelesenen Zählerstand — die App verteilt den Faktor auf seine Unterzähler. Du musst also nicht jeden Zähler einzeln eingeben. Einzelne Geräte ohne Hauptzähler kannst du weiter unten separat kalibrieren.') +
         '</p></div>';
       // Meter cascade first: define main meters + assign devices, then calibrate a
-      // main meter against the SUM of its direct sub-meters (the correct way when
-      // several sub-meters share one meter). Per-device cards follow for fine control.
-      html += _calRenderHierarchy();
-      devs.forEach(dev => {{ html += _calRenderDeviceCard(dev); }});
+      // main meter against the SUM of its direct sub-meters (central, not per sub-meter).
+      html += _calRenderHierarchy(devs);
+      // Per-device cards ONLY for devices NOT attached to the cascade (parent empty).
+      // Anything with a parent is calibrated centrally via its main meter, so a
+      // separate per-device entry would be redundant (and could set inconsistent values).
+      const parentByKey = {{}};
+      (_calMeters.devices || []).forEach(x => {{ parentByKey[x.key] = x.parent || ''; }});
+      const standalone = devs.filter(dev => !(parentByKey[dev.key] || ''));
+      if (standalone.length) {{
+        html += '<div class="card" style="margin-bottom:8px"><h3 style="margin:0;font-size:14px">' +
+          t('cal.standalone_title', 'Einzelne Geräte (ohne Hauptzähler)') + '</h3>' +
+          '<p style="margin:4px 0 0;color:var(--muted);font-size:12px">' +
+          t('cal.standalone_intro', 'Diese Geräte hängen an keinem Hauptzähler und werden hier einzeln kalibriert.') + '</p></div>';
+        standalone.forEach(dev => {{ html += _calRenderDeviceCard(dev); }});
+      }}
       el.innerHTML = html;
     }} catch(e) {{
       el.innerHTML = '<p class="error-msg">' + t('calibration.error', 'Error:') + ' ' + e.message + '</p>';

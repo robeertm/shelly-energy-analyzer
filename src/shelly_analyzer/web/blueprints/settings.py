@@ -87,7 +87,7 @@ def get_i18n():
     prefix = request.args.get("prefix", "web.")
     full = get_lang_map(lang)
     # Filter to keys starting with prefix (saves bandwidth)
-    filtered = {k: v for k, v in full.items() if k.startswith(prefix) or k.startswith("settings.") or k.startswith("toast.") or k.startswith("setup.")}
+    filtered = {k: v for k, v in full.items() if k.startswith(prefix) or k.startswith("settings.") or k.startswith("toast.") or k.startswith("setup.") or k.startswith("calibration.") or k.startswith("cal.")}
     resp = jsonify({"lang": lang, "map": filtered})
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return resp
