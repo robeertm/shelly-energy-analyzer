@@ -1,0 +1,344 @@
+"""External PV / battery / grid data source.
+
+Bridges a PV/battery system that is *not* measured by a Shelly into the
+analyzer. Common inverters and batteries (Huawei, SolarEdge, Fronius, SMA,
+Kostal, Sungrow, GoodWe, …) are already integrated in Home Assistant, so the
+default source reads their entities over the HA REST API. Alternatively the
+values can be subscribed from MQTT.
+
+Readings are ingested as synthetic devices — ``pv``, ``battery`` and
+``grid_ext`` — into the same energy database (via ``EnergyDB.insert_dataframe``,
+the exact path Shelly samples use) and the in-memory live store. Every
+downstream calculation (autarky, self-consumption, PV yield, sankey, battery
+SOC, spot cost, CO₂) therefore works with the real production/storage data
+without any change to the compute code.
+
+Reserved synthetic device keys (do not use for Shelly devices):
+    pv        – PV production power (W, ≥ 0)
+    battery   – battery power (W, + = charging, − = discharging)
+    grid_ext  – grid connection power (W, + = import, − = export)
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import threading
+import time
+from typing import Any, Callable, Dict, Optional
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+# Reserved synthetic device keys.
+PV_KEY = "pv"
+BATTERY_KEY = "battery"
+GRID_KEY = "grid_ext"
+
+# Supervisor proxy used when running as a Home Assistant add-on and no explicit
+# base URL/token is configured.
+_SUPERVISOR_CORE = "http://supervisor/core"
+
+# Thread-safe snapshot of the most recent external readings. Consumers (the
+# battery/solar endpoints) read this for values that are more precise live than
+# what can be derived from the DB (e.g. a real state-of-charge entity).
+_LATEST: Dict[str, Any] = {
+    "ts": 0,
+    "pv_w": None,
+    "battery_w": None,      # normalised: + = charging, − = discharging
+    "soc_pct": None,
+    "grid_w": None,         # normalised: + = import, − = export
+    "house_w": None,
+    "pv_today_kwh": None,
+}
+_LATEST_LOCK = threading.Lock()
+
+
+def latest_readings() -> Dict[str, Any]:
+    """Return a copy of the latest external readings (may contain ``None``)."""
+    with _LATEST_LOCK:
+        return dict(_LATEST)
+
+
+def _store_latest(**vals: Any) -> None:
+    with _LATEST_LOCK:
+        _LATEST.update(vals)
+
+
+def _to_float(v: Any) -> Optional[float]:
+    if v is None:
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if f != f:  # NaN
+        return None
+    return f
+
+
+def _dig_json(payload: str, path: str) -> Any:
+    """Extract a value from a (possibly JSON) MQTT payload via a dotted path."""
+    if not path:
+        return payload
+    try:
+        obj: Any = json.loads(payload)
+    except (ValueError, TypeError):
+        return payload
+    for part in path.split("."):
+        if isinstance(obj, list):
+            try:
+                obj = obj[int(part)]
+                continue
+            except (ValueError, IndexError):
+                return None
+        if isinstance(obj, dict):
+            obj = obj.get(part)
+        else:
+            return None
+    return obj
+
+
+class PvSourceService:
+    """Background poller/subscriber for an external PV/battery/grid source."""
+
+    def __init__(self, storage, live_store, get_config: Callable[[], Any]) -> None:
+        self.storage = storage
+        self.live_store = live_store
+        self._get_config = get_config
+        self._thread: Optional[threading.Thread] = None
+        self._stop = threading.Event()
+        self._trigger = threading.Event()
+        self._mqtt_client = None
+        # Latest raw values received over MQTT, keyed by role.
+        self._mqtt_vals: Dict[str, Optional[float]] = {}
+        self._mqtt_lock = threading.Lock()
+        self._log_cb: Optional[Callable[[str], None]] = None
+        self.last_error: Optional[str] = None
+
+    def set_log_callback(self, cb: Callable[[str], None]) -> None:
+        self._log_cb = cb
+
+    def _svc_log(self, msg: str) -> None:
+        logger.info(msg)
+        if self._log_cb:
+            try:
+                self._log_cb(msg)
+            except Exception:
+                pass
+
+    # ── lifecycle ──────────────────────────────────────────────────────
+    def start(self) -> None:
+        cfg = self._pv_cfg()
+        if cfg is None or not getattr(cfg, "enabled", False):
+            return
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop.clear()
+        if str(getattr(cfg, "source_type", "homeassistant")) == "mqtt":
+            self._start_mqtt(cfg)
+        self._thread = threading.Thread(target=self._run, name="PvSourceService", daemon=True)
+        self._thread.start()
+        self._svc_log(f"PV source started (source={getattr(cfg, 'source_type', '?')})")
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._trigger.set()
+        if self._mqtt_client is not None:
+            try:
+                self._mqtt_client.loop_stop()
+                self._mqtt_client.disconnect()
+            except Exception:
+                pass
+            self._mqtt_client = None
+        if self._thread:
+            self._thread.join(timeout=8)
+
+    def trigger_now(self) -> None:
+        self._trigger.set()
+
+    def _pv_cfg(self):
+        try:
+            return getattr(self._get_config(), "pv_source", None)
+        except Exception:
+            return None
+
+    # ── main loop ──────────────────────────────────────────────────────
+    def _run(self) -> None:
+        self._trigger.wait(3.0)
+        self._trigger.clear()
+        while not self._stop.is_set():
+            cfg = self._pv_cfg()
+            if cfg is None or not getattr(cfg, "enabled", False):
+                break
+            try:
+                self._tick(cfg)
+            except Exception as e:  # never let the loop die
+                self.last_error = str(e)
+                logger.exception("PV source tick error")
+            interval = max(5, int(getattr(cfg, "poll_interval_seconds", 15) or 15))
+            self._trigger.wait(interval)
+            self._trigger.clear()
+
+    def _tick(self, cfg) -> None:
+        source = str(getattr(cfg, "source_type", "homeassistant"))
+        if source == "mqtt":
+            pv_w, batt_w, soc, grid_w, house_w, pv_today = self._read_mqtt(cfg)
+        else:
+            pv_w, batt_w, soc, grid_w, house_w, pv_today = self._read_ha(cfg)
+
+        # Normalise sign conventions to internal (+charge / +import).
+        if batt_w is not None and str(getattr(cfg, "battery_power_sign", "charge_positive")) == "discharge_positive":
+            batt_w = -batt_w
+        if grid_w is not None and str(getattr(cfg, "grid_power_sign", "import_positive")) == "export_positive":
+            grid_w = -grid_w
+
+        ts = int(time.time())
+        _store_latest(ts=ts, pv_w=pv_w, battery_w=batt_w, soc_pct=soc,
+                      grid_w=grid_w, house_w=house_w, pv_today_kwh=pv_today)
+
+        if pv_w is not None:
+            self._ingest(PV_KEY, ts, max(0.0, pv_w), kwh_today=pv_today, soc=None)
+        if batt_w is not None:
+            self._ingest(BATTERY_KEY, ts, batt_w, kwh_today=None, soc=soc)
+        if grid_w is not None:
+            self._ingest(GRID_KEY, ts, grid_w, kwh_today=None, soc=None)
+
+    # ── ingest into live store + DB ────────────────────────────────────
+    def _ingest(self, key: str, ts: int, power_w: float, kwh_today: Optional[float], soc: Optional[float]) -> None:
+        # 1) Live store (for the live view / power-flow).
+        try:
+            from shelly_analyzer.services.webdash import LivePoint
+            lp = LivePoint(
+                ts=ts, power_total_w=float(power_w),
+                va=0.0, vb=0.0, vc=0.0, ia=0.0, ib=0.0, ic=0.0,
+                kwh_today=float(kwh_today) if kwh_today is not None else 0.0,
+                soc_pct=float(soc) if soc is not None else 0.0,
+                raw={"external": True},
+            )
+            self.live_store.update(key, lp)
+        except Exception as e:
+            logger.debug("PV live-store update failed for %s: %s", key, e)
+
+        # 2) Energy DB (samples + hourly rollup) — same path as Shelly data, so
+        #    every historical calculation picks it up automatically.
+        try:
+            import pandas as pd
+            df = pd.DataFrame([{"timestamp": int(ts), "total_power": float(power_w)}])
+            self.storage.db.insert_dataframe(key, df)
+        except Exception as e:
+            logger.debug("PV DB insert failed for %s: %s", key, e)
+
+    # ── Home Assistant REST ────────────────────────────────────────────
+    def _ha_conn(self, cfg):
+        base = str(getattr(cfg, "ha_base_url", "") or "").rstrip("/")
+        token = str(getattr(cfg, "ha_token", "") or "")
+        if not base:
+            base = _SUPERVISOR_CORE
+        if not token:
+            token = os.environ.get("SUPERVISOR_TOKEN", "") or os.environ.get("HASSIO_TOKEN", "")
+        return base, token
+
+    def _read_ha(self, cfg):
+        base, token = self._ha_conn(cfg)
+        if not token:
+            self.last_error = "No HA token (set a long-lived token, or enable homeassistant_api on the add-on)."
+            self._svc_log("PV source: " + self.last_error)
+            return (None, None, None, None, None, None)
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        verify = bool(getattr(cfg, "ha_verify_ssl", True))
+
+        def _state(entity: str) -> Optional[float]:
+            entity = (entity or "").strip()
+            if not entity:
+                return None
+            try:
+                r = requests.get(f"{base}/api/states/{entity}", headers=headers, timeout=8, verify=verify)
+                if r.status_code != 200:
+                    self.last_error = f"HA {r.status_code} for {entity}"
+                    return None
+                st = r.json().get("state")
+                if st in (None, "unknown", "unavailable", ""):
+                    return None
+                return _to_float(st)
+            except Exception as e:
+                self.last_error = f"HA request failed: {e}"
+                return None
+
+        pv_w = _state(getattr(cfg, "pv_power_entity", ""))
+        batt_w = _state(getattr(cfg, "battery_power_entity", ""))
+        soc = _state(getattr(cfg, "battery_soc_entity", ""))
+        grid_w = _state(getattr(cfg, "grid_power_entity", ""))
+        house_w = _state(getattr(cfg, "house_power_entity", ""))
+        pv_today = _state(getattr(cfg, "pv_energy_today_entity", ""))
+        if pv_w is not None or batt_w is not None or grid_w is not None:
+            self.last_error = None
+        return (pv_w, batt_w, soc, grid_w, house_w, pv_today)
+
+    # ── MQTT subscribe ─────────────────────────────────────────────────
+    def _start_mqtt(self, cfg) -> None:
+        try:
+            import paho.mqtt.client as mqtt
+        except Exception as e:
+            self._svc_log(f"PV source: paho-mqtt unavailable ({e})")
+            return
+        app = self._get_config()
+        mcfg = getattr(app, "mqtt", None)
+        broker = str(getattr(mcfg, "broker", "127.0.0.1") or "127.0.0.1")
+        port = int(getattr(mcfg, "port", 1883) or 1883)
+        user = str(getattr(mcfg, "username", "") or "")
+        pw = str(getattr(mcfg, "password", "") or "")
+
+        topic_role = {
+            str(getattr(cfg, "mqtt_pv_power_topic", "") or ""): "pv",
+            str(getattr(cfg, "mqtt_battery_power_topic", "") or ""): "battery",
+            str(getattr(cfg, "mqtt_battery_soc_topic", "") or ""): "soc",
+            str(getattr(cfg, "mqtt_grid_power_topic", "") or ""): "grid",
+            str(getattr(cfg, "mqtt_house_power_topic", "") or ""): "house",
+        }
+        topic_role = {t: r for t, r in topic_role.items() if t}
+        if not topic_role:
+            self._svc_log("PV source (MQTT): no topics configured")
+            return
+        json_path = str(getattr(cfg, "mqtt_json_path", "") or "")
+
+        def _on_connect(client, userdata, flags, rc, *args):
+            for t in topic_role:
+                try:
+                    client.subscribe(t)
+                except Exception:
+                    pass
+            self._svc_log(f"PV source (MQTT) subscribed to {len(topic_role)} topic(s)")
+
+        def _on_message(client, userdata, msg):
+            role = topic_role.get(msg.topic)
+            if not role:
+                return
+            try:
+                payload = msg.payload.decode("utf-8", "ignore")
+            except Exception:
+                return
+            val = _to_float(_dig_json(payload, json_path))
+            if val is None:
+                return
+            with self._mqtt_lock:
+                self._mqtt_vals[role] = val
+
+        try:
+            client = mqtt.Client()
+            if user:
+                client.username_pw_set(user, pw)
+            client.on_connect = _on_connect
+            client.on_message = _on_message
+            client.connect_async(broker, port, keepalive=60)
+            client.loop_start()
+            self._mqtt_client = client
+        except Exception as e:
+            self._svc_log(f"PV source (MQTT) connect failed: {e}")
+
+    def _read_mqtt(self, cfg):
+        with self._mqtt_lock:
+            v = dict(self._mqtt_vals)
+        return (v.get("pv"), v.get("battery"), v.get("soc"),
+                v.get("grid"), v.get("house"), None)

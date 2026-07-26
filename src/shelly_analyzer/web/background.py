@@ -51,6 +51,7 @@ class BackgroundServiceManager:
         self._co2_fetcher = None
         self._co2_forecaster = None
         self._spot_fetcher = None
+        self._pv_source = None
         self._feed_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._autosync_thread: Optional[threading.Thread] = None
@@ -91,6 +92,7 @@ class BackgroundServiceManager:
         self._start_co2_fetcher()
         self._start_co2_forecaster()
         self._start_spot_fetcher()
+        self._start_pv_source()
         self._start_summary_scheduler()
         self._start_update_checker()
         self._start_live_history_saver()
@@ -138,6 +140,11 @@ class BackgroundServiceManager:
         if self._spot_fetcher:
             try:
                 self._spot_fetcher.stop()
+            except Exception:
+                pass
+        if self._pv_source:
+            try:
+                self._pv_source.stop()
             except Exception:
                 pass
         # Flush NILM state so nothing learned is lost on shutdown/reload
@@ -984,6 +991,25 @@ class BackgroundServiceManager:
                         getattr(spot_cfg, "bidding_zone", "?"))
         except Exception as e:
             logger.exception("Spot-price fetcher failed to start: %s", e)
+
+    def _start_pv_source(self) -> None:
+        """Start the external PV/battery/grid data source if enabled."""
+        pv_cfg = getattr(self.cfg, "pv_source", None)
+        if pv_cfg is None or not getattr(pv_cfg, "enabled", False):
+            logger.debug("PV source disabled")
+            return
+        try:
+            from shelly_analyzer.services.pv_source import PvSourceService
+            self._pv_source = PvSourceService(
+                storage=self.storage,
+                live_store=self.live_store,
+                get_config=lambda: self.cfg,
+            )
+            self._pv_source.start()
+            logger.info("PV source started (type=%s)",
+                        getattr(pv_cfg, "source_type", "?"))
+        except Exception as e:
+            logger.exception("PV source failed to start: %s", e)
 
     # ── Periodic Update Check ──────────────────────────────────────────
 

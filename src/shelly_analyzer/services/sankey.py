@@ -69,7 +69,10 @@ def compute_sankey(
     start_ts = int(start.timestamp())
     end_ts = int(now.timestamp())
 
+    # Signed net/grid meter: a dedicated PV meter if set, else the grid meter.
     pv_key = getattr(solar_config, "pv_meter_device_key", "") if solar_config else ""
+    if not pv_key and solar_config is not None:
+        pv_key = getattr(solar_config, "grid_meter_device_key", "") or ""
     has_solar = bool(pv_key) and getattr(solar_config, "enabled", False)
 
     # Collect per-device energy
@@ -112,6 +115,23 @@ def compute_sankey(
     else:
         self_consumption = 0.0
         pv_production = 0.0
+
+    # Prefer a measured PV-production series when available (external PV source
+    # ingested as the synthetic "pv" device).
+    pv_prod_key = getattr(solar_config, "pv_production_device_key", "") if solar_config else ""
+    if not pv_prod_key and getattr(solar_config, "enabled", False):
+        pv_prod_key = "pv"
+    if pv_prod_key:
+        try:
+            _pvh = db.query_hourly(pv_prod_key, start_ts=start_ts, end_ts=end_ts)
+            if _pvh is not None and not _pvh.empty and "kwh" in _pvh.columns:
+                _pvp = float(_pvh["kwh"].clip(lower=0).sum())
+                if _pvp > 0:
+                    pv_production = _pvp
+                    has_solar = True
+                    self_consumption = max(0.0, pv_production - pv_feed_in_kwh)
+        except Exception:
+            pass
 
     # Build Sankey nodes and flows
     nodes: List[str] = []
