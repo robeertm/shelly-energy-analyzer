@@ -4128,25 +4128,28 @@ class ActionDispatcher:
                         "month": (month_start_ts, now_ts),
                         "year": (year_start_ts, now_ts),
                     }
-                    _grid_op = {"today": co2_today, "week": co2_week,
-                                "month": co2_month, "year": co2_year}
                     for _fk, (_fs, _fe) in _fp_ranges.items():
                         _fb = compute_balance(self.storage.db, self.cfg, _fs, _fe)
                         if not (_fb.has_pv or _fb.has_battery):
                             continue
                         _fp_has_solar = True
                         _ai = _avg_intensity(_fs, _fe)
+                        # Fully balance-based so grid CO₂, embodied CO₂ and load
+                        # share one consumption basis (the supply-side identity),
+                        # giving a consistent effective intensity.
+                        _grid_kg = _fb.grid_import_kwh * _ai / 1000.0
+                        _feed_credit_kg = _fb.grid_export_kwh * _ai / 1000.0
                         _pv_emb_kg = _fb.self_consumption_kwh * _pv_emb_g / 1000.0
                         _bat_emb_kg = _fb.battery_discharge_kwh * _bat_emb_g / 1000.0
                         _solar_kwh = _fb.self_consumption_kwh + _fb.battery_discharge_kwh
                         # Had this solar+battery energy come from the grid instead:
                         _would_be_kg = _solar_kwh * _ai / 1000.0
                         _saved_kg = max(0.0, _would_be_kg - _pv_emb_kg - _bat_emb_kg)
-                        _grid_kg = float(_grid_op.get(_fk, 0.0))
-                        _net_kg = _grid_kg + _pv_emb_kg + _bat_emb_kg
+                        _net_kg = max(0.0, _grid_kg + _pv_emb_kg + _bat_emb_kg - _feed_credit_kg)
                         _load = _fb.total_load_kwh
                         _footprint[_fk] = {
                             "grid_kg": round(_grid_kg, 3),
+                            "feed_in_credit_kg": round(_feed_credit_kg, 3),
                             "pv_embodied_kg": round(_pv_emb_kg, 3),
                             "battery_embodied_kg": round(_bat_emb_kg, 3),
                             "net_kg": round(_net_kg, 3),
