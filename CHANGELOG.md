@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.44.3
+### Fixed
+- **Live sparklines stopped rendering (regression in 16.44.2).** The negative-value change referenced the padding constant before it was declared, throwing a runtime `ReferenceError` (a temporal-dead-zone error that a syntax check does not catch) which blanked every Live sparkline. The zero-baseline is now computed after the padding is defined.
+
 ## 16.44.2
 ### Fixed
 - **Live sparklines clipped negative values.** The per-device Live sparkline forced its lower bound to zero for the power metric, so negative readings — grid feed-in and battery discharge, now common with signed grid meters and the external battery source — were clipped at the baseline. The sparkline now keeps zero in view, draws negative values below a zero baseline, and shows a faint zero line when the series crosses zero.
