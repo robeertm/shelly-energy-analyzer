@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.45.2
+### Changed
+- **Costs tab prices devices by their real cost after solar.** The per-device cost cards priced every kWh at the full grid tariff, which overstates the owner's real cost once PV/battery cover most of the consumption. With a balance available, owner devices are now priced at the **effective €/kWh after solar** = (net grid bill) ÷ (owner consumption); the grid-meter card shows its real **net position** (import cost − feed-in revenue); tenant circuits keep the full tariff. Each owner/grid card also shows the "without solar" full-tariff figure for comparison. Without a PV/grid source the classic full-tariff cards are unchanged.
+- **Energy-balance table shows the battery from the storage's point of view.** Battery **charge** is now a separate row (positive, energy stored) and **discharge** is shown negative (energy released), instead of a single positive discharge row.
+
 ## 16.45.1
 ### Fixed
 - **CO₂ solar-footprint effective intensity was inconsistent.** The footprint's grid share reused the per-device operational CO₂ (which sums overlapping sub-meters) while the load came from the supply-side balance, so the effective intensity could read implausibly high. The footprint card is now derived entirely from the energy balance — grid import × grid intensity, minus a feed-in credit, plus the embodied CO₂ of self-consumed PV and battery output — over the same load basis, so the effective intensity is consistent.
