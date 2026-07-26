@@ -4219,9 +4219,9 @@ function drawSparkline(canvas, values, color, relMin) {{
   const max = relMin ? dMax * 1.02 : Math.max(dMax, 0);
   const min = relMin ? dMin * 0.98 : Math.min(dMin, 0);
   const range = max - min || 1;
-  const zeroY = H - pad - ((0 - min) / range) * (H - pad*2);
   const pad = 4;
   const sx = (W - pad*2) / (values.length - 1);
+  const zeroY = H - pad - ((0 - min) / range) * (H - pad*2);
   const cs = getComputedStyle(document.documentElement);
   const accent = color || cs.getPropertyValue('--accent').trim() || '#2563eb';
   // Fill
