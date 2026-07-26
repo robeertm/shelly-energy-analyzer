@@ -158,7 +158,13 @@ def get_battery_status(db, cfg) -> BatteryStatus:
         # Extract power time series (positive = charge, negative = discharge)
         samples = []
         for _, row in df.iterrows():
-            ts = int(row.get("timestamp", 0))
+            tsv = row.get("timestamp", 0)
+            try:
+                # query_samples returns 'timestamp' as a pandas datetime; older
+                # callers may still pass a raw epoch int.
+                ts = int(tsv.timestamp()) if hasattr(tsv, "timestamp") else int(tsv)
+            except (ValueError, TypeError, AttributeError):
+                continue
             power = float(row.get("total_power", 0) or 0)
             samples.append((ts, power))
 

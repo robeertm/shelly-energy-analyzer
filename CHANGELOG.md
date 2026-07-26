@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.44.1
+### Fixed
+- **Battery status crashed once a battery device had data.** `get_battery_status` read the `timestamp` column from `query_samples` as a raw integer, but that query returns a pandas datetime, so building the SOC timeline raised `int() argument must be … not 'Timestamp'` (previously latent because no battery had samples; now reachable via the external PV/battery source). Timestamps are coerced from datetime to epoch seconds, so the SOC timeline and cycle detection work again.
+
 ## 16.44.0
 ### Added
 - **Universal external PV / battery data source.** PV and battery systems that are *not* measured by a Shelly can now feed the analyzer directly. Common inverters and batteries (Huawei, SolarEdge, Fronius, SMA, Kostal, Sungrow, GoodWe, …) are already integrated in Home Assistant, so the default source reads their entities over the Home Assistant REST API; alternatively the values can be subscribed from MQTT. Configured under **Settings → PV / Battery data source** (`pv_source`): PV production, battery power, battery state-of-charge, and optionally the grid connection and total house load, each mapped to an HA entity or an MQTT topic, with configurable sign conventions and poll interval. The readings are ingested as synthetic devices (`pv`, `battery`, `grid_ext`) into the same energy database and live store used by Shelly data, so autarky, self-consumption, PV yield, the energy-flow (sankey), battery SOC, spot cost and CO₂ all work with real production/storage figures instead of a grid-derived estimate. When running as a Home Assistant add-on, leave the URL and token empty to use the Supervisor proxy automatically (the add-on now requests `homeassistant_api`).
