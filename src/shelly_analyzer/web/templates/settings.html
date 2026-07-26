@@ -456,6 +456,7 @@ const SECTIONS = [
   {id:"solar", title:"Solar / PV", group:"Energy", fields:[
     {key:"solar.enabled", label:"Solar active", type:"checkbox"},
     {key:"solar.pv_meter_device_key", label:"PV meter device", type:"select-device"},
+    {key:"solar.grid_meter_device_key", label:"Grid meter device (± import/export)", type:"select-device"},
     {key:"solar.feed_in_tariff_eur_per_kwh", label:"Feed-in tariff €/kWh", type:"number", step:"0.001"},
     {key:"solar.kw_peak", label:"kWp", type:"number", step:"0.1"},
     {key:"solar.battery_kwh", label:"Battery kWh", type:"number", step:"0.1"},

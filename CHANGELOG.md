@@ -1,5 +1,13 @@
 # Changelog
 
+## 16.43.0
+### Added
+- **Plots page now renders every configured device.** The Plotly "Plots" page was previously hardcoded to a maximum of two devices (both in the backend `plots_data` builder and in the frontend, which capped the device selector at two). It now generates one block per configured device, each showing that device's kWh, CO₂ and Price charts. The plot cards are created dynamically per device, and the device selector no longer enforces a two-device limit; with no explicit selection every configured device is shown.
+- **Grid-meter role in the Solar/PV section.** New optional `solar.grid_meter_device_key` setting for installs that have no dedicated PV-production CT but do have a Shelly on the grid connection measuring signed net power (positive = grid import, negative = feed-in). When set, the analyzer derives feed-in (export), grid import and feed-in revenue from that single signed meter. Backward compatible: empty by default, and a dedicated PV meter still takes precedence when both are configured. Exposed in the settings page and persisted in the config.
+
+### Changed
+- **Add-on options now cover weather, CO₂ and solar.** The Home Assistant add-on renders `config.json` from `options.json` on every start, so any setting absent from the options was lost on restart. The add-on schema/options and `run.sh` now also emit `weather`, `co2` and `solar` blocks (all optional, disabled by default), so those settings persist across restarts.
+
 ## 16.42.0 - 2026-07-24
 ### Added
 - **Meter cascade (hierarchy).** Calibration used to be strictly per device. Anyone with several sub-meters behind ONE main meter (e.g. "House" + "Wallbox") ended up comparing the main-meter reading against a SINGLE sub-device — which yields a nonsensical factor (the main meter measures both together). You can now model an arbitrary meter structure: any number of **main meters** (with name + serial number), and every Shelly device is assigned to its parent meter (a main meter or another measuring device → arbitrary cascade depth). A main meter always calibrates against the **sum of its direct `em` children** — switches and deeper sub-sub-meters are never counted (no double counting).

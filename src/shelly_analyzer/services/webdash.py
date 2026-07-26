@@ -9386,30 +9386,8 @@ _PLOTS_TEMPLATE = """<!doctype html>
     </div>
 
     <div class="meta" id="meta"></div>
-    <div class="card">
-      <div id="plot1_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px;display:none"></div>
-      <div id="plot1" class="plot"></div>
-    </div>
-    <div class="card" id="card2" style="display:none">
-      <div id="plot2_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px;display:none"></div>
-      <div id="plot2" class="plot"></div>
-    </div>
-    <div class="card" id="card_co2_1" style="display:none">
-      <div id="plot_co2_1_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px"></div>
-      <div id="plot_co2_1" class="plot"></div>
-    </div>
-    <div class="card" id="card_co2_2" style="display:none">
-      <div id="plot_co2_2_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px"></div>
-      <div id="plot_co2_2" class="plot"></div>
-    </div>
-    <div class="card" id="card_price_1" style="display:none">
-      <div id="plot_price_1_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px"></div>
-      <div id="plot_price_1" class="plot"></div>
-    </div>
-    <div class="card" id="card_price_2" style="display:none">
-      <div id="plot_price_2_title" style="font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px"></div>
-      <div id="plot_price_2" class="plot"></div>
-    </div>
+    <!-- Plot cards are generated dynamically (one block per configured device). -->
+    <div id="plotCards"></div>
   </div>
 
 <!-- JSON payloads are injected as inert text to avoid JS parse errors even if placeholders aren't replaced -->
@@ -9659,26 +9637,18 @@ function getSelectedDevices(){
   const cbs = document.querySelectorAll('#devs input[type=checkbox]');
   const sel = [];
   cbs.forEach(cb=>{ if (cb.checked) sel.push(cb.value); });
-  return sel.slice(0,2);
+  return sel;
 }
 function setHint(){
   const n = getSelectedDevices().length;
   const el = document.getElementById('hintDevs');
-  if (el) el.textContent = t('web.plots.max2') + ' ('+n+'/2)';
-}
-
-function enforceMax2(changedCb){
-  const all = Array.from(document.querySelectorAll('#devs input[type=checkbox]')).filter(cb=>cb.checked);
-  if (all.length <= 2) return;
-  if (changedCb) { changedCb.checked = false; return; }
-  for (let i=2;i<all.length;i++) all[i].checked = false;
+  if (el) el.textContent = t('web.plots.select_devices') + ' ('+n+')';
 }
 
 function bindDeviceEvents(){
   const cbs = document.querySelectorAll('#devs input[type=checkbox]');
   cbs.forEach(cb=>{
     cb.addEventListener('change', ()=>{
-      enforceMax2(cb);
       refreshDevChipStyles();
       setHint();
       try {
@@ -9692,14 +9662,13 @@ function bindDeviceEvents(){
 
 function setDevicesFromParams(params){
   const cbs = Array.from(document.querySelectorAll('#devs input[type=checkbox]'));
-  const want = (params.devices ? String(params.devices).split(',').map(s=>s.trim()).filter(Boolean).slice(0,2) : []);
+  const want = (params.devices ? String(params.devices).split(',').map(s=>s.trim()).filter(Boolean) : []);
   if (want.length){
     cbs.forEach(cb=>{ cb.checked = want.includes(cb.value); });
   } else {
-    let count = 0;
-    cbs.forEach(cb=>{ cb.checked = (count < 2); if (cb.checked) count++; });
+    // Default: select every configured device so all of them are plotted.
+    cbs.forEach(cb=>{ cb.checked = true; });
   }
-  enforceMax2(null);
   refreshDevChipStyles();
   setHint();
 }
@@ -9896,6 +9865,26 @@ function applyVarCosphiFilters(x, y, metricKey, opts){
   return yy;
 }
 
+// Build a plot card (title div + plot div) and append it to a container.
+// Returns the created plot div element (its .id is `plotId`). The matching
+// title div gets id `plotId + '_title'`. `titleShown` controls initial
+// visibility of the title line.
+function buildPlotCard(container, plotId, titleShown){
+  const card = document.createElement('div');
+  card.className = 'card';
+  const titleEl = document.createElement('div');
+  titleEl.id = plotId + '_title';
+  titleEl.style.cssText = 'font-size:13px;font-weight:650;color:var(--fg);margin:2px 2px 6px;'
+    + (titleShown ? '' : 'display:none');
+  const plotEl = document.createElement('div');
+  plotEl.id = plotId;
+  plotEl.className = 'plot';
+  card.appendChild(titleEl);
+  card.appendChild(plotEl);
+  container.appendChild(card);
+  return plotEl;
+}
+
 async function loadData() {
   document.getElementById('meta').textContent = t('web.loading');
   await waitPlotly();
@@ -9987,55 +9976,13 @@ async function loadData() {
       return [p33, p66];
     }
 
-    // Plot 1: first device
-    if (kwhTraces.length >= 1) {
-      drawKwhForDevice('plot1', 'plot1_title', kwhTraces[0]);
-    } else {
-      Plotly.newPlot('plot1', [], kwhLayout('kWh'), plotlyConfig());
-    }
-
-    // Plot 2: second device (own card, separate, not grouped)
-    if (kwhTraces.length >= 2) {
-      document.getElementById('card2').style.display = '';
-      drawKwhForDevice('plot2', 'plot2_title', kwhTraces[1]);
-    } else {
-      document.getElementById('card2').style.display = 'none';
-    }
-
-    // CO2 bar charts (per device) – colour by g/kWh intensity (green < thr, red >= dirty)
+    // Shared CO₂ colour scale / thresholds (used by every device card)
     const co2Int = data.co2_intensity_g_per_kwh || [];
     const gThr = (data.co2_green_thr != null) ? data.co2_green_thr : 150;
     const dThr = (data.co2_dirty_thr != null) ? data.co2_dirty_thr : 400;
     const co2Devs = data.co2_per_device || [];
-    function renderCo2Card(idx, devData) {
-      const cardEl = document.getElementById('card_co2_' + idx);
-      const titleEl = document.getElementById('plot_co2_' + idx + '_title');
-      const plotId = 'plot_co2_' + idx;
-      if (!devData || !(devData.g||[]).some(v => v != null)) { cardEl.style.display = 'none'; return; }
-      cardEl.style.display = '';
-      titleEl.textContent = t('web.plots.co2.title', {
-        name: (devData.name || devData.key || ''),
-        zone: (data.co2_zone ? ' (' + data.co2_zone + ')' : ''),
-        green: gThr, dirty: dThr
-      });
-      const yArr = (devData.g || []).map(v => (v==null ? 0 : v));
-      // Use the smooth 9-stop CO₂ gradient so users can read the intensity
-      // ramp at a glance instead of seeing only red/yellow/green buckets.
-      const colors = co2Int.map(co2Color);
-      const custom = co2Int.map((v,i) => [v==null?'—':v, yArr[i]]);
-      Plotly.newPlot(
-        plotId,
-        [{type:'bar', name:'CO₂', x: xsLab, y: yArr, marker:{color:colors},
-          customdata: custom,
-          hovertemplate:'%{x}<br>%{customdata[0]} g/kWh · Σ %{customdata[1]} g<extra></extra>'}],
-        kwhLayout('g CO₂'),
-        plotlyConfig()
-      );
-    }
-    renderCo2Card(1, co2Devs[0]);
-    renderCo2Card(2, co2Devs[1]);
 
-    // Price bar charts (per device) – colour by ct/kWh (percentile thresholds)
+    // Shared price thresholds / surcharge + fixed-tariff info
     const priceCt = data.price_ct_kwh || [];
     const [p33, p66] = autoThresholds(priceCt);
     const gThrP = (p33 != null) ? p33 : 10;
@@ -10048,12 +9995,39 @@ async function loadData() {
         })
       : t('web.plots.price.surcharges.off');
     const fixedCt = data.price_fixed_ct_kwh;
-    function renderPriceCard(idx, devData) {
-      const cardEl = document.getElementById('card_price_' + idx);
-      const titleEl = document.getElementById('plot_price_' + idx + '_title');
-      const plotId = 'plot_price_' + idx;
-      if (!devData || !(devData.eur||[]).some(v => v != null)) { cardEl.style.display = 'none'; return; }
-      cardEl.style.display = '';
+
+    // Draw one device's CO₂ card into `container` (skipped when no CO₂ data).
+    // Colour bars by g/kWh intensity using the smooth 9-stop gradient.
+    function renderCo2Card(container, uid, devData) {
+      if (!devData || !(devData.g||[]).some(v => v != null)) return;
+      const plotId = 'plot_co2_' + uid;
+      const plotEl = buildPlotCard(container, plotId, true);
+      const titleEl = document.getElementById(plotId + '_title');
+      titleEl.textContent = t('web.plots.co2.title', {
+        name: (devData.name || devData.key || ''),
+        zone: (data.co2_zone ? ' (' + data.co2_zone + ')' : ''),
+        green: gThr, dirty: dThr
+      });
+      const yArr = (devData.g || []).map(v => (v==null ? 0 : v));
+      const colors = co2Int.map(co2Color);
+      const custom = co2Int.map((v,i) => [v==null?'—':v, yArr[i]]);
+      Plotly.newPlot(
+        plotId,
+        [{type:'bar', name:'CO₂', x: xsLab, y: yArr, marker:{color:colors},
+          customdata: custom,
+          hovertemplate:'%{x}<br>%{customdata[0]} g/kWh · Σ %{customdata[1]} g<extra></extra>'}],
+        kwhLayout('g CO₂'),
+        plotlyConfig()
+      );
+    }
+
+    // Draw one device's Price card into `container` (skipped when no price data).
+    // Colour bars by ct/kWh using percentile-derived green/red thresholds.
+    function renderPriceCard(container, uid, devData) {
+      if (!devData || !(devData.eur||[]).some(v => v != null)) return;
+      const plotId = 'plot_price_' + uid;
+      const plotEl = buildPlotCard(container, plotId, true);
+      const titleEl = document.getElementById(plotId + '_title');
       const fixInfo = (fixedCt != null) ? t('web.plots.price.fixed.info', {ct: fixedCt.toFixed(2)}) : '';
       titleEl.textContent = t('web.plots.price.title', {
         name: (devData.name || devData.key || ''),
@@ -10083,17 +10057,30 @@ async function loadData() {
         plotlyConfig()
       );
     }
-    renderPriceCard(1, priceDevs[0]);
-    renderPriceCard(2, priceDevs[1]);
+
+    // One block per configured device: kWh + CO₂ + Price (matched by index –
+    // the backend emits traces / co2_per_device / price_per_device in the same
+    // device order). Cards are generated dynamically so N devices all show.
+    const kwhContainer = document.getElementById('plotCards');
+    kwhContainer.innerHTML = '';
+    if (!kwhTraces.length) {
+      const emptyEl = buildPlotCard(kwhContainer, 'plot_kwh_empty', false);
+      Plotly.newPlot(emptyEl.id, [], kwhLayout('kWh'), plotlyConfig());
+    }
+    for (let di = 0; di < kwhTraces.length; di++) {
+      const uid = String(di);
+      const kwhEl = buildPlotCard(kwhContainer, 'plot_kwh_' + uid, true);
+      drawKwhForDevice(kwhEl.id, kwhEl.id + '_title', kwhTraces[di]);
+      renderCo2Card(kwhContainer, uid, co2Devs[di]);
+      renderPriceCard(kwhContainer, uid, priceDevs[di]);
+    }
 
     return;
-  } else {
-    // Hide kWh-only cards when not in kwh view
-    ['card_co2_1','card_co2_2','card_price_1','card_price_2'].forEach(function(id) {
-      var el = document.getElementById(id); if (el) el.style.display = 'none';
-    });
   }
 
+  // ---- timeseries view: one card per device (generated dynamically) --------
+  const tsContainer = document.getElementById('plotCards');
+  tsContainer.innerHTML = '';
   const devs = data.devices || [];
   if (!devs || devs.length === 0) {
     document.getElementById('meta').textContent = t('web.plots.no_data');
@@ -10174,12 +10161,10 @@ async function loadData() {
     );
   }
 
-  plotInto('plot1', devs[0]);
-  if (devs.length > 1) {
-    document.getElementById('card2').style.display = '';
-    plotInto('plot2', devs[1]);
-  } else {
-    document.getElementById('card2').style.display = 'none';
+  // One card per device – generated dynamically so all configured devices show.
+  for (let di = 0; di < devs.length; di++) {
+    const tsEl = buildPlotCard(tsContainer, 'plot_ts_' + di, true);
+    plotInto(tsEl.id, devs[di]);
   }
 }
 
@@ -12466,7 +12451,7 @@ class LiveWebDashboard:
                 "lbl_from": _t(self.lang, "common.from"),
                 "lbl_to": _t(self.lang, "common.to"),
                 "lbl_devices": _t(self.lang, "web.plots.devices"),
-                "hint_max2": _t(self.lang, "web.plots.max2"),
+                "hint_max2": _t(self.lang, "web.plots.select_devices"),
                 "btn_apply": _t(self.lang, "btn.apply"),
                 "devices_html": devices_html,
                 "i18n_json": json.dumps(web_i18n, ensure_ascii=False),
