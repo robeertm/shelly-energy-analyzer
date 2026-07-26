@@ -2046,7 +2046,7 @@ class ActionDispatcher:
             if split_mode == "by_kwh":
                 s_ts = int(pd.Timestamp(start).timestamp()) if start is not None else None
                 e_ts = int(pd.Timestamp(end).timestamp()) if end is not None else None
-                for _d in self.cfg.devices[:2]:
+                for _d in self.cfg.devices:
                     try:
                         df_h = self.storage.db.query_hourly(_d.key, start_ts=s_ts, end_ts=e_ts)
                         if df_h is not None and not df_h.empty and "kwh" in df_h.columns:
@@ -2056,7 +2056,7 @@ class ActionDispatcher:
                     except Exception:
                         period_kwh_by_device[_d.key] = 0.0
 
-            for d in self.cfg.devices[:2]:
+            for d in self.cfg.devices:
                 cd = load_device(self.storage, d)
                 df_inv = filter_by_time(cd.df, start=start, end=end)
                 kwh, _avgp, _maxp = summarize(df_inv)
@@ -2103,8 +2103,21 @@ class ActionDispatcher:
                             s_eff = pd.Timestamp(date.today()).normalize()
                             e_eff = s_eff
                     else:
-                        s_eff = pd.Timestamp(start).normalize() if start is not None else pd.Timestamp(df_inv['timestamp'].min()).normalize()
-                        e_eff = pd.Timestamp(end).normalize() if end is not None else pd.Timestamp(df_inv['timestamp'].max()).normalize()
+                        _have_ts = (df_inv is not None and not df_inv.empty
+                                    and 'timestamp' in df_inv.columns)
+                        _fb = pd.Timestamp(end if end is not None else (start if start is not None else date.today())).normalize()
+
+                        def _edge(agg):
+                            if _have_ts:
+                                try:
+                                    _v = pd.Timestamp(agg(df_inv['timestamp']))
+                                    if pd.notna(_v):
+                                        return _v.normalize()
+                                except Exception:
+                                    pass
+                            return _fb
+                        s_eff = pd.Timestamp(start).normalize() if start is not None else _edge(lambda s: s.min())
+                        e_eff = pd.Timestamp(end).normalize() if end is not None else _edge(lambda s: s.max())
                     days = int((e_eff.date() - s_eff.date()).days) + 1
                     days = max(1, days)
                     base_day_net_full = float(self.cfg.pricing.base_fee_day_net())
@@ -2152,7 +2165,7 @@ class ActionDispatcher:
             web_dir = out_root / "web"
             web_dir.mkdir(parents=True, exist_ok=True)
             sheets: Dict[str, Any] = {}
-            for d in self.cfg.devices[:2]:
+            for d in self.cfg.devices:
                 cd = load_device(self.storage, d)
                 df_ex = filter_by_time(cd.df, start=start, end=end)
                 if not df_ex.empty:
@@ -2628,6 +2641,11 @@ class ActionDispatcher:
                                 _df_today = float(dev_data.get("today_kwh", 0.0) or 0.0)
                                 _delta = _live_total - _df_today
                                 if _delta != 0.0:
+                                    # Price the live delta with the same basis as
+                                    # the range cost: the current spot price under a
+                                    # dynamic tariff, else the fixed unit price.
+                                    _delta_price = (self._get_effective_unit_price()
+                                                    if _use_dynamic_web else _unit)
                                     # Delta is today's portion, so it belongs to every
                                     # range that includes today (today/week/month/year).
                                     for _rk in ("today", "week", "month", "year"):
@@ -2635,7 +2653,7 @@ class ActionDispatcher:
                                             float(dev_data.get(_rk + "_kwh", 0.0)) + _delta, 3
                                         )
                                         dev_data[_rk + "_eur"] = round(
-                                            float(dev_data.get(_rk + "_eur", 0.0)) + _delta * _unit, 2
+                                            float(dev_data.get(_rk + "_eur", 0.0)) + _delta * _delta_price, 2
                                         )
                     except Exception:
                         pass
@@ -2960,7 +2978,7 @@ class ActionDispatcher:
                 except Exception:
                     pass
 
-            period_label = f"{format_date_local(self.lang, pd.Timestamp(start_d))} \u2013 {format_date_local(self.lang, pd.Timestamp(end_d - timedelta(days=0 if is_monthly else 0)))}"
+            period_label = f"{format_date_local(self.lang, pd.Timestamp(start_d))} \u2013 {format_date_local(self.lang, pd.Timestamp(end_d - timedelta(days=1)))}"
             return {
                 "ok": True,
                 "period": period,
@@ -3020,7 +3038,7 @@ class ActionDispatcher:
                             "vat_rate_percent": float(self.cfg.pricing.vat_rate_percent),
                             "price_includes_vat": bool(self.cfg.pricing.price_includes_vat),
                         },
-                        "devices": [{"key": d.key, "name": d.name, "host": d.host} for d in self.cfg.devices[:2]],
+                        "devices": [{"key": d.key, "name": d.name, "host": d.host} for d in self.cfg.devices],
                     }
                     zf.writestr("config_snapshot.json", json.dumps(snap, indent=2, ensure_ascii=False))
                 except Exception:
@@ -3544,6 +3562,45 @@ class ActionDispatcher:
                 co2_prod_per_kwp = float(getattr(solar_cfg, "co2_production_kg_per_kwp", 1000.0) or 1000.0)
                 co2_embodied_kg = kw_peak * co2_prod_per_kwp if kw_peak > 0 else 0.0
 
+                # ── Amortization estimate ───────────────────────────────────
+                # Estimate annual benefit (self-consumption savings + feed-in
+                # revenue) from the last 365 days and derive the payback against
+                # the configured investment. Estimate improves as PV history
+                # accumulates. Only shown when an investment is configured.
+                _amort = None
+                try:
+                    _inv = float(getattr(solar_cfg, "investment_eur", 0.0) or 0.0)
+                    _inst_year = int(getattr(solar_cfg, "installation_year", 0) or 0)
+                    if _inv > 0:
+                        _ys = int((_now3 - timedelta(days=365)).timestamp())
+                        _ye = int(_now3.timestamp())
+                        _fy = 0.0
+                        _sdf = self.storage.db.query_hourly(signed_key, start_ts=_ys, end_ts=_ye)
+                        if _sdf is not None and not _sdf.empty and "kwh" in _sdf.columns:
+                            _kc = pd.to_numeric(_sdf["kwh"], errors="coerce").fillna(0.0)
+                            _fy = float(_kc[_kc < 0].abs().sum())
+                        _sy = 0.0
+                        if pv_prod_key:
+                            _pdf = self.storage.db.query_hourly(pv_prod_key, start_ts=_ys, end_ts=_ye)
+                            if _pdf is not None and not _pdf.empty and "kwh" in _pdf.columns:
+                                _py = float(pd.to_numeric(_pdf["kwh"], errors="coerce").clip(lower=0).sum())
+                                _sy = max(0.0, _py - _fy)
+                        _annual = _sy * unit_price + _fy * feed_in_tariff
+                        _payback = (_inv / _annual) if _annual > 0 else None
+                        _from_year = datetime.now(_tz3).year
+                        _yr_run = (_from_year - _inst_year) if _inst_year > 0 else None
+                        _amort = {
+                            "investment_eur": round(_inv, 2),
+                            "annual_savings_eur": round(_annual, 2),
+                            "payback_years": round(_payback, 1) if _payback else None,
+                            "installation_year": _inst_year or None,
+                            "years_running": _yr_run,
+                            "amortized_pct": (round(min(100.0, _yr_run / _payback * 100), 1)
+                                              if (_payback and _yr_run and _yr_run > 0) else None),
+                        }
+                except Exception:
+                    _amort = None
+
                 _all_devices = [{"key": d.key, "name": d.name} for d in self.cfg.devices]
                 return {
                     "ok": True,
@@ -3557,6 +3614,7 @@ class ActionDispatcher:
                     "household_kwh": round(household_kwh, 3),
                     "revenue_eur": round(feed_in_kwh * feed_in_tariff, 2),
                     "savings_eur": round(self_kwh * unit_price, 2),
+                    "amortization": _amort,
                     "co2_saved_kg": round(co2_saved_kg, 3),
                     "co2_grid_kg": round(co2_grid_kg, 3),
                     "co2_intensity_g_per_kwh": round(co2_g_per_kwh, 1),
@@ -4139,7 +4197,17 @@ class ActionDispatcher:
                     ci_by_hour = {int(h): float(v) for h, v in zip(df_co2["hour_ts"], _ci.fillna(avg_int))}
                     grid_g = 0.0
                     pv_saved_g = 0.0
-                    for d in self.cfg.devices:
+                    # Operational grid CO₂. When a grid meter is configured, take
+                    # the grid import/export from THAT meter only — the other
+                    # devices are sub-circuits downstream of it, so summing them
+                    # too would double-count the same energy (grid + tenant + …).
+                    # Without a grid meter, sum every device as grid draw.
+                    if _pv_on and _pv_key:
+                        _co2_devs = [d for d in self.cfg.devices if d.key == _pv_key]
+                    else:
+                        _co2_devs = [d for d in self.cfg.devices
+                                     if str(getattr(d, "kind", "em")) != "switch"]
+                    for d in _co2_devs:
                         try:
                             df_h = self.storage.db.query_hourly(d.key, start_ts=start_ts_d, end_ts=end_ts_d)
                             if df_h is None or df_h.empty or "kwh" not in df_h.columns:

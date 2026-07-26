@@ -176,6 +176,25 @@ def get_battery_status(db, cfg) -> BatteryStatus:
             samples, cfg.capacity_kwh, cfg.efficiency_pct
         )
 
+        # Anchor the integrated SOC curve to the real state-of-charge when an
+        # external SOC entity is available (the integration starts from an
+        # assumed 50% and drifts). Shift the whole curve so its last point
+        # equals the measured SOC, clamped to [0, 100].
+        _measured_soc = None
+        try:
+            from shelly_analyzer.services.pv_source import latest_readings
+            _lr = latest_readings()
+            if _lr.get("soc_pct") is not None:
+                _measured_soc = float(_lr["soc_pct"])
+        except Exception:
+            _measured_soc = None
+        if timeline and _measured_soc is not None:
+            _shift = _measured_soc - timeline[-1][1]
+            timeline = [
+                (t[0], max(0.0, min(100.0, round(t[1] + _shift, 1))), t[2], t[3])
+                for t in timeline
+            ]
+
         if timeline:
             last = timeline[-1]
             status.soc_pct = last[1]
@@ -183,16 +202,32 @@ def get_battery_status(db, cfg) -> BatteryStatus:
             status.mode = last[3]
             status.soc_timeline = [(t[0], t[1]) for t in timeline]
 
-        # Detect cycles
+        # Detect cycles (for cycle_count + efficiency).
         cycles = detect_cycles(timeline)
         status.cycles = cycles
         status.cycle_count = len(cycles)
-        status.total_charged_kwh = sum(c.charge_kwh for c in cycles)
-        status.total_discharged_kwh = sum(c.discharge_kwh for c in cycles)
         if cycles:
             status.avg_efficiency_pct = round(
                 sum(c.efficiency_pct for c in cycles) / len(cycles), 1
             )
+
+        # Total charged/discharged = ALL throughput over the window, independent
+        # of whether a full cycle completed (cycle-only sums undercount).
+        _charge_kwh = 0.0
+        _discharge_kwh = 0.0
+        _pt = None
+        for _ts, _soc, _pw, _mode in timeline:
+            if _pt is not None:
+                _dt = (_ts - _pt) / 3600.0
+                if 0 < _dt < 2:
+                    _e = abs(_pw) * _dt / 1000.0
+                    if _pw > 50:
+                        _charge_kwh += _e
+                    elif _pw < -50:
+                        _discharge_kwh += _e
+            _pt = _ts
+        status.total_charged_kwh = round(_charge_kwh, 3)
+        status.total_discharged_kwh = round(_discharge_kwh, 3)
 
     except Exception as e:
         _log.error("Battery status error: %s", e)

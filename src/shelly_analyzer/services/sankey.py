@@ -129,7 +129,19 @@ def compute_sankey(
                 if _pvp > 0:
                     pv_production = _pvp
                     has_solar = True
-                    self_consumption = max(0.0, pv_production - pv_feed_in_kwh)
+                    if pv_feed_in_kwh > 0 or pv_grid_import_kwh > 0:
+                        # A signed grid meter is present → trust its metered
+                        # import/export for the split.
+                        self_consumption = max(0.0, pv_production - pv_feed_in_kwh)
+                    else:
+                        # Measured PV only (no signed grid meter, e.g. the
+                        # external HA/EMMA source): derive the split from the
+                        # measured load so the diagram balances.
+                        self_consumption = max(0.0, min(pv_production, total_consumption))
+                        pv_feed_in_kwh = max(0.0, pv_production - self_consumption)
+                    # Recompute grid import so Grid→House + PV→House == load
+                    # (was left at total_consumption → House over-supplied).
+                    grid_import = max(0.0, total_consumption - self_consumption)
         except Exception:
             pass
 
