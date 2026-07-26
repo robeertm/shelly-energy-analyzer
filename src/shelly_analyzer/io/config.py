@@ -491,6 +491,11 @@ class SolarConfig:
     # analyzer can derive feed-in and grid-import from this single meter even if
     # there is no dedicated PV-production CT. Empty = disabled.
     grid_meter_device_key: str = ""
+    # Optional: key of the device carrying *PV production* power/energy (always
+    # ≥ 0). Usually the synthetic "pv" device fed by an external PV source (see
+    # PvSourceConfig). When set and it has data, the analyzer uses the measured
+    # PV production instead of deriving it from the grid meter. Empty = derive.
+    pv_production_device_key: str = ""
     # Feed-in tariff in €/kWh
     feed_in_tariff_eur_per_kwh: float = 0.082
     # Installed PV capacity in kWp (0 = unknown/not set)
@@ -505,6 +510,57 @@ class SolarConfig:
     installation_year: int = 0
     # Annual degradation rate in % (typical: 0.5%)
     degradation_pct: float = 0.5
+
+
+@dataclass(frozen=True)
+class PvSourceConfig:
+    """External PV / battery / grid data source.
+
+    Universal bridge so any inverter or battery that is NOT measured by a Shelly
+    can still feed the analyzer. Common systems (Huawei, SolarEdge, Fronius, SMA,
+    Kostal, Sungrow, …) are already integrated in Home Assistant, so the default
+    source reads their entities over the HA REST API; alternatively values can be
+    subscribed from MQTT. The readings are ingested as synthetic devices
+    ("pv", "battery", "grid_ext") into the same energy database and live store,
+    so every downstream calculation (autarky, self-consumption, PV yield, sankey,
+    battery SOC, spot cost, CO₂) works with real production/storage data.
+    """
+    enabled: bool = False
+    # "homeassistant" = poll HA REST /api/states; "mqtt" = subscribe to topics.
+    source_type: str = "homeassistant"
+
+    # ── Home Assistant REST ────────────────────────────────────────────
+    # Base URL, e.g. "http://homeassistant.local:8123". Empty while running as
+    # an HA add-on → the Supervisor proxy "http://supervisor/core" is used.
+    ha_base_url: str = ""
+    # Long-lived access token. Empty while running as an add-on → the add-on's
+    # Supervisor token is used (requires homeassistant_api in the add-on).
+    ha_token: str = ""
+    ha_verify_ssl: bool = True
+    pv_power_entity: str = ""        # W, PV production (≥ 0)
+    battery_power_entity: str = ""   # W, signed (see battery_power_sign)
+    battery_soc_entity: str = ""     # %, state of charge
+    grid_power_entity: str = ""      # W, signed net grid (optional)
+    house_power_entity: str = ""     # W, total house load (optional)
+    pv_energy_today_entity: str = "" # kWh, cumulative PV yield today (optional)
+
+    # ── MQTT subscribe (broker creds reuse MqttConfig when empty) ───────
+    mqtt_pv_power_topic: str = ""
+    mqtt_battery_power_topic: str = ""
+    mqtt_battery_soc_topic: str = ""
+    mqtt_grid_power_topic: str = ""
+    mqtt_house_power_topic: str = ""
+    # Optional dotted JSON path if payloads are JSON objects, e.g. "value" or
+    # "0.apower". Empty = payload is a plain number.
+    mqtt_json_path: str = ""
+
+    # ── Conventions ────────────────────────────────────────────────────
+    # "charge_positive": +W = charging (default, matches most inverters/HA).
+    # "discharge_positive": +W = discharging → sign is flipped on ingest.
+    battery_power_sign: str = "charge_positive"
+    # "import_positive": +W = grid import (default). "export_positive": flipped.
+    grid_power_sign: str = "import_positive"
+    poll_interval_seconds: int = 15
 
 
 @dataclass(frozen=True)
@@ -921,6 +977,7 @@ class AppConfig:
     billing: BillingConfig = field(default_factory=BillingConfig)
     alerts: List[AlertRule] = field(default_factory=list)
     solar: SolarConfig = field(default_factory=SolarConfig)
+    pv_source: PvSourceConfig = field(default_factory=PvSourceConfig)
     tou: TouConfig = field(default_factory=TouConfig)
     anomaly: AnomalyConfig = field(default_factory=AnomalyConfig)
     co2: Co2Config = field(default_factory=Co2Config)
@@ -1359,6 +1416,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         enabled=bool(solar_raw.get("enabled", SolarConfig.enabled)),
         pv_meter_device_key=str(solar_raw.get("pv_meter_device_key", SolarConfig.pv_meter_device_key) or ""),
         grid_meter_device_key=str(solar_raw.get("grid_meter_device_key", SolarConfig.grid_meter_device_key) or ""),
+        pv_production_device_key=str(solar_raw.get("pv_production_device_key", SolarConfig.pv_production_device_key) or ""),
         feed_in_tariff_eur_per_kwh=_coerce_float(
             solar_raw.get("feed_in_tariff_eur_per_kwh", SolarConfig.feed_in_tariff_eur_per_kwh),
             SolarConfig.feed_in_tariff_eur_per_kwh,
@@ -1457,6 +1515,30 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         enabled=bool(forecast_raw.get("enabled", ForecastConfig.enabled)),
         horizon_days=_coerce_int(forecast_raw.get("horizon_days", ForecastConfig.horizon_days), ForecastConfig.horizon_days),
         history_days=_coerce_int(forecast_raw.get("history_days", ForecastConfig.history_days), ForecastConfig.history_days),
+    )
+
+    pvsrc_raw = raw.get("pv_source", {}) if isinstance(raw.get("pv_source"), dict) else {}
+    pv_source = PvSourceConfig(
+        enabled=bool(pvsrc_raw.get("enabled", PvSourceConfig.enabled)),
+        source_type=("mqtt" if str(pvsrc_raw.get("source_type", PvSourceConfig.source_type) or "").lower() == "mqtt" else "homeassistant"),
+        ha_base_url=str(pvsrc_raw.get("ha_base_url", PvSourceConfig.ha_base_url) or ""),
+        ha_token=str(pvsrc_raw.get("ha_token", PvSourceConfig.ha_token) or ""),
+        ha_verify_ssl=bool(pvsrc_raw.get("ha_verify_ssl", PvSourceConfig.ha_verify_ssl)),
+        pv_power_entity=str(pvsrc_raw.get("pv_power_entity", PvSourceConfig.pv_power_entity) or ""),
+        battery_power_entity=str(pvsrc_raw.get("battery_power_entity", PvSourceConfig.battery_power_entity) or ""),
+        battery_soc_entity=str(pvsrc_raw.get("battery_soc_entity", PvSourceConfig.battery_soc_entity) or ""),
+        grid_power_entity=str(pvsrc_raw.get("grid_power_entity", PvSourceConfig.grid_power_entity) or ""),
+        house_power_entity=str(pvsrc_raw.get("house_power_entity", PvSourceConfig.house_power_entity) or ""),
+        pv_energy_today_entity=str(pvsrc_raw.get("pv_energy_today_entity", PvSourceConfig.pv_energy_today_entity) or ""),
+        mqtt_pv_power_topic=str(pvsrc_raw.get("mqtt_pv_power_topic", PvSourceConfig.mqtt_pv_power_topic) or ""),
+        mqtt_battery_power_topic=str(pvsrc_raw.get("mqtt_battery_power_topic", PvSourceConfig.mqtt_battery_power_topic) or ""),
+        mqtt_battery_soc_topic=str(pvsrc_raw.get("mqtt_battery_soc_topic", PvSourceConfig.mqtt_battery_soc_topic) or ""),
+        mqtt_grid_power_topic=str(pvsrc_raw.get("mqtt_grid_power_topic", PvSourceConfig.mqtt_grid_power_topic) or ""),
+        mqtt_house_power_topic=str(pvsrc_raw.get("mqtt_house_power_topic", PvSourceConfig.mqtt_house_power_topic) or ""),
+        mqtt_json_path=str(pvsrc_raw.get("mqtt_json_path", PvSourceConfig.mqtt_json_path) or ""),
+        battery_power_sign=("discharge_positive" if str(pvsrc_raw.get("battery_power_sign", PvSourceConfig.battery_power_sign) or "").lower() == "discharge_positive" else "charge_positive"),
+        grid_power_sign=("export_positive" if str(pvsrc_raw.get("grid_power_sign", PvSourceConfig.grid_power_sign) or "").lower() == "export_positive" else "import_positive"),
+        poll_interval_seconds=_coerce_int(pvsrc_raw.get("poll_interval_seconds", PvSourceConfig.poll_interval_seconds), PvSourceConfig.poll_interval_seconds),
     )
 
     weather_raw = raw.get("weather", {}) if isinstance(raw.get("weather"), dict) else {}
@@ -1747,6 +1829,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         billing=billing,
         alerts=alerts,
         solar=solar,
+        pv_source=pv_source,
         tou=tou,
         anomaly=anomaly,
         co2=co2,
@@ -1978,6 +2061,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "enabled": bool(getattr(cfg.solar, "enabled", False)),
             "pv_meter_device_key": str(getattr(cfg.solar, "pv_meter_device_key", "") or ""),
             "grid_meter_device_key": str(getattr(cfg.solar, "grid_meter_device_key", "") or ""),
+            "pv_production_device_key": str(getattr(cfg.solar, "pv_production_device_key", "") or ""),
             "feed_in_tariff_eur_per_kwh": float(getattr(cfg.solar, "feed_in_tariff_eur_per_kwh", 0.082)),
             "kw_peak": float(getattr(cfg.solar, "kw_peak", 0.0)),
             "battery_kwh": float(getattr(cfg.solar, "battery_kwh", 0.0)),
@@ -1985,6 +2069,28 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "investment_eur": float(getattr(cfg.solar, "investment_eur", 0.0)),
             "installation_year": int(getattr(cfg.solar, "installation_year", 0)),
             "degradation_pct": float(getattr(cfg.solar, "degradation_pct", 0.5)),
+        },
+        "pv_source": {
+            "enabled": bool(getattr(cfg.pv_source, "enabled", False)),
+            "source_type": str(getattr(cfg.pv_source, "source_type", "homeassistant") or "homeassistant"),
+            "ha_base_url": str(getattr(cfg.pv_source, "ha_base_url", "") or ""),
+            "ha_token": str(getattr(cfg.pv_source, "ha_token", "") or ""),
+            "ha_verify_ssl": bool(getattr(cfg.pv_source, "ha_verify_ssl", True)),
+            "pv_power_entity": str(getattr(cfg.pv_source, "pv_power_entity", "") or ""),
+            "battery_power_entity": str(getattr(cfg.pv_source, "battery_power_entity", "") or ""),
+            "battery_soc_entity": str(getattr(cfg.pv_source, "battery_soc_entity", "") or ""),
+            "grid_power_entity": str(getattr(cfg.pv_source, "grid_power_entity", "") or ""),
+            "house_power_entity": str(getattr(cfg.pv_source, "house_power_entity", "") or ""),
+            "pv_energy_today_entity": str(getattr(cfg.pv_source, "pv_energy_today_entity", "") or ""),
+            "mqtt_pv_power_topic": str(getattr(cfg.pv_source, "mqtt_pv_power_topic", "") or ""),
+            "mqtt_battery_power_topic": str(getattr(cfg.pv_source, "mqtt_battery_power_topic", "") or ""),
+            "mqtt_battery_soc_topic": str(getattr(cfg.pv_source, "mqtt_battery_soc_topic", "") or ""),
+            "mqtt_grid_power_topic": str(getattr(cfg.pv_source, "mqtt_grid_power_topic", "") or ""),
+            "mqtt_house_power_topic": str(getattr(cfg.pv_source, "mqtt_house_power_topic", "") or ""),
+            "mqtt_json_path": str(getattr(cfg.pv_source, "mqtt_json_path", "") or ""),
+            "battery_power_sign": str(getattr(cfg.pv_source, "battery_power_sign", "charge_positive") or "charge_positive"),
+            "grid_power_sign": str(getattr(cfg.pv_source, "grid_power_sign", "import_positive") or "import_positive"),
+            "poll_interval_seconds": int(getattr(cfg.pv_source, "poll_interval_seconds", 15)),
         },
         "pricing": {
             "electricity_price_eur_per_kwh": cfg.pricing.electricity_price_eur_per_kwh,

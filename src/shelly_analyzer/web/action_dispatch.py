@@ -3368,6 +3368,43 @@ class ActionDispatcher:
                 pv_kwh = self_kwh + feed_in_kwh
                 autarky_pct = (min(100.0, self_kwh / household_kwh * 100.0) if household_kwh > 0 else 0.0)
 
+                # ── Real PV/battery from an external source (PvSourceConfig) ──
+                # When a PV-production series ("pv") and/or a battery series
+                # ("battery") have been ingested by the external PV source, use
+                # the measured production instead of the grid-derived estimate.
+                pv_source_cfg = getattr(self.cfg, "pv_source", None)
+                pv_prod_key = str(getattr(solar_cfg, "pv_production_device_key", "") or "")
+                if not pv_prod_key and pv_source_cfg is not None and getattr(pv_source_cfg, "enabled", False):
+                    pv_prod_key = "pv"
+                pv_measured = False
+                pv_production_kwh = 0.0
+                if pv_prod_key:
+                    pv_production_kwh = _load_hourly_kwh(pv_prod_key)
+                    if pv_production_kwh > 0:
+                        pv_measured = True
+                        pv_kwh = pv_production_kwh
+                        # Self-consumed PV = production − export (feed-in).
+                        self_kwh = max(0.0, pv_production_kwh - feed_in_kwh)
+
+                battery_charge_kwh = 0.0
+                battery_discharge_kwh = 0.0
+                battery_soc_pct = None
+                try:
+                    b_df = self.storage.db.query_hourly("battery", start_ts=start_ts3, end_ts=end_ts3)
+                    if b_df is not None and not b_df.empty and "kwh" in b_df.columns:
+                        b_col = pd.to_numeric(b_df["kwh"], errors="coerce").fillna(0.0)
+                        battery_charge_kwh = float(b_col[b_col > 0].sum())
+                        battery_discharge_kwh = float(b_col[b_col < 0].abs().sum())
+                except Exception:
+                    pass
+                try:
+                    from shelly_analyzer.services.pv_source import latest_readings
+                    _lr = latest_readings()
+                    if _lr.get("soc_pct") is not None:
+                        battery_soc_pct = round(float(_lr["soc_pct"]), 1)
+                except Exception:
+                    pass
+
                 try:
                     feed_in_tariff = float(getattr(solar_cfg, "feed_in_tariff_eur_per_kwh", 0.082))
                     unit_price = float(self.cfg.pricing.unit_price_gross())
@@ -3423,6 +3460,11 @@ class ActionDispatcher:
                     "pv_meter_device_key": pv_key,
                     "grid_meter_device_key": grid_key,
                     "signed_meter_device_key": signed_key,
+                    "pv_measured": pv_measured,
+                    "pv_production_kwh": round(pv_production_kwh, 3),
+                    "battery_charge_kwh": round(battery_charge_kwh, 3),
+                    "battery_discharge_kwh": round(battery_discharge_kwh, 3),
+                    "battery_soc_pct": battery_soc_pct,
                     "devices": _all_devices,
                 }
             except Exception as e:
@@ -4305,13 +4347,46 @@ class ActionDispatcher:
         if action == "battery":
             try:
                 from shelly_analyzer.services.battery import get_battery_status
-                status = get_battery_status(self.storage.db, self.cfg.battery)
+                batt_cfg = self.cfg.battery
+                pvs = getattr(self.cfg, "pv_source", None)
+                _has_ext_batt = (
+                    pvs is not None and getattr(pvs, "enabled", False)
+                    and (bool(getattr(pvs, "battery_power_entity", ""))
+                         or bool(getattr(pvs, "mqtt_battery_power_topic", "")))
+                )
+                _no_shelly_batt = (not getattr(batt_cfg, "enabled", False)) or (not getattr(batt_cfg, "device_key", ""))
+                # External battery fallback: analyse the synthetic "battery"
+                # device fed by the external PV source when no Shelly battery is
+                # configured.
+                if _no_shelly_batt and _has_ext_batt:
+                    from shelly_analyzer.io.config import BatteryConfig
+                    _cap = float(getattr(self.cfg.solar, "battery_kwh", 0.0) or 0.0)
+                    batt_cfg = BatteryConfig(
+                        enabled=True, device_key="battery",
+                        capacity_kwh=_cap if _cap > 0 else 10.0,
+                    )
+                status = get_battery_status(self.storage.db, batt_cfg)
+                # Prefer a real state-of-charge entity over the integrated estimate.
+                _soc_source = "estimated"
+                try:
+                    from shelly_analyzer.services.pv_source import latest_readings
+                    _lr = latest_readings()
+                    if _lr.get("soc_pct") is not None:
+                        status.soc_pct = round(float(_lr["soc_pct"]), 1)
+                        _soc_source = "measured"
+                    if _lr.get("battery_w") is not None:
+                        status.power_w = float(_lr["battery_w"])
+                        status.mode = ("charging" if status.power_w > 50
+                                       else ("discharging" if status.power_w < -50 else "idle"))
+                except Exception:
+                    pass
                 return {"ok": True, "data": {
                     "soc_pct": status.soc_pct, "power_w": status.power_w,
                     "mode": status.mode, "cycle_count": status.cycle_count,
                     "total_charged_kwh": status.total_charged_kwh,
                     "total_discharged_kwh": status.total_discharged_kwh,
                     "avg_efficiency_pct": status.avg_efficiency_pct,
+                    "soc_source": _soc_source,
                 }}
             except Exception as e:
                 return {"ok": False, "error": str(e)}
