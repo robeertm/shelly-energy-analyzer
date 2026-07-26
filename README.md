@@ -226,6 +226,7 @@ Android / any browser: open `/w` and add to home screen — no app required.
 - **CO2 savings** — displays avoided CO2 (kg), tree-day and car-km equivalents using real ENTSO-E grid intensity
 - **PV amortization calculator** — investment payback analysis with configurable investment amount, installation year, and panel degradation rate; shows annual savings, payback period, ROI after 20 years, total CO2 saved; amortization timeline chart with cumulative savings vs. investment crossover point
 - System config — configurable installed capacity (kWp), battery storage (kWh), embodied CO2 per kWp
+- **External PV / battery data source** — for systems not measured by a Shelly, pull PV production, battery power, battery state-of-charge and (optionally) the grid connection from **Home Assistant entities** (works with any inverter integrated in HA — Huawei, SolarEdge, Fronius, SMA, Kostal, Sungrow, …) or from **MQTT** topics. Ingested as synthetic `pv` / `battery` / `grid_ext` devices so autarky, self-consumption, energy-flow and battery SOC use real data. As an HA add-on it uses the Supervisor proxy — no URL or token needed
 
 ### 🔌 Standby Killer Report
 - Identifies devices with constant base load (standby consumers)

@@ -118,6 +118,7 @@ class LivePoint:
     cost_today: float = 0.0
     freq_hz: float = 50.0
     i_n: float = 0.0
+    soc_pct: float = 0.0  # battery state-of-charge (external PV source only)
     raw: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -318,6 +319,7 @@ class LiveStateStore:
                     "cost_today": _safe_f(p.cost_today),
                     "freq_hz": _safe_f(p.freq_hz),
                     "i_n": _safe_f(p.i_n),
+                    "soc_pct": _safe_f(p.soc_pct),
                 }
                 for p in arr
             ]

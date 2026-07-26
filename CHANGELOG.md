@@ -1,5 +1,14 @@
 # Changelog
 
+## 16.44.0
+### Added
+- **Universal external PV / battery data source.** PV and battery systems that are *not* measured by a Shelly can now feed the analyzer directly. Common inverters and batteries (Huawei, SolarEdge, Fronius, SMA, Kostal, Sungrow, GoodWe, …) are already integrated in Home Assistant, so the default source reads their entities over the Home Assistant REST API; alternatively the values can be subscribed from MQTT. Configured under **Settings → PV / Battery data source** (`pv_source`): PV production, battery power, battery state-of-charge, and optionally the grid connection and total house load, each mapped to an HA entity or an MQTT topic, with configurable sign conventions and poll interval. The readings are ingested as synthetic devices (`pv`, `battery`, `grid_ext`) into the same energy database and live store used by Shelly data, so autarky, self-consumption, PV yield, the energy-flow (sankey), battery SOC, spot cost and CO₂ all work with real production/storage figures instead of a grid-derived estimate. When running as a Home Assistant add-on, leave the URL and token empty to use the Supervisor proxy automatically (the add-on now requests `homeassistant_api`).
+  - The Solar endpoint now reports measured PV production, battery charge/discharge and (when an SOC entity is provided) the real state-of-charge; the Battery view falls back to the external battery when no Shelly battery is configured; the energy-flow diagram now also honours a grid meter and a measured PV series.
+### Changed
+- **Add-on options now cover the dynamic spot-price tariff and the PV source.** The Home Assistant add-on renders `config.json` from `options.json` on every start, so any setting absent from the options was reset on restart. The add-on schema/options and `run.sh` now also emit the `spot_price` and `pv_source` blocks (both optional, disabled by default), so the dynamic-tariff toggle and the PV-source configuration survive restarts. Enabling the dynamic tariff triggers a spot-price fetch immediately.
+### Fixed
+- **Plots device selector no longer says "max. 2" in non-English languages.** The per-device plots change in 16.43.0 removed the two-device cap, but several translations (and the `ui.view` label in every language) still advertised a two-device maximum. Cleaned up across all nine languages; added the missing translations for the new plots and grid-meter strings.
+
 ## 16.43.0
 ### Added
 - **Plots page now renders every configured device.** The Plotly "Plots" page was previously hardcoded to a maximum of two devices (both in the backend `plots_data` builder and in the frontend, which capped the device selector at two). It now generates one block per configured device, each showing that device's kWh, CO₂ and Price charts. The plot cards are created dynamically per device, and the device selector no longer enforces a two-device limit; with no explicit selection every configured device is shown.
