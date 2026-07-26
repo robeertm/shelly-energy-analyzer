@@ -4606,7 +4606,11 @@ function renderCosts(data, el) {{
     bh += brow(t('web.costs.feed_in','Feed-in') + ' (kWh)', 'grid_export_kwh', 2, '');
     var anyBatt = bcols.some(function(k){{ return B[k] && (B[k].battery_discharge_kwh > 0 || B[k].battery_charge_kwh > 0); }});
     if (anyBatt) {{
-      bh += brow(t('web.costs.battery_out','Battery discharge') + ' (kWh)', 'battery_discharge_kwh', 2, '');
+      // Battery from the storage's own view: charging is positive (energy in),
+      // discharging is negative (energy out).
+      bh += brow(t('web.costs.battery_in','Battery charge') + ' (kWh)', 'battery_charge_kwh', 2, '');
+      var tdsBd = bcols.map(function(k){{ var r=B[k]; var v=(r && r.battery_discharge_kwh!=null) ? -Math.abs(r.battery_discharge_kwh) : null; return '<td style="text-align:right">' + (v==null ? '–' : fmt(v,2,'')) + '</td>'; }}).join('');
+      bh += '<tr><td>' + t('web.costs.battery_out','Battery discharge') + ' (kWh)</td>' + tdsBd + '</tr>';
     }}
     bh += brow(t('web.costs.autarky','Self-sufficiency') + ' (%)', 'autarky_pct', 0, '');
     bh += '<tr><td colspan="5" style="border-top:2px solid var(--border,#333);padding:2px"></td></tr>';
@@ -4656,14 +4660,26 @@ function renderCosts(data, el) {{
 
   html += '<div class="card-grid">';
   data.devices.forEach(function(d) {{
-    // Fixed tariff section
-    var fixedLabel = '<div style="font-size:11px;color:#2196F3;margin-bottom:4px">\U0001f4b2 ' + t('plots.dynprice.fixed', 'Fixed price') + '</div>';
+    // Effective (solar-aware) cost when a PV/grid balance is available, else
+    // the classic full-tariff cost.
+    var hasEff = !!data.balance_present && !!d.cost_role;
+    var eur = function(rng) {{ return hasEff ? d[rng + '_eff_eur'] : d[rng + '_eur']; }};
+    var roleLbl, roleColor;
+    if (hasEff && d.cost_role === 'grid') {{ roleLbl = t('web.costs.role_grid','Grid balance'); roleColor = '#e53935'; }}
+    else if (hasEff && d.cost_role === 'tenant') {{ roleLbl = t('web.costs.role_tenant','Tenant \u00b7 full tariff'); roleColor = '#9c27b0'; }}
+    else if (hasEff) {{ roleLbl = t('web.costs.role_owner','After solar'); roleColor = '#4caf50'; }}
+    else {{ roleLbl = t('plots.dynprice.fixed','Fixed price'); roleColor = '#2196F3'; }}
+    var fixedLabel = '<div style="font-size:11px;color:' + roleColor + ';margin-bottom:4px">\U0001f4b2 ' + roleLbl + '</div>';
     var fixedGrid = '<div class="metric-grid">' +
-      metricCardHtml(t('web.costs.today', 'Today'), fmt(d.today_eur,2,'\u20ac'), fmt(d.today_kwh,3,'kWh')) +
-      metricCardHtml(t('web.costs.week', 'Week'), fmt(d.week_eur,2,'\u20ac'), fmt(d.week_kwh,3,'kWh')) +
-      metricCardHtml(t('web.costs.month', 'Month'), fmt(d.month_eur,2,'\u20ac'), fmt(d.month_kwh,3,'kWh')) +
-      metricCardHtml(t('web.costs.projected', 'Forecast'), fmt(d.proj_eur,2,'\u20ac'), fmt(d.proj_kwh,1,'kWh')) +
+      metricCardHtml(t('web.costs.today', 'Today'), fmt(eur('today'),2,'\u20ac'), fmt(d.today_kwh,3,'kWh')) +
+      metricCardHtml(t('web.costs.week', 'Week'), fmt(eur('week'),2,'\u20ac'), fmt(d.week_kwh,3,'kWh')) +
+      metricCardHtml(t('web.costs.month', 'Month'), fmt(eur('month'),2,'\u20ac'), fmt(d.month_kwh,3,'kWh')) +
+      metricCardHtml(t('web.costs.projected', 'Forecast'), fmt(hasEff ? d.proj_eff_eur : d.proj_eur,2,'\u20ac'), fmt(d.proj_kwh,1,'kWh')) +
       '</div>';
+    // "without solar" comparison for owner/grid devices.
+    if (hasEff && d.cost_role !== 'tenant') {{
+      fixedGrid += '<div class="dev-meta" style="margin-top:4px;opacity:.6;font-size:10px">' + t('web.costs.without_solar','without solar') + ': ' + t('web.costs.month','Month') + ' ' + fmt(d.month_eur,2,'\u20ac') + '</div>';
+    }}
     // Dynamic tariff section
     var dynSection = spotActive
       ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">' +

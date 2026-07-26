@@ -2727,6 +2727,61 @@ class ActionDispatcher:
                 except Exception:
                     logger.debug("cost balance failed", exc_info=True)
 
+                # ── Effective (solar-aware) per-device cost ─────────────────
+                # Self-consumed PV/battery energy is not bought from the grid,
+                # so owner devices are priced at the *effective* €/kWh after
+                # solar = (net grid bill) / (owner consumption). The grid meter
+                # card shows its real net position (import cost − feed-in
+                # revenue); tenant circuits always pay the full tariff.
+                if _balance_present:
+                    _grid_dev_key = ""
+                    if _solar_bc:
+                        _grid_dev_key = (str(getattr(_solar_bc, "grid_meter_device_key", "") or "")
+                                         or str(getattr(_solar_bc, "pv_meter_device_key", "") or ""))
+                    _tenant_keys_c = set()
+                    _tcfg_c = getattr(self.cfg, "tenant", None)
+                    if _tcfg_c is not None and getattr(_tcfg_c, "enabled", False):
+                        for _td in (getattr(_tcfg_c, "tenants", []) or []):
+                            for _tk in (getattr(_td, "device_keys", []) or []):
+                                _tenant_keys_c.add(str(_tk))
+                    _eff_price: Dict[str, float] = {}
+                    for _rk, _bd in _balance_ranges.items():
+                        _owner_load = max(0.0, float(_bd.get("total_load_kwh", 0.0))
+                                          - float(_bd.get("tenant_load_kwh", 0.0)))
+                        _net = float(_bd.get("net_cost_eur", 0.0))
+                        _eff_price[_rk] = max(0.0, _net / _owner_load) if _owner_load > 0 else _unit
+                    for dev_data in devices_out:
+                        _k = dev_data["key"]
+                        if _grid_dev_key and _k == _grid_dev_key:
+                            _role = "grid"
+                        elif _k in _tenant_keys_c:
+                            _role = "tenant"
+                        else:
+                            _role = "owner"
+                        dev_data["cost_role"] = _role
+                        for _rk in ("today", "week", "month", "year", "last_month"):
+                            _kwh = float(dev_data.get(_rk + "_kwh", 0.0))
+                            _base = float(dev_data.get(_rk + "_eur", 0.0))
+                            if _role == "grid":
+                                _bd = _balance_ranges.get(_rk)
+                                dev_data[_rk + "_eff_eur"] = round(
+                                    float(_bd.get("net_cost_eur", _base)) if _bd else _base, 2)
+                            elif _role == "tenant":
+                                dev_data[_rk + "_eff_eur"] = round(_base, 2)
+                            else:
+                                dev_data[_rk + "_eff_eur"] = round(_kwh * _eff_price.get(_rk, _unit), 2)
+                        # Projection (PROGNOSE) mirrors the month basis.
+                        _proj_kwh = float(dev_data.get("proj_kwh", 0.0))
+                        _proj_full = float(dev_data.get("proj_eur", 0.0))
+                        if _role == "grid":
+                            _mf = float(dev_data.get("month_eur", 0.0))
+                            _me = float(dev_data.get("month_eff_eur", _mf))
+                            dev_data["proj_eff_eur"] = round(_proj_full * (_me / _mf), 2) if _mf > 0 else round(_proj_full, 2)
+                        elif _role == "tenant":
+                            dev_data["proj_eff_eur"] = round(_proj_full, 2)
+                        else:
+                            dev_data["proj_eff_eur"] = round(_proj_kwh * _eff_price.get("month", _unit), 2)
+
                 _spot_enabled = getattr(_spot_cfg, "enabled", False) if _spot_cfg else False
                 if _spot_enabled:
                     for dev_data in devices_out:
