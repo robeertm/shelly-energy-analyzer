@@ -2685,6 +2685,48 @@ class ActionDispatcher:
                 except Exception:
                     pass
 
+                # ── Energy balance: grid import cost, feed-in revenue, self-
+                #    consumption savings, battery, tenant billing. Only emitted
+                #    when a PV or grid source exists; else the classic per-device
+                #    table stands alone. Universal — no site-specific keys. ─────
+                _balance_ranges: Dict[str, Any] = {}
+                _balance_present = False
+                _solar_bc = getattr(self.cfg, "solar", None)
+                _feed_in_tariff = (
+                    float(getattr(_solar_bc, "feed_in_tariff_eur_per_kwh", 0.082) or 0.082)
+                    if _solar_bc else 0.082
+                )
+                try:
+                    from shelly_analyzer.services.energy_balance import compute_balance
+                    for _rk, (_rs, _re) in _ranges.items():
+                        _b = compute_balance(
+                            self.storage.db, self.cfg,
+                            int(_rs.timestamp()), int(_re.timestamp()),
+                        )
+                        if not (_b.has_pv or _b.has_grid_meter):
+                            continue
+                        _balance_present = True
+                        _bd = _b.as_dict()
+                        _grid_cost = _b.grid_import_kwh * _unit
+                        _feed_rev = _b.grid_export_kwh * _feed_in_tariff
+                        _self_save = _b.self_consumption_kwh * _unit
+                        _batt_save = _b.battery_discharge_kwh * _unit
+                        _tenant_bill = _b.tenant_load_kwh * _unit
+                        _bd.update({
+                            "grid_import_eur": round(_grid_cost, 2),
+                            "feed_in_revenue_eur": round(_feed_rev, 2),
+                            "self_consumption_savings_eur": round(_self_save, 2),
+                            "battery_savings_eur": round(_batt_save, 2),
+                            "tenant_billed_eur": round(_tenant_bill, 2),
+                            # What the owner actually pays: grid drawn − feed-in earned.
+                            "net_cost_eur": round(_grid_cost - _feed_rev, 2),
+                            # Everything PV/battery/feed-in kept off the bill.
+                            "total_savings_eur": round(_self_save + _feed_rev, 2),
+                        })
+                        _balance_ranges[_rk] = _bd
+                except Exception:
+                    logger.debug("cost balance failed", exc_info=True)
+
                 _spot_enabled = getattr(_spot_cfg, "enabled", False) if _spot_cfg else False
                 if _spot_enabled:
                     for dev_data in devices_out:
@@ -2755,6 +2797,9 @@ class ActionDispatcher:
                     "summary": _s,
                     "co2_g_per_kwh": _co2_g,
                     "solar_co2_saved_month_kg": round(_solar_co2_saved_month_kg, 3),
+                    "balance": _balance_ranges,
+                    "balance_present": _balance_present,
+                    "feed_in_tariff": round(_feed_in_tariff, 4),
                     "tariff_schedule": _tariff_sched,
                     "spot_enabled": _spot_enabled,
                     "spot_chart": _spot_chart,
@@ -4051,6 +4096,71 @@ class ActionDispatcher:
                 co2_month = _device_co2(month_start_ts, now_ts)
                 co2_year = _device_co2(year_start_ts, now_ts)
 
+                # ── Embodied CO₂ + solar footprint ──────────────────────────
+                # Grid-only accounting treats self-consumed PV and battery output
+                # as 0 g/kWh. Physically they carry the panels'/cells' *embodied*
+                # (manufacturing) emissions amortised over their output — small,
+                # but not zero. We add that here and report what solar saved vs.
+                # buying the same energy from the grid. Universal: factors come
+                # from SolarConfig, series from the energy balance.
+                _solar_fp = getattr(self.cfg, "solar", None)
+                _pv_emb_g = float(getattr(_solar_fp, "pv_embodied_g_per_kwh", 40.0) or 0.0) if _solar_fp else 0.0
+                _bat_emb_g = float(getattr(_solar_fp, "battery_embodied_g_per_kwh", 60.0) or 0.0) if _solar_fp else 0.0
+
+                def _avg_intensity(s_ts, e_ts):
+                    try:
+                        _dfi = self.storage.db.query_co2_intensity(zone, s_ts, e_ts + 3600)
+                        if _dfi is not None and not _dfi.empty:
+                            _m = float(pd.to_numeric(_dfi["intensity_g_per_kwh"], errors="coerce").mean())
+                            if _m == _m and _m > 0:
+                                return _m
+                    except Exception:
+                        pass
+                    return current_intensity if current_intensity > 0 else 380.0
+
+                _footprint: Dict[str, Any] = {}
+                _fp_has_solar = False
+                try:
+                    from shelly_analyzer.services.energy_balance import compute_balance
+                    _fp_ranges = {
+                        "today": (today_start_ts, now_ts),
+                        "week": (week_start_ts, now_ts),
+                        "month": (month_start_ts, now_ts),
+                        "year": (year_start_ts, now_ts),
+                    }
+                    _grid_op = {"today": co2_today, "week": co2_week,
+                                "month": co2_month, "year": co2_year}
+                    for _fk, (_fs, _fe) in _fp_ranges.items():
+                        _fb = compute_balance(self.storage.db, self.cfg, _fs, _fe)
+                        if not (_fb.has_pv or _fb.has_battery):
+                            continue
+                        _fp_has_solar = True
+                        _ai = _avg_intensity(_fs, _fe)
+                        _pv_emb_kg = _fb.self_consumption_kwh * _pv_emb_g / 1000.0
+                        _bat_emb_kg = _fb.battery_discharge_kwh * _bat_emb_g / 1000.0
+                        _solar_kwh = _fb.self_consumption_kwh + _fb.battery_discharge_kwh
+                        # Had this solar+battery energy come from the grid instead:
+                        _would_be_kg = _solar_kwh * _ai / 1000.0
+                        _saved_kg = max(0.0, _would_be_kg - _pv_emb_kg - _bat_emb_kg)
+                        _grid_kg = float(_grid_op.get(_fk, 0.0))
+                        _net_kg = _grid_kg + _pv_emb_kg + _bat_emb_kg
+                        _load = _fb.total_load_kwh
+                        _footprint[_fk] = {
+                            "grid_kg": round(_grid_kg, 3),
+                            "pv_embodied_kg": round(_pv_emb_kg, 3),
+                            "battery_embodied_kg": round(_bat_emb_kg, 3),
+                            "net_kg": round(_net_kg, 3),
+                            "solar_saved_kg": round(_saved_kg, 3),
+                            "self_consumption_kwh": round(_fb.self_consumption_kwh, 3),
+                            "battery_discharge_kwh": round(_fb.battery_discharge_kwh, 3),
+                            "load_kwh": round(_load, 3),
+                            "effective_intensity": round(_net_kg * 1000.0 / _load, 1) if _load > 0 else 0.0,
+                            "grid_intensity": round(_ai, 1),
+                            "autarky_pct": round(_fb.autarky_pct, 1),
+                        }
+                except Exception:
+                    logger.debug("co2 footprint failed", exc_info=True)
+
                 device_rates = []
                 if current_intensity > 0:
                     live_snap = {}
@@ -4150,6 +4260,10 @@ class ActionDispatcher:
                     "co2_week_kg": round(co2_week, 3),
                     "co2_month_kg": round(co2_month, 3),
                     "co2_year_kg": round(co2_year, 3),
+                    "footprint": _footprint,
+                    "footprint_present": _fp_has_solar,
+                    "pv_embodied_g_per_kwh": round(_pv_emb_g, 1),
+                    "battery_embodied_g_per_kwh": round(_bat_emb_g, 1),
                     "tree_days": round(tree_days, 0),
                     "car_km": round(car_km, 0),
                     "hourly": hourly_data,
