@@ -1906,7 +1906,7 @@ class ActionDispatcher:
             web_dir.mkdir(parents=True, exist_ok=True)
             files: List[Dict[str, str]] = []
 
-            devs2 = list(self.cfg.devices[:2])
+            devs2 = list(self.cfg.devices)
             total = max(1, len(devs2))
             for idx, d in enumerate(devs2, start=1):
                 if progress:
@@ -2668,6 +2668,9 @@ class ActionDispatcher:
                 try:
                     _solar_cfg_c = getattr(self.cfg, "solar", None)
                     _pv_key_c = str(getattr(_solar_cfg_c, "pv_meter_device_key", "") or "") if _solar_cfg_c else ""
+                    # Fall back to a signed grid meter when no dedicated PV meter is set.
+                    _grid_key_c = str(getattr(_solar_cfg_c, "grid_meter_device_key", "") or "") if _solar_cfg_c else ""
+                    _pv_key_c = _pv_key_c or _grid_key_c
                     if _pv_key_c and getattr(_solar_cfg_c, "enabled", False):
                         _pv_df_c = self.storage.db.query_hourly(_pv_key_c, start_ts=int(_month_start.timestamp()), end_ts=int(_now.timestamp()))
                         if _pv_df_c is not None and not _pv_df_c.empty and "kwh" in _pv_df_c.columns:
@@ -3096,6 +3099,7 @@ class ActionDispatcher:
                 _new = _SC(
                     enabled=bool(params.get("enabled", getattr(_old, "enabled", False))),
                     pv_meter_device_key=str(params.get("pv_meter_device_key", getattr(_old, "pv_meter_device_key", "")) or ""),
+                    grid_meter_device_key=str(params.get("grid_meter_device_key", getattr(_old, "grid_meter_device_key", "")) or ""),
                     feed_in_tariff_eur_per_kwh=float(params.get("feed_in_tariff", getattr(_old, "feed_in_tariff_eur_per_kwh", 0.082))),
                     kw_peak=float(params.get("kw_peak", getattr(_old, "kw_peak", 0.0))),
                     battery_kwh=float(params.get("battery_kwh", getattr(_old, "battery_kwh", 0.0))),
@@ -3298,6 +3302,7 @@ class ActionDispatcher:
                 _scfg_resp = {
                     "enabled": bool(getattr(solar_cfg, "enabled", False)) if solar_cfg else False,
                     "pv_meter_device_key": str(getattr(solar_cfg, "pv_meter_device_key", "") or "") if solar_cfg else "",
+                    "grid_meter_device_key": str(getattr(solar_cfg, "grid_meter_device_key", "") or "") if solar_cfg else "",
                     "feed_in_tariff": float(getattr(solar_cfg, "feed_in_tariff_eur_per_kwh", 0.082)) if solar_cfg else 0.082,
                     "kw_peak": float(getattr(solar_cfg, "kw_peak", 0.0) or 0.0) if solar_cfg else 0.0,
                     "battery_kwh": float(getattr(solar_cfg, "battery_kwh", 0.0) or 0.0) if solar_cfg else 0.0,
@@ -3306,7 +3311,11 @@ class ActionDispatcher:
                 if solar_cfg is None or not getattr(solar_cfg, "enabled", False):
                     return {"ok": True, "configured": False, "devices": _all_devs_s, "config": _scfg_resp}
                 pv_key = str(getattr(solar_cfg, "pv_meter_device_key", "") or "")
-                if not pv_key:
+                grid_key = str(getattr(solar_cfg, "grid_meter_device_key", "") or "")
+                # Signed net-meter source: prefer the dedicated PV meter, else fall
+                # back to a grid meter (+ = import/Netzbezug, − = export/Einspeisung).
+                signed_key = pv_key or grid_key
+                if not signed_key:
                     return {"ok": True, "configured": False, "devices": _all_devs_s, "config": _scfg_resp}
 
                 period_s = str(params.get("period") or "today").strip()
@@ -3341,7 +3350,7 @@ class ActionDispatcher:
                 feed_in_kwh = 0.0
                 grid_kwh = 0.0
                 try:
-                    pv_df = self.storage.db.query_hourly(pv_key, start_ts=start_ts3, end_ts=end_ts3)
+                    pv_df = self.storage.db.query_hourly(signed_key, start_ts=start_ts3, end_ts=end_ts3)
                     if pv_df is not None and not pv_df.empty and "kwh" in pv_df.columns:
                         kwh_col = pd.to_numeric(pv_df["kwh"], errors="coerce").fillna(0.0)
                         feed_in_kwh = float(kwh_col[kwh_col < 0].abs().sum())
@@ -3351,7 +3360,7 @@ class ActionDispatcher:
 
                 household_kwh = 0.0
                 for d in self.cfg.devices:
-                    if d.key == pv_key:
+                    if d.key == signed_key:
                         continue
                     household_kwh += _load_hourly_kwh(d.key)
 
@@ -3412,6 +3421,8 @@ class ActionDispatcher:
                     "co2_production_kg_per_kwp": round(co2_prod_per_kwp, 0),
                     "feed_in_tariff": round(feed_in_tariff, 4),
                     "pv_meter_device_key": pv_key,
+                    "grid_meter_device_key": grid_key,
+                    "signed_meter_device_key": signed_key,
                     "devices": _all_devices,
                 }
             except Exception as e:
@@ -3961,6 +3972,9 @@ class ActionDispatcher:
 
                 _solar_cfg = getattr(self.cfg, "solar", None)
                 _pv_key = getattr(_solar_cfg, "pv_meter_device_key", "") if _solar_cfg else ""
+                # Fall back to a signed grid meter when no dedicated PV meter is set.
+                _grid_key = getattr(_solar_cfg, "grid_meter_device_key", "") if _solar_cfg else ""
+                _pv_key = _pv_key or _grid_key
                 _pv_on = bool(getattr(_solar_cfg, "enabled", False)) if _solar_cfg else False
 
                 def _device_co2(start_ts_d, end_ts_d):
@@ -4350,7 +4364,6 @@ class ActionDispatcher:
                 k = alias.get(_norm(raw), raw)
                 if k and k not in dev_keys:
                     dev_keys.append(k)
-            dev_keys = dev_keys[:2]
 
             try:
                 self.storage.ensure_data_for_devices(
@@ -4360,7 +4373,7 @@ class ActionDispatcher:
                 pass
 
             if not dev_keys:
-                dev_keys = [d.key for d in self.cfg.devices[:2] if getattr(d, "key", None)]
+                dev_keys = [d.key for d in self.cfg.devices if getattr(d, "key", None)]
 
             start = None
             end = None
