@@ -329,7 +329,12 @@ class LiveStateStore:
         for k, arr in snap.items():
             if arr:
                 try:
-                    matches = list(_identify_appliance(arr[-1].power_total_w)[:3])
+                    # Identify from a short trailing median rather than the single
+                    # latest reading, so a jittery instantaneous power doesn't make
+                    # the appliance hints flicker on/off between polls.
+                    _recent = sorted(pt.power_total_w for pt in arr[-7:])
+                    _p_med = _recent[len(_recent) // 2]
+                    matches = list(_identify_appliance(_p_med)[:3])
                     # Boost confidence with ML-learned clusters
                     if _ml_clusters and matches:
                         for i, (sig, conf) in enumerate(matches):
@@ -337,9 +342,12 @@ class LiveStateStore:
                                 if cl.get("matched_appliance") == sig.id and cl.get("count", 0) >= 5:
                                     matches[i] = (sig, min(1.0, conf + 0.15))
                                     break
+                    # Drop low-confidence guesses so uncertain detections show
+                    # nothing steadily instead of appearing/disappearing.
                     appliances[k] = [
                         {"icon": sig.icon, "id": sig.id, "conf": conf}
                         for sig, conf in matches
+                        if conf >= 0.35
                     ]
                 except Exception:
                     appliances[k] = []
@@ -4203,9 +4211,15 @@ function drawSparkline(canvas, values, color, relMin) {{
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, W, H);
   if (!values || values.length < 2) return;
-  const max = Math.max(...values, 1);
-  const min = relMin ? Math.min(...values) * 0.98 : 0;
+  const dMax = Math.max(...values);
+  const dMin = Math.min(...values);
+  // Always keep 0 in view for absolute metrics (power etc.) so negative values
+  // — grid feed-in, battery discharge — are drawn below the baseline instead of
+  // being clipped at zero. relMin (voltage/frequency) keeps a tight window.
+  const max = relMin ? dMax * 1.02 : Math.max(dMax, 0);
+  const min = relMin ? dMin * 0.98 : Math.min(dMin, 0);
   const range = max - min || 1;
+  const zeroY = H - pad - ((0 - min) / range) * (H - pad*2);
   const pad = 4;
   const sx = (W - pad*2) / (values.length - 1);
   const cs = getComputedStyle(document.documentElement);
@@ -4217,11 +4231,17 @@ function drawSparkline(canvas, values, color, relMin) {{
     const y = H - pad - ((v - min) / range) * (H - pad*2);
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }});
-  ctx.lineTo(pad + (values.length-1)*sx, H - pad);
-  ctx.lineTo(pad, H - pad);
+  ctx.lineTo(pad + (values.length-1)*sx, zeroY);
+  ctx.lineTo(pad, zeroY);
   ctx.closePath();
   ctx.fillStyle = accent + '28';
   ctx.fill();
+  // Zero baseline when the series crosses zero (feed-in / discharge).
+  if (min < 0 && max > 0) {{
+    ctx.beginPath();
+    ctx.moveTo(pad, zeroY); ctx.lineTo(W - pad, zeroY);
+    ctx.strokeStyle = accent + '55'; ctx.lineWidth = 0.5; ctx.stroke();
+  }}
   // Line
   ctx.beginPath();
   values.forEach(function(v, i) {{

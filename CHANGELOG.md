@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.44.2
+### Fixed
+- **Live sparklines clipped negative values.** The per-device Live sparkline forced its lower bound to zero for the power metric, so negative readings — grid feed-in and battery discharge, now common with signed grid meters and the external battery source — were clipped at the baseline. The sparkline now keeps zero in view, draws negative values below a zero baseline, and shows a faint zero line when the series crosses zero.
+- **Live appliance (NILM) hints flickered.** The per-device appliance detection identified from the single latest power reading each poll, so a jittery instantaneous power made the hint chips appear and disappear between refreshes. Detection now uses a short trailing median of the recent power and drops low-confidence guesses, so an uncertain detection stays quiet instead of toggling.
+
 ## 16.44.1
 ### Fixed
 - **Battery status crashed once a battery device had data.** `get_battery_status` read the `timestamp` column from `query_samples` as a raw integer, but that query returns a pandas datetime, so building the SOC timeline raised `int() argument must be … not 'Timestamp'` (previously latent because no battery had samples; now reachable via the external PV/battery source). Timestamps are coerced from datetime to epoch seconds, so the SOC timeline and cycle detection work again.
