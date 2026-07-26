@@ -2749,7 +2749,16 @@ class ActionDispatcher:
                         _owner_load = max(0.0, float(_bd.get("total_load_kwh", 0.0))
                                           - float(_bd.get("tenant_load_kwh", 0.0)))
                         _net = float(_bd.get("net_cost_eur", 0.0))
-                        _eff_price[_rk] = max(0.0, _net / _owner_load) if _owner_load > 0 else _unit
+                        # Clamp to [0, full tariff]: self-consumed solar can only
+                        # ever make a kWh *cheaper* than the grid, never dearer.
+                        # This also keeps the price sane when the PV-production
+                        # history is still thin (supply-side load understated →
+                        # tiny denominator would otherwise explode the price); it
+                        # then degrades gracefully to the full tariff.
+                        if _owner_load > 0:
+                            _eff_price[_rk] = min(_unit, max(0.0, _net / _owner_load))
+                        else:
+                            _eff_price[_rk] = _unit
                     for dev_data in devices_out:
                         _k = dev_data["key"]
                         if _grid_dev_key and _k == _grid_dev_key:

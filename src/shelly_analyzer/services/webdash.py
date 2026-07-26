@@ -1457,7 +1457,9 @@ _HTML_TEMPLATE = """<!doctype html>
     .switch-btn:hover {{ background: var(--chipbg); }}
     .switch-btn:disabled {{ opacity: 0.5; cursor: wait; }}
     /* NILM chips */
-    .appl-list {{ display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }}
+    /* min-height reserves space for one chip row so the card frame does not
+       jump when the NILM appliance hint appears/disappears between polls. */
+    .appl-list {{ display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; min-height: 22px; }}
     .appl-chip {{
       font-size: 11px;
       background: rgba(106,167,255,0.10);
@@ -2350,7 +2352,7 @@ let currentPane = 'live';
 let _quietRefresh = false;
 let sparkData = {{}};   // key -> [{{"ts":..,"w":..,"v":..,"a":..,"phases":[...]}}]
 let cmpChart = null;
-let liveWindowSec = 60;
+let liveWindowSec = 7200;  // Live plots default to a 2 h window.
 const MAX_HIST_PTS = Math.ceil(7200000 / REFRESH_MS);
 
 /* ── Theme ── */
@@ -4034,7 +4036,9 @@ function devCardHTML(d) {{
     }});
     phaseHtml += '</dl>';
   }}
-  const nilm = d.appliances && d.appliances.length ? '<div class="appl-list">' + d.appliances.map(function(a) {{ return '<span class="appl-chip">' + esc(a.icon + ' ' + t('appliance.' + a.id + '.name', a.id)) + '</span>'; }}).join('') + '</div>' : '';
+  // Always render the container (even when empty) so its reserved min-height
+  // keeps the card frame stable when the NILM hint flickers on/off.
+  const nilm = '<div class="appl-list">' + ((d.appliances && d.appliances.length) ? d.appliances.map(function(a) {{ return '<span class="appl-chip">' + esc(a.icon + ' ' + t('appliance.' + a.id + '.name', a.id)) + '</span>'; }}).join('') : '') + '</div>';
   const inHtml = (d.i_n && d.i_n > 0.01) ? '<dl class="dev-kv" id="kv-in-' + d.key + '"><dt>I\u2099 (N)</dt><dd>' + fmt(d.i_n, 2, 'A') + '</dd></dl>' : '';
   const qHtml = '<dl class="dev-kv" id="kv-q-' + d.key + '"><dt>' + t('web.kv.var', 'Reactive power') + '</dt><dd>' + fmt(d.q_total_var || 0, 1, 'VAR') + '</dd></dl>';
   let balanceHtml = '';
@@ -4187,15 +4191,12 @@ function updateDeviceCard(card, d) {{
       }}
     }}
   }}
-  // Update appliance chips (outside expand)
+  // Update appliance chips in place — never add/remove the container, so the
+  // reserved min-height keeps the card height stable when the hint flickers.
   var applEl = card.querySelector('.appl-list');
-  if (d.appliances && d.appliances.length) {{
-    var newHtml = d.appliances.map(function(a) {{ return '<span class="appl-chip">' + esc(a.icon + ' ' + t('appliance.' + a.id + '.name', a.id)) + '</span>'; }}).join('');
-    if (applEl) {{ applEl.innerHTML = newHtml; }}
-    else {{ card.insertAdjacentHTML('beforeend', '<div class="appl-list">' + newHtml + '</div>'); }}
-  }} else if (applEl) {{
-    applEl.remove();
-  }}
+  var newHtml = (d.appliances && d.appliances.length) ? d.appliances.map(function(a) {{ return '<span class="appl-chip">' + esc(a.icon + ' ' + t('appliance.' + a.id + '.name', a.id)) + '</span>'; }}).join('') : '';
+  if (applEl) {{ applEl.innerHTML = newHtml; }}
+  else {{ card.insertAdjacentHTML('beforeend', '<div class="appl-list">' + newHtml + '</div>'); }}
 }}
 
 /* ──────────────────────────────────────────────
