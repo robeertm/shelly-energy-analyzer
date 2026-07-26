@@ -1,5 +1,12 @@
 # Changelog
 
+## 16.45.3
+### Fixed
+- **Solar-effective device cost could exceed the full tariff.** The effective €/kWh divided the net grid bill by the supply-side owner consumption; when the PV-production history is still thin (so the derived consumption is understated) — especially after subtracting a tenant load — the denominator became tiny and the price shot above the grid tariff. The effective price is now clamped to `[0, full tariff]`: self-consumed solar can only ever make a kWh cheaper than the grid, and the figure degrades gracefully to the full tariff until enough PV history has accumulated.
+- **Live device cards no longer jump when the appliance (NILM) hint flickers.** The appliance-hint row was added and removed from the card depending on whether a detection was present, resizing the card between polls. The row is now always present with a reserved height and only its contents change.
+### Changed
+- **Live plots default to a 2-hour window.** The Live view opened at a 1-minute window; it now defaults to 2 h (all zoom buttons still available).
+
 ## 16.45.2
 ### Changed
 - **Costs tab prices devices by their real cost after solar.** The per-device cost cards priced every kWh at the full grid tariff, which overstates the owner's real cost once PV/battery cover most of the consumption. With a balance available, owner devices are now priced at the **effective €/kWh after solar** = (net grid bill) ÷ (owner consumption); the grid-meter card shows its real **net position** (import cost − feed-in revenue); tenant circuits keep the full tariff. Each owner/grid card also shows the "without solar" full-tariff figure for comparison. Without a PV/grid source the classic full-tariff cards are unchanged.
