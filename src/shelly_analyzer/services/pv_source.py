@@ -116,6 +116,13 @@ class PvSourceService:
         self._mqtt_lock = threading.Lock()
         self._log_cb: Optional[Callable[[str], None]] = None
         self.last_error: Optional[str] = None
+        # Per-key previous sample (ts, power_w) for trapezoidal energy
+        # integration, and a per-key daily energy accumulator so the live tile
+        # can show a meaningful "today" figure and so the DB hourly rollup gets
+        # real interval energy (samples carry only instantaneous power).
+        self._prev_sample: Dict[str, tuple] = {}
+        self._day: Dict[str, Dict[str, Any]] = {}
+        self._acc_lock = threading.Lock()
 
     def set_log_callback(self, cb: Callable[[str], None]) -> None:
         self._log_cb = cb
@@ -199,21 +206,74 @@ class PvSourceService:
                       grid_w=grid_w, house_w=house_w, pv_today_kwh=pv_today)
 
         if pv_w is not None:
-            self._ingest(PV_KEY, ts, max(0.0, pv_w), kwh_today=pv_today, soc=None)
+            self._ingest(PV_KEY, "pv", ts, max(0.0, pv_w), kwh_today=pv_today, soc=None)
         if batt_w is not None:
-            self._ingest(BATTERY_KEY, ts, batt_w, kwh_today=None, soc=soc)
+            self._ingest(BATTERY_KEY, "battery", ts, batt_w, kwh_today=None, soc=soc)
         if grid_w is not None:
-            self._ingest(GRID_KEY, ts, grid_w, kwh_today=None, soc=None)
+            self._ingest(GRID_KEY, "grid", ts, grid_w, kwh_today=None, soc=None)
+
+    # ── energy accumulation ────────────────────────────────────────────
+    def _accumulate(self, key: str, role: str, ts: int, power_w: float) -> tuple:
+        """Integrate interval energy since the previous sample (trapezoidal,
+        capped like the DB ingest at 10 min so a gap can't inflate energy) and
+        roll it into a per-key daily accumulator.
+
+        Returns ``(energy_kwh_signed, kwh_today)`` where ``kwh_today`` is the
+        role-appropriate live-tile figure (PV → produced today, battery →
+        discharged today, grid → imported today).
+        """
+        energy_kwh = 0.0
+        with self._acc_lock:
+            prev = self._prev_sample.get(key)
+            self._prev_sample[key] = (int(ts), float(power_w))
+            if prev is not None:
+                dt = int(ts) - int(prev[0])
+                if 0 < dt <= 600:
+                    energy_kwh = ((float(power_w) + float(prev[1])) / 2.0) * (dt / 3600.0) / 1000.0
+
+            today = time.strftime("%Y-%m-%d", time.localtime(ts))
+            acc = self._day.get(key)
+            if acc is None or acc.get("date") != today:
+                acc = {"date": today, "charge": 0.0, "discharge": 0.0,
+                       "import": 0.0, "export": 0.0, "production": 0.0}
+                self._day[key] = acc
+            if energy_kwh > 0:
+                acc["charge"] += energy_kwh
+                acc["import"] += energy_kwh
+                acc["production"] += energy_kwh
+            elif energy_kwh < 0:
+                acc["discharge"] += -energy_kwh
+                acc["export"] += -energy_kwh
+
+            if role == "battery":
+                tile = acc["discharge"]
+            elif role == "grid":
+                tile = acc["import"]
+            else:  # pv
+                tile = acc["production"]
+        return energy_kwh, tile
+
+    def daily_energy(self) -> Dict[str, Dict[str, float]]:
+        """Snapshot of today's per-key energy accumulators (charge/discharge/
+        import/export/production, kWh). Empty until the poller has run."""
+        with self._acc_lock:
+            return {k: dict(v) for k, v in self._day.items()}
 
     # ── ingest into live store + DB ────────────────────────────────────
-    def _ingest(self, key: str, ts: int, power_w: float, kwh_today: Optional[float], soc: Optional[float]) -> None:
+    def _ingest(self, key: str, role: str, ts: int, power_w: float,
+                kwh_today: Optional[float], soc: Optional[float]) -> None:
+        energy_kwh, acc_today = self._accumulate(key, role, ts, power_w)
+        # PV "today": prefer the inverter's own cumulative counter when the user
+        # mapped one (kwh_today), else the integrated accumulator.
+        tile_kwh = float(kwh_today) if kwh_today is not None else float(acc_today)
+
         # 1) Live store (for the live view / power-flow).
         try:
             from shelly_analyzer.services.webdash import LivePoint
             lp = LivePoint(
                 ts=ts, power_total_w=float(power_w),
                 va=0.0, vb=0.0, vc=0.0, ia=0.0, ib=0.0, ic=0.0,
-                kwh_today=float(kwh_today) if kwh_today is not None else 0.0,
+                kwh_today=tile_kwh,
                 soc_pct=float(soc) if soc is not None else 0.0,
                 raw={"external": True},
             )
@@ -222,10 +282,18 @@ class PvSourceService:
             logger.debug("PV live-store update failed for %s: %s", key, e)
 
         # 2) Energy DB (samples + hourly rollup) — same path as Shelly data, so
-        #    every historical calculation picks it up automatically.
+        #    every historical calculation picks it up automatically. We supply the
+        #    integrated interval energy (signed: + charge/import, − discharge/
+        #    export); synthetic samples carry only instantaneous power and the
+        #    hourly rollup SUMs ``energy_kwh`` — without it every rollup is 0
+        #    (this is why the battery showed 0.000 kWh everywhere).
         try:
             import pandas as pd
-            df = pd.DataFrame([{"timestamp": int(ts), "total_power": float(power_w)}])
+            df = pd.DataFrame([{
+                "timestamp": int(ts),
+                "total_power": float(power_w),
+                "energy_kwh": float(energy_kwh),
+            }])
             self.storage.db.insert_dataframe(key, df)
         except Exception as e:
             logger.debug("PV DB insert failed for %s: %s", key, e)

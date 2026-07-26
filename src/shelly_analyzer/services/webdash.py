@@ -4586,6 +4586,43 @@ function renderCosts(data, el) {{
       metricCardHtml(t('web.costs.year', 'Year'), fmt(s.year_eur,2,'\u20ac'), fmt(s.year_kwh,3,'kWh')) +
       '</div></div>';
   }}
+  // \u2500\u2500 Energy balance (grid import / feed-in / self-consumption / tenant) \u2500\u2500
+  if (data.balance_present && data.balance) {{
+    var bcols = ['today','week','month','year'];
+    var bhead = [t('web.costs.today','Today'), t('web.costs.week','Week'), t('web.costs.month','Month'), t('web.costs.year','Year')];
+    var B = data.balance;
+    var anyTenant = bcols.some(function(k){{ return B[k] && B[k].tenant_load_kwh > 0; }});
+    function bcell(k, field, dec, unit) {{ var r = B[k]; return r && r[field] != null ? fmt(r[field], dec, unit) : '\u2013'; }}
+    function brow(label, field, dec, unit, cls) {{
+      var tds = bcols.map(function(k){{ return '<td style="text-align:right">' + bcell(k, field, dec, unit) + '</td>'; }}).join('');
+      return '<tr class="' + (cls||'') + '"><td>' + label + '</td>' + tds + '</tr>';
+    }}
+    var bh = '<div class="card" style="margin-bottom:10px"><div class="card-title">\u26a1 ' + t('web.costs.balance_title','Energy balance') + '</div>';
+    bh += '<div style="overflow-x:auto"><table class="data-table" style="width:100%"><thead><tr><th></th>';
+    bh += bhead.map(function(h){{ return '<th style="text-align:right">' + h + '</th>'; }}).join('') + '</tr></thead><tbody>';
+    bh += brow(t('web.costs.pv_production','PV production') + ' (kWh)', 'pv_production_kwh', 2, '');
+    bh += brow(t('web.costs.self_consumption','Self-consumption') + ' (kWh)', 'self_consumption_kwh', 2, '');
+    bh += brow(t('web.costs.grid_import','Grid import') + ' (kWh)', 'grid_import_kwh', 2, '');
+    bh += brow(t('web.costs.feed_in','Feed-in') + ' (kWh)', 'grid_export_kwh', 2, '');
+    var anyBatt = bcols.some(function(k){{ return B[k] && (B[k].battery_discharge_kwh > 0 || B[k].battery_charge_kwh > 0); }});
+    if (anyBatt) {{
+      bh += brow(t('web.costs.battery_out','Battery discharge') + ' (kWh)', 'battery_discharge_kwh', 2, '');
+    }}
+    bh += brow(t('web.costs.autarky','Self-sufficiency') + ' (%)', 'autarky_pct', 0, '');
+    bh += '<tr><td colspan="5" style="border-top:2px solid var(--border,#333);padding:2px"></td></tr>';
+    bh += brow('\u2192 ' + t('web.costs.grid_import','Grid import') + ' (\u20ac)', 'grid_import_eur', 2, '\u20ac');
+    bh += brow('\u2190 ' + t('web.costs.feed_in','Feed-in') + ' (\u20ac ' + t('web.costs.earned','earned') + ')', 'feed_in_revenue_eur', 2, '\u20ac', 'balance-earn');
+    bh += brow('\u2713 ' + t('web.costs.self_consumption','Self-consumption') + ' (\u20ac ' + t('web.costs.saved','saved') + ')', 'self_consumption_savings_eur', 2, '\u20ac', 'balance-earn');
+    bh += '<tr class="balance-net" style="font-weight:bold"><td>' + t('web.costs.net_cost','Net electricity cost') + ' (\u20ac)</td>' +
+          bcols.map(function(k){{ return '<td style="text-align:right">' + bcell(k,'net_cost_eur',2,'\u20ac') + '</td>'; }}).join('') + '</tr>';
+    if (anyTenant) {{
+      bh += brow(t('web.costs.tenant_billed','Tenant (billed)') + ' (\u20ac)', 'tenant_billed_eur', 2, '\u20ac');
+    }}
+    bh += '</tbody></table></div>';
+    bh += '<div class="dev-meta" style="margin-top:6px;opacity:.7">' + t('web.costs.feed_in','Feed-in') + ': ' + fmt((data.feed_in_tariff||0)*100, 2) + ' ct/kWh</div>';
+    bh += '</div>';
+    html += bh;
+  }}
   function spotSub(key, d) {{
     var v = d[key + '_spot_eur'];
     var f = d[key + '_eur'];
@@ -5560,6 +5597,25 @@ function renderCo2(data, el) {{
   html += metricCardHtml(t('web.co2.trees', 'Trees (eq.)'), (data.tree_days||0).toFixed(0) + ' ' + t('web.dash.tree_days', 'tree-days'), '🌳');
   html += metricCardHtml(t('web.co2.car', 'Car km avoided'), (data.car_km||0).toFixed(0) + ' km', '🚗');
   html += '</div></div>';
+
+  // ── Solar footprint & embodied CO₂ ──────────────────────────────────
+  // Solar power isn't zero-carbon: self-consumed PV and battery output carry
+  // the panels'/cells' *embodied* (manufacturing) emissions amortised over
+  // their output. We show that, plus the CO₂ solar avoided vs. the grid.
+  if (data.footprint_present && data.footprint && data.footprint.month) {{
+    var F = data.footprint.month;
+    var fp = '<div class="card" style="margin-top:8px"><div class="card-title">☀️ ' + t('web.co2.footprint_title','Solar footprint (this month)') + '</div>';
+    fp += '<div class="metric-grid">';
+    fp += metricCardHtml(t('web.co2.net_footprint','Net footprint'), fmt(F.net_kg,2,'kg'), (F.effective_intensity||0).toFixed(0) + ' g/kWh');
+    fp += metricCardHtml(t('web.co2.grid_operational','Grid (operational)'), fmt(F.grid_kg,2,'kg'), 'CO₂');
+    fp += metricCardHtml(t('web.co2.pv_embodied','PV embodied'), fmt(F.pv_embodied_kg,2,'kg'), (data.pv_embodied_g_per_kwh||0).toFixed(0) + ' g/kWh');
+    if (F.battery_embodied_kg > 0 || F.battery_discharge_kwh > 0) {{
+      fp += metricCardHtml(t('web.co2.battery_embodied','Storage embodied'), fmt(F.battery_embodied_kg,2,'kg'), (data.battery_embodied_g_per_kwh||0).toFixed(0) + ' g/kWh');
+    }}
+    fp += metricCardHtml('🌱 ' + t('web.co2.solar_saved','Avoided by solar'), fmt(F.solar_saved_kg,2,'kg'), t('web.costs.autarky','Self-sufficiency') + ' ' + (F.autarky_pct||0).toFixed(0) + '%');
+    fp += '</div></div>';
+    html += fp;
+  }}
 
   // ── Trend + Best/Worst + Renewables row ──
   const hourly = data.hourly || [];

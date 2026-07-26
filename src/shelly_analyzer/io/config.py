@@ -504,6 +504,14 @@ class SolarConfig:
     battery_kwh: float = 0.0
     # Embodied CO₂ of PV production in kg per kWp (lifecycle, default ~1000 kg/kWp for typical Si panels)
     co2_production_kg_per_kwp: float = 1000.0
+    # Lifecycle (embodied) CO₂ intensity of self-consumed PV energy, g/kWh.
+    # Solar power is not truly zero-carbon: manufacturing the panels emits CO₂
+    # amortised over the energy they produce. IPCC median for rooftop PV ≈ 41 g/kWh.
+    pv_embodied_g_per_kwh: float = 40.0
+    # Lifecycle (embodied) CO₂ intensity of battery-delivered energy, g/kWh.
+    # Manufacturing the storage emits CO₂ amortised over lifetime throughput.
+    # Typical Li-ion home storage ≈ 50–70 g/kWh discharged.
+    battery_embodied_g_per_kwh: float = 60.0
     # PV amortization: total investment cost in EUR
     investment_eur: float = 0.0
     # Year of PV installation (for amortization timeline)
@@ -1427,6 +1435,14 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
             solar_raw.get("co2_production_kg_per_kwp", SolarConfig.co2_production_kg_per_kwp),
             SolarConfig.co2_production_kg_per_kwp,
         ),
+        pv_embodied_g_per_kwh=_coerce_float(
+            solar_raw.get("pv_embodied_g_per_kwh", SolarConfig.pv_embodied_g_per_kwh),
+            SolarConfig.pv_embodied_g_per_kwh,
+        ),
+        battery_embodied_g_per_kwh=_coerce_float(
+            solar_raw.get("battery_embodied_g_per_kwh", SolarConfig.battery_embodied_g_per_kwh),
+            SolarConfig.battery_embodied_g_per_kwh,
+        ),
         investment_eur=_coerce_float(solar_raw.get("investment_eur", SolarConfig.investment_eur), SolarConfig.investment_eur),
         installation_year=_coerce_int(solar_raw.get("installation_year", SolarConfig.installation_year), SolarConfig.installation_year),
         degradation_pct=_coerce_float(solar_raw.get("degradation_pct", SolarConfig.degradation_pct), SolarConfig.degradation_pct),
@@ -2066,6 +2082,8 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "kw_peak": float(getattr(cfg.solar, "kw_peak", 0.0)),
             "battery_kwh": float(getattr(cfg.solar, "battery_kwh", 0.0)),
             "co2_production_kg_per_kwp": float(getattr(cfg.solar, "co2_production_kg_per_kwp", 1000.0)),
+            "pv_embodied_g_per_kwh": float(getattr(cfg.solar, "pv_embodied_g_per_kwh", 40.0)),
+            "battery_embodied_g_per_kwh": float(getattr(cfg.solar, "battery_embodied_g_per_kwh", 60.0)),
             "investment_eur": float(getattr(cfg.solar, "investment_eur", 0.0)),
             "installation_year": int(getattr(cfg.solar, "installation_year", 0)),
             "degradation_pct": float(getattr(cfg.solar, "degradation_pct", 0.5)),
