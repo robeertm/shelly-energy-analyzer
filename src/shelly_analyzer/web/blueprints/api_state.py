@@ -7,7 +7,19 @@ from typing import Any, Dict, List, Optional
 
 from flask import Blueprint, Response, current_app, jsonify, request
 
+from shelly_analyzer.i18n import t as _t
+
 bp = Blueprint("api_state", __name__)
+
+# Reserved synthetic devices from the external PV/battery source get a friendly
+# default label (else they'd show the raw key on the Live view).
+_SYNTH_KEYS = ("pv", "battery", "grid_ext")
+
+
+def _device_name(meta: Dict[str, Any], dkey: str, lang: str) -> str:
+    if not meta.get("name") and dkey in _SYNTH_KEYS:
+        return _t(lang, "live.synth." + dkey)
+    return str(meta.get("name") or dkey)
 
 
 def _get_state():
@@ -66,7 +78,7 @@ def api_state():
             continue
         latest: Dict[str, Any] = points[-1]
         meta = dev_meta_by_key.get(dkey, {})
-        name = str(meta.get("name") or dkey)
+        name = _device_name(meta, dkey, getattr(state, "lang", "en"))
 
         va = float(latest.get("va") or 0)
         vb = float(latest.get("vb") or 0)
@@ -118,6 +130,7 @@ def api_state():
             "power_w": float(latest.get("power_total_w") or 0),
             "today_kwh": float(latest.get("kwh_today") or 0),
             "cost_today": float(latest.get("cost_today") or 0),
+            "soc_pct": float(latest.get("soc_pct") or 0),
             "voltage_v": voltage_v,
             "current_a": current_a,
             "pf": float(latest.get("cosphi_total") or 0),
@@ -142,11 +155,12 @@ def api_state():
             continue
         devices_list.append({
             "key": k,
-            "name": str(m.get("name") or k),
+            "name": _device_name(m, k, getattr(state, "lang", "en")),
             "kind": str(m.get("kind") or "em"),
             "power_w": 0.0,
             "today_kwh": 0.0,
             "cost_today": 0.0,
+            "soc_pct": 0.0,
             "voltage_v": 0.0,
             "current_a": 0.0,
             "pf": 0.0,
