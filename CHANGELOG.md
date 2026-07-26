@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.45.1
+### Fixed
+- **CO₂ solar-footprint effective intensity was inconsistent.** The footprint's grid share reused the per-device operational CO₂ (which sums overlapping sub-meters) while the load came from the supply-side balance, so the effective intensity could read implausibly high. The footprint card is now derived entirely from the energy balance — grid import × grid intensity, minus a feed-in credit, plus the embodied CO₂ of self-consumed PV and battery output — over the same load basis, so the effective intensity is consistent.
+
 ## 16.45.0
 ### Added
 - **Solar-aware cost breakdown (Costs tab).** With a PV and/or grid source configured, the Costs tab now shows an **Energy balance** table across today / week / month / year: PV production, self-consumption, grid import, feed-in, battery discharge and self-sufficiency in kWh, and below them the money — grid drawn (€), feed-in earned (€), self-consumption saved (€), and the **net electricity cost** (grid drawn minus feed-in earned). A **tenant (billed)** line is shown when tenant sub-circuits are configured; tenant consumption is always priced at the full consumer tariff regardless of the owner's solar. Without a solar/grid source the tab is unchanged. The whole breakdown is derived generically from the configured grid meter, PV series, battery series and tenant device keys, so it works for any inverter/battery — Shelly-measured or bridged in via the external PV source.
