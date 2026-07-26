@@ -1417,6 +1417,7 @@ _HTML_TEMPLATE = """<!doctype html>
     .dev-name {{ font-size: 14px; font-weight: 700; flex: 1; min-width: 0; }}
     .dev-power {{ font-size: 26px; font-weight: 700; }}
     .dev-meta {{ font-size: 12px; color: var(--muted); margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }}
+    .soc-badge {{ color: #4caf50; font-weight: 600; }}
     .dev-expand {{ display: none; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }}
     .dev-expand.open {{ display: block; }}
     .dev-kv {{ display: grid; grid-template-columns: minmax(100px, auto) 1fr; gap: 4px 12px; font-size: 12px; }}
@@ -4058,6 +4059,7 @@ function devCardHTML(d) {{
         '<div class="dev-meta">' +
           '<span>' + fmt(d.today_kwh, 3) + ' kWh</span>' +
           (d.cost_today !== undefined ? '<span>' + fmt(d.cost_today, 2) + ' €</span>' : '') +
+          (d.soc_pct && d.soc_pct > 0 ? '<span class="soc-badge">🔋 ' + fmt(d.soc_pct, 0) + '%</span>' : '') +
         '</div>' +
       '</div>' +
       '<div class="dev-power ' + pc + '">' + fmt(d.power_w, 0) + ' W</div>' +
@@ -4114,6 +4116,12 @@ function updateDeviceCard(card, d) {{
     const spans = meta.querySelectorAll('span');
     if (spans[0]) spans[0].textContent = fmt(d.today_kwh, 3) + ' kWh';
     if (spans[1] && d.cost_today !== undefined) spans[1].textContent = fmt(d.cost_today, 2) + ' €';
+    // Battery state-of-charge badge (external battery source).
+    let socEl = meta.querySelector('.soc-badge');
+    if (d.soc_pct && d.soc_pct > 0) {{
+      if (!socEl) {{ socEl = document.createElement('span'); socEl.className = 'soc-badge'; meta.appendChild(socEl); }}
+      socEl.textContent = '🔋 ' + fmt(d.soc_pct, 0) + '%';
+    }} else if (socEl) {{ socEl.remove(); }}
   }}
   const buf = sparkData[d.key];
   // Main power sparkline
@@ -5185,7 +5193,8 @@ function renderHeatmapCalendar(data, el, unit) {{
   const calArr = data.calendar || [];
   const daily = {{}};
   calArr.forEach(function(item) {{ daily[item.date] = item.value; }});
-  const year = parseInt(document.getElementById('hm-year').value);
+  let year = parseInt(document.getElementById('hm-year').value);
+  if (!Number.isFinite(year)) year = new Date().getFullYear();  // guard: NaN → infinite loop below
   const start = new Date(year, 0, 1);
   while (start.getDay() !== 1) start.setDate(start.getDate() - 1);
   const vals = Object.values(daily).filter(function(v) {{ return v > 0; }});
@@ -6186,6 +6195,26 @@ function renderSolar(data, el) {{
       html += metricCardHtml(t('web.dash.co2_embodied', 'CO\u2082 embodied'), fmt(data.co2_embodied_kg,0,'kg'), '🏗️');
     }}
     html += '</div></div>';
+  }}
+
+  // Amortization (if an investment is configured)
+  var am = data.amortization;
+  if (am && am.investment_eur > 0) {{
+    html += '<div class="card" style="margin-top:8px"><div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">\U0001f4b6 ' + t('web.solar.amortization', 'Amortization') + '</div><div class="metric-grid">';
+    html += metricCardHtml(t('web.solar.investment', 'Investment'), fmt(am.investment_eur,0,'€'), '\U0001f3e6');
+    html += metricCardHtml(t('web.solar.annual_benefit', 'Benefit / yr'), fmt(am.annual_savings_eur,0,'€'), '↩️');
+    if (am.payback_years != null) {{
+      html += metricCardHtml(t('web.solar.payback', 'Payback'), fmt(am.payback_years,1) + ' ' + t('web.solar.years','yr'), '⏳');
+    }}
+    if (am.amortized_pct != null) {{
+      html += metricCardHtml(t('web.solar.amortized', 'Amortized'), fmt(am.amortized_pct,0,'%'), '✅');
+    }}
+    html += '</div>';
+    if (am.amortized_pct != null) {{
+      var _ap = Math.max(0, Math.min(100, am.amortized_pct));
+      html += '<div style="margin-top:8px;height:8px;border-radius:4px;background:var(--border,#333);overflow:hidden"><div style="height:100%;width:' + _ap + '%;background:#4caf50"></div></div>';
+    }}
+    html += '</div>';
   }}
 
   // Settings toggle at bottom
@@ -8900,11 +8929,11 @@ _loadLsSettings();
     const ml = {{charging:'Charging', discharging:'Discharging', idle:'Standby'}};
     el.innerHTML = '<div class="card" style="margin-bottom:10px"><div class="card-title">🔋 Battery storage</div>' +
       '<div class="metric-grid">' +
-      metricCardHtml('SOC', data.soc_pct.toFixed(0) + '%') +
-      metricCardHtml('Power', data.power_w.toFixed(0) + ' W') +
+      metricCardHtml('SOC', (data.soc_pct||0).toFixed(0) + '%') +
+      metricCardHtml('Power', (data.power_w||0).toFixed(0) + ' W') +
       metricCardHtml('Mode', ml[data.mode] || data.mode) +
       metricCardHtml('Cycles', data.cycle_count) +
-      metricCardHtml('Efficiency', data.avg_efficiency_pct.toFixed(1) + '%') +
+      metricCardHtml('Efficiency', (data.avg_efficiency_pct||0).toFixed(1) + '%') +
       '</div></div>';
   }}
 
@@ -8926,7 +8955,7 @@ _loadLsSettings();
     let html = '<div class="card" style="margin-bottom:10px;text-align:center">' +
       '<div class="card-title">🤖 ' + t('advisor.card_title','AI Energy Advisor') + '</div>' +
       '<div style="font-size:20px;font-weight:700;color:#4caf50;padding:8px 0">💰 ' +
-      data.total_savings_potential_eur.toFixed(0) + ' €/year savings potential</div></div>';
+      (data.total_savings_potential_eur||0).toFixed(0) + ' €/year savings potential</div></div>';
     if (data.llm_summary) {{
       html += '<div class="card" style="margin-bottom:10px"><div class="card-title">🤖 ' + t('web.advisor.llm_summary', 'AI summary') + '</div>' +
         '<div style="padding:4px 0">' + esc(data.llm_summary) + '</div></div>';
@@ -11343,6 +11372,11 @@ class _Handler(BaseHTTPRequestHandler):
                     latest: Dict[str, Any] = points[-1]
                     meta = dev_meta_by_key.get(dkey, {})
                     name = str(meta.get("name") or dkey)
+                    # Friendly default labels for the reserved synthetic devices
+                    # fed by the external PV/battery source (else they'd show the
+                    # raw key "pv"/"battery"/"grid_ext"). A user-set meta name wins.
+                    if not meta.get("name") and dkey in ("pv", "battery", "grid_ext"):
+                        name = _t(getattr(self.dashboard, "lang", "en"), "live.synth." + dkey)
                     va = float(latest.get("va") or 0)
                     vb = float(latest.get("vb") or 0)
                     vc = float(latest.get("vc") or 0)
@@ -11390,6 +11424,7 @@ class _Handler(BaseHTTPRequestHandler):
                         "power_w": float(latest.get("power_total_w") or 0),
                         "today_kwh": float(latest.get("kwh_today") or 0),
                         "cost_today": float(latest.get("cost_today") or 0),
+                        "soc_pct": float(latest.get("soc_pct") or 0),
                         "voltage_v": voltage_v,
                         "current_a": current_a,
                         "pf": float(latest.get("cosphi_total") or 0),

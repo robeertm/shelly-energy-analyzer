@@ -1,9 +1,70 @@
 from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
+
+import pandas as pd
 
 _log = logging.getLogger(__name__)
+
+_LOCAL_TZ = ZoneInfo("Europe/Berlin")
+
+
+def _household_hourly(db, cfg, start_ts: int, now: int) -> Tuple[List[float], List[int]]:
+    """Return (kwh_per_hour, hour_ts) of household grid consumption aggregated
+    per wall-clock hour across the primary consumption meters.
+
+    Sub-meters (devices with a ``parent``) and the configured grid meter are
+    excluded so a main meter and its sub-circuits are not double-counted; if that
+    leaves nothing, all EM devices are summed. Aggregating per hour (not per
+    device-hour) is what lets the annualisation and spot alignment be correct.
+    """
+    devices = [d for d in (getattr(cfg, "devices", []) or [])
+               if str(getattr(d, "kind", "em")) == "em"]
+    solar = getattr(cfg, "solar", None)
+    grid_key = ""
+    if solar:
+        grid_key = (str(getattr(solar, "grid_meter_device_key", "") or "")
+                    or str(getattr(solar, "pv_meter_device_key", "") or ""))
+    primary = [d for d in devices
+               if not str(getattr(d, "parent", "") or "") and d.key != grid_key]
+    if not primary:
+        primary = devices
+    by_hour: Dict[int, float] = {}
+    for dev in primary:
+        try:
+            df = db.query_hourly(dev.key, start_ts, now)
+        except Exception:
+            continue
+        if df is None or df.empty or "kwh" not in df.columns:
+            continue
+        for _h, _k in zip(df["hour_ts"], pd.to_numeric(df["kwh"], errors="coerce").fillna(0.0)):
+            k = float(_k)
+            if k > 0:
+                by_hour[int(_h)] = by_hour.get(int(_h), 0.0) + k
+    hts = sorted(by_hour.keys())
+    return [by_hour[h] for h in hts], hts
+
+
+def _hourly_spot_ct(db, cfg, hour_ts_list: List[int], start_ts: int, now: int) -> List[float]:
+    """Map each hour to its spot price (ct/kWh), averaging sub-hour slots."""
+    spot_by_hour: Dict[int, float] = {}
+    try:
+        zone = getattr(getattr(cfg, "spot_price", None), "bidding_zone", "DE-LU") or "DE-LU"
+        spot_df = db.query_spot_prices(zone, start_ts, now)
+        if spot_df is not None and not spot_df.empty:
+            acc: Dict[int, list] = {}
+            for _, r in spot_df.iterrows():
+                _hr = (int(r["slot_ts"]) // 3600) * 3600
+                acc.setdefault(_hr, []).append(float(r["price_eur_mwh"]) / 10.0)
+            spot_by_hour = {k: sum(v) / len(v) for k, v in acc.items()}
+    except Exception:
+        pass
+    # Fall back to the wholesale average (or 5 ct) for hours without a price.
+    _fallback = (sum(spot_by_hour.values()) / len(spot_by_hour)) if spot_by_hour else 5.0
+    return [spot_by_hour.get((h // 3600) * 3600, _fallback) for h in hour_ts_list]
 
 
 @dataclass
@@ -425,21 +486,11 @@ def _get_consumption_stats(db, cfg) -> Optional[Dict]:
     now = int(time.time())
     start_ts = now - 90 * 86400
     try:
-        total_kwh = 0.0
-        hours = 0
-        devices = cfg.devices if hasattr(cfg, 'devices') else []
-        for dev in devices:
-            if getattr(dev, 'kind', 'em') != 'em':
-                continue
-            try:
-                df = db.query_hourly(dev.key, start_ts, now)
-                if df is not None and not df.empty:
-                    total_kwh += float(df["kwh"].sum())
-                    hours += len(df)
-            except Exception:
-                pass
+        kwh_list, _hts = _household_hourly(db, cfg, start_ts, now)
+        hours = len(kwh_list)
         if hours <= 0:
             return None
+        total_kwh = float(sum(kwh_list))
         days = hours / 24
         annual_kwh = total_kwh * (8760 / hours)
         return {"total_kwh": total_kwh, "hours": hours, "days": days, "annual_kwh": annual_kwh}
@@ -462,43 +513,16 @@ def compare_tariffs(
     results: List[TariffResult] = []
 
     try:
-        # Collect hourly consumption across all devices
-        hourly_kwh: List[float] = []
-        hourly_hours: List[int] = []
-        hourly_spot_ct: List[float] = []
-
-        devices = cfg.devices if hasattr(cfg, 'devices') else []
-        for dev in devices:
-            if getattr(dev, 'kind', 'em') != 'em':
-                continue
-            try:
-                df = db.query_hourly(dev.key, start_ts, now)
-                if df is not None and not df.empty:
-                    for _, row in df.iterrows():
-                        h_ts = int(row.get("hour_ts", 0))
-                        kwh = float(row.get("kwh", 0) or 0)
-                        hourly_kwh.append(kwh)
-                        hourly_hours.append((h_ts % 86400) // 3600)
-            except Exception:
-                pass
-
+        # Household consumption aggregated per wall-clock hour (not per
+        # device-hour), with the hour-of-day taken in LOCAL time for TOU and the
+        # spot price aligned to each hour's actual epoch.
+        hourly_kwh, hour_ts_list = _household_hourly(db, cfg, start_ts, now)
         if not hourly_kwh:
             return []
-
-        # Get spot prices
-        try:
-            zone = getattr(cfg.spot_price, 'bidding_zone', 'DE-LU')
-            spot_df = db.query_spot_prices(zone, start_ts, now)
-            if spot_df is not None and not spot_df.empty:
-                spot_map: Dict[int, float] = {}
-                for _, r in spot_df.iterrows():
-                    spot_map[int(r["slot_ts"])] = float(r["price_eur_mwh"]) / 10.0  # to ct/kWh
-                # Fill spot prices per hour
-                hourly_spot_ct = [spot_map.get(h, 5.0) for h in range(len(hourly_kwh))]
-            else:
-                hourly_spot_ct = [5.0] * len(hourly_kwh)  # Default 5 ct/kWh wholesale
-        except Exception:
-            hourly_spot_ct = [5.0] * len(hourly_kwh)
+        hourly_hours: List[int] = [
+            datetime.fromtimestamp(h, tz=_LOCAL_TZ).hour for h in hour_ts_list
+        ]
+        hourly_spot_ct: List[float] = _hourly_spot_ct(db, cfg, hour_ts_list, start_ts, now)
 
         total_kwh = sum(hourly_kwh)
         hours = len(hourly_kwh)

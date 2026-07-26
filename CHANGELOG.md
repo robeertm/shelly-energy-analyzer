@@ -1,5 +1,24 @@
 # Changelog
 
+## 16.46.0
+A full correctness pass over the app. Highlights:
+
+### Fixed
+- **Data retention was completely broken.** The monthly-compression query contained doubled `%%` format specifiers, so `month_ts` evaluated to `NULL` and the `INSERT` failed silently — old data was never compressed and never deleted, so the database grew without bound and the monthly-aggregate path stayed empty. Fixed; retention now compresses and prunes as intended.
+- **Tariff comparison priced every dynamic tariff at a flat wholesale price.** The spot-price lookup used the row index instead of the hour's timestamp, so every dynamic/spot tariff (Tibber, aWATTar, Ostrom, …) was costed at a constant 5 ct/kWh regardless of the real price history. It now aligns each hour of consumption to its actual spot price.
+- **Tariff comparison under-counted annual consumption.** Annual kWh was extrapolated from *device-hours* rather than wall-clock hours, underestimating by roughly the number of meters (and double-counting a main meter against its sub-circuits). Consumption is now aggregated per wall-clock hour across the primary meters.
+- **CO₂ totals double-counted the grid meter against its sub-circuits** (grid + house + tenant), inflating the headline figures. Grid CO₂ is now taken from the grid meter alone when one is configured.
+- **Invoice / Excel / bundle exports silently processed only the first two devices.** All configured devices are now exported.
+- **Energy-flow (Sankey) over-supplied the house** when PV was measured but no signed grid meter was configured — grid import is now recomputed so the diagram balances.
+- **Spot-cost used the current calibration factor for all history** instead of the factor in effect at each timestamp; standby and time-of-use classification used UTC instead of local time; the report period label was off by one day; a tenant invoice could crash on an empty date range; and the live cost delta was priced at the fixed tariff even under a dynamic one. All fixed.
+- **Battery totals under-counted throughput** (only energy inside completed cycles was summed) and the state-of-charge curve drifted from an assumed 50 % start — throughput now covers the whole window and the curve is anchored to the measured SOC.
+- Hardened two front-end paths (calendar heatmap against a non-numeric year; battery/advisor cards against missing numeric fields).
+
+### Added
+- **PV amortization** (Solar tab) — estimates the annual benefit (self-consumption savings + feed-in revenue) from the last 12 months and shows the payback time and progress against the configured investment.
+- **Battery state-of-charge** now shows live on the device tile (🔋 badge) for the external battery source.
+- **Friendly names** for the external PV / battery / grid devices on the Live view (PV / Battery / Grid (ext.)) instead of the raw keys.
+
 ## 16.45.3
 ### Fixed
 - **Solar-effective device cost could exceed the full tariff.** The effective €/kWh divided the net grid bill by the supply-side owner consumption; when the PV-production history is still thin (so the derived consumption is understated) — especially after subtracting a tenant load — the denominator became tiny and the price shot above the grid tariff. The effective price is now clamped to `[0, full tariff]`: self-consumed solar can only ever make a kWh cheaper than the grid, and the figure degrades gracefully to the full tariff until enough PV history has accumulated.

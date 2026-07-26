@@ -9,9 +9,14 @@ import datetime
 import logging
 from dataclasses import dataclass, field
 from typing import List, Optional
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
+
+# Standby is a night-time base load, so the "night" window (and the hour-of-day
+# profile) must be evaluated in local time, not UTC.
+_TZ = ZoneInfo("Europe/Berlin")
 
 logger = logging.getLogger(__name__)
 
@@ -115,9 +120,9 @@ def analyze_standby(
         avg_power[nan_mask] = kwh_arr[nan_mask] * 1000.0
 
     if "hour_ts" in hourly.columns:
-        hours = pd.to_datetime(hourly["hour_ts"], unit="s", utc=True)
+        hours = pd.to_datetime(hourly["hour_ts"], unit="s", utc=True).dt.tz_convert(_TZ)
     else:
-        hours = pd.Series(pd.date_range(start="2020-01-01", periods=len(hourly), freq="h", tz="UTC"))
+        hours = pd.Series(pd.date_range(start="2020-01-01", periods=len(hourly), freq="h", tz="UTC")).dt.tz_convert(_TZ)
 
     # Remove remaining NaN
     valid = ~np.isnan(avg_power)
@@ -131,8 +136,8 @@ def analyze_standby(
     # Base load: 10th percentile of hourly power (robust against spikes)
     base_load = float(np.percentile(avg_power, 10))
 
-    # Night median (00:00-05:00)
-    night_mask = hours.hour.isin([0, 1, 2, 3, 4])
+    # Night median (00:00-05:00 local)
+    night_mask = hours.dt.hour.isin([0, 1, 2, 3, 4])
     if night_mask.sum() > 5:
         night_median = float(np.median(avg_power[night_mask]))
     else:
@@ -151,7 +156,7 @@ def analyze_standby(
     annual_standby_cost = annual_standby_kwh * price_eur_per_kwh
 
     # Hourly profile
-    hour_of_day = hours.hour
+    hour_of_day = hours.dt.hour
     hourly_profile = [0.0] * 24
     for h in range(24):
         mask = hour_of_day == h
@@ -225,7 +230,13 @@ def analyze_standby_from_df(
             return None
 
         kwh_arr = pd.to_numeric(df.get("energy_kwh", pd.Series(avg_power / 1000.0)), errors="coerce").fillna(0).values.astype(float)
-        hours = df["timestamp"]
+        # Stored timestamps are tz-naive UTC → localize for night/hour buckets.
+        _h = pd.to_datetime(df["timestamp"], errors="coerce")
+        try:
+            _h = _h.dt.tz_localize("UTC") if _h.dt.tz is None else _h.dt.tz_convert("UTC")
+            hours = _h.dt.tz_convert(_TZ)
+        except Exception:
+            hours = df["timestamp"]
 
         valid = ~np.isnan(avg_power) & (avg_power >= 0)
         if valid.sum() < 6:

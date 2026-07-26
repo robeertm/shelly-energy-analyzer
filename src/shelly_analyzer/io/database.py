@@ -1072,7 +1072,7 @@ class EnergyDB:
         agg_sql = """
             SELECT
                 -- First day of month as Unix ts
-                CAST(strftime('%%s', strftime('%%Y-%%m-01', timestamp, 'unixepoch')) AS INTEGER) AS month_ts,
+                CAST(strftime('%s', strftime('%Y-%m-01', timestamp, 'unixepoch')) AS INTEGER) AS month_ts,
                 COALESCE(SUM(energy_kwh), 0) AS kwh,
                 AVG(total_power) AS avg_power_w,
                 MAX(total_power) AS max_power_w,
@@ -1549,9 +1549,14 @@ class EnergyDB:
                     f"{_dev} GROUP BY (timestamp / 900) * 900 ORDER BY slot_ts",
                     conn, params=_ep,
                 )
-                _cf = self._comp_factor(device_key)
-                if _cf != 1.0 and not df_e.empty:
-                    df_e["kwh"] = pd.to_numeric(df_e["kwh"], errors="coerce") * _cf
+                # Per-row compensation: use the factor that was in effect at each
+                # slot's timestamp (the dated step function), not just today's
+                # factor — otherwise historical spot costs disagree with History/
+                # invoices once a device has a dated calibration history.
+                if not df_e.empty:
+                    _cfs = self._comp_factor_series(device_key, df_e["slot_ts"])
+                    if _cfs is not None:
+                        df_e["kwh"] = pd.to_numeric(df_e["kwh"], errors="coerce") * _cfs
                 df_sp = pd.read_sql_query(
                     "SELECT slot_ts, price_eur_mwh FROM spot_prices "
                     "WHERE zone = ? AND slot_ts >= ? AND slot_ts < ? ORDER BY slot_ts",
@@ -1579,9 +1584,9 @@ class EnergyDB:
             )
             if df_h.empty:
                 return 0.0, 0.0, 0.0
-            _cf = self._comp_factor(device_key)
-            if _cf != 1.0:
-                df_h["kwh"] = pd.to_numeric(df_h["kwh"], errors="coerce") * _cf
+            _cfs = self._comp_factor_series(device_key, df_h["hour_ts"])
+            if _cfs is not None:
+                df_h["kwh"] = pd.to_numeric(df_h["kwh"], errors="coerce") * _cfs
 
             # For spot prices, average 15-min slots per hour for joining
             df_sp = pd.read_sql_query(
