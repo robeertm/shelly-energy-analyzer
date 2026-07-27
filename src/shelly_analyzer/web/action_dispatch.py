@@ -4637,12 +4637,32 @@ class ActionDispatcher:
                                        else ("discharging" if status.power_w < -50 else "idle"))
                 except Exception:
                     pass
+                # Today's charge/discharge from the external source's daily
+                # accumulators (kWh in/out since local midnight).
+                _today_in = _today_out = 0.0
+                try:
+                    from shelly_analyzer.services.pv_source import daily_readings
+                    _bd = (daily_readings() or {}).get("battery") or {}
+                    _today_in = round(float(_bd.get("charge", 0.0) or 0.0), 3)
+                    _today_out = round(float(_bd.get("discharge", 0.0) or 0.0), 3)
+                except Exception:
+                    pass
+                _cap = float(status.capacity_kwh or 0.0)
+                _stored = round(_cap * (status.soc_pct or 0.0) / 100.0, 2) if _cap > 0 else 0.0
                 return {"ok": True, "data": {
                     "soc_pct": status.soc_pct, "power_w": status.power_w,
                     "mode": status.mode, "cycle_count": status.cycle_count,
+                    "equivalent_cycles": status.equivalent_cycles,
                     "total_charged_kwh": status.total_charged_kwh,
                     "total_discharged_kwh": status.total_discharged_kwh,
+                    "today_charged_kwh": _today_in,
+                    "today_discharged_kwh": _today_out,
                     "avg_efficiency_pct": status.avg_efficiency_pct,
+                    "efficiency_measured": status.efficiency_measured,
+                    "capacity_kwh": status.capacity_kwh,
+                    "stored_kwh": _stored,
+                    "window_days": 7,
+                    "soc_timeline": status.soc_timeline,
                     "soc_source": _soc_source,
                 }}
             except Exception as e:
