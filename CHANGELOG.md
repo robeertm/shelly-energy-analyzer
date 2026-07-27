@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.46.7
+### Fixed
+- **NILM appliance hints no longer reappear on PV / battery tiles.** The live-poll updater re-created the appliance-chip container on every refresh even for flow devices, undoing the hide applied at first render. Flow devices (PV, battery) now stay free of NILM hints on live updates too.
+
 ## 16.46.6
 ### Added
 - **Battery Live tile shows energy IN and OUT today separately** — charged today (green ↓) and discharged today (red ↑), instead of a single direction figure.
