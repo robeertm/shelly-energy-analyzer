@@ -70,8 +70,10 @@ def api_state():
     try:
         _solar = getattr(getattr(state, "cfg", None), "solar", None)
         grid_key = str(getattr(_solar, "grid_meter_device_key", "") or "")
+        grid_display_key = str(getattr(_solar, "grid_display_device_key", "") or "")
     except Exception:
         grid_key = ""
+        grid_display_key = ""
     try:
         from shelly_analyzer.services.pv_source import (
             daily_readings, PV_KEY, BATTERY_KEY, GRID_KEY)
@@ -79,12 +81,21 @@ def api_state():
     except Exception:
         _daily, PV_KEY, BATTERY_KEY, GRID_KEY = {}, "pv", "battery", "grid_ext"
 
+    # Which device the live view shows (and colours) as the grid tile. Defaults
+    # to the cost meter, but can be a different device — e.g. the cost is derived
+    # from the accurate external "grid_ext" (EMMA) while the familiar Shelly grid
+    # meter stays the visible coloured "Netz" tile.
+    grid_display = grid_display_key or grid_key
+    # The external "grid_ext" series is a COST-ONLY source when it isn't the
+    # display grid — hide its (redundant) tile from the live view.
+    grid_ext_hidden = (GRID_KEY != grid_display)
+
     def _flow_role(k: str):
         if k == PV_KEY:
             return "pv"
         if k == BATTERY_KEY:
             return "battery"
-        if k == GRID_KEY or (grid_key and k == grid_key):
+        if grid_display and k == grid_display:
             return "grid"
         return None
 
@@ -99,6 +110,10 @@ def api_state():
     devices_list: List[Dict[str, Any]] = []
     for dkey, points in raw_snap.items():
         if dkey.startswith("_") or not isinstance(points, list) or not points:
+            continue
+        # Hide the cost-only external grid series so the live view doesn't show a
+        # second, redundant "Netz" tile next to the real grid meter.
+        if grid_ext_hidden and dkey == GRID_KEY:
             continue
         latest: Dict[str, Any] = points[-1]
         meta = dev_meta_by_key.get(dkey, {})
