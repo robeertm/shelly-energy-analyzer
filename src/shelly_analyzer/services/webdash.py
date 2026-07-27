@@ -3772,7 +3772,7 @@ async function loadHistory() {{
         const buf = sparkData[key];
         if (!buf || !buf.length) continue;
         const sp = document.getElementById('sp-' + key);
-        if (sp) drawSparkline(sp, wndVals(buf, 'w'));
+        if (sp) drawSparkline(sp, wndVals(buf, 'w'), null, false, key === 'battery');
         const spv = document.getElementById('sp-v-' + key);
         if (spv) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true);
         const spa = document.getElementById('sp-a-' + key);
@@ -4126,7 +4126,7 @@ function updateDeviceCard(card, d) {{
   const buf = sparkData[d.key];
   // Main power sparkline
   const sp = document.getElementById('sp-' + d.key);
-  if (sp && buf) drawSparkline(sp, wndVals(buf, 'w'));
+  if (sp && buf) drawSparkline(sp, wndVals(buf, 'w'), null, false, d.key === 'battery');
   // Voltage sparkline (relative scale so variation is visible)
   const spv = document.getElementById('sp-v-' + d.key);
   if (spv && buf) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true);
@@ -4210,7 +4210,7 @@ function updateDeviceCard(card, d) {{
 /* ──────────────────────────────────────────────
    SPARKLINE
 ────────────────────────────────────────────── */
-function drawSparkline(canvas, values, color, relMin) {{
+function drawSparkline(canvas, values, color, relMin, signColor) {{
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.offsetWidth || 200;
   const H = canvas.offsetHeight || 56;
@@ -4233,12 +4233,43 @@ function drawSparkline(canvas, values, color, relMin) {{
   const zeroY = H - pad - ((0 - min) / range) * (H - pad*2);
   const cs = getComputedStyle(document.documentElement);
   const accent = color || cs.getPropertyValue('--accent').trim() || '#2563eb';
+  const _y = function(v) {{ return H - pad - ((v - min) / range) * (H - pad*2); }};
+
+  // signColor: colour by sign — green where the series is ≥ 0 (battery
+  // charging), red where < 0 (discharging). Green fill above the zero line,
+  // red fill below, and the line drawn per segment.
+  if (signColor) {{
+    const GREEN = '#22c55e', RED = '#ef4444';
+    // area path
+    ctx.beginPath();
+    values.forEach(function(v, i) {{ const x = pad + i*sx; i===0 ? ctx.moveTo(x,_y(v)) : ctx.lineTo(x,_y(v)); }});
+    ctx.lineTo(pad + (values.length-1)*sx, zeroY);
+    ctx.lineTo(pad, zeroY);
+    ctx.closePath();
+    ctx.save(); ctx.clip();
+    ctx.fillStyle = GREEN + '28'; ctx.fillRect(0, 0, W, zeroY);      // above zero
+    ctx.fillStyle = RED + '28';   ctx.fillRect(0, zeroY, W, H-zeroY); // below zero
+    ctx.restore();
+    // zero baseline
+    ctx.beginPath(); ctx.moveTo(pad, zeroY); ctx.lineTo(W - pad, zeroY);
+    ctx.strokeStyle = '#88888855'; ctx.lineWidth = 0.5; ctx.stroke();
+    // line, per-segment coloured by the segment's mean sign
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < values.length - 1; i++) {{
+      ctx.beginPath();
+      ctx.moveTo(pad + i*sx, _y(values[i]));
+      ctx.lineTo(pad + (i+1)*sx, _y(values[i+1]));
+      ctx.strokeStyle = ((values[i] + values[i+1]) / 2 >= 0) ? GREEN : RED;
+      ctx.stroke();
+    }}
+    return;
+  }}
+
   // Fill
   ctx.beginPath();
   values.forEach(function(v, i) {{
     const x = pad + i * sx;
-    const y = H - pad - ((v - min) / range) * (H - pad*2);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    i === 0 ? ctx.moveTo(x, _y(v)) : ctx.lineTo(x, _y(v));
   }});
   ctx.lineTo(pad + (values.length-1)*sx, zeroY);
   ctx.lineTo(pad, zeroY);
@@ -4255,8 +4286,7 @@ function drawSparkline(canvas, values, color, relMin) {{
   ctx.beginPath();
   values.forEach(function(v, i) {{
     const x = pad + i * sx;
-    const y = H - pad - ((v - min) / range) * (H - pad*2);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    i === 0 ? ctx.moveTo(x, _y(v)) : ctx.lineTo(x, _y(v));
   }});
   ctx.strokeStyle = accent;
   ctx.lineWidth = 1.5;
