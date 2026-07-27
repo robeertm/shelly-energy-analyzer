@@ -1,6 +1,9 @@
 # Changelog
 
-## 16.47.0
+## 16.48.0
+### Changed
+- **Grid (Netz) tile and plot are now signed.** Feed-in shows as a NEGATIVE value in green, grid draw as a POSITIVE value in red; the live plot draws feed-in below the zero line (green) and draw above it (red). PV and battery tiles keep showing magnitude with direction conveyed by colour.
+- **Removed manual reload buttons; everything auto-refreshes.** The Heatmap ↻, EV ↻ and Sync-status refresh buttons are gone: Heatmap selectors now apply on change and the tab auto-refreshes, the EV tab already auto-refreshed, and the Sync device/last-sync panel now refreshes itself every 5 s.
 ### Fixed
 - **Grid feed-in / export is now recorded (was structurally always 0).** For a bidirectional grid meter the stored per-interval energy was import-only — the per-phase export counters (`*_total_act_ret_energy`) were persisted but never subtracted — so hourly energy could never go negative and every feed-in figure was stuck at 0. Energy is now signed net (import − export) at both computation sites (`core/energy.py` live/sync path and `io/database.py` CSV path). Consumption-only meters have no export counters, so their values are unchanged.
 - **Feed-in, revenue, CO₂ export credit, self-consumption and autarky are now correct** on the Solar / Cost / CO₂ tabs, which all derive feed-in from negative grid energy. Autarky is now computed directly from grid import (independent of the self-consumption override) so the two figures can no longer contradict each other.
