@@ -491,6 +491,12 @@ class SolarConfig:
     # analyzer can derive feed-in and grid-import from this single meter even if
     # there is no dedicated PV-production CT. Empty = disabled.
     grid_meter_device_key: str = ""
+    # Optional: which device the LIVE view shows (and colours green/red) as the
+    # grid tile. Decouples display from the cost meter: e.g. cost derived from
+    # the accurate external EMMA series ("grid_ext") while the familiar Shelly
+    # grid meter stays the visible, coloured "Netz" tile. Empty = use
+    # grid_meter_device_key for display too.
+    grid_display_device_key: str = ""
     # Optional: key of the device carrying *PV production* power/energy (always
     # ≥ 0). Usually the synthetic "pv" device fed by an external PV source (see
     # PvSourceConfig). When set and it has data, the analyzer uses the measured
@@ -1424,6 +1430,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         enabled=bool(solar_raw.get("enabled", SolarConfig.enabled)),
         pv_meter_device_key=str(solar_raw.get("pv_meter_device_key", SolarConfig.pv_meter_device_key) or ""),
         grid_meter_device_key=str(solar_raw.get("grid_meter_device_key", SolarConfig.grid_meter_device_key) or ""),
+        grid_display_device_key=str(solar_raw.get("grid_display_device_key", SolarConfig.grid_display_device_key) or ""),
         pv_production_device_key=str(solar_raw.get("pv_production_device_key", SolarConfig.pv_production_device_key) or ""),
         feed_in_tariff_eur_per_kwh=_coerce_float(
             solar_raw.get("feed_in_tariff_eur_per_kwh", SolarConfig.feed_in_tariff_eur_per_kwh),
@@ -2077,6 +2084,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "enabled": bool(getattr(cfg.solar, "enabled", False)),
             "pv_meter_device_key": str(getattr(cfg.solar, "pv_meter_device_key", "") or ""),
             "grid_meter_device_key": str(getattr(cfg.solar, "grid_meter_device_key", "") or ""),
+            "grid_display_device_key": str(getattr(cfg.solar, "grid_display_device_key", "") or ""),
             "pv_production_device_key": str(getattr(cfg.solar, "pv_production_device_key", "") or ""),
             "feed_in_tariff_eur_per_kwh": float(getattr(cfg.solar, "feed_in_tariff_eur_per_kwh", 0.082)),
             "kw_peak": float(getattr(cfg.solar, "kw_peak", 0.0)),

@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.50.2
+### Added
+- **Grid display can be decoupled from the grid cost meter** (`solar.grid_display_device_key`). This lets the cost/energy figures be derived from an accurate external grid series (e.g. EMMA `grid_ext`) while the familiar physical grid meter stays the visible, colour-coded "Netz" tile in the Live view — and the redundant cost-only series is hidden from the tiles.
+
 ## 16.50.1
 ### Fixed
 - **Battery tab showed raw HTML** in the Power / charged / discharged / efficiency cards (the value passed to the metric card was HTML but metric values are always escaped). These now render as coloured values via a raw-HTML card helper.
