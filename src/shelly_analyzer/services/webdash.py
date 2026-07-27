@@ -7780,6 +7780,7 @@ function _drawSankeyFlow(canvasId, d) {{
   const sources = [];
   const consumers = [];
   const feedIn = [];
+  let battCharge = 0;  // PV → Battery (stored, not a house consumer nor export)
   linkSrc.forEach(function(s, i) {{
     if (linkTgt[i] === houseIdx && linkVal[i] > 0.001) {{
       sources.push({{ name: nodeLabels[s], kwh: linkVal[i], color: nodeColors[s] || '#e53935' }});
@@ -7792,11 +7793,13 @@ function _drawSankeyFlow(canvasId, d) {{
         consumers.push({{ name: tName, kwh: linkVal[i], color: nodeColors[linkTgt[i]] || '#3498db' }});
       }}
     }}
-    // PV → Feed-in (not through house)
+    // Source → non-house sink (PV → Feed-in, PV → Battery)
     if (s !== houseIdx && linkTgt[i] !== houseIdx && linkVal[i] > 0.001) {{
       const tName = nodeLabels[linkTgt[i]];
       if (tName === 'Feed-in') {{
         feedIn.push({{ name: tName, kwh: linkVal[i], color: nodeColors[linkTgt[i]] || '#43A047' }});
+      }} else if (tName === 'Battery') {{
+        battCharge += linkVal[i];
       }}
     }}
   }});
@@ -7804,7 +7807,11 @@ function _drawSankeyFlow(canvasId, d) {{
   consumers.sort(function(a, b) {{ return b.kwh - a.kwh; }});
   const topConsumers = consumers.slice(0, 10);
 
-  const total = Math.max(d.total_consumption_kwh || 0.01, 0.01);
+  // Scale so no bar overflows: use the largest of the source sum, the consumer
+  // sum, and the total-consumption figure (was total_consumption only, which
+  // let PV/feed-in overflow the frame).
+  const _sum = function(arr) {{ return arr.reduce(function(a, x) {{ return a + x.kwh; }}, 0); }};
+  const total = Math.max(_sum(sources), _sum(consumers), d.total_consumption_kwh || 0, 0.01);
 
   // Layout constants (in pixels)
   const PAD_X = 10, PAD_Y = 30;
@@ -7927,13 +7934,17 @@ function _drawSankeyFlow(canvasId, d) {{
     yCursor += h + GAP;
   }}
 
-  // --- Feed-in label ---
-  if (feedIn.length && feedIn[0].kwh > 0.001) {{
-    ctx.fillStyle = '#43A047';
-    ctx.font = 'bold 10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Feed-in: ' + feedIn[0].kwh.toFixed(2) + ' kWh', HOUSE_X + HOUSE_W / 2, BOT + 12);
-  }}
+  // --- Feed-in / battery-charge labels ---
+  const _feedTotal = _sum(feedIn);
+  const _labels = [];
+  if (_feedTotal > 0.001) _labels.push({{txt: '⚡ Einspeisung: ' + _feedTotal.toFixed(2) + ' kWh', col: '#43A047'}});
+  if (battCharge > 0.001) _labels.push({{txt: '🔋 Batterie geladen: ' + battCharge.toFixed(2) + ' kWh', col: '#8e44ad'}});
+  ctx.font = 'bold 10px sans-serif';
+  ctx.textAlign = 'center';
+  _labels.forEach(function(lb, i) {{
+    ctx.fillStyle = lb.col;
+    ctx.fillText(lb.txt, HOUSE_X + HOUSE_W / 2, BOT + 12 + i * 13);
+  }});
 
   // --- Flow bands: Sources → House ---
   let hBandY = houseCy - houseH / 2;
@@ -9009,15 +9020,73 @@ _loadLsSettings();
     }}
   }}
   function renderBattery(data, el) {{
-    const ml = {{charging:'Charging', discharging:'Discharging', idle:'Standby'}};
-    el.innerHTML = '<div class="card" style="margin-bottom:10px"><div class="card-title">🔋 Battery storage</div>' +
+    const ml = {{charging:'Laden', discharging:'Entladen', idle:'Bereitschaft'}};
+    const soc = data.soc_pct || 0;
+    const pw = data.power_w || 0;
+    const cap = data.capacity_kwh || 0;
+    const stored = data.stored_kwh || 0;
+    const days = data.window_days || 7;
+    const srcBadge = (data.soc_source === 'measured')
+      ? '<span class="badge badge-green">gemessen</span>'
+      : '<span class="badge badge-yellow">geschätzt</span>';
+    // Power tile: charge green, discharge red, idle neutral.
+    const pwCol = pw > 50 ? '#22c55e' : (pw < -50 ? '#ef4444' : '');
+    // ETA to full (charging) / empty (discharging).
+    let eta = '—';
+    if (cap > 0) {{
+      if (pw > 50) {{ const h = (cap - stored) / (pw/1000.0); if (h > 0 && h < 999) eta = 'voll in ' + _fmtDur(h); }}
+      else if (pw < -50) {{ const h = stored / (Math.abs(pw)/1000.0); if (h > 0 && h < 999) eta = 'leer in ' + _fmtDur(h); }}
+    }}
+    const effTxt = (data.avg_efficiency_pct||0).toFixed(1) + '%' +
+      (data.efficiency_measured ? '' : ' <span style="font-size:10px;color:var(--muted)">(nominal)</span>');
+
+    let html = '<div class="card" style="margin-bottom:10px">' +
+      '<div class="card-title">🔋 Batteriespeicher ' + srcBadge + '</div>' +
       '<div class="metric-grid">' +
-      metricCardHtml('SOC', (data.soc_pct||0).toFixed(0) + '%') +
-      metricCardHtml('Power', (data.power_w||0).toFixed(0) + ' W') +
-      metricCardHtml('Mode', ml[data.mode] || data.mode) +
-      metricCardHtml('Cycles', data.cycle_count) +
-      metricCardHtml('Efficiency', (data.avg_efficiency_pct||0).toFixed(1) + '%') +
+      metricCardHtml('Ladestand', soc.toFixed(0) + '%') +
+      metricCardHtml('Gespeichert', (cap > 0 ? stored.toFixed(1) + ' / ' + cap.toFixed(1) + ' kWh' : '—')) +
+      metricCardHtml('Leistung', '<span style="color:' + pwCol + '">' + fmt(Math.abs(pw),0) + ' W</span>') +
+      metricCardHtml('Status', ml[data.mode] || data.mode) +
+      metricCardHtml('Prognose', eta) +
       '</div></div>';
+
+    // SOC history chart
+    const tl = data.soc_timeline || [];
+    if (tl.length > 1) {{
+      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">Ladestand-Verlauf (' + days + ' Tage)</div>' +
+        '<canvas id="bat-soc-spark" class="bar-chart" style="height:120px"></canvas></div>';
+    }}
+
+    // Today in/out
+    html += '<div class="card" style="margin-bottom:10px"><div class="card-title">Heute</div>' +
+      '<div class="metric-grid">' +
+      metricCardHtml('Geladen', '<span style="color:#22c55e">↓ ' + (data.today_charged_kwh||0).toFixed(2) + ' kWh</span>') +
+      metricCardHtml('Entladen', '<span style="color:#ef4444">↑ ' + (data.today_discharged_kwh||0).toFixed(2) + ' kWh</span>') +
+      '</div></div>';
+
+    // Window totals + cycles + efficiency
+    html += '<div class="card"><div class="card-title">Zeitraum (' + days + ' Tage)</div>' +
+      '<div class="metric-grid">' +
+      metricCardHtml('Geladen', (data.total_charged_kwh||0).toFixed(2) + ' kWh') +
+      metricCardHtml('Entladen', (data.total_discharged_kwh||0).toFixed(2) + ' kWh') +
+      metricCardHtml('Vollzyklen', (data.equivalent_cycles!=null ? data.equivalent_cycles.toFixed(2) : data.cycle_count)) +
+      metricCardHtml('Wirkungsgrad', effTxt) +
+      '</div></div>';
+
+    el.innerHTML = html;
+
+    // Draw SOC sparkline after the canvas is in the DOM.
+    if (tl.length > 1) {{
+      const cv = document.getElementById('bat-soc-spark');
+      if (cv) {{ drawSparkline(cv, tl.map(function(p){{ return p[1]; }}), '#3b82f6', true, false, null); }}
+    }}
+  }}
+
+  // Format a duration in hours as "Xh Ym" / "Ym".
+  function _fmtDur(h) {{
+    const totalMin = Math.round(h * 60);
+    const hh = Math.floor(totalMin / 60), mm = totalMin % 60;
+    return hh > 0 ? (hh + 'h ' + mm + 'm') : (mm + 'm');
   }}
 
   /* ── AI Advisor ── */

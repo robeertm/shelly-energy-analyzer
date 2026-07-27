@@ -23,9 +23,12 @@ class BatteryStatus:
     power_w: float = 0.0
     mode: str = "idle"  # charging | discharging | idle
     cycle_count: int = 0
+    equivalent_cycles: float = 0.0  # SOC-swing based full-cycle equivalents
     total_charged_kwh: float = 0.0
     total_discharged_kwh: float = 0.0
     avg_efficiency_pct: float = 0.0
+    efficiency_measured: bool = False  # False → nominal fallback, not a real round-trip
+    capacity_kwh: float = 0.0
     cycles: List[CycleEvent] = field(default_factory=list)
     soc_timeline: List[Tuple[int, float]] = field(default_factory=list)  # [(ts, soc_pct), ...]
     optimal_charge_hours: List[int] = field(default_factory=list)
@@ -202,14 +205,35 @@ def get_battery_status(db, cfg) -> BatteryStatus:
             status.mode = last[3]
             status.soc_timeline = [(t[0], t[1]) for t in timeline]
 
+        status.capacity_kwh = round(float(cfg.capacity_kwh or 0.0), 2)
+
         # Detect cycles (for cycle_count + efficiency).
         cycles = detect_cycles(timeline)
         status.cycles = cycles
         status.cycle_count = len(cycles)
-        if cycles:
-            status.avg_efficiency_pct = round(
-                sum(c.efficiency_pct for c in cycles) / len(cycles), 1
-            )
+        # Round-trip efficiency is only meaningful when measured over a genuine
+        # closed cycle (charge ≈ discharge). A charge-heavy partial cycle yields
+        # a nonsensical ratio (e.g. 0.5%). Only trust cycles whose discharge is a
+        # plausible fraction of their charge; otherwise fall back to the nominal
+        # configured efficiency and flag it as not-measured.
+        _real = [c for c in cycles if c.charge_kwh > 0 and 0.5 <= (c.discharge_kwh / c.charge_kwh) <= 1.05]
+        nominal_eff = float(getattr(cfg, "efficiency_pct", 95.0) or 95.0)
+        if _real:
+            status.avg_efficiency_pct = round(sum(c.efficiency_pct for c in _real) / len(_real), 1)
+            status.efficiency_measured = True
+        else:
+            status.avg_efficiency_pct = round(nominal_eff, 1)
+            status.efficiency_measured = False
+
+        # Equivalent full cycles over the window = sum of positive SOC swings / 100.
+        _swing = 0.0
+        _psoc = None
+        for _t in timeline:
+            _s = _t[1]
+            if _psoc is not None and _s > _psoc:
+                _swing += (_s - _psoc)
+            _psoc = _s
+        status.equivalent_cycles = round(_swing / 100.0, 2)
 
         # Total charged/discharged = ALL throughput over the window, independent
         # of whether a full cycle completed (cycle-only sums undercount).

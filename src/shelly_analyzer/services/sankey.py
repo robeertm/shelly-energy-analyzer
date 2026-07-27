@@ -145,6 +145,36 @@ def compute_sankey(
         except Exception:
             pass
 
+    # Battery flows: the external "battery" series is signed net energy per hour
+    # (+ = charging, − = discharging). PV that charged the battery must NOT be
+    # counted as house self-consumption; the battery is its own node so the
+    # diagram balances (PV = direct-to-house + to-battery + feed-in).
+    battery_charge = 0.0
+    battery_discharge = 0.0
+    batt_key = getattr(solar_config, "battery_production_device_key", "") if solar_config else ""
+    if not batt_key and getattr(solar_config, "enabled", False):
+        batt_key = "battery"
+    if batt_key:
+        try:
+            _bh = db.query_hourly(batt_key, start_ts=start_ts, end_ts=end_ts)
+            if _bh is not None and not _bh.empty and "kwh" in _bh.columns:
+                battery_charge = float(_bh["kwh"].clip(lower=0).sum())
+                battery_discharge = float(-_bh["kwh"].clip(upper=0).sum())
+        except Exception:
+            pass
+
+    has_battery = (battery_charge > 0.01 or battery_discharge > 0.01)
+
+    # Re-derive the split so every node balances:
+    #   PV      = pv_direct_to_house + battery_charge + feed_in
+    #   House   = pv_direct_to_house + battery_discharge + grid_import
+    if has_solar and pv_production > 0.01:
+        pv_direct = max(0.0, pv_production - pv_feed_in_kwh - battery_charge)
+        grid_import = max(0.0, total_consumption - pv_direct - battery_discharge)
+        self_consumption = pv_direct + battery_charge  # PV used on-site (house + stored)
+    else:
+        pv_direct = 0.0
+
     # Build Sankey nodes and flows
     nodes: List[str] = []
     node_colors: List[str] = []
@@ -157,24 +187,35 @@ def compute_sankey(
             node_colors.append(color)
         return nodes.index(name)
 
-    # Source nodes
-    grid_idx = add_node("Grid", "#e74c3c")
+    # House is always present; Grid is added only if there is real grid import
+    # (avoids an orphan zero Grid node on a fully self-supplied day).
     house_idx = add_node("House", "#3498db")
 
     if has_solar and pv_production > 0.01:
         pv_idx = add_node("PV", "#f39c12")
 
-        # PV → House (self-consumption)
-        if self_consumption > 0.01:
-            flows.append(EnergyFlow("PV", "House", self_consumption, "#f1c40f"))
+        # PV → House (direct self-consumption, excluding battery charging)
+        if pv_direct > 0.01:
+            flows.append(EnergyFlow("PV", "House", pv_direct, "#f1c40f"))
 
-        # PV → Grid (feed-in)
+        # PV → Battery (charging)
+        if battery_charge > 0.01:
+            add_node("Battery", "#8e44ad")
+            flows.append(EnergyFlow("PV", "Battery", battery_charge, "#a569bd"))
+
+        # PV → Feed-in (export)
         if pv_feed_in_kwh > 0.01:
-            feed_idx = add_node("Feed-in", "#27ae60")
+            add_node("Feed-in", "#27ae60")
             flows.append(EnergyFlow("PV", "Feed-in", pv_feed_in_kwh, "#2ecc71"))
+
+    # Battery → House (discharging)
+    if battery_discharge > 0.01:
+        add_node("Battery", "#8e44ad")
+        flows.append(EnergyFlow("Battery", "House", battery_discharge, "#a569bd"))
 
     # Grid → House
     if grid_import > 0.01:
+        add_node("Grid", "#e74c3c")
         flows.append(EnergyFlow("Grid", "House", grid_import, "#e74c3c"))
 
     # House → Devices
