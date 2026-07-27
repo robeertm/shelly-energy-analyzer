@@ -116,6 +116,13 @@ class DeviceConfig:
     # compare a meter against the SUM of its direct children rather than a single
     # sub-meter. Backward compatible: absent in old configs → "".
     parent: str = ""
+    # Deducted tenant sub-meter. The device sits physically behind ``parent`` but
+    # is NOT calibrated against it. Instead its (compensated) consumption is
+    # SUBTRACTED from the parent meter's reading before the owner meters' drift
+    # factor is derived, and it keeps its own (flat) compensation. Lets a single
+    # utility meter that covers owner + tenant calibrate the owner correctly while
+    # the tenant is billed on a fixed deviation surcharge. Default off = legacy.
+    deduct_from_parent: bool = False
 
 
 @dataclass(frozen=True)
@@ -1162,6 +1169,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
                 compensation_percent=_coerce_float(d.get("compensation_percent", 0.0), 0.0),
                 compensation_history=tuple(history_entries),
                 parent=str(d.get("parent", "") or "").strip(),
+                deduct_from_parent=bool(d.get("deduct_from_parent", False)),
             )
         )
 
@@ -1957,6 +1965,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
                     for h in (getattr(d, "compensation_history", ()) or ())
                 ],
                 "parent": getattr(d, "parent", "") or "",
+                "deduct_from_parent": bool(getattr(d, "deduct_from_parent", False)),
             }
             for d in cfg.devices
         ],
