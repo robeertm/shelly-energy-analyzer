@@ -3726,6 +3726,13 @@ function fmt(v, dec, unit) {{
   if (v === null || v === undefined || isNaN(v)) return '—';
   return v.toFixed(dec) + (unit ? ' ' + unit : '');
 }}
+// Direction colour for the PV/battery tiles: green = producing / charging,
+// red = discharging. PV is always green; other devices keep the default colour.
+function _flowCol(key, val) {{
+  if (key === 'pv') return '#22c55e';
+  if (key === 'battery') return (val >= 0 ? '#22c55e' : '#ef4444');
+  return '';
+}}
 
 function initTimescaleBtns() {{
   const wrap = document.getElementById('live-timescale');
@@ -3773,7 +3780,7 @@ async function loadHistory() {{
         if (!buf || !buf.length) continue;
         const bt = wndTimes(buf);
         const sp = document.getElementById('sp-' + key);
-        if (sp) drawSparkline(sp, wndVals(buf, 'w'), null, false, key === 'battery', bt);
+        if (sp) drawSparkline(sp, wndVals(buf, 'w'), key === 'pv' ? '#22c55e' : null, false, key === 'battery', bt);
         const spv = document.getElementById('sp-v-' + key);
         if (spv) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true, false, bt);
         const spa = document.getElementById('sp-a-' + key);
@@ -4058,12 +4065,12 @@ function devCardHTML(d) {{
       '<div>' +
         '<div class="dev-name">' + esc(d.name || d.key) + '</div>' +
         '<div class="dev-meta">' +
-          '<span>' + fmt(d.today_kwh, 3) + ' kWh</span>' +
+          (function(){{ var c=_flowCol(d.key,d.power_w); return '<span' + (c?' style="color:'+c+';font-weight:600"':'') + '>' + fmt(Math.abs(d.today_kwh), 3) + ' kWh</span>'; }})() +
           (d.cost_today !== undefined ? '<span>' + fmt(d.cost_today, 2) + ' €</span>' : '') +
           (d.soc_pct && d.soc_pct > 0 ? '<span class="soc-badge">🔋 ' + fmt(d.soc_pct, 0) + '%</span>' : '') +
         '</div>' +
       '</div>' +
-      '<div class="dev-power ' + pc + '">' + fmt(d.power_w, 0) + ' W</div>' +
+      (function(){{ var c=_flowCol(d.key,d.power_w); return '<div class="dev-power ' + pc + '"' + (c?' style="color:'+c+'"':'') + '>' + fmt(c?Math.abs(d.power_w):d.power_w, 0) + ' W</div>'; }})() +
     '</div>' +
     (d.kind === 'switch' ? '<div class="switch-row" id="sw-' + d.key + '"><span class="switch-label">' + t('live.cards.switch', 'Switch') + ':</span> <span class="switch-state ' + (d.switch_on ? 'on' : 'off') + '">' + (d.switch_on ? t('live.switch.on', 'On') : t('live.switch.off', 'Off')) + '</span> <button class="switch-btn" data-devkey="' + d.key + '">' + t('live.switch.toggle', 'Toggle') + '</button></div>' : '') +
     '<div class="sparkline-wrap" data-metric="w" data-devkey="' + d.key + '"><canvas class="sparkline" id="sp-' + d.key + '"></canvas></div>' +
@@ -4118,12 +4125,14 @@ function wndPhaseSeries(buf, field) {{
 }}
 function updateDeviceCard(card, d) {{
   const pc = pwrClass(d.power_w || 0);
+  const pwCol = _flowCol(d.key, d.power_w);
   const pw = card.querySelector('.dev-power');
-  if (pw) {{ pw.textContent = fmt(d.power_w, 0) + ' W'; pw.className = 'dev-power ' + pc; }}
+  if (pw) {{ pw.textContent = fmt(pwCol?Math.abs(d.power_w):d.power_w, 0) + ' W'; pw.className = 'dev-power ' + pc; pw.style.color = pwCol || ''; }}
   const meta = card.querySelector('.dev-meta');
   if (meta) {{
     const spans = meta.querySelectorAll('span');
-    if (spans[0]) spans[0].textContent = fmt(d.today_kwh, 3) + ' kWh';
+    const kwhCol = _flowCol(d.key, d.power_w);
+    if (spans[0]) {{ spans[0].textContent = fmt(Math.abs(d.today_kwh), 3) + ' kWh'; spans[0].style.color = kwhCol || ''; spans[0].style.fontWeight = kwhCol?'600':''; }}
     if (spans[1] && d.cost_today !== undefined) spans[1].textContent = fmt(d.cost_today, 2) + ' €';
     // Battery state-of-charge badge (external battery source).
     let socEl = meta.querySelector('.soc-badge');
@@ -4136,7 +4145,7 @@ function updateDeviceCard(card, d) {{
   const bt = buf ? wndTimes(buf) : null;
   // Main power sparkline
   const sp = document.getElementById('sp-' + d.key);
-  if (sp && buf) drawSparkline(sp, wndVals(buf, 'w'), null, false, d.key === 'battery', bt);
+  if (sp && buf) drawSparkline(sp, wndVals(buf, 'w'), d.key === 'pv' ? '#22c55e' : null, false, d.key === 'battery', bt);
   // Voltage sparkline (relative scale so variation is visible)
   const spv = document.getElementById('sp-v-' + d.key);
   if (spv && buf) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true, false, bt);

@@ -219,8 +219,9 @@ class PvSourceService:
         roll it into a per-key daily accumulator.
 
         Returns ``(energy_kwh_signed, kwh_today)`` where ``kwh_today`` is the
-        role-appropriate live-tile figure (PV → produced today, battery →
-        discharged today, grid → imported today).
+        role-appropriate live-tile figure: PV → produced today (≥0); battery →
+        NET today (charge − discharge, signed → + charging, − discharging);
+        grid → NET import today (import − export, signed).
         """
         energy_kwh = 0.0
         with self._acc_lock:
@@ -236,6 +237,11 @@ class PvSourceService:
             if acc is None or acc.get("date") != today:
                 acc = {"date": today, "charge": 0.0, "discharge": 0.0,
                        "import": 0.0, "export": 0.0, "production": 0.0}
+                # Seed from the DB so today's figure reflects the whole day and
+                # survives add-on restarts (the accumulator is otherwise in-memory
+                # only — the reason the battery tile could read 0.000 after a
+                # restart even though it had been active all day).
+                self._seed_from_db(key, ts, acc)
                 self._day[key] = acc
             if energy_kwh > 0:
                 acc["charge"] += energy_kwh
@@ -245,13 +251,35 @@ class PvSourceService:
                 acc["discharge"] += -energy_kwh
                 acc["export"] += -energy_kwh
 
+            # Direction-appropriate daily energy (magnitude): while charging show
+            # today's charged kWh, while discharging today's discharged kWh — the
+            # frontend colours it green/red by the live power direction. Always
+            # non-zero once the battery has done that direction today.
             if role == "battery":
-                tile = acc["discharge"]
+                tile = acc["charge"] if float(power_w) >= 0 else acc["discharge"]
             elif role == "grid":
-                tile = acc["import"]
+                tile = acc["import"] if float(power_w) >= 0 else acc["export"]
             else:  # pv
                 tile = acc["production"]
         return energy_kwh, tile
+
+    def _seed_from_db(self, key: str, ts: int, acc: Dict[str, float]) -> None:
+        """Populate today's accumulator from the DB hourly rollup (local day)."""
+        try:
+            lt = time.localtime(ts)
+            midnight = int(time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday,
+                                        0, 0, 0, 0, 0, -1)))
+            df = self.storage.db.query_hourly(key, start_ts=midnight, end_ts=int(ts))
+            if df is None or getattr(df, "empty", True) or "kwh" not in df.columns:
+                return
+            import pandas as pd
+            col = pd.to_numeric(df["kwh"], errors="coerce").fillna(0.0)
+            pos = float(col[col > 0].sum())
+            neg = float(col[col < 0].abs().sum())
+            acc["charge"] = acc["import"] = acc["production"] = pos
+            acc["discharge"] = acc["export"] = neg
+        except Exception as e:
+            logger.debug("PV daily seed failed for %s: %s", key, e)
 
     def daily_energy(self) -> Dict[str, Dict[str, float]]:
         """Snapshot of today's per-key energy accumulators (charge/discharge/
