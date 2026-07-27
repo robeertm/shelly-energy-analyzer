@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.46.2
+### Added
+- **Battery Live sparkline is now colour-coded by direction** — green while charging, red while discharging (split at the zero line).
+
 ## 16.46.1
 ### Fixed
 - **Live battery SOC and friendly synthetic-device names now actually appear.** The additions in 16.46.0 were applied to a legacy `/api/state` builder; they are now in the live one, so the 🔋 SOC badge and the PV / Battery / Grid (ext.) labels show on the Live view.
