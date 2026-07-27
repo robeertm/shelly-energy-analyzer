@@ -25,6 +25,20 @@ def _find_interval_energy_cols(df: pd.DataFrame) -> List[str]:
     return []
 
 
+def _find_return_energy_cols(df: pd.DataFrame, import_cols: List[str]) -> List[str]:
+    """Matching per-phase EXPORT (returned) energy columns for the chosen import
+    triplet. A bidirectional meter (grid) reports both; consumption-only devices
+    report only import. Returned only when the whole triplet is present — never
+    used to gate the interval branch, only to subtract when available."""
+    if not import_cols:
+        return []
+    # import cols are '{a,b,c}_{total,fund}_act_energy' → insert 'ret_' before energy
+    ret = [c.replace("_act_energy", "_act_ret_energy") for c in import_cols]
+    if all(c in df.columns for c in ret):
+        return ret
+    return []
+
+
 def calculate_energy(
     df: pd.DataFrame,
     power_columns: Optional[Iterable[str]] = None,
@@ -65,8 +79,17 @@ def calculate_energy(
 
     if eff == "interval" and energy_cols:
         wh = out[energy_cols].fillna(0).sum(axis=1)
+        # Bidirectional (grid) meters also report per-phase EXPORT energy. Net
+        # energy = import − export, so kWh goes NEGATIVE during feed-in. This is
+        # the single signed-kWh contract the whole app relies on to detect
+        # feed-in (kwh < 0). Consumption-only devices have no ret columns, so
+        # net == import and their values are unchanged.
+        ret_cols = _find_return_energy_cols(out, energy_cols)
+        if ret_cols:
+            wh = wh - out[ret_cols].fillna(0).sum(axis=1)
         out["energy_kwh"] = wh / 1000.0
-        # Derive average W over the delta (avoid div by 0)
+        # Derive average W over the delta (avoid div by 0); carries the sign of
+        # the net energy so exporting intervals show negative average power too.
         out["total_power"] = 0.0
         mask = out["delta_s"] > 0
         out.loc[mask, "total_power"] = (out.loc[mask, "energy_kwh"] * 1000.0) * (3600.0 / out.loc[mask, "delta_s"])

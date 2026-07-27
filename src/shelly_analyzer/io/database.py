@@ -241,11 +241,20 @@ def _compute_energy_row(
     a_energy: Optional[float],
     b_energy: Optional[float],
     c_energy: Optional[float],
+    a_ret_energy: Optional[float] = None,
+    b_ret_energy: Optional[float] = None,
+    c_ret_energy: Optional[float] = None,
 ) -> Tuple[Optional[float], Optional[float]]:
     """Compute (total_power, energy_kwh) for a single row.
 
     Prefers interval energy (Wh) if available, otherwise integrates power.
     Returns (total_power, energy_kwh).
+
+    For a bidirectional (grid) meter the per-phase EXPORT (returned) energy is
+    subtracted so energy_kwh is SIGNED net = import − export (negative during
+    feed-in). Consumption-only devices report no ret energy (None→0), so
+    net == import and their values are unchanged. The gate stays on the IMPORT
+    columns only — ret values never decide which branch is taken.
     """
     # Cap delta to avoid absurd energy values during data gaps.
     if delta_s > _MAX_DELTA_S:
@@ -254,8 +263,10 @@ def _compute_energy_row(
     # If interval energy columns are available, use them.
     if a_energy is not None and b_energy is not None and c_energy is not None:
         wh = (a_energy if a_energy else 0.0) + (b_energy if b_energy else 0.0) + (c_energy if c_energy else 0.0)
+        wh -= (a_ret_energy or 0.0) + (b_ret_energy or 0.0) + (c_ret_energy or 0.0)
         kwh = wh / 1000.0
-        # Derive average power from energy (avoid div/0)
+        # Derive average power from energy (avoid div/0); carries the sign of the
+        # net energy so exporting intervals show negative average power too.
         if delta_s > 0:
             tp = (kwh * 1000.0) * (3600.0 / delta_s)
         else:
@@ -479,9 +490,14 @@ class EnergyDB:
             a_e = _get("a_total_act_energy")
             b_e = _get("b_total_act_energy")
             c_e = _get("c_total_act_energy")
+            # Export (returned) energy for a bidirectional grid meter — subtracted
+            # inside _compute_energy_row to yield signed net energy_kwh.
+            a_re = _get("a_total_act_ret_energy")
+            b_re = _get("b_total_act_ret_energy")
+            c_re = _get("c_total_act_ret_energy")
 
             delta_s = float(ts_int - prev_ts) if prev_ts is not None and prev_ts < ts_int else 0.0
-            tp, kwh = _compute_energy_row(total_p, delta_s, a_e, b_e, c_e)
+            tp, kwh = _compute_energy_row(total_p, delta_s, a_e, b_e, c_e, a_re, b_re, c_re)
 
             # Frequency: prefer pre-computed column; else average the per-phase columns.
             # Read each key exactly once to avoid redundant dict lookups.
