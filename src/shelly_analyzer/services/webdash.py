@@ -9040,12 +9040,20 @@ _loadLsSettings();
     const effTxt = (data.avg_efficiency_pct||0).toFixed(1) + '%' +
       (data.efficiency_measured ? '' : ' <span style="font-size:10px;color:var(--muted)">(nominal)</span>');
 
+    // Metric card that does NOT escape its value (metricCardHtml always does),
+    // so we can colour the value.
+    const _mcRaw = function(label, valueHtml) {{
+      return '<div class="metric-card"><div class="metric-label">' + esc(label) +
+        '</div><div class="metric-value">' + valueHtml +
+        '</div><div class="metric-sub">&nbsp;</div></div>';
+    }};
+
     let html = '<div class="card" style="margin-bottom:10px">' +
       '<div class="card-title">🔋 Batteriespeicher ' + srcBadge + '</div>' +
       '<div class="metric-grid">' +
       metricCardHtml('Ladestand', soc.toFixed(0) + '%') +
       metricCardHtml('Gespeichert', (cap > 0 ? stored.toFixed(1) + ' / ' + cap.toFixed(1) + ' kWh' : '—')) +
-      metricCardHtml('Leistung', '<span style="color:' + pwCol + '">' + fmt(Math.abs(pw),0) + ' W</span>') +
+      _mcRaw('Leistung', '<span style="color:' + pwCol + '">' + fmt(Math.abs(pw),0) + ' W</span>') +
       metricCardHtml('Status', ml[data.mode] || data.mode) +
       metricCardHtml('Prognose', eta) +
       '</div></div>';
@@ -9060,8 +9068,8 @@ _loadLsSettings();
     // Today in/out
     html += '<div class="card" style="margin-bottom:10px"><div class="card-title">Heute</div>' +
       '<div class="metric-grid">' +
-      metricCardHtml('Geladen', '<span style="color:#22c55e">↓ ' + (data.today_charged_kwh||0).toFixed(2) + ' kWh</span>') +
-      metricCardHtml('Entladen', '<span style="color:#ef4444">↑ ' + (data.today_discharged_kwh||0).toFixed(2) + ' kWh</span>') +
+      _mcRaw('Geladen', '<span style="color:#22c55e">↓ ' + (data.today_charged_kwh||0).toFixed(2) + ' kWh</span>') +
+      _mcRaw('Entladen', '<span style="color:#ef4444">↑ ' + (data.today_discharged_kwh||0).toFixed(2) + ' kWh</span>') +
       '</div></div>';
 
     // Window totals + cycles + efficiency
@@ -9070,7 +9078,7 @@ _loadLsSettings();
       metricCardHtml('Geladen', (data.total_charged_kwh||0).toFixed(2) + ' kWh') +
       metricCardHtml('Entladen', (data.total_discharged_kwh||0).toFixed(2) + ' kWh') +
       metricCardHtml('Vollzyklen', (data.equivalent_cycles!=null ? data.equivalent_cycles.toFixed(2) : data.cycle_count)) +
-      metricCardHtml('Wirkungsgrad', effTxt) +
+      _mcRaw('Wirkungsgrad', effTxt) +
       '</div></div>';
 
     el.innerHTML = html;
