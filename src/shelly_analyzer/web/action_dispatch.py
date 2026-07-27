@@ -3493,7 +3493,15 @@ class ActionDispatcher:
 
                 self_kwh = max(0.0, household_kwh - grid_kwh) if household_kwh > 0 else 0.0
                 pv_kwh = self_kwh + feed_in_kwh
-                autarky_pct = (min(100.0, self_kwh / household_kwh * 100.0) if household_kwh > 0 else 0.0)
+                # Autarky is grid-based and INDEPENDENT of self_kwh (which the
+                # pv_measured branch below overwrites with production − feed_in).
+                # Deriving it directly from (household − grid import) keeps the two
+                # shipped fields consistent instead of contradicting each other.
+                grid_import_kwh = grid_kwh  # positive branch = Netzbezug (import)
+                autarky_pct = (
+                    min(100.0, max(0.0, household_kwh - grid_import_kwh) / household_kwh * 100.0)
+                    if household_kwh > 0 else 0.0
+                )
 
                 # ── Real PV/battery from an external source (PvSourceConfig) ──
                 # When a PV-production series ("pv") and/or a battery series
