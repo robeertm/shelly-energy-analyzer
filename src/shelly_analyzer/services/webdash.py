@@ -4262,10 +4262,17 @@ function updateDeviceCard(card, d) {{
   }}
   // Update appliance chips in place — never add/remove the container, so the
   // reserved min-height keeps the card height stable when the hint flickers.
+  // Flow devices (PV/battery) must NEVER carry a NILM appliance hint — it is
+  // meaningless for them. Mirror the showNilm gate in devCardHTML here: drop any
+  // existing container and never re-create one on live poll.
   var applEl = card.querySelector('.appl-list');
-  var newHtml = (d.appliances && d.appliances.length) ? d.appliances.map(function(a) {{ return '<span class="appl-chip">' + esc(a.icon + ' ' + t('appliance.' + a.id + '.name', a.id)) + '</span>'; }}).join('') : '';
-  if (applEl) {{ applEl.innerHTML = newHtml; }}
-  else {{ card.insertAdjacentHTML('beforeend', '<div class="appl-list">' + newHtml + '</div>'); }}
+  var showNilm = !(d.flow_role === 'pv' || d.flow_role === 'battery');
+  if (!showNilm) {{ if (applEl) applEl.remove(); }}
+  else {{
+    var newHtml = (d.appliances && d.appliances.length) ? d.appliances.map(function(a) {{ return '<span class="appl-chip">' + esc(a.icon + ' ' + t('appliance.' + a.id + '.name', a.id)) + '</span>'; }}).join('') : '';
+    if (applEl) {{ applEl.innerHTML = newHtml; }}
+    else {{ card.insertAdjacentHTML('beforeend', '<div class="appl-list">' + newHtml + '</div>'); }}
+  }}
 }}
 
 /* ──────────────────────────────────────────────
