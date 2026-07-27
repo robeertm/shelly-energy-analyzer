@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.51.0
+### Added
+- **Exact energy accounting from cumulative counters.** The external PV / battery / grid source can now be given cumulative energy-counter entities (kWh) for PV production, grid import, grid export, battery charge and battery discharge. When mapped, the interval energy written to the database is the **delta of those counters between polls** instead of the trapezoidal integral of instantaneous power. Daily / weekly / monthly kWh (and the derived cost, feed-in revenue and autarky) therefore match the source system (e.g. the inverter or the Home Assistant Energy dashboard) to the decimal, rather than only to within power-integration error (~1–3 %). Signs are applied per role (grid = import − export, battery = charge − discharge, PV = production); counter resets and gaps are guarded so a discontinuity never spikes the total. The instantaneous power entities are still used for the live tile and plot. Prefer lifetime totals — they have no midnight reset and so no day-boundary gap.
+
 ## 16.50.2
 ### Added
 - **Grid display can be decoupled from the grid cost meter** (`solar.grid_display_device_key`). This lets the cost/energy figures be derived from an accurate external grid series (e.g. EMMA `grid_ext`) while the familiar physical grid meter stays the visible, colour-coded "Netz" tile in the Live view — and the redundant cost-only series is hidden from the tiles.
