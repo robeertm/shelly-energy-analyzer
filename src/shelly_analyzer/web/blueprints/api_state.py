@@ -64,6 +64,30 @@ def api_state():
     state = _get_state()
     raw_snap = state.live_store.snapshot()
 
+    # Flow devices (coloured green/red by direction in the live view) + today's
+    # battery charge/discharge. ``grid`` = the configured signed grid meter (± Netz)
+    # or the synthetic ``grid_ext`` from an external source.
+    try:
+        _solar = getattr(getattr(state, "cfg", None), "solar", None)
+        grid_key = str(getattr(_solar, "grid_meter_device_key", "") or "")
+    except Exception:
+        grid_key = ""
+    try:
+        from shelly_analyzer.services.pv_source import (
+            daily_readings, PV_KEY, BATTERY_KEY, GRID_KEY)
+        _daily = daily_readings()
+    except Exception:
+        _daily, PV_KEY, BATTERY_KEY, GRID_KEY = {}, "pv", "battery", "grid_ext"
+
+    def _flow_role(k: str):
+        if k == PV_KEY:
+            return "pv"
+        if k == BATTERY_KEY:
+            return "battery"
+        if k == GRID_KEY or (grid_key and k == grid_key):
+            return "grid"
+        return None
+
     appliances_map: Dict[str, List[Any]] = raw_snap.get("_appliances", {})
     switch_states_map: Dict[str, Any] = raw_snap.get("_switch_states", {})
     dev_meta_by_key: Dict[str, Dict[str, Any]] = {
@@ -141,6 +165,9 @@ def api_state():
             "i_n": _compute_i_n(float(latest.get("i_n") or 0), ia, ib, ic, va, vb, vc),
             "q_total_var": float(latest.get("q_total_var") or 0),
             "switch_on": switch_on,
+            "flow_role": _flow_role(dkey),
+            "today_in_kwh": float((_daily.get(dkey) or {}).get("charge", 0.0)),
+            "today_out_kwh": float((_daily.get(dkey) or {}).get("discharge", 0.0)),
         })
 
     # Include configured devices that have not produced a sample yet
@@ -171,6 +198,9 @@ def api_state():
             "i_n": 0.0,
             "q_total_var": 0.0,
             "switch_on": None,
+            "flow_role": _flow_role(k),
+            "today_in_kwh": 0.0,
+            "today_out_kwh": 0.0,
             "pending": True,
         })
 

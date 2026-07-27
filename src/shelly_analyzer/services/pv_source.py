@@ -54,11 +54,30 @@ _LATEST: Dict[str, Any] = {
 }
 _LATEST_LOCK = threading.Lock()
 
+# Module-level snapshot of today's per-key energy accumulators (charge/discharge/
+# import/export/production, kWh). Mirrors the poller's in-memory ``self._day`` so
+# the live /api/state endpoint can show e.g. the battery's kWh IN and OUT today
+# without holding a reference to the running PvSource instance.
+_DAILY: Dict[str, Dict[str, float]] = {}
+_DAILY_LOCK = threading.Lock()
+
 
 def latest_readings() -> Dict[str, Any]:
     """Return a copy of the latest external readings (may contain ``None``)."""
     with _LATEST_LOCK:
         return dict(_LATEST)
+
+
+def daily_readings() -> Dict[str, Dict[str, float]]:
+    """Snapshot of today's per-key energy accumulators (kWh). Empty until the
+    poller has integrated at least one interval."""
+    with _DAILY_LOCK:
+        return {k: dict(v) for k, v in _DAILY.items()}
+
+
+def _store_daily(key: str, acc: Dict[str, float]) -> None:
+    with _DAILY_LOCK:
+        _DAILY[key] = dict(acc)
 
 
 def _store_latest(**vals: Any) -> None:
@@ -250,6 +269,9 @@ class PvSourceService:
             elif energy_kwh < 0:
                 acc["discharge"] += -energy_kwh
                 acc["export"] += -energy_kwh
+            # Mirror into the module-level snapshot so the live endpoint can read
+            # today's charge/discharge (battery IN/OUT) without the instance.
+            _store_daily(key, acc)
 
             # Direction-appropriate daily energy (magnitude): while charging show
             # today's charged kWh, while discharging today's discharged kWh — the
