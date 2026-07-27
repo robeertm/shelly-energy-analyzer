@@ -1966,14 +1966,13 @@ _HTML_TEMPLATE = """<!doctype html>
     <!-- Heatmap -->
     <div id="pane-heatmap" class="pane">
       <div class="controls-row">
-        <select id="hm-device"></select>
-        <select id="hm-unit">
+        <select id="hm-device" onchange="loadHeatmap()"></select>
+        <select id="hm-unit" onchange="loadHeatmap()">
           <option value="kWh">kWh</option>
           <option value="eur">EUR</option>
           <option value="co2">g CO₂</option>
         </select>
-        <select id="hm-year"></select>
-        <button class="btn btn-outline" onclick="loadHeatmap()">↻</button>
+        <select id="hm-year" onchange="loadHeatmap()"></select>
       </div>
       <div id="hm-stats-wrap"></div>
       <div id="hm-calendar-wrap"></div>
@@ -2054,7 +2053,6 @@ _HTML_TEMPLATE = """<!doctype html>
           <option value="chademo">CHAdeMO</option>
           <option value="schuko">Schuko</option>
         </select>
-        <button class="btn btn-outline" onclick="loadEv()">\u21bb</button>
       </div>
       <div id="ev-apikey-row" style="display:none;padding:6px 0">
         <div style="font-size:11px;color:var(--muted);margin-bottom:4px">{web_ev_apikey_hint}</div>
@@ -2116,7 +2114,6 @@ _HTML_TEMPLATE = """<!doctype html>
           <button class="btn" onclick="syncAll('week')">{sync_btn_week}</button>
           <button class="btn" onclick="syncAll('month')">{sync_btn_month}</button>
           <span style="flex:1"></span>
-          <button class="btn" onclick="refreshSyncStatus()">{sync_btn_status}</button>
           <label style="display:flex;align-items:center;gap:4px;font-size:11px"><input type="checkbox" id="log-autoscroll" checked> {sync_opt_autoscroll}</label>
           <label style="display:flex;align-items:center;gap:4px;font-size:11px"><input type="checkbox" id="log-include-http" onchange="toggleLogHttp(this.checked)"> {sync_opt_http_logs}</label>
         </div>
@@ -3218,6 +3215,7 @@ function _drawNilmCategoryDonut(catEntries) {{
    SYNC PANE (trigger + live log)
 ────────────────────────────────────────────── */
 let _syncTimer = null;
+let _syncStatusTimer = null;
 let _syncLogSince = 0;
 function initSync() {{
   refreshSyncStatus();
@@ -3226,9 +3224,13 @@ function initSync() {{
   if (el) el.textContent = '';
   pollSyncLogs();
   if (!_syncTimer) _syncTimer = setInterval(pollSyncLogs, 2000);
+  // Auto-refresh the device/last-sync panel (replaces the removed manual
+  // refresh button) so it stays current without user interaction.
+  if (!_syncStatusTimer) _syncStatusTimer = setInterval(refreshSyncStatus, 5000);
 }}
 function stopSyncPolling() {{
   if (_syncTimer) {{ clearInterval(_syncTimer); _syncTimer = null; }}
+  if (_syncStatusTimer) {{ clearInterval(_syncStatusTimer); _syncStatusTimer = null; }}
 }}
 function toggleLogHttp(v) {{
   fetch('/api/logs/config', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{include_http: !!v}})}}).catch(function() {{}});
@@ -3742,16 +3744,26 @@ function _flowCol(role, val) {{
 // only has /api/history keys) can colour the main power sparkline correctly.
 const flowRole = {{}};
 
-// Arguments for the main power sparkline given the device's flow role. Grid is
-// negated so export (negative W) draws green ABOVE the zero line like a battery
-// charging — reusing drawSparkline's ≥0-green / <0-red sign colouring.
+// Arguments for the main power sparkline given the device's flow role. Grid
+// keeps its raw sign — export (negative W) draws BELOW the zero line and is
+// coloured GREEN, import (positive W) draws above and is RED ('invert' sign
+// mode). Battery uses the normal ≥0-green / <0-red colouring.
 function _sparkArgs(key, buf) {{
   const role = flowRole[key] || '';
   const vals = wndVals(buf, 'w');
   if (role === 'pv') return {{vals: vals, color: '#22c55e', sign: false}};
   if (role === 'battery') return {{vals: vals, color: null, sign: true}};
-  if (role === 'grid') return {{vals: vals.map(function(v) {{ return -v; }}), color: null, sign: true}};
+  if (role === 'grid') return {{vals: vals, color: null, sign: 'invert'}};
   return {{vals: vals, color: null, sign: false}};
+}}
+
+// Display value for a device's power tile. Grid shows the SIGNED value (export
+// negative / import positive); pv & battery show magnitude (their direction is
+// conveyed by colour). Everything else shows the raw signed value.
+function _pwrVal(d) {{
+  if (d.flow_role === 'grid') return d.power_w;
+  const c = _flowCol(d.flow_role, d.power_w);
+  return c ? Math.abs(d.power_w) : d.power_w;
 }}
 
 // Inner HTML of the kWh meta line. Battery shows today's energy IN (charged,
@@ -3762,6 +3774,11 @@ function _kwhInner(d) {{
     return '<span style="color:#22c55e;font-weight:600">↓ ' + fmt(d.today_in_kwh || 0, 2) + '</span> \xb7 ' +
            '<span style="color:#ef4444;font-weight:600">↑ ' + fmt(d.today_out_kwh || 0, 2) + '</span> ' +
            '<span style="color:var(--muted)">kWh</span>';
+  }}
+  if (d.flow_role === 'grid') {{
+    // Signed net today: negative = net feed-in (green), positive = net draw (red).
+    const gc = _flowCol('grid', d.today_kwh);
+    return '<span style="color:' + gc + ';font-weight:600">' + fmt(d.today_kwh, 3) + ' kWh</span>';
   }}
   const c = _flowCol(d.flow_role, d.power_w);
   return '<span' + (c ? ' style="color:' + c + ';font-weight:600"' : '') + '>' + fmt(Math.abs(d.today_kwh), 3) + ' kWh</span>';
@@ -3939,6 +3956,7 @@ const TAB_LIVE_REFRESH = {{
   battery: 5000,
   goals: 10000,
   nilm: 15000,
+  heatmap: 30000,
 }};
 let _tabRefreshTimer = null;
 function _runTabRefresh(pane) {{
@@ -3955,6 +3973,7 @@ function _runTabRefresh(pane) {{
     else if (pane === 'battery') {{ if (typeof loadBattery === 'function') loadBattery(); }}
     else if (pane === 'goals')   {{ if (typeof loadGoals === 'function') loadGoals(); }}
     else if (pane === 'nilm')    loadNilm();
+    else if (pane === 'heatmap') {{ if (typeof loadHeatmap === 'function') loadHeatmap(); }}
   }} finally {{
     // Reset on next tick so the load function (which is async) has finished
     // its synchronous spinner-skip path before we re-enable it for manual loads.
@@ -4109,7 +4128,7 @@ function devCardHTML(d) {{
           (d.soc_pct && d.soc_pct > 0 ? '<span class="soc-badge">🔋 ' + fmt(d.soc_pct, 0) + '%</span>' : '') +
         '</div>' +
       '</div>' +
-      (function(){{ var c=_flowCol(d.flow_role,d.power_w); return '<div class="dev-power ' + pc + '"' + (c?' style="color:'+c+'"':'') + '>' + fmt(c?Math.abs(d.power_w):d.power_w, 0) + ' W</div>'; }})() +
+      (function(){{ var c=_flowCol(d.flow_role,d.power_w); return '<div class="dev-power ' + pc + '"' + (c?' style="color:'+c+'"':'') + '>' + fmt(_pwrVal(d), 0) + ' W</div>'; }})() +
     '</div>' +
     (d.kind === 'switch' ? '<div class="switch-row" id="sw-' + d.key + '"><span class="switch-label">' + t('live.cards.switch', 'Switch') + ':</span> <span class="switch-state ' + (d.switch_on ? 'on' : 'off') + '">' + (d.switch_on ? t('live.switch.on', 'On') : t('live.switch.off', 'Off')) + '</span> <button class="switch-btn" data-devkey="' + d.key + '">' + t('live.switch.toggle', 'Toggle') + '</button></div>' : '') +
     '<div class="sparkline-wrap" data-metric="w" data-devkey="' + d.key + '"><canvas class="sparkline" id="sp-' + d.key + '"></canvas></div>' +
@@ -4167,7 +4186,7 @@ function updateDeviceCard(card, d) {{
   flowRole[d.key] = d.flow_role || '';
   const pwCol = _flowCol(d.flow_role, d.power_w);
   const pw = card.querySelector('.dev-power');
-  if (pw) {{ pw.textContent = fmt(pwCol?Math.abs(d.power_w):d.power_w, 0) + ' W'; pw.className = 'dev-power ' + pc; pw.style.color = pwCol || ''; }}
+  if (pw) {{ pw.textContent = fmt(_pwrVal(d), 0) + ' W'; pw.className = 'dev-power ' + pc; pw.style.color = pwCol || ''; }}
   const meta = card.querySelector('.dev-meta');
   if (meta) {{
     // Class-based (not index-based): the battery kWh cell contains nested spans
@@ -4315,11 +4334,14 @@ function drawSparkline(canvas, values, color, relMin, signColor, times) {{
   }};
   const x0 = _x(0), xN = _x(values.length - 1);
 
-  // signColor: colour by sign — green where the series is ≥ 0 (battery
-  // charging), red where < 0 (discharging). Green fill above the zero line,
-  // red fill below, and the line drawn per segment.
+  // signColor: colour by sign. true  → ≥0 green / <0 red (battery: charge up
+  // green, discharge down red). 'invert' → ≥0 red / <0 green (grid: import
+  // drawn above zero RED, feed-in/export drawn below zero GREEN). Either way
+  // negative values are drawn below the baseline (values are raw & signed).
   if (signColor) {{
     const GREEN = '#22c55e', RED = '#ef4444';
+    const POS = (signColor === 'invert') ? RED : GREEN;   // colour for v ≥ 0
+    const NEG = (signColor === 'invert') ? GREEN : RED;   // colour for v < 0
     // area path
     ctx.beginPath();
     values.forEach(function(v, i) {{ i===0 ? ctx.moveTo(_x(i),_y(v)) : ctx.lineTo(_x(i),_y(v)); }});
@@ -4327,8 +4349,8 @@ function drawSparkline(canvas, values, color, relMin, signColor, times) {{
     ctx.lineTo(x0, zeroY);
     ctx.closePath();
     ctx.save(); ctx.clip();
-    ctx.fillStyle = GREEN + '28'; ctx.fillRect(0, 0, W, zeroY);      // above zero
-    ctx.fillStyle = RED + '28';   ctx.fillRect(0, zeroY, W, H-zeroY); // below zero
+    ctx.fillStyle = POS + '28'; ctx.fillRect(0, 0, W, zeroY);      // above zero
+    ctx.fillStyle = NEG + '28'; ctx.fillRect(0, zeroY, W, H-zeroY); // below zero
     ctx.restore();
     // zero baseline
     ctx.beginPath(); ctx.moveTo(pad, zeroY); ctx.lineTo(W - pad, zeroY);
@@ -4339,7 +4361,7 @@ function drawSparkline(canvas, values, color, relMin, signColor, times) {{
       ctx.beginPath();
       ctx.moveTo(_x(i), _y(values[i]));
       ctx.lineTo(_x(i+1), _y(values[i+1]));
-      ctx.strokeStyle = ((values[i] + values[i+1]) / 2 >= 0) ? GREEN : RED;
+      ctx.strokeStyle = ((values[i] + values[i+1]) / 2 >= 0) ? POS : NEG;
       ctx.stroke();
     }}
     return;
