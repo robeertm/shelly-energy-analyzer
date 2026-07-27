@@ -3728,10 +3728,43 @@ function fmt(v, dec, unit) {{
 }}
 // Direction colour for the PV/battery tiles: green = producing / charging,
 // red = discharging. PV is always green; other devices keep the default colour.
-function _flowCol(key, val) {{
-  if (key === 'pv') return '#22c55e';
-  if (key === 'battery') return (val >= 0 ? '#22c55e' : '#ef4444');
+// Colour by flow role: PV always green (produces); battery green charging /
+// red discharging; grid ("Netz") green when exporting (power < 0 = einspeisen) /
+// red when importing (>= 0 = beziehen).
+function _flowCol(role, val) {{
+  if (role === 'pv') return '#22c55e';
+  if (role === 'battery') return (val >= 0 ? '#22c55e' : '#ef4444');
+  if (role === 'grid') return (val < 0 ? '#22c55e' : '#ef4444');
   return '';
+}}
+
+// key -> flow_role, kept in sync from every /api/state poll so loadHistory (which
+// only has /api/history keys) can colour the main power sparkline correctly.
+const flowRole = {{}};
+
+// Arguments for the main power sparkline given the device's flow role. Grid is
+// negated so export (negative W) draws green ABOVE the zero line like a battery
+// charging — reusing drawSparkline's ≥0-green / <0-red sign colouring.
+function _sparkArgs(key, buf) {{
+  const role = flowRole[key] || '';
+  const vals = wndVals(buf, 'w');
+  if (role === 'pv') return {{vals: vals, color: '#22c55e', sign: false}};
+  if (role === 'battery') return {{vals: vals, color: null, sign: true}};
+  if (role === 'grid') return {{vals: vals.map(function(v) {{ return -v; }}), color: null, sign: true}};
+  return {{vals: vals, color: null, sign: false}};
+}}
+
+// Inner HTML of the kWh meta line. Battery shows today's energy IN (charged,
+// green ↓) and OUT (discharged, red ↑) separately; everything else the single
+// direction-coloured today figure.
+function _kwhInner(d) {{
+  if (d.flow_role === 'battery') {{
+    return '<span style="color:#22c55e;font-weight:600">↓ ' + fmt(d.today_in_kwh || 0, 2) + '</span> \xb7 ' +
+           '<span style="color:#ef4444;font-weight:600">↑ ' + fmt(d.today_out_kwh || 0, 2) + '</span> ' +
+           '<span style="color:var(--muted)">kWh</span>';
+  }}
+  const c = _flowCol(d.flow_role, d.power_w);
+  return '<span' + (c ? ' style="color:' + c + ';font-weight:600"' : '') + '>' + fmt(Math.abs(d.today_kwh), 3) + ' kWh</span>';
 }}
 
 function initTimescaleBtns() {{
@@ -3780,7 +3813,7 @@ async function loadHistory() {{
         if (!buf || !buf.length) continue;
         const bt = wndTimes(buf);
         const sp = document.getElementById('sp-' + key);
-        if (sp) drawSparkline(sp, wndVals(buf, 'w'), key === 'pv' ? '#22c55e' : null, false, key === 'battery', bt);
+        if (sp) {{ const sa = _sparkArgs(key, buf); drawSparkline(sp, sa.vals, sa.color, false, sa.sign, bt); }}
         const spv = document.getElementById('sp-v-' + key);
         if (spv) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true, false, bt);
         const spa = document.getElementById('sp-a-' + key);
@@ -3990,7 +4023,7 @@ function buildDeviceCard(d) {{
   div.innerHTML = devCardHTML(d);
   div.querySelector('.dev-header').addEventListener('click', function() {{
     const exp = div.querySelector('.dev-expand');
-    exp.classList.toggle('open');
+    if (exp) exp.classList.toggle('open');  // PV/battery have no expand
   }});
   var swBtn = div.querySelector('.switch-btn');
   if (swBtn) {{
@@ -4045,13 +4078,19 @@ function devCardHTML(d) {{
     }});
     phaseHtml += '</dl>';
   }}
-  // Always render the container (even when empty) so its reserved min-height
-  // keeps the card frame stable when the NILM hint flickers on/off.
-  const nilm = '<div class="appl-list">' + ((d.appliances && d.appliances.length) ? d.appliances.map(function(a) {{ return '<span class="appl-chip">' + esc(a.icon + ' ' + t('appliance.' + a.id + '.name', a.id)) + '</span>'; }}).join('') : '') + '</div>';
-  const inHtml = (d.i_n && d.i_n > 0.01) ? '<dl class="dev-kv" id="kv-in-' + d.key + '"><dt>I\u2099 (N)</dt><dd>' + fmt(d.i_n, 2, 'A') + '</dd></dl>' : '';
-  const qHtml = '<dl class="dev-kv" id="kv-q-' + d.key + '"><dt>' + t('web.kv.var', 'Reactive power') + '</dt><dd>' + fmt(d.q_total_var || 0, 1, 'VAR') + '</dd></dl>';
+  // Flow devices from the external source (PV/battery) carry no voltage/current/
+  // phase data \u2014 only show what's really there, and drop the NILM appliance hint
+  // (meaningless for PV/battery).
+  const hasElec = !!(d.voltage_v > 0.01 || d.current_a > 0.01 || (phases && phases.length));
+  const showNilm = !(d.flow_role === 'pv' || d.flow_role === 'battery');
+  flowRole[d.key] = d.flow_role || '';
+  const nilm = showNilm
+    ? '<div class="appl-list">' + ((d.appliances && d.appliances.length) ? d.appliances.map(function(a) {{ return '<span class="appl-chip">' + esc(a.icon + ' ' + t('appliance.' + a.id + '.name', a.id)) + '</span>'; }}).join('') : '') + '</div>'
+    : '';
+  const inHtml = (hasElec && d.i_n && d.i_n > 0.01) ? '<dl class="dev-kv" id="kv-in-' + d.key + '"><dt>I\u2099 (N)</dt><dd>' + fmt(d.i_n, 2, 'A') + '</dd></dl>' : '';
+  const qHtml = hasElec ? '<dl class="dev-kv" id="kv-q-' + d.key + '"><dt>' + t('web.kv.var', 'Reactive power') + '</dt><dd>' + fmt(d.q_total_var || 0, 1, 'VAR') + '</dd></dl>' : '';
   let balanceHtml = '';
-  if (phases && phases.length > 1) {{
+  if (hasElec && phases && phases.length > 1) {{
     const totalP = phases.reduce(function(s, ph) {{ return s + Math.abs(ph.power_w || 0); }}, 0) || 1;
     balanceHtml = '<dl class="dev-kv" id="kv-bal-' + d.key + '"><dt>' + t('web.kv.balance', 'Phase balance') + '</dt><dd>';
     balanceHtml += phases.map(function(ph, i) {{
@@ -4065,16 +4104,16 @@ function devCardHTML(d) {{
       '<div>' +
         '<div class="dev-name">' + esc(d.name || d.key) + '</div>' +
         '<div class="dev-meta">' +
-          (function(){{ var c=_flowCol(d.key,d.power_w); return '<span' + (c?' style="color:'+c+';font-weight:600"':'') + '>' + fmt(Math.abs(d.today_kwh), 3) + ' kWh</span>'; }})() +
-          (d.cost_today !== undefined ? '<span>' + fmt(d.cost_today, 2) + ' €</span>' : '') +
+          '<span class="m-kwh">' + _kwhInner(d) + '</span>' +
+          (d.cost_today !== undefined ? '<span class="m-cost">' + fmt(d.cost_today, 2) + ' €</span>' : '') +
           (d.soc_pct && d.soc_pct > 0 ? '<span class="soc-badge">🔋 ' + fmt(d.soc_pct, 0) + '%</span>' : '') +
         '</div>' +
       '</div>' +
-      (function(){{ var c=_flowCol(d.key,d.power_w); return '<div class="dev-power ' + pc + '"' + (c?' style="color:'+c+'"':'') + '>' + fmt(c?Math.abs(d.power_w):d.power_w, 0) + ' W</div>'; }})() +
+      (function(){{ var c=_flowCol(d.flow_role,d.power_w); return '<div class="dev-power ' + pc + '"' + (c?' style="color:'+c+'"':'') + '>' + fmt(c?Math.abs(d.power_w):d.power_w, 0) + ' W</div>'; }})() +
     '</div>' +
     (d.kind === 'switch' ? '<div class="switch-row" id="sw-' + d.key + '"><span class="switch-label">' + t('live.cards.switch', 'Switch') + ':</span> <span class="switch-state ' + (d.switch_on ? 'on' : 'off') + '">' + (d.switch_on ? t('live.switch.on', 'On') : t('live.switch.off', 'Off')) + '</span> <button class="switch-btn" data-devkey="' + d.key + '">' + t('live.switch.toggle', 'Toggle') + '</button></div>' : '') +
     '<div class="sparkline-wrap" data-metric="w" data-devkey="' + d.key + '"><canvas class="sparkline" id="sp-' + d.key + '"></canvas></div>' +
-    '<div class="dev-expand">' +
+    (hasElec ? ('<div class="dev-expand">' +
       '<dl class="dev-kv">' +
         '<dt>' + t('web.kv.u', 'Voltage') + '</dt><dd>' + fmt(d.voltage_v, 1, 'V') + '</dd>' +
         '<dt>' + t('web.kv.i', 'Current') + '</dt><dd>' + fmt(d.current_a, 2, 'A') + '</dd>' +
@@ -4090,7 +4129,7 @@ function devCardHTML(d) {{
       '<div class="sparkline-wrap" style="margin-top:6px" data-metric="q" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.var', 'Reactive power') + ' (VAR)</div><canvas class="sparkline-sm" id="sp-q-' + d.key + '"></canvas></div>' +
       (phases ? '<div class="sparkline-wrap" style="margin-top:6px" data-metric="in" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.chart.neutral_current', 'I\u2099 Neutral (A)') + '</div><canvas class="sparkline-sm" id="sp-in-' + d.key + '"></canvas></div>' : '') +
       '<div class="sparkline-wrap" style="margin-top:6px" data-metric="hz" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.freq', 'Frequency') + ' (Hz)</div><canvas class="sparkline-sm" id="sp-hz-' + d.key + '"></canvas></div>' +
-    '</div>' +
+    '</div>') : '') +
     nilm
   );
 }}
@@ -4125,15 +4164,18 @@ function wndPhaseSeries(buf, field) {{
 }}
 function updateDeviceCard(card, d) {{
   const pc = pwrClass(d.power_w || 0);
-  const pwCol = _flowCol(d.key, d.power_w);
+  flowRole[d.key] = d.flow_role || '';
+  const pwCol = _flowCol(d.flow_role, d.power_w);
   const pw = card.querySelector('.dev-power');
   if (pw) {{ pw.textContent = fmt(pwCol?Math.abs(d.power_w):d.power_w, 0) + ' W'; pw.className = 'dev-power ' + pc; pw.style.color = pwCol || ''; }}
   const meta = card.querySelector('.dev-meta');
   if (meta) {{
-    const spans = meta.querySelectorAll('span');
-    const kwhCol = _flowCol(d.key, d.power_w);
-    if (spans[0]) {{ spans[0].textContent = fmt(Math.abs(d.today_kwh), 3) + ' kWh'; spans[0].style.color = kwhCol || ''; spans[0].style.fontWeight = kwhCol?'600':''; }}
-    if (spans[1] && d.cost_today !== undefined) spans[1].textContent = fmt(d.cost_today, 2) + ' €';
+    // Class-based (not index-based): the battery kWh cell contains nested spans
+    // for IN/OUT, so a querySelectorAll('span')[0] would grab the wrong node.
+    const kwhEl = meta.querySelector('.m-kwh');
+    if (kwhEl) kwhEl.innerHTML = _kwhInner(d);
+    const costEl = meta.querySelector('.m-cost');
+    if (costEl && d.cost_today !== undefined) costEl.textContent = fmt(d.cost_today, 2) + ' €';
     // Battery state-of-charge badge (external battery source).
     let socEl = meta.querySelector('.soc-badge');
     if (d.soc_pct && d.soc_pct > 0) {{
@@ -4143,9 +4185,9 @@ function updateDeviceCard(card, d) {{
   }}
   const buf = sparkData[d.key];
   const bt = buf ? wndTimes(buf) : null;
-  // Main power sparkline
+  // Main power sparkline (flow-role coloured: PV green, battery/grid signed)
   const sp = document.getElementById('sp-' + d.key);
-  if (sp && buf) drawSparkline(sp, wndVals(buf, 'w'), d.key === 'pv' ? '#22c55e' : null, false, d.key === 'battery', bt);
+  if (sp && buf) {{ const sa = _sparkArgs(d.key, buf); drawSparkline(sp, sa.vals, sa.color, false, sa.sign, bt); }}
   // Voltage sparkline (relative scale so variation is visible)
   const spv = document.getElementById('sp-v-' + d.key);
   if (spv && buf) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true, false, bt);
