@@ -1,5 +1,11 @@
 # Changelog
 
+## 16.46.5
+### Fixed
+- **Battery Live tile no longer stuck at 0.000 kWh.** The daily energy accumulator was in-memory only (reset on every restart) and showed only discharge. It is now seeded from the database (survives restarts, reflects the whole day) and shows the direction-appropriate daily energy: charged-today while charging, discharged-today while discharging.
+### Added
+- **PV / battery tile numbers are colour-coded by direction** — green while producing / charging, red while consuming / discharging. The PV Live plot is always green.
+
 ## 16.46.4
 ### Fixed
 - **Live sparklines now share a common real-time x-axis.** They were plotted by sample index, so a sparse series (e.g. an external PV/battery source polled every 15 s) scrolled visibly faster than a dense Shelly series in the same window. Points are now positioned by timestamp over the selected window, so all device plots advance at the same rate.
