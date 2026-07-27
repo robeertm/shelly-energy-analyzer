@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.50.1
+### Fixed
+- **Battery tab showed raw HTML** in the Power / charged / discharged / efficiency cards (the value passed to the metric card was HTML but metric values are always escaped). These now render as coloured values via a raw-HTML card helper.
+
 ## 16.50.0
 ### Fixed
 - **Energy-flow (Sankey) now balances even when the external meters don't fully reconcile.** House inflows always equal what the devices consumed; any PV that isn't direct-to-house, stored, or already metered as export is attributed to feed-in, so the house is never over-supplied.
