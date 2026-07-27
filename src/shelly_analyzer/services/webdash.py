@@ -3771,18 +3771,19 @@ async function loadHistory() {{
       for (const key in sparkData) {{
         const buf = sparkData[key];
         if (!buf || !buf.length) continue;
+        const bt = wndTimes(buf);
         const sp = document.getElementById('sp-' + key);
-        if (sp) drawSparkline(sp, wndVals(buf, 'w'), null, false, key === 'battery');
+        if (sp) drawSparkline(sp, wndVals(buf, 'w'), null, false, key === 'battery', bt);
         const spv = document.getElementById('sp-v-' + key);
-        if (spv) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true);
+        if (spv) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true, false, bt);
         const spa = document.getElementById('sp-a-' + key);
-        if (spa) drawSparkline(spa, wndVals(buf, 'a'), '#10b981', true);
+        if (spa) drawSparkline(spa, wndVals(buf, 'a'), '#10b981', true, false, bt);
         const spq = document.getElementById('sp-q-' + key);
-        if (spq) drawSparkline(spq, wndVals(buf, 'q'), '#ef4444', true);
+        if (spq) drawSparkline(spq, wndVals(buf, 'q'), '#ef4444', true, false, bt);
         const spin = document.getElementById('sp-in-' + key);
-        if (spin) drawSparkline(spin, wndVals(buf, 'i_n'), '#a855f7', true);
+        if (spin) drawSparkline(spin, wndVals(buf, 'i_n'), '#a855f7', true, false, bt);
         const sphz = document.getElementById('sp-hz-' + key);
-        if (sphz) drawSparkline(sphz, wndVals(buf, 'hz'), '#06b6d4', true);
+        if (sphz) drawSparkline(sphz, wndVals(buf, 'hz'), '#06b6d4', true, false, bt);
       }}
     }}
   }} catch(e) {{ /* silent */ }}
@@ -4093,6 +4094,14 @@ function wndVals(buf, field) {{
   const pts = buf.filter(function(p) {{ return p.ts >= cutoff; }});
   return pts.map(function(p) {{ return p[field] || 0; }});
 }}
+// Timestamps parallel to wndVals(buf,...) — lets drawSparkline place points on a
+// real-time x-axis so sparse (external PV/battery) and dense (Shelly) series
+// scroll at the same speed.
+function wndTimes(buf) {{
+  if (!buf || !buf.length) return [];
+  const cutoff = Date.now() - liveWindowSec * 1000;
+  return buf.filter(function(p) {{ return p.ts >= cutoff; }}).map(function(p) {{ return p.ts; }});
+}}
 function wndPhaseSeries(buf, field) {{
   if (!buf || !buf.length) return [];
   const cutoff = Date.now() - liveWindowSec * 1000;
@@ -4124,24 +4133,25 @@ function updateDeviceCard(card, d) {{
     }} else if (socEl) {{ socEl.remove(); }}
   }}
   const buf = sparkData[d.key];
+  const bt = buf ? wndTimes(buf) : null;
   // Main power sparkline
   const sp = document.getElementById('sp-' + d.key);
-  if (sp && buf) drawSparkline(sp, wndVals(buf, 'w'), null, false, d.key === 'battery');
+  if (sp && buf) drawSparkline(sp, wndVals(buf, 'w'), null, false, d.key === 'battery', bt);
   // Voltage sparkline (relative scale so variation is visible)
   const spv = document.getElementById('sp-v-' + d.key);
-  if (spv && buf) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true);
+  if (spv && buf) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true, false, bt);
   // Current sparkline
   const spa = document.getElementById('sp-a-' + d.key);
-  if (spa && buf) drawSparkline(spa, wndVals(buf, 'a'), '#10b981', true);
+  if (spa && buf) drawSparkline(spa, wndVals(buf, 'a'), '#10b981', true, false, bt);
   // Reactive power sparkline
   const spq = document.getElementById('sp-q-' + d.key);
-  if (spq && buf) drawSparkline(spq, wndVals(buf, 'q'), '#ef4444', true);
+  if (spq && buf) drawSparkline(spq, wndVals(buf, 'q'), '#ef4444', true, false, bt);
   // Neutral current sparkline
   const spin = document.getElementById('sp-in-' + d.key);
-  if (spin && buf) drawSparkline(spin, wndVals(buf, 'i_n'), '#a855f7', true);
+  if (spin && buf) drawSparkline(spin, wndVals(buf, 'i_n'), '#a855f7', true, false, bt);
   // Frequency (Hz) sparkline – relative scale (grid freq varies narrowly)
   const sphz = document.getElementById('sp-hz-' + d.key);
-  if (sphz && buf) drawSparkline(sphz, wndVals(buf, 'hz'), '#06b6d4', true);
+  if (sphz && buf) drawSparkline(sphz, wndVals(buf, 'hz'), '#06b6d4', true, false, bt);
   // Update expand section detail values (voltage, current, cos φ, freq, phases)
   const exp = card.querySelector('.dev-expand');
   if (exp) {{
@@ -4210,7 +4220,7 @@ function updateDeviceCard(card, d) {{
 /* ──────────────────────────────────────────────
    SPARKLINE
 ────────────────────────────────────────────── */
-function drawSparkline(canvas, values, color, relMin, signColor) {{
+function drawSparkline(canvas, values, color, relMin, signColor, times) {{
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.offsetWidth || 200;
   const H = canvas.offsetHeight || 56;
@@ -4234,6 +4244,18 @@ function drawSparkline(canvas, values, color, relMin, signColor) {{
   const cs = getComputedStyle(document.documentElement);
   const accent = color || cs.getPropertyValue('--accent').trim() || '#2563eb';
   const _y = function(v) {{ return H - pad - ((v - min) / range) * (H - pad*2); }};
+  // Time-based x-axis when timestamps are supplied: every series maps onto the
+  // SAME fixed window [now − liveWindowSec, now], so plots with different sample
+  // densities (sparse external PV/battery vs. dense Shelly history) scroll at
+  // the same real-time speed instead of by point index.
+  const useTime = !!(times && times.length === values.length && liveWindowSec > 0);
+  const _t0 = Date.now() - liveWindowSec * 1000;
+  const _tspan = (liveWindowSec * 1000) || 1;
+  const _x = function(i) {{
+    if (!useTime) return pad + i * sx;
+    return pad + Math.max(0, Math.min(1, (times[i] - _t0) / _tspan)) * (W - pad*2);
+  }};
+  const x0 = _x(0), xN = _x(values.length - 1);
 
   // signColor: colour by sign — green where the series is ≥ 0 (battery
   // charging), red where < 0 (discharging). Green fill above the zero line,
@@ -4242,9 +4264,9 @@ function drawSparkline(canvas, values, color, relMin, signColor) {{
     const GREEN = '#22c55e', RED = '#ef4444';
     // area path
     ctx.beginPath();
-    values.forEach(function(v, i) {{ const x = pad + i*sx; i===0 ? ctx.moveTo(x,_y(v)) : ctx.lineTo(x,_y(v)); }});
-    ctx.lineTo(pad + (values.length-1)*sx, zeroY);
-    ctx.lineTo(pad, zeroY);
+    values.forEach(function(v, i) {{ i===0 ? ctx.moveTo(_x(i),_y(v)) : ctx.lineTo(_x(i),_y(v)); }});
+    ctx.lineTo(xN, zeroY);
+    ctx.lineTo(x0, zeroY);
     ctx.closePath();
     ctx.save(); ctx.clip();
     ctx.fillStyle = GREEN + '28'; ctx.fillRect(0, 0, W, zeroY);      // above zero
@@ -4257,8 +4279,8 @@ function drawSparkline(canvas, values, color, relMin, signColor) {{
     ctx.lineWidth = 1.5;
     for (let i = 0; i < values.length - 1; i++) {{
       ctx.beginPath();
-      ctx.moveTo(pad + i*sx, _y(values[i]));
-      ctx.lineTo(pad + (i+1)*sx, _y(values[i+1]));
+      ctx.moveTo(_x(i), _y(values[i]));
+      ctx.lineTo(_x(i+1), _y(values[i+1]));
       ctx.strokeStyle = ((values[i] + values[i+1]) / 2 >= 0) ? GREEN : RED;
       ctx.stroke();
     }}
@@ -4268,11 +4290,10 @@ function drawSparkline(canvas, values, color, relMin, signColor) {{
   // Fill
   ctx.beginPath();
   values.forEach(function(v, i) {{
-    const x = pad + i * sx;
-    i === 0 ? ctx.moveTo(x, _y(v)) : ctx.lineTo(x, _y(v));
+    i === 0 ? ctx.moveTo(_x(i), _y(v)) : ctx.lineTo(_x(i), _y(v));
   }});
-  ctx.lineTo(pad + (values.length-1)*sx, zeroY);
-  ctx.lineTo(pad, zeroY);
+  ctx.lineTo(xN, zeroY);
+  ctx.lineTo(x0, zeroY);
   ctx.closePath();
   ctx.fillStyle = accent + '28';
   ctx.fill();
@@ -4285,8 +4306,7 @@ function drawSparkline(canvas, values, color, relMin, signColor) {{
   // Line
   ctx.beginPath();
   values.forEach(function(v, i) {{
-    const x = pad + i * sx;
-    i === 0 ? ctx.moveTo(x, _y(v)) : ctx.lineTo(x, _y(v));
+    i === 0 ? ctx.moveTo(_x(i), _y(v)) : ctx.lineTo(_x(i), _y(v));
   }});
   ctx.strokeStyle = accent;
   ctx.lineWidth = 1.5;
