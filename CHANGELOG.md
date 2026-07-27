@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.46.3
+### Changed
+- **All configuration is now managed in the Settings menu only.** The inline Solar/PV quick-config panel on the Solar tab was removed; the tab links to Settings instead (single source of truth). The Settings menu's Solar section gained the previously missing fields: PV-production device, and the PV/battery embodied-CO₂ factors.
+
 ## 16.46.2
 ### Added
 - **Battery Live sparkline is now colour-coded by direction** — green while charging, red while discharging (split at the zero line).
