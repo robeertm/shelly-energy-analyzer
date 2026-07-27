@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.51.1
+### Fixed
+- **Energy-flow (Sankey) footer no longer clips.** When both a feed-in and a battery-charge summary line were shown under the diagram, the second line was drawn past the bottom edge of the fixed-height canvas and got cut off. The canvas is now taller and the bottom margin scales with the number of footer lines, so the "⚡ Feed-in" and "🔋 Battery charged" totals always stay fully inside the frame (and the diagram itself gains a little vertical room).
+
 ## 16.51.0
 ### Added
 - **Exact energy accounting from cumulative counters.** The external PV / battery / grid source can now be given cumulative energy-counter entities (kWh) for PV production, grid import, grid export, battery charge and battery discharge. When mapped, the interval energy written to the database is the **delta of those counters between polls** instead of the trapezoidal integral of instantaneous power. Daily / weekly / monthly kWh (and the derived cost, feed-in revenue and autarky) therefore match the source system (e.g. the inverter or the Home Assistant Energy dashboard) to the decimal, rather than only to within power-integration error (~1–3 %). Signs are applied per role (grid = import − export, battery = charge − discharge, PV = production); counter resets and gaps are guarded so a discontinuity never spikes the total. The instantaneous power entities are still used for the live tile and plot. Prefer lifetime totals — they have no midnight reset and so no day-boundary gap.

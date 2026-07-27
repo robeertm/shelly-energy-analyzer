@@ -7749,7 +7749,7 @@ function renderSankey(d) {{
     document.getElementById('sankey-cards').innerHTML = html;
     return;
   }}
-  html += '<div class="card" style="padding:8px"><canvas id="sankey-flow-canvas" style="width:100%;height:340px"></canvas></div>';
+  html += '<div class="card" style="padding:8px"><canvas id="sankey-flow-canvas" style="width:100%;height:380px"></canvas></div>';
   document.getElementById('sankey-cards').innerHTML = html;
   requestAnimationFrame(function() {{ _drawSankeyFlow('sankey-flow-canvas', d); }});
 }}
@@ -7813,12 +7813,18 @@ function _drawSankeyFlow(canvasId, d) {{
   const _sum = function(arr) {{ return arr.reduce(function(a, x) {{ return a + x.kwh; }}, 0); }};
   const total = Math.max(_sum(sources), _sum(consumers), d.total_consumption_kwh || 0, 0.01);
 
+  // Reserve bottom space for the feed-in / battery-charge footer labels so
+  // they never clip past the canvas edge (drawn below at BOT + 12 + i*13).
+  const _feedTotal0 = _sum(feedIn);
+  const _nFooter = (_feedTotal0 > 0.001 ? 1 : 0) + (battCharge > 0.001 ? 1 : 0);
+  const _footerH = _nFooter > 0 ? (15 + _nFooter * 13) : 12;
+
   // Layout constants (in pixels)
   const PAD_X = 10, PAD_Y = 30;
   const SRC_X = PAD_X, SRC_W = W * 0.15;
   const HOUSE_X = W * 0.30, HOUSE_W = W * 0.16;
   const TGT_X = W * 0.58, TGT_W = W * 0.40;
-  const TOP = PAD_Y + 14, BOT = H - 20;
+  const TOP = PAD_Y + 14, BOT = H - _footerH;
   const usable = BOT - TOP;
   const GAP = 4;
 
