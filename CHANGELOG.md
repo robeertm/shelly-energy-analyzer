@@ -1,5 +1,12 @@
 # Changelog
 
+## 16.46.6
+### Added
+- **Battery Live tile shows energy IN and OUT today separately** — charged today (green ↓) and discharged today (red ↑), instead of a single direction figure.
+- **Grid meter Live plot is colour-coded by direction** — green while exporting (feed-in), red while importing (drawing from grid). Applies to the device selected as the grid meter (Settings → Solar → grid meter) or the synthetic external grid series.
+### Changed
+- **Flow devices (PV, battery) only show fields they actually have.** The expandable detail with voltage / current / cos φ / frequency / phases and the NILM appliance hints are hidden for PV and battery, which carry no such data — only power and (for the battery) charge/discharge and state of charge are shown.
+
 ## 16.46.5
 ### Fixed
 - **Battery Live tile no longer stuck at 0.000 kWh.** The daily energy accumulator was in-memory only (reset on every restart) and showed only discharge. It is now seeded from the database (survives restarts, reflects the whole day) and shows the direction-appropriate daily energy: charged-today while charging, discharged-today while discharging.
