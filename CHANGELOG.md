@@ -1,6 +1,11 @@
 # Changelog
 
-## 16.48.0
+## 16.49.0
+### Added
+- **Battery tab is much richer.** New: stored kWh vs capacity, charge/discharge today (in/out), a state-of-charge history chart, equivalent full cycles, a time-to-full / time-to-empty forecast, and a measured/estimated SOC-source badge. Round-trip efficiency now falls back to the nominal configured value (labelled) instead of reporting a nonsensical figure from a partial cycle.
+- **Battery in the energy-flow (Sankey) diagram.** PV → Battery (charging) and Battery → House (discharging) are now separate flows, so PV that charged the battery is no longer miscounted as house self-consumption and the diagram balances.
+### Fixed
+- **Energy-flow no longer over-scales / shows an orphan Grid node.** Bars are scaled to the largest of the source/consumer sums (PV and feed-in no longer overflow the frame); the Grid node only appears when there is real grid import; feed-in and battery-charge are labelled below the house.
 ### Changed
 - **Grid (Netz) tile and plot are now signed.** Feed-in shows as a NEGATIVE value in green, grid draw as a POSITIVE value in red; the live plot draws feed-in below the zero line (green) and draw above it (red). PV and battery tiles keep showing magnitude with direction conveyed by colour.
 - **Removed manual reload buttons; everything auto-refreshes.** The Heatmap ↻, EV ↻ and Sync-status refresh buttons are gone: Heatmap selectors now apply on change and the tab auto-refreshes, the EV tab already auto-refreshed, and the Sync device/last-sync panel now refreshes itself every 5 s.
