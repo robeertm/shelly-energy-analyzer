@@ -142,6 +142,13 @@ class PvSourceService:
         self._prev_sample: Dict[str, tuple] = {}
         self._day: Dict[str, Dict[str, Any]] = {}
         self._acc_lock = threading.Lock()
+        # Latest cumulative energy-counter readings (kWh) from the source, keyed
+        # by sub-metric (pv_total / grid_import / grid_export / batt_charge /
+        # batt_discharge). Populated each tick when the user mapped counter
+        # entities; drives EXACT interval energy via counter deltas.
+        self._energy_counters: Dict[str, Optional[float]] = {}
+        # Previous counter value per sub-metric, for delta computation.
+        self._prev_counter: Dict[str, float] = {}
 
     def set_log_callback(self, cb: Callable[[str], None]) -> None:
         self._log_cb = cb
@@ -232,6 +239,29 @@ class PvSourceService:
             self._ingest(GRID_KEY, "grid", ts, grid_w, kwh_today=None, soc=None)
 
     # ── energy accumulation ────────────────────────────────────────────
+    def _day_acc_for(self, key: str, ts: int) -> Dict[str, float]:
+        """Return today's per-key accumulator, (re)seeding it from the DB on a
+        date rollover so the figure reflects the whole day and survives add-on
+        restarts. Caller must hold ``self._acc_lock``."""
+        today = time.strftime("%Y-%m-%d", time.localtime(ts))
+        acc = self._day.get(key)
+        if acc is None or acc.get("date") != today:
+            acc = {"date": today, "charge": 0.0, "discharge": 0.0,
+                   "import": 0.0, "export": 0.0, "production": 0.0}
+            self._seed_from_db(key, ts, acc)
+            self._day[key] = acc
+        return acc
+
+    def _tile_today(self, role: str, acc: Dict[str, float], power_w: float) -> float:
+        """Direction-appropriate daily energy for the live tile: while charging
+        show today's charged kWh, while discharging today's discharged, etc.
+        (the frontend colours it green/red by the live power direction)."""
+        if role == "battery":
+            return acc["charge"] if float(power_w) >= 0 else acc["discharge"]
+        if role == "grid":
+            return acc["import"] if float(power_w) >= 0 else acc["export"]
+        return acc["production"]
+
     def _accumulate(self, key: str, role: str, ts: int, power_w: float) -> tuple:
         """Integrate interval energy since the previous sample (trapezoidal,
         capped like the DB ingest at 10 min so a gap can't inflate energy) and
@@ -251,17 +281,7 @@ class PvSourceService:
                 if 0 < dt <= 600:
                     energy_kwh = ((float(power_w) + float(prev[1])) / 2.0) * (dt / 3600.0) / 1000.0
 
-            today = time.strftime("%Y-%m-%d", time.localtime(ts))
-            acc = self._day.get(key)
-            if acc is None or acc.get("date") != today:
-                acc = {"date": today, "charge": 0.0, "discharge": 0.0,
-                       "import": 0.0, "export": 0.0, "production": 0.0}
-                # Seed from the DB so today's figure reflects the whole day and
-                # survives add-on restarts (the accumulator is otherwise in-memory
-                # only — the reason the battery tile could read 0.000 after a
-                # restart even though it had been active all day).
-                self._seed_from_db(key, ts, acc)
-                self._day[key] = acc
+            acc = self._day_acc_for(key, ts)
             if energy_kwh > 0:
                 acc["charge"] += energy_kwh
                 acc["import"] += energy_kwh
@@ -272,18 +292,66 @@ class PvSourceService:
             # Mirror into the module-level snapshot so the live endpoint can read
             # today's charge/discharge (battery IN/OUT) without the instance.
             _store_daily(key, acc)
-
-            # Direction-appropriate daily energy (magnitude): while charging show
-            # today's charged kWh, while discharging today's discharged kWh — the
-            # frontend colours it green/red by the live power direction. Always
-            # non-zero once the battery has done that direction today.
-            if role == "battery":
-                tile = acc["charge"] if float(power_w) >= 0 else acc["discharge"]
-            elif role == "grid":
-                tile = acc["import"] if float(power_w) >= 0 else acc["export"]
-            else:  # pv
-                tile = acc["production"]
+            tile = self._tile_today(role, acc, power_w)
         return energy_kwh, tile
+
+    def _counter_delta(self, ckey: str, cur: Optional[float]) -> float:
+        """Non-negative delta of a cumulative counter since the previous poll.
+        Returns 0 on the first sample, on a counter reset (delta < 0, e.g. an
+        inverter reboot), or on an implausible jump (> 100 kWh in one interval),
+        so a discontinuity never spikes the energy total."""
+        if cur is None:
+            return 0.0
+        prev = self._prev_counter.get(ckey)
+        self._prev_counter[ckey] = float(cur)
+        if prev is None:
+            return 0.0
+        d = float(cur) - float(prev)
+        if d < 0 or d > 100:
+            return 0.0
+        return d
+
+    def _role_counter_parts(self, role: str) -> Optional[Dict[str, float]]:
+        """Per-sub-metric interval energy (kWh) for a role from cumulative-counter
+        deltas, or ``None`` when no counter is mapped for this role (→ fall back
+        to power integration). Consumes the counter deltas exactly once."""
+        ec = self._energy_counters or {}
+        if role == "pv":
+            if ec.get("pv_total") is None:
+                return None
+            return {"production": self._counter_delta("pv_total", ec.get("pv_total"))}
+        if role == "grid":
+            if ec.get("grid_import") is None and ec.get("grid_export") is None:
+                return None
+            return {"import": self._counter_delta("grid_import", ec.get("grid_import")),
+                    "export": self._counter_delta("grid_export", ec.get("grid_export"))}
+        if role == "battery":
+            if ec.get("batt_charge") is None and ec.get("batt_discharge") is None:
+                return None
+            return {"charge": self._counter_delta("batt_charge", ec.get("batt_charge")),
+                    "discharge": self._counter_delta("batt_discharge", ec.get("batt_discharge"))}
+        return None
+
+    def _accumulate_counter(self, key: str, role: str, ts: int, power_w: float,
+                            parts: Dict[str, float]) -> tuple:
+        """Roll counter-delta sub-metrics into today's accumulator and return the
+        SIGNED interval energy for the DB rollup (import/charge/production +,
+        export/discharge −) plus the live-tile figure. This is the EXACT path:
+        summed over a day it equals the source counters' daily delta."""
+        with self._acc_lock:
+            acc = self._day_acc_for(key, ts)
+            for sub, d in parts.items():
+                if d:
+                    acc[sub] = acc.get(sub, 0.0) + float(d)
+            _store_daily(key, acc)
+            tile = self._tile_today(role, acc, power_w)
+        if role == "grid":
+            signed = parts.get("import", 0.0) - parts.get("export", 0.0)
+        elif role == "battery":
+            signed = parts.get("charge", 0.0) - parts.get("discharge", 0.0)
+        else:  # pv
+            signed = parts.get("production", 0.0)
+        return signed, tile
 
     def _seed_from_db(self, key: str, ts: int, acc: Dict[str, float]) -> None:
         """Populate today's accumulator from the DB hourly rollup (local day)."""
@@ -312,7 +380,14 @@ class PvSourceService:
     # ── ingest into live store + DB ────────────────────────────────────
     def _ingest(self, key: str, role: str, ts: int, power_w: float,
                 kwh_today: Optional[float], soc: Optional[float]) -> None:
-        energy_kwh, acc_today = self._accumulate(key, role, ts, power_w)
+        # EXACT path: when the user mapped cumulative energy counters for this
+        # role, derive interval energy from the counter delta (matches the source
+        # system to the decimal). Otherwise integrate instantaneous power.
+        parts = self._role_counter_parts(role)
+        if parts is not None:
+            energy_kwh, acc_today = self._accumulate_counter(key, role, ts, power_w, parts)
+        else:
+            energy_kwh, acc_today = self._accumulate(key, role, ts, power_w)
         # PV "today": prefer the inverter's own cumulative counter when the user
         # mapped one (kwh_today), else the integrated accumulator.
         tile_kwh = float(kwh_today) if kwh_today is not None else float(acc_today)
@@ -390,6 +465,16 @@ class PvSourceService:
         grid_w = _state(getattr(cfg, "grid_power_entity", ""))
         house_w = _state(getattr(cfg, "house_power_entity", ""))
         pv_today = _state(getattr(cfg, "pv_energy_today_entity", ""))
+        # Cumulative energy counters (kWh) for EXACT interval energy via deltas.
+        # Read each tick; missing/unmapped ones stay None → role falls back to
+        # power integration.
+        self._energy_counters = {
+            "pv_total": _state(getattr(cfg, "pv_energy_total_entity", "")),
+            "grid_import": _state(getattr(cfg, "grid_import_energy_entity", "")),
+            "grid_export": _state(getattr(cfg, "grid_export_energy_entity", "")),
+            "batt_charge": _state(getattr(cfg, "battery_charge_energy_entity", "")),
+            "batt_discharge": _state(getattr(cfg, "battery_discharge_energy_entity", "")),
+        }
         if pv_w is not None or batt_w is not None or grid_w is not None:
             self.last_error = None
         return (pv_w, batt_w, soc, grid_w, house_w, pv_today)
@@ -456,6 +541,9 @@ class PvSourceService:
             self._svc_log(f"PV source (MQTT) connect failed: {e}")
 
     def _read_mqtt(self, cfg):
+        # MQTT source carries instantaneous power only — no cumulative counters,
+        # so the exact-energy path stays disabled (power integration is used).
+        self._energy_counters = {}
         with self._mqtt_lock:
             v = dict(self._mqtt_vals)
         return (v.get("pv"), v.get("battery"), v.get("soc"),

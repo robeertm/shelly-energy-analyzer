@@ -558,6 +558,21 @@ class PvSourceConfig:
     house_power_entity: str = ""     # W, total house load (optional)
     pv_energy_today_entity: str = "" # kWh, cumulative PV yield today (optional)
 
+    # ── Exact energy counters (kWh, cumulative/monotonic) ──────────────
+    # When set, the interval energy fed to the DB rollup is the DELTA of these
+    # cumulative counters between polls instead of the trapezoidal integral of
+    # instantaneous power. That makes daily/weekly/monthly kWh match the source
+    # system (e.g. HA Energy / the inverter) to the decimal, rather than only to
+    # within power-integration error (~1-3 %). Signs are applied per role:
+    # grid = import − export, battery = charge − discharge, pv = production
+    # (≥ 0). Prefer lifetime totals (no midnight reset → no day-boundary gap).
+    # The power entities above are still used for the live instantaneous tile.
+    pv_energy_total_entity: str = ""         # kWh, cumulative PV production
+    grid_import_energy_entity: str = ""      # kWh, cumulative grid import
+    grid_export_energy_entity: str = ""      # kWh, cumulative grid export (feed-in)
+    battery_charge_energy_entity: str = ""   # kWh, cumulative battery charge
+    battery_discharge_energy_entity: str = "" # kWh, cumulative battery discharge
+
     # ── MQTT subscribe (broker creds reuse MqttConfig when empty) ───────
     mqtt_pv_power_topic: str = ""
     mqtt_battery_power_topic: str = ""
@@ -1553,6 +1568,11 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         grid_power_entity=str(pvsrc_raw.get("grid_power_entity", PvSourceConfig.grid_power_entity) or ""),
         house_power_entity=str(pvsrc_raw.get("house_power_entity", PvSourceConfig.house_power_entity) or ""),
         pv_energy_today_entity=str(pvsrc_raw.get("pv_energy_today_entity", PvSourceConfig.pv_energy_today_entity) or ""),
+        pv_energy_total_entity=str(pvsrc_raw.get("pv_energy_total_entity", PvSourceConfig.pv_energy_total_entity) or ""),
+        grid_import_energy_entity=str(pvsrc_raw.get("grid_import_energy_entity", PvSourceConfig.grid_import_energy_entity) or ""),
+        grid_export_energy_entity=str(pvsrc_raw.get("grid_export_energy_entity", PvSourceConfig.grid_export_energy_entity) or ""),
+        battery_charge_energy_entity=str(pvsrc_raw.get("battery_charge_energy_entity", PvSourceConfig.battery_charge_energy_entity) or ""),
+        battery_discharge_energy_entity=str(pvsrc_raw.get("battery_discharge_energy_entity", PvSourceConfig.battery_discharge_energy_entity) or ""),
         mqtt_pv_power_topic=str(pvsrc_raw.get("mqtt_pv_power_topic", PvSourceConfig.mqtt_pv_power_topic) or ""),
         mqtt_battery_power_topic=str(pvsrc_raw.get("mqtt_battery_power_topic", PvSourceConfig.mqtt_battery_power_topic) or ""),
         mqtt_battery_soc_topic=str(pvsrc_raw.get("mqtt_battery_soc_topic", PvSourceConfig.mqtt_battery_soc_topic) or ""),
@@ -2108,6 +2128,11 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "grid_power_entity": str(getattr(cfg.pv_source, "grid_power_entity", "") or ""),
             "house_power_entity": str(getattr(cfg.pv_source, "house_power_entity", "") or ""),
             "pv_energy_today_entity": str(getattr(cfg.pv_source, "pv_energy_today_entity", "") or ""),
+            "pv_energy_total_entity": str(getattr(cfg.pv_source, "pv_energy_total_entity", "") or ""),
+            "grid_import_energy_entity": str(getattr(cfg.pv_source, "grid_import_energy_entity", "") or ""),
+            "grid_export_energy_entity": str(getattr(cfg.pv_source, "grid_export_energy_entity", "") or ""),
+            "battery_charge_energy_entity": str(getattr(cfg.pv_source, "battery_charge_energy_entity", "") or ""),
+            "battery_discharge_energy_entity": str(getattr(cfg.pv_source, "battery_discharge_energy_entity", "") or ""),
             "mqtt_pv_power_topic": str(getattr(cfg.pv_source, "mqtt_pv_power_topic", "") or ""),
             "mqtt_battery_power_topic": str(getattr(cfg.pv_source, "mqtt_battery_power_topic", "") or ""),
             "mqtt_battery_soc_topic": str(getattr(cfg.pv_source, "mqtt_battery_soc_topic", "") or ""),
