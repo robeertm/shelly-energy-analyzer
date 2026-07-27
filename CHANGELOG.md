@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.46.4
+### Fixed
+- **Live sparklines now share a common real-time x-axis.** They were plotted by sample index, so a sparse series (e.g. an external PV/battery source polled every 15 s) scrolled visibly faster than a dense Shelly series in the same window. Points are now positioned by timestamp over the selected window, so all device plots advance at the same rate.
+
 ## 16.46.3
 ### Changed
 - **All configuration is now managed in the Settings menu only.** The inline Solar/PV quick-config panel on the Solar tab was removed; the tab links to Settings instead (single source of truth). The Settings menu's Solar section gained the previously missing fields: PV-production device, and the PV/battery embodied-CO₂ factors.
