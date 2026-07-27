@@ -1,6 +1,11 @@
 # Changelog
 
-## 16.46.7
+## 16.47.0
+### Fixed
+- **Grid feed-in / export is now recorded (was structurally always 0).** For a bidirectional grid meter the stored per-interval energy was import-only — the per-phase export counters (`*_total_act_ret_energy`) were persisted but never subtracted — so hourly energy could never go negative and every feed-in figure was stuck at 0. Energy is now signed net (import − export) at both computation sites (`core/energy.py` live/sync path and `io/database.py` CSV path). Consumption-only meters have no export counters, so their values are unchanged.
+- **Feed-in, revenue, CO₂ export credit, self-consumption and autarky are now correct** on the Solar / Cost / CO₂ tabs, which all derive feed-in from negative grid energy. Autarky is now computed directly from grid import (independent of the self-consumption override) so the two figures can no longer contradict each other.
+### Note
+- Existing history was stored import-only; run a **full re-sync** (Settings → Sync, full mode) once after updating so past days are recomputed with signed energy.
 ### Fixed
 - **NILM appliance hints no longer reappear on PV / battery tiles.** The live-poll updater re-created the appliance-chip container on every refresh even for flow devices, undoing the hide applied at first render. Flow devices (PV, battery) now stay free of NILM hints on live updates too.
 
