@@ -4022,14 +4022,25 @@ class ActionDispatcher:
             try:
                 from shelly_analyzer.services.standby import generate_standby_report, analyze_standby_from_df
                 price = self._get_effective_unit_price()
-                report = generate_standby_report(self.storage.db, self.cfg.devices, price)
+                # The grid/PV meter is not a consumer — excluding it stops the
+                # net meter being reported as a standby "waster" (its base load
+                # is the whole-house import, not appliance standby).
+                _sc = getattr(self.cfg, "solar", None)
+                _excl = set()
+                if _sc is not None:
+                    for _a in ("grid_meter_device_key", "pv_meter_device_key", "pv_production_device_key"):
+                        _v = str(getattr(_sc, _a, "") or "")
+                        if _v:
+                            _excl.add(_v)
+                _standby_devs = [d for d in self.cfg.devices if d.key not in _excl]
+                report = generate_standby_report(self.storage.db, _standby_devs, price)
 
                 # Fallback: if DB-based analysis found nothing, use computed
                 # DataFrames (CSV-based, same source as Costs tab).
                 if not report.devices:
                     from shelly_analyzer.services.standby import StandbyReport
                     results = []
-                    for dev in self.cfg.devices:
+                    for dev in _standby_devs:
                         if str(getattr(dev, "kind", "em")) == "switch":
                             continue
                         try:

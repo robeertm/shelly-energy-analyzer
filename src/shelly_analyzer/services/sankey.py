@@ -165,15 +165,27 @@ def compute_sankey(
 
     has_battery = (battery_charge > 0.01 or battery_discharge > 0.01)
 
-    # Re-derive the split so every node balances:
-    #   PV      = pv_direct_to_house + battery_charge + feed_in
-    #   House   = pv_direct_to_house + battery_discharge + grid_import
+    # Re-derive the split so BOTH the House and the PV node balance, prioritising
+    # House-load conservation (its inflows must equal what the devices consumed).
+    # External PV/grid/battery/house meters rarely reconcile to the last kWh, so
+    # any PV that is neither direct-to-house, stored, nor already metered as
+    # export is attributed to feed-in (keeps PV = direct + charge + feed-in and
+    # House = direct + discharge + grid_import, never over-supplying the house).
+    #   House   = pv_direct + battery_to_house + grid_import
+    #   PV      = pv_direct + battery_charge + feed_in
+    battery_to_house = min(battery_discharge, total_consumption)
     if has_solar and pv_production > 0.01:
-        pv_direct = max(0.0, pv_production - pv_feed_in_kwh - battery_charge)
-        grid_import = max(0.0, total_consumption - pv_direct - battery_discharge)
+        pv_direct = max(0.0, min(pv_production - pv_feed_in_kwh - battery_charge,
+                                 total_consumption - battery_to_house))
+        grid_import = max(0.0, total_consumption - pv_direct - battery_to_house)
+        _pv_left = max(0.0, pv_production - pv_feed_in_kwh - battery_charge - pv_direct)
+        pv_feed_in_kwh += _pv_left  # unaccounted surplus → export
         self_consumption = pv_direct + battery_charge  # PV used on-site (house + stored)
     else:
         pv_direct = 0.0
+        grid_import = max(0.0, total_consumption - battery_to_house)
+    # The Battery→House flow uses the load-clamped value so it can't over-supply.
+    battery_discharge = battery_to_house
 
     # Build Sankey nodes and flows
     nodes: List[str] = []

@@ -1,6 +1,11 @@
 # Changelog
 
-## 16.49.0
+## 16.50.0
+### Fixed
+- **Energy-flow (Sankey) now balances even when the external meters don't fully reconcile.** House inflows always equal what the devices consumed; any PV that isn't direct-to-house, stored, or already metered as export is attributed to feed-in, so the house is never over-supplied.
+- **Standby tab no longer flags the grid/PV meter as a "waster".** The net meter is excluded from standby analysis (its base load is whole-house import, not appliance standby).
+### Added
+- **External PV / battery / grid devices are now selectable in Settings.** When the external PV source is enabled, the synthetic `pv`, `battery` and `grid_ext` devices appear (read-only) in the device dropdowns, so PV-production / battery / grid-meter settings can actually be pointed at them.
 ### Added
 - **Battery tab is much richer.** New: stored kWh vs capacity, charge/discharge today (in/out), a state-of-charge history chart, equivalent full cycles, a time-to-full / time-to-empty forecast, and a measured/estimated SOC-source badge. Round-trip efficiency now falls back to the nominal configured value (labelled) instead of reporting a nonsensical figure from a partial cycle.
 - **Battery in the energy-flow (Sankey) diagram.** PV → Battery (charging) and Battery → House (discharging) are now separate flows, so PV that charged the battery is no longer miscounted as house self-consumption and the diagram balances.

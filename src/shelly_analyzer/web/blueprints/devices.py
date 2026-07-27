@@ -53,6 +53,35 @@ def list_devices():
             "has_password": bool(getattr(d, "password", "") or ""),
         }
         devices.append(info)
+
+    # Synthetic pseudo-devices fed by the external PV source (PvSourceConfig).
+    # They are not in cfg.devices but MUST be selectable in the Settings
+    # device dropdowns (PV production, battery, grid meter), otherwise a
+    # pre-set config value can never be picked from the UI. Marked synthetic so
+    # the Devices section can render them read-only.
+    try:
+        pvs = getattr(state.cfg, "pv_source", None)
+        if pvs is not None and getattr(pvs, "enabled", False):
+            _existing = {d["key"] for d in devices}
+            _synth = [
+                ("pv", "PV (extern)"),
+                ("battery", "Batterie (extern)"),
+                ("grid_ext", "Netz (extern)"),
+            ]
+            for _k, _n in _synth:
+                if _k in _existing:
+                    continue
+                devices.append({
+                    "key": _k, "name": _n, "host": "", "em_id": 0,
+                    "kind": "em", "gen": 0, "model": "external",
+                    "phases": 3, "supports_emdata": False,
+                    "online": _k in snap and bool(snap.get(_k)),
+                    "username": "", "has_password": False,
+                    "synthetic": True,
+                })
+    except Exception:
+        pass
+
     return jsonify({"devices": devices})
 
 
