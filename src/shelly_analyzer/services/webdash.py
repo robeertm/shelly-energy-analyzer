@@ -8625,28 +8625,36 @@ _loadLsSettings();
       html += '<tr style="color:var(--muted);font-size:11px;text-transform:uppercase">' +
         '<th style="text-align:left;padding:4px 6px">' + t('cal.device', 'Gerät') + '</th>' +
         '<th style="text-align:left;padding:4px 6px">' + t('cal.type', 'Typ') + '</th>' +
-        '<th style="text-align:left;padding:4px 6px">' + t('cal.hangs_on', 'hängt an') + '</th></tr>';
+        '<th style="text-align:left;padding:4px 6px">' + t('cal.hangs_on', 'hängt an') + '</th>' +
+        '<th style="text-align:left;padding:4px 6px" title="' + t('cal.deduct_hint', 'Mieter/Unterzähler: wird NICHT kalibriert, sondern vom Zählerstand abgezogen (behält eigenen Aufschlag).') + '">' + t('cal.deduct', 'Abzug') + '</th></tr>';
       devs.forEach(dev => {{
+        const _isEmChild = dev.kind === 'em' && !!dev.parent;
         html += '<tr style="border-top:1px solid var(--border)">';
         html += '<td style="padding:4px 6px">' + esc(dev.name) + '</td>';
         html += '<td style="padding:4px 6px;color:var(--muted)">' + (dev.kind === 'em' ? ('⚡ ' + t('cal.kind_meter', 'Messgerät')) : ('🔌 ' + t('cal.kind_switch', 'Schalter'))) + '</td>';
         html += '<td style="padding:4px 6px"><select onchange="setDeviceParent(\\u0027' + esc(dev.key) + '\\u0027, this.value)" style="font-size:13px;padding:3px">' + _calParentOptions(dev) + '</select></td>';
+        html += '<td style="padding:4px 6px">' + (_isEmChild
+          ? ('<label style="cursor:pointer;font-size:12px;color:var(--muted)"><input type="checkbox"' + (dev.deduct_from_parent ? ' checked' : '') + ' onchange="setDeviceDeduct(\\u0027' + esc(dev.key) + '\\u0027, this.checked)"> ' + t('cal.deduct_tenant', 'Mieter') + '</label>')
+          : '') + '</td>';
         html += '</tr>';
       }});
       html += '</table>';
     }}
     meters.forEach(m => {{
-      const kids = devs.filter(x => x.parent === m.id && x.kind === 'em');
+      const allKids = devs.filter(x => x.parent === m.id && x.kind === 'em');
+      const kids = allKids.filter(x => !x.deduct_from_parent);      // calibrated
+      const deductKids = allKids.filter(x => x.deduct_from_parent);  // tenant, subtracted
       if (!kids.length) return;
       const fid = 'calm-' + m.id;
       const readings = (m.readings || []).slice().sort((a,b) => a.ts - b.ts);
-      // Alle Kinder tragen dieselben abgeleiteten Einträge → Historie eines Kindes reicht.
+      // Alle kalibrierten Kinder tragen dieselben abgeleiteten Einträge → Historie eines reicht.
       const sharedHist = (histByKey[kids[0].key] && histByKey[kids[0].key].history) ? histByKey[kids[0].key].history : [];
       html += '<div style="margin-top:12px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">';
       html += '<div style="font-weight:600;margin-bottom:2px">📏 ' + esc(m.name || m.id) + ' — ' + t('cal.reading_log', 'Zählerstände') + '</div>';
       html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' +
         t('cal.log_intro', 'Trage von Zeit zu Zeit den abgelesenen Zählerstand ein. Die Abweichung zwischen zwei Ablesungen wird automatisch berechnet und rückwirkend auf genau diesen Zeitraum angewendet. Eine einzelne Ablesung ist der Startwert (noch kein Faktor).') +
-        ' ' + t('cal.will_sum', 'Summiert') + ': ' + kids.map(k => esc(k.name)).join(' + ') + '</div>';
+        ' ' + t('cal.will_sum', 'Summiert') + ': ' + kids.map(k => esc(k.name)).join(' + ') +
+        (deductKids.length ? (' &minus; ' + deductKids.map(k => esc(k.name)).join(' &minus; ') + ' (' + t('cal.deducted', 'abgezogen') + ')') : '') + '</div>';
       // Trend der Abweichung über die Zeit
       if (sharedHist.length) {{
         html += '<div style="margin:6px 0 10px">' + _calChartSvg(sharedHist) + '</div>';
@@ -8723,6 +8731,12 @@ _loadLsSettings();
   async function setDeviceParent(key, parent) {{
     try {{
       await fetch('/api/devices/' + encodeURIComponent(key), {{method:'PUT', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{parent: parent}})}});
+      await loadCalibration();
+    }} catch(e) {{ alert(e.message); }}
+  }}
+  async function setDeviceDeduct(key, checked) {{
+    try {{
+      await fetch('/api/devices/' + encodeURIComponent(key), {{method:'PUT', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{deduct_from_parent: !!checked}})}});
       await loadCalibration();
     }} catch(e) {{ alert(e.message); }}
   }}

@@ -210,6 +210,9 @@ def update_device(key: str):
         # Meter cascade: which meter this device hangs under (main-meter id or
         # device key). Falls back to the existing value when not supplied.
         parent=str(body.get("parent", getattr(d, "parent", "")) or "").strip(),
+        # Tenant sub-meter deducted from (not calibrated against) its parent meter.
+        deduct_from_parent=bool(body.get("deduct_from_parent",
+                                         getattr(d, "deduct_from_parent", False))),
     )
 
     new_devices = list(state.cfg.devices)
@@ -745,6 +748,38 @@ def _raw_kwh_over(state, db, dkey: str, t0: int, t1: int) -> float:
     return 0.0
 
 
+def _comp_kwh_over(state, db, dkey: str, t0: int, t1: int) -> float:
+    """COMPENSATED measured kWh of a device over [t0, t1] (applies its dated
+    compensation history / flat factor). Used to subtract a deducted tenant
+    sub-meter's *real* consumption from a shared utility-meter reading before the
+    owner meters' drift factor is derived."""
+    import pandas as pd
+    try:
+        dfh = db.query_hourly(dkey, start_ts=t0, end_ts=t1, compensate=True)
+        if dfh is not None and not dfh.empty and "kwh" in dfh.columns:
+            return float(pd.to_numeric(dfh["kwh"], errors="coerce").fillna(0).sum())
+    except TypeError:
+        # DB without the compensate kwarg → apply the scalar factor to raw.
+        raw = _raw_kwh_over(state, db, dkey, t0, t1)
+        dev = next((x for x in state.cfg.devices if x.key == dkey), None)
+        cf = 1.0 + float(getattr(dev, "compensation_percent", 0.0) or 0.0) / 100.0 if dev else 1.0
+        return raw * (cf or 1.0)
+    except Exception:
+        pass
+    return 0.0
+
+
+def _split_meter_children(devices, meter_id):
+    """Direct em children of ``meter_id`` split into (calibrated, deducted).
+    Deducted children are tenant sub-meters subtracted from the meter reading."""
+    em = [d for d in devices
+          if str(getattr(d, "parent", "") or "") == meter_id
+          and str(getattr(d, "kind", "")) == "em"]
+    calib = [d for d in em if not bool(getattr(d, "deduct_from_parent", False))]
+    deduct = [d for d in em if bool(getattr(d, "deduct_from_parent", False))]
+    return calib, deduct
+
+
 def _set_history_on_cfg(cfg, device_key: str, entries):
     """Like ``_comp_set_history`` but operating on an arbitrary cfg, so several
     devices can be updated before a single save."""
@@ -790,6 +825,7 @@ def list_meters():
             "kind": str(getattr(d, "kind", "em")),
             "parent": str(getattr(d, "parent", "") or ""),
             "compensation_percent": float(getattr(d, "compensation_percent", 0.0) or 0.0),
+            "deduct_from_parent": bool(getattr(d, "deduct_from_parent", False)),
         }
         for d in state.cfg.devices
     ]
@@ -872,22 +908,24 @@ def calibrate_meter():
     except Exception:
         eff_ts = t0
 
-    children = [
-        d for d in state.cfg.devices
-        if str(getattr(d, "parent", "") or "") == meter_id
-        and str(getattr(d, "kind", "")) == "em"
-    ]
+    children, deduct_children = _split_meter_children(state.cfg.devices, meter_id)
     if not children:
         return jsonify({"ok": False,
                         "error": _t(_lang, "settings.compensation.err_no_children")}), 400
 
     db = state.storage.db
+    # Subtract deducted tenant sub-meters (compensated → their real consumption)
+    # from the meter reading so their usage doesn't inflate the owner factor.
+    deduct = sum(_comp_kwh_over(state, db, d.key, t0, t1) for d in deduct_children)
+    meter_eff = meter - deduct
+    if meter_eff <= 0:
+        return jsonify({"ok": False, "error": _t(_lang, "settings.compensation.err_meter_order")}), 400
     per = {d.key: _raw_kwh_over(state, db, d.key, t0, t1) for d in children}
     raw = sum(per.values())
     if raw <= 0:
         return jsonify({"ok": False, "error": _t(_lang, "settings.compensation.err_no_data")}), 400
 
-    factor = meter / raw
+    factor = meter_eff / raw
     percent = (factor - 1.0) * 100.0
 
     new_cfg = state.cfg
@@ -898,7 +936,7 @@ def calibrate_meter():
             effective_from_ts=int(eff_ts),
             percent=percent,
             note=f"meter:{meter_id}",
-            meter_kwh=meter,
+            meter_kwh=meter_eff,
             raw_kwh=per[d.key],
         ))
         new_cfg = _set_history_on_cfg(new_cfg, d.key, hist)
@@ -907,6 +945,7 @@ def calibrate_meter():
     return jsonify({
         "ok": True, "meter_id": meter_id,
         "percent": round(percent, 3), "factor": round(factor, 5),
+        "deducted_kwh": round(deduct, 3), "meter_effective_kwh": round(meter_eff, 3),
         "meter_kwh": round(meter, 3), "raw_kwh": round(raw, 3),
         "children": [d.key for d in children],
         "per_child_raw": {k: round(v, 3) for k, v in per.items()},
@@ -929,9 +968,7 @@ def _recompute_meter_from_readings(state, meter_id):
     if meter is None:
         return state.cfg
     readings = sorted((getattr(meter, "readings", ()) or ()), key=lambda r: int(r.ts))
-    children = [d for d in state.cfg.devices
-                if str(getattr(d, "parent", "") or "") == meter_id
-                and str(getattr(d, "kind", "")) == "em"]
+    children, deduct_children = _split_meter_children(state.cfg.devices, meter_id)
     tag = "meter:" + str(meter_id)
     pre_tag = tag + ":pre"  # synthetic pre-first-reading step (weighted overall)
     derived = []  # (eff_ts, percent, meter_delta, raw_delta)
@@ -940,6 +977,9 @@ def _recompute_meter_from_readings(state, meter_id):
         if t1 <= t0:
             continue
         meter_d = float(readings[i + 1].kwh) - float(readings[i].kwh)
+        # Subtract deducted tenant sub-meters (compensated → their real usage) so a
+        # single meter covering owner + tenant still yields the OWNER drift factor.
+        meter_d -= sum(_comp_kwh_over(state, db, c.key, t0, t1) for c in deduct_children)
         raw_d = sum(_raw_kwh_over(state, db, c.key, t0, t1) for c in children)
         if meter_d <= 0 or raw_d <= 0:
             continue
@@ -969,6 +1009,14 @@ def _recompute_meter_from_readings(state, meter_id):
                 effective_from_ts=pre_entry[0], percent=pre_entry[1], note=pre_tag,
                 meter_kwh=pre_entry[2], raw_kwh=pre_entry[3]))
         new_cfg = _set_history_on_cfg(new_cfg, c.key, kept + made)
+    # Deducted tenant sub-meters must NOT carry this meter's derived factor — strip
+    # any stale entries so a device switched to "deduct" drops its old shared factor
+    # (its own manual/flat compensation, note != meter tag, is preserved).
+    for c in deduct_children:
+        old = getattr(c, "compensation_history", ()) or ()
+        kept = [e for e in old if not str(getattr(e, "note", "")).startswith(tag)]
+        if len(kept) != len(old):
+            new_cfg = _set_history_on_cfg(new_cfg, c.key, kept)
     return new_cfg
 
 

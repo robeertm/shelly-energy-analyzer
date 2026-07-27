@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.52.0
+### Added
+- **Deducted tenant sub-meters in the meter cascade** (`DeviceConfig.deduct_from_parent`). A single utility meter that physically covers the owner *and* a tenant can now calibrate the owner correctly: a child flagged as *deduct* is **not** calibrated against the main meter — instead its (compensated) consumption is **subtracted from the meter reading** before the owner meters' drift factor is derived, and it keeps its own flat compensation surcharge. Without this, the tenant's usage inflated the shared drift factor and — worse — that contaminated factor was written onto the tenant's own meter too, distorting the tenant bill. Both the reading-log recompute and the one-shot `calibrate_meter` honour it; the cascade UI gains a per-device "Deduct (tenant)" toggle and shows the subtracted meters in the calibration summary. Backward compatible: default off = previous behaviour.
+
 ## 16.51.1
 ### Fixed
 - **Energy-flow (Sankey) footer no longer clips.** When both a feed-in and a battery-charge summary line were shown under the diagram, the second line was drawn past the bottom edge of the fixed-height canvas and got cut off. The canvas is now taller and the bottom margin scales with the number of footer lines, so the "⚡ Feed-in" and "🔋 Battery charged" totals always stay fully inside the frame (and the diagram itself gains a little vertical room).
