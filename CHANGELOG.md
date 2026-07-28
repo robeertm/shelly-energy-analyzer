@@ -1,5 +1,21 @@
 # Changelog
 
+## 16.54.0
+### Fixed
+- **CO₂ accounting was physically wrong: feed-in produced negative CO₂ and the generation chain was ignored.** The CO₂ tab derived the household footprint from a single meter as *grid − feed-in*, valuing every exported kWh at the full grid intensity and **subtracting** it — so an hour of feed-in cancelled real grid emissions and the summary could read negative. The solar footprint likewise booked a *feed-in credit*, and per-device charts/plots drew negative CO₂ bars for a signed grid meter. Exported energy is energy that leaves the property; it can never be a negative footprint.
+
+  CO₂ is now attributed **per hour over the whole generation chain** (`energy_balance.compute_co2`). Each consumed kWh is charged the intensity of the source that actually served it that hour: grid import at the (hourly) grid mix, self-consumed PV and battery discharge at their embodied factors (`SolarConfig.pv_embodied_g_per_kwh` / `battery_embodied_g_per_kwh`). Feed-in is charged **nothing** — the footprint is never negative. Concretely per hour, with signed grid (+import/−export), signed battery (+charge/−discharge) and PV ≥ 0:
+
+  `PV_direct = max(0, pv − export − charge)`, `pool = PV_direct + import`, `solar_frac = PV_direct / pool`, and the blended non-battery intensity `eff = solar_frac·pv_embodied + (1−solar_frac)·grid_mix`.
+
+- **The grid-parallel tenant is now billed the solar-blended intensity, not the flat grid mix.** A tenant circuit that draws PV surplus when it is available (and grid otherwise, never the battery) now gets a CO₂ share that follows the prevailing supply: it drops toward the PV embodied factor when solar flows and rises to the full grid mix at night. The CO₂ tab shows the owner vs. tenant split and the tenant's solar share. Previously the tenant had no CO₂ figure at all.
+
+- **Plots priced feed-in at the consumer tariff.** The per-device cost overlay in Plots multiplied every bucket — including a signed grid meter's negative (export) buckets — by the consumer price (spot or fixed). Exported energy is now credited at the **feed-in tariff** (`SolarConfig.feed_in_tariff_eur_per_kwh`, ≈ 8 ct/kWh) instead, and its CO₂ bar is clamped to zero.
+
+- **The daily digest CO₂ (HA sensor) was a flat grid-mix estimate.** It multiplied the whole day's consumption by the static grid factor, ignoring solar. It now uses the same chain-aware footprint (falling back to the flat estimate only when no PV/grid meter exists).
+
+  No stored CO₂ data exists to migrate — every figure is derived on the fly from the stored per-hour kWh and grid intensity, so all historical CO₂ and cost views are recomputed correctly by this fix.
+
 ## 16.53.1
 ### Fixed
 - **Balance tenant "today" double-counted the midnight hour.** The 16.53.0 live-store supplement capped the hourly rollups at today's midnight, but `query_hourly` bounds are inclusive, so today's midnight-hour bucket was summed from the DB *and* again via the live daily total. The hourly cap now ends one second before midnight, so the tenant "today" equals the live daily accumulator exactly.
