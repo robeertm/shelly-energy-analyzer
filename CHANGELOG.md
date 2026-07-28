@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.55.1
+### Fixed
+- **Heatmap: the visible grid meter (Netz) was coloured as an owner circuit.** When the cost grid source is the external series (EMMA `grid_ext`) but a Shelly stays the displayed Netz tile (`grid_display_device_key`), the heatmap didn't recognise that tile as the grid, so its legend read "Less/More" instead of "Import/Feed-in" (feed-in cells were already blue/purple via the fallback). The heatmap now treats both the cost meter and the display meter as grid, matching the live view, and no longer offers a duplicate synthetic grid entry in the picker.
+
 ## 16.55.0
 ### Fixed
 - **Owner energy drawn from the battery/PV was still priced at the full grid tariff in Plots.** The per-device cost overlay multiplied every bucket by the consumer price, so a night run entirely on the battery still showed a cost. Owner circuits are now priced per bucket at the **grid-served share** of that bucket (`energy_balance.compute_grid_cost_share`): battery discharge and directly self-consumed PV cost nothing, so a battery night drops to ~0. The grid meter keeps its real import/feed-in position and tenant circuits always pay the full tariff. (The Kosten-tab range totals were already solar-aware via the effective price; this brings the time-resolved plots in line.)

@@ -3235,9 +3235,19 @@ class ActionDispatcher:
                 except Exception:
                     _grid_k = _pv_k = _batt_k = ""
                     _ten_set = set()
+                # The *visible* grid meter can differ from the cost meter: the cost
+                # may come from the accurate external grid_ext (EMMA) while a Shelly
+                # stays the coloured "Netz" tile (grid_display_device_key). Colour
+                # BOTH as grid (mirrors the live view's _flow_role).
+                _solar_hm = getattr(self.cfg, "solar", None)
+                _grid_disp_k = ""
+                if _solar_hm:
+                    _grid_disp_k = (str(getattr(_solar_hm, "grid_display_device_key", "") or "")
+                                    or str(getattr(_solar_hm, "grid_meter_device_key", "") or ""))
+                _grid_role_keys = {k for k in (_grid_k, _grid_disp_k) if k}
 
                 def _role_for(_k: str) -> str:
-                    if _grid_k and _k == _grid_k:
+                    if _k in _grid_role_keys:
                         return "grid"
                     if _pv_k and _k == _pv_k:
                         return "pv"
@@ -3250,8 +3260,10 @@ class ActionDispatcher:
                 _cfg_keys = {d.key for d in self.cfg.devices}
                 devices_list = [{"key": d.key, "name": d.name, "flow_role": _role_for(d.key)}
                                 for d in self.cfg.devices]
-                # Append the synthetic PV/battery/grid series (from the external
-                # PV source) when they exist and aren't already configured devices.
+                # Append the synthetic PV/battery series (from the external PV
+                # source) when they exist and aren't already configured devices.
+                # The synthetic grid_ext is a cost-only mirror of the visible Netz
+                # tile, so it is NOT added here (would duplicate the grid device).
                 try:
                     _live_names = {}
                     for _lk, _lp in (self.live_store.snapshot() or {}).items():
@@ -3262,8 +3274,7 @@ class ActionDispatcher:
                 except Exception:
                     _live_names = {}
                 for _sk, _srole, _sname in ((_pv_k, "pv", "PV"),
-                                            (_batt_k, "battery", "Batterie"),
-                                            (_grid_k, "grid", "Netz")):
+                                            (_batt_k, "battery", "Batterie")):
                     if _sk and _sk not in _cfg_keys:
                         devices_list.append({"key": _sk, "name": _live_names.get(_sk, _sname),
                                              "flow_role": _srole})
