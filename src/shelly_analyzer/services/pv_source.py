@@ -218,6 +218,10 @@ class PvSourceService:
         source = str(getattr(cfg, "source_type", "homeassistant"))
         if source == "mqtt":
             pv_w, batt_w, soc, grid_w, house_w, pv_today = self._read_mqtt(cfg)
+        elif source == "modbus":
+            pv_w, batt_w, soc, grid_w, house_w, pv_today = self._read_modbus(cfg)
+        elif source == "http":
+            pv_w, batt_w, soc, grid_w, house_w, pv_today = self._read_http(cfg)
         else:
             pv_w, batt_w, soc, grid_w, house_w, pv_today = self._read_ha(cfg)
 
@@ -477,6 +481,52 @@ class PvSourceService:
         }
         if pv_w is not None or batt_w is not None or grid_w is not None:
             self.last_error = None
+        return (pv_w, batt_w, soc, grid_w, house_w, pv_today)
+
+    # ── Modbus TCP (no Home Assistant needed) ──────────────────────────
+    def _read_modbus(self, cfg):
+        try:
+            from shelly_analyzer.services.pv_modbus import read_modbus
+        except Exception as e:
+            self.last_error = f"Modbus unavailable: {e}"
+            self._svc_log("PV source: " + self.last_error)
+            return (None, None, None, None, None, None)
+        pv_w, batt_w, soc, grid_w, house_w, pv_today, counters = read_modbus(cfg)
+        err = counters.pop("_error", None) if isinstance(counters, dict) else None
+        self._energy_counters = {
+            "pv_total": counters.get("pv_total"),
+            "grid_import": counters.get("grid_import"),
+            "grid_export": counters.get("grid_export"),
+            "batt_charge": counters.get("batt_charge"),
+            "batt_discharge": counters.get("batt_discharge"),
+        }
+        if pv_w is not None or batt_w is not None or grid_w is not None:
+            self.last_error = None
+        elif err:
+            self.last_error = f"Modbus: {err}"
+        return (pv_w, batt_w, soc, grid_w, house_w, pv_today)
+
+    # ── Local/cloud HTTP API (no Home Assistant needed) ────────────────
+    def _read_http(self, cfg):
+        try:
+            from shelly_analyzer.services.pv_http import read_http
+        except Exception as e:
+            self.last_error = f"HTTP source unavailable: {e}"
+            self._svc_log("PV source: " + self.last_error)
+            return (None, None, None, None, None, None)
+        pv_w, batt_w, soc, grid_w, house_w, pv_today, counters = read_http(cfg)
+        err = counters.pop("_error", None) if isinstance(counters, dict) else None
+        self._energy_counters = {
+            "pv_total": counters.get("pv_total"),
+            "grid_import": counters.get("grid_import"),
+            "grid_export": counters.get("grid_export"),
+            "batt_charge": counters.get("batt_charge"),
+            "batt_discharge": counters.get("batt_discharge"),
+        }
+        if pv_w is not None or batt_w is not None or grid_w is not None:
+            self.last_error = None
+        elif err:
+            self.last_error = f"HTTP: {err}"
         return (pv_w, batt_w, soc, grid_w, house_w, pv_today)
 
     # ── MQTT subscribe ─────────────────────────────────────────────────
