@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.55.2
+### Fixed
+- **Owner cost share now models the full chain per hour (tenant + battery), so every device — Haus, Wallbox, … — is only charged for its grid-sourced energy.** The 16.55.0 share used `grid_import / total_load`, which slightly overcharged the owner when a tenant and the battery were active in the same hour (the battery serves the owner only, and a grid-parallel tenant draws its share of the non-battery bus first). `compute_grid_cost_share` now derives the **owner-specific** grid rate: `PV_direct = max(0, pv − export − charge)`, `pool = PV_direct + grid_import`, `owner_nonbatt = max(0, pool − tenant_load)`, `owner_grid = owner_nonbatt · grid_import/pool`, `owner_total = owner_nonbatt + battery_discharge`, and the bucket rate is `Σ owner_grid / Σ owner_total`. Verified across every combination — much/little solar, much/little battery, and a load larger than solar+battery can cover (grid makes up the rest): a device running on battery/PV costs 0, grid+battery charges only the grid part, a pure-grid night charges full. Fully config-driven (roles from Solar/PV-source/tenant config); grid-only and no-tenant setups are unaffected (full tariff, reduces to `grid_import/total_load`). Consistent with the CO₂ owner/tenant split.
+
 ## 16.55.1
 ### Fixed
 - **Heatmap: the visible grid meter (Netz) was coloured as an owner circuit.** When the cost grid source is the external series (EMMA `grid_ext`) but a Shelly stays the displayed Netz tile (`grid_display_device_key`), the heatmap didn't recognise that tile as the grid, so its legend read "Less/More" instead of "Import/Feed-in" (feed-in cells were already blue/purple via the fallback). The heatmap now treats both the cost meter and the display meter as grid, matching the live view, and no longer offers a duplicate synthetic grid entry in the picker.
