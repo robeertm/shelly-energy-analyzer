@@ -5111,6 +5111,7 @@ class ActionDispatcher:
                     "co2_per_device": co2_per_device,
                     "price_ct_kwh": price_ct_kwh,
                     "price_fixed_ct_kwh": fixed_ct_kwh,
+                    "feed_in_ct": round(_feed_ct, 2),
                     "price_per_device": price_per_device,
                     "price_surcharges_included": include_surcharges and (surcharge_markup_ct > 0 or vat_factor != 1.0),
                     "price_surcharge_ct": round(surcharge_markup_ct, 3),

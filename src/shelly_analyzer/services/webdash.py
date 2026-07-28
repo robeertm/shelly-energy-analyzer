@@ -10468,8 +10468,17 @@ async function loadData() {
       // pure-export Netz card would hide the fixed feed-in trace entirely.
       const hasFixed = (devData.eur_fixed || []).some(v => v != null && v !== 0);
       if (hasFixed) {
+        // Per-bucket rate: export (negative €) is the FIXED feed-in tariff, not
+        // the consumer tariff — show the rate the € was actually computed with.
+        const feedInCt = (data.feed_in_ct != null) ? data.feed_in_ct : null;
+        const fxCustom = fxArr.map(function(v){
+          var rate = (v < 0 && feedInCt != null) ? feedInCt : fixedCt;
+          var lbl = (v < 0) ? t('web.costs.feed_in','Feed-in') : fixName;
+          return [ (rate != null ? rate.toFixed(2) : '?'), v, lbl ];
+        });
         traces.push({type:'bar', name: fixName, x: xsLab, y: fxArr, marker:{color:'#9ca3af'},
-          hovertemplate:'%{x}<br>' + (fixedCt != null ? fixedCt.toFixed(2) : '?') + ' ct/kWh · Σ %{y} €<extra>' + fixName + '</extra>'});
+          customdata: fxCustom,
+          hovertemplate:'%{x}<br>%{customdata[2]}: %{customdata[0]} ct/kWh · Σ %{customdata[1]} €<extra></extra>'});
       }
       Plotly.newPlot(
         plotId,
