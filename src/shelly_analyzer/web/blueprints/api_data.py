@@ -42,6 +42,28 @@ def api_heatmap():
     return _action_endpoint("heatmap")
 
 
+@bp.route("/api/pv_presets")
+def api_pv_presets():
+    """Manufacturer presets for the external PV source (UI auto-fill)."""
+    return _action_endpoint("pv_presets")
+
+
+@bp.route("/api/pv_source_test", methods=["POST"])
+def api_pv_source_test():
+    """Read the external PV source once with the posted field values so the user
+    can verify a preset (and the battery/grid signs) before enabling it."""
+    state = _get_state()
+    try:
+        body = request.get_json(silent=True) or {}
+        params = body.get("params") if isinstance(body.get("params"), dict) else body
+        if not isinstance(params, dict):
+            params = {}
+        payload = state.on_action("pv_source_test", params) if state.on_action else {"ok": False, "error": "not available"}
+    except Exception as e:
+        payload = {"ok": False, "error": str(e)}
+    return jsonify(payload)
+
+
 @bp.route("/api/solar")
 def api_solar():
     return _action_endpoint("solar")

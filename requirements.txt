@@ -13,3 +13,5 @@ plotly>=5.18
 # We intentionally do NOT depend on kaleido/Chrome.
 pywebview>=5.0
 zeroconf>=0.131
+# Direct Modbus TCP reads for the external PV source (no Home Assistant needed)
+pymodbus>=3.5

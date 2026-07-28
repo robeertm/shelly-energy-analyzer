@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shelly-energy-analyzer"
-version = "16.55.8"
+version = "16.56.0"
 description = "Shelly EM/3EM Energy Analyzer (Flask Web App)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,6 +24,7 @@ dependencies = [
   "plotly>=5.18",
   "zeroconf>=0.131",
   "paho-mqtt>=1.6",
+  "pymodbus>=3.5",
 ]
 
 [project.optional-dependencies]

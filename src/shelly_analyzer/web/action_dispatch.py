@@ -3294,6 +3294,69 @@ class ActionDispatcher:
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 
+        # --- Manufacturer presets for the external PV source ---
+        if action == "pv_presets":
+            try:
+                from shelly_analyzer.services.pv_presets import public_catalog
+                return {"ok": True, "presets": public_catalog()}
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+
+        # --- Test the external PV source once and return decoded values ---
+        # Reads the connection defined by the posted params (or the saved config)
+        # a single time so the user can verify a preset before trusting it, and
+        # see whether the battery/grid signs need flipping.
+        if action == "pv_source_test":
+            try:
+                import types as _types
+                _cur = getattr(self.cfg, "pv_source", None)
+
+                def _p(name, default=""):
+                    v = params.get(name)
+                    if v is None or v == "":
+                        return getattr(_cur, name, default) if _cur is not None else default
+                    return v
+
+                src = str(_p("source_type", "homeassistant")).lower()
+                shim = _types.SimpleNamespace(
+                    modbus_host=str(_p("modbus_host", "")),
+                    modbus_port=int(float(_p("modbus_port", 502) or 502)),
+                    modbus_unit_id=int(float(_p("modbus_unit_id", 1) or 1)),
+                    modbus_register_map=str(_p("modbus_register_map", "sunspec")),
+                    http_kind=str(_p("http_kind", "fronius_solar_api")),
+                    http_base_url=str(_p("http_base_url", "")),
+                )
+                if src == "modbus":
+                    from shelly_analyzer.services.pv_modbus import read_modbus
+                    pv_w, batt_w, soc, grid_w, house_w, pv_today, counters = read_modbus(shim)
+                elif src == "http":
+                    from shelly_analyzer.services.pv_http import read_http
+                    pv_w, batt_w, soc, grid_w, house_w, pv_today, counters = read_http(shim)
+                else:
+                    return {"ok": False, "error": "Test is available for the Modbus and HTTP sources. For Home Assistant / MQTT, save and watch the live tiles."}
+
+                err = counters.pop("_error", None) if isinstance(counters, dict) else None
+                # Apply the same sign normalisation the poller uses, so the user
+                # sees the INTERNAL convention (battery + = charge, grid + = import).
+                bsign = str(_p("battery_power_sign", "charge_positive")).lower()
+                gsign = str(_p("grid_power_sign", "import_positive")).lower()
+                if batt_w is not None and bsign == "discharge_positive":
+                    batt_w = -batt_w
+                if grid_w is not None and gsign == "export_positive":
+                    grid_w = -grid_w
+
+                got = any(v is not None for v in (pv_w, batt_w, grid_w, soc))
+                return {
+                    "ok": bool(got),
+                    "error": None if got else (err or "No values read — check host/port/unit id and that Modbus/HTTP is enabled on the device."),
+                    "pv_w": pv_w, "battery_w": batt_w, "soc_pct": soc,
+                    "grid_w": grid_w, "house_w": house_w,
+                    "pv_energy_total_kwh": (counters or {}).get("pv_total"),
+                    "source_type": src,
+                }
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+
         # --- Save solar config from web ---
         if action == "save_solar_config":
             try:

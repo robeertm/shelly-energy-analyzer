@@ -547,8 +547,17 @@ class PvSourceConfig:
     battery SOC, spot cost, CO₂) works with real production/storage data.
     """
     enabled: bool = False
-    # "homeassistant" = poll HA REST /api/states; "mqtt" = subscribe to topics.
+    # Connection method:
+    #   "homeassistant" = poll HA REST /api/states (needs HA)
+    #   "mqtt"          = subscribe to broker topics (needs an MQTT publisher)
+    #   "modbus"        = read the inverter/dongle/EMMA directly over Modbus TCP
+    #                     (NO Home Assistant required)
+    #   "http"          = read a vendor local/cloud HTTP API, e.g. the Fronius
+    #                     Solar API (NO Home Assistant required)
     source_type: str = "homeassistant"
+    # Optional id of the manufacturer preset the user picked (see pv_presets).
+    # Purely informational — the concrete fields below carry the actual config.
+    preset_id: str = ""
 
     # ── Home Assistant REST ────────────────────────────────────────────
     # Base URL, e.g. "http://homeassistant.local:8123". Empty while running as
@@ -597,6 +606,24 @@ class PvSourceConfig:
     # "import_positive": +W = grid import (default). "export_positive": flipped.
     grid_power_sign: str = "import_positive"
     poll_interval_seconds: int = 15
+
+    # ── Modbus TCP (source_type="modbus") — works WITHOUT Home Assistant ─
+    # Reads the inverter / hybrid / dongle / energy-manager directly. The
+    # register_map selects how the raw registers are decoded: "sunspec" (the
+    # SunSpec standard, used by SolarEdge, SMA, Fronius Gen24, Kostal, Sungrow,
+    # GoodWe, …) or a vendor map ("huawei"). Presets pre-fill host/port/unit/map.
+    modbus_host: str = ""
+    modbus_port: int = 502
+    modbus_unit_id: int = 1
+    modbus_register_map: str = "sunspec"   # "sunspec" | "huawei"
+
+    # ── HTTP API (source_type="http") — works WITHOUT Home Assistant ────
+    # http_kind selects the API dialect. "fronius_solar_api" reads the local
+    # Fronius Solar API (http://<ip>/solar_api/v1/…); no key needed.
+    http_kind: str = "fronius_solar_api"
+    http_base_url: str = ""                 # e.g. "http://192.168.1.50"
+    http_api_key: str = ""                  # cloud APIs only
+    http_site_id: str = ""                  # cloud APIs only (site/plant id)
 
 
 @dataclass(frozen=True)
@@ -1566,7 +1593,11 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     pvsrc_raw = raw.get("pv_source", {}) if isinstance(raw.get("pv_source"), dict) else {}
     pv_source = PvSourceConfig(
         enabled=bool(pvsrc_raw.get("enabled", PvSourceConfig.enabled)),
-        source_type=("mqtt" if str(pvsrc_raw.get("source_type", PvSourceConfig.source_type) or "").lower() == "mqtt" else "homeassistant"),
+        source_type=(str(pvsrc_raw.get("source_type", PvSourceConfig.source_type) or "").lower()
+                     if str(pvsrc_raw.get("source_type", PvSourceConfig.source_type) or "").lower()
+                        in ("mqtt", "modbus", "http", "homeassistant")
+                     else "homeassistant"),
+        preset_id=str(pvsrc_raw.get("preset_id", PvSourceConfig.preset_id) or ""),
         ha_base_url=str(pvsrc_raw.get("ha_base_url", PvSourceConfig.ha_base_url) or ""),
         ha_token=str(pvsrc_raw.get("ha_token", PvSourceConfig.ha_token) or ""),
         ha_verify_ssl=bool(pvsrc_raw.get("ha_verify_ssl", PvSourceConfig.ha_verify_ssl)),
@@ -1590,6 +1621,16 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         battery_power_sign=("discharge_positive" if str(pvsrc_raw.get("battery_power_sign", PvSourceConfig.battery_power_sign) or "").lower() == "discharge_positive" else "charge_positive"),
         grid_power_sign=("export_positive" if str(pvsrc_raw.get("grid_power_sign", PvSourceConfig.grid_power_sign) or "").lower() == "export_positive" else "import_positive"),
         poll_interval_seconds=_coerce_int(pvsrc_raw.get("poll_interval_seconds", PvSourceConfig.poll_interval_seconds), PvSourceConfig.poll_interval_seconds),
+        modbus_host=str(pvsrc_raw.get("modbus_host", PvSourceConfig.modbus_host) or ""),
+        modbus_port=_coerce_int(pvsrc_raw.get("modbus_port", PvSourceConfig.modbus_port), PvSourceConfig.modbus_port),
+        modbus_unit_id=_coerce_int(pvsrc_raw.get("modbus_unit_id", PvSourceConfig.modbus_unit_id), PvSourceConfig.modbus_unit_id),
+        modbus_register_map=(str(pvsrc_raw.get("modbus_register_map", PvSourceConfig.modbus_register_map) or "sunspec").lower()
+                             if str(pvsrc_raw.get("modbus_register_map", PvSourceConfig.modbus_register_map) or "").lower() in ("sunspec", "huawei")
+                             else "sunspec"),
+        http_kind=str(pvsrc_raw.get("http_kind", PvSourceConfig.http_kind) or "fronius_solar_api"),
+        http_base_url=str(pvsrc_raw.get("http_base_url", PvSourceConfig.http_base_url) or ""),
+        http_api_key=str(pvsrc_raw.get("http_api_key", PvSourceConfig.http_api_key) or ""),
+        http_site_id=str(pvsrc_raw.get("http_site_id", PvSourceConfig.http_site_id) or ""),
     )
 
     weather_raw = raw.get("weather", {}) if isinstance(raw.get("weather"), dict) else {}
@@ -2128,6 +2169,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
         "pv_source": {
             "enabled": bool(getattr(cfg.pv_source, "enabled", False)),
             "source_type": str(getattr(cfg.pv_source, "source_type", "homeassistant") or "homeassistant"),
+            "preset_id": str(getattr(cfg.pv_source, "preset_id", "") or ""),
             "ha_base_url": str(getattr(cfg.pv_source, "ha_base_url", "") or ""),
             "ha_token": str(getattr(cfg.pv_source, "ha_token", "") or ""),
             "ha_verify_ssl": bool(getattr(cfg.pv_source, "ha_verify_ssl", True)),
@@ -2151,6 +2193,14 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "battery_power_sign": str(getattr(cfg.pv_source, "battery_power_sign", "charge_positive") or "charge_positive"),
             "grid_power_sign": str(getattr(cfg.pv_source, "grid_power_sign", "import_positive") or "import_positive"),
             "poll_interval_seconds": int(getattr(cfg.pv_source, "poll_interval_seconds", 15)),
+            "modbus_host": str(getattr(cfg.pv_source, "modbus_host", "") or ""),
+            "modbus_port": int(getattr(cfg.pv_source, "modbus_port", 502)),
+            "modbus_unit_id": int(getattr(cfg.pv_source, "modbus_unit_id", 1)),
+            "modbus_register_map": str(getattr(cfg.pv_source, "modbus_register_map", "sunspec") or "sunspec"),
+            "http_kind": str(getattr(cfg.pv_source, "http_kind", "fronius_solar_api") or "fronius_solar_api"),
+            "http_base_url": str(getattr(cfg.pv_source, "http_base_url", "") or ""),
+            "http_api_key": str(getattr(cfg.pv_source, "http_api_key", "") or ""),
+            "http_site_id": str(getattr(cfg.pv_source, "http_site_id", "") or ""),
         },
         "pricing": {
             "electricity_price_eur_per_kwh": cfg.pricing.electricity_price_eur_per_kwh,
