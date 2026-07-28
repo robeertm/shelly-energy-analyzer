@@ -2716,10 +2716,26 @@ class ActionDispatcher:
                 )
                 try:
                     from shelly_analyzer.services.energy_balance import compute_balance
+                    # Live "today" per-device kWh — real sub-meters (tenant Shellys)
+                    # only reach the DB on sync, so the balance would read ~0 for
+                    # today. The live store carries the current daily total.
+                    _live_today: Dict[str, float] = {}
+                    try:
+                        for _k, _pts in (self.live_store.snapshot() or {}).items():
+                            if isinstance(_pts, list) and _pts:
+                                _lt = _pts[-1].get("kwh_today")
+                                if _lt is not None:
+                                    _live_today[str(_k)] = float(_lt)
+                    except Exception:
+                        pass
+                    _today_start_ts = (int(_ranges["today"][0].timestamp())
+                                       if "today" in _ranges else None)
                     for _rk, (_rs, _re) in _ranges.items():
                         _b = compute_balance(
                             self.storage.db, self.cfg,
                             int(_rs.timestamp()), int(_re.timestamp()),
+                            live_today_kwh=_live_today,
+                            today_start_ts=_today_start_ts,
                         )
                         if not (_b.has_pv or _b.has_grid_meter):
                             continue
