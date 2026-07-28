@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.54.1
+### Fixed
+- **Grid-only homes lost their CO₂ figures in 16.54.0.** The new chain-aware `compute_co2` returned nothing when no PV/grid meter was configured, so a plain consumption-only install (no solar) showed 0 kg on the CO₂ tab. It now falls back to charging every consumption device's positive hourly energy at the grid mix (feed-in still impossible there, so never negative), with the tenant split preserved — restoring the pre-16.54.0 numbers for grid-only setups while keeping the corrected chain accounting for solar homes.
+
 ## 16.54.0
 ### Fixed
 - **CO₂ accounting was physically wrong: feed-in produced negative CO₂ and the generation chain was ignored.** The CO₂ tab derived the household footprint from a single meter as *grid − feed-in*, valuing every exported kWh at the full grid intensity and **subtracting** it — so an hour of feed-in cancelled real grid emissions and the summary could read negative. The solar footprint likewise booked a *feed-in credit*, and per-device charts/plots drew negative CO₂ bars for a signed grid meter. Exported energy is energy that leaves the property; it can never be a negative footprint.
