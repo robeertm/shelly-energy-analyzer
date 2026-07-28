@@ -106,8 +106,17 @@ def _hourly_sum(db, key: str, start_ts: int, end_ts: int) -> float:
     return pos - neg
 
 
-def compute_balance(db, cfg, start_ts: int, end_ts: int) -> EnergyBalance:
+def compute_balance(db, cfg, start_ts: int, end_ts: int,
+                    live_today_kwh: Optional[Dict[str, float]] = None,
+                    today_start_ts: Optional[int] = None) -> EnergyBalance:
     """Compute the household energy balance for ``[start_ts, end_ts)``.
+
+    ``live_today_kwh`` (device_key → today's kWh from the live store) and
+    ``today_start_ts`` (local-midnight epoch) let the balance stay correct for the
+    current day: real sub-meters (tenant Shellys) only reach the DB on sync, so
+    their hourly rollups lag intraday. When both are given and the period covers
+    today, the tenant load uses hourly rollups up to today's midnight plus the
+    live daily accumulator for today — no double count, always current.
 
     Everything is optional: with no PV/grid meter configured the balance simply
     reports the grid figures it can find (or zeros), and callers fall back to the
@@ -189,8 +198,17 @@ def compute_balance(db, cfg, start_ts: int, end_ts: int) -> EnergyBalance:
                 if k and k not in tenant_keys:
                     tenant_keys.append(k)
                     key_to_tenant[k] = tname
+    _use_live = (live_today_kwh is not None and today_start_ts is not None
+                 and end_ts > int(today_start_ts))
     for k in tenant_keys:
-        kwh = max(0.0, _hourly_sum(db, k, start_ts, end_ts))
+        if _use_live:
+            # Hourly rollups up to today's midnight (synced days) + live daily
+            # accumulator for today (real sub-meters lag the DB until sync).
+            cap = max(int(today_start_ts), int(start_ts))
+            kwh = max(0.0, _hourly_sum(db, k, start_ts, cap))
+            kwh += max(0.0, float((live_today_kwh or {}).get(k, 0.0) or 0.0))
+        else:
+            kwh = max(0.0, _hourly_sum(db, k, start_ts, end_ts))
         if kwh <= 0:
             continue
         tname = key_to_tenant.get(k, "Tenant")
