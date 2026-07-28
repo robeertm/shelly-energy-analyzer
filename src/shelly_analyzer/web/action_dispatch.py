@@ -2495,11 +2495,15 @@ class ActionDispatcher:
                                         on="hour_ts", how="inner",
                                     )
                                     if not merged.empty:
-                                        return float((merged["kwh"] * merged["intensity_g_per_kwh"]).sum()) / 1000.0
+                                        # Feed-in (negative kWh) emits no CO₂ — a
+                                        # device that exports must never score a
+                                        # negative footprint. Clamp per hour.
+                                        _kwh_pos = merged["kwh"].clip(lower=0.0)
+                                        return float((_kwh_pos * merged["intensity_g_per_kwh"]).sum()) / 1000.0
                         except Exception:
                             pass
                     if _co2_g > 0:
-                        return kwh_fb * _co2_g / 1000.0
+                        return max(0.0, kwh_fb) * _co2_g / 1000.0
                     return 0.0
 
                 _ranges = {
@@ -4221,47 +4225,37 @@ class ActionDispatcher:
                 _pv_key = _pv_key or _grid_key
                 _pv_on = bool(getattr(_solar_cfg, "enabled", False)) if _solar_cfg else False
 
-                def _device_co2(start_ts_d, end_ts_d):
+                from shelly_analyzer.services.energy_balance import compute_co2
+
+                def _intensity_map(start_ts_d, end_ts_d):
+                    """(hour_ts → g/kWh, average) for the range; empty falls back."""
                     df_co2 = self.storage.db.query_co2_intensity(zone, start_ts_d, end_ts_d + 3600)
                     if df_co2 is None or df_co2.empty:
-                        return 0.0
+                        return {}, (current_intensity if current_intensity > 0 else 380.0)
                     _ci = pd.to_numeric(df_co2["intensity_g_per_kwh"], errors="coerce")
                     avg_int = float(_ci.mean())
-                    if avg_int <= 0:
-                        return 0.0
-                    ci_by_hour = {int(h): float(v) for h, v in zip(df_co2["hour_ts"], _ci.fillna(avg_int))}
-                    grid_g = 0.0
-                    pv_saved_g = 0.0
-                    # Operational grid CO₂. When a grid meter is configured, take
-                    # the grid import/export from THAT meter only — the other
-                    # devices are sub-circuits downstream of it, so summing them
-                    # too would double-count the same energy (grid + tenant + …).
-                    # Without a grid meter, sum every device as grid draw.
-                    if _pv_on and _pv_key:
-                        _co2_devs = [d for d in self.cfg.devices if d.key == _pv_key]
-                    else:
-                        _co2_devs = [d for d in self.cfg.devices
-                                     if str(getattr(d, "kind", "em")) != "switch"]
-                    for d in _co2_devs:
-                        try:
-                            df_h = self.storage.db.query_hourly(d.key, start_ts=start_ts_d, end_ts=end_ts_d)
-                            if df_h is None or df_h.empty or "kwh" not in df_h.columns:
-                                continue
-                            for _hts, _kwh in zip(df_h["hour_ts"], pd.to_numeric(df_h["kwh"], errors="coerce").fillna(0.0)):
-                                _ciH = ci_by_hour.get(int(_hts), avg_int)
-                                _k = float(_kwh)
-                                if _pv_on and d.key == _pv_key and _k < 0:
-                                    pv_saved_g += (-_k) * _ciH
-                                elif _k > 0:
-                                    grid_g += _k * _ciH
-                        except Exception:
-                            pass
-                    return max(0.0, (grid_g - pv_saved_g) / 1000.0)
+                    if not (avg_int == avg_int) or avg_int <= 0:
+                        avg_int = current_intensity if current_intensity > 0 else 380.0
+                    imap = {int(h): float(v) for h, v in zip(df_co2["hour_ts"], _ci.fillna(avg_int))}
+                    return imap, avg_int
 
-                co2_today = _device_co2(today_start_ts, now_ts)
-                co2_week = _device_co2(week_start_ts, now_ts)
-                co2_month = _device_co2(month_start_ts, now_ts)
-                co2_year = _device_co2(year_start_ts, now_ts)
+                # Physically-consistent footprint over the whole generation chain:
+                # grid import at the hourly mix, self-consumed PV and battery at
+                # their embodied factors, feed-in charged NOTHING (never negative),
+                # the grid-parallel tenant billed the solar-blended intensity.
+                _co2_cache: Dict[str, Any] = {}
+
+                def _prop_co2(start_ts_d, end_ts_d, _ck):
+                    imap, avg_int = _intensity_map(start_ts_d, end_ts_d)
+                    r = compute_co2(self.storage.db, self.cfg, start_ts_d, end_ts_d,
+                                    intensity_by_hour=imap, default_intensity=avg_int)
+                    _co2_cache[_ck] = r
+                    return r.property_kg
+
+                co2_today = _prop_co2(today_start_ts, now_ts, "today")
+                co2_week = _prop_co2(week_start_ts, now_ts, "week")
+                co2_month = _prop_co2(month_start_ts, now_ts, "month")
+                co2_year = _prop_co2(year_start_ts, now_ts, "year")
 
                 # ── Embodied CO₂ + solar footprint ──────────────────────────
                 # Grid-only accounting treats self-consumed PV and battery output
@@ -4288,7 +4282,6 @@ class ActionDispatcher:
                 _footprint: Dict[str, Any] = {}
                 _fp_has_solar = False
                 try:
-                    from shelly_analyzer.services.energy_balance import compute_balance
                     _fp_ranges = {
                         "today": (today_start_ts, now_ts),
                         "week": (week_start_ts, now_ts),
@@ -4296,38 +4289,15 @@ class ActionDispatcher:
                         "year": (year_start_ts, now_ts),
                     }
                     for _fk, (_fs, _fe) in _fp_ranges.items():
-                        _fb = compute_balance(self.storage.db, self.cfg, _fs, _fe)
-                        if not (_fb.has_pv or _fb.has_battery):
+                        _r = _co2_cache.get(_fk)
+                        if _r is None:
+                            _imap, _ai = _intensity_map(_fs, _fe)
+                            _r = compute_co2(self.storage.db, self.cfg, _fs, _fe,
+                                             intensity_by_hour=_imap, default_intensity=_ai)
+                        if not _r.has_solar:
                             continue
                         _fp_has_solar = True
-                        _ai = _avg_intensity(_fs, _fe)
-                        # Fully balance-based so grid CO₂, embodied CO₂ and load
-                        # share one consumption basis (the supply-side identity),
-                        # giving a consistent effective intensity.
-                        _grid_kg = _fb.grid_import_kwh * _ai / 1000.0
-                        _feed_credit_kg = _fb.grid_export_kwh * _ai / 1000.0
-                        _pv_emb_kg = _fb.self_consumption_kwh * _pv_emb_g / 1000.0
-                        _bat_emb_kg = _fb.battery_discharge_kwh * _bat_emb_g / 1000.0
-                        _solar_kwh = _fb.self_consumption_kwh + _fb.battery_discharge_kwh
-                        # Had this solar+battery energy come from the grid instead:
-                        _would_be_kg = _solar_kwh * _ai / 1000.0
-                        _saved_kg = max(0.0, _would_be_kg - _pv_emb_kg - _bat_emb_kg)
-                        _net_kg = max(0.0, _grid_kg + _pv_emb_kg + _bat_emb_kg - _feed_credit_kg)
-                        _load = _fb.total_load_kwh
-                        _footprint[_fk] = {
-                            "grid_kg": round(_grid_kg, 3),
-                            "feed_in_credit_kg": round(_feed_credit_kg, 3),
-                            "pv_embodied_kg": round(_pv_emb_kg, 3),
-                            "battery_embodied_kg": round(_bat_emb_kg, 3),
-                            "net_kg": round(_net_kg, 3),
-                            "solar_saved_kg": round(_saved_kg, 3),
-                            "self_consumption_kwh": round(_fb.self_consumption_kwh, 3),
-                            "battery_discharge_kwh": round(_fb.battery_discharge_kwh, 3),
-                            "load_kwh": round(_load, 3),
-                            "effective_intensity": round(_net_kg * 1000.0 / _load, 1) if _load > 0 else 0.0,
-                            "grid_intensity": round(_ai, 1),
-                            "autarky_pct": round(_fb.autarky_pct, 1),
-                        }
+                        _footprint[_fk] = _r.as_dict()
                 except Exception:
                     logger.debug("co2 footprint failed", exc_info=True)
 
@@ -4997,6 +4967,13 @@ class ActionDispatcher:
                 except Exception:
                     fixed_ct_kwh = None
 
+                # Feed-in tariff (ct/kWh): exported energy (a bucket with negative
+                # kWh, i.e. a signed grid meter feeding in) is credited at the
+                # feed-in tariff — NOT the consumer price — and emits no CO₂.
+                _solar_pl = getattr(self.cfg, "solar", None)
+                _feed_ct = (float(getattr(_solar_pl, "feed_in_tariff_eur_per_kwh", 0.082) or 0.082) * 100.0
+                            if _solar_pl else 8.2)
+
                 # Per-device CO2 (g) and price (EUR) aggregations
                 co2_per_device: List[Dict[str, Any]] = []
                 price_per_device: List[Dict[str, Any]] = []
@@ -5004,6 +4981,7 @@ class ActionDispatcher:
                     y_dev = tr.get("y") or []
                     g_arr: List[Optional[float]] = []
                     eur_arr: List[Optional[float]] = []
+                    fixed_eur_arr: List[Optional[float]] = []
                     for i in range(len(labels)):
                         try:
                             kwh_dev = float(y_dev[i]) if i < len(y_dev) else 0.0
@@ -5011,20 +4989,19 @@ class ActionDispatcher:
                             kwh_dev = 0.0
                         gi = co2_intensity[i] if i < len(co2_intensity) else None
                         ci = price_ct_kwh[i] if i < len(price_ct_kwh) else None
-                        g_arr.append(round(gi * kwh_dev, 1) if gi is not None else None)
-                        # ct/kWh × kWh / 100 = €
-                        eur_arr.append(round(ci * kwh_dev / 100.0, 2) if ci is not None else None)
-                    # Fixed-tariff EUR per bucket for this device (ct_fix × kWh / 100)
-                    fixed_eur_arr: List[Optional[float]] = []
-                    if fixed_ct_kwh is not None:
-                        for i in range(len(labels)):
-                            try:
-                                kwh_dev = float(y_dev[i]) if i < len(y_dev) else 0.0
-                            except Exception:
-                                kwh_dev = 0.0
-                            fixed_eur_arr.append(round(fixed_ct_kwh * kwh_dev / 100.0, 2))
-                    else:
-                        fixed_eur_arr = [None] * len(labels)
+                        # CO₂: only consumed (positive) energy counts; feed-in = 0 g.
+                        _kwh_co2 = kwh_dev if kwh_dev > 0 else 0.0
+                        g_arr.append(round(gi * _kwh_co2, 1) if gi is not None else None)
+                        if kwh_dev < 0:
+                            # Export → credit at the feed-in tariff (negative € = revenue).
+                            eur_arr.append(round(_feed_ct * kwh_dev / 100.0, 2) if ci is not None else None)
+                            fixed_eur_arr.append(round(_feed_ct * kwh_dev / 100.0, 2)
+                                                 if fixed_ct_kwh is not None else None)
+                        else:
+                            # ct/kWh × kWh / 100 = €
+                            eur_arr.append(round(ci * kwh_dev / 100.0, 2) if ci is not None else None)
+                            fixed_eur_arr.append(round(fixed_ct_kwh * kwh_dev / 100.0, 2)
+                                                 if fixed_ct_kwh is not None else None)
                     co2_per_device.append({"key": tr["key"], "name": tr["name"], "g": g_arr})
                     price_per_device.append({"key": tr["key"], "name": tr["name"], "eur": eur_arr, "eur_fixed": fixed_eur_arr})
 
