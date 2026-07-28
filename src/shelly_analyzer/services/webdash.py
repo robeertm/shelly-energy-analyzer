@@ -5243,6 +5243,7 @@ async function loadHeatmap() {{
     const r = await fetch('/api/heatmap?device=' + encodeURIComponent(device) + '&year=' + year + '&unit=' + unit);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
+    syncHmDevices(data.devices);
     if (data.summary && stWrap) renderHmStats(data, stWrap, unit);
     renderHeatmapCalendar(data, calWrap, unit);
     renderHeatmapHourly(data, hrWrap, unit);
@@ -5280,7 +5281,74 @@ function ratioEurColor(ratio) {{
     return 'rgb(' + Math.round(206 + 25 * t) + ',' + Math.round(140 - 80 * t) + ',' + Math.round(38 + 15 * t) + ')';
   }}
 }}
+// Logical source colours: PV = gold (sun), battery charge = green (storing),
+// battery discharge = amber (drawing down), grid feed-in / export = blue→purple.
+// Owner/tenant consumption keeps the unit-based scale (ratioColor/…).
+function ratioPvColor(r) {{ r = Math.max(0, Math.min(1, r));
+  return 'rgb(' + Math.round(255 - 10*r) + ',' + Math.round(236 - 112*r) + ',' + Math.round(140 - 140*r) + ')'; }}   // #ffec8c → #f57c00
+function ratioBattChargeColor(r) {{ r = Math.max(0, Math.min(1, r));
+  return 'rgb(' + Math.round(200 - 173*r) + ',' + Math.round(230 - 90*r) + ',' + Math.round(201 - 131*r) + ')'; }}    // pale green → #1b8c46
+function ratioBattDischargeColor(r) {{ r = Math.max(0, Math.min(1, r));
+  return 'rgb(' + Math.round(255 - 25*r) + ',' + Math.round(213 - 105*r) + ',' + Math.round(150 - 130*r) + ')'; }}    // pale amber → #e66c14
+function ratioFeedInColor(r) {{ r = Math.max(0, Math.min(1, r));
+  return 'rgb(' + Math.round(96 + 28*r) + ',' + Math.round(165 - 107*r) + ',' + Math.round(250 - 13*r) + ')'; }}      // #60a5fa → #7c3aed
 function hmColorFn(unit) {{ return unit === 'co2' ? ratioCo2Color : unit === 'eur' ? ratioEurColor : ratioColor; }}
+// Pick a cell colour by the device's flow_role and the value's sign.
+// posR = value / maxPositive, negR = value / minNegative (both land in 0..1).
+function hmCellColor(v, posR, negR, role, unit) {{
+  if (!v) return 'var(--chipbg)';
+  if (v > 0) {{
+    if (role === 'pv') return ratioPvColor(posR);
+    if (role === 'battery') return ratioBattChargeColor(posR);
+    if (role === 'grid') return ratioColor(posR);
+    return hmColorFn(unit)(posR);
+  }}
+  if (role === 'battery') return ratioBattDischargeColor(negR);
+  return ratioFeedInColor(negR);   // grid export / any other negative
+}}
+// Role-aware legend row.
+function hmLegendHtml(role, unit, maxVal, minNeg) {{
+  var h = '<div style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:10px;color:var(--muted);flex-wrap:wrap">';
+  function ramp(fn, lbl) {{
+    var s = '<span>' + lbl + '</span>';
+    for (var i = 0; i <= 4; i++) s += '<div style="width:12px;height:12px;border-radius:2px;background:' + fn(i/4) + '"></div>';
+    return s;
+  }}
+  if (role === 'battery') {{
+    if (minNeg < 0) h += ramp(function(x){{return ratioBattDischargeColor(1-x);}}, t('web.hm.discharge','Discharge')) + '<span style="width:6px"></span>';
+    h += ramp(ratioBattChargeColor, t('web.hm.charge','Charge'));
+    h += '<span style="margin-left:auto">Max: ' + hmFmtVal(maxVal, unit) + (minNeg<0 ? ' / ' + hmFmtVal(minNeg, unit) : '') + '</span>';
+  }} else if (role === 'pv') {{
+    h += ramp(ratioPvColor, t('web.hm.generation','Generation'));
+    h += '<span style="margin-left:auto">Max: ' + hmFmtVal(maxVal, unit) + '</span>';
+  }} else if (role === 'grid') {{
+    h += ramp(ratioColor, t('web.hm.import','Import'));
+    if (minNeg < 0) h += '<span style="width:6px"></span>' + ramp(ratioFeedInColor, t('web.hm.feed_in','Feed-in'));
+    h += '<span style="margin-left:auto">Max: ' + hmFmtVal(maxVal, unit) + '</span>';
+  }} else {{
+    h += '<span>' + t('web.hm.less','Less') + '</span>';
+    for (var j = 0; j <= 4; j++) h += '<div style="width:12px;height:12px;border-radius:2px;background:' + hmColorFn(unit)(j/4) + '"></div>';
+    h += '<span>' + t('web.hm.more','More') + '</span><span style="margin-left:auto">Max: ' + hmFmtVal(maxVal, unit) + '</span>';
+  }}
+  h += '</div>';
+  return h;
+}}
+// Add any devices returned by /api/heatmap (incl. synthetic PV/battery) that
+// aren't in the dropdown yet, preserving the current selection.
+function syncHmDevices(list) {{
+  if (!Array.isArray(list)) return;
+  var sel = document.getElementById('hm-device');
+  if (!sel) return;
+  var have = {{}};
+  for (var i = 0; i < sel.options.length; i++) have[sel.options[i].value] = 1;
+  list.forEach(function(d) {{
+    if (d && d.key && !have[d.key]) {{
+      var opt = document.createElement('option');
+      opt.value = d.key; opt.textContent = d.name || d.key;
+      sel.appendChild(opt);
+    }}
+  }});
+}}
 function hmFmtVal(v, unit) {{
   if (unit === 'co2') return fmt(v, 1, 'g CO\u2082');
   if (unit === 'eur') return fmt(v, 2, '\u20ac');
@@ -5329,6 +5397,11 @@ function renderHeatmapCalendar(data, el, unit) {{
   while (start.getDay() !== 1) start.setDate(start.getDate() - 1);
   const vals = Object.values(daily).filter(function(v) {{ return v > 0; }});
   const maxVal = vals.length ? Math.max(...vals) : 1;
+  // Signed sources (grid, battery) also carry negatives (feed-in / discharge);
+  // normalise those against the most-negative day for the blue/amber scales.
+  const hmRole = data.flow_role || '';
+  const _negVals = Object.values(daily).filter(function(v) {{ return v < 0; }});
+  const minNeg = _negVals.length ? Math.min(...(_negVals)) : 0;
 
   const weeks = [];
   let cur = new Date(start);
@@ -5365,31 +5438,24 @@ function renderHeatmapCalendar(data, el, unit) {{
   monthLabelHtml += '</div>';
 
   let gridHtml = '<div class="hm-grid">';
-  const _colorFn = hmColorFn(unit);
   weeks.forEach(function(week) {{
     gridHtml += '<div class="hm-week">';
     week.forEach(function(day) {{
       const key = day.toISOString().slice(0,10);
       const v = daily[key] || 0;
-      const ratio = maxVal > 0 ? v / maxVal : 0;
       const label = hmFmtVal(v, unit);
       const inYear = day.getFullYear() === year;
-      const bg = inYear && v > 0 ? _colorFn(ratio) : 'var(--chipbg)';
+      const posR = maxVal > 0 ? v / maxVal : 0;
+      const negR = minNeg < 0 ? v / minNeg : 0;
+      const bg = inYear && v !== 0 ? hmCellColor(v, posR, negR, hmRole, unit) : 'var(--chipbg)';
       gridHtml += '<div class="hm-day" style="width:' + calCellSize + 'px;height:' + calCellSize + 'px;background:' + bg + '" data-date="' + key + '" data-val="' + label + '"></div>';
     }});
     gridHtml += '</div>';
   }});
   gridHtml += '</div>';
 
-  // Color legend
-  var legendHtml = '<div style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:10px;color:var(--muted)">';
-  legendHtml += '<span>' + t('web.hm.less', 'Less') + '</span>';
-  for (var li = 0; li <= 4; li++) {{
-    legendHtml += '<div style="width:12px;height:12px;border-radius:2px;background:' + _colorFn(li / 4) + '"></div>';
-  }}
-  legendHtml += '<span>' + t('web.hm.more', 'More') + '</span>';
-  legendHtml += '<span style="margin-left:auto">Max: ' + hmFmtVal(maxVal, unit) + '</span>';
-  legendHtml += '</div>';
+  // Color legend (role-aware: charge/discharge, generation, import/feed-in).
+  var legendHtml = hmLegendHtml(hmRole, unit, maxVal, minNeg);
 
   el.innerHTML = '<div class="card"><div class="card-title">' + t('web.hm.year_overview', 'Year overview') + ' ' + year + '</div><div class="hm-calendar">' + monthLabelHtml + gridHtml + '</div>' + legendHtml + '</div>';
 
@@ -5408,11 +5474,15 @@ function renderHeatmapHourly(data, el, unit) {{
   const _dtfDay = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{weekday: 'short'}});
   const days = Array.from({{length: 7}}, function(_, i) {{ return _dtfDay.format(new Date(2001, 0, 1 + i)); }});
   const vals = [];
+  const negVals = [];
   for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) {{
     const v = (hourly[d] && hourly[d][h]) ? hourly[d][h] : 0;
     if (v > 0) vals.push(v);
+    else if (v < 0) negVals.push(v);
   }}
   const maxVal = vals.length ? Math.max(...vals) : 1;
+  const minNeg = negVals.length ? Math.min(...negVals) : 0;
+  const hmRole = data.flow_role || '';
 
   const pane = el.closest('.pane') || document.body;
   const availW = pane.clientWidth - 32;
@@ -5421,7 +5491,6 @@ function renderHeatmapHourly(data, el, unit) {{
   const availHHr = window.innerHeight - 290;
   const cellFromH = Math.floor((availHHr - 20) / 7 - 2);
   const cellSize = Math.max(8, Math.min(cellFromW, cellFromH));
-  const _colorFn = hmColorFn(unit);
 
   let html = '<div class="card"><div class="card-title">' + t('web.dash.hourly_pattern', 'Hourly Pattern') + '</div>';
   html += '<div class="hm-table-wrap"><table class="hm-table" style="table-layout:fixed;width:' + (labelW + 2 + 24 * (cellSize + 2)) + 'px"><thead><tr>';
@@ -5435,8 +5504,9 @@ function renderHeatmapHourly(data, el, unit) {{
     html += '<tr><td style="width:' + labelW + 'px;font-size:9px;color:var(--muted);text-align:right;padding-right:3px;white-space:nowrap">' + days[d] + '</td>';
     for (let h = 0; h < 24; h++) {{
       const v = (hourly[d] && hourly[d][h]) ? hourly[d][h] : 0;
-      const ratio = maxVal > 0 ? v / maxVal : 0;
-      const bg = v > 0 ? _colorFn(ratio) : 'var(--chipbg)';
+      const posR = maxVal > 0 ? v / maxVal : 0;
+      const negR = minNeg < 0 ? v / minNeg : 0;
+      const bg = v !== 0 ? hmCellColor(v, posR, negR, hmRole, unit) : 'var(--chipbg)';
       const title = days[d] + ' ' + h + 'h: ' + hmFmtVal(v, unit);
       html += '<td class="hm-cell" style="width:' + cellSize + 'px;height:' + cellSize + 'px;background:' + bg + '" data-tip="' + title + '"></td>';
     }}
@@ -10199,6 +10269,41 @@ function buildPlotCard(container, plotId, titleShown){
   return plotEl;
 }
 
+// Subtle per-group background tints so plots that belong together (the kWh +
+// CO₂ + price cards of one device, or one device's timeseries) read as a unit.
+// Low-alpha hues work on both light and dark themes; a matching left border
+// reinforces the grouping. Cycles when there are more groups than colours.
+const _PLOT_GROUP_TINTS = [
+  ['rgba(106,167,255,0.10)', 'rgba(106,167,255,0.55)'],  // blue
+  ['rgba(76,175,80,0.10)',   'rgba(76,175,80,0.55)'],    // green
+  ['rgba(255,152,0,0.10)',   'rgba(255,152,0,0.55)'],    // orange
+  ['rgba(171,71,188,0.11)',  'rgba(171,71,188,0.55)'],   // purple
+  ['rgba(0,188,212,0.10)',   'rgba(0,188,212,0.55)'],    // cyan
+  ['rgba(233,30,99,0.10)',   'rgba(233,30,99,0.5)'],     // pink
+];
+function plotGroup(container, gi){
+  const pair = _PLOT_GROUP_TINTS[((gi % _PLOT_GROUP_TINTS.length) + _PLOT_GROUP_TINTS.length) % _PLOT_GROUP_TINTS.length];
+  const g = document.createElement('div');
+  g.className = 'plot-group';
+  g.style.cssText = 'background:' + pair[0] + ';border-left:3px solid ' + pair[1]
+    + ';border-radius:10px;padding:6px 8px;margin-bottom:14px';
+  container.appendChild(g);
+  return g;
+}
+// Make the inner cards transparent so the group tint shows through as their
+// shared background (Robert: "backgrounds slightly different colours per group").
+function stripGroupCards(grp){
+  const cards = grp.querySelectorAll('.card');
+  for (let i = 0; i < cards.length; i++){
+    const c = cards[i];
+    c.style.background = 'transparent';
+    c.style.border = 'none';
+    c.style.boxShadow = 'none';
+    c.style.margin = '0';
+    c.style.padding = '4px 2px';
+  }
+}
+
 async function loadData() {
   document.getElementById('meta').textContent = t('web.loading');
   await waitPlotly();
@@ -10383,10 +10488,12 @@ async function loadData() {
     }
     for (let di = 0; di < kwhTraces.length; di++) {
       const uid = String(di);
-      const kwhEl = buildPlotCard(kwhContainer, 'plot_kwh_' + uid, true);
+      const grp = plotGroup(kwhContainer, di);
+      const kwhEl = buildPlotCard(grp, 'plot_kwh_' + uid, true);
       drawKwhForDevice(kwhEl.id, kwhEl.id + '_title', kwhTraces[di]);
-      renderCo2Card(kwhContainer, uid, co2Devs[di]);
-      renderPriceCard(kwhContainer, uid, priceDevs[di]);
+      renderCo2Card(grp, uid, co2Devs[di]);
+      renderPriceCard(grp, uid, priceDevs[di]);
+      stripGroupCards(grp);
     }
 
     return;
@@ -10477,8 +10584,10 @@ async function loadData() {
 
   // One card per device – generated dynamically so all configured devices show.
   for (let di = 0; di < devs.length; di++) {
-    const tsEl = buildPlotCard(tsContainer, 'plot_ts_' + di, true);
+    const grp = plotGroup(tsContainer, di);
+    const tsEl = buildPlotCard(grp, 'plot_ts_' + di, true);
     plotInto(tsEl.id, devs[di]);
+    stripGroupCards(grp);
   }
 }
 

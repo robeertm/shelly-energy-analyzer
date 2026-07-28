@@ -1,6 +1,12 @@
 # Changelog
 
-## 16.54.1
+## 16.55.0
+### Fixed
+- **Owner energy drawn from the battery/PV was still priced at the full grid tariff in Plots.** The per-device cost overlay multiplied every bucket by the consumer price, so a night run entirely on the battery still showed a cost. Owner circuits are now priced per bucket at the **grid-served share** of that bucket (`energy_balance.compute_grid_cost_share`): battery discharge and directly self-consumed PV cost nothing, so a battery night drops to ~0. The grid meter keeps its real import/feed-in position and tenant circuits always pay the full tariff. (The Kosten-tab range totals were already solar-aware via the effective price; this brings the time-resolved plots in line.)
+
+### Added
+- **Heatmap: PV and battery as selectable sources, with logical colours.** The heatmap can now show *when* and *how much* PV was generated and how much was charged into / drawn from the battery — the synthetic PV/battery series are offered in the device picker alongside the meters. Colours follow the source: PV generation in gold→orange (sun), battery **charge** in green (storing) vs **discharge** in amber (drawing down), and grid **feed-in / export** in blue→purple, while grid import and owner/tenant consumption keep the existing scales. The calendar and hourly grids colour negative (feed-in / discharge) values on their own scale, and the legend is role-aware.
+- **Plots: subtle per-group background tints.** The kWh/CO₂/price cards of one device (and each device's timeseries) now share a faint background tint with a matching accent border, so it is obvious at a glance which plots belong together.
 ### Fixed
 - **Grid-only homes lost their CO₂ figures in 16.54.0.** The new chain-aware `compute_co2` returned nothing when no PV/grid meter was configured, so a plain consumption-only install (no solar) showed 0 kg on the CO₂ tab. It now falls back to charging every consumption device's positive hourly energy at the grid mix (feed-in still impossible there, so never negative), with the tenant split preserved — restoring the pre-16.54.0 numbers for grid-only setups while keeping the corrected chain accounting for solar homes.
 

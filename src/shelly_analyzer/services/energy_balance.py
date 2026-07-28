@@ -368,6 +368,80 @@ def compute_co2(db, cfg, start_ts: int, end_ts: int,
     return res
 
 
+def compute_grid_cost_share(db, cfg, ranges) -> List[float]:
+    """Per time-bucket fraction of on-site load that was drawn from the grid.
+
+    For pricing the owner's energy: grid import is bought at the tariff, while
+    directly self-consumed PV and battery **discharge cost nothing** (already
+    paid for, or free). So a bucket served entirely by the battery (a night on
+    storage) returns ~0 → the owner's devices are priced at ~0 for that bucket
+    instead of the full grid tariff.
+
+    ``ranges`` is a list of ``(start_ts, end_ts)`` tuples (as built for the
+    plots buckets). Returns a list aligned with ``ranges``; ``1.0`` (full
+    tariff) for buckets with no data or when no PV/grid meter is configured.
+
+    Per hour, with signed grid (+import/−export), signed battery (+charge/
+    −discharge) and PV ≥ 0: ``grid = max(0, grid)``, ``PV_direct = max(0, pv −
+    export − charge)``, ``B_dis = max(0, −battery)``, and the bucket share is
+    ``Σ grid / Σ (grid + PV_direct + B_dis)``.
+    """
+    import pandas as pd
+
+    n = len(ranges)
+    grid_key, pv_key, batt_key = _resolve_source_keys(cfg)
+    if not grid_key and not pv_key:
+        return [1.0] * n
+    valid = [(a, b) for (a, b) in ranges if a is not None and b is not None]
+    if not valid:
+        return [1.0] * n
+    lo = min(a for a, b in valid)
+    hi = max(b for a, b in valid)
+
+    def _ser(key: str) -> Dict[int, float]:
+        out: Dict[int, float] = {}
+        if not key:
+            return out
+        try:
+            df = db.query_hourly(key, start_ts=lo, end_ts=hi)
+        except Exception:
+            return out
+        if df is None or df.empty or "kwh" not in df.columns:
+            return out
+        for h, k in zip(df["hour_ts"], pd.to_numeric(df["kwh"], errors="coerce").fillna(0.0)):
+            out[int(h)] = float(k)
+        return out
+
+    g_s = _ser(grid_key)
+    pv_s = _ser(pv_key)
+    b_s = _ser(batt_key)
+    all_hours = sorted(set(g_s) | set(pv_s) | set(b_s))
+
+    shares: List[float] = []
+    for ab in ranges:
+        a, b = (ab[0], ab[1]) if ab else (None, None)
+        if a is None or b is None:
+            shares.append(1.0)
+            continue
+        gi = pvd = bd = 0.0
+        for h in all_hours:
+            if h < a or h >= b:
+                continue
+            g = g_s.get(h, 0.0)
+            pv = max(0.0, pv_s.get(h, 0.0))
+            bt = b_s.get(h, 0.0)
+            g_imp = max(0.0, g)
+            g_exp = max(0.0, -g)
+            bch = max(0.0, bt)
+            bdis = max(0.0, -bt)
+            gi += g_imp
+            pvd += max(0.0, pv - g_exp - bch)
+            bd += bdis
+        load = gi + pvd + bd
+        shares.append(min(1.0, max(0.0, gi / load)) if load > 0 else 1.0)
+    return shares
+
+
 def compute_balance(db, cfg, start_ts: int, end_ts: int,
                     live_today_kwh: Optional[Dict[str, float]] = None,
                     today_start_ts: Optional[int] = None) -> EnergyBalance:

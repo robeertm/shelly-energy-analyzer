@@ -3223,12 +3223,58 @@ class ActionDispatcher:
                     "weekday_avgs": {str(wd): weekday_avgs[wd] for wd in range(7)},
                 }
 
-                devices_list = [{"key": d.key, "name": d.name} for d in self.cfg.devices]
+                # Device list with flow_role so the frontend can colour each
+                # source logically (grid import/feed-in, PV generation, battery
+                # charge/discharge) and offer PV + battery as heatmap sources.
+                try:
+                    from shelly_analyzer.services.energy_balance import (
+                        _resolve_source_keys, _tenant_key_map)
+                    _grid_k, _pv_k, _batt_k = _resolve_source_keys(self.cfg)
+                    _ten_keys, _ = _tenant_key_map(self.cfg)
+                    _ten_set = set(_ten_keys)
+                except Exception:
+                    _grid_k = _pv_k = _batt_k = ""
+                    _ten_set = set()
+
+                def _role_for(_k: str) -> str:
+                    if _grid_k and _k == _grid_k:
+                        return "grid"
+                    if _pv_k and _k == _pv_k:
+                        return "pv"
+                    if _batt_k and _k == _batt_k:
+                        return "battery"
+                    if _k in _ten_set:
+                        return "tenant"
+                    return "owner"
+
+                _cfg_keys = {d.key for d in self.cfg.devices}
+                devices_list = [{"key": d.key, "name": d.name, "flow_role": _role_for(d.key)}
+                                for d in self.cfg.devices]
+                # Append the synthetic PV/battery/grid series (from the external
+                # PV source) when they exist and aren't already configured devices.
+                try:
+                    _live_names = {}
+                    for _lk, _lp in (self.live_store.snapshot() or {}).items():
+                        if isinstance(_lp, list) and _lp:
+                            _nm = _lp[-1].get("name")
+                            if _nm:
+                                _live_names[str(_lk)] = str(_nm)
+                except Exception:
+                    _live_names = {}
+                for _sk, _srole, _sname in ((_pv_k, "pv", "PV"),
+                                            (_batt_k, "battery", "Batterie"),
+                                            (_grid_k, "grid", "Netz")):
+                    if _sk and _sk not in _cfg_keys:
+                        devices_list.append({"key": _sk, "name": _live_names.get(_sk, _sname),
+                                             "flow_role": _srole})
+                        _cfg_keys.add(_sk)
+
                 return {
                     "ok": True,
                     "device_key": device_key,
                     "year": year,
                     "unit": unit_h,
+                    "flow_role": _role_for(device_key),
                     "calendar": calendar_data,
                     "hourly": hourly_out,
                     "devices": devices_list,
@@ -4974,11 +5020,42 @@ class ActionDispatcher:
                 _feed_ct = (float(getattr(_solar_pl, "feed_in_tariff_eur_per_kwh", 0.082) or 0.082) * 100.0
                             if _solar_pl else 8.2)
 
+                # Battery/PV-aware owner pricing: energy an owner circuit drew
+                # from the battery or directly from PV in a bucket was NOT bought
+                # from the grid, so it must not be priced at the full tariff.
+                # `_grid_share_b[i]` = fraction of that bucket's load served by the
+                # grid (a battery night ⇒ ~0). Applied to owner devices only; the
+                # grid meter keeps its real import/feed-in position and tenant
+                # circuits always pay the full tariff.
+                _grid_share_b = None
+                try:
+                    from shelly_analyzer.services.energy_balance import compute_grid_cost_share
+                    _grid_share_b = compute_grid_cost_share(self.storage.db, self.cfg, ranges)
+                except Exception:
+                    _grid_share_b = None
+                _grid_dev_key_p = ""
+                if _solar_pl:
+                    _grid_dev_key_p = (str(getattr(_solar_pl, "grid_meter_device_key", "") or "")
+                                       or str(getattr(_solar_pl, "pv_meter_device_key", "") or ""))
+                _tenant_keys_p = set()
+                _tcfg_p = getattr(self.cfg, "tenant", None)
+                if _tcfg_p is not None and getattr(_tcfg_p, "enabled", False):
+                    for _td in (getattr(_tcfg_p, "tenants", []) or []):
+                        for _tk in (getattr(_td, "device_keys", []) or []):
+                            _tenant_keys_p.add(str(_tk))
+
                 # Per-device CO2 (g) and price (EUR) aggregations
                 co2_per_device: List[Dict[str, Any]] = []
                 price_per_device: List[Dict[str, Any]] = []
                 for tr in out_traces:
                     y_dev = tr.get("y") or []
+                    _dkey = str(tr.get("key", ""))
+                    _is_grid_dev = bool(_grid_dev_key_p) and _dkey == _grid_dev_key_p
+                    _is_tenant_dev = _dkey in _tenant_keys_p
+                    # Only owner circuits get the solar/battery discount; grid meter
+                    # and tenant keep the full market/tariff price.
+                    _owner_priced = (_grid_share_b is not None
+                                     and not _is_grid_dev and not _is_tenant_dev)
                     g_arr: List[Optional[float]] = []
                     eur_arr: List[Optional[float]] = []
                     fixed_eur_arr: List[Optional[float]] = []
@@ -4998,10 +5075,17 @@ class ActionDispatcher:
                             fixed_eur_arr.append(round(_feed_ct * kwh_dev / 100.0, 2)
                                                  if fixed_ct_kwh is not None else None)
                         else:
+                            # Owner consumption is discounted by the grid-served
+                            # share of the bucket (battery/PV = 0 cost).
+                            _shr = 1.0
+                            if _owner_priced and i < len(_grid_share_b):
+                                _shr = float(_grid_share_b[i])
+                            _ci_eff = (ci * _shr) if ci is not None else None
+                            _fx_eff = (fixed_ct_kwh * _shr) if fixed_ct_kwh is not None else None
                             # ct/kWh × kWh / 100 = €
-                            eur_arr.append(round(ci * kwh_dev / 100.0, 2) if ci is not None else None)
-                            fixed_eur_arr.append(round(fixed_ct_kwh * kwh_dev / 100.0, 2)
-                                                 if fixed_ct_kwh is not None else None)
+                            eur_arr.append(round(_ci_eff * kwh_dev / 100.0, 2) if _ci_eff is not None else None)
+                            fixed_eur_arr.append(round(_fx_eff * kwh_dev / 100.0, 2)
+                                                 if _fx_eff is not None else None)
                     co2_per_device.append({"key": tr["key"], "name": tr["name"], "g": g_arr})
                     price_per_device.append({"key": tr["key"], "name": tr["name"], "eur": eur_arr, "eur_fixed": fixed_eur_arr})
 
