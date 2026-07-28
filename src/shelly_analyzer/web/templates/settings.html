@@ -139,7 +139,7 @@ function _dynOpts(f) {
   if (!f || !f.dynSrc) return [];
   if (f.dynSrc === "pv_presets") {
     return (PV_PRESETS || []).map(function(p){
-      return [p.id, p.manufacturer + " — " + p.model];
+      return [p.id, T("settings.pv_preset."+p.id, p.manufacturer + " — " + p.model)];
     });
   }
   if (f.dynSrc === "co2") {
@@ -845,7 +845,7 @@ function renderSection(s) {
     if (s.id === "supported_devices") return renderSupportedDevices();
   }
   const fieldsHtml = (s.fields||[]).map(renderField).join("");
-  const hint = s.hint ? `<div class="hint" style="margin-bottom:10px">${s.hint}</div>` : "";
+  const hint = s.hint ? `<div class="hint" style="margin-bottom:10px">${T("settings.sectionhint."+s.id, s.hint)}</div>` : "";
   const testBtn = s.testBtn ? `<button class="secondary" onclick="testConnection('${s.testBtn}')">${T("settings.btn.test","🔌 Test")}</button>` : "";
   return `<section id="sec-${s.id}"><h2>${tSection(s)}</h2>${hint}
     <div class="grid2">${fieldsHtml}</div>
@@ -3008,7 +3008,7 @@ function _pvApplyPreset(presetId) {
   else if (method === "modbus") { const m=p.modbus||{}; ps.modbus_port=m.port||502; ps.modbus_unit_id=(m.unit_id!=null?m.unit_id:1); ps.modbus_register_map=m.register_map||"sunspec"; }
   else if (method === "http") { const h=p.http||{}; ps.http_kind=h.http_kind||"fronius_solar_api"; }
   // Surface the manufacturer note so the user knows any device-side step.
-  if (p.note) toast(p.manufacturer + ": " + p.note);
+  if (p.note) toast(T("settings.pv_preset_note."+p.id, p.manufacturer + ": " + p.note));
 }
 
 function _pvVisibility() {
