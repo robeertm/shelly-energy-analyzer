@@ -243,8 +243,6 @@ def compute_co2(db, cfg, start_ts: int, end_ts: int,
 
     grid_key, pv_key, batt_key = _resolve_source_keys(cfg)
     res = Co2Breakdown()
-    if not grid_key and not pv_key:
-        return res  # no supply-side series → caller uses the legacy per-device table
 
     def _series(key: str) -> Dict[int, float]:
         out: Dict[int, float] = {}
@@ -260,10 +258,52 @@ def compute_co2(db, cfg, start_ts: int, end_ts: int,
             out[int(h)] = float(k)
         return out
 
+    tenant_keys, key_to_tenant = _tenant_key_map(cfg)
+
+    if not grid_key and not pv_key:
+        # ── Grid-only home: no supply-side meter/PV configured. Every
+        #    consumption device's positive hourly energy is a grid draw at the
+        #    grid mix; feed-in is impossible here, so nothing is ever negative.
+        #    (Restores the legacy per-device grid accounting.) ──────────────
+        tenant_set = set(tenant_keys)
+        int_sum = 0.0
+        int_n = 0
+        seen_hours: set = set()
+        for d in (getattr(cfg, "devices", []) or []):
+            if str(getattr(d, "kind", "em")) == "switch":
+                continue
+            dk = str(getattr(d, "key", ""))
+            is_tenant = dk in tenant_set
+            tname = key_to_tenant.get(dk, "")
+            for h, k in _series(dk).items():
+                if k <= 0:
+                    continue
+                ci = imap.get(int(h), di)
+                if not (ci and ci > 0):
+                    ci = di
+                g = k * ci
+                res.property_kg += g / 1000.0
+                res.grid_kg += g / 1000.0
+                res.grid_import_kwh += k
+                res.load_kwh += k
+                if is_tenant:
+                    res.tenant_kg += g / 1000.0
+                    res.tenant_load_kwh += k
+                    if tname:
+                        res.tenant_breakdown[tname] = res.tenant_breakdown.get(tname, 0.0) + g / 1000.0
+                if int(h) not in seen_hours:
+                    seen_hours.add(int(h))
+                    int_sum += ci
+                    int_n += 1
+        res.owner_kg = max(0.0, res.property_kg - res.tenant_kg)
+        res.grid_intensity_avg = (int_sum / int_n) if int_n else di
+        res.effective_intensity = (res.property_kg * 1000.0 / res.load_kwh) if res.load_kwh > 0 else 0.0
+        res.has_solar = False
+        return res
+
     g_s = _series(grid_key)
     pv_s = _series(pv_key)
     b_s = _series(batt_key)
-    tenant_keys, key_to_tenant = _tenant_key_map(cfg)
     ten_s: Dict[int, Dict[str, float]] = {}
     for tk in tenant_keys:
         for h, k in _series(tk).items():
