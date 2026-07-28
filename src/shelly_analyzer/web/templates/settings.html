@@ -134,8 +134,14 @@ let ZONES = {
 };
 // Return either a flat [[k,v],...] list or a grouped
 // [[groupName, [[k,v],...]], ...] list — the renderer detects the shape.
+let PV_PRESETS = [];
 function _dynOpts(f) {
   if (!f || !f.dynSrc) return [];
+  if (f.dynSrc === "pv_presets") {
+    return (PV_PRESETS || []).map(function(p){
+      return [p.id, p.manufacturer + " — " + p.model];
+    });
+  }
   if (f.dynSrc === "co2") {
     if (ZONES.co2_grouped && ZONES.co2_grouped.length) return ZONES.co2_grouped;
     return ZONES.co2 || [];
@@ -468,9 +474,16 @@ const SECTIONS = [
     {key:"solar.installation_year", label:"Installation year", type:"number"},
     {key:"solar.degradation_pct", label:"Degradation (%/year)", type:"number", step:"0.1"},
   ]},
-  {id:"pv_source", title:"PV / Battery data source", group:"Energy", hint:"For PV/battery systems not measured by a Shelly. Reads Home Assistant entities (works with any inverter integrated in HA — Huawei, SolarEdge, Fronius, SMA, Kostal, Sungrow, …) or subscribes to MQTT. Ingested as devices 'pv', 'battery', 'grid_ext' so autarky, self-consumption, sankey and battery SOC use real data.", fields:[
+  {id:"pv_source", title:"PV / Battery data source", group:"Energy", testBtn:"pv_source", hint:"For PV/battery systems not measured by a Shelly. Pick your system from the preset list to auto-fill everything. Works WITHOUT Home Assistant via Modbus TCP (Huawei, SolarEdge, SMA, Kostal, Sungrow, GoodWe, …) or a local HTTP API (Fronius Solar API); or read Home Assistant entities, or subscribe to MQTT. Ingested as devices 'pv', 'battery', 'grid_ext' so autarky, self-consumption, sankey and battery SOC use real data. Use 🔌 Test to verify a Modbus/HTTP connection before enabling.", fields:[
     {key:"pv_source.enabled", label:"External PV source active", type:"checkbox"},
-    {key:"pv_source.source_type", label:"Source", type:"select", opts:[["homeassistant","Home Assistant (REST)"],["mqtt","MQTT (subscribe)"]]},
+    {key:"pv_source.preset_id", label:"System / manufacturer preset", type:"select-dyn", dynSrc:"pv_presets", hint:"Pick your inverter/battery to auto-fill the connection method, ports, entity names and sign conventions. You can still adjust everything afterwards."},
+    {key:"pv_source.source_type", label:"Connection", type:"select", opts:[["homeassistant","Home Assistant (REST)"],["mqtt","MQTT (subscribe)"],["modbus","Modbus TCP (direct, no HA)"],["http","HTTP API (direct, no HA)"]]},
+    {key:"pv_source.modbus_host", label:"Modbus: host / IP", type:"text", placeholder:"192.168.1.50", hint:"Modbus source — the inverter / dongle / energy-manager IP"},
+    {key:"pv_source.modbus_port", label:"Modbus: port", type:"number", min:1},
+    {key:"pv_source.modbus_unit_id", label:"Modbus: unit / slave id", type:"number", min:0},
+    {key:"pv_source.modbus_register_map", label:"Modbus: register map", type:"select", opts:[["sunspec","SunSpec (SolarEdge, SMA, Fronius Gen24, Kostal, Sungrow, GoodWe, SolaX)"],["huawei","Huawei SUN2000 / LUNA2000"]]},
+    {key:"pv_source.http_kind", label:"HTTP: API type", type:"select", opts:[["fronius_solar_api","Fronius Solar API (local)"]]},
+    {key:"pv_source.http_base_url", label:"HTTP: base URL", type:"text", placeholder:"http://192.168.1.50", hint:"HTTP source — the device address (Fronius: the inverter's IP, no key needed)"},
     {key:"pv_source.ha_base_url", label:"HA base URL", type:"text", placeholder:"http://homeassistant.local:8123", hint:"Leave empty when running as a Home Assistant add-on (uses the Supervisor proxy)"},
     {key:"pv_source.ha_token", label:"HA long-lived token", type:"password", hint:"Leave empty when running as an add-on"},
     {key:"pv_source.ha_verify_ssl", label:"Verify SSL", type:"checkbox"},
@@ -2930,6 +2943,8 @@ function renderAll() {
   // zone dropdown switches between Energy-Charts zones and aWATTar zones.
   // Rebind after re-render (old select node is gone).
   _bindSpotApiChange();
+  // PV-source preset dropdown + connection-method field visibility.
+  _bindPvSourceChange();
   // If the URL had a hash (e.g. /settings#sec-tenant), scroll to it
   // explicitly — the browser doesn't re-trigger anchor jumps after we
   // replace #main innerHTML async via reload().
@@ -2962,6 +2977,76 @@ function _bindSpotApiChange() {
       _bindSpotApiChange();
     }
   });
+}
+
+// ── External PV source: preset auto-fill + connection-method visibility ──
+const _PV_HA_FIELDS = ["ha_base_url","ha_token","ha_verify_ssl","pv_power_entity",
+  "battery_power_entity","battery_soc_entity","grid_power_entity","house_power_entity",
+  "pv_energy_today_entity","pv_energy_total_entity","grid_import_energy_entity",
+  "grid_export_energy_entity","battery_charge_energy_entity","battery_discharge_energy_entity"];
+const _PV_MQTT_FIELDS = ["mqtt_pv_power_topic","mqtt_battery_power_topic",
+  "mqtt_battery_soc_topic","mqtt_grid_power_topic","mqtt_house_power_topic","mqtt_json_path"];
+const _PV_MODBUS_FIELDS = ["modbus_host","modbus_port","modbus_unit_id","modbus_register_map"];
+const _PV_HTTP_FIELDS = ["http_kind","http_base_url"];
+
+function _pvApplyPreset(presetId) {
+  if (!cfg.pv_source) cfg.pv_source = {};
+  const ps = cfg.pv_source;
+  ps.preset_id = presetId;
+  const p = (PV_PRESETS||[]).find(x=>x.id===presetId);
+  if (!p) return;
+  let method = p.default_method || "homeassistant";
+  if ((p.methods||[]).indexOf(method) < 0) method = (p.methods||["homeassistant"])[0];
+  ps.source_type = method;
+  ps.battery_power_sign = p.battery_power_sign || "charge_positive";
+  ps.grid_power_sign = p.grid_power_sign || "import_positive";
+  // Clear all method-specific text fields so no stale values leak across presets.
+  _PV_HA_FIELDS.concat(_PV_MQTT_FIELDS, ["modbus_host","http_base_url","http_api_key","http_site_id"]).forEach(k=>{ ps[k]=""; });
+  ps.modbus_register_map = "sunspec"; ps.http_kind = "fronius_solar_api";
+  if (method === "homeassistant") { const e=p.ha||{}; Object.keys(e).forEach(k=>{ ps[k]=e[k]; }); }
+  else if (method === "mqtt") { const e=p.mqtt||{}; Object.keys(e).forEach(k=>{ ps[k]=e[k]; }); }
+  else if (method === "modbus") { const m=p.modbus||{}; ps.modbus_port=m.port||502; ps.modbus_unit_id=(m.unit_id!=null?m.unit_id:1); ps.modbus_register_map=m.register_map||"sunspec"; }
+  else if (method === "http") { const h=p.http||{}; ps.http_kind=h.http_kind||"fronius_solar_api"; }
+  // Surface the manufacturer note so the user knows any device-side step.
+  if (p.note) toast(p.manufacturer + ": " + p.note);
+}
+
+function _pvVisibility() {
+  const st = (cfg.pv_source && cfg.pv_source.source_type) || "homeassistant";
+  const groups = { homeassistant:_PV_HA_FIELDS, mqtt:_PV_MQTT_FIELDS, modbus:_PV_MODBUS_FIELDS, http:_PV_HTTP_FIELDS };
+  Object.keys(groups).forEach(function(g){
+    groups[g].forEach(function(k){
+      const inp = document.querySelector('[data-key="pv_source.'+k+'"]');
+      if (!inp) return;
+      const field = inp.closest('.field') || inp.closest('label');
+      if (field) field.style.display = (g === st) ? "" : "none";
+    });
+  });
+}
+
+function _pvRerender() {
+  const secEl = document.getElementById("sec-pv_source");
+  const s = SECTIONS.find(x=>x.id==="pv_source");
+  if (secEl && s && !s.custom) {
+    const fieldsHtml = (s.fields||[]).map(renderField).join("");
+    const grid = secEl.querySelector(".grid2");
+    if (grid) { grid.innerHTML = fieldsHtml; wireListEvents(grid); }
+    _bindPvSourceChange();
+  }
+}
+
+function _bindPvSourceChange() {
+  const psel = document.querySelector('[data-key="pv_source.preset_id"]');
+  if (psel && !psel._pvBound) {
+    psel._pvBound = true;
+    psel.addEventListener("change", function(){ _pvApplyPreset(psel.value); _pvRerender(); });
+  }
+  const ssel = document.querySelector('[data-key="pv_source.source_type"]');
+  if (ssel && !ssel._pvBound) {
+    ssel._pvBound = true;
+    ssel.addEventListener("change", function(){ if(!cfg.pv_source)cfg.pv_source={}; cfg.pv_source.source_type=ssel.value; _pvRerender(); });
+  }
+  _pvVisibility();
 }
 
 async function discoverDevices() {
@@ -3021,7 +3106,18 @@ async function deleteDevice(key) {
 
 async function testConnection(which) {
   toast(T("settings.toast.testing","Teste {what}…",{what:which}));
-  const r = await fetch("/api/settings/test-"+which,{method:"POST"});
+  let opts = {method:"POST"};
+  if (which === "pv_source") {
+    // Test the values currently in the form (even before saving).
+    const params = {};
+    document.querySelectorAll('[data-key^="pv_source."]').forEach(function(el){
+      const k = el.getAttribute("data-key").replace("pv_source.","");
+      params[k] = (el.type === "checkbox") ? (el.checked ? "true" : "") : el.value;
+    });
+    opts.headers = {"Content-Type":"application/json"};
+    opts.body = JSON.stringify({params: params});
+  }
+  const r = await fetch("/api/settings/test-"+which, opts);
   const j = await r.json();
   if (j.ok) toast("✓ " + (j.message||"OK"));
   else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
@@ -3029,13 +3125,15 @@ async function testConnection(which) {
 
 async function reload() {
   try {
-    const [cfgR, devR, i18nR, zonesR] = await Promise.all([
+    const [cfgR, devR, i18nR, zonesR, presetsR] = await Promise.all([
       fetch("/api/settings").then(r=>r.json()),
       fetch("/api/devices").then(r=>r.json()),
       fetch("/api/i18n?prefix=settings.").then(r=>r.json()).catch(_=>({map:{}})),
       fetch("/api/zones").then(r=>r.json()).catch(_=>({spot_energy_charts:[], spot_awattar:[], co2:[]})),
+      fetch("/api/pv_presets").then(r=>r.json()).catch(_=>({presets:[]})),
     ]);
     cfg = cfgR;
+    PV_PRESETS = (presetsR && presetsR.presets) || [];
     devices = devR.devices || [];
     I18N = (i18nR && i18nR.map) || {};
     ZONES = zonesR || ZONES;

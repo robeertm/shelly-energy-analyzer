@@ -259,6 +259,42 @@ def test_mqtt():
         return jsonify({"ok": False, "error": str(e)})
 
 
+@bp.route("/api/settings/test-pv_source", methods=["POST"])
+def test_pv_source():
+    """Read the external PV source once (with the currently SAVED config) and
+    report the decoded PV/battery/grid/SOC so the user can verify a preset."""
+    state = _get_state()
+    try:
+        obj = request.get_json(silent=True) or {}
+    except Exception:
+        obj = {}
+    params = obj.get("params") if isinstance(obj.get("params"), dict) else {}
+    if not isinstance(params, dict):
+        params = {}
+    try:
+        res = state.on_action("pv_source_test", params) if getattr(state, "on_action", None) else {"ok": False, "error": "not available"}
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+    if not res.get("ok"):
+        return jsonify({"ok": False, "error": res.get("error") or "no data"})
+
+    def _w(v):
+        return "—" if v is None else f"{v:+.0f} W"
+    parts = []
+    if res.get("pv_w") is not None:
+        parts.append(f"PV {res['pv_w']:.0f} W")
+    if res.get("battery_w") is not None:
+        parts.append(f"Batt {res['battery_w']:+.0f} W")
+    if res.get("grid_w") is not None:
+        parts.append(f"Grid {res['grid_w']:+.0f} W")
+    if res.get("soc_pct") is not None:
+        parts.append(f"SOC {res['soc_pct']:.0f}%")
+    if res.get("pv_energy_total_kwh") is not None:
+        parts.append(f"PV total {res['pv_energy_total_kwh']:.1f} kWh")
+    msg = " · ".join(parts) if parts else "connected, but no values"
+    return jsonify({"ok": True, "message": msg})
+
+
 @bp.route("/api/settings/test-influxdb", methods=["POST"])
 def test_influxdb():
     """Test InfluxDB connection."""

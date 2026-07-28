@@ -1,5 +1,14 @@
 # Changelog
 
+## 16.56.0
+### Added
+- **Manufacturer presets for the external PV / battery source — and two connection methods that work entirely without Home Assistant.** Setup → *PV / Battery data source* now has a **preset dropdown** (Huawei, SolarEdge, Fronius, SMA, Kostal, Sungrow, GoodWe, Victron, SolaX, Enphase, generic SunSpec, or manual). Picking a system auto-fills the connection method, ports, unit ids, entity names and the battery/grid sign conventions.
+  - **Modbus TCP** (`Connection → Modbus TCP`): reads the inverter / dongle / energy manager directly. A **SunSpec** decoder auto-discovers the model blocks (SolarEdge, SMA, Fronius Gen24, Kostal, Sungrow, GoodWe, SolaX), plus a dedicated **Huawei** SUN2000/LUNA2000 register map.
+  - **Local HTTP API** (`Connection → HTTP API`): reads the **Fronius Solar API** over the inverter's IP — no key, no HA.
+  - Home Assistant and MQTT remain available and unchanged.
+  - A **🔌 Test connection** button reads the source once and shows the decoded PV / battery / grid / SOC values, so you can verify a preset (and whether a sign needs flipping) before enabling it.
+  - Only the fields relevant to the chosen connection are shown. New config keys under `pv_source`: `preset_id`, `modbus_host/port/unit_id/register_map`, `http_kind/base_url`. Adds an optional `pymodbus` dependency (installed automatically on update / add-on rebuild); the Modbus reader degrades gracefully if it is missing.
+
 ## 16.55.8
 ### Changed
 - **The battery power tile now shows a signed value: charge `+`, discharge `−`.** Previously the tile showed only the magnitude and conveyed direction by colour alone. Discharge now reads e.g. `−370 W` (red) and charge `+410 W` (green), so the direction is unmistakable at a glance. Colours are unchanged.
