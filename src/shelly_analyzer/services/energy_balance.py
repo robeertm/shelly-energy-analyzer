@@ -202,10 +202,12 @@ def compute_balance(db, cfg, start_ts: int, end_ts: int,
                  and end_ts > int(today_start_ts))
     for k in tenant_keys:
         if _use_live:
-            # Hourly rollups up to today's midnight (synced days) + live daily
-            # accumulator for today (real sub-meters lag the DB until sync).
+            # Hourly rollups strictly BEFORE today's midnight (synced days) + live
+            # daily accumulator for today (real sub-meters lag the DB until sync).
+            # query_hourly bounds are inclusive, so end at midnight-1 to exclude
+            # today's midnight-hour bucket (else it double-counts with live).
             cap = max(int(today_start_ts), int(start_ts))
-            kwh = max(0.0, _hourly_sum(db, k, start_ts, cap))
+            kwh = max(0.0, _hourly_sum(db, k, start_ts, cap - 1))
             kwh += max(0.0, float((live_today_kwh or {}).get(k, 0.0) or 0.0))
         else:
             kwh = max(0.0, _hourly_sum(db, k, start_ts, end_ts))

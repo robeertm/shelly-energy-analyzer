@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.53.1
+### Fixed
+- **Balance tenant "today" double-counted the midnight hour.** The 16.53.0 live-store supplement capped the hourly rollups at today's midnight, but `query_hourly` bounds are inclusive, so today's midnight-hour bucket was summed from the DB *and* again via the live daily total. The hourly cap now ends one second before midnight, so the tenant "today" equals the live daily accumulator exactly.
+
 ## 16.53.0
 ### Fixed
 - **Energy-balance tenant cost was 0 for "today" (and lagged intraday).** The Kosten-tab balance reads each device's energy from the hourly rollups, but real sub-meters (a tenant Shelly) only reach the DB on sync — so today's tenant consumption showed as 0 € until the next sync, while the synthetic PV/grid/battery series (written live) were current. `compute_balance` now accepts the live daily accumulator (`live_today_kwh` + `today_start_ts`): for any period covering today it sums the hourly rollups up to midnight and adds the live daily total for today, so the tenant cost is correct in real time with no double count. The per-device `cost_today` sensor was already correct (it used the live store); this aligns the balance with it.
