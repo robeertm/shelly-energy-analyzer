@@ -5081,10 +5081,12 @@ class ActionDispatcher:
                         _kwh_co2 = kwh_dev if kwh_dev > 0 else 0.0
                         g_arr.append(round(gi * _kwh_co2, 1) if gi is not None else None)
                         if kwh_dev < 0:
-                            # Export → credit at the feed-in tariff (negative € = revenue).
-                            eur_arr.append(round(_feed_ct * kwh_dev / 100.0, 2) if ci is not None else None)
-                            fixed_eur_arr.append(round(_feed_ct * kwh_dev / 100.0, 2)
-                                                 if fixed_ct_kwh is not None else None)
+                            # Export → credit at the FIXED feed-in tariff (negative
+                            # € = revenue). There is no dynamic/spot feed-in rate,
+                            # so the dynamic trace stays empty for export — only the
+                            # fixed feed-in value is shown.
+                            eur_arr.append(None)
+                            fixed_eur_arr.append(round(_feed_ct * kwh_dev / 100.0, 2))
                         else:
                             # Owner consumption is discounted by the grid-served
                             # share of the bucket (battery/PV = 0 cost).

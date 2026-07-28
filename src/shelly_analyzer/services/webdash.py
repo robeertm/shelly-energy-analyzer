@@ -10464,7 +10464,9 @@ async function loadData() {
           hovertemplate:'%{x}<br>%{customdata[0]} ct/kWh · Σ %{customdata[1]} €<extra>' + dynName + '</extra>'}
       ];
       const fxArr = (devData.eur_fixed || []).map(v => (v==null ? 0 : v));
-      const hasFixed = (devData.eur_fixed || []).some(v => v != null && v > 0);
+      // Include negative buckets too (feed-in revenue on the grid meter), else a
+      // pure-export Netz card would hide the fixed feed-in trace entirely.
+      const hasFixed = (devData.eur_fixed || []).some(v => v != null && v !== 0);
       if (hasFixed) {
         traces.push({type:'bar', name: fixName, x: xsLab, y: fxArr, marker:{color:'#9ca3af'},
           hovertemplate:'%{x}<br>' + (fixedCt != null ? fixedCt.toFixed(2) : '?') + ' ct/kWh · Σ %{y} €<extra>' + fixName + '</extra>'});
