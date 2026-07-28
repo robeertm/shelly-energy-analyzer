@@ -3333,7 +3333,7 @@ class ActionDispatcher:
                     from shelly_analyzer.services.pv_http import read_http
                     pv_w, batt_w, soc, grid_w, house_w, pv_today, counters = read_http(shim)
                 else:
-                    return {"ok": False, "error": "Test is available for the Modbus and HTTP sources. For Home Assistant / MQTT, save and watch the live tiles."}
+                    return {"ok": False, "error": self.t("pv_test.only_modbus_http")}
 
                 err = counters.pop("_error", None) if isinstance(counters, dict) else None
                 # Apply the same sign normalisation the poller uses, so the user
@@ -3348,7 +3348,7 @@ class ActionDispatcher:
                 got = any(v is not None for v in (pv_w, batt_w, grid_w, soc))
                 return {
                     "ok": bool(got),
-                    "error": None if got else (err or "No values read — check host/port/unit id and that Modbus/HTTP is enabled on the device."),
+                    "error": None if got else (err or self.t("pv_test.no_values")),
                     "pv_w": pv_w, "battery_w": batt_w, "soc_pct": soc,
                     "grid_w": grid_w, "house_w": house_w,
                     "pv_energy_total_kwh": (counters or {}).get("pv_total"),

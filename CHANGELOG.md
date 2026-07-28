@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.56.1
+### Fixed
+- **The new PV-source preset UI is now fully translated (de/en).** The v16.56.0 preset dropdown, connection selector, Modbus/HTTP fields, hints and the manufacturer notes were shipped with hardcoded English strings, so they showed English inside a German UI. All of them now go through the i18n system (labels, options, hints, the section description, the preset names and setup notes, and the Test-connection messages), with German and English keys; other languages fall back to English as elsewhere. Also translated the previously-untranslated battery/grid sign options and made section descriptions translatable.
+
 ## 16.56.0
 ### Added
 - **Manufacturer presets for the external PV / battery source — and two connection methods that work entirely without Home Assistant.** Setup → *PV / Battery data source* now has a **preset dropdown** (Huawei, SolarEdge, Fronius, SMA, Kostal, Sungrow, GoodWe, Victron, SolaX, Enphase, generic SunSpec, or manual). Picking a system auto-fills the connection method, ports, unit ids, entity names and the battery/grid sign conventions.
