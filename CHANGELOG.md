@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.55.7
+### Changed
+- **A device now keeps the same background tint on both the live dashboard tiles and the Plots page.** Previously each page picked tints independently in render order, so the same device could appear in different colours across the two views. The tint index is now a pure hash (FNV-1a) of the device key with an identical palette on both pages, so each device's colour is stable regardless of order or which devices are present.
+
 ## 16.55.6
 ### Added
 - **Live device tiles get subtle per-device background tints** — the same palette and idea as the Plots-page groups, so each tile reads as a distinct unit. The tint is layered over the card colour (kept opaque) with a matching accent left border, assigned once per device in a stable order. The sparkline lines keep their direction colouring.

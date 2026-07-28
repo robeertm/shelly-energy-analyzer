@@ -4047,11 +4047,17 @@ const _CARD_TINTS = [
   ['rgba(0,188,212,0.10)',   'rgba(0,188,212,0.55)'],
   ['rgba(233,30,99,0.10)',   'rgba(233,30,99,0.5)'],
 ];
-const _cardTintIdx = {{}};
-let _cardTintNext = 0;
+// Tint index is a pure function of the device key (stable string hash), so a
+// device gets the SAME colour here and on the Plots page — independent of render
+// order or which devices are present. Palette matches _PLOT_GROUP_TINTS 1:1.
+function _tintIdxForKey(key) {{
+  const s = String(key == null ? '' : key);
+  let h = 2166136261;  // FNV-1a: spreads short similar keys across the palette
+  for (let i = 0; i < s.length; i++) {{ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }}
+  return (h >>> 0) % _CARD_TINTS.length;
+}}
 function _applyCardTint(div, key) {{
-  if (!(key in _cardTintIdx)) {{ _cardTintIdx[key] = _cardTintNext % _CARD_TINTS.length; _cardTintNext++; }}
-  const pair = _CARD_TINTS[_cardTintIdx[key]];
+  const pair = _CARD_TINTS[_tintIdxForKey(key)];
   div.style.background = 'linear-gradient(' + pair[0] + ',' + pair[0] + '), var(--card)';
   div.style.borderLeft = '3px solid ' + pair[1];
 }}
@@ -10303,8 +10309,20 @@ const _PLOT_GROUP_TINTS = [
   ['rgba(0,188,212,0.10)',   'rgba(0,188,212,0.55)'],    // cyan
   ['rgba(233,30,99,0.10)',   'rgba(233,30,99,0.5)'],     // pink
 ];
-function plotGroup(container, gi){
-  const pair = _PLOT_GROUP_TINTS[((gi % _PLOT_GROUP_TINTS.length) + _PLOT_GROUP_TINTS.length) % _PLOT_GROUP_TINTS.length];
+// Tint index is a pure function of the device key (same hash + palette as the
+// live dashboard cards), so each device keeps ONE background colour across both
+// pages regardless of order. Legacy numeric arg still works as a fallback.
+function _tintIdxForKey(key){
+  const s = String(key == null ? '' : key);
+  let h = 2166136261;  // FNV-1a: same hash as the live dashboard cards
+  for (let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0) % _PLOT_GROUP_TINTS.length;
+}
+function plotGroup(container, key){
+  const idx = (typeof key === 'number')
+    ? (((key % _PLOT_GROUP_TINTS.length) + _PLOT_GROUP_TINTS.length) % _PLOT_GROUP_TINTS.length)
+    : _tintIdxForKey(key);
+  const pair = _PLOT_GROUP_TINTS[idx];
   const g = document.createElement('div');
   g.className = 'plot-group';
   g.style.cssText = 'background:' + pair[0] + ';border-left:3px solid ' + pair[1]
@@ -10521,7 +10539,7 @@ async function loadData() {
     }
     for (let di = 0; di < kwhTraces.length; di++) {
       const uid = String(di);
-      const grp = plotGroup(kwhContainer, di);
+      const grp = plotGroup(kwhContainer, (kwhTraces[di] && kwhTraces[di].key) || di);
       const kwhEl = buildPlotCard(grp, 'plot_kwh_' + uid, true);
       drawKwhForDevice(kwhEl.id, kwhEl.id + '_title', kwhTraces[di]);
       renderCo2Card(grp, uid, co2Devs[di]);
@@ -10617,7 +10635,7 @@ async function loadData() {
 
   // One card per device – generated dynamically so all configured devices show.
   for (let di = 0; di < devs.length; di++) {
-    const grp = plotGroup(tsContainer, di);
+    const grp = plotGroup(tsContainer, (devs[di] && devs[di].key) || di);
     const tsEl = buildPlotCard(grp, 'plot_ts_' + di, true);
     plotInto(tsEl.id, devs[di]);
     stripGroupCards(grp);
