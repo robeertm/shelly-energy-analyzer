@@ -369,22 +369,36 @@ def compute_co2(db, cfg, start_ts: int, end_ts: int,
 
 
 def compute_grid_cost_share(db, cfg, ranges) -> List[float]:
-    """Per time-bucket fraction of on-site load that was drawn from the grid.
+    """Per time-bucket fraction of the **owner's** consumption drawn from the grid.
 
-    For pricing the owner's energy: grid import is bought at the tariff, while
-    directly self-consumed PV and battery **discharge cost nothing** (already
-    paid for, or free). So a bucket served entirely by the battery (a night on
-    storage) returns ~0 → the owner's devices are priced at ~0 for that bucket
-    instead of the full grid tariff.
+    This is the rate an owner circuit (Haus, Wallbox, …) should be priced at:
+    only grid-sourced energy costs money; directly self-consumed PV and battery
+    discharge are free. It honours the full generation chain per hour, so every
+    combination is handled — much/little solar, much/little battery, and a total
+    load larger than solar+battery can cover (grid makes up the rest).
 
-    ``ranges`` is a list of ``(start_ts, end_ts)`` tuples (as built for the
-    plots buckets). Returns a list aligned with ``ranges``; ``1.0`` (full
-    tariff) for buckets with no data or when no PV/grid meter is configured.
+    Sign conventions per module docstring (grid +import/−export, battery
+    +charge/−discharge, PV ≥ 0). Per hour:
 
-    Per hour, with signed grid (+import/−export), signed battery (+charge/
-    −discharge) and PV ≥ 0: ``grid = max(0, grid)``, ``PV_direct = max(0, pv −
-    export − charge)``, ``B_dis = max(0, −battery)``, and the bucket share is
-    ``Σ grid / Σ (grid + PV_direct + B_dis)``.
+        G_imp = max(0, grid)                 G_exp = max(0, −grid)
+        B_chg = max(0, batt)                 B_dis = max(0, −batt)
+        PV_direct = max(0, pv − G_exp − B_chg)   # PV used directly by loads
+        pool  = PV_direct + G_imp                # the non-battery supply bus
+
+    The tenant is grid-parallel and **never** battery-fed, so it takes its share
+    of the non-battery pool first; the battery serves the owner only:
+
+        owner_nonbatt = max(0, pool − tenant_load)   # owner's slice of the pool
+        owner_grid    = owner_nonbatt · G_imp / pool  # grid part of that slice
+        owner_total   = owner_nonbatt + B_dis         # + free battery discharge
+
+    The bucket share is ``Σ owner_grid / Σ owner_total`` — 0 when the owner ran
+    entirely on PV/battery, rising toward 1 when the grid covers the shortfall.
+
+    ``ranges`` is a list of ``(start_ts, end_ts)`` tuples (the plots buckets).
+    Returns a list aligned with ``ranges``; ``1.0`` (full tariff) for buckets
+    with no data or when no PV/grid meter is configured. With no tenant this
+    reduces to ``Σ G_imp / Σ (G_imp + PV_direct + B_dis)``.
     """
     import pandas as pd
 
@@ -415,7 +429,12 @@ def compute_grid_cost_share(db, cfg, ranges) -> List[float]:
     g_s = _ser(grid_key)
     pv_s = _ser(pv_key)
     b_s = _ser(batt_key)
-    all_hours = sorted(set(g_s) | set(pv_s) | set(b_s))
+    tenant_keys, _ = _tenant_key_map(cfg)
+    ten_s: Dict[int, float] = {}
+    for tk in tenant_keys:
+        for h, k in _ser(tk).items():
+            ten_s[h] = ten_s.get(h, 0.0) + max(0.0, k)
+    all_hours = sorted(set(g_s) | set(pv_s) | set(b_s) | set(ten_s))
 
     shares: List[float] = []
     for ab in ranges:
@@ -423,7 +442,7 @@ def compute_grid_cost_share(db, cfg, ranges) -> List[float]:
         if a is None or b is None:
             shares.append(1.0)
             continue
-        gi = pvd = bd = 0.0
+        owner_grid = owner_total = 0.0
         for h in all_hours:
             if h < a or h >= b:
                 continue
@@ -434,11 +453,13 @@ def compute_grid_cost_share(db, cfg, ranges) -> List[float]:
             g_exp = max(0.0, -g)
             bch = max(0.0, bt)
             bdis = max(0.0, -bt)
-            gi += g_imp
-            pvd += max(0.0, pv - g_exp - bch)
-            bd += bdis
-        load = gi + pvd + bd
-        shares.append(min(1.0, max(0.0, gi / load)) if load > 0 else 1.0)
+            pv_direct = max(0.0, pv - g_exp - bch)
+            pool = pv_direct + g_imp
+            tload = min(max(0.0, ten_s.get(h, 0.0)), pool)  # tenant ⊆ non-battery pool
+            own_nb = max(0.0, pool - tload)
+            owner_grid += (own_nb * g_imp / pool) if pool > 0 else 0.0
+            owner_total += own_nb + bdis
+        shares.append(min(1.0, max(0.0, owner_grid / owner_total)) if owner_total > 0 else 1.0)
     return shares
 
 
