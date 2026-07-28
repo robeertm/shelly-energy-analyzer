@@ -3757,13 +3757,21 @@ function _sparkArgs(key, buf) {{
   return {{vals: vals, color: null, sign: false}};
 }}
 
-// Display value for a device's power tile. Grid shows the SIGNED value (export
-// negative / import positive); pv & battery show magnitude (their direction is
-// conveyed by colour). Everything else shows the raw signed value.
+// Display value for a device's power tile. Grid and battery show the SIGNED
+// value; PV shows magnitude (always ≥0 anyway, direction is obvious). Battery
+// sign is charge + / discharge − (Robert: "akku entladen −, beladen +").
 function _pwrVal(d) {{
   if (d.flow_role === 'grid') return d.power_w;
+  if (d.flow_role === 'battery') return d.power_w;
   const c = _flowCol(d.flow_role, d.power_w);
   return c ? Math.abs(d.power_w) : d.power_w;
+}}
+// Formatted power string incl. unit. Battery gets an explicit leading + on
+// charge so charge (+) / discharge (−) reads unmistakably on the tile.
+function _pwrText(d) {{
+  const v = _pwrVal(d);
+  if (d.flow_role === 'battery' && v > 0) return '+' + fmt(v, 0) + ' W';
+  return fmt(v, 0) + ' W';
 }}
 
 // Inner HTML of the kWh meta line. Battery shows today's energy IN (charged,
@@ -4156,7 +4164,7 @@ function devCardHTML(d) {{
           (d.soc_pct && d.soc_pct > 0 ? '<span class="soc-badge">🔋 ' + fmt(d.soc_pct, 0) + '%</span>' : '') +
         '</div>' +
       '</div>' +
-      (function(){{ var c=_flowCol(d.flow_role,d.power_w); return '<div class="dev-power ' + pc + '"' + (c?' style="color:'+c+'"':'') + '>' + fmt(_pwrVal(d), 0) + ' W</div>'; }})() +
+      (function(){{ var c=_flowCol(d.flow_role,d.power_w); return '<div class="dev-power ' + pc + '"' + (c?' style="color:'+c+'"':'') + '>' + _pwrText(d) + '</div>'; }})() +
     '</div>' +
     (d.kind === 'switch' ? '<div class="switch-row" id="sw-' + d.key + '"><span class="switch-label">' + t('live.cards.switch', 'Switch') + ':</span> <span class="switch-state ' + (d.switch_on ? 'on' : 'off') + '">' + (d.switch_on ? t('live.switch.on', 'On') : t('live.switch.off', 'Off')) + '</span> <button class="switch-btn" data-devkey="' + d.key + '">' + t('live.switch.toggle', 'Toggle') + '</button></div>' : '') +
     '<div class="sparkline-wrap" data-metric="w" data-devkey="' + d.key + '"><canvas class="sparkline" id="sp-' + d.key + '"></canvas></div>' +
@@ -4214,7 +4222,7 @@ function updateDeviceCard(card, d) {{
   flowRole[d.key] = d.flow_role || '';
   const pwCol = _flowCol(d.flow_role, d.power_w);
   const pw = card.querySelector('.dev-power');
-  if (pw) {{ pw.textContent = fmt(_pwrVal(d), 0) + ' W'; pw.className = 'dev-power ' + pc; pw.style.color = pwCol || ''; }}
+  if (pw) {{ pw.textContent = _pwrText(d); pw.className = 'dev-power ' + pc; pw.style.color = pwCol || ''; }}
   const meta = card.querySelector('.dev-meta');
   if (meta) {{
     // Class-based (not index-based): the battery kWh cell contains nested spans

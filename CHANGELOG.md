@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.55.8
+### Changed
+- **The battery power tile now shows a signed value: charge `+`, discharge `−`.** Previously the tile showed only the magnitude and conveyed direction by colour alone. Discharge now reads e.g. `−370 W` (red) and charge `+410 W` (green), so the direction is unmistakable at a glance. Colours are unchanged.
+
 ## 16.55.7
 ### Changed
 - **A device now keeps the same background tint on both the live dashboard tiles and the Plots page.** Previously each page picked tints independently in render order, so the same device could appear in different colours across the two views. The tint index is now a pure hash (FNV-1a) of the device key with an identical palette on both pages, so each device's colour is stable regardless of order or which devices are present.
