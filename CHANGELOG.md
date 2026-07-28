@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.53.0
+### Fixed
+- **Energy-balance tenant cost was 0 for "today" (and lagged intraday).** The Kosten-tab balance reads each device's energy from the hourly rollups, but real sub-meters (a tenant Shelly) only reach the DB on sync — so today's tenant consumption showed as 0 € until the next sync, while the synthetic PV/grid/battery series (written live) were current. `compute_balance` now accepts the live daily accumulator (`live_today_kwh` + `today_start_ts`): for any period covering today it sums the hourly rollups up to midnight and adds the live daily total for today, so the tenant cost is correct in real time with no double count. The per-device `cost_today` sensor was already correct (it used the live store); this aligns the balance with it.
+
 ## 16.52.0
 ### Added
 - **Deducted tenant sub-meters in the meter cascade** (`DeviceConfig.deduct_from_parent`). A single utility meter that physically covers the owner *and* a tenant can now calibrate the owner correctly: a child flagged as *deduct* is **not** calibrated against the main meter — instead its (compensated) consumption is **subtracted from the meter reading** before the owner meters' drift factor is derived, and it keeps its own flat compensation surcharge. Without this, the tenant's usage inflated the shared drift factor and — worse — that contaminated factor was written onto the tenant's own meter too, distorting the tenant bill. Both the reading-log recompute and the one-shot `calibrate_meter` honour it; the cascade UI gains a per-device "Deduct (tenant)" toggle and shows the subtracted meters in the calibration summary. Backward compatible: default off = previous behaviour.
