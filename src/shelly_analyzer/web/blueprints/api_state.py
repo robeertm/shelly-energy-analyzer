@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import math
+import time as _time
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from flask import Blueprint, Response, current_app, jsonify, request
@@ -57,6 +59,74 @@ def _compute_i_n(measured: float, ia: float, ib: float, ic: float,
         return 0.0
     except Exception:
         return float(measured or 0.0)
+
+
+def _today_cost_ctx(state) -> Dict[str, Any]:
+    """Today's chain-cost context, cached ~30 s (the shares move slowly).
+
+    The naive per-sample ``cost_today`` (kWh × tariff) ignores the generation
+    chain. This provides the pieces to make the live tiles depend on each other:
+    the owner's grid-served share of today's consumption, today's grid
+    import/export, the unit tariff and the feed-in tariff, plus the tenant keys.
+    """
+    now = _time.time()
+    cached = getattr(state, "_today_cost_ctx_cache", None)
+    if cached and (now - cached[0]) < 30:
+        return cached[1]
+    ctx: Dict[str, Any] = {"owner_share": 1.0, "grid_import": 0.0,
+                           "grid_export": 0.0, "unit": 0.30, "feed_in": 0.082,
+                           "tenant_set": set()}
+    try:
+        cfg = getattr(state, "cfg", None)
+        db = getattr(getattr(state, "storage", None), "db", None)
+        if cfg is not None and db is not None:
+            _now_dt = datetime.now()
+            _today_start = int(_now_dt.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+            _now_ts = int(now)
+            try:
+                ctx["unit"] = float(cfg.pricing.effective_pricing_for_date(_now_dt.date()).unit_price_gross())
+            except Exception:
+                ctx["unit"] = float(getattr(getattr(cfg, "pricing", None), "electricity_price_eur_per_kwh", 0.30) or 0.30)
+            _solar = getattr(cfg, "solar", None)
+            ctx["feed_in"] = float(getattr(_solar, "feed_in_tariff_eur_per_kwh", 0.082) or 0.082) if _solar else 0.082
+            from shelly_analyzer.services.energy_balance import (
+                compute_grid_cost_share, compute_balance, _tenant_key_map)
+            ctx["owner_share"] = float(compute_grid_cost_share(db, cfg, [(_today_start, _now_ts)])[0])
+            _b = compute_balance(db, cfg, _today_start, _now_ts)
+            ctx["grid_import"] = float(_b.grid_import_kwh)
+            ctx["grid_export"] = float(_b.grid_export_kwh)
+            _tk, _ = _tenant_key_map(cfg)
+            ctx["tenant_set"] = set(_tk)
+    except Exception:
+        pass
+    state._today_cost_ctx_cache = (now, ctx)
+    return ctx
+
+
+def _apply_today_chain_costs(state, devices_list) -> None:
+    """Override each live tile's ``cost_today`` with the chain-aware value.
+
+    Grid meter = import·tariff − export·feed-in (net position); owner circuits
+    pay only their grid-served share (battery/PV = free); the tenant pays the
+    full tariff; PV and battery cost nothing.
+    """
+    ctx = _today_cost_ctx(state)
+    unit = ctx["unit"]
+    feed_in = ctx["feed_in"]
+    share = ctx["owner_share"]
+    tenant_set = ctx["tenant_set"]
+    for d in devices_list:
+        role = d.get("flow_role")
+        key = d.get("key")
+        kwh = float(d.get("today_kwh") or 0.0)
+        if role in ("pv", "battery"):
+            d["cost_today"] = 0.0
+        elif role == "grid":
+            d["cost_today"] = round(ctx["grid_import"] * unit - ctx["grid_export"] * feed_in, 2)
+        elif key in tenant_set:
+            d["cost_today"] = round(max(0.0, kwh) * unit, 2)
+        else:
+            d["cost_today"] = round(max(0.0, kwh) * unit * share, 2)
 
 
 @bp.route("/api/state")
@@ -218,6 +288,14 @@ def api_state():
             "today_out_kwh": 0.0,
             "pending": True,
         })
+
+    # Chain-aware "today" cost per tile (they depend on each other): grid nets
+    # import@tariff − export@feed-in, owner circuits pay only their grid share,
+    # tenant pays full, PV/battery cost nothing. Safe no-op if it can't compute.
+    try:
+        _apply_today_chain_costs(state, devices_list)
+    except Exception:
+        pass
 
     return jsonify({"devices": devices_list})
 

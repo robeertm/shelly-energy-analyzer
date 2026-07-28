@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.55.5
+### Fixed
+- **Live tile "today €" ignored the generation chain — every device was priced at kWh × consumer tariff.** So the grid meter's feed-in was valued at the consumer tariff (e.g. −7.60 € instead of the feed-in tariff), and owner circuits (Haus, Wallbox) showed a full-tariff cost even when running on battery/PV. The `/api/state` builder now overrides each tile's `cost_today` with a chain-aware value (they depend on each other, cached ~30 s): the grid meter nets **import·tariff − export·feed-in**; owner circuits pay only their **grid-served share** of today (battery/PV = free, via `compute_grid_cost_share`); the tenant pays the full tariff; PV and battery cost nothing. Config-driven and universal — grid-only/no-tenant setups fall back to the full tariff.
+
 ## 16.55.4
 ### Fixed
 - **The grid meter's fixed-price plot showed the consumer tariff (e.g. 30.25 ct/kWh) on feed-in buckets instead of the feed-in tariff.** The bar value was already computed with the feed-in tariff, but the hover label hard-coded the consumer fixed tariff, so a −0.36 € feed-in bar read "30.25 ct/kWh". The fixed trace now shows the per-bucket rate — the feed-in tariff (labelled "Feed-in") for export, the consumer tariff for consumption — matching the value shown. `feed_in_ct` is exposed by the plots endpoint.
