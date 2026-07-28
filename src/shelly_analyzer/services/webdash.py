@@ -4035,10 +4035,32 @@ function renderLive(data, first) {{
   if (_cdState) requestAnimationFrame(_drawDetailChart);
 }}
 
+// Subtle per-device card tints — same palette/idea as the Plots page groups,
+// so a device reads as a distinct unit. The tint is layered OVER var(--card)
+// (kept opaque) with a matching accent left border; assigned once per key in
+// render order so it stays stable across refreshes.
+const _CARD_TINTS = [
+  ['rgba(106,167,255,0.10)', 'rgba(106,167,255,0.55)'],
+  ['rgba(76,175,80,0.10)',   'rgba(76,175,80,0.55)'],
+  ['rgba(255,152,0,0.10)',   'rgba(255,152,0,0.55)'],
+  ['rgba(171,71,188,0.11)',  'rgba(171,71,188,0.55)'],
+  ['rgba(0,188,212,0.10)',   'rgba(0,188,212,0.55)'],
+  ['rgba(233,30,99,0.10)',   'rgba(233,30,99,0.5)'],
+];
+const _cardTintIdx = {{}};
+let _cardTintNext = 0;
+function _applyCardTint(div, key) {{
+  if (!(key in _cardTintIdx)) {{ _cardTintIdx[key] = _cardTintNext % _CARD_TINTS.length; _cardTintNext++; }}
+  const pair = _CARD_TINTS[_cardTintIdx[key]];
+  div.style.background = 'linear-gradient(' + pair[0] + ',' + pair[0] + '), var(--card)';
+  div.style.borderLeft = '3px solid ' + pair[1];
+}}
+
 function buildDeviceCard(d) {{
   const div = document.createElement('div');
   div.className = 'dev-card';
   div.id = 'dc-' + d.key;
+  _applyCardTint(div, d.key);
   div.innerHTML = devCardHTML(d);
   div.querySelector('.dev-header').addEventListener('click', function() {{
     const exp = div.querySelector('.dev-expand');
