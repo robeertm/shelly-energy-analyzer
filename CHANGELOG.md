@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.55.4
+### Fixed
+- **The grid meter's fixed-price plot showed the consumer tariff (e.g. 30.25 ct/kWh) on feed-in buckets instead of the feed-in tariff.** The bar value was already computed with the feed-in tariff, but the hover label hard-coded the consumer fixed tariff, so a −0.36 € feed-in bar read "30.25 ct/kWh". The fixed trace now shows the per-bucket rate — the feed-in tariff (labelled "Feed-in") for export, the consumer tariff for consumption — matching the value shown. `feed_in_ct` is exposed by the plots endpoint.
+
 ## 16.55.3
 ### Fixed
 - **The grid meter's Plots price card showed a "dynamic" value for feed-in, which doesn't exist.** Feed-in is paid at a **fixed** tariff (`feed_in_tariff_eur_per_kwh`) — there is no spot/dynamic feed-in rate — but the export buckets were written to the dynamic series too (coloured by the spot traffic-light), implying a dynamic feed-in price. Export buckets now leave the dynamic series empty and show the feed-in revenue only in the fixed series; the fixed trace also renders when a card has only feed-in (negative) buckets.
