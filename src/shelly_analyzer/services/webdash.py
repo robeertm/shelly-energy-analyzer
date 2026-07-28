@@ -5769,7 +5769,17 @@ function renderCo2(data, el) {{
       fp += metricCardHtml(t('web.co2.battery_embodied','Storage embodied'), fmt(F.battery_embodied_kg,2,'kg'), (data.battery_embodied_g_per_kwh||0).toFixed(0) + ' g/kWh');
     }}
     fp += metricCardHtml('🌱 ' + t('web.co2.solar_saved','Avoided by solar'), fmt(F.solar_saved_kg,2,'kg'), t('web.costs.autarky','Self-sufficiency') + ' ' + (F.autarky_pct||0).toFixed(0) + '%');
-    fp += '</div></div>';
+    fp += '</div>';
+    // Owner vs. grid-parallel tenant: the tenant is billed the solar-blended
+    // intensity, so a share of the household's PV lowers the tenant's CO₂ below
+    // the pure grid mix. Only shown when a tenant circuit exists.
+    if ((F.tenant_kg||0) > 0 || (F.tenant_load_kwh||0) > 0) {{
+      fp += '<div class="metric-grid" style="margin-top:8px">';
+      fp += metricCardHtml('🏠 ' + t('web.co2.owner','Owner'), fmt(F.owner_kg,2,'kg'), 'CO₂');
+      fp += metricCardHtml('👤 ' + t('web.co2.tenant','Tenant'), fmt(F.tenant_kg,2,'kg'), (F.solar_share_pct||0).toFixed(0) + '% ' + t('web.co2.solar_share','solar'));
+      fp += '</div>';
+    }}
+    fp += '</div>';
     html += fp;
   }}
 

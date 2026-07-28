@@ -1156,6 +1156,9 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.co2.pv_embodied": "PV-Herstellung",
         "web.co2.battery_embodied": "Speicher-Herstellung",
         "web.co2.solar_saved": "durch Solar vermieden",
+        "web.co2.owner": "Eigentümer",
+        "web.co2.tenant": "Mieter",
+        "web.co2.solar_share": "Solar",
 
         # Web: Dashboard UI (mobile/web app texts)
         "web.dash.device_order": "Geräteanordnung &amp; Sichtbarkeit",
@@ -3853,6 +3856,9 @@ _I18N: Dict[str, Dict[str, str]] = {
         "web.co2.pv_embodied": "PV embodied",
         "web.co2.battery_embodied": "Storage embodied",
         "web.co2.solar_saved": "avoided by solar",
+        "web.co2.owner": "Owner",
+        "web.co2.tenant": "Tenant",
+        "web.co2.solar_share": "solar",
         "web.co2.chart_title": "CO\u2082 Intensity 24h",
         "web.co2.current": "Current Grid CO\u2082 Intensity",
         "web.co2.device_rates": "CO\u2082 per Device (live)",

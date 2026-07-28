@@ -1720,7 +1720,9 @@ class BackgroundServiceManager:
         avg_w = (total_kwh / 24) * 1000 if total_kwh > 0 else 0.0
         load_factor = (avg_w / max_power_w) if max_power_w > 0 else 0.0
 
-        # CO2
+        # CO2 — solar-aware footprint over the generation chain (grid at the
+        # mix, self-consumed PV / battery at embodied factors, feed-in = 0 g),
+        # falling back to a flat grid-mix estimate when no PV/grid meter exists.
         co2_kg = 0.0
         co2_g_per_kwh = 0.0
         try:
@@ -1728,6 +1730,25 @@ class BackgroundServiceManager:
             if co2_cfg and getattr(co2_cfg, "enabled", False):
                 co2_g_per_kwh = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380) or 380)
                 co2_kg = total_kwh * co2_g_per_kwh / 1000
+                try:
+                    from shelly_analyzer.services.energy_balance import compute_co2
+                    _zone = str(getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU")
+                    _dfi = self.storage.db.query_co2_intensity(_zone, y_start, y_end + 3600)
+                    _imap, _avg = {}, co2_g_per_kwh
+                    if _dfi is not None and not _dfi.empty:
+                        import pandas as _pd
+                        _civ = _pd.to_numeric(_dfi["intensity_g_per_kwh"], errors="coerce")
+                        _m = float(_civ.mean())
+                        if _m == _m and _m > 0:
+                            _avg = _m
+                        _imap = {int(h): float(v) for h, v in zip(_dfi["hour_ts"], _civ.fillna(_avg))}
+                    _r = compute_co2(self.storage.db, self.cfg, y_start, y_end,
+                                     intensity_by_hour=_imap, default_intensity=_avg)
+                    if _r.load_kwh > 0:
+                        co2_kg = _r.property_kg
+                        co2_g_per_kwh = _r.effective_intensity or co2_g_per_kwh
+                except Exception:
+                    logger.debug("digest solar-aware co2 failed", exc_info=True)
         except Exception:
             pass
 
