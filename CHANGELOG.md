@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.55.6
+### Added
+- **Live device tiles get subtle per-device background tints** — the same palette and idea as the Plots-page groups, so each tile reads as a distinct unit. The tint is layered over the card colour (kept opaque) with a matching accent left border, assigned once per device in a stable order. The sparkline lines keep their direction colouring.
+
 ## 16.55.5
 ### Fixed
 - **Live tile "today €" ignored the generation chain — every device was priced at kWh × consumer tariff.** So the grid meter's feed-in was valued at the consumer tariff (e.g. −7.60 € instead of the feed-in tariff), and owner circuits (Haus, Wallbox) showed a full-tariff cost even when running on battery/PV. The `/api/state` builder now overrides each tile's `cost_today` with a chain-aware value (they depend on each other, cached ~30 s): the grid meter nets **import·tariff − export·feed-in**; owner circuits pay only their **grid-served share** of today (battery/PV = free, via `compute_grid_cost_share`); the tenant pays the full tariff; PV and battery cost nothing. Config-driven and universal — grid-only/no-tenant setups fall back to the full tariff.
