@@ -1,6 +1,8 @@
 # Changelog
 
-## 16.57.3
+## 16.57.4
+### Changed
+- **One net/gross switch instead of two.** In the dashboard's Plots tab the header **Net ✓ / Gross** pill and the Plots page's own "Raw (gross)" checkbox were two separate controls for the same thing, which was confusing and could disagree. The header pill is now the single control: it drives both the Live view and the embedded Plots iframe, and the Plots page hides its own checkbox when embedded (the checkbox still appears when `/plots` is opened standalone, where there is no pill). Switching net/gross on the Plots tab now works from the one pill.
 ### Fixed
 - **The Plots page "Raw (gross)" checkbox did nothing — the plot always stayed gross.** Its inline `onchange` called `scheduleApply(...)`, but on the Plots page that function is scoped inside the init closure and is only reachable through the `window.__scheduleApplyPlots` global alias (the same alias the device checkboxes use). The inline handler therefore threw a silent `ReferenceError` and never re-requested the data, so toggling raw/net had no effect. The checkbox now calls the global alias like the other controls, so switching between net and gross works on the Plots page.
 ### Fixed

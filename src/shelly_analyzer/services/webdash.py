@@ -2410,11 +2410,15 @@ function onPaneActivated(name) {{
     if (name === 'plots') {{
       const fr = document.getElementById('plots-frame');
       if (fr && (!fr.src || fr.src === 'about:blank' || fr.src.endsWith('about:blank'))) {{
+        // Sync the embedded plot to the header pill's net/gross state once loaded.
+        fr.onload = function() {{ try {{ if (fr.contentWindow && fr.contentWindow.__setPlotsRaw) fr.contentWindow.__setPlotsRaw(_rawView); }} catch(e) {{}} }};
         fr.src = '/plots';
       }} else if (fr) {{
-        // Iframe is already loaded → ask it to re-fetch fresh data
-        // (e.g. after initial sync or when user returns to the tab).
-        try {{ if (fr.contentWindow && fr.contentWindow.__scheduleApplyPlots) fr.contentWindow.__scheduleApplyPlots(50); }} catch(e) {{}}
+        // Iframe is already loaded → sync net/gross to the pill and re-fetch.
+        try {{
+          if (fr.contentWindow && fr.contentWindow.__setPlotsRaw) fr.contentWindow.__setPlotsRaw(_rawView);
+          else if (fr.contentWindow && fr.contentWindow.__scheduleApplyPlots) fr.contentWindow.__scheduleApplyPlots(50);
+        }} catch(e) {{}}
       }}
     }}
     else if (name === 'costs') loadCosts();
@@ -3947,6 +3951,12 @@ function toggleRawView() {{
   _historyLoaded = false;
   loadHistory();
   tick(true);
+  // Single control: also drive the embedded Plots iframe (its own checkbox is
+  // hidden when embedded, so this pill is the one switch for Live + Plots).
+  try {{
+    var _pf = document.getElementById('plots-frame');
+    if (_pf && _pf.contentWindow && _pf.contentWindow.__setPlotsRaw) _pf.contentWindow.__setPlotsRaw(_rawView);
+  }} catch(e){{}}
 }}
 async function tick(first) {{
   try {{
@@ -10800,6 +10810,9 @@ async function init() {
   if (params.deadband_var || params.deadband) document.getElementById('deadband_var').value = String(params.deadband_var || params.deadband);
   if (params.sign_hold_s || params.signhold) document.getElementById('sign_hold_s').value = String(params.sign_hold_s || params.signhold);
   try { var _rt0 = document.getElementById('raw_toggle'); if (_rt0) _rt0.checked = (String(params.raw || '') === '1'); } catch(e){}
+  // Embedded in the dashboard's Plots tab → the parent's header Net/Gross pill is
+  // the single control; hide this checkbox to avoid two switches for one thing.
+  try { if (window.top !== window.self) { var _cr = document.getElementById('ctrlRaw'); if (_cr) _cr.style.display = 'none'; } } catch(e){}
   syncFilterControls();
 
   // devices (from query or default first two)
@@ -10894,6 +10907,12 @@ async function init() {
 
   // Expose scheduleApply for device pill change handler
   window.__scheduleApplyPlots = scheduleApply;
+  // Let the embedding dashboard's Net/Gross pill drive this plot (single control).
+  window.__setPlotsRaw = function(on) {
+    var cb = document.getElementById('raw_toggle');
+    if (cb) cb.checked = !!on;
+    scheduleApply(0);
+  };
 
   // Auto-apply on any change
   document.getElementById('view').addEventListener('change', ()=>{ syncViewControls(); scheduleApply(50); });
