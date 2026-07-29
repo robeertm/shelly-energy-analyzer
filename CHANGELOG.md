@@ -1,6 +1,8 @@
 # Changelog
 
-## 16.57.1
+## 16.57.2
+### Fixed
+- **Live sparklines/2 h history could stay empty after the browser was closed or offline, until a manual raw/net toggle.** `loadHistory()` latched `_historyLoaded = true` before the fetch, so if the first `/api/history` request on reconnect came back empty or failed (the analyzer was still spinning up, or the network had just returned), the 2 h history was never retried — the tiles filled forward but the historic curve stayed blank until toggling raw/net forced a reload. It now latches only once the server actually returns history, guards against concurrent fetches, and the background poll retries every tick until the history arrives (self-healing after any connectivity gap).
 ### Fixed
 - **Net "meter behind meter" now also nets the Live sparklines / history chart, and the mode is clearly visible.** In 16.57.0 only the live tile numbers and the Plots page were netted — the Live view's sparklines and history curves (served by `/api/history`) stayed gross, so toggling looked like nothing happened (especially when the sub-meter was momentarily idle). `/api/history` now applies the same subtraction (with a `?raw=1` bypass), and the Live toggle clears the sparkline buffer and reloads history so the curves switch net↔gross together with the tiles. The toggle is now a clearly labelled **Net ✓ / Gross** pill, and each netted tile shows a small **"net − <device>"** badge, so it is obvious whether the mode is active and which tile is affected.
 ### Added

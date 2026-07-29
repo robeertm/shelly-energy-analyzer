@@ -3813,14 +3813,24 @@ function initTimescaleBtns() {{
   }});
 }}
 let _historyLoaded = false;
+let _historyLoading = false;
 async function loadHistory() {{
-  if (_historyLoaded) return;
-  _historyLoaded = true;
+  // Latch as loaded only once the server actually returned history. After the
+  // browser was closed / the client was offline, the first fetch on reconnect
+  // can come back empty/failed (analyzer still spinning up); latching eagerly
+  // used to strand the 2 h sparkline history until a manual raw/net toggle. Now
+  // we retry (tick() re-invokes) until real data arrives. _historyLoading guards
+  // against concurrent fetches.
+  if (_historyLoaded || _historyLoading) return;
+  _historyLoading = true;
   try {{
     const r = await fetch('/api/history' + (_rawView ? '?raw=1' : ''));
     if (!r.ok) return;
     const data = await r.json();
     const hist = data.history || {{}};
+    let _hasHist = false;
+    for (const _hk in hist) {{ if ((hist[_hk] || []).length) {{ _hasHist = true; break; }} }}
+    if (_hasHist) _historyLoaded = true;  // only latch on real data
     for (const key in hist) {{
       if (!sparkData[key]) sparkData[key] = [];
       // Merge server history with client buffer, dedupe by timestamp,
@@ -3852,7 +3862,7 @@ async function loadHistory() {{
         if (sphz) drawSparkline(sphz, wndVals(buf, 'hz'), '#06b6d4', true, false, bt);
       }}
     }}
-  }} catch(e) {{ /* silent */ }}
+  }} catch(e) {{ /* silent */ }} finally {{ _historyLoading = false; }}
 }}
 /* ── Persistent live polling ──────────────────────────────────────────
    /api/state is polled in the background regardless of which pane is
@@ -3945,6 +3955,7 @@ async function tick(first) {{
     const data = await r.json();
     _liveLatest = data;
     _updateRawBtn(data);
+    if (!_historyLoaded) loadHistory();  // self-heal: retry until 2 h history arrives
     if (currentPane === 'live') renderLive(data, first);
     // Always update the live timestamp in the header (visible on the Live
     // pane only, but harmless to set when hidden).
