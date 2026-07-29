@@ -16,7 +16,8 @@ identically. Fully generic: any user can configure any parent/child pair.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List
+import bisect
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
 def net_display_children(devices: Iterable[Any]) -> Dict[str, List[str]]:
@@ -73,3 +74,52 @@ def apply_live_subtraction(tiles: List[Dict[str, Any]],
         pt["today_kwh"] = raw_k.get(parent, float(pt.get("today_kwh") or 0.0)) \
             - sum(raw_k.get(c, 0.0) for c in applied)
         pt["net_of_children"] = applied
+
+
+def _nearest_w(pairs: List[Tuple[int, float]], ts: int, tol_ms: int = 10000) -> float:
+    """Child power at ``ts`` from a time-sorted ``[(ts_ms, w), ...]`` list, taking
+    the nearest sample within ``tol_ms``; 0.0 if none (a gap → leave gross there)."""
+    if not pairs:
+        return 0.0
+    keys = [p[0] for p in pairs]
+    i = bisect.bisect_left(keys, ts)
+    best: Optional[Tuple[int, float]] = None
+    for j in (i - 1, i):
+        if 0 <= j < len(pairs):
+            d = abs(pairs[j][0] - ts)
+            if best is None or d < best[0]:
+                best = (d, pairs[j][1])
+    if best is None or best[0] > tol_ms:
+        return 0.0
+    return float(best[1])
+
+
+def apply_history_subtraction(hist: Dict[str, List[Dict[str, Any]]],
+                              submap: Dict[str, List[str]]) -> None:
+    """Mutate the ``/api/history`` payload so each parent's power series (``w``) is
+    net of its children, aligned by nearest timestamp. Same transform as the live
+    tiles and Plots, so the Live view's sparklines/history chart stay consistent
+    when the net/raw toggle flips. Only ``w`` is netted (voltages/currents aren't).
+    """
+    if not submap or not hist:
+        return
+    for parent, kids in submap.items():
+        ppts = hist.get(parent)
+        if not ppts:
+            continue
+        cmaps: List[List[Tuple[int, float]]] = []
+        for c in kids:
+            cp = hist.get(c)
+            if not cp:
+                continue
+            cmaps.append(sorted(
+                ((int(p.get("ts") or 0), float(p.get("w") or 0.0)) for p in cp),
+                key=lambda x: x[0]))
+        if not cmaps:
+            continue
+        for p in ppts:
+            tsp = int(p.get("ts") or 0)
+            sub = 0.0
+            for cm in cmaps:
+                sub += _nearest_w(cm, tsp)
+            p["w"] = float(p.get("w") or 0.0) - sub

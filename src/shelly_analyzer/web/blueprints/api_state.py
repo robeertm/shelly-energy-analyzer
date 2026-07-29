@@ -375,6 +375,21 @@ def api_history():
             })
         hist[dkey] = pts_out
 
+    # Net "meter behind meter": subtract each flagged child's power series from
+    # its parent's, so the Live sparklines / history chart stay consistent with
+    # the netted tiles. ``?raw=1`` shows the gross series. Only ``w`` is netted.
+    _raw_view = str(request.args.get("raw", "")).strip().lower() in ("1", "true", "yes", "on")
+    if not _raw_view:
+        try:
+            from shelly_analyzer.services.net_display import (
+                net_display_children, apply_history_subtraction)
+            _cfg = getattr(state, "cfg", None)
+            _submap = net_display_children(getattr(_cfg, "devices", []) or []) if _cfg else {}
+            if _submap:
+                apply_history_subtraction(hist, _submap)
+        except Exception:
+            pass
+
     return jsonify({"history": hist})
 
 
