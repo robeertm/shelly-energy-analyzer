@@ -1,6 +1,8 @@
 # Changelog
 
-## 16.57.2
+## 16.57.3
+### Fixed
+- **The Plots page "Raw (gross)" checkbox did nothing — the plot always stayed gross.** Its inline `onchange` called `scheduleApply(...)`, but on the Plots page that function is scoped inside the init closure and is only reachable through the `window.__scheduleApplyPlots` global alias (the same alias the device checkboxes use). The inline handler therefore threw a silent `ReferenceError` and never re-requested the data, so toggling raw/net had no effect. The checkbox now calls the global alias like the other controls, so switching between net and gross works on the Plots page.
 ### Fixed
 - **Live sparklines/2 h history could stay empty after the browser was closed or offline, until a manual raw/net toggle.** `loadHistory()` latched `_historyLoaded = true` before the fetch, so if the first `/api/history` request on reconnect came back empty or failed (the analyzer was still spinning up, or the network had just returned), the 2 h history was never retried — the tiles filled forward but the historic curve stayed blank until toggling raw/net forced a reload. It now latches only once the server actually returns history, guards against concurrent fetches, and the background poll retries every tick until the history arrives (self-healing after any connectivity gap).
 ### Fixed
