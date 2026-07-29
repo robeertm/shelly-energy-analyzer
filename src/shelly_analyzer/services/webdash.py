@@ -9835,7 +9835,7 @@ _PLOTS_TEMPLATE = """<!doctype html>
         <div class="ctrl" id="ctrlRaw">
           <label id="lblRaw"></label>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400">
-            <input id="raw_toggle" type="checkbox" onchange="scheduleApply(0)"> <span id="lblRawInline"></span>
+            <input id="raw_toggle" type="checkbox" onchange="if(window.__scheduleApplyPlots)window.__scheduleApplyPlots(0)"> <span id="lblRawInline"></span>
           </label>
         </div>
 
