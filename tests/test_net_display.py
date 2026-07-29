@@ -19,7 +19,7 @@ from shelly_analyzer.io.config import (  # noqa: E402
     AppConfig, DeviceConfig, MainMeter, load_config, save_config,
 )
 from shelly_analyzer.services.net_display import (  # noqa: E402
-    net_display_children, apply_live_subtraction,
+    net_display_children, apply_live_subtraction, apply_history_subtraction,
 )
 
 
@@ -125,10 +125,38 @@ def test_empty_and_raw_are_noops():
     print("OK  empty submap / empty tiles are no-ops (raw bypass = skip caller)")
 
 
+def test_history_subtraction():
+    hist = {
+        "haus": [{"ts": 1000, "w": 5000.0}, {"ts": 2000, "w": 5200.0}, {"ts": 3000, "w": 400.0}],
+        "wallbox": [{"ts": 1005, "w": 4600.0}, {"ts": 2000, "w": 4700.0}, {"ts": 3000, "w": 0.0}],
+        "solar": [{"ts": 1000, "w": -200.0}],
+    }
+    apply_history_subtraction(hist, {"haus": ["wallbox"]})
+    ws = [p["w"] for p in hist["haus"]]
+    # ts1000 -> nearest wallbox ts1005 (5 ms) = 4600 -> 400; ts2000 -> 4700 -> 500; ts3000 -> 0 -> 400
+    assert abs(ws[0] - 400) < 1e-9 and abs(ws[1] - 500) < 1e-9 and abs(ws[2] - 400) < 1e-9, ws
+    assert [p["w"] for p in hist["wallbox"]] == [4600.0, 4700.0, 0.0], "child untouched"
+    assert hist["solar"][0]["w"] == -200.0, "unrelated untouched"
+    print("OK  history subtraction (nearest-ts align; child + unrelated untouched)")
+
+
+def test_history_subtraction_gap():
+    # Child sample too far from the parent point (> tolerance) → not subtracted.
+    hist = {
+        "haus": [{"ts": 100000, "w": 3000.0}],
+        "wallbox": [{"ts": 100000 + 30000, "w": 2000.0}],  # 30 s away, tol 10 s
+    }
+    apply_history_subtraction(hist, {"haus": ["wallbox"]})
+    assert hist["haus"][0]["w"] == 3000.0, "gap beyond tolerance must leave gross"
+    print("OK  history subtraction respects tolerance (gap → gross)")
+
+
 if __name__ == "__main__":
     test_config_roundtrip_flag()
     test_children_map()
     test_live_subtraction_basic()
     test_live_subtraction_chain()
     test_empty_and_raw_are_noops()
+    test_history_subtraction()
+    test_history_subtraction_gap()
     print("\nAll net-display tests passed.")

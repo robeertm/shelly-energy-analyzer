@@ -1,6 +1,8 @@
 # Changelog
 
-## 16.57.0
+## 16.57.1
+### Fixed
+- **Net "meter behind meter" now also nets the Live sparklines / history chart, and the mode is clearly visible.** In 16.57.0 only the live tile numbers and the Plots page were netted — the Live view's sparklines and history curves (served by `/api/history`) stayed gross, so toggling looked like nothing happened (especially when the sub-meter was momentarily idle). `/api/history` now applies the same subtraction (with a `?raw=1` bypass), and the Live toggle clears the sparkline buffer and reloads history so the curves switch net↔gross together with the tiles. The toggle is now a clearly labelled **Net ✓ / Gross** pill, and each netted tile shows a small **"net − <device>"** badge, so it is obvious whether the mode is active and which tile is affected.
 ### Added
 - **Net "meter behind meter" display — subtract a sub-meter from the meter it sits behind (Live + Plots), virtually and reversibly.** When one meter is wired physically behind another (e.g. a wallbox on a circuit fed through the house meter), the upstream meter measures its own load *plus* the downstream one, so its tile and history double-count the sub-meter. In **Calibration → Meter structure**, any device whose parent is another meter device now has a **Net view** checkbox ("behind meter"). With it on, that device's power/energy is subtracted from its parent everywhere it is shown — the Live tile (and its chain-aware cost) and the Plots page (kWh buckets and the power-over-time total) — while the sub-meter keeps its own tile/series. It is a pure display transform: stored samples are never modified. A **Σ** toggle on the Live view and a **Raw (gross)** switch on Plots (`?raw=1`) show everything again with one click. Fully generic and config-driven (`DeviceConfig.subtract_from_parent_display`); chains (A behind B behind C) net correctly. Full de/en i18n.
 
