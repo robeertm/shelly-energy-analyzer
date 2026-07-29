@@ -1934,6 +1934,7 @@ _HTML_TEMPLATE = """<!doctype html>
       <span id="live-stamp" style="font-size:11px;color:var(--muted)"></span>
       <button id="btn-hamburger" class="icon-btn" title="Menu" onclick="toggleNavDrawer()">☰</button>
       <button id="btn-freeze" class="icon-btn" title="{web_btn_freeze_title}" style="display:none">▶</button>
+      <button id="btn-raw" class="icon-btn" onclick="toggleRawView()" title="" style="display:none">Σ</button>
       <button id="btn-live-settings" class="icon-btn" title="{web_btn_settings_title}" onclick="window.location.href='/settings#sec-devices'">⚙</button>
       <button id="btn-theme" class="icon-btn" title="{web_btn_theme_title}">☀</button>
     </div>
@@ -3890,12 +3891,39 @@ function toggleFreeze() {{
   if (_fb) _fb.textContent = frozen ? '▶' : '⏸';
 }}
 
+// Net "meter behind meter" display: default shows parents net of children
+// wired behind them; the Σ toggle switches to raw/gross (?raw=1 → server sends
+// everything). Persisted per browser; the button only appears once a device is
+// configured with net-display (or while raw is active).
+var _rawView = (function(){{ try {{ return localStorage.getItem('sea_raw_view') === '1'; }} catch(e){{ return false; }} }})();
+function _updateRawBtn(data) {{
+  var b = document.getElementById('btn-raw');
+  if (!b) return;
+  var hasNet = _rawView;
+  try {{
+    var ds = (data && data.devices) || [];
+    for (var i = 0; i < ds.length; i++) {{
+      if (ds[i] && ds[i].net_of_children && ds[i].net_of_children.length) {{ hasNet = true; break; }}
+    }}
+  }} catch(e){{}}
+  b.style.display = hasNet ? '' : 'none';
+  b.style.color = _rawView ? 'var(--accent)' : '';
+  b.title = _rawView
+    ? t('web.raw_on', 'Rohdaten (brutto) — klicken für Netto-Ansicht')
+    : t('web.raw_off', 'Netto-Ansicht — klicken für Rohdaten (alles anzeigen)');
+}}
+function toggleRawView() {{
+  _rawView = !_rawView;
+  try {{ localStorage.setItem('sea_raw_view', _rawView ? '1' : '0'); }} catch(e){{}}
+  tick(true);
+}}
 async function tick(first) {{
   try {{
-    const r = await fetch('/api/state');
+    const r = await fetch('/api/state' + (_rawView ? '?raw=1' : ''));
     if (!r.ok) return;
     const data = await r.json();
     _liveLatest = data;
+    _updateRawBtn(data);
     if (currentPane === 'live') renderLive(data, first);
     // Always update the live timestamp in the header (visible on the Live
     // pane only, but harmless to set when hidden).
@@ -8742,15 +8770,21 @@ _loadLsSettings();
         '<th style="text-align:left;padding:4px 6px">' + t('cal.device', 'Gerät') + '</th>' +
         '<th style="text-align:left;padding:4px 6px">' + t('cal.type', 'Typ') + '</th>' +
         '<th style="text-align:left;padding:4px 6px">' + t('cal.hangs_on', 'hängt an') + '</th>' +
-        '<th style="text-align:left;padding:4px 6px" title="' + t('cal.deduct_hint', 'Mieter/Unterzähler: wird NICHT kalibriert, sondern vom Zählerstand abgezogen (behält eigenen Aufschlag).') + '">' + t('cal.deduct', 'Abzug') + '</th></tr>';
+        '<th style="text-align:left;padding:4px 6px" title="' + t('cal.deduct_hint', 'Mieter/Unterzähler: wird NICHT kalibriert, sondern vom Zählerstand abgezogen (behält eigenen Aufschlag).') + '">' + t('cal.deduct', 'Abzug') + '</th>' +
+        '<th style="text-align:left;padding:4px 6px" title="' + t('cal.net_display_hint', 'Gerät sitzt physisch hinter dem Eltern-Zähler: sein Verbrauch wird in Live-Ansicht und Plots virtuell vom Eltern-Zähler abgezogen (nur Anzeige — die gespeicherte Historie bleibt, „Rohdaten" zeigt wieder alles).') + '">' + t('cal.net_display', 'Netto-Anzeige') + '</th></tr>';
+      const _devKeys = new Set(devs.map(x => x.key));
       devs.forEach(dev => {{
         const _isEmChild = dev.kind === 'em' && !!dev.parent;
+        const _parentIsDev = dev.kind === 'em' && _devKeys.has(dev.parent);
         html += '<tr style="border-top:1px solid var(--border)">';
         html += '<td style="padding:4px 6px">' + esc(dev.name) + '</td>';
         html += '<td style="padding:4px 6px;color:var(--muted)">' + (dev.kind === 'em' ? ('⚡ ' + t('cal.kind_meter', 'Messgerät')) : ('🔌 ' + t('cal.kind_switch', 'Schalter'))) + '</td>';
         html += '<td style="padding:4px 6px"><select onchange="setDeviceParent(\\u0027' + esc(dev.key) + '\\u0027, this.value)" style="font-size:13px;padding:3px">' + _calParentOptions(dev) + '</select></td>';
         html += '<td style="padding:4px 6px">' + (_isEmChild
           ? ('<label style="cursor:pointer;font-size:12px;color:var(--muted)"><input type="checkbox"' + (dev.deduct_from_parent ? ' checked' : '') + ' onchange="setDeviceDeduct(\\u0027' + esc(dev.key) + '\\u0027, this.checked)"> ' + t('cal.deduct_tenant', 'Mieter') + '</label>')
+          : '') + '</td>';
+        html += '<td style="padding:4px 6px">' + (_parentIsDev
+          ? ('<label style="cursor:pointer;font-size:12px;color:var(--muted)"><input type="checkbox"' + (dev.subtract_from_parent_display ? ' checked' : '') + ' onchange="setDeviceNetDisplay(\\u0027' + esc(dev.key) + '\\u0027, this.checked)"> ' + t('cal.net_behind', 'hinter Zähler') + '</label>')
           : '') + '</td>';
         html += '</tr>';
       }});
@@ -8853,6 +8887,12 @@ _loadLsSettings();
   async function setDeviceDeduct(key, checked) {{
     try {{
       await fetch('/api/devices/' + encodeURIComponent(key), {{method:'PUT', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{deduct_from_parent: !!checked}})}});
+      await loadCalibration();
+    }} catch(e) {{ alert(e.message); }}
+  }}
+  async function setDeviceNetDisplay(key, checked) {{
+    try {{
+      await fetch('/api/devices/' + encodeURIComponent(key), {{method:'PUT', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{subtract_from_parent_display: !!checked}})}});
       await loadCalibration();
     }} catch(e) {{ alert(e.message); }}
   }}
@@ -9748,6 +9788,13 @@ _PLOTS_TEMPLATE = """<!doctype html>
             <option value="total">total</option>
             <option value="phases">phases</option>
           </select>
+        </div>
+
+        <div class="ctrl" id="ctrlRaw">
+          <label id="lblRaw"></label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400">
+            <input id="raw_toggle" type="checkbox" onchange="scheduleApply(0)"> <span id="lblRawInline"></span>
+          </label>
         </div>
 
 <div class="ctrl" id="ctrlSmooth" style="display:none">
@@ -10683,6 +10730,8 @@ async function init() {
 
     setTxt('#series', 'total', 'web.plots.series.total', 'total');
     setTxt('#series', 'phases', 'web.plots.series.phases', 'phases');
+    var _lr = document.getElementById('lblRaw'); if (_lr) _lr.textContent = t('plots.raw_label', 'Ansicht');
+    var _lri = document.getElementById('lblRawInline'); if (_lri) _lri.textContent = t('plots.raw_gross', 'Rohdaten (brutto)');
   } catch (e) {}
 
   const params = qp();
@@ -10708,6 +10757,7 @@ async function init() {
   if (params.smooth_s || params.smooth) document.getElementById('smooth_s').value = String(params.smooth_s || params.smooth);
   if (params.deadband_var || params.deadband) document.getElementById('deadband_var').value = String(params.deadband_var || params.deadband);
   if (params.sign_hold_s || params.signhold) document.getElementById('sign_hold_s').value = String(params.sign_hold_s || params.signhold);
+  try { var _rt0 = document.getElementById('raw_toggle'); if (_rt0) _rt0.checked = (String(params.raw || '') === '1'); } catch(e){}
   syncFilterControls();
 
   // devices (from query or default first two)
@@ -10735,6 +10785,7 @@ async function init() {
       smooth_s: (smooth_s>0) ? smooth_s : '',
       deadband_var: (deadband_var>0) ? deadband_var : '',
       sign_hold_s: (sign_hold_s>0) ? sign_hold_s : '',
+      raw: (document.getElementById('raw_toggle') && document.getElementById('raw_toggle').checked) ? '1' : '',
     };
 
     if (view === 'timeseries') {

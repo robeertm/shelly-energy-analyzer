@@ -213,6 +213,9 @@ def update_device(key: str):
         # Tenant sub-meter deducted from (not calibrated against) its parent meter.
         deduct_from_parent=bool(body.get("deduct_from_parent",
                                          getattr(d, "deduct_from_parent", False))),
+        # Net "meter behind meter" display subtraction (Live + Plots), virtual.
+        subtract_from_parent_display=bool(body.get("subtract_from_parent_display",
+                                          getattr(d, "subtract_from_parent_display", False))),
     )
 
     new_devices = list(state.cfg.devices)
@@ -826,6 +829,7 @@ def list_meters():
             "parent": str(getattr(d, "parent", "") or ""),
             "compensation_percent": float(getattr(d, "compensation_percent", 0.0) or 0.0),
             "deduct_from_parent": bool(getattr(d, "deduct_from_parent", False)),
+            "subtract_from_parent_display": bool(getattr(d, "subtract_from_parent_display", False)),
         }
         for d in state.cfg.devices
     ]
