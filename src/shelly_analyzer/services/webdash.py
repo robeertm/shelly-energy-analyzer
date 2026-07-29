@@ -1934,7 +1934,7 @@ _HTML_TEMPLATE = """<!doctype html>
       <span id="live-stamp" style="font-size:11px;color:var(--muted)"></span>
       <button id="btn-hamburger" class="icon-btn" title="Menu" onclick="toggleNavDrawer()">☰</button>
       <button id="btn-freeze" class="icon-btn" title="{web_btn_freeze_title}" style="display:none">▶</button>
-      <button id="btn-raw" class="icon-btn" onclick="toggleRawView()" title="" style="display:none">Σ</button>
+      <button id="btn-raw" onclick="toggleRawView()" title="" style="display:none"></button>
       <button id="btn-live-settings" class="icon-btn" title="{web_btn_settings_title}" onclick="window.location.href='/settings#sec-devices'">⚙</button>
       <button id="btn-theme" class="icon-btn" title="{web_btn_theme_title}">☀</button>
     </div>
@@ -3817,7 +3817,7 @@ async function loadHistory() {{
   if (_historyLoaded) return;
   _historyLoaded = true;
   try {{
-    const r = await fetch('/api/history');
+    const r = await fetch('/api/history' + (_rawView ? '?raw=1' : ''));
     if (!r.ok) return;
     const data = await r.json();
     const hist = data.history || {{}};
@@ -3906,15 +3906,36 @@ function _updateRawBtn(data) {{
       if (ds[i] && ds[i].net_of_children && ds[i].net_of_children.length) {{ hasNet = true; break; }}
     }}
   }} catch(e){{}}
-  b.style.display = hasNet ? '' : 'none';
-  b.style.color = _rawView ? 'var(--accent)' : '';
-  b.title = _rawView
-    ? t('web.raw_on', 'Rohdaten (brutto) — klicken für Netto-Ansicht')
-    : t('web.raw_off', 'Netto-Ansicht — klicken für Rohdaten (alles anzeigen)');
+  b.style.display = hasNet ? 'inline-flex' : 'none';
+  b.style.alignItems = 'center';
+  b.style.padding = '2px 9px';
+  b.style.fontSize = '11px';
+  b.style.fontWeight = '700';
+  b.style.borderRadius = '999px';
+  b.style.cursor = 'pointer';
+  b.style.whiteSpace = 'nowrap';
+  if (_rawView) {{
+    b.textContent = t('web.raw_badge_gross', 'Brutto');
+    b.style.background = 'transparent';
+    b.style.color = 'var(--muted)';
+    b.style.border = '1px solid var(--border)';
+    b.title = t('web.raw_on', 'Rohdaten (brutto) werden gezeigt — klicken für Netto-Ansicht');
+  }} else {{
+    b.textContent = t('web.raw_badge_net', 'Netto ✓');
+    b.style.background = 'var(--accent)';
+    b.style.color = '#fff';
+    b.style.border = '1px solid var(--accent)';
+    b.title = t('web.raw_off', 'Netto-Ansicht aktiv (Zähler-hinter-Zähler abgezogen) — klicken für Rohdaten');
+  }}
 }}
 function toggleRawView() {{
   _rawView = !_rawView;
   try {{ localStorage.setItem('sea_raw_view', _rawView ? '1' : '0'); }} catch(e){{}}
+  // Sparklines/history come from /api/history — clear the buffer and reload so
+  // the curves switch net<->gross together with the tiles (no mixed points).
+  try {{ for (var k in sparkData) delete sparkData[k]; }} catch(e){{}}
+  _historyLoaded = false;
+  loadHistory();
   tick(true);
 }}
 async function tick(first) {{
@@ -4150,6 +4171,13 @@ function buildDeviceCard(d) {{
   return div;
 }}
 
+function _devName(k) {{
+  try {{
+    var ds = (_liveLatest && _liveLatest.devices) || [];
+    for (var i = 0; i < ds.length; i++) {{ if (ds[i] && ds[i].key === k) return ds[i].name || k; }}
+  }} catch(e){{}}
+  return k;
+}}
 function devCardHTML(d) {{
   const pc = pwrClass(d.power_w || 0);
   const phases = (d.phases && d.phases.length > 0) ? d.phases : null;
@@ -4185,7 +4213,10 @@ function devCardHTML(d) {{
   return (
     '<div class="dev-header">' +
       '<div>' +
-        '<div class="dev-name">' + esc(d.name || d.key) + '</div>' +
+        '<div class="dev-name">' + esc(d.name || d.key) +
+          ((d.net_of_children && d.net_of_children.length)
+            ? ('<span class="net-badge" title="' + esc(t('web.net_badge_title', 'Verbrauch dieser Geräte ist herausgerechnet — nur Anzeige')) + '" style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;background:var(--accent);color:#fff;vertical-align:middle">' + esc(t('web.net_badge', 'netto')) + ' − ' + esc(d.net_of_children.map(function(k){{ return _devName(k); }}).join(', ')) + '</span>')
+            : '') + '</div>' +
         '<div class="dev-meta">' +
           '<span class="m-kwh">' + _kwhInner(d) + '</span>' +
           (d.cost_today !== undefined ? '<span class="m-cost">' + fmt(d.cost_today, 2) + ' €</span>' : '') +
