@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+### Added
+- **Net "meter behind meter" display — subtract a sub-meter from the meter it sits behind (Live + Plots), virtually and reversibly.** When one meter is wired physically behind another (e.g. a wallbox on a circuit fed through the house meter), the upstream meter measures its own load *plus* the downstream one, so its tile and history double-count the sub-meter. In **Calibration → Meter structure**, any device whose parent is another meter device now has a **Net view** checkbox ("behind meter"). With it on, that device's power/energy is subtracted from its parent everywhere it is shown — the Live tile (and its chain-aware cost) and the Plots page (kWh buckets and the power-over-time total) — while the sub-meter keeps its own tile/series. It is a pure display transform: stored samples are never modified. A **Σ** toggle on the Live view and a **Raw (gross)** switch on Plots (`?raw=1`) show everything again with one click. Fully generic and config-driven (`DeviceConfig.subtract_from_parent_display`); chains (A behind B behind C) net correctly. Full de/en i18n.
+
 ## 16.56.1
 ### Fixed
 - **The new PV-source preset UI is now fully translated (de/en).** The v16.56.0 preset dropdown, connection selector, Modbus/HTTP fields, hints and the manufacturer notes were shipped with hardcoded English strings, so they showed English inside a German UI. All of them now go through the i18n system (labels, options, hints, the section description, the preset names and setup notes, and the Test-connection messages), with German and English keys; other languages fall back to English as elsewhere. Also translated the previously-untranslated battery/grid sign options and made section descriptions translatable.
