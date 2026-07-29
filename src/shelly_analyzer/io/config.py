@@ -123,6 +123,15 @@ class DeviceConfig:
     # utility meter that covers owner + tenant calibrate the owner correctly while
     # the tenant is billed on a fixed deviation surcharge. Default off = legacy.
     deduct_from_parent: bool = False
+    # Net "meter behind meter" DISPLAY subtraction. When true and ``parent`` is
+    # another device's key, this device's power/energy is virtually SUBTRACTED
+    # from the parent device's shown values on the Live view and the Plots page
+    # (e.g. a wallbox wired behind the house meter → the house tile shows the net
+    # house load, the wallbox stays its own tile). Purely a display transform: the
+    # stored samples are never modified, and a raw/gross view (``?raw=1``) shows
+    # everything again. Independent of ``deduct_from_parent`` (which is a
+    # calibration-only concept for a hand-read main meter). Default off = legacy.
+    subtract_from_parent_display: bool = False
 
 
 @dataclass(frozen=True)
@@ -1197,6 +1206,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
                 compensation_history=tuple(history_entries),
                 parent=str(d.get("parent", "") or "").strip(),
                 deduct_from_parent=bool(d.get("deduct_from_parent", False)),
+                subtract_from_parent_display=bool(d.get("subtract_from_parent_display", False)),
             )
         )
 
@@ -2007,6 +2017,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
                 ],
                 "parent": getattr(d, "parent", "") or "",
                 "deduct_from_parent": bool(getattr(d, "deduct_from_parent", False)),
+                "subtract_from_parent_display": bool(getattr(d, "subtract_from_parent_display", False)),
             }
             for d in cfg.devices
         ],

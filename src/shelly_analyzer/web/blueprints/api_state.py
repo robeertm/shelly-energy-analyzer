@@ -289,6 +289,23 @@ def api_state():
             "pending": True,
         })
 
+    # Net "meter behind meter" display: a device wired behind another (e.g. a
+    # wallbox on a circuit fed through the house meter) is virtually subtracted
+    # from its parent's tile so the parent shows its net load. Purely a display
+    # transform — applied BEFORE the cost chain so the parent's cost follows the
+    # net energy. ``?raw=1`` (or raw=true) bypasses it to show the gross values.
+    _raw_view = str(request.args.get("raw", "")).strip().lower() in ("1", "true", "yes", "on")
+    if not _raw_view:
+        try:
+            from shelly_analyzer.services.net_display import (
+                net_display_children, apply_live_subtraction)
+            _cfg = getattr(state, "cfg", None)
+            _submap = net_display_children(getattr(_cfg, "devices", []) or []) if _cfg else {}
+            if _submap:
+                apply_live_subtraction(devices_list, _submap)
+        except Exception:
+            pass
+
     # Chain-aware "today" cost per tile (they depend on each other): grid nets
     # import@tariff − export@feed-in, owner circuits pay only their grid share,
     # tenant pays full, PV/battery cost nothing. Safe no-op if it can't compute.

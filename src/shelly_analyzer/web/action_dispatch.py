@@ -4817,6 +4817,16 @@ class ActionDispatcher:
 
             dev_cfgs = {d.key: d for d in self.cfg.devices}
 
+            # Net "meter behind meter" display: subtract a device wired behind
+            # another from its parent's series (Live + Plots share this map).
+            # ?raw=1 shows the gross values again. Pure display transform.
+            _raw_view = str(params.get("raw", "")).strip().lower() in ("1", "true", "yes", "on")
+            try:
+                from shelly_analyzer.services.net_display import net_display_children
+                _submap = {} if _raw_view else net_display_children(list(self.cfg.devices))
+            except Exception:
+                _submap = {}
+
             def _norm(s: str) -> str:
                 s = (s or "").strip().lower()
                 s = s.replace("\u00e4", "ae").replace("\u00f6", "oe").replace("\u00fc", "ue").replace("\u00df", "ss")
@@ -4933,6 +4943,47 @@ class ActionDispatcher:
                         labels = all_lab
                     name = dev_cfgs.get(k).name if k in dev_cfgs else k
                     traces.append({"key": k, "name": name, "series": s})
+
+                # Net "meter behind meter": subtract each flagged child's kWh from
+                # its parent's series, label-aligned onto the parent's own buckets
+                # (never adding child-only buckets). Children outside the current
+                # selection are fetched on demand so the parent is always net.
+                if _submap:
+                    _kwh_cache: Dict[str, "pd.Series"] = {tr["key"]: tr["series"] for tr in traces}
+
+                    def _kwh_series_for(_k: str) -> "pd.Series":
+                        if _k in _kwh_cache:
+                            return _kwh_cache[_k]
+                        _cs = _range_start_ts
+                        _ce = _range_end_ts
+                        if _cs is None and _ce is None and _kwh_preset is not None:
+                            try:
+                                _mt = self.storage.db.max_timestamp(_k)
+                                if _mt is not None:
+                                    _cs = _mt - int(_kwh_preset["delta"].total_seconds())
+                                    _ce = _mt
+                            except Exception:
+                                pass
+                        _df = _df_for(_k, _cs, _ce)
+                        if _df is None or len(_df) == 0:
+                            _sv = pd.Series(dtype="float64")
+                        else:
+                            _lb, _vv = self._stats_series(_df, mode)
+                            _sv = pd.Series(_vv, index=[str(x) for x in _lb], dtype="float64")
+                        _kwh_cache[_k] = _sv
+                        return _sv
+
+                    for _parent, _kids in _submap.items():
+                        if _parent not in _kwh_cache:
+                            continue
+                        _base = _kwh_cache[_parent]
+                        for _c in _kids:
+                            _cs = _kwh_series_for(_c)
+                            _base = _base.subtract(_cs.reindex(_base.index).fillna(0.0))
+                        _kwh_cache[_parent] = _base
+                    for tr in traces:
+                        if tr["key"] in _kwh_cache:
+                            tr["series"] = _kwh_cache[tr["key"]]
 
                 out_traces: List[Dict[str, Any]] = []
                 for tr in traces:
@@ -5320,6 +5371,60 @@ class ActionDispatcher:
                     if series_mode == "phases":
                         out_d["phases"] = ph_out
                 out_devs.append(out_d)
+
+            # Net "meter behind meter": for the power-over-time total (W) view,
+            # subtract each flagged child's series from its parent's, aligned by
+            # nearest timestamp. Only meaningful for power totals \u2014 voltages,
+            # currents etc. are never netted. Fully guarded: any failure leaves
+            # the gross series untouched.
+            if _submap and series_mode == "total" and metric_norm == "W":
+                try:
+                    _by_ts = {d["key"]: d for d in out_devs}
+
+                    def _ts_series_for(_k: str) -> "pd.Series":
+                        _d = _by_ts.get(_k)
+                        if _d is not None:
+                            _ix = pd.to_datetime(_d.get("x") or [], errors="coerce")
+                            return pd.Series(_d.get("y") or [], index=_ix).dropna().sort_index()
+                        _s2 = _range_start_ts
+                        _e2 = _range_end_ts
+                        if _s2 is None and _e2 is None:
+                            try:
+                                _mt = self.storage.db.max_timestamp(_k)
+                                if _mt is not None:
+                                    _s2 = _mt - _delta_s
+                                    _e2 = _mt
+                            except Exception:
+                                pass
+                        _df = _df_for(_k, _s2, _e2)
+                        if _df is None or len(_df) == 0:
+                            return pd.Series(dtype="float64")
+                        _st, _ = self._wva_series(_df, metric)
+                        if not isinstance(_st.index, pd.DatetimeIndex) and "timestamp" in _df.columns:
+                            _st = pd.Series(
+                                pd.to_numeric(_st, errors="coerce").to_numpy(),
+                                index=pd.DatetimeIndex(pd.to_datetime(_df["timestamp"], errors="coerce")),
+                            ).dropna().sort_index()
+                        return _downsample(_st)
+
+                    for _parent, _kids in _submap.items():
+                        _pd = _by_ts.get(_parent)
+                        if _pd is None:
+                            continue
+                        _base = _ts_series_for(_parent)
+                        if _base.empty:
+                            continue
+                        for _c in _kids:
+                            _cs = _ts_series_for(_c)
+                            if _cs.empty:
+                                continue
+                            _aligned = _cs.reindex(_base.index, method="nearest",
+                                                   tolerance=pd.Timedelta("180s")).fillna(0.0)
+                            _base = _base.subtract(_aligned)
+                        _pd["y"] = [float(v) if v == v else 0.0 for v in _base.values.tolist()]
+                        _pd["net_of_children"] = list(_kids)
+                except Exception:
+                    pass
 
             title = f"{metric_label} \u2022 {ln:g} {unit_ts}"
             return {"ok": True, "view": "timeseries", "metric": metric, "metric_label": metric_label, "series": series_mode, "devices": out_devs, "title": title, "diag": diag_ts}
