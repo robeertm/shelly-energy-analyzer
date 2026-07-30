@@ -8584,6 +8584,58 @@ _loadLsSettings();
       '</div>' +
     '</div>';
   }}
+  function _evChargeCard(g) {{
+    // A group of one physical charge. Single-session groups render exactly like
+    // a normal session card (deletable); multi-session groups show the merged
+    // totals with an expandable list of the individual sessions.
+    if (!g.sessions || (g.session_count || 1) <= 1) {{
+      return _evSessionCard((g.sessions && g.sessions[0]) || g);
+    }}
+    const sd = new Date(g.start_ts*1000);
+    const ed = new Date(g.end_ts*1000);
+    const spanMin = Math.max(1, Math.round((g.end_ts - g.start_ts) / 60));
+    const spanStr = spanMin >= 60 ? Math.floor(spanMin/60) + 'h ' + (spanMin%60) + 'm' : spanMin + ' min';
+    const avgKw = (g.avg_power_w/1000).toFixed(1);
+    const peakKw = (g.peak_power_w/1000).toFixed(1);
+    const dateStr = sd.toLocaleDateString([], {{weekday:'short', day:'2-digit', month:'short'}});
+    const t1 = sd.toLocaleTimeString([], {{hour:'2-digit', minute:'2-digit'}});
+    const t2 = ed.toLocaleTimeString([], {{hour:'2-digit', minute:'2-digit'}});
+    const fillPct = Math.min(100, (g.energy_kwh / 30) * 100);
+    const badge = t('web.ev.part_sessions', '{{n}}× interrupted', {{n: g.session_count}});
+    const delTitle = t('web.ev.delete_entry', 'Delete entry');
+    const sub = g.sessions.slice().reverse().map(function(se) {{
+      const ssd = new Date(se.start_ts*1000);
+      const sdur = Math.max(1, Math.round((se.end_ts - se.start_ts) / 60));
+      const idAttr = esc(se.session_id || '');
+      return '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--border);font-size:11px;color:var(--muted)">' +
+        '<span>' + ssd.toLocaleTimeString([], {{hour:'2-digit', minute:'2-digit'}}) + ' · ' + sdur + ' min</span>' +
+        '<span>' + se.energy_kwh.toFixed(2) + ' kWh · ' + se.cost_eur.toFixed(2) + ' € ' +
+          '<button onclick="deleteEvSession(&#39;' + idAttr + '&#39;)" title="' + esc(delTitle) +
+            '" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:12px;padding:0 2px;line-height:1">🗑</button></span>' +
+      '</div>';
+    }}).join('');
+    return '<div class="card" style="padding:12px;margin-bottom:8px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">' +
+        '<div>' +
+          '<div style="font-weight:600;font-size:13px">' + esc(dateStr) + ' · ' + esc(t1) + '–' + esc(t2) +
+            ' <span style="font-size:10px;font-weight:600;color:#4caf50;background:rgba(76,175,80,0.14);padding:1px 6px;border-radius:10px;margin-left:4px" title="' +
+              esc(t('web.ev.grouped_hint', 'Surplus charging paused and resumed — merged into one charge')) + '">⚡ ' + esc(badge) + '</span></div>' +
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + spanStr + ' · ⌀ ' + avgKw + ' kW · peak ' + peakKw + ' kW</div>' +
+        '</div>' +
+        '<div style="text-align:right">' +
+          '<div style="font-size:18px;font-weight:700">' + g.energy_kwh.toFixed(1) + ' <span style="font-size:11px;color:var(--muted);font-weight:400">kWh</span></div>' +
+          '<div style="font-size:12px;color:var(--muted)">' + g.cost_eur.toFixed(2) + ' €</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="margin-top:8px;height:5px;background:var(--border);border-radius:3px;overflow:hidden">' +
+        '<div style="height:100%;width:' + fillPct.toFixed(1) + '%;background:linear-gradient(90deg,#4caf50,#81c784);border-radius:3px"></div>' +
+      '</div>' +
+      '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:11px;color:var(--muted)">' +
+        esc(t('web.ev.show_parts', 'Show {{n}} individual sessions', {{n: g.session_count}})) + '</summary>' +
+        '<div style="margin-top:2px">' + sub + '</div>' +
+      '</details>' +
+    '</div>';
+  }}
   function renderEvLog(data, el) {{
     const win = data.window_days || _evWindowDays;
     const sessions = data.sessions || [];
@@ -8642,12 +8694,20 @@ _loadLsSettings();
       _evHeatmap(sessions, heatDays) +
     '</div>';
 
+    // When grouping is on, show one entry per physical charge (fragmented
+    // surplus sessions merged) — expandable to the individual sessions.
+    const useCharges = !!data.grouping_enabled && Array.isArray(data.charges) && data.charges.length > 0;
+    const items = useCharges ? data.charges : sessions;
+    const renderFn = useCharges ? _evChargeCard : _evSessionCard;
+    const headLabel = useCharges ? t('web.ev.charges', 'Charges') : t('web.ev.sessions', 'Sessions');
+    const countNote = useCharges
+      ? t('web.ev.n_charges_note', '{{c}} charges · {{s}} sessions', {{c: data.charges.length, s: sessions.length}})
+      : t('web.ev.n_total', '{{n}} total', {{n: sessions.length}});
     const head = '<div class="card-title" style="display:flex;justify-content:space-between;align-items:baseline">' +
-      '<span>' + t('web.ev.sessions', 'Sessions') + '</span>' +
-      '<span style="font-size:11px;color:var(--muted);font-weight:400">' +
-        t('web.ev.n_total', '{n} total', {{n: sessions.length}}) + '</span>' +
+      '<span>' + headLabel + '</span>' +
+      '<span style="font-size:11px;color:var(--muted);font-weight:400">' + countNote + '</span>' +
     '</div>';
-    const list = sessions.slice().reverse().slice(0, 50).map(_evSessionCard).join('');
+    const list = items.slice().reverse().slice(0, 50).map(renderFn).join('');
     html += '<div>' + head + list + '</div>';
 
     el.innerHTML = html;

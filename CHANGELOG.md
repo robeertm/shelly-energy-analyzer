@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.59.0
+### Added
+- **The EV-log groups the fragmented sessions of one physical charge into a single entry.** Charging on PV surplus pauses every time the sun drops below the car's minimum charge power, so one plugged-in charge was logged as many short sessions. The log now merges them into one **charge** — but intelligently: two consecutive sessions are only merged when the gap between them was a genuine surplus pause. Where a grid meter is configured, the merge only happens if the available grid **export (surplus) during the gap stayed below the charge threshold** — i.e. the car *couldn't* have charged (still plugged in, waiting for sun), rather than being unplugged while surplus went spare. An overnight-length gap always stays a separate charge. Each grouped entry shows the merged total kWh/€/duration and expands to the individual sessions (nothing is hidden), and the individual sessions remain deletable. New settings under **EV Charging**: *Group fragmented charges* (on by default), *Group max gap (Min)* (default 240), and *Group surplus floor (W)* (0 = use the detection threshold). Turn grouping off to keep the old per-session list.
+
 ## 16.58.2
 ### Fixed
 - **The Battery tab's SOC chart went empty after 16.58.1.** The minute-bucketing added in 16.58.1 converted the sample timestamps assuming nanosecond-resolution datetimes, but the query returns second-resolution timestamps, so every row collapsed into a single bucket and the SOC timeline shrank to one point. Timestamps are now converted via `datetime64[s]` (resolution- and timezone-safe, matching the charging-session detector), so the full minute-resolution SOC curve is back — with the same sub-second load time as 16.58.1.

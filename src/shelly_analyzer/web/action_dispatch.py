@@ -4688,6 +4688,60 @@ class ActionDispatcher:
                     sessions = [s for s in sessions if s.session_id not in _del]
                 summary_ev = get_monthly_summary(sessions)
 
+                # Group fragmented sessions of ONE physical charge into a single
+                # entry. Surplus (PV) charging pauses when the sun drops below the
+                # car's minimum charge power, splitting a plugged-in charge into
+                # many short sessions. A gap is bridged only if — where a grid
+                # meter exists — the available grid export (surplus) during it was
+                # too low to charge (car still plugged in, waiting for sun) and the
+                # gap is within group_gap_minutes (an overnight gap stays separate).
+                charges_payload = None
+                _grouping_on = bool(getattr(self.cfg.ev_charging, "group_sessions", True))
+                if _grouping_on and sessions:
+                    try:
+                        from shelly_analyzer.services.ev_charging_log import group_sessions_into_charges
+                        _sfloor = float(getattr(self.cfg.ev_charging, "group_surplus_floor_w", 0.0) or 0.0)
+                        if _sfloor <= 0:
+                            _sfloor = float(getattr(self.cfg.ev_charging, "detection_threshold_w", 1500.0))
+                        _gap_s = int(getattr(self.cfg.ev_charging, "group_gap_minutes", 240)) * 60
+                        _surplus_ts = _surplus_w = None
+                        _grid_key = (str(getattr(getattr(self.cfg, "solar", None), "grid_meter_device_key", "") or "")
+                                     or "grid_ext")
+                        try:
+                            _gdf = self.storage.read_device_df(_grid_key, start_ts=start_ts)
+                            if _gdf is not None and not _gdf.empty and "total_power" in _gdf.columns and "timestamp" in _gdf.columns:
+                                _gts = _gdf["timestamp"]
+                                if pd.api.types.is_datetime64_any_dtype(_gts):
+                                    if getattr(_gts.dt, "tz", None) is not None:
+                                        _gts = _gts.dt.tz_convert("UTC").dt.tz_localize(None)
+                                    _surplus_ts = _gts.astype("datetime64[s]").astype("int64").to_numpy()
+                                else:
+                                    _surplus_ts = pd.to_numeric(_gts, errors="coerce").fillna(0).astype("int64").to_numpy()
+                                _gp = pd.to_numeric(_gdf["total_power"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+                                _surplus_w = np.maximum(0.0, -_gp)  # export = negative grid power
+                        except Exception:
+                            _surplus_ts = _surplus_w = None
+                        _charges = group_sessions_into_charges(
+                            sessions, max_gap_s=_gap_s,
+                            surplus_ts=_surplus_ts, surplus_export_w=_surplus_w,
+                            min_charge_w=_sfloor,
+                        )
+                        charges_payload = [
+                            {"group_id": g.group_id, "start_ts": g.start_ts, "end_ts": g.end_ts,
+                             "energy_kwh": g.energy_kwh, "peak_power_w": g.peak_power_w,
+                             "avg_power_w": g.avg_power_w, "cost_eur": g.cost_eur,
+                             "session_count": g.session_count,
+                             "sessions": [
+                                 {"session_id": s.session_id, "start_ts": s.start_ts, "end_ts": s.end_ts,
+                                  "energy_kwh": s.energy_kwh, "peak_power_w": s.peak_power_w,
+                                  "avg_power_w": s.avg_power_w, "cost_eur": s.cost_eur}
+                                 for s in g.sessions],
+                             }
+                            for g in _charges
+                        ]
+                    except Exception:
+                        charges_payload = None
+
                 # Wallbox real-charging consumption per month, last 24 months.
                 # Filters out the wallbox's permanent standby base load so the
                 # chart only shows months with actual EV charging activity.
@@ -4701,6 +4755,9 @@ class ActionDispatcher:
                     "avg_kwh_per_session": summary_ev.avg_kwh_per_session,
                     "avg_duration_min": summary_ev.avg_duration_min,
                     "window_days": days,
+                    "grouping_enabled": _grouping_on,
+                    "charge_count": len(charges_payload) if charges_payload is not None else None,
+                    "charges": charges_payload,
                     "monthly_kwh": monthly.get("months", []),
                     "monthly_price_eur_kwh": monthly.get("price_eur_kwh"),
                     "monthly_threshold_w": monthly.get("threshold_w"),

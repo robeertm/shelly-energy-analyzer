@@ -588,6 +588,9 @@ const SECTIONS = [
     {key:"ev_charging.detection_threshold_w", label:"Detection threshold (W)", type:"number"},
     {key:"ev_charging.min_session_minutes", label:"Min Session (Min)", type:"number"},
     {key:"ev_charging.max_gap_minutes", label:"Max gap / bridge dips (Min)", type:"number"},
+    {key:"ev_charging.group_sessions", label:"Group fragmented charges", type:"checkbox", hint:"Merge the many short sessions of one surplus (PV) charge — which pauses whenever the sun drops below the car's minimum charge power — into a single log entry, expandable to the individual sessions."},
+    {key:"ev_charging.group_gap_minutes", label:"Group max gap (Min)", type:"number", hint:"Two sessions farther apart than this are always separate charges (an overnight gap stays separate). Default 240."},
+    {key:"ev_charging.group_surplus_floor_w", label:"Group surplus floor (W)", type:"number", hint:"With a grid meter: a gap is only merged if grid export (surplus) during it stayed below this — i.e. the car couldn't charge (still plugged in), rather than being unplugged while surplus went spare. 0 = use the detection threshold."},
   ]},
   {id:"device_control", title:"Device control", group:"Features", fields:[
     {key:"device_control.enabled", label:"Device control active", type:"checkbox", hint:"Show the Control tab for switches, dimmers, RGB lights, and roller shutters"},
