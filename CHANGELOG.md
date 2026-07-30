@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.57.7
+### Fixed
+- **The Live view took ~20–25 s to fully show the last two hours on multi-meter installs.** `/api/history` returned every raw sample at full poll resolution (up to ~7200 points per meter over the 2 h window), so on a setup with several meters the response ballooned past 12 MB and took 20+ seconds to build, transfer and parse — the sparklines and 2 h detail chart only filled in gradually as it arrived. The endpoint now subsamples each series to a sane density (~1000 points, always keeping the newest sample) before serialising, and gzip-compresses the response. Together this cuts the payload from multiple MB to a few hundred KB and the load from ~20 s to well under a second, with no visible change to the charts (they are only a few hundred pixels wide). The live 1 s updates refill the right edge at full resolution within seconds after a reload, so the newest part of each sparkline stays smooth. `?full=1` returns the un-subsampled series for debugging.
+
 ## 16.57.6
 ### Changed
 - **The kWh Plots view is much faster, especially the first load after being idle.** It used to read every raw sample for the whole range (tens of thousands of rows for a 30-day view) and integrate them in-process, which was slow on a cold cache (~8–10 s). It now aggregates from the pre-built `hourly_energy` rollup (~60× fewer rows → ~1 s) with the identical compensation and local-time bucketing, falling back to the raw-sample path automatically when no rollup exists. Every fully-covered bucket is value-identical to the old path (verified day-for-day); only a partial bucket at the very edge of a rolling window — the current, still-in-progress bucket and the oldest partial day — can differ by up to the energy of the partial boundary hour (hourly rollups can't split a partial hour). `?src=raw` forces the legacy path for comparison.
