@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.58.2
+### Fixed
+- **The Battery tab's SOC chart went empty after 16.58.1.** The minute-bucketing added in 16.58.1 converted the sample timestamps assuming nanosecond-resolution datetimes, but the query returns second-resolution timestamps, so every row collapsed into a single bucket and the SOC timeline shrank to one point. Timestamps are now converted via `datetime64[s]` (resolution- and timezone-safe, matching the charging-session detector), so the full minute-resolution SOC curve is back — with the same sub-second load time as 16.58.1.
+
 ## 16.58.1
 ### Fixed
 - **The Battery tab took >10 s to load.** `get_battery_status` iterated the 7-day sample window row-by-row with pandas `iterrows` (up to ~300k rows at a 1–2 s poll) and returned a full-resolution SOC timeline (~800 KB). It now extracts the two columns as numpy arrays and buckets them to 1-minute mean power before integrating — a battery's SOC moves slowly and mean-power-per-minute preserves the energy integral, so the SOC estimate and cycle detection are unchanged while the point count and payload drop ~30× and the load goes from ~11 s to well under a second. (The EV-log tab was already fast; no change there.)
