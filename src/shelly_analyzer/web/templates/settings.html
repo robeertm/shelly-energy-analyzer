@@ -465,6 +465,10 @@ const SECTIONS = [
     {key:"solar.grid_meter_device_key", label:"Grid meter device (± import/export)", type:"select-device"},
     {key:"solar.pv_production_device_key", label:"PV production device", type:"select-device", hint:"Device carrying PV production (≥0). Usually the synthetic 'pv' from the external PV source. Empty = derive from the grid meter."},
     {key:"solar.feed_in_tariff_eur_per_kwh", label:"Feed-in tariff €/kWh", type:"number", step:"0.001"},
+    {key:"solar.feed_in_schedule", label:"Feed-in price changes", type:"list", itemLabel:"Feed-in period", hint:"From the start date the new feed-in tariff applies. Older data keeps the previous one.", schema:[
+      {key:"start_date", label:"From date", type:"date"},
+      {key:"feed_in_tariff_eur_per_kwh", label:"Feed-in tariff €/kWh", type:"number", step:"0.001"},
+    ], defaults:{start_date:"",feed_in_tariff_eur_per_kwh:0.082}},
     {key:"solar.kw_peak", label:"kWp", type:"number", step:"0.1"},
     {key:"solar.battery_kwh", label:"Battery kWh", type:"number", step:"0.1"},
     {key:"solar.co2_production_kg_per_kwp", label:"CO₂ production (kg/kWp)", type:"number"},

@@ -2756,8 +2756,8 @@ class ActionDispatcher:
                 _balance_present = False
                 _solar_bc = getattr(self.cfg, "solar", None)
                 _feed_in_tariff = (
-                    float(getattr(_solar_bc, "feed_in_tariff_eur_per_kwh", 0.082) or 0.082)
-                    if _solar_bc else 0.082
+                    float(_solar_bc.effective_feed_in_for_date(date.today()))
+                    if _solar_bc is not None else 0.082
                 )
                 try:
                     from shelly_analyzer.services.energy_balance import compute_balance
@@ -3722,7 +3722,8 @@ class ActionDispatcher:
                     pass
 
                 try:
-                    feed_in_tariff = float(getattr(solar_cfg, "feed_in_tariff_eur_per_kwh", 0.082))
+                    feed_in_tariff = (float(solar_cfg.effective_feed_in_for_date(date.today()))
+                                      if solar_cfg is not None else 0.082)
                     unit_price = float(self.cfg.pricing.unit_price_gross())
                 except Exception:
                     feed_in_tariff = 0.082
@@ -5197,8 +5198,28 @@ class ActionDispatcher:
                 # kWh, i.e. a signed grid meter feeding in) is credited at the
                 # feed-in tariff — NOT the consumer price — and emits no CO₂.
                 _solar_pl = getattr(self.cfg, "solar", None)
-                _feed_ct = (float(getattr(_solar_pl, "feed_in_tariff_eur_per_kwh", 0.082) or 0.082) * 100.0
-                            if _solar_pl else 8.2)
+                _feed_ct = (float(_solar_pl.effective_feed_in_for_date(date.today())) * 100.0
+                            if _solar_pl is not None else 8.2)
+                # Per-bucket feed-in rate: a scheduled feed-in change only affects
+                # buckets on/after its start date — older buckets keep the old
+                # tariff (mirrors the per-day import pricing). Uses each bucket's
+                # own local date; falls back to the flat current rate on error.
+                _feed_ct_arr = None
+                if _solar_pl is not None:
+                    try:
+                        from datetime import datetime as _dtm_fi
+                        _tz_fi = ZoneInfo("Europe/Berlin")
+                        _feed_ct_arr = []
+                        for _rg_fi in ranges:
+                            _bts_fi = _rg_fi[0] if _rg_fi else None
+                            if _bts_fi:
+                                _d_fi = _dtm_fi.fromtimestamp(int(_bts_fi), _tz_fi).date()
+                                _feed_ct_arr.append(
+                                    float(_solar_pl.effective_feed_in_for_date(_d_fi)) * 100.0)
+                            else:
+                                _feed_ct_arr.append(_feed_ct)
+                    except Exception:
+                        _feed_ct_arr = None
 
                 # Battery/PV-aware owner pricing: energy an owner circuit drew
                 # from the battery or directly from PV in a bucket was NOT bought
@@ -5255,7 +5276,9 @@ class ActionDispatcher:
                             # so the dynamic trace stays empty for export — only the
                             # fixed feed-in value is shown.
                             eur_arr.append(None)
-                            fixed_eur_arr.append(round(_feed_ct * kwh_dev / 100.0, 2))
+                            _rate_ct = (_feed_ct_arr[i] if (_feed_ct_arr is not None
+                                        and i < len(_feed_ct_arr)) else _feed_ct)
+                            fixed_eur_arr.append(round(_rate_ct * kwh_dev / 100.0, 2))
                         else:
                             # Owner consumption is discounted by the grid-served
                             # share of the bucket (battery/PV = 0 cost).

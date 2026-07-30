@@ -21,6 +21,19 @@ class TariffPeriod:
 
 
 @dataclass(frozen=True)
+class FeedInPeriod:
+    """A feed-in (export) tariff period with a start date.
+
+    When the current date >= start_date, this feed-in tariff overrides the base
+    SolarConfig.feed_in_tariff_eur_per_kwh from its start_date onward. Mirrors
+    TariffPeriod, but for the money you EARN exporting to the grid rather than
+    the money you pay importing.
+    """
+    start_date: str = ""  # ISO "YYYY-MM-DD"
+    feed_in_tariff_eur_per_kwh: float = 0.082
+
+
+@dataclass(frozen=True)
 class TouRate:
     """A single Time-of-Use tariff window."""
     name: str = "HT"
@@ -520,6 +533,10 @@ class SolarConfig:
     pv_production_device_key: str = ""
     # Feed-in tariff in €/kWh
     feed_in_tariff_eur_per_kwh: float = 0.082
+    # Future feed-in tariff periods. Each overrides feed_in_tariff_eur_per_kwh
+    # from its start_date onward (mirrors PricingConfig.tariff_schedule for the
+    # import price). Older data keeps the previous feed-in tariff.
+    feed_in_schedule: List["FeedInPeriod"] = field(default_factory=list)
     # Installed PV capacity in kWp (0 = unknown/not set)
     kw_peak: float = 0.0
     # Battery storage capacity in kWh (0 = no battery)
@@ -540,6 +557,25 @@ class SolarConfig:
     installation_year: int = 0
     # Annual degradation rate in % (typical: 0.5%)
     degradation_pct: float = 0.5
+
+    def effective_feed_in_for_date(self, dt) -> float:
+        """Return feed_in_tariff_eur_per_kwh effective on *dt* (date or datetime).
+
+        Picks the latest feed_in_schedule period whose start_date <= dt; falls
+        back to the base feed_in_tariff_eur_per_kwh. Mirrors
+        PricingConfig.effective_price_for_date for the export tariff.
+        """
+        from datetime import date as _date, datetime as _dt
+        d = dt.date() if isinstance(dt, _dt) else dt
+        for period in sorted(self.feed_in_schedule,
+                             key=lambda p: p.start_date, reverse=True):
+            if period.start_date:
+                try:
+                    if d >= _date.fromisoformat(period.start_date):
+                        return float(period.feed_in_tariff_eur_per_kwh)
+                except ValueError:
+                    continue
+        return float(self.feed_in_tariff_eur_per_kwh)
 
 
 @dataclass(frozen=True)
@@ -1496,6 +1532,16 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
             solar_raw.get("feed_in_tariff_eur_per_kwh", SolarConfig.feed_in_tariff_eur_per_kwh),
             SolarConfig.feed_in_tariff_eur_per_kwh,
         ),
+        feed_in_schedule=[
+            FeedInPeriod(
+                start_date=str(fp.get("start_date", "") or ""),
+                feed_in_tariff_eur_per_kwh=_coerce_float(
+                    fp.get("feed_in_tariff_eur_per_kwh", SolarConfig.feed_in_tariff_eur_per_kwh),
+                    SolarConfig.feed_in_tariff_eur_per_kwh),
+            )
+            for fp in (solar_raw.get("feed_in_schedule") or [])
+            if isinstance(fp, dict)
+        ],
         kw_peak=_coerce_float(solar_raw.get("kw_peak", SolarConfig.kw_peak), SolarConfig.kw_peak),
         battery_kwh=_coerce_float(solar_raw.get("battery_kwh", SolarConfig.battery_kwh), SolarConfig.battery_kwh),
         co2_production_kg_per_kwp=_coerce_float(
@@ -2168,6 +2214,13 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "grid_display_device_key": str(getattr(cfg.solar, "grid_display_device_key", "") or ""),
             "pv_production_device_key": str(getattr(cfg.solar, "pv_production_device_key", "") or ""),
             "feed_in_tariff_eur_per_kwh": float(getattr(cfg.solar, "feed_in_tariff_eur_per_kwh", 0.082)),
+            "feed_in_schedule": [
+                {
+                    "start_date": fp.start_date,
+                    "feed_in_tariff_eur_per_kwh": float(fp.feed_in_tariff_eur_per_kwh),
+                }
+                for fp in (getattr(cfg.solar, "feed_in_schedule", []) or [])
+            ],
             "kw_peak": float(getattr(cfg.solar, "kw_peak", 0.0)),
             "battery_kwh": float(getattr(cfg.solar, "battery_kwh", 0.0)),
             "co2_production_kg_per_kwp": float(getattr(cfg.solar, "co2_production_kg_per_kwp", 1000.0)),

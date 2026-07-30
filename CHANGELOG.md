@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.58.0
+### Added
+- **Dated feed-in (export) tariff schedule — the sell price can now change over time, like the import price already could.** The feed-in tariff used to be a single fixed value, so if your export rate changed you lost the old one and every past export got re-valued at the new rate. You can now add feed-in periods under **Solar → Feed-in price changes**, each with a *From date* and a €/kWh rate. From a period's start date the new feed-in tariff applies; older data keeps the previous rate. This mirrors the existing **Pricing → Price changes** schedule for the import tariff. In the Plots kWh/€ view the export credit is valued **per bucket** at the tariff effective on that bucket's date, so historical revenue stays correct across a rate change. Config key: `solar.feed_in_schedule` (list of `{start_date, feed_in_tariff_eur_per_kwh}`); the base `solar.feed_in_tariff_eur_per_kwh` remains the fallback for dates before the first period. Fully backward compatible — an empty schedule behaves exactly as before.
+
 ## 16.57.8
 ### Fixed
 - **The Live view looked coarse after 16.57.7's history speedup.** The flat subsample thinned the whole 2 h window to a fixed density, which smeared out fast transitions — the Live power signal can toggle every second (e.g. surplus EV charging switching on and off), and that detail sits at the right edge the user actually watches. `/api/history` now uses tiered resolution: the most recent 20 minutes are kept at full 1 s resolution and only the older part of the window is thinned. The Live sparklines stay crisp where it matters while the payload stays small (still gzip-compressed), so the load remains ~1–2 s. `?full=1` still returns the raw series.
