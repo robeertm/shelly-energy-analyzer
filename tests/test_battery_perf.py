@@ -27,12 +27,16 @@ class _FakeDB:
         return self._df
 
 
-def _make_df(n, poll_s=2):
+def _make_df(n, poll_s=2, ts_unit="s", tz=None):
     base = int(time.time()) - 7 * 86400
     ts = np.arange(base, base + n * poll_s, poll_s)[:n]
+    tcol = pd.to_datetime(ts, unit="s")
+    # coerce to the requested datetime resolution (s/ms/us/ns)
+    tcol = tcol.astype(f"datetime64[{ts_unit}]")
+    if tz:
+        tcol = tcol.tz_localize("UTC").tz_convert(tz)
     pw = (np.sin(np.arange(n) / 21600.0 * np.pi) * 3000).astype(float)
-    return pd.DataFrame({"timestamp": pd.to_datetime(ts, unit="s"),
-                         "total_power": pw})
+    return pd.DataFrame({"timestamp": tcol, "total_power": pw})
 
 
 def test_soc_timeline_is_bucketed_and_bounded():
@@ -41,10 +45,29 @@ def test_soc_timeline_is_bucketed_and_bounded():
     status = get_battery_status(_FakeDB(df), cfg)
     # bucketed to ~minute resolution → far fewer than the raw sample count
     assert 0 < len(status.soc_timeline) <= 11000
+    # crucially: NOT collapsed to a single bucket (the ÷1e9 resolution bug)
+    assert len(status.soc_timeline) > 1000
     socs = [s[1] for s in status.soc_timeline]
     assert min(socs) >= 0.0 and max(socs) <= 100.0
+    # timeline timestamps are real epoch seconds, not a collapsed constant
+    assert status.soc_timeline[0][0] > 1_000_000_000
     # cycle detection still runs on the (bucketed) timeline
     assert status.cycle_count >= 1
+
+
+def test_datetime_resolutions_and_tz_do_not_collapse():
+    """Regression: datetime64[s]/[ms]/[ns] and tz-aware must all bucket by minute
+    (a hardcoded ÷1e9 collapsed [s]-resolution to one point)."""
+    cfg = BatteryConfig(enabled=True, device_key="battery", capacity_kwh=10.0)
+    for unit in ("s", "ms", "us", "ns"):
+        df = _make_df(50000, ts_unit=unit)
+        st = get_battery_status(_FakeDB(df), cfg)
+        assert len(st.soc_timeline) > 500, f"collapsed for datetime64[{unit}]"
+        assert st.soc_timeline[0][0] > 1_000_000_000, f"bad epoch for [{unit}]"
+    # tz-aware column
+    df_tz = _make_df(50000, ts_unit="ns", tz="Europe/Berlin")
+    st = get_battery_status(_FakeDB(df_tz), cfg)
+    assert len(st.soc_timeline) > 500
 
 
 def test_empty_and_disabled():
