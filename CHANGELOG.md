@@ -1,6 +1,8 @@
 # Changelog
 
-## 16.57.5
+## 16.57.6
+### Changed
+- **The kWh Plots view is much faster, especially the first load after being idle.** It used to read every raw sample for the whole range (tens of thousands of rows for a 30-day view) and integrate them in-process, which was slow on a cold cache (~8–10 s). It now aggregates from the pre-built `hourly_energy` rollup (~60× fewer rows) with the identical compensation and local-time bucketing, falling back to the raw-sample path automatically when no rollup exists. Results are unchanged (verified value-for-value against the old path); `?src=raw` forces the legacy path for comparison.
 ### Fixed
 - **The embedded Plots tab loaded twice — first gross, then net — which was slow and briefly showed the wrong value.** The iframe used to load in its last-saved raw/net state and then get re-synced to the header pill, running the (multi-second) query twice and flashing gross before net. The parent now loads the plot once already in the pill's mode via the iframe URL, and net/gross is treated as a transient view state that is never persisted, so the embedded plot always starts correct. (The heavy first query is cold-cache SQLite; it is ~2 s once warm — net and gross cost essentially the same.)
 

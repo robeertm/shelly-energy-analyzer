@@ -688,37 +688,78 @@ class ActionDispatcher:
             return ([], [])
         tmp = tmp.set_index("timestamp")
 
-        if unit == "all":
-            total = float(tmp["energy_kwh"].sum())
-            return (["Total"], [total])
+        return self._bucket_energy(tmp, unit, limit_n)
 
+    def _bucket_energy(self, tmp: "pd.DataFrame", unit: str,
+                       limit_n: Optional[int]) -> Tuple[List[str], List[float]]:
+        """Resample a local-time-indexed ``energy_kwh`` frame into bar-chart
+        buckets. Shared by the raw-sample path (``_stats_series``) and the fast
+        hourly-rollup path (``_stats_series_hourly``) so both bucket identically."""
+        if unit == "all":
+            return (["Total"], [float(tmp["energy_kwh"].sum())])
         if unit == "hours":
             hr = tmp["energy_kwh"].resample("h").sum()
             if limit_n is not None:
                 hr = hr.tail(int(limit_n))
-            labels = [pd.Timestamp(x).strftime("%Y-%m-%d %H:00") for x in hr.index]
-            return (labels, [float(v) for v in hr.values])
-
+            return ([pd.Timestamp(x).strftime("%Y-%m-%d %H:00") for x in hr.index],
+                    [float(v) for v in hr.values])
         if unit == "weeks":
             wk = tmp["energy_kwh"].resample("W-MON").sum()
             if limit_n is not None:
                 wk = wk.tail(int(limit_n))
-            labels = [f"{int(x.isocalendar().year)}-W{int(x.isocalendar().week):02d}" for x in wk.index]
-            return (labels, [float(v) for v in wk.values])
-
+            return ([f"{int(x.isocalendar().year)}-W{int(x.isocalendar().week):02d}" for x in wk.index],
+                    [float(v) for v in wk.values])
         if unit == "months":
             mo = tmp["energy_kwh"].resample("MS").sum()
             if limit_n is not None:
                 mo = mo.tail(int(limit_n))
-            labels = [pd.Timestamp(x).strftime("%Y-%m") for x in mo.index]
-            return (labels, [float(v) for v in mo.values])
-
-        # default: days
+            return ([pd.Timestamp(x).strftime("%Y-%m") for x in mo.index],
+                    [float(v) for v in mo.values])
         day = tmp["energy_kwh"].resample("D").sum()
         if limit_n is not None:
             day = day.tail(int(limit_n))
-        labels = [pd.Timestamp(x).strftime("%Y-%m-%d") for x in day.index]
-        return (labels, [float(v) for v in day.values])
+        return ([pd.Timestamp(x).strftime("%Y-%m-%d") for x in day.index],
+                [float(v) for v in day.values])
+
+    def _stats_series_hourly(self, key: str, s_ts: Optional[int], e_ts: Optional[int],
+                             mode: str) -> Optional[Tuple[List[str], List[float]]]:
+        """Fast kWh buckets from the pre-aggregated ``hourly_energy`` rollup — far
+        fewer rows than raw samples, so it stays fast even on a cold cache. Uses
+        the SAME compensation (``compensate=True``, matching ``query_samples``) and
+        the SAME local-time bucketing as the raw path. Returns ``(labels, values)``,
+        or ``None`` to signal the caller to fall back to the raw-sample path."""
+        mode = str(mode or "days").lower().strip()
+        unit = mode
+        limit_n: Optional[int] = None
+        if ':' in mode:
+            try:
+                unit, n_raw = mode.split(':', 1)
+                unit = unit.strip()
+                limit_n = int(float(n_raw.strip()))
+                if limit_n <= 0:
+                    limit_n = None
+            except Exception:
+                unit = mode
+                limit_n = None
+        try:
+            df = self.storage.db.query_hourly(key, start_ts=s_ts, end_ts=e_ts, compensate=True)
+        except Exception:
+            return None
+        if df is None or df.empty or "kwh" not in df.columns or "hour_ts" not in df.columns:
+            return None
+        kwh = pd.to_numeric(df["kwh"], errors="coerce").fillna(0.0)
+        # hour_ts is a UTC epoch; convert to Europe/Berlin local (tz-stripped) so
+        # day/week/month boundaries match the raw path and the user's clock.
+        ts = pd.to_datetime(df["hour_ts"], unit="s", errors="coerce")
+        try:
+            ts = ts.dt.tz_localize("UTC").dt.tz_convert("Europe/Berlin").dt.tz_localize(None)
+        except Exception:
+            pass
+        tmp = pd.DataFrame({"timestamp": ts, "energy_kwh": kwh}).dropna(subset=["timestamp"]).sort_values("timestamp")
+        if tmp.empty:
+            return None
+        tmp = tmp.set_index("timestamp")
+        return self._bucket_energy(tmp, unit, limit_n)
 
     # ------------------------------------------------------------------
     # _wva_series (ported from core.py — W/V/A timeseries for web plots)
@@ -4887,6 +4928,10 @@ class ActionDispatcher:
 
             if view == "kwh":
                 mode = str(params.get("mode") or "days")
+                # Fast path: aggregate from the pre-built hourly_energy rollup
+                # (far fewer rows than raw samples → fast even on a cold cache).
+                # ?src=raw forces the legacy raw-sample path (for verification).
+                _use_raw_src = str(params.get("src", "")).lower() == "raw"
 
                 try:
                     if start is None and end is None and str(params.get("len") or "").strip():
@@ -4927,12 +4972,17 @@ class ActionDispatcher:
                                 _e_ts = _max_ts
                         except Exception:
                             pass
-                    df = _df_for(k, _s_ts, _e_ts)
-                    if df is None or len(df) == 0:
-                        diag["counts"][k] = 0
-                        continue
-                    diag["counts"][k] = int(len(df))
-                    lbls, vals = self._stats_series(df, mode)
+                    _hres = None if _use_raw_src else self._stats_series_hourly(k, _s_ts, _e_ts, mode)
+                    if _hres is not None:
+                        lbls, vals = _hres
+                        diag["counts"][k] = len(lbls)
+                    else:
+                        df = _df_for(k, _s_ts, _e_ts)
+                        if df is None or len(df) == 0:
+                            diag["counts"][k] = 0
+                            continue
+                        diag["counts"][k] = int(len(df))
+                        lbls, vals = self._stats_series(df, mode)
                     s = pd.Series(vals, index=[str(x) for x in lbls], dtype="float64")
 
                     idx = [str(x) for x in s.index.tolist()]
@@ -4964,12 +5014,17 @@ class ActionDispatcher:
                                     _ce = _mt
                             except Exception:
                                 pass
-                        _df = _df_for(_k, _cs, _ce)
-                        if _df is None or len(_df) == 0:
-                            _sv = pd.Series(dtype="float64")
-                        else:
-                            _lb, _vv = self._stats_series(_df, mode)
+                        _hr = None if _use_raw_src else self._stats_series_hourly(_k, _cs, _ce, mode)
+                        if _hr is not None:
+                            _lb, _vv = _hr
                             _sv = pd.Series(_vv, index=[str(x) for x in _lb], dtype="float64")
+                        else:
+                            _df = _df_for(_k, _cs, _ce)
+                            if _df is None or len(_df) == 0:
+                                _sv = pd.Series(dtype="float64")
+                            else:
+                                _lb, _vv = self._stats_series(_df, mode)
+                                _sv = pd.Series(_vv, index=[str(x) for x in _lb], dtype="float64")
                         _kwh_cache[_k] = _sv
                         return _sv
 
