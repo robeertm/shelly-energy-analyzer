@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.58.1
+### Fixed
+- **The Battery tab took >10 s to load.** `get_battery_status` iterated the 7-day sample window row-by-row with pandas `iterrows` (up to ~300k rows at a 1–2 s poll) and returned a full-resolution SOC timeline (~800 KB). It now extracts the two columns as numpy arrays and buckets them to 1-minute mean power before integrating — a battery's SOC moves slowly and mean-power-per-minute preserves the energy integral, so the SOC estimate and cycle detection are unchanged while the point count and payload drop ~30× and the load goes from ~11 s to well under a second. (The EV-log tab was already fast; no change there.)
+
 ## 16.58.0
 ### Added
 - **Dated feed-in (export) tariff schedule — the sell price can now change over time, like the import price already could.** The feed-in tariff used to be a single fixed value, so if your export rate changed you lost the old one and every past export got re-valued at the new rate. You can now add feed-in periods under **Solar → Feed-in price changes**, each with a *From date* and a €/kWh rate. From a period's start date the new feed-in tariff applies; older data keeps the previous rate. This mirrors the existing **Pricing → Price changes** schedule for the import tariff. In the Plots kWh/€ view the export credit is valued **per bucket** at the tariff effective on that bucket's date, so historical revenue stays correct across a rate change. Config key: `solar.feed_in_schedule` (list of `{start_date, feed_in_tariff_eur_per_kwh}`); the base `solar.feed_in_tariff_eur_per_kwh` remains the fallback for dates before the first period. Fully backward compatible — an empty schedule behaves exactly as before.
