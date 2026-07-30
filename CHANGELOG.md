@@ -1,6 +1,11 @@
 # Changelog
 
-## 16.57.4
+## 16.57.5
+### Fixed
+- **The embedded Plots tab loaded twice — first gross, then net — which was slow and briefly showed the wrong value.** The iframe used to load in its last-saved raw/net state and then get re-synced to the header pill, running the (multi-second) query twice and flashing gross before net. The parent now loads the plot once already in the pill's mode via the iframe URL, and net/gross is treated as a transient view state that is never persisted, so the embedded plot always starts correct. (The heavy first query is cold-cache SQLite; it is ~2 s once warm — net and gross cost essentially the same.)
+
+### Changed
+- **The battery tile no longer prefixes charging power with `+`.** Discharge still shows a leading `−`; charging now shows the plain number, since the tile colour already conveys the direction.
 ### Changed
 - **One net/gross switch instead of two.** In the dashboard's Plots tab the header **Net ✓ / Gross** pill and the Plots page's own "Raw (gross)" checkbox were two separate controls for the same thing, which was confusing and could disagree. The header pill is now the single control: it drives both the Live view and the embedded Plots iframe, and the Plots page hides its own checkbox when embedded (the checkbox still appears when `/plots` is opened standalone, where there is no pill). Switching net/gross on the Plots tab now works from the one pill.
 ### Fixed

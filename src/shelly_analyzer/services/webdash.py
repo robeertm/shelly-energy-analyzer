@@ -2410,11 +2410,10 @@ function onPaneActivated(name) {{
     if (name === 'plots') {{
       const fr = document.getElementById('plots-frame');
       if (fr && (!fr.src || fr.src === 'about:blank' || fr.src.endsWith('about:blank'))) {{
-        // Sync the embedded plot to the header pill's net/gross state once loaded.
-        fr.onload = function() {{ try {{ if (fr.contentWindow && fr.contentWindow.__setPlotsRaw) fr.contentWindow.__setPlotsRaw(_rawView); }} catch(e) {{}} }};
-        fr.src = '/plots';
+        // Load once already in the header pill's net/gross mode (no second reload).
+        fr.src = '/plots?raw=' + (_rawView ? '1' : '0');
       }} else if (fr) {{
-        // Iframe is already loaded → sync net/gross to the pill and re-fetch.
+        // Returning to the tab → sync net/gross to the pill (single refetch).
         try {{
           if (fr.contentWindow && fr.contentWindow.__setPlotsRaw) fr.contentWindow.__setPlotsRaw(_rawView);
           else if (fr.contentWindow && fr.contentWindow.__scheduleApplyPlots) fr.contentWindow.__scheduleApplyPlots(50);
@@ -3774,8 +3773,9 @@ function _pwrVal(d) {{
 // Formatted power string incl. unit. Battery gets an explicit leading + on
 // charge so charge (+) / discharge (−) reads unmistakably on the tile.
 function _pwrText(d) {{
+  // Battery: discharge shows a leading '−' (negative value); charge shows the
+  // plain number (no '+') — direction is already conveyed by the tile colour.
   const v = _pwrVal(d);
-  if (d.flow_role === 'battery' && v > 0) return '+' + fmt(v, 0) + ' W';
   return fmt(v, 0) + ' W';
 }}
 
@@ -10028,7 +10028,9 @@ function setQP(newParams) {
   // is shared between /plots standalone and the embedded iframe in the Plots tab).
   try {
     const obj = {};
-    u.searchParams.forEach((v,k)=>{ obj[k]=v; });
+    // 'raw' (net/gross) is a transient view toggle, not a saved preference — never
+    // persist it, so the embedded plot always starts in the header pill's mode.
+    u.searchParams.forEach((v,k)=>{ if (k !== 'raw') obj[k]=v; });
     localStorage.setItem('sea_plots_qp', JSON.stringify(obj));
   } catch(e){}
 }
@@ -10043,7 +10045,7 @@ function restorePlotsDefaults() {
   try {
     const saved = JSON.parse(localStorage.getItem('sea_plots_qp') || 'null');
     if (saved && typeof saved === 'object' && Object.keys(saved).length > 0) {
-      Object.keys(saved).forEach(k => u.searchParams.set(k, String(saved[k])));
+      Object.keys(saved).forEach(k => { if (k !== 'raw') u.searchParams.set(k, String(saved[k])); });
       history.replaceState(null, '', u.toString());
       return;
     }
