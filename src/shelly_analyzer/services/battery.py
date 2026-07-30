@@ -158,18 +158,40 @@ def get_battery_status(db, cfg) -> BatteryStatus:
         if df is None or df.empty:
             return status
 
-        # Extract power time series (positive = charge, negative = discharge)
-        samples = []
-        for _, row in df.iterrows():
-            tsv = row.get("timestamp", 0)
-            try:
-                # query_samples returns 'timestamp' as a pandas datetime; older
-                # callers may still pass a raw epoch int.
-                ts = int(tsv.timestamp()) if hasattr(tsv, "timestamp") else int(tsv)
-            except (ValueError, TypeError, AttributeError):
-                continue
-            power = float(row.get("total_power", 0) or 0)
-            samples.append((ts, power))
+        # Extract power time series (positive = charge, negative = discharge).
+        # Vectorized: iterrows over the ~300k raw samples of a 7-day window (at a
+        # 1–2 s poll) dominated latency (~10 s). Pull the two columns as numpy
+        # arrays, then bucket to 1-minute mean power. A battery SOC curve moves
+        # slowly, and mean-power-per-minute preserves the energy integral, so the
+        # SOC estimate and cycle detection are unchanged while the point count
+        # (and the JSON payload) drops ~30×.
+        import numpy as np
+        import pandas as pd
+        try:
+            _ts_col = df["timestamp"]
+            if pd.api.types.is_datetime64_any_dtype(_ts_col):
+                ts_arr = (_ts_col.astype("int64") // 1_000_000_000).to_numpy()
+            else:
+                ts_arr = pd.to_numeric(_ts_col, errors="coerce").fillna(0).astype("int64").to_numpy()
+            pw_arr = pd.to_numeric(df.get("total_power", 0.0), errors="coerce").fillna(0.0).to_numpy(dtype=float)
+        except Exception:
+            return status
+
+        _ok = ts_arr > 0
+        ts_arr, pw_arr = ts_arr[_ok], pw_arr[_ok]
+        if ts_arr.size == 0:
+            return status
+
+        if ts_arr.size > 1:
+            # 1-minute buckets, energy-preserving (mean power); bucket ts = last.
+            _bkt = ts_arr // 60
+            _b = pd.DataFrame({"b": _bkt, "ts": ts_arr, "pw": pw_arr})
+            _g = _b.groupby("b", sort=True)
+            ts_ds = _g["ts"].last().to_numpy()
+            pw_ds = _g["pw"].mean().to_numpy()
+            samples = list(zip(ts_ds.tolist(), pw_ds.tolist()))
+        else:
+            samples = list(zip(ts_arr.tolist(), pw_arr.tolist()))
 
         if not samples:
             return status
