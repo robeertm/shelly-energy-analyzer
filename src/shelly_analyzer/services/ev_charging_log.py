@@ -190,3 +190,84 @@ def get_monthly_summary(sessions: List[ChargingSession]) -> ChargingSummary:
         avg_duration_min=round(sum(durations) / len(durations), 1),
         sessions=sessions,
     )
+
+
+@dataclass
+class ChargingGroup:
+    """One physical charge = one or more detected sessions merged together."""
+    group_id: str
+    device_key: str
+    start_ts: int
+    end_ts: int
+    energy_kwh: float
+    peak_power_w: float
+    avg_power_w: float
+    cost_eur: float
+    session_count: int
+    sessions: List[ChargingSession] = field(default_factory=list)
+
+
+def group_sessions_into_charges(
+    sessions: List[ChargingSession],
+    max_gap_s: int = 14400,
+    surplus_ts: Optional["np.ndarray"] = None,
+    surplus_export_w: Optional["np.ndarray"] = None,
+    min_charge_w: float = 1500.0,
+) -> List[ChargingGroup]:
+    """Merge consecutive sessions that belong to ONE physical charge.
+
+    Surplus (PV) charging pauses whenever available solar drops below the car's
+    minimum charge power, fragmenting one plugged-in charge into many short
+    sessions. Two consecutive sessions are merged when:
+
+      * the gap between them is <= ``max_gap_s`` (an overnight gap stays
+        separate), AND
+      * if a grid-export (surplus) series is supplied: the *median* available
+        export during the gap stayed below ``min_charge_w`` — i.e. the car could
+        not have charged then (still plugged in, waiting for sun) rather than
+        being unplugged while surplus went spare. Without a series the gap alone
+        decides (best effort).
+
+    Each returned group keeps its member sessions so the UI can expand detail.
+    """
+    if not sessions:
+        return []
+    ordered = sorted(sessions, key=lambda s: s.start_ts)
+    buckets: List[List[ChargingSession]] = [[ordered[0]]]
+    have_surplus = (
+        surplus_ts is not None and surplus_export_w is not None
+        and getattr(surplus_ts, "size", 0)
+    )
+    for s in ordered[1:]:
+        prev = buckets[-1][-1]
+        gap = s.start_ts - prev.end_ts
+        merge = 0 <= gap <= max_gap_s
+        if merge and have_surplus:
+            m = (surplus_ts >= prev.end_ts) & (surplus_ts <= s.start_ts)
+            if bool(np.any(m)):
+                # Merge only if surplus was too low to charge (a genuine pause).
+                merge = float(np.median(surplus_export_w[m])) < min_charge_w
+            # no samples inside the gap → keep the gap-only decision
+        if merge:
+            buckets[-1].append(s)
+        else:
+            buckets.append([s])
+
+    groups: List[ChargingGroup] = []
+    for grp in buckets:
+        start = grp[0].start_ts
+        end = grp[-1].end_ts
+        energy = round(sum(x.energy_kwh for x in grp), 3)
+        cost = round(sum(x.cost_eur for x in grp), 2)
+        peak = max((x.peak_power_w for x in grp), default=0.0)
+        active_s = sum(max(0, x.end_ts - x.start_ts) for x in grp)
+        avg = round(energy / (active_s / 3600.0) * 1000.0, 0) if active_s > 0 else 0.0
+        groups.append(ChargingGroup(
+            group_id=grp[0].session_id,   # stable id = first session's id
+            device_key=grp[0].device_key,
+            start_ts=start, end_ts=end,
+            energy_kwh=energy, peak_power_w=round(peak, 0),
+            avg_power_w=avg, cost_eur=cost,
+            session_count=len(grp), sessions=list(grp),
+        ))
+    return groups

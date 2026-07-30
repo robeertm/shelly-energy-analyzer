@@ -926,6 +926,20 @@ class EvChargingConfig:
     detection_threshold_w: float = 1500.0
     min_session_minutes: int = 5
     max_gap_minutes: int = 15
+    # Group fragmented sessions of ONE physical charge into a single log entry.
+    # Surplus (PV) charging pauses whenever the sun drops below the car's minimum
+    # charge power, splitting one plugged-in charge into many short sessions.
+    group_sessions: bool = True
+    # Max gap between two sessions that may still belong to the same charge
+    # (minutes). A daytime surplus pause is usually well under this; an overnight
+    # gap is longer and stays separate.
+    group_gap_minutes: int = 240
+    # When a grid/PV meter is configured, a gap is only bridged if the available
+    # grid export (surplus) during it stayed below this many watts — i.e. the car
+    # *couldn't* have charged (it was still plugged in, waiting for sun) rather
+    # than being unplugged while surplus was going spare. 0 = use
+    # detection_threshold_w.
+    group_surplus_floor_w: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -1843,6 +1857,9 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         detection_threshold_w=_coerce_float(evc_raw.get("detection_threshold_w", 1500.0), 1500.0),
         min_session_minutes=_coerce_int(evc_raw.get("min_session_minutes", 5), 5),
         max_gap_minutes=_coerce_int(evc_raw.get("max_gap_minutes", 15), 15),
+        group_sessions=bool(evc_raw.get("group_sessions", True)),
+        group_gap_minutes=_coerce_int(evc_raw.get("group_gap_minutes", 240), 240),
+        group_surplus_floor_w=_coerce_float(evc_raw.get("group_surplus_floor_w", 0.0), 0.0),
     )
 
     tc_raw = raw.get("tariff_compare", {}) if isinstance(raw.get("tariff_compare"), dict) else {}
@@ -2483,6 +2500,9 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "detection_threshold_w": float(getattr(cfg.ev_charging, "detection_threshold_w", 1500.0)),
             "min_session_minutes": int(getattr(cfg.ev_charging, "min_session_minutes", 5)),
             "max_gap_minutes": int(getattr(cfg.ev_charging, "max_gap_minutes", 15)),
+            "group_sessions": bool(getattr(cfg.ev_charging, "group_sessions", True)),
+            "group_gap_minutes": int(getattr(cfg.ev_charging, "group_gap_minutes", 240)),
+            "group_surplus_floor_w": float(getattr(cfg.ev_charging, "group_surplus_floor_w", 0.0)),
         },
         "tariff_compare": {
             "enabled": bool(getattr(cfg.tariff_compare, "enabled", False)),
