@@ -170,7 +170,13 @@ def get_battery_status(db, cfg) -> BatteryStatus:
         try:
             _ts_col = df["timestamp"]
             if pd.api.types.is_datetime64_any_dtype(_ts_col):
-                ts_arr = (_ts_col.astype("int64") // 1_000_000_000).to_numpy()
+                # Normalize tz then go via datetime64[s] so the epoch conversion
+                # is correct regardless of the column's datetime resolution
+                # (ns/us/s) — a hardcoded ÷1e9 collapses second-resolution
+                # timestamps to a single bucket. Mirrors detect_charging_sessions.
+                if getattr(_ts_col.dt, "tz", None) is not None:
+                    _ts_col = _ts_col.dt.tz_convert("UTC").dt.tz_localize(None)
+                ts_arr = _ts_col.astype("datetime64[s]").astype("int64").to_numpy()
             else:
                 ts_arr = pd.to_numeric(_ts_col, errors="coerce").fillna(0).astype("int64").to_numpy()
             pw_arr = pd.to_numeric(df.get("total_power", 0.0), errors="coerce").fillna(0.0).to_numpy(dtype=float)
