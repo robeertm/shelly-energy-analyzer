@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.57.8
+### Fixed
+- **The Live view looked coarse after 16.57.7's history speedup.** The flat subsample thinned the whole 2 h window to a fixed density, which smeared out fast transitions — the Live power signal can toggle every second (e.g. surplus EV charging switching on and off), and that detail sits at the right edge the user actually watches. `/api/history` now uses tiered resolution: the most recent 20 minutes are kept at full 1 s resolution and only the older part of the window is thinned. The Live sparklines stay crisp where it matters while the payload stays small (still gzip-compressed), so the load remains ~1–2 s. `?full=1` still returns the raw series.
+
 ## 16.57.7
 ### Fixed
 - **The Live view took ~20–25 s to fully show the last two hours on multi-meter installs.** `/api/history` returned every raw sample at full poll resolution (up to ~7200 points per meter over the 2 h window), so on a setup with several meters the response ballooned past 12 MB and took 20+ seconds to build, transfer and parse — the sparklines and 2 h detail chart only filled in gradually as it arrived. The endpoint now subsamples each series to a sane density (~1000 points, always keeping the newest sample) before serialising, and gzip-compresses the response. Together this cuts the payload from multiple MB to a few hundred KB and the load from ~20 s to well under a second, with no visible change to the charts (they are only a few hundred pixels wide). The live 1 s updates refill the right edge at full resolution within seconds after a reload, so the newest part of each sparkline stays smooth. `?full=1` returns the un-subsampled series for debugging.
