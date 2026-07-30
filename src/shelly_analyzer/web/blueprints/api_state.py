@@ -323,25 +323,32 @@ def api_history():
     raw_snap = state.live_store.snapshot()
     hist: Dict[str, List[Dict[str, Any]]] = {}
 
-    # Cap per-series resolution. The Live sparklines and the 2 h detail chart
-    # are only a few hundred px wide, so per-second resolution over a 2 h window
-    # (up to ~7200 pts/series) is pure payload bloat — on multi-meter installs
-    # this ballooned /api/history past 12 MB / 20 s. Subsample to a sane density
-    # (always keeping the newest point) unless ?full=1 is given. The live 1 s
-    # appends from /api/state refill the right-edge tail at full resolution
-    # within seconds after a reload, so the tail stays smooth.
+    # Tiered per-series resolution. Serving every raw sample at full poll
+    # resolution over a 2 h window (up to ~7200 pts/series) ballooned
+    # /api/history past 12 MB / 20 s on multi-meter installs. But a flat
+    # subsample makes the Live view look coarse — its power signal can toggle
+    # every second (e.g. surplus EV charging), and that detail sits at the
+    # right edge the user actually watches. So keep the most recent window at
+    # full 1 s resolution and only thin the older part of the window. This
+    # keeps the sparklines crisp where it matters while still collapsing the
+    # bulk of the payload; gzip below handles the rest. ?full=1 disables all
+    # thinning.
     _full = str(request.args.get("full", "")).strip().lower() in ("1", "true", "yes", "on")
-    _MAX_PTS = 1000
+    _TAIL_FULL_S = 1200   # keep the last 20 min at full resolution
+    _HEAD_PTS = 700       # thin everything older than that to ~this many points
 
     for dkey, points in raw_snap.items():
         if dkey.startswith("_") or not isinstance(points, list) or not points:
             continue
         src_points = points
-        if not _full and len(src_points) > _MAX_PTS:
-            stride = (len(points) + _MAX_PTS - 1) // _MAX_PTS
-            src_points = points[::stride]
-            if src_points[-1] is not points[-1]:
-                src_points = src_points + [points[-1]]
+        if not _full and len(points) > _HEAD_PTS * 2:
+            cut = int(points[-1].get("ts") or 0) - _TAIL_FULL_S
+            head = [p for p in points if int(p.get("ts") or 0) < cut]
+            tail = points[len(head):]  # chronological → head is a prefix
+            if len(head) > _HEAD_PTS:
+                stride = (len(head) + _HEAD_PTS - 1) // _HEAD_PTS
+                head = head[::stride]
+            src_points = head + tail
         pts_out = []
         for p in src_points:
             va = float(p.get("va") or 0)
