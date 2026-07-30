@@ -323,11 +323,27 @@ def api_history():
     raw_snap = state.live_store.snapshot()
     hist: Dict[str, List[Dict[str, Any]]] = {}
 
+    # Cap per-series resolution. The Live sparklines and the 2 h detail chart
+    # are only a few hundred px wide, so per-second resolution over a 2 h window
+    # (up to ~7200 pts/series) is pure payload bloat — on multi-meter installs
+    # this ballooned /api/history past 12 MB / 20 s. Subsample to a sane density
+    # (always keeping the newest point) unless ?full=1 is given. The live 1 s
+    # appends from /api/state refill the right-edge tail at full resolution
+    # within seconds after a reload, so the tail stays smooth.
+    _full = str(request.args.get("full", "")).strip().lower() in ("1", "true", "yes", "on")
+    _MAX_PTS = 1000
+
     for dkey, points in raw_snap.items():
         if dkey.startswith("_") or not isinstance(points, list) or not points:
             continue
+        src_points = points
+        if not _full and len(src_points) > _MAX_PTS:
+            stride = (len(points) + _MAX_PTS - 1) // _MAX_PTS
+            src_points = points[::stride]
+            if src_points[-1] is not points[-1]:
+                src_points = src_points + [points[-1]]
         pts_out = []
-        for p in points:
+        for p in src_points:
             va = float(p.get("va") or 0)
             vb = float(p.get("vb") or 0)
             vc = float(p.get("vc") or 0)
@@ -390,7 +406,22 @@ def api_history():
         except Exception:
             pass
 
-    return jsonify({"history": hist})
+    # Compact JSON + optional gzip. This history payload is by far the fattest
+    # response; numeric JSON compresses ~85%, so gzip turns a multi-MB body into
+    # a few hundred KB and the transfer stops dominating cold Live loads.
+    body = json.dumps({"history": hist}, separators=(",", ":")).encode("utf-8")
+    ae = (request.headers.get("Accept-Encoding") or "").lower()
+    if "gzip" in ae and len(body) > 1024:
+        try:
+            import gzip as _gzip
+            gz = _gzip.compress(body, 5)
+            resp = Response(gz, mimetype="application/json")
+            resp.headers["Content-Encoding"] = "gzip"
+            resp.headers["Vary"] = "Accept-Encoding"
+            return resp
+        except Exception:
+            pass
+    return Response(body, mimetype="application/json")
 
 
 @bp.route("/api/config")
