@@ -314,7 +314,39 @@ def api_state():
     except Exception:
         pass
 
-    return jsonify({"devices": devices_list})
+    # Tenant source share (0..1): how much of the tenant's supply is PV right now
+    # (green) vs from the grid (red). A tenant circuit runs parallel to the grid
+    # and never uses the battery, so the household's instantaneous solar share is
+    # exactly the tenant's. Marks tenant tiles so the Live view can badge/tint them.
+    _share_now = None
+    try:
+        from shelly_analyzer.services.energy_balance import (
+            _resolve_source_keys, _tenant_key_map, instantaneous_solar_share)
+        _cfg2 = getattr(state, "cfg", None)
+        if _cfg2 is not None:
+            _gk, _pk, _bk = _resolve_source_keys(_cfg2)
+
+            def _latest_w(k):
+                _pts = raw_snap.get(k) if k else None
+                if isinstance(_pts, list) and _pts:
+                    return float(_pts[-1].get("power_total_w") or 0.0)
+                return 0.0
+
+            if _pk or _gk:
+                _share_now = round(instantaneous_solar_share(
+                    _latest_w(_pk), _latest_w(_gk), _latest_w(_bk)), 4)
+            _tset, _ = _tenant_key_map(_cfg2)
+            _tset = set(_tset)
+            if _tset:
+                for _d in devices_list:
+                    if _d.get("key") in _tset:
+                        _d["is_tenant"] = True
+                        if _share_now is not None:
+                            _d["solar_share"] = _share_now
+    except Exception:
+        _share_now = None
+
+    return jsonify({"devices": devices_list, "solar_share_now": _share_now})
 
 
 @bp.route("/api/history")
@@ -412,6 +444,38 @@ def api_history():
                 apply_history_subtraction(hist, _submap)
         except Exception:
             pass
+
+    # Tenant source over time: annotate each tenant series point with ``ss`` —
+    # the solar share (0..1) of the supply at that moment — so the Live sparkline
+    # can colour the tenant curve green (PV-covered) vs red (from the grid). The
+    # share is derived from the aligned PV/grid/battery series (nearest sample).
+    try:
+        from shelly_analyzer.services.energy_balance import (
+            _resolve_source_keys, _tenant_key_map, instantaneous_solar_share)
+        from shelly_analyzer.services.net_display import _nearest_w
+        _cfg_ss = getattr(state, "cfg", None)
+        if _cfg_ss is not None:
+            _tk_ss, _ = _tenant_key_map(_cfg_ss)
+            _tk_ss = [k for k in _tk_ss if k in hist]
+            if _tk_ss:
+                _gk2, _pk2, _bk2 = _resolve_source_keys(_cfg_ss)
+
+                def _pairs(k):
+                    return sorted(((int(p.get("ts") or 0), float(p.get("w") or 0.0))
+                                   for p in (hist.get(k) or [])), key=lambda x: x[0])
+                _pv_p = _pairs(_pk2) if _pk2 else []
+                _g_p = _pairs(_gk2) if _gk2 else []
+                _b_p = _pairs(_bk2) if _bk2 else []
+                if _pv_p or _g_p:
+                    for _tkey in _tk_ss:
+                        for _pt in hist.get(_tkey, []):
+                            _tsp = int(_pt.get("ts") or 0)
+                            _pt["ss"] = round(instantaneous_solar_share(
+                                _nearest_w(_pv_p, _tsp, 600000),
+                                _nearest_w(_g_p, _tsp, 600000),
+                                _nearest_w(_b_p, _tsp, 600000)), 3)
+    except Exception:
+        pass
 
     # Compact JSON + optional gzip. This history payload is by far the fattest
     # response; numeric JSON compresses ~85%, so gzip turns a multi-MB body into

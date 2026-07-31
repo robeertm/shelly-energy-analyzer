@@ -139,6 +139,28 @@ def _resolve_source_keys(cfg) -> tuple:
     return grid_key, pv_key, batt_key
 
 
+def instantaneous_solar_share(pv_w: float, grid_w: float, batt_w: float) -> float:
+    """Fraction (0..1) of the non-battery supply pool covered by PV right now.
+
+    Sign convention (matches compute_co2): grid ``+`` = import / ``−`` = export;
+    battery ``+`` = charge / ``−`` = discharge; PV ≥ 0. A tenant circuit runs in
+    parallel with the grid and never draws the battery, so this share is exactly
+    how "green" the tenant's supply is at this instant: 1.0 = fully PV-covered
+    (grid exporting or PV ≥ load), 0.0 = fully from the grid (e.g. at night).
+    """
+    pv = max(0.0, float(pv_w or 0.0))
+    g = float(grid_w or 0.0)
+    b = float(batt_w or 0.0)
+    grid_import = max(0.0, g)
+    export = max(0.0, -g)
+    batt_charge = max(0.0, b)
+    pv_direct = max(0.0, pv - export - batt_charge)   # PV serving load directly
+    pool = pv_direct + grid_import
+    if pool <= 1e-9:
+        return 1.0 if pv > 0.0 else 0.0
+    return max(0.0, min(1.0, pv_direct / pool))
+
+
 def _tenant_key_map(cfg) -> tuple:
     """Return (tenant_keys, key_to_tenant_name)."""
     tenant_keys: List[str] = []

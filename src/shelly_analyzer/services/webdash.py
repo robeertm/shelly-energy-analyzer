@@ -3758,6 +3758,10 @@ function _sparkArgs(key, buf) {{
   if (role === 'pv') return {{vals: vals, color: '#22c55e', sign: false}};
   if (role === 'battery') return {{vals: vals, color: null, sign: true}};
   if (role === 'grid') return {{vals: vals, color: null, sign: 'invert'}};
+  // Tenant: colour the curve by solar share over time (green = PV-covered,
+  // red = drawn from the grid), when the source share is available per point.
+  const hasShare = buf && buf.some(function(p) {{ return p && p.ss != null; }});
+  if (hasShare) return {{vals: vals, color: null, sign: false, share: wndVals(buf, 'ss')}};
   return {{vals: vals, color: null, sign: false}};
 }}
 
@@ -3853,7 +3857,7 @@ async function loadHistory() {{
         if (!buf || !buf.length) continue;
         const bt = wndTimes(buf);
         const sp = document.getElementById('sp-' + key);
-        if (sp) {{ const sa = _sparkArgs(key, buf); drawSparkline(sp, sa.vals, sa.color, false, sa.sign, bt); }}
+        if (sp) {{ const sa = _sparkArgs(key, buf); drawSparkline(sp, sa.vals, sa.color, false, sa.sign, bt, sa.share); }}
         const spv = document.getElementById('sp-v-' + key);
         if (spv) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true, false, bt);
         const spa = document.getElementById('sp-a-' + key);
@@ -4097,7 +4101,7 @@ function renderLive(data, first) {{
   devices.forEach(function(d) {{
     if (!sparkData[d.key]) sparkData[d.key] = [];
     const buf = sparkData[d.key];
-    buf.push({{ ts: Date.now(), w: d.power_w || 0, v: d.voltage_v || 0, a: d.current_a || 0, phases: d.phases ? d.phases.slice() : [], i_n: d.i_n || 0, q: d.q_total_var || 0, q_phases: d.q_phases ? d.q_phases.slice() : [], hz: d.freq_hz || 0 }});
+    buf.push({{ ts: Date.now(), w: d.power_w || 0, v: d.voltage_v || 0, a: d.current_a || 0, phases: d.phases ? d.phases.slice() : [], i_n: d.i_n || 0, q: d.q_total_var || 0, q_phases: d.q_phases ? d.q_phases.slice() : [], hz: d.freq_hz || 0, ss: (typeof d.solar_share === 'number' ? d.solar_share : undefined) }});
     if (buf.length > MAX_HIST_PTS) buf.shift();
   }});
 
@@ -4243,6 +4247,15 @@ function devCardHTML(d) {{
         '<div class="dev-name">' + esc(d.name || d.key) +
           ((d.net_of_children && d.net_of_children.length)
             ? ('<span class="net-badge" title="' + esc(t('web.net_badge_title', 'Verbrauch dieser Geräte ist herausgerechnet — nur Anzeige')) + '" style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;background:var(--accent);color:#fff;vertical-align:middle">' + esc(t('web.net_badge', 'netto')) + ' − ' + esc(d.net_of_children.map(function(k){{ return _devName(k); }}).join(', ')) + '</span>')
+            : '') +
+          (d.is_tenant && typeof d.solar_share === 'number'
+            ? (function(){{
+                var ss = d.solar_share;
+                var col = ss >= 0.66 ? '#22c55e' : (ss < 0.33 ? '#ef4444' : '#f59e0b');
+                var ico = ss >= 0.66 ? '☀️' : (ss < 0.33 ? '⚡' : '◐');
+                var lbl = ss >= 0.66 ? t('web.tenant_src_pv', 'PV') : (ss < 0.33 ? t('web.tenant_src_grid', 'Netz') : t('web.tenant_src_mix', 'Mix'));
+                return '<span title="' + esc(t('web.tenant_src_title', 'Woher der Mieter-Strom gerade kommt: PV-Überschuss (grün) oder Netz (rot)')) + '" style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;background:' + col + ';color:#fff;vertical-align:middle">' + ico + ' ' + esc(lbl) + ' ' + Math.round(ss*100) + '%</span>';
+              }})()
             : '') + '</div>' +
         '<div class="dev-meta">' +
           '<span class="m-kwh">' + _kwhInner(d) + '</span>' +
@@ -4328,7 +4341,7 @@ function updateDeviceCard(card, d) {{
   const bt = buf ? wndTimes(buf) : null;
   // Main power sparkline (flow-role coloured: PV green, battery/grid signed)
   const sp = document.getElementById('sp-' + d.key);
-  if (sp && buf) {{ const sa = _sparkArgs(d.key, buf); drawSparkline(sp, sa.vals, sa.color, false, sa.sign, bt); }}
+  if (sp && buf) {{ const sa = _sparkArgs(d.key, buf); drawSparkline(sp, sa.vals, sa.color, false, sa.sign, bt, sa.share); }}
   // Voltage sparkline (relative scale so variation is visible)
   const spv = document.getElementById('sp-v-' + d.key);
   if (spv && buf) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true, false, bt);
@@ -4419,7 +4432,7 @@ function updateDeviceCard(card, d) {{
 /* ──────────────────────────────────────────────
    SPARKLINE
 ────────────────────────────────────────────── */
-function drawSparkline(canvas, values, color, relMin, signColor, times) {{
+function drawSparkline(canvas, values, color, relMin, signColor, times, shareArr) {{
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.offsetWidth || 200;
   const H = canvas.offsetHeight || 56;
@@ -4484,6 +4497,37 @@ function drawSparkline(canvas, values, color, relMin, signColor, times) {{
       ctx.moveTo(_x(i), _y(values[i]));
       ctx.lineTo(_x(i+1), _y(values[i+1]));
       ctx.strokeStyle = ((values[i] + values[i+1]) / 2 >= 0) ? POS : NEG;
+      ctx.stroke();
+    }}
+    return;
+  }}
+
+  // Solar-share colouring (tenant): each segment green where PV-covered,
+  // red where drawn from the grid — so the source is visible over time.
+  if (shareArr && shareArr.length === values.length) {{
+    const GRN = '#22c55e', RED = '#ef4444';
+    const _scol = function(i) {{
+      let s = shareArr[i];
+      if (s == null && i + 1 < shareArr.length) s = shareArr[i + 1];
+      if (s == null) return accent;
+      return s >= 0.5 ? GRN : RED;
+    }};
+    for (let i = 0; i < values.length - 1; i++) {{
+      ctx.beginPath();
+      ctx.moveTo(_x(i), _y(values[i]));
+      ctx.lineTo(_x(i + 1), _y(values[i + 1]));
+      ctx.lineTo(_x(i + 1), zeroY);
+      ctx.lineTo(_x(i), zeroY);
+      ctx.closePath();
+      ctx.fillStyle = _scol(i) + '22';
+      ctx.fill();
+    }}
+    ctx.lineWidth = 1.6;
+    for (let i = 0; i < values.length - 1; i++) {{
+      ctx.beginPath();
+      ctx.moveTo(_x(i), _y(values[i]));
+      ctx.lineTo(_x(i + 1), _y(values[i + 1]));
+      ctx.strokeStyle = _scol(i);
       ctx.stroke();
     }}
     return;
@@ -10608,9 +10652,17 @@ async function loadData() {
         const te = document.getElementById(titleDivId);
         if (te) { te.textContent = (tr && tr.name) ? tr.name : ''; te.style.display = (tr && tr.name) ? 'block' : 'none'; }
       } catch(e) {}
+      // Tenant series: colour each bucket green (PV-covered) vs red (grid) by
+      // the period's solar share, so the tenant's source is visible over time.
+      let mcolor = '#6aa7ff';
+      try {
+        if (data.tenant_keys && data.tenant_keys.indexOf(tr.key) >= 0 && Array.isArray(data.solar_share)) {
+          mcolor = data.solar_share.map(function(s){ return (s == null) ? '#6aa7ff' : (s >= 0.5 ? '#22c55e' : '#ef4444'); });
+        }
+      } catch(e) {}
       Plotly.newPlot(
         divId,
-        [{type:'bar', name: tr.name, x: xsLab, y: tr.y, marker:{color:'#6aa7ff'}}],
+        [{type:'bar', name: tr.name, x: xsLab, y: tr.y, marker:{color: mcolor}}],
         kwhLayout('kWh'),
         plotlyConfig()
       );
