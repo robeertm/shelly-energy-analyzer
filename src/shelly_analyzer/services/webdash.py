@@ -3957,6 +3957,12 @@ function toggleRawView() {{
     var _pf = document.getElementById('plots-frame');
     if (_pf && _pf.contentWindow && _pf.contentWindow.__setPlotsRaw) _pf.contentWindow.__setPlotsRaw(_rawView);
   }} catch(e){{}}
+  // The heatmap and the energy-flow (sankey) also net meter-behind-meter —
+  // reload whichever is the open pane so it switches net<->gross with the pill.
+  try {{
+    if (currentPane === 'heatmap' && typeof loadHeatmap === 'function') loadHeatmap();
+    else if (currentPane === 'sankey' && typeof loadSankey === 'function') loadSankey();
+  }} catch(e){{}}
 }}
 async function tick(first) {{
   try {{
@@ -5356,7 +5362,7 @@ async function loadHeatmap() {{
   hrWrap.innerHTML = ''; if (stWrap) stWrap.innerHTML = ''; if (chWrap) chWrap.innerHTML = '';
   if (!device) {{ calWrap.innerHTML = '<p class="info-msg">' + t('web.dash.select_device', 'Select a device.') + '</p>'; return; }}
   try {{
-    const r = await fetch('/api/heatmap?device=' + encodeURIComponent(device) + '&year=' + year + '&unit=' + unit);
+    const r = await fetch('/api/heatmap?device=' + encodeURIComponent(device) + '&year=' + year + '&unit=' + unit + (_rawView ? '&raw=1' : ''));
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     syncHmDevices(data.devices);
@@ -7903,6 +7909,8 @@ function _sbDraw24hAll(devs) {{
    SANKEY / ENERGY FLOW TAB
 ────────────────────────────────────────────── */
 let _sankeyPeriod = 'today';
+let _sankeyRAF = null;      // energy-flow particle animation handle
+let _sankeyBands = [];      // captured flow-band centre lines for the animation
 function initSankeyPeriods() {{
   const el = document.getElementById('sankey-periods');
   if (el.children.length) return;
@@ -7925,7 +7933,7 @@ async function loadSankey() {{
   const cont = document.getElementById('sankey-cards');
   if (!_quietRefresh) cont.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
   try {{
-    const r = await fetch('/api/sankey?period=' + _sankeyPeriod);
+    const r = await fetch('/api/sankey?period=' + _sankeyPeriod + (_rawView ? '&raw=1' : ''));
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     renderSankey(data);
@@ -7945,7 +7953,10 @@ function renderSankey(d) {{
     document.getElementById('sankey-cards').innerHTML = html;
     return;
   }}
-  html += '<div class="card" style="padding:8px"><canvas id="sankey-flow-canvas" style="width:100%;height:380px"></canvas></div>';
+  html += '<div class="card" style="padding:8px"><div style="position:relative">' +
+    '<canvas id="sankey-flow-canvas" style="width:100%;height:380px"></canvas>' +
+    '<canvas id="sankey-flow-anim" style="position:absolute;left:0;top:0;width:100%;height:380px;pointer-events:none"></canvas>' +
+    '</div></div>';
   document.getElementById('sankey-cards').innerHTML = html;
   requestAnimationFrame(function() {{ _drawSankeyFlow('sankey-flow-canvas', d); }});
 }}
@@ -7960,6 +7971,7 @@ function _drawSankeyFlow(canvasId, d) {{
   cv.height = H * dpr;
   const ctx = cv.getContext('2d');
   ctx.scale(dpr, dpr);
+  _sankeyBands = [];  // reset captured flow lines for the animation overlay
 
   const isDark = document.documentElement.dataset.theme === 'dark';
   const fg = isDark ? '#e0e0e0' : '#333';
@@ -8054,6 +8066,8 @@ function _drawSankeyFlow(canvasId, d) {{
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+    // Capture the band's centre line (left→right flow) for the particle overlay.
+    _sankeyBands.push({{ x0: x0, y0: y0, x1: x1, y1: y1, color: color, w: Math.min(h0, h1) }});
   }}
 
   // --- Column headers ---
@@ -8165,6 +8179,57 @@ function _drawSankeyFlow(canvasId, d) {{
     flowBand(HOUSE_X + HOUSE_W, bandCy, bHouse, TGT_X, tgtCy[i], tgtH[i] * 0.85, topConsumers[i].color, 0.28);
     hBandY += bHouse;
   }}
+
+  _animateSankey();
+}}
+
+// Animated particles flowing left→right (sources → house → consumers) along the
+// captured band centre lines, on a transparent overlay canvas so the static
+// diagram is never redrawn. Honours prefers-reduced-motion and self-cancels when
+// the energy-flow pane is left.
+function _animateSankey() {{
+  if (_sankeyRAF) {{ cancelAnimationFrame(_sankeyRAF); _sankeyRAF = null; }}
+  const base = document.getElementById('sankey-flow-canvas');
+  const ov = document.getElementById('sankey-flow-anim');
+  if (!base || !ov || !_sankeyBands.length) return;
+  try {{ if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; }} catch(e){{}}
+  const dpr = window.devicePixelRatio || 1;
+  const W = base.offsetWidth, H = base.offsetHeight || 340;
+  ov.width = W * dpr; ov.height = H * dpr;
+  const ctx = ov.getContext('2d'); ctx.scale(dpr, dpr);
+  const bands = _sankeyBands.slice();
+  function bez(p, x0, y0, x1, y1) {{
+    const dx = (x1 - x0) * 0.4, cx0 = x0 + dx, cx1 = x1 - dx, mt = 1 - p;
+    const x = mt*mt*mt*x0 + 3*mt*mt*p*cx0 + 3*mt*p*p*cx1 + p*p*p*x1;
+    const y = mt*mt*mt*y0 + 3*mt*mt*p*y0 + 3*mt*p*p*y1 + p*p*p*y1;
+    return [x, y];
+  }}
+  let start = null;
+  function frame(ts) {{
+    if (currentPane !== 'sankey' || !document.getElementById('sankey-flow-anim')) {{ _sankeyRAF = null; return; }}
+    if (start === null) start = ts;
+    const t = (ts - start) / 1000;
+    ctx.clearRect(0, 0, W, H);
+    const N = 3, speed = 0.32;
+    for (let bi = 0; bi < bands.length; bi++) {{
+      const b = bands[bi];
+      const r = Math.max(1.6, Math.min(3, (b.w || 6) * 0.18));
+      for (let k = 0; k < N; k++) {{
+        const p = ((t * speed) + (k / N) + (bi * 0.13)) % 1;
+        const pos = bez(p, b.x0, b.y0, b.x1, b.y1);
+        const a = Math.sin(p * Math.PI);  // fade at both ends
+        ctx.beginPath();
+        ctx.arc(pos[0], pos[1], r, 0, 6.2832);
+        ctx.fillStyle = b.color;
+        ctx.globalAlpha = 0.2 + 0.6 * a;
+        ctx.shadowColor = b.color; ctx.shadowBlur = 6;
+        ctx.fill();
+      }}
+    }}
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    _sankeyRAF = requestAnimationFrame(frame);
+  }}
+  _sankeyRAF = requestAnimationFrame(frame);
 }}
 
 /* ──────────────────────────────────────────────

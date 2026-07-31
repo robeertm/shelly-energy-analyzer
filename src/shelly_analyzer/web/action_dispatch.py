@@ -3155,6 +3155,38 @@ class ActionDispatcher:
                 except Exception:
                     hourly_df = None
 
+                # Net "meter behind meter": if this device has children wired
+                # behind it (subtract_from_parent_display), subtract their hourly
+                # kWh so the heatmap matches the netted Live/Plots values (e.g. the
+                # house meter net of the wallbox). ?raw=1 shows gross. Pure display
+                # transform — stored data untouched. hour_ts grids align exactly.
+                _raw_hm = str(params.get("raw", "")).strip().lower() in ("1", "true", "yes", "on")
+                _hm_net_children: List[str] = []
+                _child_hourly: Dict[int, float] = {}
+                if not _raw_hm:
+                    try:
+                        from shelly_analyzer.services.net_display import net_display_children
+                        _kids_hm = net_display_children(list(self.cfg.devices)).get(device_key) or []
+                        for _ck in _kids_hm:
+                            try:
+                                _cdf = self.storage.db.query_hourly(_ck, start_ts=start_ts, end_ts=end_ts)
+                            except Exception:
+                                _cdf = None
+                            if _cdf is None or _cdf.empty or "hour_ts" not in _cdf.columns or "kwh" not in _cdf.columns:
+                                continue
+                            _applied = False
+                            for _ct, _ckwh in zip(_cdf["hour_ts"].to_numpy(), _cdf["kwh"].to_numpy()):
+                                try:
+                                    _child_hourly[int(_ct)] = _child_hourly.get(int(_ct), 0.0) + float(_ckwh or 0.0)
+                                    _applied = True
+                                except Exception:
+                                    continue
+                            if _applied and _ck not in _hm_net_children:
+                                _hm_net_children.append(_ck)
+                    except Exception:
+                        _child_hourly = {}
+                        _hm_net_children = []
+
                 co2_intensity_map: Dict[int, float] = {}
                 _co2_fallback_g = 0.0
                 if use_co2:
@@ -3183,6 +3215,9 @@ class ActionDispatcher:
                         try:
                             ts_val = int(row["hour_ts"])
                             kwh_val = float(row["kwh"] or 0.0)
+                            if _child_hourly:
+                                # net of children wired behind this meter (>=0)
+                                kwh_val = max(0.0, kwh_val - _child_hourly.get(ts_val, 0.0))
                             dt_local = datetime.fromtimestamp(ts_val)
                             date_str = dt_local.strftime("%Y-%m-%d")
 
@@ -3331,6 +3366,7 @@ class ActionDispatcher:
                     "hourly": hourly_out,
                     "devices": devices_list,
                     "summary": summary,
+                    "net_of_children": _hm_net_children,
                 }
             except Exception as e:
                 return {"ok": False, "error": str(e)}
@@ -4273,7 +4309,18 @@ class ActionDispatcher:
             try:
                 from shelly_analyzer.services.sankey import compute_sankey, sankey_to_plotly_dict
                 period_sk = str(params.get("period", "today") or "today")
-                data = compute_sankey(self.storage.db, self.cfg.devices, self.cfg.solar, period_sk)
+                # Net "meter behind meter": subtract sub-meters wired behind a
+                # meter (e.g. wallbox behind the house meter) so the flow isn't
+                # double-counted. ?raw=1 shows gross. Same map as Live/Plots/Heatmap.
+                _raw_sk = str(params.get("raw", "")).strip().lower() in ("1", "true", "yes", "on")
+                _submap_sk = {}
+                try:
+                    from shelly_analyzer.services.net_display import net_display_children
+                    _submap_sk = {} if _raw_sk else net_display_children(list(self.cfg.devices))
+                except Exception:
+                    _submap_sk = {}
+                data = compute_sankey(self.storage.db, self.cfg.devices, self.cfg.solar,
+                                      period_sk, net_children=_submap_sk)
                 plotly_data = sankey_to_plotly_dict(data)
                 return {
                     "ok": True,
@@ -4283,6 +4330,7 @@ class ActionDispatcher:
                     "feed_in_kwh": data.feed_in_kwh,
                     "total_consumption_kwh": data.total_consumption_kwh,
                     "sankey": plotly_data,
+                    "net_of_children": sorted({c for ks in _submap_sk.values() for c in ks}),
                 }
             except Exception as e:
                 return {"ok": False, "error": str(e)}
