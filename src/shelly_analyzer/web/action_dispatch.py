@@ -4707,20 +4707,40 @@ class ActionDispatcher:
                         _surplus_ts = _surplus_w = None
                         _grid_key = (str(getattr(getattr(self.cfg, "solar", None), "grid_meter_device_key", "") or "")
                                      or "grid_ext")
-                        try:
-                            _gdf = self.storage.read_device_df(_grid_key, start_ts=start_ts)
-                            if _gdf is not None and not _gdf.empty and "total_power" in _gdf.columns and "timestamp" in _gdf.columns:
-                                _gts = _gdf["timestamp"]
-                                if pd.api.types.is_datetime64_any_dtype(_gts):
-                                    if getattr(_gts.dt, "tz", None) is not None:
-                                        _gts = _gts.dt.tz_convert("UTC").dt.tz_localize(None)
-                                    _surplus_ts = _gts.astype("datetime64[s]").astype("int64").to_numpy()
-                                else:
-                                    _surplus_ts = pd.to_numeric(_gts, errors="coerce").fillna(0).astype("int64").to_numpy()
-                                _gp = pd.to_numeric(_gdf["total_power"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
-                                _surplus_w = np.maximum(0.0, -_gp)  # export = negative grid power
-                        except Exception:
-                            _surplus_ts = _surplus_w = None
+                        # Only read the grid-export series for the SMALL gap windows
+                        # that are actually merge candidates (consecutive sessions
+                        # <= group gap). Reading the whole window would pull millions
+                        # of rows (grid meter at a 1-2 s poll over 30-90 days) and
+                        # made this endpoint take tens of seconds; the gap windows
+                        # together are tiny and use an indexed range query each.
+                        _ordered = sorted(sessions, key=lambda s: s.start_ts)
+                        _gap_windows = [
+                            (_ordered[i - 1].end_ts, _ordered[i].start_ts)
+                            for i in range(1, len(_ordered))
+                            if 0 <= (_ordered[i].start_ts - _ordered[i - 1].end_ts) <= _gap_s
+                        ]
+                        if _gap_windows:
+                            _ts_parts, _w_parts = [], []
+                            for _gws, _gwe in _gap_windows:
+                                try:
+                                    _gdf = self.storage.read_device_df(_grid_key, start_ts=_gws, end_ts=_gwe)
+                                    if _gdf is None or _gdf.empty or "total_power" not in _gdf.columns or "timestamp" not in _gdf.columns:
+                                        continue
+                                    _gts = _gdf["timestamp"]
+                                    if pd.api.types.is_datetime64_any_dtype(_gts):
+                                        if getattr(_gts.dt, "tz", None) is not None:
+                                            _gts = _gts.dt.tz_convert("UTC").dt.tz_localize(None)
+                                        _tsa = _gts.astype("datetime64[s]").astype("int64").to_numpy()
+                                    else:
+                                        _tsa = pd.to_numeric(_gts, errors="coerce").fillna(0).astype("int64").to_numpy()
+                                    _wa = np.maximum(0.0, -pd.to_numeric(_gdf["total_power"], errors="coerce").fillna(0.0).to_numpy(dtype=float))
+                                    _ts_parts.append(_tsa)
+                                    _w_parts.append(_wa)
+                                except Exception:
+                                    continue
+                            if _ts_parts:
+                                _surplus_ts = np.concatenate(_ts_parts)
+                                _surplus_w = np.concatenate(_w_parts)
                         _charges = group_sessions_into_charges(
                             sessions, max_gap_s=_gap_s,
                             surplus_ts=_surplus_ts, surplus_export_w=_surplus_w,
