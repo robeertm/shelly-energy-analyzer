@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.63.0
+### Fixed
+- **The tenant's CO₂ chart in the Plots view still showed the full grid mix, even though the tenant now consumes PV.** 16.62.0 fixed the per-device CO₂ on the Costs tab, but the Plots "CO₂ · <tenant> – g per bucket" chart is fed by a *different* array (`co2_per_device`) that multiplied the tenant's energy by the raw grid intensity, and the bars were coloured by the shared grid-intensity scale — so both the height and the colour ignored solar. The tenant's CO₂ bars are now charged the solar-blended intensity per bucket `frac·pv_emb + (1−frac)·grid_intensity`, where `frac` is the tenant's **own** per-bucket solar share `Σ PV_direct ÷ Σ (PV_direct + grid_import)` — deliberately not `1 − owner_grid_share`, which folds in free battery discharge and would wrongly green a tenant on a battery-fed night. The chart now colours and labels each tenant bucket by that blended g/kWh, so PV-covered hours read green and drop below the grid mix. New per-device field `co2_per_device[].gi` (effective intensity); non-tenant devices are unchanged.
+
 ## 16.62.0
 ### Fixed
 - **A tenant's CO₂ in the Plots view was still charged as if it were 100 % grid, even though the tenant now consumes PV.** The per-device CO₂ used by Plots multiplied the device's energy by the grid intensity for every device, with no knowledge of tenants — so the tenant's footprint ignored solar entirely. It now solar-weights the tenant the same way the CO₂ balance already does: per hour the tenant is charged the blended non-battery intensity `frac·pv_emb + (1−frac)·grid_intensity` (with `frac = PV_direct ÷ (PV_direct + grid_import)`), so PV-covered consumption scores below the grid mix and only night/grid draw is charged the full mix. Owner circuits and the grid meter are unchanged. The per-hour blend is built once over the widest range and reused across all device rows.

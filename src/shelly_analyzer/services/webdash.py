@@ -10754,8 +10754,11 @@ async function loadData() {
         green: gThr, dirty: dThr
       });
       const yArr = (devData.g || []).map(v => (v==null ? 0 : v));
-      const colors = co2Int.map(co2Color);
-      const custom = co2Int.map((v,i) => [v==null?'—':v, yArr[i]]);
+      // Colour + hover by this device's own intensity when the backend supplies
+      // it (the tenant's solar-blended g/kWh); otherwise the shared grid mix.
+      const intArr = (devData.gi && devData.gi.length) ? devData.gi : co2Int;
+      const colors = intArr.map(co2Color);
+      const custom = intArr.map((v,i) => [v==null?'—':v, yArr[i]]);
       Plotly.newPlot(
         plotId,
         [{type:'bar', name:'CO₂', x: xsLab, y: yArr, marker:{color:colors},

@@ -5476,6 +5476,29 @@ class ActionDispatcher:
                         for _tk in (getattr(_td, "device_keys", []) or []):
                             _tenant_keys_p.add(str(_tk))
 
+                # Tenant CO₂ is solar-weighted: the grid-parallel tenant sees the
+                # blended intensity eff = frac·pv_emb + (1−frac)·grid_intensity per
+                # bucket (frac = PV_direct/pool, its true solar share — never the
+                # owner's battery-diluted share). Built once; only the tenant's CO₂
+                # bars use it, so a tenant on PV no longer scores the full grid mix.
+                _tenant_solar_b = None
+                _pv_emb_plots = (float(getattr(_solar_pl, "pv_embodied_g_per_kwh", 40.0) or 0.0)
+                                 if _solar_pl else 0.0)
+                if _tenant_keys_p and co2_zone:
+                    try:
+                        from shelly_analyzer.services.energy_balance import tenant_solar_share_buckets
+                        _tenant_solar_b = tenant_solar_share_buckets(self.storage.db, self.cfg, ranges)
+                    except Exception:
+                        _tenant_solar_b = None
+
+                def _tenant_eff_intensity(i, grid_gi):
+                    """Solar-blended g/kWh for a tenant bucket, else the raw grid gi."""
+                    if (grid_gi is None or _tenant_solar_b is None
+                            or i >= len(_tenant_solar_b)):
+                        return grid_gi
+                    frac = float(_tenant_solar_b[i])
+                    return round(frac * _pv_emb_plots + (1.0 - frac) * grid_gi, 1)
+
                 # Per-device CO2 (g) and price (EUR) aggregations
                 co2_per_device: List[Dict[str, Any]] = []
                 price_per_device: List[Dict[str, Any]] = []
@@ -5489,6 +5512,7 @@ class ActionDispatcher:
                     _owner_priced = (_grid_share_b is not None
                                      and not _is_grid_dev and not _is_tenant_dev)
                     g_arr: List[Optional[float]] = []
+                    gi_arr: List[Optional[float]] = []
                     eur_arr: List[Optional[float]] = []
                     fixed_eur_arr: List[Optional[float]] = []
                     for i in range(len(labels)):
@@ -5497,6 +5521,11 @@ class ActionDispatcher:
                         except Exception:
                             kwh_dev = 0.0
                         gi = co2_intensity[i] if i < len(co2_intensity) else None
+                        # The grid-parallel tenant sees the solar-blended intensity;
+                        # every other device sees the raw grid mix.
+                        if _is_tenant_dev:
+                            gi = _tenant_eff_intensity(i, gi)
+                        gi_arr.append(gi)
                         ci = price_ct_kwh[i] if i < len(price_ct_kwh) else None
                         # CO₂: only consumed (positive) energy counts; feed-in = 0 g.
                         _kwh_co2 = kwh_dev if kwh_dev > 0 else 0.0
@@ -5522,7 +5551,8 @@ class ActionDispatcher:
                             eur_arr.append(round(_ci_eff * kwh_dev / 100.0, 2) if _ci_eff is not None else None)
                             fixed_eur_arr.append(round(_fx_eff * kwh_dev / 100.0, 2)
                                                  if _fx_eff is not None else None)
-                    co2_per_device.append({"key": tr["key"], "name": tr["name"], "g": g_arr})
+                    co2_per_device.append({"key": tr["key"], "name": tr["name"],
+                                           "g": g_arr, "gi": gi_arr})
                     price_per_device.append({"key": tr["key"], "name": tr["name"], "eur": eur_arr, "eur_fixed": fixed_eur_arr})
 
                 return {

@@ -485,6 +485,75 @@ def compute_grid_cost_share(db, cfg, ranges) -> List[float]:
     return shares
 
 
+def tenant_solar_share_buckets(db, cfg, ranges) -> List[float]:
+    """Per time-bucket **PV-direct fraction of the non-battery pool** — the
+    grid-parallel tenant's solar share, matching ``compute_co2``'s per-hour
+    ``frac = PV_direct / (PV_direct + grid_import)``.
+
+    This is deliberately **not** ``1 − compute_grid_cost_share`` (that is the
+    *owner's* fraction, which folds in free battery discharge and would credit
+    the tenant with solar on a battery-fed night). The tenant never touches the
+    battery, so its greenness is purely the pool's PV share. Sign conventions per
+    module docstring. Per bucket the fraction is aggregated ``Σ PV_direct / Σ pool``.
+
+    Returns a list aligned with ``ranges``; ``0.0`` (full grid) for buckets with
+    no pool or when no PV/grid meter is configured.
+    """
+    import pandas as pd
+
+    n = len(ranges)
+    grid_key, pv_key, batt_key = _resolve_source_keys(cfg)
+    if not grid_key and not pv_key:
+        return [0.0] * n
+    valid = [(a, b) for (a, b) in ranges if a is not None and b is not None]
+    if not valid:
+        return [0.0] * n
+    lo = min(a for a, b in valid)
+    hi = max(b for a, b in valid)
+
+    def _ser(key: str) -> Dict[int, float]:
+        out: Dict[int, float] = {}
+        if not key:
+            return out
+        try:
+            df = db.query_hourly(key, start_ts=lo, end_ts=hi)
+        except Exception:
+            return out
+        if df is None or df.empty or "kwh" not in df.columns:
+            return out
+        for h, k in zip(df["hour_ts"], pd.to_numeric(df["kwh"], errors="coerce").fillna(0.0)):
+            out[int(h)] = float(k)
+        return out
+
+    g_s = _ser(grid_key)
+    pv_s = _ser(pv_key)
+    b_s = _ser(batt_key)
+    all_hours = sorted(set(g_s) | set(pv_s) | set(b_s))
+
+    shares: List[float] = []
+    for ab in ranges:
+        a, b = (ab[0], ab[1]) if ab else (None, None)
+        if a is None or b is None:
+            shares.append(0.0)
+            continue
+        pvd_sum = pool_sum = 0.0
+        for h in all_hours:
+            if h < a or h >= b:
+                continue
+            g = g_s.get(h, 0.0)
+            pv = max(0.0, pv_s.get(h, 0.0))
+            bt = b_s.get(h, 0.0)
+            g_imp = max(0.0, g)
+            g_exp = max(0.0, -g)
+            bch = max(0.0, bt)
+            pv_direct = max(0.0, pv - g_exp - bch)
+            pool = pv_direct + g_imp
+            pvd_sum += pv_direct
+            pool_sum += pool
+        shares.append(min(1.0, max(0.0, pvd_sum / pool_sum)) if pool_sum > 0 else 0.0)
+    return shares
+
+
 def compute_balance(db, cfg, start_ts: int, end_ts: int,
                     live_today_kwh: Optional[Dict[str, float]] = None,
                     today_start_ts: Optional[int] = None) -> EnergyBalance:
