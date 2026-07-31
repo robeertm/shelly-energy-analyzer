@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.61.0
+### Added
+- **You can now see when a tenant is running on PV surplus (green) vs drawing from the grid (red), in Live and Plots.** A tenant circuit runs in parallel with the grid and never uses the battery, so its "greenness" at any moment is the household's instantaneous solar share (PV serving load ÷ (PV + grid import)). In the **Live** view the tenant tile gets a source badge (☀️ PV / ◐ Mix / ⚡ Grid with the current %) and its 2 h sparkline is coloured per point — green where PV-covered, red where from the grid. In **Plots** (kWh view) each of the tenant's bars is coloured the same way by that bucket's solar share (reusing the existing per-bucket grid-share calc). New API fields: `/api/state` → `solar_share_now` + `is_tenant`/`solar_share` on tenant tiles; `/api/history` → per-point `ss` on tenant series; kWh Plots → `solar_share` + `tenant_keys`.
+
 ## 16.60.0
 ### Added
 - **Net/gross now also applies to the Heatmap and the Energy-flow (Sankey).** Both used to show a meter's gross energy, so a meter carrying a sub-meter wired behind it (e.g. the house meter carrying the wallbox) was double-counted. They now subtract the same "meter behind meter" children as the Live view and Plots, driven by the single header Net/Gross pill (`?raw=1` shows gross). In the heatmap the house calendar/hourly values drop the wallbox; in the energy flow the house node shrinks by the wallbox (which keeps its own node), so the totals stop double-counting.
