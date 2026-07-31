@@ -44,6 +44,7 @@ def compute_sankey(
     devices: list,
     solar_config,
     period: str = "today",
+    net_children: "Optional[Dict[str, list]]" = None,
 ) -> SankeyData:
     """Compute energy flow data for a Sankey diagram.
 
@@ -52,6 +53,12 @@ def compute_sankey(
         devices: list of DeviceConfig
         solar_config: SolarConfig with pv_meter_device_key
         period: "today" | "week" | "month" | "year"
+        net_children: optional ``{parent_key: [child_key, ...]}`` map (from
+            ``net_display.net_display_children``). When given, each child wired
+            *behind* its parent has its energy subtracted from the parent's node,
+            so a meter that physically contains a sub-meter (e.g. the house meter
+            carrying the wallbox) isn't double-counted in the flow. ``None`` /
+            empty = gross (raw) diagram.
     """
     now = datetime.datetime.now(datetime.timezone.utc)
 
@@ -101,6 +108,18 @@ def compute_sankey(
             if total > 0:
                 device_kwh[dev.key] = total
                 device_names[dev.key] = dev.name
+
+    # Net "meter behind meter": subtract each child's energy from the parent it
+    # is wired behind, so a meter that contains a sub-meter (e.g. the house meter
+    # carrying the wallbox) is not double-counted here. The child keeps its own
+    # node; only the parent shrinks. Pure display transform (raw diagram when
+    # net_children is None/empty).
+    if net_children:
+        for _parent, _kids in net_children.items():
+            if _parent in device_kwh:
+                _sub = sum(device_kwh.get(_c, 0.0) for _c in _kids if _c in device_kwh)
+                if _sub:
+                    device_kwh[_parent] = max(0.0, device_kwh[_parent] - _sub)
 
     # Calculate flows
     total_consumption = sum(device_kwh.values())
