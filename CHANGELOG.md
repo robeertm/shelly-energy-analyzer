@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.62.0
+### Fixed
+- **A tenant's CO₂ in the Plots view was still charged as if it were 100 % grid, even though the tenant now consumes PV.** The per-device CO₂ used by Plots multiplied the device's energy by the grid intensity for every device, with no knowledge of tenants — so the tenant's footprint ignored solar entirely. It now solar-weights the tenant the same way the CO₂ balance already does: per hour the tenant is charged the blended non-battery intensity `frac·pv_emb + (1−frac)·grid_intensity` (with `frac = PV_direct ÷ (PV_direct + grid_import)`), so PV-covered consumption scores below the grid mix and only night/grid draw is charged the full mix. Owner circuits and the grid meter are unchanged. The per-hour blend is built once over the widest range and reused across all device rows.
+
 ## 16.61.0
 ### Added
 - **You can now see when a tenant is running on PV surplus (green) vs drawing from the grid (red), in Live and Plots.** A tenant circuit runs in parallel with the grid and never uses the battery, so its "greenness" at any moment is the household's instantaneous solar share (PV serving load ÷ (PV + grid import)). In the **Live** view the tenant tile gets a source badge (☀️ PV / ◐ Mix / ⚡ Grid with the current %) and its 2 h sparkline is coloured per point — green where PV-covered, red where from the grid. In **Plots** (kWh view) each of the tenant's bars is coloured the same way by that bucket's solar share (reusing the existing per-bucket grid-share calc). New API fields: `/api/state` → `solar_share_now` + `is_tenant`/`solar_share` on tenant tiles; `/api/history` → per-point `ss` on tenant series; kWh Plots → `solar_share` + `tenant_keys`.
