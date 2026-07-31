@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.60.0
+### Added
+- **Net/gross now also applies to the Heatmap and the Energy-flow (Sankey).** Both used to show a meter's gross energy, so a meter carrying a sub-meter wired behind it (e.g. the house meter carrying the wallbox) was double-counted. They now subtract the same "meter behind meter" children as the Live view and Plots, driven by the single header Net/Gross pill (`?raw=1` shows gross). In the heatmap the house calendar/hourly values drop the wallbox; in the energy flow the house node shrinks by the wallbox (which keeps its own node), so the totals stop double-counting.
+- **The energy flow is now animated.** Particles flow left→right along each band (sources → house → consumers) on a transparent overlay, so you can see the direction and relative magnitude at a glance. It honours `prefers-reduced-motion` and stops when you leave the tab.
+
 ## 16.59.1
 ### Fixed
 - **The EV-log tab became slow (tens of seconds) after 16.59.0.** The new surplus-aware session grouping loaded the entire grid-meter series over the whole window to judge each pause — millions of rows at a 1–2 s poll over 30–90 days. It now reads the grid export only for the small gap windows between consecutive sessions that are actual merge candidates (each an indexed range query, together a tiny fraction of the data), so the EV-log is back to sub-second while the grouping result is unchanged.
