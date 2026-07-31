@@ -2520,7 +2520,110 @@ class ActionDispatcher:
                 except Exception:
                     pass
 
-                def _calc_co2(dev_key: str, rng_s, rng_e, kwh_fb: float) -> float:
+                # ── Tenant CO₂ is solar-weighted (mirrors compute_co2) ──────────
+                #    The tenant is grid-parallel and never battery-fed, so per hour
+                #    it sees the blended non-battery intensity
+                #        eff = frac·pv_emb + (1−frac)·grid_intensity,
+                #        frac = PV_direct / (PV_direct + grid_import).
+                #    When PV surplus flows the tenant's share of it is charged the
+                #    PV embodied factor, not the grid mix — so a tenant that now
+                #    consumes solar no longer scores full grid CO₂. The per-hour
+                #    blend is built once over the widest range (year) and reused.
+                from ..services.energy_balance import (  # noqa: E402
+                    _resolve_source_keys as _rsk_co2,
+                    _tenant_key_map as _tkm_co2)
+                _grid_k_co2, _pv_k_co2, _batt_k_co2 = _rsk_co2(self.cfg)
+                _ten_keys_co2, _ = _tkm_co2(self.cfg)
+                _co2_tenant_set = set(_ten_keys_co2)
+                _solar_c_co2 = getattr(self.cfg, "solar", None)
+                _pv_emb_co2 = (float(getattr(_solar_c_co2, "pv_embodied_g_per_kwh", 40.0) or 0.0)
+                               if _solar_c_co2 else 0.0)
+                _tenant_eff_by_hour: dict = {}
+                _tenant_eff_state = {"built": False}
+
+                def _build_tenant_eff() -> None:
+                    if _tenant_eff_state["built"]:
+                        return
+                    _tenant_eff_state["built"] = True
+                    if not _co2_tenant_set or not (_grid_k_co2 or _pv_k_co2):
+                        return
+                    db = self.storage.db
+                    s_ts = int(_year_start.timestamp())
+                    e_ts = int(_now.timestamp()) + 3600
+
+                    def _hser(k: str) -> dict:
+                        out: dict = {}
+                        if not k:
+                            return out
+                        try:
+                            df = db.query_hourly(k, start_ts=s_ts, end_ts=e_ts)
+                        except Exception:
+                            return out
+                        if df is None or df.empty or "kwh" not in df.columns:
+                            return out
+                        for _h, _v in zip(df["hour_ts"],
+                                          pd.to_numeric(df["kwh"], errors="coerce").fillna(0.0)):
+                            out[int(_h)] = float(_v)
+                        return out
+
+                    g_s = _hser(_grid_k_co2)
+                    pv_s = _hser(_pv_k_co2)
+                    b_s = _hser(_batt_k_co2)
+                    ci_map: dict = {}
+                    if _use_entsoe:
+                        try:
+                            df_ci = db.query_co2_intensity(_co2_zone, s_ts, e_ts)
+                            if df_ci is not None and not df_ci.empty:
+                                for _h, _v in zip(df_ci["hour_ts"],
+                                                  pd.to_numeric(df_ci["intensity_g_per_kwh"],
+                                                                errors="coerce")):
+                                    if _v == _v:  # not NaN
+                                        ci_map[int(_h)] = float(_v)
+                        except Exception:
+                            pass
+                    _ci_fb = _co2_g if _co2_g > 0 else 380.0
+                    for _h in set(g_s) | set(pv_s) | set(b_s):
+                        g = g_s.get(_h, 0.0)
+                        pv = max(0.0, pv_s.get(_h, 0.0))
+                        b = b_s.get(_h, 0.0)
+                        gi = max(0.0, g)
+                        ge = max(0.0, -g)
+                        bch = max(0.0, b)
+                        ci = ci_map.get(_h, _ci_fb)
+                        if not (ci and ci > 0):
+                            ci = _ci_fb
+                        pv_direct = max(0.0, pv - ge - bch)
+                        pool = pv_direct + gi
+                        frac = (pv_direct / pool) if pool > 0 else 0.0
+                        _tenant_eff_by_hour[_h] = frac * _pv_emb_co2 + (1.0 - frac) * ci
+
+                def _calc_co2(dev_key: str, rng_s, rng_e, kwh_fb: float,
+                              is_tenant: bool = False) -> float:
+                    if is_tenant and _co2_tenant_set and (_grid_k_co2 or _pv_k_co2):
+                        # Charge each tenant kWh the solar-blended intensity of its
+                        # hour, so PV-covered consumption scores below the grid mix.
+                        try:
+                            _build_tenant_eff()
+                            s_ts = int(rng_s.timestamp())
+                            e_ts = int(rng_e.timestamp())
+                            df_h = self.storage.db.query_hourly(
+                                dev_key, start_ts=s_ts, end_ts=e_ts + 3600)
+                            if df_h is not None and not df_h.empty and "kwh" in df_h.columns:
+                                _ci_fb = _co2_g if _co2_g > 0 else 380.0
+                                _tot = 0.0
+                                for _h, _k in zip(df_h["hour_ts"],
+                                                  pd.to_numeric(df_h["kwh"],
+                                                                errors="coerce").fillna(0.0)):
+                                    _kp = max(0.0, float(_k))
+                                    if _kp <= 0.0:
+                                        continue
+                                    _eff = _tenant_eff_by_hour.get(int(_h))
+                                    if _eff is None:
+                                        _eff = _ci_fb
+                                    _tot += _kp * _eff
+                                return _tot / 1000.0
+                        except Exception:
+                            pass
                     if _use_entsoe:
                         try:
                             s_ts = int(rng_s.timestamp())
@@ -2668,7 +2771,9 @@ class ActionDispatcher:
                                 dev_data[rng_key + "_eur"] = round(cost, 2)
                             else:
                                 dev_data[rng_key + "_eur"] = round(kwh * _unit, 2)
-                        dev_data[rng_key + "_co2_kg"] = round(_calc_co2(d.key, rng_start, rng_end, kwh), 3)
+                        dev_data[rng_key + "_co2_kg"] = round(
+                            _calc_co2(d.key, rng_start, rng_end, kwh,
+                                      is_tenant=(d.key in _co2_tenant_set)), 3)
 
                     # ── Live-delta from background._today_state ─────────────────
                     # The Live tab shows `base_kwh + live_kwh` (trapezoid-integrated
@@ -2709,7 +2814,8 @@ class ActionDispatcher:
                         _mk = dev_data.get("month_kwh", 0.0)
                         dev_data["proj_kwh"] = round(_mk / _elapsed * _dim, 1)
                         dev_data["proj_eur"] = round(dev_data["proj_kwh"] * _unit, 2)
-                        _month_co2 = _calc_co2(d.key, _month_start, _now, _mk)
+                        _month_co2 = _calc_co2(d.key, _month_start, _now, _mk,
+                                               is_tenant=(d.key in _co2_tenant_set))
                         dev_data["proj_co2_kg"] = round(_month_co2 / _elapsed * _dim, 2) if _month_co2 > 0 else 0.0
                     except Exception:
                         dev_data["proj_kwh"] = 0.0
