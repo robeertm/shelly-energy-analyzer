@@ -5435,6 +5435,14 @@ class ActionDispatcher:
                     "price_vat_pct": round((vat_factor - 1.0) * 100, 0),
                     "co2_zone": co2_zone, "price_zone": price_zone,
                     "unit": unit, "title": title, "diag": diag,
+                    # Per-bucket solar share (0..1) and the tenant device keys, so
+                    # the Plots view can colour a tenant series green (PV-covered)
+                    # vs red (from the grid) over time — same signal as the Live
+                    # tenant sparkline. solar_share = 1 − the grid-served share.
+                    "solar_share": ([round(max(0.0, min(1.0, 1.0 - float(g))), 3)
+                                     for g in _grid_share_b]
+                                    if _grid_share_b is not None else None),
+                    "tenant_keys": sorted(_tenant_keys_p),
                 }
 
             # timeseries
