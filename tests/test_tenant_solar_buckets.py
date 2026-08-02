@@ -1,4 +1,10 @@
-"""Per-bucket tenant solar share — the CO₂-intensity blend behind the Plots chart."""
+"""Per-bucket tenant solar share — the green/red colouring behind the Plots chart.
+
+The tenant is grid-parallel and served **last**: only genuine PV surplus (PV left
+over once the whole house — including any battery discharge — is covered) counts
+as green. Per hour ``tenant_pv = max(0, tenant_load − grid_import − battery_discharge)``
+and the bucket share is ``Σ tenant_pv / Σ tenant_load``.
+"""
 import os
 import sys
 import types
@@ -23,42 +29,63 @@ class _FakeDB:
         return pd.DataFrame(rows, columns=["hour_ts", "kwh"])
 
 
-def _cfg(grid_key="grid", pv_key="pv"):
+def _cfg(grid_key="grid", pv_key="pv", with_battery=False, tenant_key="ten"):
     solar = types.SimpleNamespace(
         grid_meter_device_key=grid_key,
         pv_meter_device_key="",
         pv_production_device_key=pv_key,
     )
-    return types.SimpleNamespace(solar=solar, pv_source=None)
+    pv_source = None
+    if with_battery:
+        # Battery series resolves to the "battery" key when a source is mapped.
+        pv_source = types.SimpleNamespace(
+            enabled=True,
+            grid_power_entity="", mqtt_grid_power_topic="",
+            pv_power_entity="", mqtt_pv_power_topic="",
+            battery_power_entity="sensor.batt", mqtt_battery_power_topic="",
+        )
+    tenants = []
+    if tenant_key:
+        tenants = [types.SimpleNamespace(name="Mieter", tenant_id="m1",
+                                         device_keys=[tenant_key])]
+    tenant = types.SimpleNamespace(enabled=bool(tenant_key), tenants=tenants)
+    return types.SimpleNamespace(solar=solar, pv_source=pv_source, tenant=tenant)
 
 
 # Sign convention: grid + import / − export; PV ≥ 0; battery + charge / − discharge.
 
 def test_full_grid_night_bucket():
     # PV 0, grid importing → tenant fully on the grid (0.0)
-    db = _FakeDB({"grid": {0: 2.0}, "pv": {0: 0.0}})
+    db = _FakeDB({"grid": {0: 2.0}, "pv": {0: 0.0}, "ten": {0: 1.0}})
     assert tsb(db, _cfg(), [(0, 3600)]) == [0.0]
 
 
 def test_full_pv_export_bucket():
-    # PV covers load and exports → pool is all PV_direct → 1.0
-    db = _FakeDB({"grid": {0: -1.0}, "pv": {0: 3.0}})
-    # pv_direct = 3 - export(1) = 2 ; pool = 2 + grid_import(0) = 2 → 1.0
+    # PV covers the house and exports → the tenant's whole load is PV surplus → 1.0
+    db = _FakeDB({"grid": {0: -1.0}, "pv": {0: 3.0}, "ten": {0: 1.0}})
     assert tsb(db, _cfg(), [(0, 3600)]) == [1.0]
 
 
 def test_mixed_bucket_two_thirds_solar():
-    # pv_direct 2 + grid_import 1 → 2/3 solar
-    db = _FakeDB({"grid": {0: 1.0}, "pv": {0: 2.0}})
+    # tenant 3, grid import 1 → 2 kWh is PV surplus → 2/3 solar
+    db = _FakeDB({"grid": {0: 1.0}, "pv": {0: 5.0}, "ten": {0: 3.0}})
     out = tsb(db, _cfg(), [(0, 3600)])
     assert round(out[0], 2) == 0.67
 
 
+def test_battery_discharge_leaves_no_surplus():
+    # The reported bug: high PV but the house drains the battery to cover its own
+    # deficit → no PV surplus for the tenant → grid/red (0.0), not green.
+    db = _FakeDB({"grid": {0: 0.05}, "pv": {0: 5.4},
+                  "battery": {0: -2.7}, "ten": {0: 0.25}})
+    assert tsb(db, _cfg(with_battery=True), [(0, 3600)]) == [0.0]
+
+
 def test_daily_bucket_aggregates_over_hours():
-    # hour 0: full sun (pv_direct 2, import 0), hour 1: night (import 2)
-    db = _FakeDB({"grid": {0: -0.5, 1: 2.0}, "pv": {0: 2.5, 1: 0.0}})
-    # h0: pv_direct = 2.5-0.5 = 2, pool = 2 ; h1: pv_direct 0, pool 2
-    # Σpvd/Σpool = 2 / 4 = 0.5
+    # hour 0: full sun exporting (tenant fully PV); hour 1: night (tenant grid)
+    db = _FakeDB({"grid": {0: -0.5, 1: 2.0}, "pv": {0: 2.5, 1: 0.0},
+                  "ten": {0: 1.0, 1: 1.0}})
+    # Σtenant_pv = 1 (h0) + 0 (h1) ; Σtenant_load = 2 → 0.5
     out = tsb(db, _cfg(), [(0, 7200)])
     assert round(out[0], 2) == 0.5
 
@@ -69,5 +96,11 @@ def test_no_meter_configured_is_zero():
 
 
 def test_none_bucket_defaults_to_grid():
-    db = _FakeDB({"grid": {0: 1.0}, "pv": {0: 0.0}})
+    db = _FakeDB({"grid": {0: 1.0}, "pv": {0: 0.0}, "ten": {0: 1.0}})
     assert tsb(db, _cfg(), [(None, None)]) == [0.0]
+
+
+def test_no_tenant_load_is_zero():
+    # No tenant consumption in the bucket → nothing to colour (0.0).
+    db = _FakeDB({"grid": {0: -2.0}, "pv": {0: 5.0}, "ten": {}})
+    assert tsb(db, _cfg(), [(0, 3600)]) == [0.0]

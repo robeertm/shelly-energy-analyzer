@@ -139,26 +139,37 @@ def _resolve_source_keys(cfg) -> tuple:
     return grid_key, pv_key, batt_key
 
 
-def instantaneous_solar_share(pv_w: float, grid_w: float, batt_w: float) -> float:
-    """Fraction (0..1) of the non-battery supply pool covered by PV right now.
+def instantaneous_solar_share(pv_w: float, grid_w: float,
+                              batt_w: float, tenant_load_w: float) -> float:
+    """Fraction (0..1) of the tenant's supply covered by genuine PV surplus now.
+
+    The tenant runs grid-parallel and is served **last** — after the owner's own
+    consumption *and* any battery charging. So it is "green" only to the extent
+    real PV surplus reaches it: PV left over once the whole property's external
+    draw has been covered. Every watt of grid import **and** battery discharge is
+    owner-priority (it proves the house needed more than its PV) and is charged to
+    the tenant first; only the remainder of the tenant's own load is PV-fed.
 
     Sign convention (matches compute_co2): grid ``+`` = import / ``−`` = export;
-    battery ``+`` = charge / ``−`` = discharge; PV ≥ 0. A tenant circuit runs in
-    parallel with the grid and never draws the battery, so this share is exactly
-    how "green" the tenant's supply is at this instant: 1.0 = fully PV-covered
-    (grid exporting or PV ≥ load), 0.0 = fully from the grid (e.g. at night).
+    battery ``+`` = charge / ``−`` = discharge; PV ≥ 0. A full AC-bus balance with
+    the owner served before the tenant collapses to this pv-free identity:
+
+        tenant_pv = max(0, tenant_load − grid_import − battery_discharge)
+        share     = tenant_pv / tenant_load
+
+    So a discharging battery (owner deficit → no surplus) or a property importing
+    more than the tenant draws yields 0.0 (grid/red); the share only climbs toward
+    1.0 once PV covers the whole house and spills past the tenant's load.
     """
     pv = max(0.0, float(pv_w or 0.0))
-    g = float(grid_w or 0.0)
-    b = float(batt_w or 0.0)
-    grid_import = max(0.0, g)
-    export = max(0.0, -g)
-    batt_charge = max(0.0, b)
-    pv_direct = max(0.0, pv - export - batt_charge)   # PV serving load directly
-    pool = pv_direct + grid_import
-    if pool <= 1e-9:
-        return 1.0 if pv > 0.0 else 0.0
-    return max(0.0, min(1.0, pv_direct / pool))
+    tl = max(0.0, float(tenant_load_w or 0.0))
+    if tl <= 1e-9 or pv <= 0.0:
+        # No tenant load to colour, or no PV at all → nothing green to attribute.
+        return 0.0
+    grid_import = max(0.0, float(grid_w or 0.0))
+    batt_discharge = max(0.0, -float(batt_w or 0.0))
+    tenant_pv = max(0.0, tl - grid_import - batt_discharge)
+    return max(0.0, min(1.0, tenant_pv / tl))
 
 
 def _tenant_key_map(cfg) -> tuple:
@@ -486,18 +497,26 @@ def compute_grid_cost_share(db, cfg, ranges) -> List[float]:
 
 
 def tenant_solar_share_buckets(db, cfg, ranges) -> List[float]:
-    """Per time-bucket **PV-direct fraction of the non-battery pool** — the
-    grid-parallel tenant's solar share, matching ``compute_co2``'s per-hour
-    ``frac = PV_direct / (PV_direct + grid_import)``.
+    """Per time-bucket fraction (0..1) of the tenant's load covered by genuine
+    **PV surplus** — the grid-parallel tenant's solar share, matching the live
+    tile's :func:`instantaneous_solar_share`.
 
-    This is deliberately **not** ``1 − compute_grid_cost_share`` (that is the
-    *owner's* fraction, which folds in free battery discharge and would credit
-    the tenant with solar on a battery-fed night). The tenant never touches the
-    battery, so its greenness is purely the pool's PV share. Sign conventions per
-    module docstring. Per bucket the fraction is aggregated ``Σ PV_direct / Σ pool``.
+    The tenant is served **last**, after the owner's consumption and any battery
+    charging, so every kWh of grid import **and** battery discharge is charged to
+    the tenant first (owner priority); only PV that spills past the whole house
+    reaches the tenant. This is deliberately **not** ``PV_direct / pool`` (which
+    credits the tenant with a proportional slice of PV even while the battery is
+    discharging to cover an owner deficit — i.e. when there is no surplus at all)
+    and **not** ``1 − compute_grid_cost_share`` (the *owner's* fraction, which
+    folds in free battery discharge and would green the tenant on a battery-fed
+    night). Per hour, with sign conventions per the module docstring:
+
+        tenant_pv = max(0, tenant_load − grid_import − battery_discharge)
+
+    and the bucket share is ``Σ tenant_pv / Σ tenant_load``.
 
     Returns a list aligned with ``ranges``; ``0.0`` (full grid) for buckets with
-    no pool or when no PV/grid meter is configured.
+    no tenant load or when no PV/grid meter is configured.
     """
     import pandas as pd
 
@@ -528,7 +547,12 @@ def tenant_solar_share_buckets(db, cfg, ranges) -> List[float]:
     g_s = _ser(grid_key)
     pv_s = _ser(pv_key)
     b_s = _ser(batt_key)
-    all_hours = sorted(set(g_s) | set(pv_s) | set(b_s))
+    tenant_keys, _ = _tenant_key_map(cfg)
+    ten_s: Dict[int, float] = {}
+    for tk in tenant_keys:
+        for h, k in _ser(tk).items():
+            ten_s[h] = ten_s.get(h, 0.0) + max(0.0, k)
+    all_hours = sorted(set(g_s) | set(pv_s) | set(b_s) | set(ten_s))
 
     shares: List[float] = []
     for ab in ranges:
@@ -536,21 +560,21 @@ def tenant_solar_share_buckets(db, cfg, ranges) -> List[float]:
         if a is None or b is None:
             shares.append(0.0)
             continue
-        pvd_sum = pool_sum = 0.0
+        pv_sum = tl_sum = 0.0
         for h in all_hours:
             if h < a or h >= b:
                 continue
-            g = g_s.get(h, 0.0)
             pv = max(0.0, pv_s.get(h, 0.0))
-            bt = b_s.get(h, 0.0)
-            g_imp = max(0.0, g)
-            g_exp = max(0.0, -g)
-            bch = max(0.0, bt)
-            pv_direct = max(0.0, pv - g_exp - bch)
-            pool = pv_direct + g_imp
-            pvd_sum += pv_direct
-            pool_sum += pool
-        shares.append(min(1.0, max(0.0, pvd_sum / pool_sum)) if pool_sum > 0 else 0.0)
+            if pv <= 0.0:
+                # No PV that hour → no green to attribute (still counts as load).
+                tl_sum += max(0.0, ten_s.get(h, 0.0))
+                continue
+            g_imp = max(0.0, g_s.get(h, 0.0))
+            b_dis = max(0.0, -b_s.get(h, 0.0))
+            tl = max(0.0, ten_s.get(h, 0.0))
+            pv_sum += max(0.0, tl - g_imp - b_dis)
+            tl_sum += tl
+        shares.append(min(1.0, max(0.0, pv_sum / tl_sum)) if tl_sum > 0 else 0.0)
     return shares
 
 
