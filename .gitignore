@@ -41,3 +41,6 @@ exports/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# CI-Uploads (Screenshots etc.) NIE ins öffentliche Repo
+werkstatt-uploads/
