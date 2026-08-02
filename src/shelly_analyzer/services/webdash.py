@@ -4254,7 +4254,11 @@ function devCardHTML(d) {{
                 var col = ss >= 0.66 ? '#22c55e' : (ss < 0.33 ? '#ef4444' : '#f59e0b');
                 var ico = ss >= 0.66 ? '☀️' : (ss < 0.33 ? '⚡' : '◐');
                 var lbl = ss >= 0.66 ? t('web.tenant_src_pv', 'PV') : (ss < 0.33 ? t('web.tenant_src_grid', 'Netz') : t('web.tenant_src_mix', 'Mix'));
-                return '<span title="' + esc(t('web.tenant_src_title', 'Woher der Mieter-Strom gerade kommt: PV-Überschuss (grün) oder Netz (rot)')) + '" style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;background:' + col + ';color:#fff;vertical-align:middle">' + ico + ' ' + esc(lbl) + ' ' + Math.round(ss*100) + '%</span>';
+                // The percentage always describes the *named* source, so it can't
+                // read as its own opposite: "Netz 100%" (all grid), not "Netz 0%"
+                // (which looked like 0% grid). PV/Mix keep the solar share.
+                var pct = ss < 0.33 ? Math.round((1 - ss) * 100) : Math.round(ss * 100);
+                return '<span title="' + esc(t('web.tenant_src_title', 'Woher der Mieter-Strom gerade kommt: PV-Überschuss (grün) oder Netz (rot)')) + '" style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;background:' + col + ';color:#fff;vertical-align:middle">' + ico + ' ' + esc(lbl) + ' ' + pct + '%</span>';
               }})()
             : '') + '</div>' +
         '<div class="dev-meta">' +
