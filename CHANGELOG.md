@@ -1,5 +1,10 @@
 # Changelog
 
+## 16.63.1
+### Fixed
+- fix(tenant): show Mieter as Netz/red unless genuine PV surplus covers it
+  Tenant is grid-parallel and served last; only green when real PV surplus (after own use + battery charge) covers it, else grid/red.
+
 ## 16.63.0
 ### Fixed
 - **The tenant's CO₂ chart in the Plots view still showed the full grid mix, even though the tenant now consumes PV.** 16.62.0 fixed the per-device CO₂ on the Costs tab, but the Plots "CO₂ · <tenant> – g per bucket" chart is fed by a *different* array (`co2_per_device`) that multiplied the tenant's energy by the raw grid intensity, and the bars were coloured by the shared grid-intensity scale — so both the height and the colour ignored solar. The tenant's CO₂ bars are now charged the solar-blended intensity per bucket `frac·pv_emb + (1−frac)·grid_intensity`, where `frac` is the tenant's **own** per-bucket solar share `Σ PV_direct ÷ Σ (PV_direct + grid_import)` — deliberately not `1 − owner_grid_share`, which folds in free battery discharge and would wrongly green a tenant on a battery-fed night. The chart now colours and labels each tenant bucket by that blended g/kWh, so PV-covered hours read green and drop below the grid mix. New per-device field `co2_per_device[].gi` (effective intensity); non-tenant devices are unchanged.
