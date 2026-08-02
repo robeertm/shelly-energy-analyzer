@@ -1,5 +1,9 @@
 # Changelog
 
+## 16.63.2
+### Fixed
+- **The Mieter badge read "Netz 0%", which looks like it means "0 % grid" — the exact opposite of the truth.** The badge always appended the *solar* share, so a grid-fed tenant (`ss = 0`) showed "Netz 0%" (0 % PV) sitting next to the word "Netz". The percentage now describes the *named* source: the grid case reads **"Netz 100%"** (all grid), while PV/Mix keep the solar share. No colour/threshold change.
+
 ## 16.63.1
 ### Fixed
 - fix(tenant): show Mieter as Netz/red unless genuine PV surplus covers it
