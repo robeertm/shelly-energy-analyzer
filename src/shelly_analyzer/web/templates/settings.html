@@ -1756,6 +1756,16 @@ function renderUpdates() {
   const repo = u.repo || "";
   const checkOnStart = u.check_on_start !== false;
   const autoInstall = !!u.auto_install;
+  // Home-Assistant add-on: the in-app self-updater doesn't apply (updates come
+  // via the add-on / rebuild, and a service restart restores the pinned pip
+  // version). Hide the check/install controls and show a clear hint instead.
+  if (cfg && cfg._addon) {
+    return `<section id="sec-updates"><h2>${T("settings.updates.title","Updates")}</h2>
+      <div class="hint" style="margin-top:8px;padding:12px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--card-bg,rgba(59,130,246,0.05))">
+        ℹ️ ${T("settings.updates.addon_managed","Updates werden über das Home-Assistant-Add-on verwaltet.")}
+      </div>
+    </section>`;
+  }
   return `<section id="sec-updates"><h2>${T("settings.updates.title","Updates")}</h2>
     <div class="grid2">
       <div class="field"><label>${T("settings.updates.repo","GitHub Repo")}</label>
@@ -2923,8 +2933,9 @@ function renderAll() {
   loadAlerts();
   // Load measurement compensation values if that section is rendered
   if (document.getElementById("sec-compensation")) loadCompensation();
-  // Auto-check update status if the updates section is rendered
-  if (document.getElementById("sec-updates")) {
+  // Auto-check update status if the updates section is rendered (skipped as a
+  // Home-Assistant add-on, where the in-app updater is hidden entirely).
+  if (document.getElementById("sec-updates") && !(cfg && cfg._addon)) {
     checkUpdateStatus();
     loadReleaseList();
   }
