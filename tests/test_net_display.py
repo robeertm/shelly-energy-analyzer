@@ -55,7 +55,7 @@ def test_children_map():
                      parent="haus", subtract_from_parent_display=True),
         # tenant behind a HAND-READ main meter id (not a device) → no display sub
         DeviceConfig(key="mieter", name="M", host="", kind="em",
-                     parent="sampletown", subtract_from_parent_display=True),
+                     parent="handmeter", subtract_from_parent_display=True),
         # flagged but no parent → ignored
         DeviceConfig(key="lonely", name="L", host="", kind="em",
                      subtract_from_parent_display=True),
@@ -81,7 +81,7 @@ def test_live_subtraction_basic():
         DeviceConfig(key="haus", name="", host="", kind="em", parent="solar"),
         DeviceConfig(key="wallbox", name="", host="", kind="em",
                      parent="haus", subtract_from_parent_display=True),
-        DeviceConfig(key="solar", name="", host="", kind="em", parent="sampletown"),
+        DeviceConfig(key="solar", name="", host="", kind="em", parent="handmeter"),
     ])
     apply_live_subtraction(tiles, submap)
     by = {t["key"]: t for t in tiles}
