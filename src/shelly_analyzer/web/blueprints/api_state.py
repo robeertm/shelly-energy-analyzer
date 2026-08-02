@@ -332,11 +332,16 @@ def api_state():
                     return float(_pts[-1].get("power_total_w") or 0.0)
                 return 0.0
 
-            if _pk or _gk:
-                _share_now = round(instantaneous_solar_share(
-                    _latest_w(_pk), _latest_w(_gk), _latest_w(_bk)), 4)
             _tset, _ = _tenant_key_map(_cfg2)
             _tset = set(_tset)
+            if _tset and (_pk or _gk):
+                # The tenant is served last (owner + battery-charge first), so its
+                # green share is genuine PV surplus over the whole tenant load —
+                # summed across all tenant tiles for one household-wide figure.
+                _tenant_w = sum(float(_d.get("power_w") or 0.0)
+                                for _d in devices_list if _d.get("key") in _tset)
+                _share_now = round(instantaneous_solar_share(
+                    _latest_w(_pk), _latest_w(_gk), _latest_w(_bk), _tenant_w), 4)
             if _tset:
                 for _d in devices_list:
                     if _d.get("key") in _tset:
@@ -473,7 +478,8 @@ def api_history():
                             _pt["ss"] = round(instantaneous_solar_share(
                                 _nearest_w(_pv_p, _tsp, 600000),
                                 _nearest_w(_g_p, _tsp, 600000),
-                                _nearest_w(_b_p, _tsp, 600000)), 3)
+                                _nearest_w(_b_p, _tsp, 600000),
+                                float(_pt.get("w") or 0.0)), 3)
     except Exception:
         pass
 
