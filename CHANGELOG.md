@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.63.3
+### Fixed
+- feat(updates): disable in-app self-updater in Home-Assistant add-on mode
+  As an HA add-on, updates arrive via the add-on (rebuild); the in-app
+  self-updater can't succeed (a service restart restores the pinned pip
+  version -> "Verifikation fehlgeschlagen"). Detect add-on mode via a new
+  central helper is_addon() (SUPERVISOR_TOKEN/HASSIO_TOKEN present) and:
+  - background: don't start the periodic update checker (early return in
+  _start_update_checker + safety guard in _update_check_loop)
+
 ## 16.63.2
 ### Fixed
 - **The Mieter badge read "Netz 0%", which looks like it means "0 % grid" — the exact opposite of the truth.** The badge always appended the *solar* share, so a grid-fed tenant (`ss = 0`) showed "Netz 0%" (0 % PV) sitting next to the word "Netz". The percentage now describes the *named* source: the grid case reads **"Netz 100%"** (all grid), while PV/Mix keep the solar share. No colour/threshold change.
