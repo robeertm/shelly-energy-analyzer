@@ -15,6 +15,7 @@ from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request
 
 from shelly_analyzer import __version__
+from shelly_analyzer.io.config import is_addon
 from shelly_analyzer.services.updater import (
     check_latest_release,
     fetch_releases,
@@ -25,6 +26,15 @@ from shelly_analyzer.services.updater import (
 logger = logging.getLogger(__name__)
 
 bp = Blueprint("updates", __name__)
+
+# Message surfaced whenever a self-update path is hit while running as a
+# Home-Assistant add-on. There, updates are delivered by rebuilding the add-on,
+# and an in-app self-update would be undone by the next service restart (the
+# add-on reinstalls the pinned pip version) → "Verifikation fehlgeschlagen".
+_ADDON_UPDATE_MSG = (
+    "Updates are managed via the Home-Assistant add-on (rebuild). "
+    "The in-app updater is disabled in add-on mode."
+)
 
 # In-memory TTL cache for /api/updates/releases to avoid hitting GitHub
 # on every Settings → Updates page load (rate limit 60/h unauthenticated).
@@ -47,6 +57,15 @@ def api_updates_cached():
     UpdateChecker thread. Lightweight (no network call) — used by the Live
     tab to poll for a new-version banner without hitting GitHub on every
     page load."""
+    if is_addon():
+        return jsonify({
+            "ok": True,
+            "checked": True,
+            "addon": True,
+            "current": __version__,
+            "has_update": False,
+            "message": _ADDON_UPDATE_MSG,
+        })
     state = _get_state()
     bg = getattr(state, "_bg", None)
     cached = getattr(bg, "_update_check_state", None) if bg is not None else None
@@ -72,6 +91,16 @@ def api_updates_status():
     explicitly passes ?force=1.
     """
     import time
+    if is_addon():
+        return jsonify({
+            "ok": True,
+            "addon": True,
+            "current": __version__,
+            "reachable": False,
+            "has_update": False,
+            "status": _ADDON_UPDATE_MSG,
+            "message": _ADDON_UPDATE_MSG,
+        })
     state = _get_state()
     bg = getattr(state, "_bg", None)
     cached = getattr(bg, "_update_check_state", None) if bg is not None else None
@@ -120,6 +149,14 @@ def api_updates_releases():
     Settings → Updates page load. Pass ?force=1 to bypass the cache.
     """
     import time
+    if is_addon():
+        return jsonify({
+            "ok": True,
+            "addon": True,
+            "current": __version__,
+            "releases": [],
+            "message": _ADDON_UPDATE_MSG,
+        })
     repo = _repo()
     if not repo:
         return jsonify({"ok": False, "error": "updates.repo not configured",
@@ -219,6 +256,16 @@ def api_updates_install():
     """Install a specific release tag. Body: {tag: 'v16.13.51'}. Spawns updater_helper
     in a detached process, then the current app exits so the helper can replace files
     and restart via start.{command,sh,bat}."""
+    if is_addon():
+        # Never self-update in add-on mode: the helper would swap files, but the
+        # next service restart reinstalls the add-on's pinned pip version →
+        # "Verifikation fehlgeschlagen". Report a clean status instead of a 500.
+        return jsonify({
+            "ok": False,
+            "addon": True,
+            "error": _ADDON_UPDATE_MSG,
+            "message": _ADDON_UPDATE_MSG,
+        }), 409
     body = request.get_json(silent=True) or {}
     tag = str(body.get("tag", "")).strip()
     asset_url = str(body.get("asset_url", "")).strip() or None

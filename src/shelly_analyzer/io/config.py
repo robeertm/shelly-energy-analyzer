@@ -1,11 +1,24 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from shelly_analyzer import __version__
+
+
+def is_addon() -> bool:
+    """True when running as a Home-Assistant add-on.
+
+    The Supervisor injects ``SUPERVISOR_TOKEN`` into every add-on container;
+    its presence is the canonical add-on signal (the same variable already
+    drives the HA/PV auto-connection, see ``services/pv_source.py``). On a
+    normal install (VM, standalone) the variable is absent, so this returns
+    False and add-on-specific behaviour (e.g. disabling the in-app updater)
+    stays off. ``HASSIO_TOKEN`` is the legacy name of the same token."""
+    return bool(os.environ.get("SUPERVISOR_TOKEN") or os.environ.get("HASSIO_TOKEN"))
 
 
 @dataclass(frozen=True)

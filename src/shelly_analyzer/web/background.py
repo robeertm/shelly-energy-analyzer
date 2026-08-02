@@ -1017,6 +1017,15 @@ class BackgroundServiceManager:
         """Periodically query GitHub for the latest release and cache the
         result so the Live-tab banner can surface new versions without
         hitting the network on every page load."""
+        from shelly_analyzer.io.config import is_addon
+        if is_addon():
+            # As a Home-Assistant add-on, updates come through the add-on
+            # (rebuild) — the in-app self-updater doesn't apply. Don't start
+            # the checker (no new-version banner nagging about a self-update
+            # that can't succeed here).
+            logger.info("Add-on mode: in-app update checker disabled "
+                        "(updates are managed via the Home-Assistant add-on)")
+            return
         upd_cfg = getattr(self.cfg, "updates", None)
         if upd_cfg is None or not getattr(upd_cfg, "check_on_start", True):
             logger.debug("Update checker disabled via config")
@@ -1036,7 +1045,12 @@ class BackgroundServiceManager:
           up to 1 hour so we stop hammering GitHub.
         """
         from shelly_analyzer import __version__
+        from shelly_analyzer.io.config import is_addon
         from shelly_analyzer.services.updater import check_latest_release, is_newer
+
+        if is_addon():
+            # Safety net: never poll GitHub for self-updates in add-on mode.
+            return
 
         NORMAL_INTERVAL_S = 1800     # 30 min
         MIN_BACKOFF_S = 900          # 15 min

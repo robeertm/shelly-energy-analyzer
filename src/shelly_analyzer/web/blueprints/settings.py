@@ -117,6 +117,11 @@ def get_settings():
     sp = data.get("spot_price", {})
     if sp.get("eia_api_key"):
         sp["eia_api_key"] = "***"
+    # Runtime flag (not persisted): true when running as a Home-Assistant add-on.
+    # The Settings UI uses it to hide the in-app updater controls (updates are
+    # managed via the add-on there). Prefixed with "_" so it's ignored on save.
+    from shelly_analyzer.io.config import is_addon
+    data["_addon"] = is_addon()
     resp = jsonify(data)
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return resp
