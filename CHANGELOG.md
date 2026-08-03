@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+### Fixed
+- **A tenant still showed as PV/green while the grid was importing to charge the battery.** The tenant is grid-parallel and only benefits from PV *surplus* — the power the property actually exports. The share is now driven purely by export: `share = max(0, -grid_w) / tenant_load`, capped at the tenant's own draw. Any grid import — even while the battery charges — means no surplus reaches the tenant, so it reads grid/red; the tile only greens once the property genuinely exports. The previous model (`tenant_load − grid_import − battery_discharge`) missed the charging case because it did not subtract battery charge. Badge label and the `tenant_load_w` wiring from 16.63.x are unchanged.
+
 ## 16.63.3
 ### Fixed
 - feat(updates): disable in-app self-updater in Home-Assistant add-on mode
