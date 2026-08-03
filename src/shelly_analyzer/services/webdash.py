@@ -5398,6 +5398,60 @@ function initHeatmap() {{
   loadHeatmap();
 }}
 
+/* ── Heatmap client cache + prefetch ───────────────────────────────────
+   Mike's HAOS instance serves /api/heatmap slowly, and the old periodic
+   refresh blanked the panes *before* the (slow) fetch resolved, so the
+   whole tab flickered — visible content, then blank, then content — every
+   refresh cycle. We now cache every (device, year, unit, raw) response and
+   render from cache instantly, only swapping in fresh data once it arrives:
+   the view never goes blank again once it has been shown. A background
+   prefetch warms the cache for every device (real + synthetic PV / battery
+   / tenant) so switching the dropdown — or opening the tab at all — is
+   instant. */
+var _hmCache = {{}};      // key -> {{data, ts}}
+var _hmInflight = {{}};   // key -> Promise (dedupe concurrent fetches)
+var _hmPrefetching = false;
+var _HM_STALE_MS = 30000; // silently re-fetch cached entries older than this
+function _hmKey(device, year, unit, raw) {{
+  return device + '|' + year + '|' + unit + '|' + (raw ? '1' : '0');
+}}
+function _hmCurrentKey() {{
+  var d = document.getElementById('hm-device');
+  var y = document.getElementById('hm-year');
+  var u = document.getElementById('hm-unit');
+  if (!d || !y || !u) return '';
+  return _hmKey(d.value, y.value, u.value, _rawView);
+}}
+function _hmFetch(device, year, unit, raw) {{
+  var key = _hmKey(device, year, unit, raw);
+  if (_hmInflight[key]) return _hmInflight[key];
+  var url = '/api/heatmap?device=' + encodeURIComponent(device) + '&year=' + year + '&unit=' + unit + (raw ? '&raw=1' : '');
+  var p = fetch(url).then(function(r) {{
+    if (!r.ok) throw new Error(r.status);
+    return r.json();
+  }}).then(function(data) {{
+    _hmCache[key] = {{ data: data, ts: Date.now() }};
+    return data;
+  }});
+  // Drop the in-flight marker whether the fetch resolves or rejects.
+  p.then(function() {{ delete _hmInflight[key]; }}, function() {{ delete _hmInflight[key]; }});
+  _hmInflight[key] = p;
+  return p;
+}}
+function _hmRender(data, unit) {{
+  var calWrap = document.getElementById('hm-calendar-wrap');
+  var hrWrap = document.getElementById('hm-hourly-wrap');
+  var stWrap = document.getElementById('hm-stats-wrap');
+  var chWrap = document.getElementById('hm-charts-wrap');
+  syncHmDevices(data.devices);
+  if (data.summary && stWrap) renderHmStats(data, stWrap, unit);
+  else if (stWrap) stWrap.innerHTML = '';
+  renderHeatmapCalendar(data, calWrap, unit);
+  renderHeatmapHourly(data, hrWrap, unit);
+  if (data.summary && chWrap) renderHmCharts(data, chWrap, unit);
+  else if (chWrap) chWrap.innerHTML = '';
+}}
+
 async function loadHeatmap() {{
   const device = document.getElementById('hm-device').value;
   const year = document.getElementById('hm-year').value;
@@ -5406,21 +5460,89 @@ async function loadHeatmap() {{
   const hrWrap = document.getElementById('hm-hourly-wrap');
   const stWrap = document.getElementById('hm-stats-wrap');
   const chWrap = document.getElementById('hm-charts-wrap');
-  if (!_quietRefresh) calWrap.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
-  hrWrap.innerHTML = ''; if (stWrap) stWrap.innerHTML = ''; if (chWrap) chWrap.innerHTML = '';
-  if (!device) {{ calWrap.innerHTML = '<p class="info-msg">' + t('web.dash.select_device', 'Select a device.') + '</p>'; return; }}
-  try {{
-    const r = await fetch('/api/heatmap?device=' + encodeURIComponent(device) + '&year=' + year + '&unit=' + unit + (_rawView ? '&raw=1' : ''));
-    if (!r.ok) throw new Error(r.status);
-    const data = await r.json();
-    syncHmDevices(data.devices);
-    if (data.summary && stWrap) renderHmStats(data, stWrap, unit);
-    renderHeatmapCalendar(data, calWrap, unit);
-    renderHeatmapHourly(data, hrWrap, unit);
-    if (data.summary && chWrap) renderHmCharts(data, chWrap, unit);
-  }} catch(e) {{
-    calWrap.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+  if (!device) {{
+    calWrap.innerHTML = '<p class="info-msg">' + t('web.dash.select_device', 'Select a device.') + '</p>';
+    hrWrap.innerHTML = ''; if (stWrap) stWrap.innerHTML = ''; if (chWrap) chWrap.innerHTML = '';
+    return;
   }}
+  const raw = _rawView;
+  const key = _hmKey(device, year, unit, raw);
+  const cached = _hmCache[key];
+  if (cached) {{
+    // Instant render from cache — no blanking, no flicker.
+    _hmRender(cached.data, unit);
+    // Silently refresh in the background if the entry has gone stale.
+    if (Date.now() - cached.ts > _HM_STALE_MS) {{
+      _hmFetch(device, year, unit, raw).then(function(data) {{
+        if (_hmCurrentKey() === key) _hmRender(data, unit);
+      }}).catch(function() {{}});
+    }}
+    _hmPrefetchSoon();
+    return;
+  }}
+  // Nothing cached yet: show the spinner (unless this is a quiet periodic
+  // refresh) and fetch. Leave the other panes untouched — they're empty.
+  if (!_quietRefresh) calWrap.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  try {{
+    const data = await _hmFetch(device, year, unit, raw);
+    // The user may have changed device/year/unit while we were fetching.
+    if (_hmCurrentKey() !== key) return;
+    _hmRender(data, unit);
+    _hmPrefetchSoon();
+  }} catch(e) {{
+    if (!_hmCache[key]) calWrap.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+  }}
+}}
+
+// Kick off a background prefetch shortly after an interactive load, so the
+// bulk fetch never delays the render the user is waiting on.
+function _hmPrefetchSoon() {{
+  setTimeout(function() {{ try {{ prefetchAllHeatmaps(); }} catch(e) {{}} }}, 300);
+}}
+
+// Warm the cache with the heatmap for every device (real + synthetic
+// PV / battery / tenant) for the currently-selected year/unit, so switching
+// the dropdown is instant and the whole tab is ready before it's ever
+// opened. Runs sequentially with a small gap so slow instances (Mike's
+// HAOS) aren't overwhelmed.
+function prefetchAllHeatmaps() {{
+  if (_hmPrefetching) return;
+  var ySel = document.getElementById('hm-year');
+  var uSel = document.getElementById('hm-unit');
+  var year = (ySel && ySel.value) ? ySel.value : new Date().getFullYear();
+  var unit = (uSel && uSel.value) ? uSel.value : 'kWh';
+  var raw = _rawView;
+  var seen = {{}};
+  var keys = [];
+  function addDev(k) {{ if (k && !seen[k]) {{ seen[k] = 1; keys.push(k); }} }}
+  (typeof DEVICES !== 'undefined' ? DEVICES : []).forEach(function(d) {{ if (d) addDev(d.key); }});
+  var sel = document.getElementById('hm-device');
+  if (sel) for (var i = 0; i < sel.options.length; i++) addDev(sel.options[i].value);
+  if (!keys.length) return;
+  _hmPrefetching = true;
+  var idx = 0;
+  function step() {{
+    if (idx >= keys.length) {{
+      // A fetched device may have surfaced synthetic keys (PV, battery,
+      // tenants) in its `devices` list — pull those in too, then stop.
+      var added = false;
+      Object.keys(_hmCache).forEach(function(ck) {{
+        var d = _hmCache[ck].data;
+        if (d && Array.isArray(d.devices)) d.devices.forEach(function(dev) {{
+          if (dev && dev.key && !seen[dev.key]) {{ seen[dev.key] = 1; keys.push(dev.key); added = true; }}
+        }});
+      }});
+      if (added) {{ step(); return; }}
+      _hmPrefetching = false;
+      return;
+    }}
+    var dev = keys[idx++];
+    var k = _hmKey(dev, year, unit, raw);
+    if (_hmCache[k]) {{ step(); return; }}
+    _hmFetch(dev, year, unit, raw).then(function() {{ setTimeout(step, 120); }},
+                                        function() {{ setTimeout(step, 120); }});
+  }}
+  step();
 }}
 
 /* ── Color functions ── */
@@ -9844,6 +9966,12 @@ _loadLsSettings();
   }} else {{
     startLive();
   }}
+
+  // Warm the Heatmap cache in the background for every device so the tab is
+  // instant even before it's first opened (Mike's request — the heatmap was
+  // slow to load and flickered). Deferred so it never competes with the
+  // initial live render.
+  setTimeout(function() {{ try {{ prefetchAllHeatmaps(); }} catch(e) {{}} }}, 2000);
 
 </script>
 </body>
