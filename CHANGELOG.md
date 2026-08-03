@@ -1,5 +1,11 @@
 # Changelog
 
+## 16.64.0
+### Fixed
+- **The Heatmap tab loaded slowly and then flickered — visible, blank, visible — every refresh cycle.** On slow instances the periodic refresh blanked the hourly/stats/charts panes *before* the (slow) `/api/heatmap` fetch resolved, so the tab went empty for seconds at a time on every cycle. The client now keeps a per-`(device, year, unit, raw)` cache and renders from it instantly; fresh data is swapped in only once it arrives, so the view never goes blank again once shown. Stale cache entries are re-fetched silently in the background.
+### Added
+- **Heatmaps are now prefetched for every device.** A background warm-up pulls the heatmap for every Shelly and synthetic device (PV / battery / tenant) for the selected year and unit — kicked off at page load (even while you're on Live or Costs) and after each interactive load — so switching the device dropdown, or opening the Heatmap tab at all, is instant. The prefetch runs sequentially with a small gap so slow instances aren't overwhelmed, and discovers synthetic devices from the responses it receives.
+
 ## 16.63.4
 ### Fixed
 - fix(tenant): green only on genuine grid export, not while battery charges
