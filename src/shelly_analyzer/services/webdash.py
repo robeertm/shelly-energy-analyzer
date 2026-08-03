@@ -5256,12 +5256,28 @@ function _drawSpotChart(hourly, fixedCt) {{
     ctx.beginPath(); ctx.moveTo(pad.left, zeroY); ctx.lineTo(W - pad.right, zeroY); ctx.stroke();
   }}
 
-  // Bars (bidirectional: positive bars grow up from zero, negative grow down)
-  var barW = Math.max(1, (plotW / hourly.length) - 1);
+  // Time axis. The spot series can MIX resolutions (hourly day-ahead future +
+  // 15-min recent past), so bars must be placed by their real timestamp — not by
+  // array index — otherwise the bars slide out of sync with the "jetzt" marker and
+  // the x-axis labels (which are wall-clock based). Each slot spans [ts, next ts).
+  var _n = hourly.length;
   var now = Date.now() / 1000;
-  for (var i = 0; i < hourly.length; i++) {{
+  function _slotEnd(i) {{
+    if (i + 1 < _n) return hourly[i + 1].ts;
+    // Last slot: reuse the previous gap (fallback 1h) to give it a width.
+    return hourly[i].ts + (i > 0 ? (hourly[i].ts - hourly[i - 1].ts) : 3600);
+  }}
+  var tStart = hourly[0].ts;
+  var tEnd = _slotEnd(_n - 1);
+  var tSpan = Math.max(1, tEnd - tStart);
+  function _xAt(t) {{ return pad.left + (t - tStart) / tSpan * plotW; }}
+
+  // Bars (bidirectional: positive bars grow up from zero, negative grow down)
+  for (var i = 0; i < _n; i++) {{
     var h = hourly[i];
-    var x = pad.left + (i / hourly.length) * plotW;
+    var x = _xAt(h.ts);
+    var xEnd = _xAt(_slotEnd(i));
+    var barW = Math.max(1, xEnd - x - 1);
     var v = h.total_ct;
     var vY = pad.top + plotH * (1 - (v - minV) / vRange);
     var barH, y;
@@ -5286,33 +5302,29 @@ function _drawSpotChart(hourly, fixedCt) {{
     ctx.globalAlpha = 1.0;
   }}
 
-  // "Now" vertical marker line + label
-  if (hourly.length > 1) {{
-    var tFirst = hourly[0].ts;
-    var tStep = (hourly.length > 1 ? (hourly[1].ts - hourly[0].ts) : 3600) || 3600;
-    var tLast = hourly[hourly.length - 1].ts + tStep;
-    if (now >= tFirst && now <= tLast) {{
-      var frac = (now - tFirst) / (tLast - tFirst);
-      var nowX = pad.left + frac * plotW;
-      ctx.strokeStyle = '#ff1744';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath(); ctx.moveTo(nowX, pad.top); ctx.lineTo(nowX, pad.top + plotH); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = '#ff1744';
-      ctx.font = '10px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('jetzt', nowX, pad.top - 2);
-    }}
+  // "Now" vertical marker line + label (same time axis as the bars)
+  if (_n > 1 && now >= tStart && now <= tEnd) {{
+    var nowX = _xAt(now);
+    ctx.strokeStyle = '#ff1744';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(nowX, pad.top); ctx.lineTo(nowX, pad.top + plotH); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#ff1744';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('jetzt', nowX, pad.top - 2);
   }}
 
-  // X-axis labels
+  // X-axis labels: left edge = tStart, right edge = tEnd, centre = time midpoint
+  // (the label row is flex space-between, so the centre span sits at the pixel
+  // centre, which now corresponds to the time midpoint of the axis).
   var lblEl = document.getElementById('spot-chart-labels');
-  if (lblEl && hourly.length > 0) {{
-    var first = new Date(hourly[0].ts * 1000);
-    var last = new Date(hourly[hourly.length - 1].ts * 1000);
-    var mid = hourly.length > 1 ? new Date(hourly[Math.floor(hourly.length / 2)].ts * 1000) : first;
-    function _fmtH(d) {{ return ('0' + d.getHours()).slice(-2) + ':00 ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2); }}
+  if (lblEl && _n > 0) {{
+    var first = new Date(tStart * 1000);
+    var last = new Date(tEnd * 1000);
+    var mid = new Date(((tStart + tEnd) / 2) * 1000);
+    function _fmtH(d) {{ return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ' ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2); }}
     lblEl.innerHTML = '<span>' + _fmtH(first) + '</span><span>' + _fmtH(mid) + '</span><span>' + _fmtH(last) + '</span>';
   }}
 
@@ -5330,11 +5342,17 @@ function _drawSpotChart(hourly, fixedCt) {{
   function _spotHover(e) {{
     var r = canvas.getBoundingClientRect();
     var x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
-    var idx = Math.round((x - pad.left) / plotW * hourly.length);
-    if (idx < 0 || idx >= hourly.length) {{ _spotTip.style.display = 'none'; return; }}
+    // Invert the time axis to find the slot under the cursor (bars are placed by
+    // timestamp, so index math would pick the wrong bar on mixed-resolution data).
+    var tHov = tStart + (x - pad.left) / plotW * tSpan;
+    var idx = -1;
+    for (var _k = 0; _k < _n; _k++) {{
+      if (tHov >= hourly[_k].ts && tHov < _slotEnd(_k)) {{ idx = _k; break; }}
+    }}
+    if (idx < 0) {{ _spotTip.style.display = 'none'; return; }}
     var h = hourly[idx];
     var d = new Date(h.ts * 1000);
-    var hStr = ('0' + d.getHours()).slice(-2) + ':00 ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2);
+    var hStr = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ' ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2);
     _spotTip.innerHTML = '<b>' + hStr + '</b><br>Spot: ' + h.raw_ct.toFixed(1) + ' ct/kWh<br>Total: ' + h.total_ct.toFixed(1) + ' ct/kWh';
     _spotTip.style.display = 'block';
     var tipX = Math.min(x, r.width - 120);

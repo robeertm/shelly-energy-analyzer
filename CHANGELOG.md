@@ -18,6 +18,7 @@
 
 ## Unreleased
 ### Fixed
+- **The 24h spot-price chart drew the "jetzt" (now) marker and the x-axis times out of sync with the bars.** Spot data can mix resolutions — hourly day-ahead prices for the future alongside 15-min slots for the recent past — but the chart placed bars evenly by array index while the now-line, axis labels and hover tooltip were wall-clock based. On a mixed series the denser past compressed those bars, so at e.g. 22:46 the "jetzt" line landed near the chart centre and the centre label read ~14:00. The whole chart is now placed on a single time axis: each bar sits at, and is as wide as, its real timestamp span, so the now-line, labels and tooltip all line up with the correct bar. For a uniform series the output is unchanged. Axis/tooltip times now include minutes (HH:MM) so 15-min slots read correctly.
 - **A tenant still showed as PV/green while the grid was importing to charge the battery.** The tenant is grid-parallel and only benefits from PV *surplus* — the power the property actually exports. The share is now driven purely by export: `share = max(0, -grid_w) / tenant_load`, capped at the tenant's own draw. Any grid import — even while the battery charges — means no surplus reaches the tenant, so it reads grid/red; the tile only greens once the property genuinely exports. The previous model (`tenant_load − grid_import − battery_discharge`) missed the charging case because it did not subtract battery charge. Badge label and the `tenant_load_w` wiring from 16.63.x are unchanged.
 
 ## 16.63.3
