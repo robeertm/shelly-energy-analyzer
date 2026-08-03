@@ -141,35 +141,21 @@ def _resolve_source_keys(cfg) -> tuple:
 
 def instantaneous_solar_share(pv_w: float, grid_w: float,
                               batt_w: float, tenant_load_w: float) -> float:
-    """Fraction (0..1) of the tenant's supply covered by genuine PV surplus now.
+    """Fraction (0..1) of a tenant circuit's supply that is genuine PV surplus.
 
-    The tenant runs grid-parallel and is served **last** — after the owner's own
-    consumption *and* any battery charging. So it is "green" only to the extent
-    real PV surplus reaches it: PV left over once the whole property's external
-    draw has been covered. Every watt of grid import **and** battery discharge is
-    owner-priority (it proves the house needed more than its PV) and is charged to
-    the tenant first; only the remainder of the tenant's own load is PV-fed.
-
-    Sign convention (matches compute_co2): grid ``+`` = import / ``−`` = export;
-    battery ``+`` = charge / ``−`` = discharge; PV ≥ 0. A full AC-bus balance with
-    the owner served before the tenant collapses to this pv-free identity:
-
-        tenant_pv = max(0, tenant_load − grid_import − battery_discharge)
-        share     = tenant_pv / tenant_load
-
-    So a discharging battery (owner deficit → no surplus) or a property importing
-    more than the tenant draws yields 0.0 (grid/red); the share only climbs toward
-    1.0 once PV covers the whole house and spills past the tenant's load.
+    A tenant runs grid-parallel and only benefits from PV *surplus* — the power
+    the property actually exports after its own loads and battery. So it is
+    "green" only while the property exports: with grid ``+`` = import / ``-`` =
+    export, the surplus is ``max(0, -grid_w)`` capped at the tenant's own draw.
+    Any grid import — even while the battery charges — means no surplus reaches
+    the tenant, so it reads grid/red. ``pv_w``/``batt_w`` are accepted for
+    call-site compatibility; the surplus is fully set by grid + tenant load.
     """
-    pv = max(0.0, float(pv_w or 0.0))
+    export = max(0.0, -float(grid_w or 0.0))
     tl = max(0.0, float(tenant_load_w or 0.0))
-    if tl <= 1e-9 or pv <= 0.0:
-        # No tenant load to colour, or no PV at all → nothing green to attribute.
-        return 0.0
-    grid_import = max(0.0, float(grid_w or 0.0))
-    batt_discharge = max(0.0, -float(batt_w or 0.0))
-    tenant_pv = max(0.0, tl - grid_import - batt_discharge)
-    return max(0.0, min(1.0, tenant_pv / tl))
+    if tl <= 1e-9:
+        return 1.0 if export > 1e-9 else 0.0
+    return max(0.0, min(1.0, export / tl))
 
 
 def _tenant_key_map(cfg) -> tuple:
