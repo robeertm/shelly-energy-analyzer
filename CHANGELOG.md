@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.63.4
+### Fixed
+- fix(tenant): green only on genuine grid export, not while battery charges
+  The tenant is grid-parallel and only benefits from PV surplus — the power
+  the property actually exports. The 16.63.x model
+  (tenant_load − grid_import − battery_discharge) still showed the tenant as
+  PV/green while the grid imported to charge the battery, because battery
+  charge was never subtracted.
+  Drive the share purely from export instead: share = max(0, -grid_w) capped
+
 ## Unreleased
 ### Fixed
 - **A tenant still showed as PV/green while the grid was importing to charge the battery.** The tenant is grid-parallel and only benefits from PV *surplus* — the power the property actually exports. The share is now driven purely by export: `share = max(0, -grid_w) / tenant_load`, capped at the tenant's own draw. Any grid import — even while the battery charges — means no surplus reaches the tenant, so it reads grid/red; the tile only greens once the property genuinely exports. The previous model (`tenant_load − grid_import − battery_discharge`) missed the charging case because it did not subtract battery charge. Badge label and the `tenant_load_w` wiring from 16.63.x are unchanged.
