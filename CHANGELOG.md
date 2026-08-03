@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.64.1
+### Fixed
+- fix(spot): draw 24h spot chart on a real time axis so "jetzt" and labels align
+  The spot-price series can mix resolutions — hourly day-ahead products for the
+  future alongside 15-min slots for the recent past. _drawSpotChart placed bars
+  evenly by array index, while the "now" marker, x-axis labels and hover tooltip
+  were all wall-clock based. On a mixed series the denser (15-min) past compressed
+  those bars, so at 22:46 the "jetzt" line sat near the chart centre and the centre
+  label read ~14:00 — the plot appeared to show the wrong time.
+
 ## 16.64.0
 ### Fixed
 - **The Heatmap tab loaded slowly and then flickered — visible, blank, visible — every refresh cycle.** On slow instances the periodic refresh blanked the hourly/stats/charts panes *before* the (slow) `/api/heatmap` fetch resolved, so the tab went empty for seconds at a time on every cycle. The client now keeps a per-`(device, year, unit, raw)` cache and renders from it instantly; fresh data is swapped in only once it arrives, so the view never goes blank again once shown. Stale cache entries are re-fetched silently in the background.
