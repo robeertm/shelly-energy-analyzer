@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.64.3
+### Fixed
+- fix(sankey): put the grid on the far side and reverse the flow on export
+  Grid import and PV feed-in were drawn as two unrelated nodes — Grid on the LEFT
+  as if it were an on-site producer, Feed-in on the right — so nothing conveyed
+  that both are the same utility connection, and that exporting is just importing
+  in reverse. Robert: "netz gehört auf die andere seite, wenn eingespeist wird
+  muss der Stromfluss in die andere Richtung laufen".
+  The two now collapse into a single "Netz" rectangle at the top of the right
+
 ## 16.64.2
 ### Fixed
 - **The Energy Flow diagram went blank and lost its flow direction on export-heavy
