@@ -300,6 +300,60 @@ def test_bidirectional_needs_export_at_both_ends():
     print("OK  bidirectional: skips intervals missing feed-in at one end (no −67 % garbage)")
 
 
+def test_removing_last_reading_resets_scalar():
+    """Mike's follow-up: a derived grid factor exists (scalar mirrors it), then the
+    LAST reading is removed so no interval remains. The legacy compensation_percent
+    scalar must fall back to 0 — otherwise the stale −67 % keeps showing on 'Netz'
+    even though the history is empty."""
+    from shelly_analyzer.io.config import MeterReading
+    cfg = AppConfig(
+        main_meters=[MainMeter(id="grid", name="Grid connection")],
+        devices=[
+            DeviceConfig(key="solar", name="Netz", host="", kind="em", parent="grid"),
+        ],
+    )
+    # One complete interval yields a real throughput factor: import Δ20 + feed-in
+    # Δ220 = meter 240 vs. Shelly throughput 250 → -4.0 %.
+    db = _FakeDB({"solar": {(100, 200): (200.0, 50.0)}})
+    app, state = _app(cfg, db)
+    with app.test_client() as c:
+        c.post("/api/meters/grid/reading", json={"ts": 100, "kwh": 1000.0, "export_kwh": 5000.0})
+        c.post("/api/meters/grid/reading", json={"ts": 200, "kwh": 1020.0, "export_kwh": 5220.0})
+        sdev = next(d for d in state.cfg.devices if d.key == "solar")
+        assert abs(sdev.compensation_percent - (-4.0)) < 0.01, sdev.compensation_percent
+        assert any(str(e.note).startswith("meter:grid") for e in sdev.compensation_history)
+        # Remove the last reading — one reading left, no interval, no factor.
+        j = c.delete("/api/meters/grid/reading/200").get_json()
+        assert j["ok"] and j["readings"] == 1, j
+        sdev = next(d for d in state.cfg.devices if d.key == "solar")
+        assert sdev.compensation_percent == 0.0, \
+            ("stale factor must reset to 0", sdev.compensation_percent)
+        assert not any(str(e.note).startswith("meter:grid")
+                       for e in sdev.compensation_history), sdev.compensation_history
+    print("OK  removing the last reading resets the compensation scalar to 0")
+
+
+def test_deleting_last_history_entry_resets_scalar():
+    """Deleting the final calibration-history entry via /api/compensation/history
+    must likewise reset the legacy scalar to 0 (same stale-scalar bug class)."""
+    from shelly_analyzer.io.config import CompensationEntry
+    cfg = AppConfig(devices=[
+        DeviceConfig(key="haus", name="Haus", host="", kind="em",
+                     compensation_percent=2.49,
+                     compensation_history=(CompensationEntry(
+                         effective_from_ts=100, percent=2.49, note="manual"),)),
+    ])
+    app, state = _app(cfg, _FakeDB({}))
+    with app.test_client() as c:
+        j = c.delete("/api/compensation/history",
+                     json={"device": "haus", "effective_from_ts": 100}).get_json()
+        assert j["ok"] and j["remaining"] == 0, j
+        d = next(x for x in state.cfg.devices if x.key == "haus")
+        assert d.compensation_percent == 0.0, d.compensation_percent
+        assert len(d.compensation_history) == 0
+    print("OK  deleting the last history entry resets the compensation scalar to 0")
+
+
 if __name__ == "__main__":
     test_config_roundtrip()
     test_calibrate_meter_sums_direct_children()
@@ -307,4 +361,6 @@ if __name__ == "__main__":
     test_reading_log()
     test_bidirectional_grid_meter()
     test_bidirectional_needs_export_at_both_ends()
+    test_removing_last_reading_resets_scalar()
+    test_deleting_last_history_entry_resets_scalar()
     print("\nALL METER-CASCADE TESTS PASSED")

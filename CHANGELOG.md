@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+### Fixed
+- fix(calibration): reset the compensation scalar to 0 when a meter's last
+  reading (or history entry) is removed. Both `_comp_set_history` and
+  `_set_history_on_cfg` mirrored the *latest* calibration-history entry into the
+  legacy `compensation_percent` scalar, but guarded it so an emptied history left
+  the scalar untouched. After deleting the reading that produced a derived grid
+  factor the history correctly went empty, yet the stale factor (Mike's grid
+  meter kept showing −67.12 %) lingered on the scalar and thus in the UI. An
+  emptied history now falls back to 0 %.
+
 ## 16.65.1
 ### Fixed
 - fix(calibration): skip bidirectional intervals missing the feed-in register at one end

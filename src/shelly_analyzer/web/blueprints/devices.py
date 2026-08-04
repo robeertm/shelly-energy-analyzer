@@ -549,16 +549,16 @@ def _comp_history_for_device(state, device_key: str) -> List[CompensationEntry]:
 def _comp_set_history(state, device_key: str, entries: List[CompensationEntry]):
     """Return a new cfg with ``compensation_history`` replaced on the device.
     Also updates the legacy ``compensation_percent`` to mirror the *latest*
-    entry so paths that haven't been migrated keep the right ‘current’ value."""
+    entry so paths that haven't been migrated keep the right ‘current’ value.
+    When the history is emptied (last entry / meter reading removed) the scalar
+    is reset to 0 so a stale derived factor doesn't linger (Robert/Mike −67 %)."""
     entries = sorted(entries, key=lambda e: int(e.effective_from_ts))
-    latest_pct = float(entries[-1].percent) if entries else None
+    latest_pct = float(entries[-1].percent) if entries else 0.0
     devs = list(state.cfg.devices)
     for i, d in enumerate(devs):
         if d.key == device_key:
-            updates = {"compensation_history": tuple(entries)}
-            if latest_pct is not None:
-                updates["compensation_percent"] = latest_pct
-            devs[i] = replace(d, **updates)
+            devs[i] = replace(d, compensation_history=tuple(entries),
+                              compensation_percent=latest_pct)
     return replace(state.cfg, devices=devs)
 
 
@@ -807,16 +807,15 @@ def _split_meter_children(devices, meter_id):
 
 def _set_history_on_cfg(cfg, device_key: str, entries):
     """Like ``_comp_set_history`` but operating on an arbitrary cfg, so several
-    devices can be updated before a single save."""
+    devices can be updated before a single save. An emptied history resets the
+    legacy scalar to 0 (see ``_comp_set_history``)."""
     entries = sorted(entries, key=lambda e: int(e.effective_from_ts))
-    latest_pct = float(entries[-1].percent) if entries else None
+    latest_pct = float(entries[-1].percent) if entries else 0.0
     devs = list(cfg.devices)
     for i, d in enumerate(devs):
         if d.key == device_key:
-            updates = {"compensation_history": tuple(entries)}
-            if latest_pct is not None:
-                updates["compensation_percent"] = latest_pct
-            devs[i] = replace(d, **updates)
+            devs[i] = replace(d, compensation_history=tuple(entries),
+                              compensation_percent=latest_pct)
     return replace(cfg, devices=devs)
 
 
