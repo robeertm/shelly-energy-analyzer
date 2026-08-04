@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.65.1
+### Fixed
+- fix(calibration): skip bidirectional intervals missing the feed-in register at one end
+  A throughput factor needs the feed-in register (OBIS 2.8.0) at BOTH ends of an
+  interval so an export delta can be formed. When it was logged on only the later
+  reading (an earlier import-only reading followed by a full import+feed-in one),
+  the export delta was silently dropped by the `e0 > 0` guard, yet raw_d still used
+  the grid Shelly's full import+feed-in throughput. Comparing an import-only meter
+  delta against a full-throughput measurement produced a nonsense factor — Robert's
+
 ## 16.65.0
 ### Added
 - **Bidirectional grid-meter calibration (feed-in register 2.8.0).** The meter
