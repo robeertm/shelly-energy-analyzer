@@ -26,6 +26,19 @@
   inline hint explaining when to fill it. `/api/meters` reports each meter's
   `bidirectional` flag and the per-reading `export_kwh`. Fully backward compatible:
   existing readings load with `export_kwh = 0` and behave exactly as before.
+### Fixed
+- **Bidirectional calibration no longer derives a bogus factor when the feed-in
+  register is logged on only one reading.** A throughput factor needs the feed-in
+  register (2.8.0) at *both* ends of an interval so an export delta can be formed.
+  If it was present on only the later reading — e.g. an earlier import-only reading
+  followed by a full import+feed-in reading — the export delta was silently dropped,
+  yet the comparison still used the grid Shelly's full import+feed-in throughput.
+  An import-only meter delta measured against a full-throughput reading produced a
+  nonsense factor (a −67 % on the grid Shelly in one field report). Such an interval
+  is now skipped: no factor is derived until a second *complete* (import + feed-in)
+  reading exists. The calibration tab shows a warning when a meter is bidirectional
+  but no interval yet has the feed-in register at both ends, telling the user to add
+  the feed-in value on their next reading.
 
 ## 16.64.3
 ### Fixed
