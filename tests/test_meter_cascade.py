@@ -203,10 +203,10 @@ def test_bidirectional_grid_meter():
     child; a pure-consumption tenant sub-meter is auto-excluded."""
     from shelly_analyzer.io.config import MeterReading
     cfg = AppConfig(
-        main_meters=[MainMeter(id="klipp", name="Sampletown")],
+        main_meters=[MainMeter(id="grid", name="Grid connection")],
         devices=[
-            DeviceConfig(key="solar", name="Netz", host="", kind="em", parent="klipp"),
-            DeviceConfig(key="mieter", name="Mieter", host="", kind="em", parent="klipp"),
+            DeviceConfig(key="solar", name="Netz", host="", kind="em", parent="grid"),
+            DeviceConfig(key="mieter", name="Mieter", host="", kind="em", parent="grid"),
         ],
     )
     # Interval (100,200): the signed grid Shelly draws 50 kWh, feeds in 200 kWh
@@ -219,12 +219,12 @@ def test_bidirectional_grid_meter():
     app, state = _app(cfg, db)
     with app.test_client() as c:
         # Baseline reading with both registers.
-        j = c.post("/api/meters/klipp/reading",
+        j = c.post("/api/meters/grid/reading",
                    json={"ts": 100, "kwh": 1000.0, "export_kwh": 5000.0}).get_json()
         assert j["ok"] and j["readings"] == 1, j
         # Second reading: import Δ 1051-1000=51, feed-in Δ 5204-5000=204 →
         # meter throughput 255 vs. Shelly throughput 250 → +2.0 %.
-        j = c.post("/api/meters/klipp/reading",
+        j = c.post("/api/meters/grid/reading",
                    json={"ts": 200, "kwh": 1051.0, "export_kwh": 5204.0}).get_json()
         assert j["ok"] and j["readings"] == 2, j
         comp = {d.key: d.compensation_percent for d in state.cfg.devices}
@@ -232,7 +232,7 @@ def test_bidirectional_grid_meter():
         # Tenant is a pure load → excluded, carries no meter-derived factor.
         assert comp["mieter"] == 0.0, ("tenant auto-excluded", comp)
         mdev = next(d for d in state.cfg.devices if d.key == "mieter")
-        assert not any(str(e.note).startswith("meter:klipp") for e in mdev.compensation_history), \
+        assert not any(str(e.note).startswith("meter:grid") for e in mdev.compensation_history), \
             mdev.compensation_history
         # The signed grid child carries the interval factor AND the weighted pre step.
         sdev = next(d for d in state.cfg.devices if d.key == "solar")
@@ -241,7 +241,7 @@ def test_bidirectional_grid_meter():
         assert any(str(e.note).endswith(":pre") for e in sdev.compensation_history)
         # meter API reports the meter as bidirectional and echoes the export reading.
         d = c.get("/api/meters").get_json()
-        m = next(x for x in d["main_meters"] if x["id"] == "klipp")
+        m = next(x for x in d["main_meters"] if x["id"] == "grid")
         assert m["bidirectional"] is True, m
         assert any(abs(r["export_kwh"] - 5204.0) < 1e-6 for r in m["readings"]), m
         # Readings (incl. export register) survive save + reload.
