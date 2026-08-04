@@ -51,7 +51,9 @@ def test_config_roundtrip():
 
 class _FakeDB:
     """Raw kWh per device, optionally per-interval: kwh[dkey] is either a scalar
-    (same for any interval) or a dict {(t0, t1): kwh}."""
+    (same for any interval) or a dict {(t0, t1): kwh}. A value may be a 2-tuple
+    ``(import_kwh, export_kwh)`` to model a *signed* grid meter — returned as two
+    hourly rows [+import, -export] so the sign-split logic sees both directions."""
     def __init__(self, kwh):
         self.kwh = kwh
 
@@ -59,6 +61,9 @@ class _FakeDB:
         v = self.kwh.get(dkey, 0.0)
         if isinstance(v, dict):
             v = v.get((start_ts, end_ts), 0.0)
+        if isinstance(v, tuple):
+            imp, exp = v
+            return pd.DataFrame({"kwh": [float(imp), -float(exp)]})
         return pd.DataFrame({"kwh": [v]})
 
 
@@ -190,9 +195,66 @@ def test_reading_log():
     print("OK  reading log: baseline, derived factor, back-dated insert, roundtrip, delete")
 
 
+def test_bidirectional_grid_meter():
+    """A grid connection meter with PV: the user logs BOTH the import (1.8.0) and
+    the feed-in (2.8.0) register. Calibration compares total throughput (Bezug +
+    Einspeisung) against the signed grid Shelly's own throughput — accurate even
+    when the owner barely imports — and the factor applies ONLY to the signed grid
+    child; a pure-consumption tenant sub-meter is auto-excluded."""
+    from shelly_analyzer.io.config import MeterReading
+    cfg = AppConfig(
+        main_meters=[MainMeter(id="klipp", name="Klipphausen")],
+        devices=[
+            DeviceConfig(key="solar", name="Netz", host="", kind="em", parent="klipp"),
+            DeviceConfig(key="mieter", name="Mieter", host="", kind="em", parent="klipp"),
+        ],
+    )
+    # Interval (100,200): the signed grid Shelly draws 50 kWh, feeds in 200 kWh
+    # (throughput 250). The tenant consumes 300 kWh (import only) — if it were NOT
+    # excluded it would corrupt the throughput comparison.
+    db = _FakeDB({
+        "solar": {(100, 200): (50.0, 200.0)},
+        "mieter": {(100, 200): 300.0},
+    })
+    app, state = _app(cfg, db)
+    with app.test_client() as c:
+        # Baseline reading with both registers.
+        j = c.post("/api/meters/klipp/reading",
+                   json={"ts": 100, "kwh": 1000.0, "export_kwh": 5000.0}).get_json()
+        assert j["ok"] and j["readings"] == 1, j
+        # Second reading: import Δ 1051-1000=51, feed-in Δ 5204-5000=204 →
+        # meter throughput 255 vs. Shelly throughput 250 → +2.0 %.
+        j = c.post("/api/meters/klipp/reading",
+                   json={"ts": 200, "kwh": 1051.0, "export_kwh": 5204.0}).get_json()
+        assert j["ok"] and j["readings"] == 2, j
+        comp = {d.key: d.compensation_percent for d in state.cfg.devices}
+        assert abs(comp["solar"] - 2.0) < 0.01, ("grid factor on throughput", comp)
+        # Tenant is a pure load → excluded, carries no meter-derived factor.
+        assert comp["mieter"] == 0.0, ("tenant auto-excluded", comp)
+        mdev = next(d for d in state.cfg.devices if d.key == "mieter")
+        assert not any(str(e.note).startswith("meter:klipp") for e in mdev.compensation_history), \
+            mdev.compensation_history
+        # The signed grid child carries the interval factor AND the weighted pre step.
+        sdev = next(d for d in state.cfg.devices if d.key == "solar")
+        real = [e for e in sdev.compensation_history if not str(e.note).endswith(":pre")]
+        assert len(real) == 1 and abs(real[0].percent - 2.0) < 0.01, sdev.compensation_history
+        assert any(str(e.note).endswith(":pre") for e in sdev.compensation_history)
+        # meter API reports the meter as bidirectional and echoes the export reading.
+        d = c.get("/api/meters").get_json()
+        m = next(x for x in d["main_meters"] if x["id"] == "klipp")
+        assert m["bidirectional"] is True, m
+        assert any(abs(r["export_kwh"] - 5204.0) < 1e-6 for r in m["readings"]), m
+        # Readings (incl. export register) survive save + reload.
+        cfg2 = load_config(state._cfg_path)
+        rr = {int(r.ts): (r.kwh, r.export_kwh) for r in cfg2.main_meters[0].readings}
+        assert rr == {100: (1000.0, 5000.0), 200: (1051.0, 5204.0)}, rr
+    print("OK  bidirectional grid meter: throughput factor, tenant excluded, roundtrip")
+
+
 if __name__ == "__main__":
     test_config_roundtrip()
     test_calibrate_meter_sums_direct_children()
     test_meter_crud()
     test_reading_log()
+    test_bidirectional_grid_meter()
     print("\nALL METER-CASCADE TESTS PASSED")
