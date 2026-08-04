@@ -12,14 +12,16 @@
 
 ## Unreleased
 ### Fixed
-- fix(calibration): reset the compensation scalar to 0 when a meter's last
-  reading (or history entry) is removed. Both `_comp_set_history` and
-  `_set_history_on_cfg` mirrored the *latest* calibration-history entry into the
-  legacy `compensation_percent` scalar, but guarded it so an emptied history left
-  the scalar untouched. After deleting the reading that produced a derived grid
-  factor the history correctly went empty, yet the stale factor (Mike's grid
-  meter kept showing −67.12 %) lingered on the scalar and thus in the UI. An
-  emptied history now falls back to 0 %.
+- fix(calibration): self-heal a stale main-meter-child compensation scalar on
+  config load. The previous reset-on-delete fix only fired *during* a recompute,
+  so a config already persisted by an older build (reading deleted → history
+  emptied, but the legacy `compensation_percent` scalar left stale) kept applying
+  that dead factor — it is pushed as the pre-history compensation fallback, so it
+  silently scaled every sample of the affected grid meter, and the calibration
+  tab kept showing it. A meter child's scalar is derived purely from its meter's
+  reading log, so on startup (and every reload) it is now reconciled to its
+  newest history entry, or 0 when the history is empty; the heal is persisted
+  once. Standalone devices calibrated only via the scalar are left untouched.
 
 ## 16.65.1
 ### Fixed

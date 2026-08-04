@@ -2075,6 +2075,46 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     return cfg
 
 
+def reconcile_meter_child_scalars(cfg: "AppConfig") -> "tuple[AppConfig, bool]":
+    """Heal the legacy ``compensation_percent`` scalar of every main-meter child.
+
+    A device attached to a main meter (``parent`` == a ``main_meters`` id) is
+    calibrated *exclusively* from that meter's reading log — its scalar and
+    history are fully derived by ``_recompute_meter_from_readings``. The write
+    path keeps the scalar mirroring the latest history entry (0 when empty), but
+    a config saved by an older build could carry a stale scalar with no backing
+    history: e.g. Mike deleted the reading that produced a −67 % grid factor, the
+    history correctly went empty, yet the scalar lingered at −67 % — corrupting
+    both the calibration display AND the actual data (the scalar is pushed as the
+    pre-history compensation fallback, so it factored every 'Netz' sample).
+
+    Reconcile each meter child's scalar to the percent of its newest history
+    entry, or 0.0 when it has none. Standalone devices (no meter parent) are left
+    untouched — they may be calibrated purely via the scalar (``/api/compensation
+    /set``) with no history, which is legitimate. Returns (cfg, changed)."""
+    from dataclasses import replace as _replace
+
+    meter_ids = {str(getattr(m, "id", "") or "")
+                 for m in (getattr(cfg, "main_meters", None) or [])}
+    if not meter_ids:
+        return cfg, False
+    changed = False
+    new_devices = list(cfg.devices)
+    for i, d in enumerate(new_devices):
+        if str(getattr(d, "parent", "") or "") not in meter_ids:
+            continue
+        hist = sorted((getattr(d, "compensation_history", ()) or ()),
+                      key=lambda e: int(getattr(e, "effective_from_ts", 0) or 0))
+        want = float(getattr(hist[-1], "percent", 0.0) or 0.0) if hist else 0.0
+        have = float(getattr(d, "compensation_percent", 0.0) or 0.0)
+        if abs(want - have) > 1e-9:
+            new_devices[i] = _replace(d, compensation_percent=want)
+            changed = True
+    if not changed:
+        return cfg, False
+    return _replace(cfg, devices=new_devices), True
+
+
 def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
     path = Path(path) if path else default_config_path()
     obj = {

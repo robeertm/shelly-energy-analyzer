@@ -354,6 +354,51 @@ def test_deleting_last_history_entry_resets_scalar():
     print("OK  deleting the last history entry resets the compensation scalar to 0")
 
 
+def test_reconcile_heals_persisted_stale_child_scalar():
+    """Mike's live case: the −67 % stayed even after the reset-on-delete fix,
+    because that fix only fires DURING a recompute. He had already deleted the
+    reading under an older build, so his config was *persisted* with an emptied
+    history but a stale −67.12 % scalar on 'Netz'. Loading that config must heal
+    it — otherwise the scalar keeps compensating every sample and the calibration
+    tab keeps showing −67.12 %. Standalone (no-meter) scalars stay untouched."""
+    from shelly_analyzer.io.config import (
+        CompensationEntry, reconcile_meter_child_scalars, load_config, save_config,
+    )
+    cfg = AppConfig(
+        main_meters=[MainMeter(id="klipphausen", name="Klipphausen")],
+        devices=[
+            # Meter child with a stale scalar and NO backing history → heal to 0.
+            DeviceConfig(key="netz", name="Netz", host="", kind="em",
+                         parent="klipphausen", compensation_percent=-67.12),
+            # Meter child whose scalar disagrees with its latest history entry →
+            # heal to the history value (2.485), not left at a wrong 9.9.
+            DeviceConfig(key="haus", name="Haus", host="", kind="em",
+                         parent="klipphausen", compensation_percent=9.9,
+                         compensation_history=(CompensationEntry(
+                             effective_from_ts=100, percent=2.485, note="meter:klipphausen"),)),
+            # Standalone device: scalar-only calibration is legitimate → untouched.
+            DeviceConfig(key="lonely", name="Boiler", host="", kind="em",
+                         parent="", compensation_percent=1.5),
+        ],
+    )
+    healed, changed = reconcile_meter_child_scalars(cfg)
+    assert changed
+    by = {d.key: d for d in healed.devices}
+    assert by["netz"].compensation_percent == 0.0, by["netz"].compensation_percent
+    assert abs(by["haus"].compensation_percent - 2.485) < 1e-9, by["haus"].compensation_percent
+    assert by["lonely"].compensation_percent == 1.5, by["lonely"].compensation_percent
+    # Idempotent: a second pass reports no change.
+    _, again = reconcile_meter_child_scalars(healed)
+    assert not again
+    # Survives a save/load round-trip (the persisted heal sticks).
+    d = tempfile.mkdtemp()
+    p = os.path.join(d, "config.json")
+    save_config(healed, p)
+    back = load_config(p)
+    assert next(x for x in back.devices if x.key == "netz").compensation_percent == 0.0
+    print("OK  loading a config heals a stale main-meter-child scalar (Mike's −67 %)")
+
+
 if __name__ == "__main__":
     test_config_roundtrip()
     test_calibrate_meter_sums_direct_children()
@@ -363,4 +408,5 @@ if __name__ == "__main__":
     test_bidirectional_needs_export_at_both_ends()
     test_removing_last_reading_resets_scalar()
     test_deleting_last_history_entry_resets_scalar()
+    test_reconcile_heals_persisted_stale_child_scalar()
     print("\nALL METER-CASCADE TESTS PASSED")
