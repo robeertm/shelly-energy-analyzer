@@ -17,6 +17,16 @@
   animated particles — runs strictly left → right, i.e. in the true direction of
   energy flow. A battery that both charges and discharges within the period now
   honestly appears in both columns (store on the right, release on the left).
+- **The grid now sits on the far side and the flow reverses on export.** Grid
+  import and PV feed-in were two unrelated nodes — Grid on the *left* (as if it
+  were an on-site producer) and Feed-in on the right — so nothing showed that both
+  are the same utility connection and that export is import running backwards. They
+  are now a single **"Netz"** rectangle at the top of the right column, sized by
+  total grid throughput. Importing draws energy IN from the grid: the band runs
+  from the Netz node back to the House and its particles travel **right → left**.
+  Exporting pushes energy OUT: the PV → Netz band runs **left → right** with its
+  particles flowing toward the grid. The Netz node labels both directions
+  (↓ import, ↑ export) so a day with both reads at a glance.
 
 ## 16.64.1
 ### Fixed
