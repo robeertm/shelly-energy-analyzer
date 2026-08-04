@@ -12279,6 +12279,7 @@ _I18N.setdefault("de", {}).update({
     "cal.reading_export": "Einspeisung 2.8.0 (kWh)",
     "cal.reading_export_opt": "Einspeisung 2.8.0 (kWh, optional)",
     "cal.bidir_hint": "Netzanschluss-Zähler mit PV? Trage zusätzlich den Einspeise-Stand (2.8.0) ein. Dann wird über den Gesamtdurchsatz (Bezug + Einspeisung) kalibriert — auch dann korrekt, wenn kaum Netzstrom bezogen wird. Der Faktor wirkt nur auf den signierten Netz-Shelly; reine Verbraucher (z. B. Mieter) bleiben außen vor.",
+    "cal.bidir_need_two": "Für die bidirektionale Kalibrierung brauchst du zwei vollständige Ablesungen — bei beiden muss der Einspeise-Stand (2.8.0) eingetragen sein. Bislang liegt er nur bei einer Ablesung vor, deshalb kann noch kein Faktor über den Gesamtdurchsatz gebildet werden. Trage bei der nächsten Ablesung auch die Einspeisung ein.",
 })
 _I18N.setdefault("en", {}).update({
     "cal.reading_log": "Meter readings",
@@ -12296,4 +12297,5 @@ _I18N.setdefault("en", {}).update({
     "cal.reading_export": "Feed-in 2.8.0 (kWh)",
     "cal.reading_export_opt": "Feed-in 2.8.0 (kWh, optional)",
     "cal.bidir_hint": "Grid connection meter with PV? Also log the feed-in register (2.8.0). Calibration then uses total throughput (import + feed-in) — accurate even when barely any grid power is drawn. The factor applies only to the signed grid Shelly; pure loads (e.g. a tenant) are left out.",
+    "cal.bidir_need_two": "Bidirectional calibration needs two complete readings — the feed-in register (2.8.0) must be recorded on both. So far it is present on only one reading, so no total-throughput factor can be derived yet. Also enter the feed-in value on your next reading.",
 })

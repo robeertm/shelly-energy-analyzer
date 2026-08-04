@@ -9257,6 +9257,15 @@ _loadLsSettings();
       // Hinweis für einen bidirektionalen Netzanschluss-Zähler (mit PV/Einspeisung).
       html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">💡 ' +
         t('cal.bidir_hint', 'Netzanschluss-Zähler mit PV? Trage zusätzlich den Einspeise-Stand (2.8.0) ein. Dann wird über den Gesamtdurchsatz (Bezug + Einspeisung) kalibriert — auch dann korrekt, wenn kaum Netzstrom bezogen wird. Der Faktor wirkt nur auf den signierten Netz-Shelly; reine Verbraucher (z. B. Mieter) bleiben außen vor.') + '</div>';
+      // Bidirektional, aber kein Zeitraum mit Einspeise-Stand an BEIDEN Enden →
+      // es lässt sich noch kein Durchsatz-Faktor bilden. Robert klar sagen, dass er
+      // bei einer zweiten Ablesung auch die Einspeisung (2.8.0) einträgt.
+      const bidirComplete = readings.some((r, i) => i > 0 &&
+        Number(readings[i-1].export_kwh || 0) > 0 && Number(r.export_kwh || 0) >= Number(readings[i-1].export_kwh || 0));
+      if (bidir && !bidirComplete) {{
+        html += '<div style="font-size:11px;color:var(--warn,#b26b00);background:var(--warn-bg,rgba(255,170,0,.10));border:1px solid var(--warn,#b26b00);border-radius:6px;padding:8px 10px;margin-bottom:8px;line-height:1.5">⚠️ ' +
+          t('cal.bidir_need_two', 'Für die bidirektionale Kalibrierung brauchst du zwei vollständige Ablesungen — bei beiden muss der Einspeise-Stand (2.8.0) eingetragen sein. Bislang liegt er nur bei einer Ablesung vor, deshalb kann noch kein Faktor über den Gesamtdurchsatz gebildet werden. Trage bei der nächsten Ablesung auch die Einspeisung ein.') + '</div>';
+      }}
       // Trend der Abweichung über die Zeit
       if (sharedHist.length) {{
         html += '<div style="margin:6px 0 10px">' + _calChartSvg(sharedHist) + '</div>';

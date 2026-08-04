@@ -1033,12 +1033,23 @@ def _recompute_meter_from_readings(state, meter_id):
         if t1 <= t0:
             continue
         if bidir:
-            # Meter throughput = Δ import register + Δ export register.
-            imp_d = float(readings[i + 1].kwh) - float(readings[i].kwh)
+            # Meter throughput = Δ import register + Δ export register. A throughput
+            # factor needs the feed-in register (2.8.0) at BOTH ends of the interval:
+            # only then can we form an export delta and compare it against the grid
+            # Shelly's own import+export throughput. If the export register is present
+            # at only one end (e.g. the user logged the feed-in stand on the latest
+            # reading but not the earlier one), we CANNOT form a throughput delta —
+            # comparing an import-only meter delta (Δ 1.8.0) against the Shelly's full
+            # throughput yields a nonsense factor (Robert's −67 %). Skip such an
+            # interval entirely; the user must log a second full (import + export)
+            # reading before a bidirectional factor can be derived.
             e0 = float(getattr(readings[i], "export_kwh", 0.0) or 0.0)
             e1 = float(getattr(readings[i + 1], "export_kwh", 0.0) or 0.0)
-            exp_d = (e1 - e0) if (e0 > 0 and e1 >= e0) else 0.0
-            meter_d = max(0.0, imp_d) + max(0.0, exp_d)
+            if not (e0 > 0 and e1 >= e0):
+                continue
+            imp_d = float(readings[i + 1].kwh) - float(readings[i].kwh)
+            exp_d = e1 - e0
+            meter_d = max(0.0, imp_d) + exp_d
             raw_d = 0.0
             for c in grid_children:
                 ci, ce = _raw_kwh_split_over(state, db, c.key, t0, t1)

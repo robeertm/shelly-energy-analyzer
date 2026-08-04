@@ -251,10 +251,60 @@ def test_bidirectional_grid_meter():
     print("OK  bidirectional grid meter: throughput factor, tenant excluded, roundtrip")
 
 
+def test_bidirectional_needs_export_at_both_ends():
+    """Robert's −67 % bug: the feed-in register (2.8.0) is logged on only the LATEST
+    reading, not the earlier one. Then no export delta can be formed for that
+    interval, so an import-only meter delta (Δ 1.8.0) must NOT be compared against
+    the Shelly's full import+export throughput — that would yield a garbage factor.
+    Such an incomplete interval is skipped: no factor is derived until a SECOND full
+    (import + export) reading exists."""
+    from shelly_analyzer.io.config import MeterReading
+    cfg = AppConfig(
+        main_meters=[MainMeter(id="grid", name="Grid connection")],
+        devices=[
+            DeviceConfig(key="solar", name="Netz", host="", kind="em", parent="grid"),
+        ],
+    )
+    # Over the interval the signed grid Shelly draws 63 kWh but feeds in ~130 kWh
+    # (throughput ~193) — exactly the situation that produced −67 % when the meter
+    # delta counted import only.
+    db = _FakeDB({"solar": {(100, 200): (63.0, 130.0)}})
+    app, state = _app(cfg, db)
+    with app.test_client() as c:
+        # First reading: import register only, NO feed-in (mirrors Robert's 14520).
+        j = c.post("/api/meters/grid/reading", json={"ts": 100, "kwh": 14520.0}).get_json()
+        assert j["ok"] and j["readings"] == 1, j
+        # Second reading carries BOTH registers (Robert's 14583 / 15497).
+        j = c.post("/api/meters/grid/reading",
+                   json={"ts": 200, "kwh": 14583.0, "export_kwh": 15497.0}).get_json()
+        assert j["ok"] and j["readings"] == 2, j
+        # No throughput factor can be derived from a single complete reading → the
+        # signed grid child must stay at 0 %, NOT the bogus −67 %.
+        sdev = next(d for d in state.cfg.devices if d.key == "solar")
+        assert sdev.compensation_percent == 0.0, ("no garbage factor", sdev.compensation_percent)
+        assert not any(str(e.note).startswith("meter:grid") for e in sdev.compensation_history), \
+            sdev.compensation_history
+        # A second COMPLETE reading enables the throughput factor: import Δ 20, feed-in
+        # Δ 220 → meter throughput 240 vs. Shelly throughput 250 → -4.0 %.
+        db.kwh["solar"][(200, 300)] = (200.0, 50.0)  # throughput 250 over next interval
+        j = c.post("/api/meters/grid/reading",
+                   json={"ts": 300, "kwh": 14603.0, "export_kwh": 15717.0}).get_json()
+        assert j["ok"], j
+        sdev = next(d for d in state.cfg.devices if d.key == "solar")
+        assert abs(sdev.compensation_percent - (-4.0)) < 0.01, \
+            ("factor from the complete interval only", sdev.compensation_percent)
+        # Only the complete interval (200→300) contributes a factor; the incomplete
+        # one (100→200) does not.
+        real = [e for e in sdev.compensation_history if not str(e.note).endswith(":pre")]
+        assert len(real) == 1 and int(real[0].effective_from_ts) == 200, sdev.compensation_history
+    print("OK  bidirectional: skips intervals missing feed-in at one end (no −67 % garbage)")
+
+
 if __name__ == "__main__":
     test_config_roundtrip()
     test_calibrate_meter_sums_direct_children()
     test_meter_crud()
     test_reading_log()
     test_bidirectional_grid_meter()
+    test_bidirectional_needs_export_at_both_ends()
     print("\nALL METER-CASCADE TESTS PASSED")
