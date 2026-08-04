@@ -8171,56 +8171,57 @@ function _drawSankeyFlow(canvasId, d) {{
   const linkTgt = d.sankey.link.target || [];
   const linkVal = d.sankey.link.value || [];
 
-  // Build sources and consumers from link data
+  // Build a node-graph flow diagram straight from the sankey links so EVERY real
+  // flow is drawn — including the ones that skip the House (PV → Feed-in,
+  // PV → Battery). The old renderer was House-centric (sources = links into the
+  // House, consumers = links out of it) and shoved those bypass-flows into a
+  // footer text line, so a pure-export day — PV feeding the grid, house drawing
+  // nothing — rendered as an empty box. Left column = producers (PV, Grid,
+  // Battery while discharging), middle = House, right column = sinks (devices,
+  // Feed-in, Battery while charging). Producers are always left and sinks always
+  // right, so every band runs strictly left → right and the animated particles
+  // travel in the true direction of energy flow.
   const houseIdx = nodeLabels.indexOf('House');
-  const sources = [];
-  const consumers = [];
-  const feedIn = [];
-  let battCharge = 0;  // PV → Battery (stored, not a house consumer nor export)
-  linkSrc.forEach(function(s, i) {{
-    if (linkTgt[i] === houseIdx && linkVal[i] > 0.001) {{
-      sources.push({{ name: nodeLabels[s], kwh: linkVal[i], color: nodeColors[s] || '#e53935' }});
-    }}
-    if (s === houseIdx && linkVal[i] > 0.001) {{
-      const tName = nodeLabels[linkTgt[i]];
-      if (tName === 'Feed-in') {{
-        feedIn.push({{ name: tName, kwh: linkVal[i], color: nodeColors[linkTgt[i]] || '#43A047' }});
-      }} else {{
-        consumers.push({{ name: tName, kwh: linkVal[i], color: nodeColors[linkTgt[i]] || '#3498db' }});
-      }}
-    }}
-    // Source → non-house sink (PV → Feed-in, PV → Battery)
-    if (s !== houseIdx && linkTgt[i] !== houseIdx && linkVal[i] > 0.001) {{
-      const tName = nodeLabels[linkTgt[i]];
-      if (tName === 'Feed-in') {{
-        feedIn.push({{ name: tName, kwh: linkVal[i], color: nodeColors[linkTgt[i]] || '#43A047' }});
-      }} else if (tName === 'Battery') {{
-        battCharge += linkVal[i];
-      }}
-    }}
+  const links = [];
+  for (let i = 0; i < linkVal.length; i++) {{
+    if (linkVal[i] > 0.001) links.push({{ s: linkSrc[i], t: linkTgt[i], v: linkVal[i] }});
+  }}
+
+  // Per-node in/out throughput.
+  const outSum = {{}}, inSum = {{}};
+  links.forEach(function(l) {{
+    outSum[l.s] = (outSum[l.s] || 0) + l.v;
+    inSum[l.t] = (inSum[l.t] || 0) + l.v;
   }});
-  sources.sort(function(a, b) {{ return b.kwh - a.kwh; }});
-  consumers.sort(function(a, b) {{ return b.kwh - a.kwh; }});
-  const topConsumers = consumers.slice(0, 10);
 
-  // Scale so no bar overflows: use the largest of the source sum, the consumer
-  // sum, and the total-consumption figure (was total_consumption only, which
-  // let PV/feed-in overflow the frame).
+  // Column membership. A non-House node that emits energy is a producer (left);
+  // one that receives energy is a sink (right). The Battery legitimately lands in
+  // BOTH columns when it charges and discharges within the same period — two
+  // honest rectangles for "store" (right) and "release" (left) — and each of its
+  // bands still runs left → right.
+  const leftNodes = [], rightNodes = [];
+  for (let n = 0; n < nodeLabels.length; n++) {{
+    if (n === houseIdx) continue;
+    if ((outSum[n] || 0) > 0.001) leftNodes.push({{ idx: n, name: nodeLabels[n], kwh: outSum[n], color: nodeColors[n] || '#e53935' }});
+    if ((inSum[n] || 0) > 0.001) rightNodes.push({{ idx: n, name: nodeLabels[n], kwh: inSum[n], color: nodeColors[n] || '#3498db' }});
+  }}
+  leftNodes.sort(function(a, b) {{ return b.kwh - a.kwh; }});
+  rightNodes.sort(function(a, b) {{ return b.kwh - a.kwh; }});
+  // Keep the sink column legible when there are many devices: cap it. Links that
+  // point at a dropped node are simply skipped when the bands are drawn.
+  const topRight = rightNodes.slice(0, 12);
+
+  // Scale so no rectangle overflows the frame: the largest of the producer sum,
+  // the sink sum, and the metered total consumption.
   const _sum = function(arr) {{ return arr.reduce(function(a, x) {{ return a + x.kwh; }}, 0); }};
-  const total = Math.max(_sum(sources), _sum(consumers), d.total_consumption_kwh || 0, 0.01);
-
-  // Reserve bottom space for the feed-in / battery-charge footer labels so
-  // they never clip past the canvas edge (drawn below at BOT + 12 + i*13).
-  const _feedTotal0 = _sum(feedIn);
-  const _nFooter = (_feedTotal0 > 0.001 ? 1 : 0) + (battCharge > 0.001 ? 1 : 0);
-  const _footerH = _nFooter > 0 ? (15 + _nFooter * 13) : 12;
+  const total = Math.max(_sum(leftNodes), _sum(topRight), d.total_consumption_kwh || 0, 0.01);
 
   // Layout constants (in pixels)
   const PAD_X = 10, PAD_Y = 30;
   const SRC_X = PAD_X, SRC_W = W * 0.15;
   const HOUSE_X = W * 0.30, HOUSE_W = W * 0.16;
   const TGT_X = W * 0.58, TGT_W = W * 0.40;
-  const TOP = PAD_Y + 14, BOT = H - _footerH;
+  const TOP = PAD_Y + 14, BOT = H - 14;
   const usable = BOT - TOP;
   const GAP = 4;
 
@@ -8265,42 +8266,85 @@ function _drawSankeyFlow(canvasId, d) {{
   ctx.fillText('Sources', SRC_X + SRC_W / 2, TOP - 6);
   ctx.fillText('Consumers', TGT_X + TGT_W / 2, TOP - 6);
 
-  // --- Source nodes ---
-  const nSrc = Math.max(sources.length, 1);
-  const srcTotalH = usable - (nSrc - 1) * GAP;
-  const srcCy = [], srcH = [];
-  let yCursor = TOP;
-  for (let i = 0; i < sources.length; i++) {{
-    const s = sources[i];
-    const h = Math.max(20, (s.kwh / total) * srcTotalH);
-    const cy = yCursor + h / 2;
-    srcCy.push(cy); srcH.push(h);
+  // --- Lay out the three columns ---
+  function layoutCol(items, x, w, minH) {{
+    const n = Math.max(items.length, 1);
+    const colH = usable - (n - 1) * GAP;
+    let y = TOP;
+    items.forEach(function(it) {{
+      it.h = Math.max(minH, (it.kwh / total) * colH);
+      it.x = x; it.w = w; it.y = y; it.cy = y + it.h / 2;
+      it.outCur = y; it.inCur = y;   // running band anchors along the rect edges
+      y += it.h + GAP;
+    }});
+  }}
+  layoutCol(leftNodes, SRC_X, SRC_W, 20);
+  layoutCol(topRight, TGT_X, TGT_W, 18);
+
+  const houseCy = (TOP + BOT) / 2;
+  const houseH = Math.min(72, Math.max(46, usable * 0.24));
+  const house = {{
+    x: HOUSE_X, w: HOUSE_W, cy: houseCy, h: houseH,
+    outCur: houseCy - houseH / 2, inCur: houseCy - houseH / 2
+  }};
+  const houseIn = inSum[houseIdx] || 0;
+  const houseOut = outSum[houseIdx] || 0;
+
+  const leftByIdx = {{}}; leftNodes.forEach(function(r) {{ leftByIdx[r.idx] = r; }});
+  const rightByIdx = {{}}; topRight.forEach(function(r) {{ rightByIdx[r.idx] = r; }});
+
+  // --- Flow bands (drawn first so the node rectangles sit on top) ---
+  // Sort so bands leave the producers top-to-bottom and land tidily; ordering
+  // only affects which edge-slot each band takes, never conservation.
+  const _cy = function(idx, isSrc) {{
+    if (idx === houseIdx) return houseCy;
+    const r = isSrc ? leftByIdx[idx] : rightByIdx[idx];
+    return r ? r.cy : 1e9;
+  }};
+  links.sort(function(a, b) {{
+    return (_cy(a.s, true) - _cy(b.s, true)) || (_cy(a.t, false) - _cy(b.t, false));
+  }});
+  links.forEach(function(l) {{
+    // Source anchor: the right edge of a producer, or the House's right edge.
+    let sx, sThru, sNodeH, sCurObj;
+    if (l.s === houseIdx) {{ sx = house.x + house.w; sThru = houseOut; sNodeH = house.h; sCurObj = house; }}
+    else {{ const r = leftByIdx[l.s]; if (!r) return; sx = r.x + r.w; sThru = r.kwh; sNodeH = r.h; sCurObj = r; }}
+    // Target anchor: the left edge of a sink, or the House's left edge.
+    let tx, tThru, tNodeH, tCurObj;
+    if (l.t === houseIdx) {{ tx = house.x; tThru = houseIn; tNodeH = house.h; tCurObj = house; }}
+    else {{ const r = rightByIdx[l.t]; if (!r) return; tx = r.x; tThru = r.kwh; tNodeH = r.h; tCurObj = r; }}
+    const sH = Math.max(2, (l.v / (sThru || l.v)) * sNodeH);
+    const tH = Math.max(2, (l.v / (tThru || l.v)) * tNodeH);
+    const sy = sCurObj.outCur + sH / 2; sCurObj.outCur += sH;
+    const ty = tCurObj.inCur + tH / 2; tCurObj.inCur += tH;
+    // Colour by the leaf end: the producer for source→House, else the sink.
+    const color = (l.t === houseIdx) ? (nodeColors[l.s] || '#e53935') : (nodeColors[l.t] || '#3498db');
+    flowBand(sx, sy, sH, tx, ty, tH, color, 0.28);
+  }});
+
+  // --- Producer nodes (left) ---
+  leftNodes.forEach(function(s) {{
     ctx.fillStyle = s.color;
     ctx.globalAlpha = 0.92;
-    roundRect(SRC_X, yCursor, SRC_W, h, 6);
+    roundRect(s.x, s.y, s.w, s.h, 6);
     ctx.fill();
     ctx.globalAlpha = 1;
-    // Label
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
-    if (h > 28) {{
+    if (s.h > 28) {{
       ctx.font = 'bold 9px sans-serif';
-      ctx.fillText(s.name, SRC_X + SRC_W / 2, cy - 2);
+      ctx.fillText(s.name, s.x + s.w / 2, s.cy - 2);
       ctx.font = '8px sans-serif';
-      const pct = (s.kwh / total * 100).toFixed(0);
-      ctx.fillText(s.kwh.toFixed(1) + ' kWh (' + pct + '%)', SRC_X + SRC_W / 2, cy + 10);
+      ctx.fillText(s.kwh.toFixed(1) + ' kWh (' + (s.kwh / total * 100).toFixed(0) + '%)', s.x + s.w / 2, s.cy + 10);
     }} else {{
       ctx.font = 'bold 8px sans-serif';
-      ctx.fillText(s.name + ' ' + s.kwh.toFixed(1), SRC_X + SRC_W / 2, cy + 3);
+      ctx.fillText(s.name + ' ' + s.kwh.toFixed(1), s.x + s.w / 2, s.cy + 3);
     }}
-    yCursor += h + GAP;
-  }}
+  }});
 
-  // --- House node ---
-  const houseCy = (TOP + BOT) / 2;
-  const houseH = Math.min(60, usable * 0.22);
+  // --- House node (middle) ---
   ctx.fillStyle = isDark ? 'rgba(21,101,192,0.6)' : 'rgba(227,242,253,0.8)';
-  roundRect(HOUSE_X, houseCy - houseH / 2, HOUSE_W, houseH, 10);
+  roundRect(house.x, houseCy - houseH / 2, house.w, houseH, 10);
   ctx.fill();
   ctx.strokeStyle = '#1976D2';
   ctx.lineWidth = 1.5;
@@ -8309,64 +8353,24 @@ function _drawSankeyFlow(canvasId, d) {{
   ctx.globalAlpha = 0.7;
   ctx.font = '9px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Total', HOUSE_X + HOUSE_W / 2, houseCy - 4);
+  ctx.fillText('Total', house.x + house.w / 2, houseCy - 4);
   ctx.globalAlpha = 1;
   ctx.font = 'bold 12px sans-serif';
-  ctx.fillText((d.total_consumption_kwh || 0).toFixed(1) + ' kWh', HOUSE_X + HOUSE_W / 2, houseCy + 12);
+  ctx.fillText((d.total_consumption_kwh || 0).toFixed(1) + ' kWh', house.x + house.w / 2, houseCy + 12);
 
-  // --- Consumer nodes ---
-  const nTgt = Math.max(topConsumers.length, 1);
-  const tgtTotalH = usable - (nTgt - 1) * GAP;
-  const tgtCy = [], tgtH = [];
-  yCursor = TOP;
-  for (let i = 0; i < topConsumers.length; i++) {{
-    const c = topConsumers[i];
-    const h = Math.max(18, (c.kwh / total) * tgtTotalH);
-    const cy = yCursor + h / 2;
-    tgtCy.push(cy); tgtH.push(h);
+  // --- Sink nodes (right) ---
+  topRight.forEach(function(c) {{
     ctx.fillStyle = c.color;
     ctx.globalAlpha = 0.88;
-    roundRect(TGT_X, yCursor, TGT_W, h, 6);
+    roundRect(c.x, c.y, c.w, c.h, 6);
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.font = 'bold 9px sans-serif';
     const label = c.name.length > 20 ? c.name.substring(0, 18) + '..' : c.name;
-    const pct = (c.kwh / total * 100).toFixed(0);
-    ctx.fillText(label + '   ' + c.kwh.toFixed(1) + ' kWh (' + pct + '%)', TGT_X + TGT_W / 2, cy + 3);
-    yCursor += h + GAP;
-  }}
-
-  // --- Feed-in / battery-charge labels ---
-  const _feedTotal = _sum(feedIn);
-  const _labels = [];
-  if (_feedTotal > 0.001) _labels.push({{txt: '⚡ Einspeisung: ' + _feedTotal.toFixed(2) + ' kWh', col: '#43A047'}});
-  if (battCharge > 0.001) _labels.push({{txt: '🔋 Batterie geladen: ' + battCharge.toFixed(2) + ' kWh', col: '#8e44ad'}});
-  ctx.font = 'bold 10px sans-serif';
-  ctx.textAlign = 'center';
-  _labels.forEach(function(lb, i) {{
-    ctx.fillStyle = lb.col;
-    ctx.fillText(lb.txt, HOUSE_X + HOUSE_W / 2, BOT + 12 + i * 13);
+    ctx.fillText(label + '   ' + c.kwh.toFixed(1) + ' kWh (' + (c.kwh / total * 100).toFixed(0) + '%)', c.x + c.w / 2, c.cy + 3);
   }});
-
-  // --- Flow bands: Sources → House ---
-  let hBandY = houseCy - houseH / 2;
-  for (let i = 0; i < sources.length; i++) {{
-    const bHouse = Math.max(4, (sources[i].kwh / total) * houseH);
-    const bandCy = hBandY + bHouse / 2;
-    flowBand(SRC_X + SRC_W, srcCy[i], srcH[i] * 0.85, HOUSE_X, bandCy, bHouse, sources[i].color, 0.28);
-    hBandY += bHouse;
-  }}
-
-  // --- Flow bands: House → Consumers ---
-  hBandY = houseCy - houseH / 2;
-  for (let i = 0; i < topConsumers.length; i++) {{
-    const bHouse = Math.max(4, (topConsumers[i].kwh / total) * houseH);
-    const bandCy = hBandY + bHouse / 2;
-    flowBand(HOUSE_X + HOUSE_W, bandCy, bHouse, TGT_X, tgtCy[i], tgtH[i] * 0.85, topConsumers[i].color, 0.28);
-    hBandY += bHouse;
-  }}
 
   _animateSankey();
 }}

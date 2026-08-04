@@ -1,5 +1,23 @@
 # Changelog
 
+## 16.64.2
+### Fixed
+- **The Energy Flow diagram went blank and lost its flow direction on export-heavy
+  days.** The renderer was House-centric: it only drew flows *into* the House
+  (sources) and *out of* it (consumers). Any flow that bypasses the House —
+  **PV → Feed-in** and **PV → Battery (charging)** — was dropped to a small
+  footer text line and never drawn as a node or an animated band. So on a
+  pure-export moment (PV feeding the grid while the house draws nothing) the whole
+  diagram collapsed to an empty "0.0 kWh" box, and the animated particles only ran
+  along the few House-touching bands. The pane is now built directly from the
+  Sankey links: producers (PV, Grid, Battery while discharging) sit in the left
+  column, the House in the middle, sinks (devices, Feed-in, Battery while charging)
+  on the right, and **every** real flow is drawn as its own band sized to its kWh.
+  Because producers are always left and sinks always right, every band — and its
+  animated particles — runs strictly left → right, i.e. in the true direction of
+  energy flow. A battery that both charges and discharges within the period now
+  honestly appears in both columns (store on the right, release on the left).
+
 ## 16.64.1
 ### Fixed
 - fix(spot): draw 24h spot chart on a real time axis so "jetzt" and labels align
