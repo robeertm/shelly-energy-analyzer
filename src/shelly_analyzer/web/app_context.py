@@ -143,6 +143,19 @@ class AppState:
         the time-stamped step function (``compensation_history``). The DB layer
         applies whichever fits the sample timestamp (history wins, fallback
         covers pre-history samples)."""
+        # Heal any stale legacy scalar on a main-meter child before it is pushed
+        # as the pre-history fallback. A meter child's scalar is derived purely
+        # from the meter's reading log; an emptied reading log must leave it at 0.
+        # Older builds could persist a stale factor (a user's −67 % 'Netz'), which
+        # then silently compensated every sample. Reconcile in-memory so both the
+        # calibration display (reads state.cfg) and the data (factors below) agree.
+        try:
+            from shelly_analyzer.io.config import reconcile_meter_child_scalars
+            healed, changed = reconcile_meter_child_scalars(self.cfg)
+            if changed:
+                self.cfg = healed
+        except Exception:
+            logger.debug("meter-child scalar reconcile failed", exc_info=True)
         try:
             db = getattr(self.storage, "db", None)
             if db is None or not hasattr(db, "set_compensation"):

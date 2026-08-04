@@ -350,6 +350,17 @@ def create_app(config_path: Optional[str] = None) -> Flask:
     state = AppState(cfg=cfg, storage=storage, out_dir=out_dir)
     state._cfg_path = cfg_path  # type: ignore[attr-defined]
 
+    # AppState.__init__ heals any stale main-meter-child compensation scalar in
+    # memory. Persist that heal once so the fix sticks in the config file (an old
+    # build could have saved e.g. a user's −67 % 'Netz' factor with empty history).
+    try:
+        from shelly_analyzer.io.config import reconcile_meter_child_scalars, save_config
+        _, _healed = reconcile_meter_child_scalars(cfg)
+        if _healed:
+            save_config(state.cfg, cfg_path)
+    except Exception:
+        logging.getLogger(__name__).debug("persist meter-child heal failed", exc_info=True)
+
     # Create Flask app
     app = Flask(
         __name__,
