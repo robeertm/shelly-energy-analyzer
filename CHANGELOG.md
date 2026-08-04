@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.65.3
+### Fixed
+- fix(calibration): self-heal stale main-meter-child compensation scalar on load
+  The reset-on-delete fix only ran during a recompute, so a config already
+  persisted by an older build — reading deleted, history emptied, but the legacy
+  compensation_percent scalar left stale — kept applying that dead factor. The
+  scalar is pushed as the pre-history compensation fallback, so it silently
+  scaled every sample of the affected grid meter and the calibration tab kept
+  showing it (the −67.12 % that lingered after the last reading was removed).
+
 ## 16.65.2
 ### Fixed
 - fix(calibration): reset compensation scalar to 0 when last reading/history entry is removed
