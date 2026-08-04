@@ -71,7 +71,7 @@ def test_children_map():
 
 
 def test_live_subtraction_basic():
-    # Mike's live numbers: Haus tile reads house+wallbox; wallbox its own.
+    # Live numbers: Haus tile reads house+wallbox; wallbox its own.
     tiles = [
         {"key": "haus", "power_w": 5968.8, "today_kwh": 14.089},
         {"key": "wallbox", "power_w": 5466.7, "today_kwh": 5.323},

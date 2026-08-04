@@ -252,7 +252,7 @@ def test_bidirectional_grid_meter():
 
 
 def test_bidirectional_needs_export_at_both_ends():
-    """Robert's −67 % bug: the feed-in register (2.8.0) is logged on only the LATEST
+    """The −67 % bug: the feed-in register (2.8.0) is logged on only the LATEST
     reading, not the earlier one. Then no export delta can be formed for that
     interval, so an import-only meter delta (Δ 1.8.0) must NOT be compared against
     the Shelly's full import+export throughput — that would yield a garbage factor.
@@ -271,10 +271,10 @@ def test_bidirectional_needs_export_at_both_ends():
     db = _FakeDB({"solar": {(100, 200): (63.0, 130.0)}})
     app, state = _app(cfg, db)
     with app.test_client() as c:
-        # First reading: import register only, NO feed-in (mirrors Robert's 14520).
+        # First reading: import register only, NO feed-in (mirrors the 14520 case).
         j = c.post("/api/meters/grid/reading", json={"ts": 100, "kwh": 14520.0}).get_json()
         assert j["ok"] and j["readings"] == 1, j
-        # Second reading carries BOTH registers (Robert's 14583 / 15497).
+        # Second reading carries BOTH registers (14583 / 15497).
         j = c.post("/api/meters/grid/reading",
                    json={"ts": 200, "kwh": 14583.0, "export_kwh": 15497.0}).get_json()
         assert j["ok"] and j["readings"] == 2, j
@@ -301,7 +301,7 @@ def test_bidirectional_needs_export_at_both_ends():
 
 
 def test_removing_last_reading_resets_scalar():
-    """Mike's follow-up: a derived grid factor exists (scalar mirrors it), then the
+    """Follow-up: a derived grid factor exists (scalar mirrors it), then the
     LAST reading is removed so no interval remains. The legacy compensation_percent
     scalar must fall back to 0 — otherwise the stale −67 % keeps showing on 'Netz'
     even though the history is empty."""
@@ -355,9 +355,9 @@ def test_deleting_last_history_entry_resets_scalar():
 
 
 def test_reconcile_heals_persisted_stale_child_scalar():
-    """Mike's live case: the −67 % stayed even after the reset-on-delete fix,
-    because that fix only fires DURING a recompute. He had already deleted the
-    reading under an older build, so his config was *persisted* with an emptied
+    """Live case: the −67 % stayed even after the reset-on-delete fix,
+    because that fix only fires DURING a recompute. The reading had already been
+    deleted under an older build, so the config was *persisted* with an emptied
     history but a stale −67.12 % scalar on 'Netz'. Loading that config must heal
     it — otherwise the scalar keeps compensating every sample and the calibration
     tab keeps showing −67.12 %. Standalone (no-meter) scalars stay untouched."""
@@ -365,17 +365,17 @@ def test_reconcile_heals_persisted_stale_child_scalar():
         CompensationEntry, reconcile_meter_child_scalars, load_config, save_config,
     )
     cfg = AppConfig(
-        main_meters=[MainMeter(id="klipphausen", name="Klipphausen")],
+        main_meters=[MainMeter(id="main", name="Main meter")],
         devices=[
             # Meter child with a stale scalar and NO backing history → heal to 0.
             DeviceConfig(key="netz", name="Netz", host="", kind="em",
-                         parent="klipphausen", compensation_percent=-67.12),
+                         parent="main", compensation_percent=-67.12),
             # Meter child whose scalar disagrees with its latest history entry →
             # heal to the history value (2.485), not left at a wrong 9.9.
             DeviceConfig(key="haus", name="Haus", host="", kind="em",
-                         parent="klipphausen", compensation_percent=9.9,
+                         parent="main", compensation_percent=9.9,
                          compensation_history=(CompensationEntry(
-                             effective_from_ts=100, percent=2.485, note="meter:klipphausen"),)),
+                             effective_from_ts=100, percent=2.485, note="meter:main"),)),
             # Standalone device: scalar-only calibration is legitimate → untouched.
             DeviceConfig(key="lonely", name="Boiler", host="", kind="em",
                          parent="", compensation_percent=1.5),
@@ -396,7 +396,7 @@ def test_reconcile_heals_persisted_stale_child_scalar():
     save_config(healed, p)
     back = load_config(p)
     assert next(x for x in back.devices if x.key == "netz").compensation_percent == 0.0
-    print("OK  loading a config heals a stale main-meter-child scalar (Mike's −67 %)")
+    print("OK  loading a config heals a stale main-meter-child scalar (the −67 %)")
 
 
 if __name__ == "__main__":
