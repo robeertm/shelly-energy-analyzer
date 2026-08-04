@@ -8171,17 +8171,18 @@ function _drawSankeyFlow(canvasId, d) {{
   const linkTgt = d.sankey.link.target || [];
   const linkVal = d.sankey.link.value || [];
 
-  // Build a node-graph flow diagram straight from the sankey links so EVERY real
-  // flow is drawn — including the ones that skip the House (PV → Feed-in,
-  // PV → Battery). The old renderer was House-centric (sources = links into the
-  // House, consumers = links out of it) and shoved those bypass-flows into a
-  // footer text line, so a pure-export day — PV feeding the grid, house drawing
-  // nothing — rendered as an empty box. Left column = producers (PV, Grid,
-  // Battery while discharging), middle = House, right column = sinks (devices,
-  // Feed-in, Battery while charging). Producers are always left and sinks always
-  // right, so every band runs strictly left → right and the animated particles
-  // travel in the true direction of energy flow.
+  // Build a node-graph flow diagram straight from the sankey links. Robert's
+  // model: the grid ("Netz") is ONE thing and it belongs on the FAR SIDE (right),
+  // not as a left-hand producer. On-site generation (PV, Battery while
+  // discharging) sits left, the House in the middle, loads on the right. The
+  // utility connection is a single "Netz" rectangle at the top of the right
+  // column. Importing pulls energy IN from the grid (band animates right → left,
+  // grid → house); exporting pushes it back OUT to the grid (band animates
+  // left → right, PV → grid). Same node, opposite directions — so the animation
+  // always shows the true direction of the flow.
   const houseIdx = nodeLabels.indexOf('House');
+  const gridIdx  = nodeLabels.indexOf('Grid');     // import edge: Grid → House
+  const feedIdx  = nodeLabels.indexOf('Feed-in');  // export edge: PV → Feed-in
   const links = [];
   for (let i = 0; i < linkVal.length; i++) {{
     if (linkVal[i] > 0.001) links.push({{ s: linkSrc[i], t: linkTgt[i], v: linkVal[i] }});
@@ -8194,14 +8195,18 @@ function _drawSankeyFlow(canvasId, d) {{
     inSum[l.t] = (inSum[l.t] || 0) + l.v;
   }});
 
-  // Column membership. A non-House node that emits energy is a producer (left);
-  // one that receives energy is a sink (right). The Battery legitimately lands in
-  // BOTH columns when it charges and discharges within the same period — two
-  // honest rectangles for "store" (right) and "release" (left) — and each of its
-  // bands still runs left → right.
+  // Grid import (Grid as a source) and export (Feed-in as a target) are the two
+  // ways energy crosses the meter. Both collapse into one right-side "Netz" node.
+  const gridImport = gridIdx >= 0 ? (outSum[gridIdx] || 0) : 0;
+  const gridExport = feedIdx >= 0 ? (inSum[feedIdx]  || 0) : 0;
+
+  // Column membership. On-site producers (NOT the grid) go left; loads go right.
+  // The Battery legitimately lands in BOTH columns when it charges and discharges
+  // within the same period — two honest rectangles for "store" (right) and
+  // "release" (left) — and each of its bands still runs left → right.
   const leftNodes = [], rightNodes = [];
   for (let n = 0; n < nodeLabels.length; n++) {{
-    if (n === houseIdx) continue;
+    if (n === houseIdx || n === gridIdx || n === feedIdx) continue;  // grid → Netz
     if ((outSum[n] || 0) > 0.001) leftNodes.push({{ idx: n, name: nodeLabels[n], kwh: outSum[n], color: nodeColors[n] || '#e53935' }});
     if ((inSum[n] || 0) > 0.001) rightNodes.push({{ idx: n, name: nodeLabels[n], kwh: inSum[n], color: nodeColors[n] || '#3498db' }});
   }}
@@ -8211,10 +8216,19 @@ function _drawSankeyFlow(canvasId, d) {{
   // point at a dropped node are simply skipped when the bands are drawn.
   const topRight = rightNodes.slice(0, 12);
 
+  // The Netz rectangle: one node, top of the right column, sized by total grid
+  // throughput (import + export). Absent on a fully self-supplied, non-exporting
+  // day. Both bands attach to its LEFT edge — the side that faces the House.
+  const netz = (gridImport + gridExport) > 0.001
+    ? {{ name: 'Netz', kwh: gridImport + gridExport, color: '#e74c3c', isNetz: true,
+         imp: gridImport, exp: gridExport }}
+    : null;
+  const rightItems = netz ? [netz].concat(topRight) : topRight;
+
   // Scale so no rectangle overflows the frame: the largest of the producer sum,
   // the sink sum, and the metered total consumption.
   const _sum = function(arr) {{ return arr.reduce(function(a, x) {{ return a + x.kwh; }}, 0); }};
-  const total = Math.max(_sum(leftNodes), _sum(topRight), d.total_consumption_kwh || 0, 0.01);
+  const total = Math.max(_sum(leftNodes), _sum(rightItems), d.total_consumption_kwh || 0, 0.01);
 
   // Layout constants (in pixels)
   const PAD_X = 10, PAD_Y = 30;
@@ -8264,7 +8278,7 @@ function _drawSankeyFlow(canvasId, d) {{
   ctx.fillStyle = fg;
   ctx.textAlign = 'center';
   ctx.fillText('Sources', SRC_X + SRC_W / 2, TOP - 6);
-  ctx.fillText('Consumers', TGT_X + TGT_W / 2, TOP - 6);
+  ctx.fillText('Consumers / Netz', TGT_X + TGT_W / 2, TOP - 6);
 
   // --- Lay out the three columns ---
   function layoutCol(items, x, w, minH) {{
@@ -8279,16 +8293,33 @@ function _drawSankeyFlow(canvasId, d) {{
     }});
   }}
   layoutCol(leftNodes, SRC_X, SRC_W, 20);
-  layoutCol(topRight, TGT_X, TGT_W, 18);
+  layoutCol(rightItems, TGT_X, TGT_W, 18);
+
+  // Netz carries two flows on its left edge: import leaves it (top slice), export
+  // enters it (below). Split the rectangle so the two never overlap.
+  if (netz) {{
+    const impH = netz.h * (netz.imp / (netz.kwh || 1));
+    netz.outCur = netz.y;           // import slice (Netz → House) starts at the top
+    netz.inCur = netz.y + impH;     // export slice (PV → Netz) sits below it
+  }}
 
   const houseCy = (TOP + BOT) / 2;
   const houseH = Math.min(72, Math.max(46, usable * 0.24));
-  const house = {{
-    x: HOUSE_X, w: HOUSE_W, cy: houseCy, h: houseH,
-    outCur: houseCy - houseH / 2, inCur: houseCy - houseH / 2
-  }};
   const houseIn = inSum[houseIdx] || 0;
   const houseOut = outSum[houseIdx] || 0;
+  // The House LEFT edge takes on-site inflows (PV, battery). Its RIGHT edge is
+  // shared: grid import comes IN at the top, device loads go OUT below it — the two
+  // tile the edge exactly so nothing overlaps.
+  const houseInLeft = Math.max(0, houseIn - gridImport);
+  const rightThru = houseOut + gridImport;
+  const gridBandHouseH = rightThru > 0 ? houseH * (gridImport / rightThru) : 0;
+  const house = {{
+    x: HOUSE_X, w: HOUSE_W, cy: houseCy, h: houseH,
+    inCur: houseCy - houseH / 2,                    // left-edge inflow anchor
+    gridInCur: houseCy - houseH / 2,                // right-edge grid-import anchor (top)
+    outCur: houseCy - houseH / 2 + gridBandHouseH,  // device outflow anchor (below import)
+    outH: houseH - gridBandHouseH                   // device outflow region height
+  }};
 
   const leftByIdx = {{}}; leftNodes.forEach(function(r) {{ leftByIdx[r.idx] = r; }});
   const rightByIdx = {{}}; topRight.forEach(function(r) {{ rightByIdx[r.idx] = r; }});
@@ -8298,20 +8329,49 @@ function _drawSankeyFlow(canvasId, d) {{
   // only affects which edge-slot each band takes, never conservation.
   const _cy = function(idx, isSrc) {{
     if (idx === houseIdx) return houseCy;
+    if (netz && (idx === gridIdx || idx === feedIdx)) return netz.cy;
     const r = isSrc ? leftByIdx[idx] : rightByIdx[idx];
     return r ? r.cy : 1e9;
   }};
   links.sort(function(a, b) {{
     return (_cy(a.s, true) - _cy(b.s, true)) || (_cy(a.t, false) - _cy(b.t, false));
   }});
+  // Slice heights for the two Netz flows (its rect is shared import + export).
+  const _netzImpH = netz ? netz.h * (netz.imp / (netz.kwh || 1)) : 0;
+  const _netzExpH = netz ? netz.h * (netz.exp / (netz.kwh || 1)) : 0;
   links.forEach(function(l) {{
+    // (1) IMPORT — Grid → House. The grid sits on the RIGHT, so energy enters the
+    // house FROM the right: the band runs from the Netz rectangle's left edge back
+    // to the House's right edge, and its particles travel right → left.
+    if (netz && l.s === gridIdx) {{
+      const gH = Math.max(2, (l.v / (netz.imp || l.v)) * _netzImpH);
+      const hH = Math.max(2, (l.v / (gridImport || l.v)) * gridBandHouseH);
+      const gy = netz.outCur + gH / 2; netz.outCur += gH;
+      const hy = house.gridInCur + hH / 2; house.gridInCur += hH;
+      // x0 = Netz left edge (right side); x1 = House right edge (to its left) → R→L.
+      flowBand(netz.x, gy, gH, house.x + house.w, hy, hH, '#e74c3c', 0.30);
+      return;
+    }}
+    // (2) EXPORT — PV → Feed-in. The grid is on the right: energy leaves the house
+    // system toward it, so the band runs left → right into the Netz rectangle.
+    if (netz && l.t === feedIdx) {{
+      const src = leftByIdx[l.s]; if (!src) return;
+      const sH = Math.max(2, (l.v / (src.kwh || l.v)) * src.h);
+      const nH = Math.max(2, (l.v / (netz.exp || l.v)) * _netzExpH);
+      const sy = src.outCur + sH / 2; src.outCur += sH;
+      const ny = netz.inCur + nH / 2; netz.inCur += nH;
+      flowBand(src.x + src.w, sy, sH, netz.x, ny, nH, '#2ecc71', 0.32);
+      return;
+    }}
+    // (3) On-site flows — producer → House, House → device, PV → Battery. All run
+    // strictly left → right.
     // Source anchor: the right edge of a producer, or the House's right edge.
     let sx, sThru, sNodeH, sCurObj;
-    if (l.s === houseIdx) {{ sx = house.x + house.w; sThru = houseOut; sNodeH = house.h; sCurObj = house; }}
+    if (l.s === houseIdx) {{ sx = house.x + house.w; sThru = houseOut; sNodeH = house.outH; sCurObj = house; }}
     else {{ const r = leftByIdx[l.s]; if (!r) return; sx = r.x + r.w; sThru = r.kwh; sNodeH = r.h; sCurObj = r; }}
     // Target anchor: the left edge of a sink, or the House's left edge.
     let tx, tThru, tNodeH, tCurObj;
-    if (l.t === houseIdx) {{ tx = house.x; tThru = houseIn; tNodeH = house.h; tCurObj = house; }}
+    if (l.t === houseIdx) {{ tx = house.x; tThru = houseInLeft; tNodeH = house.h; tCurObj = house; }}
     else {{ const r = rightByIdx[l.t]; if (!r) return; tx = r.x; tThru = r.kwh; tNodeH = r.h; tCurObj = r; }}
     const sH = Math.max(2, (l.v / (sThru || l.v)) * sNodeH);
     const tH = Math.max(2, (l.v / (tThru || l.v)) * tNodeH);
@@ -8358,16 +8418,31 @@ function _drawSankeyFlow(canvasId, d) {{
   ctx.font = 'bold 12px sans-serif';
   ctx.fillText((d.total_consumption_kwh || 0).toFixed(1) + ' kWh', house.x + house.w / 2, houseCy + 12);
 
-  // --- Sink nodes (right) ---
-  topRight.forEach(function(c) {{
+  // --- Right column: loads + the Netz node ---
+  rightItems.forEach(function(c) {{
     ctx.fillStyle = c.color;
-    ctx.globalAlpha = 0.88;
+    ctx.globalAlpha = c.isNetz ? 0.92 : 0.88;
     roundRect(c.x, c.y, c.w, c.h, 6);
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.font = 'bold 9px sans-serif';
+    if (c.isNetz) {{
+      // Show both directions honestly: ↓ import (from grid), ↑ export (to grid).
+      const parts = [];
+      if (c.imp > 0.01) parts.push('↓ ' + c.imp.toFixed(1));
+      if (c.exp > 0.01) parts.push('↑ ' + c.exp.toFixed(1));
+      if (c.h > 26) {{
+        ctx.fillText('Netz', c.x + c.w / 2, c.cy - 2);
+        ctx.font = '8px sans-serif';
+        ctx.fillText(parts.join('   ') + ' kWh', c.x + c.w / 2, c.cy + 10);
+      }} else {{
+        ctx.font = 'bold 8px sans-serif';
+        ctx.fillText('Netz  ' + parts.join('  '), c.x + c.w / 2, c.cy + 3);
+      }}
+      return;
+    }}
     const label = c.name.length > 20 ? c.name.substring(0, 18) + '..' : c.name;
     ctx.fillText(label + '   ' + c.kwh.toFixed(1) + ' kWh (' + (c.kwh / total * 100).toFixed(0) + '%)', c.x + c.w / 2, c.cy + 3);
   }});
@@ -8375,8 +8450,10 @@ function _drawSankeyFlow(canvasId, d) {{
   _animateSankey();
 }}
 
-// Animated particles flowing left→right (sources → house → consumers) along the
-// captured band centre lines, on a transparent overlay canvas so the static
+// Animated particles travelling along each captured band from its x0/y0 anchor to
+// its x1/y1 anchor — i.e. in the band's true direction of energy flow. On-site
+// bands run left→right; a grid IMPORT band was captured Netz→House so its
+// particles run right→left. Drawn on a transparent overlay canvas so the static
 // diagram is never redrawn. Honours prefers-reduced-motion and self-cancels when
 // the energy-flow pane is left.
 function _animateSankey() {{
