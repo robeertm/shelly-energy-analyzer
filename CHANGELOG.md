@@ -1,5 +1,32 @@
 # Changelog
 
+## 16.65.0
+### Added
+- **Bidirectional grid-meter calibration (feed-in register 2.8.0).** The meter
+  reading log could only calibrate a one-way consumption meter: you logged the
+  import counter (OBIS 1.8.0) and it derived a drift factor from the delta between
+  readings versus the summed Shelly children. That breaks down for a grid
+  connection meter behind a PV system — once the panels cover the house the import
+  register barely moves while most energy flows the *other* way as feed-in, so a
+  factor derived from import alone is noise. Each meter reading can now also record
+  the feed-in register (OBIS 2.8.0). When any reading carries a feed-in value the
+  meter is treated as bidirectional and calibrated on **total throughput**
+  (import + feed-in) against the signed grid Shelly's own throughput — accurate
+  even when hardly any grid power is drawn. A single measurement-gain factor is
+  applied to the signed device, which is correct for a current transformer whose
+  error is the same in both directions.
+- The bidirectional factor is applied **only to the signed grid meter** (the child
+  that actually shows feed-in over the reading span). Pure-consumption sub-meters
+  hanging off the same connection — a grid-parallel tenant circuit, the house
+  meter — are auto-excluded: a grid meter's registers already net them out, so
+  folding their draw into the comparison would corrupt it. Nothing to configure;
+  a tenant Shelly is recognised as a load and left out of the grid factor.
+- Calibration tab: the reading log shows a second **"Einspeisung 2.8.0"** column
+  and input (optional — leave it empty for an ordinary consumption meter), and an
+  inline hint explaining when to fill it. `/api/meters` reports each meter's
+  `bidirectional` flag and the per-reading `export_kwh`. Fully backward compatible:
+  existing readings load with `export_kwh = 0` and behave exactly as before.
+
 ## 16.64.3
 ### Fixed
 - fix(sankey): put the grid on the far side and reverse the flow on export

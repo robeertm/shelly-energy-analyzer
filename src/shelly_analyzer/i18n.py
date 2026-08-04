@@ -12275,6 +12275,10 @@ _I18N.setdefault("de", {}).update({
     "cal.err_reading": "Bitte Datum und Zählerstand eingeben.",
     "cal.confirm_del_reading": "Diese Ablesung löschen? Die betroffenen Zeiträume werden neu berechnet.",
     "cal.pre_factor": "Vor der ersten Ablesung (gewichteter Gesamtfaktor)",
+    "cal.reading_import": "Bezug 1.8.0 (kWh)",
+    "cal.reading_export": "Einspeisung 2.8.0 (kWh)",
+    "cal.reading_export_opt": "Einspeisung 2.8.0 (kWh, optional)",
+    "cal.bidir_hint": "Netzanschluss-Zähler mit PV? Trage zusätzlich den Einspeise-Stand (2.8.0) ein. Dann wird über den Gesamtdurchsatz (Bezug + Einspeisung) kalibriert — auch dann korrekt, wenn kaum Netzstrom bezogen wird. Der Faktor wirkt nur auf den signierten Netz-Shelly; reine Verbraucher (z. B. Mieter) bleiben außen vor.",
 })
 _I18N.setdefault("en", {}).update({
     "cal.reading_log": "Meter readings",
@@ -12288,4 +12292,8 @@ _I18N.setdefault("en", {}).update({
     "cal.err_reading": "Please enter date and meter reading.",
     "cal.confirm_del_reading": "Delete this reading? The affected periods are recomputed.",
     "cal.pre_factor": "Before the first reading (weighted overall factor)",
+    "cal.reading_import": "Import 1.8.0 (kWh)",
+    "cal.reading_export": "Feed-in 2.8.0 (kWh)",
+    "cal.reading_export_opt": "Feed-in 2.8.0 (kWh, optional)",
+    "cal.bidir_hint": "Grid connection meter with PV? Also log the feed-in register (2.8.0). Calibration then uses total throughput (import + feed-in) — accurate even when barely any grid power is drawn. The factor applies only to the signed grid Shelly; pure loads (e.g. a tenant) are left out.",
 })

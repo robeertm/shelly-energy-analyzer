@@ -751,6 +751,28 @@ def _raw_kwh_over(state, db, dkey: str, t0: int, t1: int) -> float:
     return 0.0
 
 
+def _raw_kwh_split_over(state, db, dkey: str, t0: int, t1: int):
+    """RAW (uncompensated) measured energy of a device over [t0, t1] split by sign:
+    returns ``(import_kwh, export_kwh)`` = (Σ positive hourly kWh, Σ |negative
+    hourly kWh|). For a plain consumption meter ``export_kwh`` is 0; for a *signed*
+    grid meter (+Bezug / −Einspeisung) it separates draw from feed-in — needed to
+    calibrate a bidirectional grid connection meter against its Shelly."""
+    import pandas as pd
+    try:
+        try:
+            dfh = db.query_hourly(dkey, start_ts=t0, end_ts=t1, compensate=False)
+        except TypeError:
+            dfh = db.query_hourly(dkey, start_ts=t0, end_ts=t1)
+        if dfh is not None and not dfh.empty and "kwh" in dfh.columns:
+            col = pd.to_numeric(dfh["kwh"], errors="coerce").fillna(0.0)
+            imp = float(col[col > 0].sum())
+            exp = float(col[col < 0].abs().sum())
+            return imp, exp
+    except Exception:
+        pass
+    return 0.0, 0.0
+
+
 def _comp_kwh_over(state, db, dkey: str, t0: int, t1: int) -> float:
     """COMPENSATED measured kWh of a device over [t0, t1] (applies its dated
     compensation history / flat factor). Used to subtract a deducted tenant
@@ -815,9 +837,15 @@ def list_meters():
         {
             "id": m.id, "name": m.name, "serial": m.serial,
             "readings": [
-                {"ts": int(getattr(r, "ts", 0) or 0), "kwh": float(getattr(r, "kwh", 0.0) or 0.0)}
+                {"ts": int(getattr(r, "ts", 0) or 0),
+                 "kwh": float(getattr(r, "kwh", 0.0) or 0.0),
+                 "export_kwh": float(getattr(r, "export_kwh", 0.0) or 0.0)}
                 for r in sorted((getattr(m, "readings", ()) or ()), key=lambda r: int(getattr(r, "ts", 0) or 0))
             ],
+            # Bidirectional grid meter = at least one reading logs a feed-in (2.8.0)
+            # value → calibrated on import+export throughput.
+            "bidirectional": any(float(getattr(r, "export_kwh", 0.0) or 0.0) > 0
+                                 for r in (getattr(m, "readings", ()) or ())),
         }
         for m in (getattr(state.cfg, "main_meters", []) or [])
     ]
@@ -975,16 +1003,52 @@ def _recompute_meter_from_readings(state, meter_id):
     children, deduct_children = _split_meter_children(state.cfg.devices, meter_id)
     tag = "meter:" + str(meter_id)
     pre_tag = tag + ":pre"  # synthetic pre-first-reading step (weighted overall)
+
+    # Bidirectional grid meter: at least one reading logs a feed-in register
+    # (OBIS 2.8.0). Then calibration compares the meter's total THROUGHPUT
+    # (Bezug 1.8.0 + Einspeisung 2.8.0) against the signed grid Shelly's own
+    # throughput. This stays accurate when the owner barely imports (PV covers the
+    # house, so most energy is fed back). A single measurement-gain factor is
+    # applied to the signed device — correct for a CT whose error is the same in
+    # both directions.
+    bidir = any(float(getattr(r, "export_kwh", 0.0) or 0.0) > 0 for r in readings)
+    grid_children = children
+    nongrid_children = []
+    if bidir and readings:
+        # Only children that actually carry feed-in (negative/export energy) over
+        # the reading span are the grid meter(s) being calibrated; pure-consumption
+        # sub-meters (tenant, house) live on the load side and are auto-excluded —
+        # a grid meter's registers already net them out.
+        span0, span1 = int(readings[0].ts), int(readings[-1].ts)
+        grid_children, nongrid_children = [], []
+        for c in children:
+            _, exp = _raw_kwh_split_over(state, db, c.key, span0, span1)
+            (grid_children if exp > 1e-6 else nongrid_children).append(c)
+        if not grid_children:   # no signed child → treat all as grid (best effort)
+            grid_children = children
+
     derived = []  # (eff_ts, percent, meter_delta, raw_delta)
     for i in range(len(readings) - 1):
         t0, t1 = int(readings[i].ts), int(readings[i + 1].ts)
         if t1 <= t0:
             continue
-        meter_d = float(readings[i + 1].kwh) - float(readings[i].kwh)
-        # Subtract deducted tenant sub-meters (compensated → their real usage) so a
-        # single meter covering owner + tenant still yields the OWNER drift factor.
-        meter_d -= sum(_comp_kwh_over(state, db, c.key, t0, t1) for c in deduct_children)
-        raw_d = sum(_raw_kwh_over(state, db, c.key, t0, t1) for c in children)
+        if bidir:
+            # Meter throughput = Δ import register + Δ export register.
+            imp_d = float(readings[i + 1].kwh) - float(readings[i].kwh)
+            e0 = float(getattr(readings[i], "export_kwh", 0.0) or 0.0)
+            e1 = float(getattr(readings[i + 1], "export_kwh", 0.0) or 0.0)
+            exp_d = (e1 - e0) if (e0 > 0 and e1 >= e0) else 0.0
+            meter_d = max(0.0, imp_d) + max(0.0, exp_d)
+            raw_d = 0.0
+            for c in grid_children:
+                ci, ce = _raw_kwh_split_over(state, db, c.key, t0, t1)
+                raw_d += ci + ce
+        else:
+            meter_d = float(readings[i + 1].kwh) - float(readings[i].kwh)
+            # Subtract deducted tenant sub-meters (compensated → their real usage) so a
+            # single meter covering owner + tenant still yields the OWNER drift factor.
+            meter_d -= sum(_comp_kwh_over(state, db, c.key, t0, t1) for c in deduct_children)
+            raw_d = sum(_raw_kwh_over(state, db, c.key, t0, t1) for c in children)
         if meter_d <= 0 or raw_d <= 0:
             continue
         pct = (meter_d / raw_d - 1.0) * 100.0
@@ -1002,7 +1066,10 @@ def _recompute_meter_from_readings(state, meter_id):
             pct_overall = (sum_md / sum_rd - 1.0) * 100.0
             pre_entry = (1, pct_overall, sum_md, sum_rd)
     new_cfg = state.cfg
-    for c in children:
+    # In bidirectional mode only the signed grid child(ren) carry the derived
+    # factor; consumption-only children are excluded (see above).
+    apply_children = grid_children if bidir else children
+    for c in apply_children:
         kept = [e for e in (getattr(c, "compensation_history", ()) or ())
                 if not str(getattr(e, "note", "")).startswith(tag)]
         made = [CompensationEntry(effective_from_ts=t0, percent=pct, note=tag,
@@ -1013,10 +1080,12 @@ def _recompute_meter_from_readings(state, meter_id):
                 effective_from_ts=pre_entry[0], percent=pre_entry[1], note=pre_tag,
                 meter_kwh=pre_entry[2], raw_kwh=pre_entry[3]))
         new_cfg = _set_history_on_cfg(new_cfg, c.key, kept + made)
-    # Deducted tenant sub-meters must NOT carry this meter's derived factor — strip
-    # any stale entries so a device switched to "deduct" drops its old shared factor
-    # (its own manual/flat compensation, note != meter tag, is preserved).
-    for c in deduct_children:
+    # Children that must NOT carry this meter's derived factor — deducted tenant
+    # sub-meters (all modes) and consumption-only children auto-excluded from a
+    # bidirectional grid meter — get any stale meter-tag entries stripped so they
+    # drop an old shared factor (their own manual/flat compensation, note != meter
+    # tag, is preserved).
+    for c in list(deduct_children) + list(nongrid_children):
         old = getattr(c, "compensation_history", ()) or ()
         kept = [e for e in old if not str(getattr(e, "note", "")).startswith(tag)]
         if len(kept) != len(old):
@@ -1027,13 +1096,17 @@ def _recompute_meter_from_readings(state, meter_id):
 @bp.route("/api/meters/<mid>/reading", methods=["POST"])
 def add_meter_reading(mid):
     """Add (or replace at the same ts) a hand-read meter value, then recompute.
-    Body: {ts, kwh}. ts may be older than existing readings."""
+    Body: {ts, kwh, export_kwh?}. ``kwh`` = import register (OBIS 1.8.0 / Bezug);
+    optional ``export_kwh`` = feed-in register (OBIS 2.8.0 / Einspeisung) for a
+    bidirectional grid connection meter. ts may be older than existing readings."""
     state = _get_state()
     body = request.get_json(silent=True) or {}
     mid = str(mid or "").strip()
     try:
         ts = _comp_parse_ts(body.get("ts"))
         kwh = float(body.get("kwh"))
+        _exp_raw = body.get("export_kwh")
+        export_kwh = float(_exp_raw) if _exp_raw not in (None, "") else 0.0
     except Exception as e:
         return jsonify({"ok": False, "error": f"invalid input: {e}"}), 400
     meters = list(getattr(state.cfg, "main_meters", []) or [])
@@ -1042,7 +1115,7 @@ def add_meter_reading(mid):
         return jsonify({"ok": False, "error": "meter not found"}), 404
     m = meters[idx]
     rd = [r for r in (getattr(m, "readings", ()) or ()) if int(r.ts) != int(ts)]
-    rd.append(MeterReading(ts=int(ts), kwh=kwh))
+    rd.append(MeterReading(ts=int(ts), kwh=kwh, export_kwh=max(0.0, export_kwh)))
     rd.sort(key=lambda r: int(r.ts))
     meters[idx] = replace(m, readings=tuple(rd))
     state.cfg = replace(state.cfg, main_meters=meters)  # recompute must see new readings

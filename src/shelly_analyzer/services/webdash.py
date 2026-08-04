@@ -9243,6 +9243,9 @@ _loadLsSettings();
       if (!kids.length) return;
       const fid = 'calm-' + m.id;
       const readings = (m.readings || []).slice().sort((a,b) => a.ts - b.ts);
+      // Bidirektionaler Netzzähler: mindestens eine Ablesung hat einen
+      // Einspeise-Stand (2.8.0) → Kalibrierung über Gesamtdurchsatz.
+      const bidir = !!m.bidirectional || readings.some(r => Number(r.export_kwh || 0) > 0);
       // Alle kalibrierten Kinder tragen dieselben abgeleiteten Einträge → Historie eines reicht.
       const sharedHist = (histByKey[kids[0].key] && histByKey[kids[0].key].history) ? histByKey[kids[0].key].history : [];
       html += '<div style="margin-top:12px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">';
@@ -9251,6 +9254,9 @@ _loadLsSettings();
         t('cal.log_intro', 'Trage von Zeit zu Zeit den abgelesenen Zählerstand ein. Die Abweichung zwischen zwei Ablesungen wird automatisch berechnet und rückwirkend auf genau diesen Zeitraum angewendet. Eine einzelne Ablesung ist der Startwert (noch kein Faktor).') +
         ' ' + t('cal.will_sum', 'Summiert') + ': ' + kids.map(k => esc(k.name)).join(' + ') +
         (deductKids.length ? (' &minus; ' + deductKids.map(k => esc(k.name)).join(' &minus; ') + ' (' + t('cal.deducted', 'abgezogen') + ')') : '') + '</div>';
+      // Hinweis für einen bidirektionalen Netzanschluss-Zähler (mit PV/Einspeisung).
+      html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">💡 ' +
+        t('cal.bidir_hint', 'Netzanschluss-Zähler mit PV? Trage zusätzlich den Einspeise-Stand (2.8.0) ein. Dann wird über den Gesamtdurchsatz (Bezug + Einspeisung) kalibriert — auch dann korrekt, wenn kaum Netzstrom bezogen wird. Der Faktor wirkt nur auf den signierten Netz-Shelly; reine Verbraucher (z. B. Mieter) bleiben außen vor.') + '</div>';
       // Trend der Abweichung über die Zeit
       if (sharedHist.length) {{
         html += '<div style="margin:6px 0 10px">' + _calChartSvg(sharedHist) + '</div>';
@@ -9260,7 +9266,8 @@ _loadLsSettings();
         html += '<table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:8px">';
         html += '<thead><tr style="text-align:left;color:var(--muted)">' +
           '<th style="padding:3px 6px">' + t('cal.reading_date', 'Ablesung') + '</th>' +
-          '<th style="padding:3px 6px;text-align:right">' + t('cal.reading_value', 'Zählerstand (kWh)') + '</th>' +
+          '<th style="padding:3px 6px;text-align:right">' + (bidir ? t('cal.reading_import', 'Bezug 1.8.0 (kWh)') : t('cal.reading_value', 'Zählerstand (kWh)')) + '</th>' +
+          (bidir ? ('<th style="padding:3px 6px;text-align:right">' + t('cal.reading_export', 'Einspeisung 2.8.0 (kWh)') + '</th>') : '') +
           '<th style="padding:3px 6px;text-align:right">' + t('cal.factor_from', 'Faktor ab hier') + '</th><th></th></tr></thead><tbody>';
         for (let i = 0; i < readings.length; i++) {{
           const r = readings[i];
@@ -9272,6 +9279,7 @@ _loadLsSettings();
           html += '<tr style="border-top:1px solid var(--border)">';
           html += '<td style="padding:3px 6px">' + esc(_calFmtDate(r.ts)) + '</td>';
           html += '<td style="padding:3px 6px;text-align:right;font-variant-numeric:tabular-nums">' + Number(r.kwh).toFixed(2) + '</td>';
+          if (bidir) html += '<td style="padding:3px 6px;text-align:right;font-variant-numeric:tabular-nums">' + (Number(r.export_kwh || 0) > 0 ? Number(r.export_kwh).toFixed(2) : '—') + '</td>';
           html += '<td style="padding:3px 6px;text-align:right;font-variant-numeric:tabular-nums">' + (fpct === null ? '—' : ((fpct >= 0 ? '+' : '') + fpct.toFixed(2) + ' %')) + '</td>';
           html += '<td style="padding:3px 6px;text-align:right"><button class="btn btn-sm btn-danger" onclick="deleteMeterReading(\\u0027' + esc(m.id) + '\\u0027, ' + Number(r.ts) + ')">×</button></td>';
           html += '</tr>';
@@ -9291,7 +9299,9 @@ _loadLsSettings();
       // Neue Ablesung
       html += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">';
       html += _calField(fid + '-rt', t('cal.reading_when', 'Datum/Zeit der Ablesung'), 'datetime-local', '', _calLocalISOInputValue(new Date()));
-      html += _calField(fid + '-rv', t('cal.reading_value', 'Zählerstand (kWh)'), 'number', '0.001', '');
+      html += _calField(fid + '-rv', (bidir ? t('cal.reading_import', 'Bezug 1.8.0 (kWh)') : t('cal.reading_value', 'Zählerstand (kWh)')), 'number', '0.001', '');
+      // Optionales Einspeise-Feld (2.8.0): ausfüllen macht den Zähler bidirektional.
+      html += _calField(fid + '-re', t('cal.reading_export_opt', 'Einspeisung 2.8.0 (kWh, optional)'), 'number', '0.001', '');
       html += '<button class="btn btn-sm btn-primary" onclick="addMeterReading(\\u0027' + esc(m.id) + '\\u0027, \\u0027' + fid + '\\u0027)">' + t('cal.add_reading', 'Ablesung hinzufügen') + '</button>';
       html += '</div><div id="' + fid + '-res" style="font-size:12px;margin-top:8px"></div>';
       // Ist-Faktor je Unterzähler (read-only)
@@ -9345,13 +9355,17 @@ _loadLsSettings();
   async function addMeterReading(meterId, fid) {{
     const t0 = document.getElementById(fid + '-rt').value;
     const v = document.getElementById(fid + '-rv').value;
+    const expEl = document.getElementById(fid + '-re');
+    const exp = expEl ? expEl.value : '';
     const res = document.getElementById(fid + '-res');
     if (!t0 || v === '') {{
       if (res) res.innerHTML = '<span style="color:var(--danger)">' + t('cal.err_reading', 'Bitte Datum und Zählerstand eingeben.') + '</span>';
       return;
     }}
+    const payload = {{ts: t0, kwh: parseFloat(v)}};
+    if (exp !== '') payload.export_kwh = parseFloat(exp);
     try {{
-      const r = await fetch('/api/meters/' + encodeURIComponent(meterId) + '/reading', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{ts: t0, kwh: parseFloat(v)}})}});
+      const r = await fetch('/api/meters/' + encodeURIComponent(meterId) + '/reading', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify(payload)}});
       const d = await r.json();
       if (!d.ok) {{ if (res) res.innerHTML = '<span style="color:var(--danger)">' + (d.error || 'Fehler') + '</span>'; return; }}
       await loadCalibration();

@@ -88,9 +88,17 @@ class MeterReading:
     """One hand-read absolute meter value at a point in time (kWh @ ts). The app
     derives calibration factors from the consumption BETWEEN consecutive readings,
     so the user just logs readings over time (a fresh start = a single reading =
-    baseline, no factor yet). Older readings can be inserted at any time."""
+    baseline, no factor yet). Older readings can be inserted at any time.
+
+    ``kwh`` is the import register (OBIS 1.8.0 / Bezug). For a bidirectional grid
+    connection meter the user may also record the feed-in register (OBIS 2.8.0 /
+    Einspeisung) in ``export_kwh``; when any reading carries an export value the
+    meter is calibrated on total throughput (import + export) so it stays accurate
+    even when the owner barely imports (PV covers the house, most energy flows the
+    other way). ``export_kwh`` = 0 → a plain consumption meter (legacy behaviour)."""
     ts: int
     kwh: float
+    export_kwh: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -1294,7 +1302,11 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
                     ts = _coerce_int(r.get("ts", 0), 0)
                     if ts <= 0:
                         continue
-                    readings.append(MeterReading(ts=ts, kwh=_coerce_float(r.get("kwh", 0.0), 0.0)))
+                    readings.append(MeterReading(
+                        ts=ts,
+                        kwh=_coerce_float(r.get("kwh", 0.0), 0.0),
+                        export_kwh=_coerce_float(r.get("export_kwh", 0.0), 0.0),
+                    ))
             readings.sort(key=lambda r: r.ts)
             main_meters.append(MainMeter(
                 id=mid,
@@ -2101,7 +2113,9 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             {
                 "id": m.id, "name": m.name, "serial": m.serial,
                 "readings": [
-                    {"ts": int(getattr(r, "ts", 0) or 0), "kwh": float(getattr(r, "kwh", 0.0) or 0.0)}
+                    {"ts": int(getattr(r, "ts", 0) or 0),
+                     "kwh": float(getattr(r, "kwh", 0.0) or 0.0),
+                     "export_kwh": float(getattr(r, "export_kwh", 0.0) or 0.0)}
                     for r in (getattr(m, "readings", ()) or ())
                 ],
             }
