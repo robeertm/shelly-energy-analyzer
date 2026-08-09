@@ -21,6 +21,20 @@
   An emptied history now falls back to 0 %.
 
 ## Unreleased
+### Performance
+- perf(ev-log): cache the EV-Log window read so the tab loads fast. Every
+  `/api/ev_sessions` request re-ran `read_device_df` — a `SELECT *` over the
+  whole raw wallbox window (7–730 days) — before the already-memoised detection,
+  which dominated latency (the tab took ~a minute to show data). The raw window
+  frame is now cached per `(device, days)` and keyed on the device's newest DB
+  timestamp (a cheap primary-key `MAX` lookup), so filter-bar toggles and quiet
+  refreshes reuse it and only bust when autosync appends new samples. On top of
+  that, the full endpoint payload is cached and served instantly on idle
+  re-loads; the freshness token folds in the live-store tail so an in-progress
+  charge always recomputes, and the deletion list plus detection/grouping/pricing
+  config so any relevant change invalidates it. Both caches carry a 15-min
+  backstop TTL for config edits that don't move the newest timestamp.
+
 ### Fixed
 - fix(calibration): self-heal a stale main-meter-child compensation scalar on
   config load. The previous reset-on-delete fix only fired *during* a recompute,
