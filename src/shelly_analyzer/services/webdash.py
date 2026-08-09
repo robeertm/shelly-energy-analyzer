@@ -1141,25 +1141,45 @@ _HTML_TEMPLATE = """<!doctype html>
   <style>
     /* ── Theme variables ── */
     :root {{
-      --bg: #f6f7fb;
+      --bg: #eef1f7;
       --card: #ffffff;
+      --surface-2: #f6f7fb;
       --fg: #111827;
       --muted: #4b5563;
       --accent: #2563eb;
+      --accent-strong: #1d4ed8;
+      --accent-weak: rgba(37,99,235,0.10);
       --border: rgba(17,24,39,0.12);
       --chipbg: rgba(17,24,39,0.06);
       --pwr-low: #16a34a;
       --pwr-med: #d97706;
       --pwr-high: #dc2626;
+      /* elevation + shape + motion tokens (v16.66 visual refresh) */
+      --radius-sm: 10px;
+      --radius: 14px;
+      --radius-lg: 18px;
+      --shadow-sm: 0 1px 2px rgba(17,24,39,0.06), 0 1px 3px rgba(17,24,39,0.07);
+      --shadow-md: 0 4px 14px rgba(17,24,39,0.10);
+      --shadow-lg: 0 14px 38px rgba(17,24,39,0.18);
+      --ring: rgba(37,99,235,0.45);
+      --ease: cubic-bezier(0.4, 0, 0.2, 1);
+      --dur: 0.18s;
     }}
     :root[data-theme="dark"] {{
       --bg: #0b0f14;
       --card: #121821;
+      --surface-2: #18212c;
       --fg: #e8eef6;
       --muted: #9fb0c3;
       --accent: #6aa7ff;
+      --accent-strong: #8bb8ff;
+      --accent-weak: rgba(106,167,255,0.14);
       --border: rgba(255,255,255,0.08);
       --chipbg: rgba(255,255,255,0.04);
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.40);
+      --shadow-md: 0 6px 18px rgba(0,0,0,0.45);
+      --shadow-lg: 0 14px 38px rgba(0,0,0,0.58);
+      --ring: rgba(106,167,255,0.55);
     }}
     /* ── Reset / base ── */
     *, *::before, *::after {{ box-sizing: border-box; }}
@@ -1170,6 +1190,13 @@ _HTML_TEMPLATE = """<!doctype html>
       color: var(--fg);
       overflow: hidden;
       height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }}
+    /* Keyboard-only focus ring (mouse clicks stay clean) */
+    :focus-visible {{ outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 6px; }}
+    @media (prefers-reduced-motion: reduce) {{
+      *, *::before, *::after {{ animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }}
     }}
     /* ── App shell ── */
     #app {{ display: flex; flex-direction: column; height: 100vh; }}
@@ -1180,7 +1207,9 @@ _HTML_TEMPLATE = """<!doctype html>
       padding: 10px 14px;
       background: var(--card);
       border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
       flex-shrink: 0;
+      z-index: 10;
     }}
     #panes {{
       flex: 1 1 0%;
@@ -1257,29 +1286,45 @@ _HTML_TEMPLATE = """<!doctype html>
       cursor: pointer;
       padding: 4px 6px;
       gap: 1px;
-      transition: color 0.15s;
+      position: relative;
+      transition: color var(--dur) var(--ease);
     }}
-    .nav-btn .nav-icon {{ font-size: 18px; line-height: 1; }}
+    .nav-btn:hover {{ color: var(--fg); }}
+    .nav-btn .nav-icon {{ font-size: 18px; line-height: 1; transition: transform var(--dur) var(--ease); }}
     .nav-btn .nav-label {{ white-space: nowrap; font-size: 9px; }}
     .nav-btn.active {{ color: var(--accent); }}
+    .nav-btn.active .nav-icon {{ transform: translateY(-1px); }}
+    /* accent tab indicator bar */
+    .nav-btn.active::before {{
+      content: "";
+      position: absolute;
+      top: 0; left: 50%;
+      transform: translateX(-50%);
+      width: 26px; height: 3px;
+      border-radius: 0 0 3px 3px;
+      background: var(--accent);
+    }}
     /* ── Icon buttons ── */
     .icon-btn {{
       background: none;
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
       color: var(--fg);
       cursor: pointer;
       font-size: 16px;
       padding: 6px 10px;
       min-height: 36px;
+      transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
     }}
+    .icon-btn:hover {{ background: var(--chipbg); border-color: var(--accent); }}
     /* ── Cards ── */
     .card {{
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: var(--radius);
       padding: 14px;
       margin-bottom: 10px;
+      box-shadow: var(--shadow-sm);
     }}
     /* ── Control tab toggle switch ── */
     .ctrl-toggle {{ position:relative; display:inline-block; width:44px; height:24px; }}
@@ -1349,12 +1394,15 @@ _HTML_TEMPLATE = """<!doctype html>
       .metric-grid {{ grid-template-columns: repeat(4,1fr); }}
     }}
     .metric-card {{
-      background: var(--bg);
+      background: var(--surface-2);
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 12px;
       text-align: center;
+      box-shadow: var(--shadow-sm);
+      transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
     }}
+    .metric-card:hover {{ transform: translateY(-1px); box-shadow: var(--shadow-md); }}
     .metric-label {{
       font-size: 11px;
       color: var(--muted);
@@ -1394,24 +1442,33 @@ _HTML_TEMPLATE = """<!doctype html>
       background: var(--chipbg);
       color: var(--fg);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
       padding: 8px 14px;
       min-height: 44px;
       font-size: 13px;
       cursor: pointer;
       font-family: inherit;
+      transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
     }}
+    .btn:hover {{ border-color: var(--accent); }}
+    .btn:active {{ transform: translateY(1px); }}
     .btn-outline {{ border: 1px solid var(--border); background: var(--card); color: var(--fg); }}
-    .btn-accent {{ background: var(--accent); color: #fff; border: none; }}
+    .btn-accent {{ background: var(--accent); color: #fff; border: none; box-shadow: var(--shadow-sm); }}
+    .btn-accent:hover {{ background: var(--accent-strong); border-color: transparent; box-shadow: var(--shadow-md); }}
     .btn-sm {{ min-height: 36px; padding: 6px 10px; font-size: 12px; }}
     /* ── Device live cards ── */
     .dev-card {{
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: var(--radius);
       padding: 14px;
       margin-bottom: 10px;
       cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
+    }}
+    @media (hover: hover) {{
+      .dev-card:hover {{ transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--accent-weak); }}
     }}
     .dev-header {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }}
     .dev-name {{ font-size: 14px; font-weight: 700; flex: 1; min-width: 0; }}
@@ -1917,6 +1974,58 @@ _HTML_TEMPLATE = """<!doctype html>
       font-size: 12px;
     }}
     .summary-chip b {{ color: var(--accent); }}
+    /* ── Command palette (⌘K / Ctrl+K / "/") ── */
+    .cmdk-overlay {{
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 500; display: none;
+      align-items: flex-start; justify-content: center;
+      padding: 12vh 14px 14px;
+      -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    }}
+    .cmdk-overlay.open {{ display: flex; animation: fadeIn 0.12s var(--ease); }}
+    .cmdk-panel {{
+      width: min(94vw, 560px);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      display: flex; flex-direction: column;
+      max-height: 72vh;
+    }}
+    .cmdk-input {{
+      border: none !important;
+      border-bottom: 1px solid var(--border) !important;
+      border-radius: 0 !important;
+      background: transparent !important;
+      color: var(--fg);
+      font-size: 16px;
+      padding: 15px 16px !important;
+      min-height: 0 !important;
+      outline: none;
+      width: 100%;
+    }}
+    .cmdk-list {{ overflow-y: auto; padding: 6px; }}
+    .cmdk-item {{
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer; font-size: 14px;
+      color: var(--fg);
+    }}
+    .cmdk-item .cmdk-ico {{ font-size: 18px; width: 24px; text-align: center; flex-shrink: 0; }}
+    .cmdk-item .cmdk-lbl {{ flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    .cmdk-item .cmdk-kind {{ font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); flex-shrink: 0; }}
+    .cmdk-item.sel {{ background: var(--accent-weak); color: var(--accent); }}
+    .cmdk-item.sel .cmdk-kind {{ color: var(--accent); opacity: .8; }}
+    .cmdk-empty {{ padding: 22px; text-align: center; color: var(--muted); font-size: 13px; }}
+    .cmdk-foot {{
+      display: flex; gap: 14px; flex-wrap: wrap;
+      padding: 8px 14px;
+      border-top: 1px solid var(--border);
+      font-size: 11px; color: var(--muted);
+    }}
   </style>
 </head>
 <body>
@@ -1932,6 +2041,7 @@ _HTML_TEMPLATE = """<!doctype html>
     <span id="hdr-title" style="font-weight:700;font-size:15px">⚡ Shelly Analyzer</span>
     <div id="hdr-actions" style="display:flex;gap:8px;align-items:center">
       <span id="live-stamp" style="font-size:11px;color:var(--muted)"></span>
+      <button id="btn-cmdk" class="icon-btn" title="Search (⌘K)" onclick="openPalette()">🔍</button>
       <button id="btn-hamburger" class="icon-btn" title="Menu" onclick="toggleNavDrawer()">☰</button>
       <button id="btn-freeze" class="icon-btn" title="{web_btn_freeze_title}" style="display:none">▶</button>
       <button id="btn-raw" onclick="toggleRawView()" title="" style="display:none"></button>
@@ -2257,6 +2367,16 @@ _HTML_TEMPLATE = """<!doctype html>
 
 <div id="hm-tooltip"></div>
 
+<!-- Command palette (⌘K / Ctrl+K / "/") -->
+<div id="cmdk" class="cmdk-overlay" onclick="if(event.target===this)closePalette()">
+  <div class="cmdk-panel" role="dialog" aria-modal="true" aria-label="Command palette">
+    <input id="cmdk-input" class="cmdk-input" type="text" autocomplete="off" autocorrect="off"
+           autocapitalize="off" spellcheck="false" oninput="renderPalette()" onkeydown="paletteKey(event)"/>
+    <div id="cmdk-list" class="cmdk-list"></div>
+    <div id="cmdk-foot" class="cmdk-foot"></div>
+  </div>
+</div>
+
 <div id="ev-detail-modal" class="modal-overlay" onclick="if(event.target===this)this.classList.remove('open')">
   <div class="modal-panel" style="width:min(94vw,420px);-webkit-overflow-scrolling:touch">
     <div class="modal-header">
@@ -2446,6 +2566,151 @@ function onPaneActivated(name) {{
   }}
   if (name !== 'sync') stopSyncPolling();
 }}
+
+/* ──────────────────────────────────────────────
+   COMMAND PALETTE  (⌘K / Ctrl+K / "/")
+   Fuzzy quick-switch across all tabs + a few actions.
+   Tab entries are read live from the bottom-nav so the
+   palette always mirrors the visible (feature-flagged) tabs
+   and their translated labels — no per-tab wiring needed.
+────────────────────────────────────────────── */
+let _pletItems = [];
+let _pletSel = 0;
+
+function _navBtnByName(name) {{
+  let found = null;
+  document.querySelectorAll('#bottom-nav .nav-btn').forEach(function(b) {{
+    const oc = b.getAttribute('onclick') || '';
+    const s = oc.indexOf("'");
+    const e = oc.indexOf("'", s + 1);
+    if (s >= 0 && e > s && oc.slice(s + 1, e) === name) found = b;
+  }});
+  return found;
+}}
+
+function _buildPaletteItems() {{
+  const items = [];
+  document.querySelectorAll('#bottom-nav .nav-btn').forEach(function(b) {{
+    if (getComputedStyle(b).display === 'none') return;
+    const oc = b.getAttribute('onclick') || '';
+    const s = oc.indexOf("'");
+    const e = oc.indexOf("'", s + 1);
+    if (s < 0 || e <= s) return;
+    const name = oc.slice(s + 1, e);
+    const lblEl = b.querySelector('.nav-label');
+    const icoEl = b.querySelector('.nav-icon');
+    const label = (lblEl ? lblEl.textContent : name).trim();
+    const icon = (icoEl ? icoEl.textContent : '•').trim();
+    items.push({{ icon: icon, label: label, kind: t('web.palette.kind.tab', 'Tab'),
+                  run: function() {{ switchPane(name, _navBtnByName(name)); }} }});
+  }});
+  // Quick actions
+  items.push({{ icon: '🌓', label: t('web.palette.act.theme', 'Toggle light/dark'),
+                kind: t('web.palette.kind.action', 'Action'),
+                run: function() {{ const tb = document.getElementById('btn-theme'); if (tb) tb.click(); }} }});
+  items.push({{ icon: '⚙', label: t('web.palette.act.settings', 'Open settings'),
+                kind: t('web.palette.kind.action', 'Action'),
+                run: function() {{ window.location.href = '/settings'; }} }});
+  items.push({{ icon: '🔄', label: t('web.palette.act.sync', 'Sync now'),
+                kind: t('web.palette.kind.action', 'Action'),
+                run: function() {{ switchPane('sync', _navBtnByName('sync')); }} }});
+  return items;
+}}
+
+function openPalette() {{
+  const ov = document.getElementById('cmdk');
+  if (!ov) return;
+  _pletItems = _buildPaletteItems();
+  _pletSel = 0;
+  const inp = document.getElementById('cmdk-input');
+  const foot = document.getElementById('cmdk-foot');
+  if (inp) inp.value = '';
+  if (inp) inp.placeholder = t('web.palette.placeholder', 'Search tabs & actions…');
+  if (foot) foot.textContent = t('web.palette.foot', '↑↓ Navigate · ⏎ Open · Esc Close');
+  ov.classList.add('open');
+  renderPalette();
+  setTimeout(function() {{ if (inp) inp.focus(); }}, 20);
+}}
+
+function closePalette() {{
+  const ov = document.getElementById('cmdk');
+  if (ov) ov.classList.remove('open');
+}}
+
+function _pletFiltered() {{
+  const inp = document.getElementById('cmdk-input');
+  const q = ((inp ? inp.value : '') || '').toLowerCase().trim();
+  if (!q) return _pletItems;
+  return _pletItems.filter(function(it) {{ return it.label.toLowerCase().indexOf(q) !== -1; }});
+}}
+
+function _pletEsc(s) {{
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}}
+
+function renderPalette() {{
+  const list = document.getElementById('cmdk-list');
+  if (!list) return;
+  const items = _pletFiltered();
+  if (_pletSel >= items.length) _pletSel = Math.max(0, items.length - 1);
+  if (!items.length) {{
+    list.innerHTML = '<div class="cmdk-empty">' + _pletEsc(t('web.palette.empty', 'No matches')) + '</div>';
+    return;
+  }}
+  list.innerHTML = items.map(function(it, i) {{
+    return '<div class="cmdk-item' + (i === _pletSel ? ' sel' : '') + '" data-i="' + i + '"'
+      + ' onmousemove="_pletSel=' + i + ';_pletMark()" onclick="_pletRun(' + i + ')">'
+      + '<span class="cmdk-ico">' + _pletEsc(it.icon) + '</span>'
+      + '<span class="cmdk-lbl">' + _pletEsc(it.label) + '</span>'
+      + '<span class="cmdk-kind">' + _pletEsc(it.kind) + '</span></div>';
+  }}).join('');
+  _pletScroll();
+}}
+
+function _pletMark() {{
+  document.querySelectorAll('#cmdk-list .cmdk-item').forEach(function(el) {{
+    el.classList.toggle('sel', (+el.dataset.i) === _pletSel);
+  }});
+}}
+
+function _pletScroll() {{
+  const el = document.querySelector('#cmdk-list .cmdk-item.sel');
+  if (el && el.scrollIntoView) el.scrollIntoView({{ block: 'nearest' }});
+}}
+
+function _pletRun(i) {{
+  const items = _pletFiltered();
+  const it = items[i];
+  if (!it) return;
+  closePalette();
+  try {{ it.run(); }} catch (e) {{}}
+}}
+
+function paletteKey(e) {{
+  const items = _pletFiltered();
+  if (e.key === 'ArrowDown') {{ e.preventDefault(); _pletSel = Math.min(items.length - 1, _pletSel + 1); _pletMark(); _pletScroll(); }}
+  else if (e.key === 'ArrowUp') {{ e.preventDefault(); _pletSel = Math.max(0, _pletSel - 1); _pletMark(); _pletScroll(); }}
+  else if (e.key === 'Enter') {{ e.preventDefault(); _pletRun(_pletSel); }}
+  else if (e.key === 'Escape') {{ e.preventDefault(); closePalette(); }}
+}}
+
+document.addEventListener('keydown', function(e) {{
+  const tgt = e.target || {{}};
+  const tag = (tgt.tagName || '').toLowerCase();
+  const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || tgt.isContentEditable;
+  const paletteOpen = (document.getElementById('cmdk') || {{}}).classList
+    && document.getElementById('cmdk').classList.contains('open');
+  if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) {{ e.preventDefault(); openPalette(); return; }}
+  if (e.key === '/' && !typing && !paletteOpen) {{ e.preventDefault(); openPalette(); return; }}
+}});
+
+// Localise the header search button tooltip once the page is ready.
+(function() {{
+  try {{
+    const btn = document.getElementById('btn-cmdk');
+    if (btn) btn.title = t('web.palette.hint', 'Search (⌘K or /)');
+  }} catch (e) {{}}
+}})();
 
 /* ──────────────────────────────────────────────
    DEVICE CONTROL TAB
