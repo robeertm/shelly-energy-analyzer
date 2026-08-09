@@ -1,5 +1,33 @@
 # Changelog
 
+## 16.66.0
+### Added
+- **Command palette — jump to any tab or action instantly.** With 24 tabs in the
+  bottom bar, finding the right one meant horizontal-scrolling a crowded strip.
+  Press `⌘K` / `Ctrl+K` (or just `/` when not typing) to open a searchable
+  palette, type a few letters, and hit `⏎` to switch tabs or run a quick action
+  (toggle theme, open settings, sync now). A 🔍 button in the header opens it too
+  (discoverable on touch devices). Tab entries are read live from the visible nav,
+  so the palette always mirrors the feature-flagged tabs and their translated
+  labels — nothing to keep in sync. Full keyboard nav (↑/↓, ⏎, Esc), mouse hover
+  selection, and localized strings (DE/EN, other languages fall back to EN).
+### Changed
+- **Visual refresh across every tab.** Introduced a small design-token layer
+  (elevation shadows `--shadow-sm/md/lg`, a shared radius scale, an accent-weak
+  tint, and motion `--ease`/`--dur`) and applied it to the shared components that
+  every pane is built from, so the whole dashboard gets the polish at once:
+  - Cards, device cards and metric tiles now sit on subtle elevation instead of
+    flat 1px borders; interactive cards/tiles lift gently on hover (pointer
+    devices only, so touch scrolling is unaffected).
+  - Buttons gained hover / active / accent-strong states; the accent primary
+    button carries a soft shadow.
+  - The active bottom-nav tab now shows a clear accent indicator bar (plus the
+    existing colour), making the current tab obvious at a glance.
+  - Keyboard-only focus rings (`:focus-visible`) for accessibility, and a
+    `prefers-reduced-motion` guard that disables the new transitions for users
+    who ask for reduced motion.
+  Purely presentational — no data, billing, or calibration logic touched.
+
 ## 16.65.4
 ### Fixed
 - perf(ev-log): cache window read + full response so the tab loads fast
