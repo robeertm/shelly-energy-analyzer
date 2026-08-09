@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.65.4
+### Fixed
+- perf(ev-log): cache window read + full response so the tab loads fast
+  /api/ev_sessions re-ran read_device_df (SELECT * over the whole raw wallbox
+  window, 7-730 days) on every request before the already-memoised detection,
+  dominating latency — the EV-Log tab took ~a minute to show data.
+  - _ev_read_window_df: memoise the raw window DataFrame per (device, days),
+  keyed on the device's newest DB timestamp (cheap PK-indexed MAX). Reused
+  across filter-bar toggles and quiet refreshes; busts when autosync appends
+
 ## 16.65.3
 ### Fixed
 - fix(calibration): self-heal stale main-meter-child compensation scalar on load
