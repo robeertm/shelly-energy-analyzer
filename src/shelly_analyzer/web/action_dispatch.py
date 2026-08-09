@@ -190,6 +190,24 @@ class ActionDispatcher:
         self._ev_monthly_cache: Dict[str, tuple] = {}
         self._ev_monthly_lock = threading.Lock()
         self._ev_monthly_ttl: float = 600.0  # 10 min — hourly_energy grows once per hour
+        # EV-Log window DataFrame cache: (dev_key, days) -> (db_max_ts, built_at, df).
+        # read_device_df pulls the full raw wallbox window (SELECT * over 7..730
+        # days) on EVERY /api/ev_sessions call and was the dominant cost (~tens of
+        # seconds) — the detection itself is already memoised.  We key the cached
+        # frame on the device's latest DB timestamp (cheap PK-indexed MAX query),
+        # so it survives filter-bar toggles and quiet refreshes but busts the
+        # instant new samples land.  The in-progress session stays live because
+        # the cheap live-store tail is re-appended on top of the cached frame.
+        self._ev_window_cache: Dict[tuple, tuple] = {}
+        self._ev_window_lock = threading.Lock()
+        self._ev_window_ttl: float = 900.0  # 15 min backstop (calibration/config edits)
+        # EV-Log full-response cache: cache_key -> (freshness_token, built_at, data).
+        # Serves the whole payload instantly on idle re-loads (tab switches,
+        # quiet auto-refresh, toggling the window back and forth).  Freshness
+        # folds in the live-store tail so an active charge always recomputes.
+        self._ev_resp_cache: Dict[tuple, tuple] = {}
+        self._ev_resp_lock = threading.Lock()
+        self._ev_resp_ttl: float = 900.0
 
     def _current_tariff_price_eur_kwh(self) -> float:
         """Mirror of ``LiveFeedLoop._current_tariff_price`` for use inside the
@@ -369,6 +387,61 @@ class ActionDispatcher:
         if df is None or df.empty:
             return tail_df
         return pd.concat([df, tail_df], ignore_index=True)
+
+    def _ev_read_window_df(self, dev_key: str, days: int) -> "pd.DataFrame":
+        """Cached raw-window read for the EV log.
+
+        Returns the persisted samples for ``dev_key`` over the last ``days``
+        days, reusing a memoised DataFrame while the device's newest DB
+        timestamp is unchanged.  This is the hot path: ``read_device_df`` runs a
+        ``SELECT *`` over the whole window on every EV-Log request, which
+        dominated the endpoint's latency.  The cached frame is treated
+        read-only by all callers (``_ev_extend_with_live`` concatenates a new
+        object; ``detect_charging_sessions`` sorts into a copy), so returning
+        the shared instance is safe.
+        """
+        import time as _t
+        try:
+            db_max = self.storage.db.max_timestamp(dev_key)
+        except Exception:
+            db_max = None
+        key = (dev_key, int(days))
+        now = _t.time()
+        with self._ev_window_lock:
+            cached = self._ev_window_cache.get(key)
+            if (
+                cached is not None
+                and cached[0] == db_max
+                and (now - cached[1]) < self._ev_window_ttl
+            ):
+                return cached[2]
+
+        start_ts = int(now) - int(days) * 86400
+        df = self.storage.read_device_df(dev_key, start_ts=start_ts)
+        with self._ev_window_lock:
+            self._ev_window_cache[key] = (db_max, now, df)
+        return df
+
+    def _ev_live_fingerprint(self, dev_key: str) -> tuple:
+        """Cheap fingerprint of the live-store tail for ``dev_key``.
+
+        Folds into the response-cache freshness token so an in-progress charge
+        (live points arriving every ~2 s) always recomputes, while an idle
+        wallbox keeps hitting the cache.
+        """
+        if self.live_store is None:
+            return (0, 0)
+        try:
+            pts = self.live_store.snapshot().get(dev_key) or []
+        except Exception:
+            return (0, 0)
+        if not pts:
+            return (0, 0)
+        try:
+            last_ts = max(int(p.get("ts") or 0) for p in pts)
+        except Exception:
+            last_ts = 0
+        return (len(pts), last_ts)
 
     def _resolve_customer(self, device_key: str) -> Dict[str, object]:
         """Return customer data for an invoice — tenant data if available, else billing.customer fallback."""
@@ -4820,8 +4893,48 @@ class ActionDispatcher:
                 except (TypeError, ValueError):
                     days = 30
                 days = max(1, min(days, 730))
-                start_ts = int(_t.time()) - days * 86400
-                df_ev = self.storage.read_device_df(dev_key, start_ts=start_ts)
+
+                # --- Full-response cache -------------------------------------
+                # Idle re-loads (tab switches, quiet auto-refresh, toggling the
+                # window back and forth) return instantly.  The freshness token
+                # folds in every input that changes the payload: the device's
+                # newest DB sample, the live-store tail (so an active charge
+                # always recomputes), the deletion list, and the config knobs
+                # that steer detection/grouping/pricing.
+                _ec = self.cfg.ev_charging
+                _dp = None
+                try:
+                    from pathlib import Path as _Path
+                    _dp = _Path(getattr(self.storage, "base_dir", ".")) / "ev_deleted_sessions.json"
+                    _del_fp = (_dp.stat().st_mtime_ns, _dp.stat().st_size) if _dp.exists() else (0, 0)
+                except Exception:
+                    _del_fp = (0, 0)
+                try:
+                    _db_max = self.storage.db.max_timestamp(dev_key)
+                except Exception:
+                    _db_max = None
+                _cfg_fp = (
+                    float(getattr(_ec, "detection_threshold_w", 1500)),
+                    int(getattr(_ec, "min_session_minutes", 5)),
+                    float(self.cfg.pricing.electricity_price_eur_per_kwh),
+                    int(getattr(_ec, "max_gap_minutes", 15)),
+                    bool(getattr(_ec, "group_sessions", True)),
+                    float(getattr(_ec, "group_surplus_floor_w", 0.0) or 0.0),
+                    int(getattr(_ec, "group_gap_minutes", 240)),
+                    str(getattr(getattr(self.cfg, "solar", None), "grid_meter_device_key", "") or ""),
+                )
+                _resp_key = (dev_key, days)
+                _resp_token = (_db_max, self._ev_live_fingerprint(dev_key), _del_fp, _cfg_fp)
+                with self._ev_resp_lock:
+                    _cached = self._ev_resp_cache.get(_resp_key)
+                    if (
+                        _cached is not None
+                        and _cached[0] == _resp_token
+                        and (_t.time() - _cached[1]) < self._ev_resp_ttl
+                    ):
+                        return {"ok": True, "data": _cached[2]}
+
+                df_ev = self._ev_read_window_df(dev_key, days)
                 df_ev = self._ev_extend_with_live(df_ev, dev_key)
                 sessions = detect_charging_sessions(
                     df_ev, dev_key,
@@ -4922,7 +5035,7 @@ class ActionDispatcher:
                 # Cached 10 min per device so filter-bar toggles stay quick.
                 monthly = self._ev_monthly_kwh(dev_key)
 
-                return {"ok": True, "data": {
+                _payload = {
                     "total_sessions": summary_ev.total_sessions,
                     "total_kwh": summary_ev.total_kwh,
                     "total_cost": summary_ev.total_cost,
@@ -4941,7 +5054,10 @@ class ActionDispatcher:
                          "avg_power_w": s.avg_power_w, "cost_eur": s.cost_eur}
                         for s in sessions
                     ],
-                }}
+                }
+                with self._ev_resp_lock:
+                    self._ev_resp_cache[_resp_key] = (_resp_token, _t.time(), _payload)
+                return {"ok": True, "data": _payload}
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 
