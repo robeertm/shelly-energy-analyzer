@@ -93,7 +93,7 @@
   reading (an earlier import-only reading followed by a full import+feed-in one),
   the export delta was silently dropped by the `e0 > 0` guard, yet raw_d still used
   the grid Shelly's full import+feed-in throughput. Comparing an import-only meter
-  delta against a full-throughput measurement produced a nonsense factor — Robert's
+  delta against a full-throughput measurement produced a nonsense factor (the −67 % bug).
 
 ## 16.65.0
 ### Added
@@ -141,8 +141,8 @@
   Grid import and PV feed-in were drawn as two unrelated nodes — Grid on the LEFT
   as if it were an on-site producer, Feed-in on the right — so nothing conveyed
   that both are the same utility connection, and that exporting is just importing
-  in reverse. Robert: "netz gehört auf die andere seite, wenn eingespeist wird
-  muss der Stromfluss in die andere Richtung laufen".
+  in reverse. The grid belongs on the other side; when exporting, the power flow
+  must run in the opposite direction.
   The two now collapse into a single "Netz" rectangle at the top of the right
 
 ## 16.64.2

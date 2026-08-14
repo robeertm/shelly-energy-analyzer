@@ -4032,7 +4032,7 @@ function _sparkArgs(key, buf) {{
 
 // Display value for a device's power tile. Grid and battery show the SIGNED
 // value; PV shows magnitude (always ≥0 anyway, direction is obvious). Battery
-// sign is charge + / discharge − (Robert: "akku entladen −, beladen +").
+// sign is charge + / discharge − (battery: discharge is negative, charge positive).
 function _pwrVal(d) {{
   if (d.flow_role === 'grid') return d.power_w;
   if (d.flow_role === 'battery') return d.power_w;
@@ -8436,7 +8436,7 @@ function _drawSankeyFlow(canvasId, d) {{
   const linkTgt = d.sankey.link.target || [];
   const linkVal = d.sankey.link.value || [];
 
-  // Build a node-graph flow diagram straight from the sankey links. Robert's
+  // Build a node-graph flow diagram straight from the sankey links. The
   // model: the grid ("Netz") is ONE thing and it belongs on the FAR SIDE (right),
   // not as a left-hand producer. On-site generation (PV, Battery while
   // discharging) sits left, the House in the middle, loads on the right. The
@@ -9522,9 +9522,9 @@ _loadLsSettings();
       // Hinweis für einen bidirektionalen Netzanschluss-Zähler (mit PV/Einspeisung).
       html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">💡 ' +
         t('cal.bidir_hint', 'Netzanschluss-Zähler mit PV? Trage zusätzlich den Einspeise-Stand (2.8.0) ein. Dann wird über den Gesamtdurchsatz (Bezug + Einspeisung) kalibriert — auch dann korrekt, wenn kaum Netzstrom bezogen wird. Der Faktor wirkt nur auf den signierten Netz-Shelly; reine Verbraucher (z. B. Mieter) bleiben außen vor.') + '</div>';
-      // Bidirektional, aber kein Zeitraum mit Einspeise-Stand an BEIDEN Enden →
-      // es lässt sich noch kein Durchsatz-Faktor bilden. Robert klar sagen, dass er
-      // bei einer zweiten Ablesung auch die Einspeisung (2.8.0) einträgt.
+      // Bidirectional, but no period with a feed-in reading at BOTH ends →
+      // no throughput factor can be derived yet. Tell the user clearly to also
+      // enter the feed-in reading (2.8.0) on a second reading.
       const bidirComplete = readings.some((r, i) => i > 0 &&
         Number(readings[i-1].export_kwh || 0) > 0 && Number(r.export_kwh || 0) >= Number(readings[i-1].export_kwh || 0));
       if (bidir && !bidirComplete) {{
@@ -11128,7 +11128,7 @@ function plotGroup(container, key){
   return g;
 }
 // Make the inner cards transparent so the group tint shows through as their
-// shared background (Robert: "backgrounds slightly different colours per group").
+// shared background (each group gets a slightly different colour).
 function stripGroupCards(grp){
   const cards = grp.querySelectorAll('.card');
   for (let i = 0; i < cards.length; i++){
