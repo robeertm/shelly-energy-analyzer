@@ -42,5 +42,5 @@ exports/
 .DS_Store
 Thumbs.db
 
-# CI-Uploads (Screenshots etc.) NIE ins öffentliche Repo
+# Local upload artifacts (screenshots etc.) — never commit to the public repo
 werkstatt-uploads/

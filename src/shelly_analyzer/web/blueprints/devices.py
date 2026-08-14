@@ -551,7 +551,7 @@ def _comp_set_history(state, device_key: str, entries: List[CompensationEntry]):
     Also updates the legacy ``compensation_percent`` to mirror the *latest*
     entry so paths that haven't been migrated keep the right ‘current’ value.
     When the history is emptied (last entry / meter reading removed) the scalar
-    is reset to 0 so a stale derived factor doesn't linger (Robert/a user −67 %)."""
+    is reset to 0 so a stale derived factor doesn't linger (the −67 % case)."""
     entries = sorted(entries, key=lambda e: int(e.effective_from_ts))
     latest_pct = float(entries[-1].percent) if entries else 0.0
     devs = list(state.cfg.devices)
@@ -1039,7 +1039,7 @@ def _recompute_meter_from_readings(state, meter_id):
             # at only one end (e.g. the user logged the feed-in stand on the latest
             # reading but not the earlier one), we CANNOT form a throughput delta —
             # comparing an import-only meter delta (Δ 1.8.0) against the Shelly's full
-            # throughput yields a nonsense factor (Robert's −67 %). Skip such an
+            # throughput yields a nonsense factor (the −67 % case). Skip such an
             # interval entirely; the user must log a second full (import + export)
             # reading before a bidirectional factor can be derived.
             e0 = float(getattr(readings[i], "export_kwh", 0.0) or 0.0)
