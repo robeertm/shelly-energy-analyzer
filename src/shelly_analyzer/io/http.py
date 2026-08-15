@@ -392,7 +392,57 @@ def download_csv(
     return b""
 
 
-def get_em_status(client: ShellyHttp, host: str, em_id: int) -> Dict[str, Any]:
+def _gen1_status_to_em_fields(status: Dict[str, Any], em_id: int) -> Dict[str, Any]:
+    """Translate a Gen1 Shelly EM/3EM ``/status`` payload into the flat,
+    ``EM.GetStatus``-style key layout that :func:`parse_live_fields` expects.
+
+    Gen1 devices expose an ``emeters`` array (one entry per channel/phase), e.g.
+    ``{"emeters": [{"power": 884.01, "pf": 0.99, "current": 3.77,
+    "voltage": 234.5, "total": ...}, ...]}``. A 3EM has three entries mapped to
+    phases a/b/c; a two-channel Shelly EM has one entry per channel, so the
+    configured ``em_id`` selects the channel and is surfaced as phase a.
+    """
+    emeters = status.get("emeters")
+    if not isinstance(emeters, list) or not emeters:
+        return {}
+    phase_keys = ("a", "b", "c")
+    if len(emeters) >= 3:
+        # 3EM: three phases in one device.
+        chans = emeters[:3]
+    else:
+        # Shelly EM: independent channels — expose the configured one as phase a.
+        i = int(em_id) if 0 <= int(em_id) < len(emeters) else 0
+        chans = [emeters[i]]
+    out: Dict[str, Any] = {}
+    for idx, em in enumerate(chans):
+        if idx >= 3 or not isinstance(em, dict):
+            break
+        p = phase_keys[idx]
+        out[f"{p}_act_power"] = em.get("power", 0.0)
+        out[f"{p}_voltage"] = em.get("voltage", 0.0)
+        out[f"{p}_current"] = em.get("current", 0.0)
+        out[f"{p}_pf"] = em.get("pf", 0.0)
+        # Some Gen1 firmwares report per-emeter reactive power.
+        if "reactive" in em:
+            out[f"{p}_react_power"] = em.get("reactive", 0.0)
+    return out
+
+
+def get_em_status(client: ShellyHttp, host: str, em_id: int, gen: int = 0) -> Dict[str, Any]:
+    """Return an EM status dict in the flat key layout ``parse_live_fields`` reads.
+
+    Gen2+ (Pro 3EM / Pro EM) answers the ``EM.GetStatus`` RPC directly. Gen1
+    devices (Shelly EM / 3EM classic, SHEM-3) have no ``/rpc`` endpoint — polling
+    them via RPC 404s and the device would look permanently offline even though it
+    is reachable. For Gen1 we read ``/status`` and translate its ``emeters`` array
+    into the same flat shape.
+    """
+    if int(gen) == 1:
+        r = client.get(f"http://{host}/status")
+        status = r.json()
+        if not isinstance(status, dict):
+            raise ValueError(f"Unexpected /status JSON from {host}")
+        return _gen1_status_to_em_fields(status, em_id)
     return rpc_call(client, host, "EM.GetStatus", {"id": int(em_id)})
 
 

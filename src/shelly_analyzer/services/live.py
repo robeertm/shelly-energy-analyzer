@@ -178,7 +178,8 @@ class LivePoller:
                     data = get_switch_status(self._http, self.device.host, self.device.em_id)
                     fields = parse_switch_fields(data)
                 else:
-                    data = get_em_status(self._http, self.device.host, self.device.em_id)
+                    data = get_em_status(self._http, self.device.host, self.device.em_id,
+                                         gen=int(getattr(self.device, "gen", 0) or 0))
                     fields = parse_live_fields(data)
                 sample = LiveSample(
                     device_key=self.device.key,
@@ -292,7 +293,7 @@ class MultiLivePoller:
             data = get_switch_status(http, d.host, d.em_id)
             fields = parse_switch_fields(data)
         else:
-            data = get_em_status(http, d.host, d.em_id)
+            data = get_em_status(http, d.host, d.em_id, gen=int(getattr(d, "gen", 0) or 0))
             fields = parse_live_fields(data)
         return LiveSample(
             device_key=d.key,
