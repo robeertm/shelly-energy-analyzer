@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.66.1
+### Fixed
+- fix(live): Gen1 Shelly EM/3EM shown offline despite being reachable (#16)
+  The live poller only spoke the Gen2 EM.GetStatus RPC, which 404s on a
+  first-generation device (SHEM-3 / Shelly EM/3EM have no /rpc endpoint).
+  Every poll threw, so no live sample was produced and the device stayed
+  permanently offline in the Devices panel and Health Check — even though
+  /status returned live readings and historical CSV import worked.
+  get_em_status is now generation-aware: for gen==1 it reads /status and
+
 ## Unreleased
 ### Fixed
 - **Gen1 Shelly EM / 3EM (SHEM-3) no longer shows "Offline / no data" while it is
