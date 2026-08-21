@@ -1,5 +1,27 @@
 # Changelog
 
+## 16.69.0
+### Changed
+- **A tab that already shows data never blanks out to "Error…" on a failed
+  refresh.** Every data tab (Costs, Anomalies, Weather, CO₂, Solar, Compare,
+  Forecast, Standby, NILM, EV chargers) used to overwrite its whole pane with
+  a red error message whenever a background/silent refresh hit a hiccup —
+  wiping perfectly good content the user was looking at. Now a refresh that
+  fails while real content is on screen keeps that content and shows a small,
+  self-dismissing toast ("Update failed – showing previous data") instead.
+  Only a first-ever load with nothing rendered yet shows the inline error.
+
+### Fixed
+- **Weather tab always shows something, even older data.** The live
+  OpenWeatherMap call is on the OWM free tier (60 req/min, 1000/day) and can
+  fail or be rate-limited, which left the weather hero blank with dashes. When
+  the live fetch fails, the tab now falls back to the most recent stored
+  observation and shows it with a "Live weather unavailable – showing last
+  reading (Xh ago)" banner, so the current-conditions cards are never empty.
+- **Weather pane never renders an empty frame.** If neither live conditions nor
+  any stored history/correlation exists yet, the pane now shows a friendly
+  "Collecting weather data…" note instead of a blank card.
+
 ## 16.68.0
 ### Changed
 - **Switching to an already-loaded tab no longer wipes it back to "Loading…".**

@@ -145,6 +145,52 @@ def geocode_city(api_key: str, city: str) -> Optional[Tuple[float, float, str]]:
     return None
 
 
+def stale_current_from_weather_df(weather_df) -> Optional[Tuple[Dict[str, Any], int]]:
+    """Build a ``current``-shaped dict from the newest stored observation.
+
+    Used as a fallback when the live OpenWeatherMap call fails or is rate-limited
+    so the weather tab always shows *something* (older data flagged as stale)
+    instead of a blank hero. ``weather_df`` is expected ordered by ``hour_ts``
+    ascending (as returned by ``Database.query_weather``); the last row is newest.
+
+    Returns ``(current_data, as_of_ts)`` or ``None`` when there is no usable row.
+    """
+    if weather_df is None or getattr(weather_df, "empty", True):
+        return None
+    last = weather_df.iloc[-1]
+    cols = weather_df.columns
+
+    def _fnum(col: str) -> Optional[float]:
+        if col not in cols:
+            return None
+        v = last[col]
+        try:
+            return float(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    temp = _fnum("temp_c")
+    if temp is None:
+        return None
+    desc = ""
+    if "description" in cols and last["description"] is not None:
+        desc = str(last["description"])
+    current = {
+        "temp_c": temp,
+        "feels_like_c": temp,
+        "humidity_pct": _fnum("humidity_pct"),
+        "wind_speed_ms": _fnum("wind_speed_ms"),
+        "clouds_pct": _fnum("clouds_pct"),
+        "pressure_hpa": _fnum("pressure_hpa") or 0,
+        "description": desc,
+    }
+    try:
+        as_of = int(last["hour_ts"])
+    except (TypeError, ValueError, KeyError):
+        as_of = 0
+    return current, as_of
+
+
 def correlate_weather_energy(
     db,
     device_key: str,

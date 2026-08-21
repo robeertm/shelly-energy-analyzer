@@ -1981,6 +1981,14 @@ _HTML_TEMPLATE = """<!doctype html>
     .exp-info-card {{ display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid rgba(106,167,255,0.25); border-radius: 12px; background: rgba(106,167,255,0.06); margin-bottom: 6px; color: var(--accent); font-size: 12px; }}
     .error-msg {{ color: var(--pwr-high); font-size: 13px; padding: 20px 0; text-align: center; }}
     .info-msg {{ color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }}
+    /* ── Transient toast (non-destructive refresh failures) ── */
+    .sea-toast {{ position: fixed; left: 50%; bottom: 78px;
+      transform: translate(-50%, 12px); background: var(--card, #1e2530); color: var(--fg, #e6edf3);
+      border: 1px solid var(--border, #333); border-radius: 10px; padding: 9px 14px; font-size: 12.5px;
+      box-shadow: 0 6px 20px rgba(0,0,0,.35); z-index: 9999; opacity: 0; pointer-events: none;
+      transition: opacity .2s ease, transform .2s ease; max-width: 86vw; text-align: center; }}
+    .sea-toast.show {{ opacity: 1; transform: translate(-50%, 0); }}
+    .sea-toast.toast-warn {{ border-left: 3px solid #f59e0b; }}
     /* ── Generic filter button bar (EV log et al.) ── */
     .filter-bar {{ display: flex; gap: 6px; flex-wrap: wrap; }}
     .filter-btn {{
@@ -2531,6 +2539,42 @@ let currentPane = 'live';
 // Set to true while a periodic per-tab auto-refresh is in flight so the
 // loadXxx functions skip the "Loading…" spinner and avoid the visible flash.
 let _quietRefresh = false;
+
+/* ── Non-destructive tab error handling ──────────────────────────────────
+   Rule (Robert): a tab that already shows real data must NEVER blank out to
+   "Error…" on a failed refresh. Keep the previous content on screen and flash
+   a small toast instead. Only a first-ever load with nothing on screen shows
+   the inline error. Loaders capture `_quietRefresh` synchronously at entry
+   (the pump resets it right after the first await) and pass it here. */
+function _tabHasContent(el) {{
+  if (!el) return false;
+  if (el.querySelector('.loading-msg')) return false;   // still on the spinner
+  return el.textContent.trim().length > 0;
+}}
+function _tabFail(el, e, quiet) {{
+  var msg = (e && e.message) ? e.message : String(e);
+  if (quiet && _tabHasContent(el)) {{
+    _toast(t('web.refresh_failed', 'Update failed – showing previous data'), 'warn');
+    return;
+  }}
+  if (el) el.innerHTML = '<p class="error-msg">' + t('web.error', 'Error') + ': ' + esc(msg) + '</p>';
+}}
+var _toastTimer = null;
+function _toast(msg, kind) {{
+  var box = document.getElementById('sea-toast');
+  if (!box) {{
+    box = document.createElement('div');
+    box.id = 'sea-toast';
+    box.className = 'sea-toast';
+    document.body.appendChild(box);
+  }}
+  box.textContent = msg;
+  box.classList.toggle('toast-warn', kind === 'warn');
+  box.classList.add('show');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function() {{ box.classList.remove('show'); }}, 3200);
+}}
+
 let sparkData = {{}};   // key -> [{{"ts":..,"w":..,"v":..,"a":..,"phases":[...]}}]
 let cmpChart = null;
 let liveWindowSec = 7200;  // Live plots default to a 2 h window.
@@ -3241,7 +3285,8 @@ let _nilmCurrentDevice = null;   // device key currently selected in the dropdow
 async function loadNilm() {{
   const el = document.getElementById('nilm-content');
   if (!el) return;
-  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  const quiet = _quietRefresh;
+  if (!quiet) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     const r = await fetch('/api/nilm_detail');
     if (!r.ok) throw new Error(r.status);
@@ -3254,7 +3299,7 @@ async function loadNilm() {{
     }}
     renderNilm(_nilmData, el);
   }} catch(e) {{
-    el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+    _tabFail(el, e, quiet);
   }}
 }}
 
@@ -5389,14 +5434,15 @@ function _fmtAxisVal(v, metric) {{
 ────────────────────────────────────────────── */
 async function loadCosts() {{
   const el = document.getElementById('costs-content');
-  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  const quiet = _quietRefresh;
+  if (!quiet) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     const r = await fetch('/api/costs');
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     renderCosts(data, el);
   }} catch(e) {{
-    el.innerHTML = '<p class="error-msg">' + t('web.error', 'Error') + ': ' + e.message + '</p>';
+    _tabFail(el, e, quiet);
   }}
 }}
 
@@ -6515,7 +6561,8 @@ let _co2Range = '24h';
 async function loadCo2(range) {{
   if (range) _co2Range = range;
   const el = document.getElementById('co2-content');
-  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  const quiet = _quietRefresh;
+  if (!quiet) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     const r = await fetch('/api/co2?range=' + _co2Range);
     if (!r.ok) throw new Error(r.status);
@@ -6524,7 +6571,7 @@ async function loadCo2(range) {{
     renderCo2(data, el);
     _startCo2LiveRates();
   }} catch(e) {{
-    el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+    _tabFail(el, e, quiet);
   }}
 }}
 
@@ -7136,14 +7183,15 @@ function initSolar() {{
 
 async function loadSolar(period) {{
   const el = document.getElementById('solar-content');
-  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  const quiet = _quietRefresh;
+  if (!quiet) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     const r = await fetch('/api/solar?period=' + period);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     renderSolar(data, el);
   }} catch(e) {{
-    el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+    _tabFail(el, e, quiet);
   }}
 }}
 
@@ -7236,14 +7284,15 @@ function initWeather() {{
 }}
 async function loadWeather() {{
   const el = document.getElementById('weather-content');
-  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  const quiet = _quietRefresh;
+  if (!quiet) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     const r = await fetch('/api/weather_correlation');
     if (!r.ok) throw new Error(r.status);
     const d = await r.json();
     renderWeather(d, el);
   }} catch(e) {{
-    el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+    _tabFail(el, e, quiet);
   }}
 }}
 
@@ -7261,6 +7310,13 @@ function renderWeather(d, el) {{
   }}
   var html = '';
   var cur = d.current;
+
+  // Stale banner: live fetch failed, we're showing the last stored observation.
+  if (d.current_stale && d.current_as_of) {{
+    html += '<div class="card" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;border-left:3px solid #f59e0b">';
+    html += '<span style="font-size:18px">⚠️</span>';
+    html += '<div style="font-size:12px;color:var(--muted)">' + t('web.weather.stale', 'Live weather unavailable – showing last reading') + ' (' + _wxAgo(d.current_as_of) + ')</div></div>';
+  }}
 
   // Current weather hero
   if (cur) {{
@@ -7376,6 +7432,16 @@ function renderWeather(d, el) {{
     html += '</div></div>';
   }}
 
+  // Never leave the pane blank: if the live fetch gave us neither current
+  // conditions nor any correlation/history yet, show a friendly note instead
+  // of an empty frame.
+  if (!html) {{
+    html = '<div class="card" style="text-align:center;padding:24px">' +
+      '<div style="font-size:34px;margin-bottom:8px">🌦️</div>' +
+      '<div style="font-size:14px;font-weight:600;margin-bottom:4px">' + t('web.weather.collecting', 'Collecting weather data…') + '</div>' +
+      '<div style="color:var(--muted);font-size:12px">' + t('web.weather.collecting_hint', 'The first readings appear once weather has been polled a few times.') + '</div></div>';
+  }}
+
   el.innerHTML = html;
 
   if (d.paired && d.paired.length >= 3) setTimeout(function() {{ _drawWeatherCharts(d); }}, 50);
@@ -7383,6 +7449,12 @@ function renderWeather(d, el) {{
   if (d.daily && d.daily.length >= 2) setTimeout(function() {{ _drawWxDailyChart(d.daily); }}, 70);
 }}
 
+function _wxAgo(ts) {{
+  var secs = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (secs < 3600) return Math.max(1, Math.round(secs / 60)) + ' min';
+  if (secs < 86400) return Math.round(secs / 3600) + ' h';
+  return Math.round(secs / 86400) + ' d';
+}}
 function _weatherHourColor(h) {{
   var hue = (240 + h * 15) % 360;
   var sat = 70;
@@ -7610,7 +7682,8 @@ function initCompare() {{
 
 async function loadComparePreset(preset) {{
   const result = document.getElementById('cmp-result');
-  if (!_quietRefresh) result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  const quiet = _quietRefresh;
+  if (!quiet) result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     // Auto-granularity per preset: month→daily, quarter→weekly, halfyear/year→monthly
     const autoGran = preset === 'month' ? 'daily'
@@ -7629,13 +7702,14 @@ async function loadComparePreset(preset) {{
     const data = await r.json();
     renderCompare(data, result);
   }} catch(e) {{
-    result.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+    _tabFail(result, e, quiet);
   }}
 }}
 
 async function loadCompare() {{
   const result = document.getElementById('cmp-result');
-  if (!_quietRefresh) result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  const quiet = _quietRefresh;
+  if (!quiet) result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     const da = document.getElementById('cmp-da').value;
     const fa = document.getElementById('cmp-fa').value;
@@ -7657,7 +7731,7 @@ async function loadCompare() {{
     const data = await r.json();
     renderCompare(data, result);
   }} catch(e) {{
-    result.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+    _tabFail(result, e, quiet);
   }}
 }}
 
@@ -7906,14 +7980,15 @@ function drawBars(canvas, labels, series, opts) {{
 ────────────────────────────────────────────── */
 async function loadAnomalies() {{
   const el = document.getElementById('anom-content');
-  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  const quiet = _quietRefresh;
+  if (!quiet) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
   try {{
     const r = await fetch('/api/anomalies');
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     renderAnomalies(data, el);
   }} catch(e) {{
-    el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+    _tabFail(el, e, quiet);
   }}
 }}
 
@@ -8154,15 +8229,16 @@ async function loadForecast() {{
   }}
   const dk = sel.value || '';
   const cont = document.getElementById('forecast-cards');
-  if (!_quietRefresh) cont.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
+  const quiet = _quietRefresh;
+  if (!quiet) cont.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
   try {{
     const r = await fetch('/api/forecast?device_key=' + encodeURIComponent(dk));
     if (!r.ok) throw new Error(r.status);
     const d = await r.json();
-    if (d.no_data) {{ cont.innerHTML = '<p class="info-msg">Not enough data for forecast (min. 3 days).</p>'; return; }}
+    if (d.no_data) {{ if (!_tabHasContent(cont)) cont.innerHTML = '<p class="info-msg">Not enough data for forecast (min. 3 days).</p>'; return; }}
     renderForecast(d);
   }} catch(e) {{
-    cont.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+    _tabFail(cont, e, quiet);
   }}
 }}
 function renderForecast(d) {{
@@ -8352,14 +8428,15 @@ function _fcDrawCostBars(d) {{
 ────────────────────────────────────────────── */
 async function loadStandby() {{
   const cont = document.getElementById('standby-cards');
-  if (!_quietRefresh) cont.innerHTML = '<p class="loading-msg">' + t('web.loading','Loading…') + '</p>';
+  const quiet = _quietRefresh;
+  if (!quiet) cont.innerHTML = '<p class="loading-msg">' + t('web.loading','Loading…') + '</p>';
   try {{
     const r = await fetch('/api/standby');
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     renderStandby(data);
   }} catch(e) {{
-    cont.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+    _tabFail(cont, e, quiet);
   }}
 }}
 function renderStandby(d) {{
@@ -9073,7 +9150,8 @@ async function _evGeocode(city) {{
 async function loadEv() {{
   const wrap = document.getElementById('ev-grid-wrap');
   if (!wrap) return;
-  if (!_quietRefresh) wrap.innerHTML = '<p class="loading-msg">' + t('web.ev.loading', 'Loading chargers\u2026') + '</p>';
+  const quiet = _quietRefresh;
+  if (!quiet) wrap.innerHTML = '<p class="loading-msg">' + t('web.ev.loading', 'Loading chargers\u2026') + '</p>';
 
   const cityInput = document.getElementById('ev-city');
   const cityVal = (cityInput ? cityInput.value.trim() : '');
@@ -9132,7 +9210,7 @@ async function loadEv() {{
       _evShowKeyRow();
       wrap.innerHTML = '<p class="error-msg">' + t('web.ev.need_key', 'API key required. Get a free key at openchargemap.org/site/develop/api') + '</p>';
     }} else {{
-      wrap.innerHTML = '<p class="error-msg">Error: ' + esc(e.message) + '</p>';
+      _tabFail(wrap, e, quiet);
     }}
   }}
 }}
