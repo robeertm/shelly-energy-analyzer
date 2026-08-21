@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.69.2
+### Fixed
+- fix(ev-charger): send User-Agent so OSM/OCM lookups work; stop log spam
+  The multi-source EV charger lookup called Overpass/OSM and OpenChargeMap
+  without a User-Agent, so Overpass answered 406 Not Acceptable on every
+  request (losing the main key-free source) and the log filled with warnings
+  each poll.
+  - Send a proper User-Agent on all outbound calls -> fixes the Overpass 406.
+  - OpenChargeMap now requires an API key (403 without one): skip quietly at
+
 ## Unreleased
 ### Fixed
 - **EV charger lookup: nearby stations show up again and the log stops
