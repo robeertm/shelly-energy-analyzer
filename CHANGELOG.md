@@ -1,5 +1,24 @@
 # Changelog
 
+## 16.69.3
+### Fixed
+- **Costs tab no longer blanks and "reloads from scratch" on every click.** The
+  `/api/costs` payload is one of the heaviest recomputes on the dashboard — it
+  walks the full hourly history of every device across today/week/month/year and
+  rebuilds the solar/CO₂ blend and the 24 h spot chart. The tab both re-fetched
+  on every activation *and* auto-refreshed every 5 s, so each visit paid the full
+  recompute and showed a spinner instead of the plots. Three changes fix it:
+  - **Server-side cache:** the costs payload is memoised for 30 s (config edits
+    bust it immediately via `reload()`), so repeated clicks and the periodic
+    refresh return instantly instead of re-running the whole computation.
+  - **Client-side persisted payload:** the last costs result is stashed in
+    `sessionStorage` and re-rendered instantly on a cold page/PWA start, so the
+    pane shows numbers and plots right away instead of an empty "Loading…" —
+    then refreshes underneath. It never shows an empty frame.
+  - **Auto-refresh cadence** for the Costs tab relaxed from 5 s to 30 s so the
+    whole pane (and every canvas) is no longer torn down and redrawn every few
+    seconds — no more chart flicker.
+
 ## 16.69.2
 ### Fixed
 - fix(ev-charger): send User-Agent so OSM/OCM lookups work; stop log spam
