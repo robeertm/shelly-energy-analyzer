@@ -2,6 +2,16 @@
 
 ## 16.69.3
 ### Fixed
+- perf(costs): cache costs payload so the tab never blanks or reloads on click
+  The /api/costs recompute (full hourly history x 4 ranges x devices +
+  solar/CO2 blend + 24h spot chart) ran on every tab activation and every
+  5s auto-refresh, so the Costs tab showed a spinner and reloaded from
+  scratch each visit.
+  - Server: memoise the costs payload for 30s; reload() busts it on config
+  change.
+
+## 16.69.3
+### Fixed
 - **Costs tab no longer blanks and "reloads from scratch" on every click.** The
   `/api/costs` payload is one of the heaviest recomputes on the dashboard — it
   walks the full hourly history of every device across today/week/month/year and
