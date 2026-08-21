@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+### Fixed
+- **EV charger lookup: nearby stations show up again and the log stops
+  spamming.** The public data sources were being called without an identifying
+  `User-Agent`, so OpenStreetMap/Overpass answered `406 Not Acceptable` on every
+  request — the community map is the main key-free source, so losing it left the
+  map empty. All outbound calls now send a proper `User-Agent`, which fixes the
+  Overpass 406. OpenChargeMap now requires an API key (it answers `403` without
+  one); when no key is configured that source is skipped quietly instead of
+  logging a warning on every refresh — set a key in the EV settings to enable
+  it. The Bundesnetzagentur endpoint only serves an HTML documentation stub (not
+  a queryable JSON API), which produced a repeating "Expecting value" error; it
+  is now detected and skipped silently. Finally, an "all sources failed" result
+  is cached like a successful one, so a periodically-refreshing UI no longer
+  re-hits every upstream API — and re-spams the log — on each poll.
+
 ## 16.69.1
 ### Fixed
 - **A pane, frame or plot that already shows data can no longer blank out to
