@@ -2574,6 +2574,26 @@ function _spinner(el, quiet, html) {{
   if (_tabHasContent(el)) return;   // already showing data → keep it, never blank
   el.innerHTML = html;
 }}
+/* ── Persisted tab payloads ──────────────────────────────────────────────
+   A tab's rendered DOM survives tab-switches within a page, but a cold page
+   load (PWA restart, hard refresh) starts every pane empty and must wait for a
+   backend recompute — that is the "jedesmal leer, keine plots" the Costs tab
+   showed. We stash the last successful payload in sessionStorage so the pane
+   can render instantly from it on the next load, then refresh in place. Kept
+   small + wrapped in try/catch so a full or unavailable store never breaks a
+   load. Only slow, heavy tabs need this; costs is the first. */
+function _saveCachedPayload(name, data) {{
+  try {{ sessionStorage.setItem('sea_tab_' + name, JSON.stringify({{ ts: Date.now(), data: data }})); }}
+  catch(e) {{}}
+}}
+function _loadCachedPayload(name) {{
+  try {{
+    var raw = sessionStorage.getItem('sea_tab_' + name);
+    if (!raw) return null;
+    var o = JSON.parse(raw);
+    return (o && o.data) ? o.data : null;
+  }} catch(e) {{ return null; }}
+}}
 var _toastTimer = null;
 function _toast(msg, kind) {{
   var box = document.getElementById('sea-toast');
@@ -4630,7 +4650,7 @@ function startUpdateBannerPolling() {{
    smart_sched are NOT refreshed because there is nothing to update.
    The CO₂ tab has its own _co2LiveTimer (1s) and is excluded too. */
 const TAB_LIVE_REFRESH = {{
-  costs: 5000,
+  costs: 30000,
   solar: 5000,
   standby: 5000,
   sankey: 3000,
@@ -5462,12 +5482,21 @@ function _fmtAxisVal(v, metric) {{
 async function loadCosts() {{
   const el = document.getElementById('costs-content');
   const quiet = _quietRefresh;
-  _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
+  // Never show an empty Costs pane: if nothing is on screen yet (cold page /
+  // PWA cold-start), paint the last payload we persisted so plots + numbers
+  // appear instantly, then refresh underneath. Only when there is truly nothing
+  // cached do we fall back to the spinner.
+  if (!_tabHasContent(el)) {{
+    var cached = _loadCachedPayload('costs');
+    if (cached) renderCosts(cached, el);
+    else _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
+  }}
   try {{
     const r = await fetch('/api/costs');
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     renderCosts(data, el);
+    _saveCachedPayload('costs', data);
   }} catch(e) {{
     _tabFail(el, e, quiet);
   }}

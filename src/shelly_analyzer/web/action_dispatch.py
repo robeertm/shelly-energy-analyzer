@@ -218,6 +218,19 @@ class ActionDispatcher:
         self._anomaly_resp_cache: tuple = ()
         self._anomaly_resp_lock = threading.Lock()
         self._anomaly_resp_ttl: float = 300.0  # 5 min
+        # Costs response cache: (built_at, data).  The /api/costs payload is one
+        # of the heaviest recomputes on the dashboard — it walks the full hourly
+        # history of every device across today/week/month/year, builds the
+        # solar/CO₂ blend and the spot chart on every call.  The Costs tab both
+        # re-fetches on every activation and auto-refreshes every few seconds, so
+        # without a cache each click paid the whole recompute → the tab showed a
+        # spinner and "reloaded from scratch" every time.  Aggregated costs barely
+        # move minute-to-minute (today's partial is the only live part), so we
+        # memoise the whole payload with a short TTL.  Config edits bust it via
+        # reload().
+        self._costs_resp_cache: tuple = ()
+        self._costs_resp_lock = threading.Lock()
+        self._costs_resp_ttl: float = 30.0  # 30 s
 
     def _current_tariff_price_eur_kwh(self) -> float:
         """Mirror of ``LiveFeedLoop._current_tariff_price`` for use inside the
@@ -497,6 +510,10 @@ class ActionDispatcher:
             self.lang = lang
         with self._computed_lock:
             self._computed.clear()
+        # Config changed (devices, pricing, tariff schedule, compensation …) →
+        # drop the memoised costs payload so the next /api/costs recomputes.
+        with self._costs_resp_lock:
+            self._costs_resp_cache = ()
 
     # ------------------------------------------------------------------
     # i18n helper
@@ -2579,6 +2596,17 @@ class ActionDispatcher:
 
         # --- Cost data for web dashboard ---
         if action == "costs":
+            # Serve the memoised payload when it is still fresh: the Costs tab
+            # re-fetches on every activation and auto-refreshes on a timer, and
+            # this recompute is heavy (full hourly history × 4 ranges × devices
+            # + solar/CO₂ blend + spot chart).  A short TTL keeps clicks instant
+            # and stops the tab "reloading from scratch"; config edits bust the
+            # cache in reload().
+            _cache_now = time.time()
+            with self._costs_resp_lock:
+                _cached = self._costs_resp_cache
+            if _cached and (_cache_now - _cached[0]) < self._costs_resp_ttl:
+                return _cached[1]
             try:
                 _tz = ZoneInfo("Europe/Berlin")
                 _now = datetime.now(_tz)
@@ -3124,7 +3152,7 @@ class ActionDispatcher:
                     _s["proj_kwh"] = 0
                     _s["proj_eur"] = 0
 
-                return {
+                _costs_payload = {
                     "ok": True, "devices": devices_out, "unit_eur": _unit,
                     "summary": _s,
                     "co2_g_per_kwh": _co2_g,
@@ -3138,6 +3166,9 @@ class ActionDispatcher:
                     "fixed_ct_per_kwh": round(_unit * 100, 2),
                     "current_spot_ct": _current_spot_ct,
                 }
+                with self._costs_resp_lock:
+                    self._costs_resp_cache = (time.time(), _costs_payload)
+                return _costs_payload
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 
