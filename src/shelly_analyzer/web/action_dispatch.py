@@ -3656,6 +3656,8 @@ class ActionDispatcher:
                     return {"ok": False, "error": _t(self.lang, "web.weather.no_data")}
 
                 current_data = None
+                current_stale = False
+                current_as_of = None
                 try:
                     from shelly_analyzer.services.weather import fetch_current_weather
                     snap_w = fetch_current_weather(api_key, lat, lon)
@@ -3669,6 +3671,7 @@ class ActionDispatcher:
                             "pressure_hpa": getattr(snap_w, "pressure_hpa", 0),
                             "description": getattr(snap_w, "description", ""),
                         }
+                        current_as_of = int(snap_w.timestamp)
                         hour_ts = (int(snap_w.timestamp) // 3600) * 3600
                         self.storage.db.upsert_weather([(
                             hour_ts, snap_w.temp_c, snap_w.humidity_pct,
@@ -3679,6 +3682,23 @@ class ActionDispatcher:
                 except Exception:
                     pass
 
+                # The live OWM call can fail or be rate-limited (free tier: 60/min,
+                # 1000/day). Never leave the weather hero blank in that case — fall
+                # back to the most recent stored observation and flag it as stale so
+                # the user always sees *something* (Robert: "immer was anzeigen, auch
+                # ältere Daten").
+                if current_data is None:
+                    try:
+                        from shelly_analyzer.services.weather import stale_current_from_weather_df
+                        _rec = self.storage.db.query_weather(
+                            int(time.time()) - 14 * 86400, int(time.time()) + 3600)
+                        _fallback = stale_current_from_weather_df(_rec)
+                        if _fallback is not None:
+                            current_data, current_as_of = _fallback
+                            current_stale = True
+                    except Exception:
+                        pass
+
                 dev_key = str(params.get("device_key", "")).strip()
                 dev = None
                 if dev_key:
@@ -3686,7 +3706,8 @@ class ActionDispatcher:
                 if dev is None and self.cfg.devices:
                     dev = self.cfg.devices[0]
                 if dev is None:
-                    return {"ok": True, "current": current_data, "correlation": None, "paired": [],
+                    return {"ok": True, "current": current_data, "current_stale": current_stale,
+                            "current_as_of": current_as_of, "correlation": None, "paired": [],
                             "daily": [], "humidity_corr": None, "comfort_zones": []}
 
                 now_wc = datetime.now(ZoneInfo("UTC"))
@@ -3697,7 +3718,8 @@ class ActionDispatcher:
                 hourly_wc = self.storage.db.query_hourly(dev.key, start_ts=start_ts_wc, end_ts=end_ts_wc)
 
                 if weather_df.empty or hourly_wc.empty:
-                    return {"ok": True, "current": current_data, "correlation": None, "paired": [],
+                    return {"ok": True, "current": current_data, "current_stale": current_stale,
+                            "current_as_of": current_as_of, "correlation": None, "paired": [],
                             "daily": [], "humidity_corr": None, "comfort_zones": []}
 
                 # Build full weather lookup (temp + humidity + wind + pressure)
@@ -3820,7 +3842,8 @@ class ActionDispatcher:
                         })
 
                 return {
-                    "ok": True, "current": current_data, "correlation": correlation,
+                    "ok": True, "current": current_data, "current_stale": current_stale,
+                    "current_as_of": current_as_of, "correlation": correlation,
                     "paired": paired, "daily": daily,
                     "humidity_corr": humidity_corr, "comfort_zones": comfort_zones,
                 }
