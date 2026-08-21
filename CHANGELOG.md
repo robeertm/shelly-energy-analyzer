@@ -1,5 +1,25 @@
 # Changelog
 
+## 16.69.1
+### Fixed
+- **A pane, frame or plot that already shows data can no longer blank out to
+  "Loading…" — under any circumstances.** The "never blank" rule previously
+  depended on a single global refresh flag (`_quietRefresh`) that is flipped
+  across `async`/`await` and timer boundaries. Under load that flag raced: a
+  loader reading it after an await, or during a periodic live-refresh tick,
+  could see the wrong value and wipe good content to a spinner, producing the
+  blank flashes ("nur leere Seiten und Frames"). Every "Loading…"/"Computing…"
+  paint now goes through a single `_spinner()` guard that refuses to overwrite
+  a pane which already holds real content — the invariant is now independent of
+  any flag timing. First-ever loads (empty pane) still show the spinner.
+- **No more constant from-scratch reloading of the whole dashboard.** Regaining
+  window focus used to wipe all per-tab freshness and re-prefetch *every* tab
+  from the backend, at most every 45 s. On mobile — where `focus`/
+  `visibilitychange` fire on nearly every interaction — this meant the entire
+  dashboard reloaded again and again. Focus now, at most once every 5 minutes,
+  quietly re-warms only the tab actually on screen; its content stays visible
+  and other tabs refresh in place when clicked.
+
 ## 16.69.0
 ### Changed
 - **A tab that already shows data never blanks out to "Error…" on a failed
