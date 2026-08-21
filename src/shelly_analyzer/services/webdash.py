@@ -2559,6 +2559,21 @@ function _tabFail(el, e, quiet) {{
   }}
   if (el) el.innerHTML = '<p class="error-msg">' + t('web.error', 'Error') + ': ' + esc(msg) + '</p>';
 }}
+// Paint a "Loading…" placeholder ONLY when it is safe to do so. Robert's hard
+// rule: a pane/frame/plot that already shows real content must NEVER blank out
+// to a spinner — not on a background refresh, not on a periodic tick, not on a
+// re-click of an already-warmed tab. The old code relied solely on the global
+// `_quietRefresh` flag, which is flipped across async/await and timer
+// boundaries and therefore raced: a loader reading it after an await (or during
+// a periodic live-refresh) could see `false` and wipe good content to
+// "Loading…", producing the blank flashes. This helper makes the invariant
+// timing-independent: even if `quiet` is wrongly false, a pane that already has
+// content is left untouched and refreshed in place underneath.
+function _spinner(el, quiet, html) {{
+  if (!el || quiet) return;
+  if (_tabHasContent(el)) return;   // already showing data → keep it, never blank
+  el.innerHTML = html;
+}}
 var _toastTimer = null;
 function _toast(msg, kind) {{
   var box = document.getElementById('sea-toast');
@@ -2808,11 +2823,23 @@ function prefetchAllTabs() {{
 // user returning to a long-open page gets everything refreshed in the
 // background rather than paying the full recompute on the next click.
 function _onAnalyzerFocus() {{
+  // Regaining focus must NOT re-walk every tab from scratch. The old version
+  // wiped `_tabLoadedOnce` and re-prefetched ALL tabs on every focus (>45s),
+  // which — on mobile especially, where focus/visibilitychange fire on every
+  // interaction — meant the whole dashboard reloaded from the backend again and
+  // again ("pausenlos neu aktualisiert"). Instead: at most once every 5 min,
+  // quietly re-warm ONLY the tab the user is actually looking at. Its existing
+  // content stays on screen (the loaders never blank a pane with content), and
+  // other tabs keep whatever was already warmed — they refresh in place when
+  // clicked. No visible churn, no from-scratch reloads.
   var now = Date.now();
-  if (now - _lastPrefetchTs < 45000) return;   // debounce rapid focus flips
-  _prefetchStarted = false;
-  _tabLoadedOnce = {{}};                        // force a fresh background pass
-  prefetchAllTabs();
+  if (now - _lastPrefetchTs < 300000) return;   // at most once per 5 min
+  _lastPrefetchTs = now;
+  var p = currentPane;
+  if (p && _tabLoaderFor(p)) {{
+    delete _tabLoadedOnce[p];       // allow an immediate quiet re-fetch
+    requestTabData(p);              // _tabRendered[p] keeps it non-blanking
+  }}
 }}
 
 /* ── Nav progress strip + status pill ── */
@@ -3286,7 +3313,7 @@ async function loadNilm() {{
   const el = document.getElementById('nilm-content');
   if (!el) return;
   const quiet = _quietRefresh;
-  if (!quiet) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
     const r = await fetch('/api/nilm_detail');
     if (!r.ok) throw new Error(r.status);
@@ -3846,7 +3873,7 @@ let _tenantsDevices = [];
 function loadTenants() {{
   const el = document.getElementById('tenants-content');
   if (!el) return;
-  if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Loading…</p>';
+  _spinner(el, _quietRefresh, '<p class="loading-msg">Loading…</p>');
   Promise.all([
     fetch('/api/tenants').then(function(r) {{ return r.json(); }}),
     fetch('/api/config').then(function(r) {{ return r.json(); }})
@@ -4034,7 +4061,7 @@ function tenantsPreviewAll() {{ computeBills(); }}
 function tenantsPreviewOne(tid) {{
   const q = _tenantsCurrentQuery();
   const el = document.getElementById('t-bills');
-  if (el && !_quietRefresh) el.innerHTML = '<p class="loading-msg">Computing…</p>';
+  _spinner(el, _quietRefresh, '<p class="loading-msg">Computing…</p>');
   fetch('/api/tenants/bill?' + q.qs).then(function(r) {{ return r.json(); }}).then(function(d) {{
     if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||'No data') + '</p>'; return; }}
     const rep = d.report;
@@ -4081,7 +4108,7 @@ function tenantsExportAllPdf() {{
 }}
 function _tenantsPostInvoice(body) {{
   const el = document.getElementById('t-bills');
-  if (el && !_quietRefresh) el.innerHTML = '<p class="loading-msg">Generating PDF…</p>';
+  _spinner(el, _quietRefresh, '<p class="loading-msg">Generating PDF…</p>');
   fetch('/api/tenants/invoice', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify(body)}})
     .then(function(r) {{ return r.json(); }})
     .then(function(d) {{
@@ -4117,7 +4144,7 @@ function computeBills() {{
   if (e) q.set('period_end', e);
   if (tm) q.set('tariff_mode', tm);
   const el = document.getElementById('t-bills');
-  if (el && !_quietRefresh) el.innerHTML = '<p class="loading-msg">Computing…</p>';
+  _spinner(el, _quietRefresh, '<p class="loading-msg">Computing…</p>');
   fetch('/api/tenants/bill?' + q.toString()).then(function(r) {{ return r.json(); }}).then(function(d) {{
     if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||'No data') + '</p>'; return; }}
     const rep = d.report;
@@ -5435,7 +5462,7 @@ function _fmtAxisVal(v, metric) {{
 async function loadCosts() {{
   const el = document.getElementById('costs-content');
   const quiet = _quietRefresh;
-  if (!quiet) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
     const r = await fetch('/api/costs');
     if (!r.ok) throw new Error(r.status);
@@ -6068,7 +6095,7 @@ async function loadHeatmap() {{
   }}
   // Nothing cached yet: show the spinner (unless this is a quiet periodic
   // refresh) and fetch. Leave the other panes untouched — they're empty.
-  if (!_quietRefresh) calWrap.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  _spinner(calWrap, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
     const data = await _hmFetch(device, year, unit, raw);
     // The user may have changed device/year/unit while we were fetching.
@@ -6562,7 +6589,7 @@ async function loadCo2(range) {{
   if (range) _co2Range = range;
   const el = document.getElementById('co2-content');
   const quiet = _quietRefresh;
-  if (!quiet) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
     const r = await fetch('/api/co2?range=' + _co2Range);
     if (!r.ok) throw new Error(r.status);
@@ -7184,7 +7211,7 @@ function initSolar() {{
 async function loadSolar(period) {{
   const el = document.getElementById('solar-content');
   const quiet = _quietRefresh;
-  if (!quiet) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
     const r = await fetch('/api/solar?period=' + period);
     if (!r.ok) throw new Error(r.status);
@@ -7285,7 +7312,7 @@ function initWeather() {{
 async function loadWeather() {{
   const el = document.getElementById('weather-content');
   const quiet = _quietRefresh;
-  if (!quiet) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
     const r = await fetch('/api/weather_correlation');
     if (!r.ok) throw new Error(r.status);
@@ -7683,7 +7710,7 @@ function initCompare() {{
 async function loadComparePreset(preset) {{
   const result = document.getElementById('cmp-result');
   const quiet = _quietRefresh;
-  if (!quiet) result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  _spinner(result, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
     // Auto-granularity per preset: month→daily, quarter→weekly, halfyear/year→monthly
     const autoGran = preset === 'month' ? 'daily'
@@ -7709,7 +7736,7 @@ async function loadComparePreset(preset) {{
 async function loadCompare() {{
   const result = document.getElementById('cmp-result');
   const quiet = _quietRefresh;
-  if (!quiet) result.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  _spinner(result, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
     const da = document.getElementById('cmp-da').value;
     const fa = document.getElementById('cmp-fa').value;
@@ -7981,7 +8008,7 @@ function drawBars(canvas, labels, series, opts) {{
 async function loadAnomalies() {{
   const el = document.getElementById('anom-content');
   const quiet = _quietRefresh;
-  if (!quiet) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+  _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
     const r = await fetch('/api/anomalies');
     if (!r.ok) throw new Error(r.status);
@@ -8230,7 +8257,7 @@ async function loadForecast() {{
   const dk = sel.value || '';
   const cont = document.getElementById('forecast-cards');
   const quiet = _quietRefresh;
-  if (!quiet) cont.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
+  _spinner(cont, quiet, '<p class="loading-msg">Loading\u2026</p>');
   try {{
     const r = await fetch('/api/forecast?device_key=' + encodeURIComponent(dk));
     if (!r.ok) throw new Error(r.status);
@@ -8429,7 +8456,7 @@ function _fcDrawCostBars(d) {{
 async function loadStandby() {{
   const cont = document.getElementById('standby-cards');
   const quiet = _quietRefresh;
-  if (!quiet) cont.innerHTML = '<p class="loading-msg">' + t('web.loading','Loading…') + '</p>';
+  _spinner(cont, quiet, '<p class="loading-msg">' + t('web.loading','Loading…') + '</p>');
   try {{
     const r = await fetch('/api/standby');
     if (!r.ok) throw new Error(r.status);
@@ -8718,7 +8745,7 @@ function initSankeyPeriods() {{
 async function loadSankey() {{
   initSankeyPeriods();
   const cont = document.getElementById('sankey-cards');
-  if (!_quietRefresh) cont.innerHTML = '<p class="loading-msg">Loading\u2026</p>';
+  _spinner(cont, _quietRefresh, '<p class="loading-msg">Loading\u2026</p>');
   try {{
     const r = await fetch('/api/sankey?period=' + _sankeyPeriod + (_rawView ? '&raw=1' : ''));
     if (!r.ok) throw new Error(r.status);
@@ -9151,7 +9178,7 @@ async function loadEv() {{
   const wrap = document.getElementById('ev-grid-wrap');
   if (!wrap) return;
   const quiet = _quietRefresh;
-  if (!quiet) wrap.innerHTML = '<p class="loading-msg">' + t('web.ev.loading', 'Loading chargers\u2026') + '</p>';
+  _spinner(wrap, quiet, '<p class="loading-msg">' + t('web.ev.loading', 'Loading chargers\u2026') + '</p>');
 
   const cityInput = document.getElementById('ev-city');
   const cityVal = (cityInput ? cityInput.value.trim() : '');
@@ -9282,7 +9309,7 @@ _loadLsSettings();
   window._ssDuration = 3;
   async function loadSmartSched() {{
     const el = document.getElementById('ss-content');
-    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Loading…</p>';
+    _spinner(el, _quietRefresh, '<p class="loading-msg">Loading…</p>');
     try {{
       const r = await fetch('/api/smart_schedule?duration=' + window._ssDuration);
       if (!r.ok) throw new Error(r.status);
@@ -9389,7 +9416,7 @@ _loadLsSettings();
   let _evWindowDays = 30;
   async function loadEvLog() {{
     const el = document.getElementById('ev-content');
-    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Loading…</p>';
+    _spinner(el, _quietRefresh, '<p class="loading-msg">Loading…</p>');
     try {{
       const r = await fetch('/api/ev_sessions?days=' + _evWindowDays);
       if (!r.ok) throw new Error(r.status);
@@ -10118,7 +10145,7 @@ _loadLsSettings();
   async function loadCalibration() {{
     const el = document.getElementById('cal-content');
     if (!el) return;
-    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+    _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
     try {{
       const r = await fetch('/api/compensation/history');
       const d = await r.json();
@@ -10201,7 +10228,7 @@ _loadLsSettings();
   /* ── Tariff Comparison ── */
   async function loadTariff() {{
     const el = document.getElementById('tariff-content');
-    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Loading…</p>';
+    _spinner(el, _quietRefresh, '<p class="loading-msg">Loading…</p>');
     try {{
       const r = await fetch('/api/tariff_compare');
       if (!r.ok) throw new Error(r.status);
@@ -10253,7 +10280,7 @@ _loadLsSettings();
   /* ── Battery ── */
   async function loadBattery() {{
     const el = document.getElementById('bat-content');
-    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Loading…</p>';
+    _spinner(el, _quietRefresh, '<p class="loading-msg">Loading…</p>');
     try {{
       const r = await fetch('/api/battery');
       if (!r.ok) throw new Error(r.status);
@@ -10345,7 +10372,7 @@ _loadLsSettings();
   /* ── AI Advisor ── */
   async function loadAdvisor() {{
     const el = document.getElementById('advisor-content');
-    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">Loading…</p>';
+    _spinner(el, _quietRefresh, '<p class="loading-msg">Loading…</p>');
     try {{
       const r = await fetch('/api/advisor');
       if (!r.ok) throw new Error(r.status);
@@ -10378,7 +10405,7 @@ _loadLsSettings();
   /* ── Goals & Gamification ── */
   async function loadGoals() {{
     const el = document.getElementById('goals-content');
-    if (!_quietRefresh) el.innerHTML = '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>';
+    _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
     try {{
       const r = await fetch('/api/goals');
       if (!r.ok) throw new Error(r.status);
