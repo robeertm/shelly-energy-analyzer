@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 _CACHE: Dict[str, Any] = {}
 _CACHE_TTL = 120  # seconds
 
+# Public services such as Overpass and OpenChargeMap reject requests without an
+# identifying User-Agent (Overpass answers 406 Not Acceptable, OCM answers 403
+# Forbidden). Send one on every outbound call.
+_UA = "shelly-energy-analyzer (+https://github.com/robeertm/shelly-energy-analyzer)"
+_BASE_HEADERS = {"User-Agent": _UA, "Accept": "application/json"}
+
 # Connector type display names
 _CONNECTOR_NAMES = {
     "IEC_62196_T2": "Typ 2",
@@ -108,6 +114,7 @@ def _fetch_enbw(lat: float, lon: float, radius_m: int, max_results: int) -> Opti
                 "Authorization": f"Bearer {_SMATRICS_KEY}",
                 "Origin": "https://enbw.smatrics.com",
                 "Referer": "https://enbw.smatrics.com/",
+                "User-Agent": _UA,
             },
             timeout=15,
         )
@@ -224,7 +231,15 @@ def _fetch_ocm(lat: float, lon: float, radius_m: int, max_results: int, api_key:
     if api_key:
         params["key"] = api_key
     try:
-        resp = requests.get(_OCM_BASE, params=params, timeout=15)
+        resp = requests.get(_OCM_BASE, params=params, headers=_BASE_HEADERS, timeout=15)
+        if resp.status_code == 403:
+            # OCM enforces API keys for most callers; without a key this is
+            # expected. Keep it quiet so it doesn't spam the log every refresh.
+            if api_key:
+                logger.warning("OpenChargeMap rejected the API key (403 Forbidden)")
+            else:
+                logger.debug("OpenChargeMap needs an API key (403); skipping source")
+            return None
         resp.raise_for_status()
         raw = resp.json()
     except Exception as e:
@@ -284,11 +299,18 @@ def _fetch_bna(lat: float, lon: float, radius_m: int, max_results: int) -> Optio
     try:
         dlat = radius_m / 111_320.0
         dlon = radius_m / (111_320.0 * max(math.cos(math.radians(lat)), 0.01))
-        resp = requests.get(_BNA_BASE, params={"lat_min": lat - dlat, "lat_max": lat + dlat, "lon_min": lon - dlon, "lon_max": lon + dlon}, timeout=10)
+        resp = requests.get(_BNA_BASE, params={"lat_min": lat - dlat, "lat_max": lat + dlat, "lon_min": lon - dlon, "lon_max": lon + dlon}, headers=_BASE_HEADERS, timeout=10)
         resp.raise_for_status()
+        ctype = resp.headers.get("Content-Type", "").lower()
+        if "json" not in ctype:
+            # bund.dev only publishes a documentation stub here (HTML), not a
+            # queryable JSON API — trying to decode it raised "Expecting value".
+            # This source is currently non-functional; keep it quiet.
+            logger.debug("Bundesnetzagentur returned non-JSON (%s); skipping source", ctype or "unknown")
+            return None
         raw = resp.json()
     except Exception as e:
-        logger.warning("Bundesnetzagentur failed: %s", e)
+        logger.debug("Bundesnetzagentur unavailable: %s", e)
         return None
     items = raw if isinstance(raw, list) else raw.get("data", raw.get("results", []))
     if not isinstance(items, list):
@@ -322,7 +344,7 @@ _OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 def _fetch_osm(lat: float, lon: float, radius_m: int, max_results: int) -> Optional[List[dict]]:
     query = f'[out:json][timeout:10];(node["amenity"="charging_station"](around:{radius_m},{lat},{lon});way["amenity"="charging_station"](around:{radius_m},{lat},{lon}););out center {max_results};'
     try:
-        resp = requests.post(_OVERPASS_URL, data={"data": query}, timeout=15)
+        resp = requests.post(_OVERPASS_URL, data={"data": query}, headers=_BASE_HEADERS, timeout=15)
         resp.raise_for_status()
         raw = resp.json()
     except Exception as e:
@@ -400,7 +422,11 @@ def fetch_ev_chargers(
                 sources_fail.append(name)
 
     if not all_stations:
-        return {"ok": False, "error": "All data sources failed", "stations": [], "sources": sources_fail}
+        # Cache the failure as well, otherwise a periodically-polling UI re-hits
+        # every (failing) upstream API on each refresh and spams the log.
+        result = {"ok": False, "error": "All data sources failed", "stations": [], "sources": sources_fail}
+        _CACHE[cache_key] = (now, result)
+        return result
 
     # Sort by distance, deduplicate (best detail wins)
     all_stations.sort(key=lambda s: s["distance_m"])
