@@ -1,5 +1,26 @@
 # Changelog
 
+## 16.67.0
+### Added
+- **Background tab prefetch + serialized data loads — no more "click a tab, wait
+  a minute".** Opening a data tab (Costs, EV-Log, …) after the page had been idle
+  used to trigger the full backend recompute on the spot. Now, once the page is
+  shown (and again whenever it regains focus after sitting idle ~45 s), the
+  dashboard walks every visible tab in bottom-bar order and warms it in the
+  background, so the tab you click next is already loaded. Impatient tab-hopping
+  no longer piles up parallel DB queries either: **all** DB-backed tab loads run
+  through a single serial queue — the load already in flight finishes (it's the
+  very query we don't want duplicated) before the next starts, and a user click
+  jumps to the front of the queue while stale foreground requests are dropped.
+- **Live loading feedback in the bottom nav.** The tab currently fetching data
+  pulses its icon and shows a tiny spinner, and a slim progress strip with a
+  status pill floats just above the nav: a determinate bar with an
+  "Updating tabs … 4/12" count during the background prefetch, and an
+  indeterminate shimmer with elapsed-time + ETA ("Costs: loading … 3 s (~5 s
+  left)", derived from the tab's last measured load time) for a single
+  foreground load — a real status instead of a bare "Loading…". Localized
+  (DE/EN, others fall back to EN) and `prefers-reduced-motion`-aware.
+
 ## 16.66.1
 ### Fixed
 - **Gen1 Shelly EM / 3EM (SHEM-3) no longer shows "Offline / no data" while it is

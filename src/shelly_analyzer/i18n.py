@@ -1227,6 +1227,10 @@ _I18N: Dict[str, Dict[str, str]] = {
         # Web: Plotly plots page
         "web.plots.title": "Plots",
         "web.loading": "Lade…",
+        "web.prefetch.status": "Aktualisiere Tabs … {n}/{total}",
+        "web.tab.loading_eta": "{label}: lädt … {e}s (noch ~{r}s)",
+        "web.tab.loading_elapsed": "{label}: lädt … {e}s",
+        "web.tab.updating": "aktualisiere …",
         "web.error": "Fehler",
         "web.unknown": "unbekannt",
         "web.axis.time": "Zeit",
@@ -3190,6 +3194,10 @@ _I18N: Dict[str, Dict[str, str]] = {
 
         "web.plots.title": "Plots",
         "web.loading": "Loading…",
+        "web.prefetch.status": "Updating tabs … {n}/{total}",
+        "web.tab.loading_eta": "{label}: loading … {e}s (~{r}s left)",
+        "web.tab.loading_elapsed": "{label}: loading … {e}s",
+        "web.tab.updating": "updating …",
         "web.error": "Error",
         "web.unknown": "unknown",
         "web.axis.time": "Time",
