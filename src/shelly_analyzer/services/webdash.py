@@ -1304,6 +1304,64 @@ _HTML_TEMPLATE = """<!doctype html>
       border-radius: 0 0 3px 3px;
       background: var(--accent);
     }}
+    /* ── Tab data-loading feedback (queue + prefetch) ── */
+    /* A nav button whose data is currently being (re)fetched pulses its icon
+       and shows a tiny spinner, so "data is updating" is visible even while
+       the pane content still shows its own placeholder. */
+    .nav-btn.tab-loading {{ color: var(--accent); }}
+    .nav-btn.tab-loading .nav-icon {{ animation: navPulse 0.9s ease-in-out infinite; }}
+    .nav-btn.tab-loading::after {{
+      content: "";
+      position: absolute;
+      bottom: 5px; right: 8px;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      border: 1.5px solid var(--accent);
+      border-top-color: transparent;
+      animation: navSpin 0.7s linear infinite;
+    }}
+    @keyframes navPulse {{ 0%,100% {{ opacity: 1; transform: translateY(0) scale(1); }} 50% {{ opacity: 0.45; transform: translateY(-1px) scale(1.14); }} }}
+    @keyframes navSpin {{ to {{ transform: rotate(360deg); }} }}
+    /* Thin progress strip + status pill that floats just above the bottom-nav.
+       Determinate width during the sequential background prefetch, indeterminate
+       shimmer during a single foreground load; the pill shows %/ETA text. */
+    #nav-progress {{
+      position: fixed;
+      left: 0; right: 0;
+      bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+      z-index: 101;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      opacity: 0;
+      transition: opacity 0.2s var(--ease, ease);
+    }}
+    #nav-progress.show {{ opacity: 1; }}
+    #nav-progress-text {{
+      align-self: center;
+      max-width: 92vw;
+      margin: 0 auto -1px;
+      padding: 2px 10px;
+      font-size: 11px;
+      color: var(--muted);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-radius: 8px 8px 0 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }}
+    #nav-progress-track {{ height: 3px; width: 100%; background: var(--border); overflow: hidden; }}
+    #nav-progress-bar {{ height: 100%; width: 0%; background: var(--accent); border-radius: 0 2px 2px 0; transition: width 0.3s var(--ease, ease); }}
+    #nav-progress.indeterminate #nav-progress-bar {{ width: 35%; transition: none; animation: navIndet 1.1s ease-in-out infinite; }}
+    @keyframes navIndet {{ 0% {{ margin-left: -35%; }} 100% {{ margin-left: 100%; }} }}
+    @media (prefers-reduced-motion: reduce) {{
+      .nav-btn.tab-loading .nav-icon,
+      .nav-btn.tab-loading::after,
+      #nav-progress.indeterminate #nav-progress-bar {{ animation: none; }}
+    }}
     /* ── Icon buttons ── */
     .icon-btn {{
       background: none;
@@ -2236,6 +2294,10 @@ _HTML_TEMPLATE = """<!doctype html>
       </div>
     </div>
 
+  <div id="nav-progress" aria-hidden="true">
+    <span id="nav-progress-text"></span>
+    <div id="nav-progress-track"><div id="nav-progress-bar"></div></div>
+  </div>
   <nav id="bottom-nav">
     <button class="nav-btn active" onclick="switchPane('live',this)">
       <span class="nav-icon">📡</span>
@@ -2540,31 +2602,209 @@ function onPaneActivated(name) {{
         }} catch(e) {{}}
       }}
     }}
-    else if (name === 'costs') loadCosts();
-    else if (name === 'heatmap') initHeatmap();
-    else if (name === 'solar') initSolar();
-    else if (name === 'weather') initWeather();
-    else if (name === 'co2') loadCo2();
-    else if (name === 'compare') initCompare();
-    else if (name === 'anomalies') loadAnomalies();
-    else if (name === 'forecast') loadForecast();
-    else if (name === 'standby') loadStandby();
-    else if (name === 'sankey') loadSankey();
-    else if (name === 'ev') {{ _evInitKeyRow(); loadEv(); }}
-    else if (name === 'smart_sched') loadSmartSched();
-    else if (name === 'ev_log') loadEvLog();
-    else if (name === 'tariff') loadTariff();
-    else if (name === 'battery') loadBattery();
-    else if (name === 'advisor') loadAdvisor();
-    else if (name === 'goals') loadGoals();
-    else if (name === 'tenants') loadTenants();
-    else if (name === 'nilm') loadNilm();
-    else if (name === 'control') loadControl();
-    else if (name === 'calibration') loadCalibration();
     else if (name === 'sync') {{ initSync(); }}
-    else {{ stopSyncPolling(); }}
+    else {{
+      // Every DB-backed tab loads through the serialized queue below so wild
+      // tab-clicking (or the background prefetch) never fires parallel queries.
+      requestTabData(name);
+    }}
   }}
   if (name !== 'sync') stopSyncPolling();
+}}
+
+/* ──────────────────────────────────────────────
+   TAB DATA COORDINATOR  — one queue, no parallel DB queries
+   ------------------------------------------------
+   Every DB-backed tab load runs through a single serial queue. That means:
+     • wild tab-clicking can never start N overlapping backend queries;
+     • coming back after a long absence, a background prefetch walks *all*
+       visible tabs in order so the one you click is already warm;
+     • the bottom-nav shows which tab is (re)fetching, plus a progress pill
+       with %/ETA — a real status instead of a bare "Loading…".
+   Foreground (user-clicked) loads jump to the front of the queue; the load
+   already in flight is allowed to finish (it's exactly the query we don't
+   want to duplicate) before the next one starts.
+────────────────────────────────────────────── */
+var _tabQ = [];            // pending: [{{name, user, prefetch}}]
+var _tabRunning = null;    // {{name, user, prefetch}} currently loading, or null
+var _tabLoadedOnce = {{}}; // name -> ts of last successful load (freshness)
+var _tabLoadDur = {{}};    // name -> last measured load duration ms (for ETA)
+var _prefetchTotal = 0;    // size of the current background prefetch batch
+var _prefetchDone = 0;     // completed items in the current batch
+var _loadTicker = null;    // interval that ticks the elapsed/ETA text
+var _loadStart = 0;
+var _prefetchStarted = false;
+var _lastPrefetchTs = 0;
+
+// Map a pane id to the loader that fetches its data. Names resolve to the
+// hoisted global loader functions; anything without a loader (live, plots,
+// sync) returns null and is handled directly in onPaneActivated.
+var _TAB_LOADER_NAMES = {{
+  costs:'loadCosts', heatmap:'initHeatmap', solar:'initSolar', weather:'initWeather',
+  co2:'loadCo2', compare:'initCompare', anomalies:'loadAnomalies', forecast:'loadForecast',
+  standby:'loadStandby', sankey:'loadSankey', smart_sched:'loadSmartSched', ev_log:'loadEvLog',
+  tariff:'loadTariff', battery:'loadBattery', advisor:'loadAdvisor', goals:'loadGoals',
+  tenants:'loadTenants', nilm:'loadNilm', control:'loadControl', calibration:'loadCalibration'
+}};
+function _tabLoaderFor(name) {{
+  if (name === 'ev') {{
+    return (typeof loadEv === 'function')
+      ? function() {{ try {{ _evInitKeyRow(); }} catch(e) {{}} return loadEv(); }}
+      : null;
+  }}
+  var fn = _TAB_LOADER_NAMES[name];
+  if (fn && typeof window[fn] === 'function') return window[fn];
+  return null;
+}}
+function _tabLabel(name) {{
+  var b = document.querySelector('.nav-btn[onclick*="\\'' + name + '\\'"]');
+  if (b) {{ var l = b.querySelector('.nav-label'); if (l) return l.textContent.trim(); }}
+  return name;
+}}
+function _setNavBtnLoading(name, on) {{
+  document.querySelectorAll('.nav-btn').forEach(function(b) {{
+    var oc = b.getAttribute('onclick') || '';
+    if (oc.indexOf("'" + name + "'") !== -1) b.classList.toggle('tab-loading', on);
+  }});
+}}
+
+// User clicked a tab: it becomes the highest priority. Drop any other pending
+// *foreground* requests (the user has moved on) but keep the prefetch batch.
+function requestTabData(name) {{
+  if (!_tabLoaderFor(name)) return;
+  _tabQ = _tabQ.filter(function(it) {{ return it.prefetch || it.name === name; }});
+  if (_tabRunning && _tabRunning.name === name) return;           // already loading it
+  // Re-click within 1.5s of a fresh load → don't re-hit the backend.
+  if (_tabLoadedOnce[name] && (Date.now() - _tabLoadedOnce[name] < 1500)) {{ _pumpTabQueue(); return; }}
+  _tabQ = _tabQ.filter(function(it) {{ return it.name !== name; }});
+  _tabQ.unshift({{ name: name, user: true }});
+  _pumpTabQueue();
+}}
+
+function _pumpTabQueue() {{
+  if (_tabRunning) return;
+  if (!_tabQ.length) {{
+    _prefetchTotal = 0; _prefetchDone = 0;
+    _stopLoadTicker();
+    _updateNavProgress();
+    return;
+  }}
+  var item = _tabQ.shift();
+  var fn = _tabLoaderFor(item.name);
+  if (!fn) {{ _pumpTabQueue(); return; }}
+  // Skip prefetch of a tab that's already warm.
+  if (item.prefetch && _tabLoadedOnce[item.name]) {{
+    if (_prefetchTotal > 0) _prefetchDone++;
+    _updateNavProgress();
+    _pumpTabQueue();
+    return;
+  }}
+  _tabRunning = item;
+  _setNavBtnLoading(item.name, true);
+  _startLoadTicker();
+  _updateNavProgress();
+  var t0 = Date.now();
+  Promise.resolve().then(fn).then(function() {{
+    _tabLoadedOnce[item.name] = Date.now();
+    _tabLoadDur[item.name] = Date.now() - t0;
+  }}, function() {{ /* keep going even if one tab errors */ }}).then(function() {{
+    _setNavBtnLoading(item.name, false);
+    if (item.prefetch && _prefetchTotal > 0) _prefetchDone++;
+    _tabRunning = null;
+    _updateNavProgress();
+    // Small gap so a slow backend isn't hammered back-to-back.
+    setTimeout(_pumpTabQueue, _tabQ.length ? 50 : 0);
+  }});
+}}
+
+// Walk every visible (feature-enabled) tab in bar order and warm it in the
+// background. Triggered on first load and whenever the page regains focus
+// after being idle for a while ("war man lange nicht im analyzer").
+function prefetchAllTabs() {{
+  if (_prefetchStarted) return;
+  _prefetchStarted = true;
+  _lastPrefetchTs = Date.now();
+  var added = 0;
+  document.querySelectorAll('#bottom-nav .nav-btn').forEach(function(b) {{
+    var oc = b.getAttribute('onclick') || '';
+    var m = /switchPane\('([^']+)'/.exec(oc);
+    if (!m) return;
+    var nm = m[1];
+    if (!_tabLoaderFor(nm)) return;                       // live/plots/sync skipped
+    if (getComputedStyle(b).display === 'none') return;   // feature-disabled tab
+    if (_tabLoadedOnce[nm]) return;
+    if (nm === (_tabRunning && _tabRunning.name)) return;
+    if (_tabQ.some(function(it) {{ return it.name === nm; }})) return;
+    _tabQ.push({{ name: nm, prefetch: true }});
+    added++;
+  }});
+  _prefetchTotal = added;
+  _prefetchDone = 0;
+  _pumpTabQueue();
+}}
+
+// Re-arm prefetch when the tab regains focus after being idle a while, so a
+// user returning to a long-open page gets everything refreshed in the
+// background rather than paying the full recompute on the next click.
+function _onAnalyzerFocus() {{
+  var now = Date.now();
+  if (now - _lastPrefetchTs < 45000) return;   // debounce rapid focus flips
+  _prefetchStarted = false;
+  _tabLoadedOnce = {{}};                        // force a fresh background pass
+  prefetchAllTabs();
+}}
+
+/* ── Nav progress strip + status pill ── */
+function _startLoadTicker() {{
+  _loadStart = Date.now();
+  _stopLoadTicker();
+  _loadTicker = setInterval(_updateNavProgressText, 250);
+}}
+function _stopLoadTicker() {{ if (_loadTicker) {{ clearInterval(_loadTicker); _loadTicker = null; }} }}
+function _navStatusText() {{
+  var r = _tabRunning;
+  if (r && r.prefetch && _prefetchTotal > 0) {{
+    var doneN = Math.min(_prefetchDone + 1, _prefetchTotal);
+    var s = t('web.prefetch.status', 'Updating tabs … {{n}}/{{total}}', {{ n: doneN, total: _prefetchTotal }});
+    var lbl = _tabLabel(r.name);
+    return lbl ? (s + ' · ' + lbl) : s;
+  }}
+  if (r) {{
+    var label = _tabLabel(r.name);
+    var elapsed = Date.now() - _loadStart;
+    var es = Math.round(elapsed / 1000);
+    var dur = _tabLoadDur[r.name];
+    if (dur && dur > 800) {{
+      var remain = Math.max(0, Math.round((dur - elapsed) / 1000));
+      return t('web.tab.loading_eta', '{{label}}: loading … {{e}}s (~{{r}}s left)', {{ label: label, e: es, r: remain }});
+    }}
+    return t('web.tab.loading_elapsed', '{{label}}: loading … {{e}}s', {{ label: label, e: es }});
+  }}
+  return t('web.loading', 'Loading…');
+}}
+function _updateNavProgressText() {{
+  var txt = document.getElementById('nav-progress-text');
+  if (txt) txt.textContent = _navStatusText();
+}}
+function _updateNavProgress() {{
+  var np = document.getElementById('nav-progress');
+  if (!np) return;
+  var bar = document.getElementById('nav-progress-bar');
+  if (!_tabRunning && !_tabQ.length) {{
+    np.classList.remove('show', 'indeterminate');
+    return;
+  }}
+  np.classList.add('show');
+  var r = _tabRunning;
+  var determinate = r && r.prefetch && _prefetchTotal > 0;
+  if (determinate) {{
+    np.classList.remove('indeterminate');
+    var pct = Math.round(100 * _prefetchDone / _prefetchTotal);
+    if (bar) {{ bar.style.marginLeft = '0'; bar.style.width = pct + '%'; }}
+  }} else {{
+    np.classList.add('indeterminate');
+  }}
+  _updateNavProgressText();
 }}
 
 /* ──────────────────────────────────────────────
@@ -10359,6 +10599,16 @@ _loadLsSettings();
   // slow to load and flickered). Deferred so it never competes with the
   // initial live render.
   setTimeout(function() {{ try {{ prefetchAllHeatmaps(); }} catch(e) {{}} }}, 2000);
+
+  // Sequentially warm *every* visible tab in the background so the pane the
+  // user clicks next is already loaded — and re-warm on focus after the page
+  // has been sitting idle. Deferred a little further than the heatmap warm so
+  // the first live render is never delayed.
+  setTimeout(function() {{ try {{ prefetchAllTabs(); }} catch(e) {{}} }}, 2500);
+  window.addEventListener('focus', function() {{ try {{ _onAnalyzerFocus(); }} catch(e) {{}} }});
+  document.addEventListener('visibilitychange', function() {{
+    if (!document.hidden) {{ try {{ _onAnalyzerFocus(); }} catch(e) {{}} }}
+  }});
 
 </script>
 </body>
