@@ -2628,6 +2628,10 @@ function onPaneActivated(name) {{
 var _tabQ = [];            // pending: [{{name, user, prefetch}}]
 var _tabRunning = null;    // {{name, user, prefetch}} currently loading, or null
 var _tabLoadedOnce = {{}}; // name -> ts of last successful load (freshness)
+var _tabRendered = {{}};   // name -> true once its DOM has ever held real content.
+                           // Unlike _tabLoadedOnce this is NEVER reset on refocus,
+                           // so a background-warmed tab you click into refreshes in
+                           // place instead of flashing "Loading…" over its content.
 var _tabLoadDur = {{}};    // name -> last measured load duration ms (for ETA)
 var _prefetchTotal = 0;    // size of the current background prefetch batch
 var _prefetchDone = 0;     // completed items in the current batch
@@ -2704,8 +2708,21 @@ function _pumpTabQueue() {{
   _startLoadTicker();
   _updateNavProgress();
   var t0 = Date.now();
-  Promise.resolve().then(fn).then(function() {{
+  // Already warm (or a background prefetch) → refresh silently in place: no
+  // "Loading…" wipe. The content that's already on screen stays visible while
+  // the fresh data is fetched and re-rendered underneath it. Only a first-ever
+  // foreground load shows the spinner (there is nothing to show yet). The tab
+  // bar still animates via _setNavBtnLoading so the update is visible there.
+  var quiet = item.prefetch || !!_tabRendered[item.name];
+  var prevQuiet = _quietRefresh;
+  if (quiet) _quietRefresh = true;
+  var p;
+  try {{ p = Promise.resolve(fn()); }}
+  catch(e) {{ p = Promise.reject(e); }}
+  finally {{ _quietRefresh = prevQuiet; }}   // sync spinner-check already ran
+  p.then(function() {{
     _tabLoadedOnce[item.name] = Date.now();
+    _tabRendered[item.name] = true;
     _tabLoadDur[item.name] = Date.now() - t0;
   }}, function() {{ /* keep going even if one tab errors */ }}).then(function() {{
     _setNavBtnLoading(item.name, false);

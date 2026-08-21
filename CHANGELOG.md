@@ -1,5 +1,27 @@
 # Changelog
 
+## 16.68.0
+### Changed
+- **Switching to an already-loaded tab no longer wipes it back to "Loading…".**
+  Once a data tab has ever shown real content — whether you opened it or the
+  background prefetch warmed it — clicking (back) into it now refreshes *in
+  place*: the existing table/chart stays on screen while fresh data is fetched
+  and re-rendered underneath, instead of flashing an empty "Loading…" placeholder
+  first. The bottom-nav tab still pulses so the silent update is visible there.
+  A first-ever foreground load (nothing rendered yet) still shows the spinner.
+  "Has rendered" is tracked separately from load-freshness, so a tab warmed by
+  the background prefetch — and even one re-warmed after the page regains focus —
+  never re-flashes when you click it.
+
+### Performance
+- **Anomalies tab loads fast on repeat opens.** `/api/anomalies` re-ran full
+  anomaly detection over the *entire history of every device* on every request
+  whenever the shared in-memory anomaly log was empty — the dominant cost, and
+  the one step that was completely uncached, so every tab activation and quiet
+  refresh paid it again. The whole response is now memoised for 5 minutes with a
+  token that busts on config or log changes, so repeat opens and background
+  refreshes are served instantly.
+
 ## 16.67.0
 ### Added
 - **Background tab prefetch + serialized data loads — no more "click a tab, wait

@@ -208,6 +208,16 @@ class ActionDispatcher:
         self._ev_resp_cache: Dict[tuple, tuple] = {}
         self._ev_resp_lock = threading.Lock()
         self._ev_resp_ttl: float = 900.0
+        # Anomalies response cache: (built_at, token, data).  When the shared
+        # _anomaly_log is empty the endpoint recomputes detection over the FULL
+        # history of EVERY device (load_device per device) on every /api/anomalies
+        # call — the dominant cost and, until now, entirely uncached, so each tab
+        # activation and quiet refresh re-ran it.  Detection over full history
+        # barely moves minute-to-minute, so we memoise the whole payload with a
+        # short TTL and a token that busts on config/log changes.
+        self._anomaly_resp_cache: tuple = ()
+        self._anomaly_resp_lock = threading.Lock()
+        self._anomaly_resp_ttl: float = 300.0  # 5 min
 
     def _current_tariff_price_eur_kwh(self) -> float:
         """Mirror of ``LiveFeedLoop._current_tariff_price`` for use inside the
@@ -4200,6 +4210,22 @@ class ActionDispatcher:
                 enabled = bool(getattr(anom_cfg, "enabled", False)) if anom_cfg else False
 
                 log = self._anomaly_log
+                # Serve a recent payload instantly.  The token busts on config
+                # or log changes; the TTL covers new samples landing.  Detection
+                # over full device history is the slow part and only runs when
+                # the shared log is empty — exactly what this cache spares.
+                _anom_token = (
+                    enabled,
+                    len(log),
+                    float(getattr(anom_cfg, "sigma_threshold", 2.0)) if anom_cfg else 2.0,
+                    float(getattr(anom_cfg, "min_deviation_kwh", 0.1)) if anom_cfg else 0.1,
+                    int(getattr(anom_cfg, "window_days", 30)) if anom_cfg else 30,
+                )
+                with self._anomaly_resp_lock:
+                    _c = self._anomaly_resp_cache
+                if (_c and _c[1] == _anom_token
+                        and (time.time() - _c[0]) < self._anomaly_resp_ttl):
+                    return _c[2]
                 all_events = []
                 for ev in log:
                     ts_str_a = ""
@@ -4273,7 +4299,7 @@ class ActionDispatcher:
                 max_sigma = max(sigma_values) if sigma_values else 0
                 avg_sigma = round(sum(sigma_values) / len(sigma_values), 1) if sigma_values else 0
 
-                return {
+                _anom_result = {
                     "ok": True,
                     "enabled": enabled,
                     "model": str(getattr(anom_cfg, "model", "rolling_zscore") or "rolling_zscore") if anom_cfg else "rolling_zscore",
@@ -4285,6 +4311,9 @@ class ActionDispatcher:
                     "max_sigma": max_sigma,
                     "avg_sigma": avg_sigma,
                 }
+                with self._anomaly_resp_lock:
+                    self._anomaly_resp_cache = (time.time(), _anom_token, _anom_result)
+                return _anom_result
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 
