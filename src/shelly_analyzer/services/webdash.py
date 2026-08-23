@@ -9926,6 +9926,16 @@ _loadLsSettings();
       if (sharedHist.length) {{
         html += '<div style="margin:6px 0 10px">' + _calChartSvg(sharedHist) + '</div>';
       }}
+      // Aktuell wirksamer Faktor = jüngstes echtes Intervall (nicht :pre). Wird
+      // schon HIER (vor der Tabelle) bestimmt, damit die JÜNGSTE Ablesungs-Zeile
+      // ihn in "Faktor ab hier" zeigen kann: die neueste Ablesung ist das ENDE des
+      // letzten Intervalls, und genau dessen Faktor gilt ab ihr fortlaufend nach
+      // vorn. Sie dort mit "—" zu zeigen las sich, als werde die frisch eingetragene
+      // Ablesung ignoriert ("dieser Wert wird nicht benutzt").
+      const curEntry = sharedHist
+        .filter(h => !String(h.note || '').endsWith(':pre'))
+        .reduce((a, h) => (a && Number(a.effective_from_ts) >= Number(h.effective_from_ts) ? a : h), null);
+      const curPct = curEntry ? (Number(curEntry.percent) || 0) : null;
       // Ablesungen-Tabelle (mit Faktor je Intervall + löschen)
       if (readings.length) {{
         html += '<table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:8px">';
@@ -9936,16 +9946,24 @@ _loadLsSettings();
           '<th style="padding:3px 6px;text-align:right">' + t('cal.factor_from', 'Faktor ab hier') + '</th><th></th></tr></thead><tbody>';
         for (let i = 0; i < readings.length; i++) {{
           const r = readings[i];
+          const isLatest = (i === readings.length - 1);
           let fpct = null;
-          if (i < readings.length - 1) {{
+          let ongoing = false;
+          if (!isLatest) {{
             const e = sharedHist.find(h => Number(h.effective_from_ts) === Number(r.ts));
             if (e) fpct = Number(e.percent);
+          }} else if (curPct !== null) {{
+            // Jüngste Ablesung: der wirksame Faktor läuft ab hier weiter.
+            fpct = curPct;
+            ongoing = true;
           }}
           html += '<tr style="border-top:1px solid var(--border)">';
           html += '<td style="padding:3px 6px">' + esc(_calFmtDate(r.ts)) + '</td>';
           html += '<td style="padding:3px 6px;text-align:right;font-variant-numeric:tabular-nums">' + Number(r.kwh).toFixed(2) + '</td>';
           if (bidir) html += '<td style="padding:3px 6px;text-align:right;font-variant-numeric:tabular-nums">' + (Number(r.export_kwh || 0) > 0 ? Number(r.export_kwh).toFixed(2) : '—') + '</td>';
-          html += '<td style="padding:3px 6px;text-align:right;font-variant-numeric:tabular-nums">' + (fpct === null ? '—' : ((fpct >= 0 ? '+' : '') + fpct.toFixed(2) + ' %')) + '</td>';
+          html += '<td style="padding:3px 6px;text-align:right;font-variant-numeric:tabular-nums' + (ongoing ? ';font-weight:600' : '') + '">' +
+            (fpct === null ? '—' : ((fpct >= 0 ? '+' : '') + fpct.toFixed(2) + ' %' +
+              (ongoing ? (' <span style="font-weight:400;color:var(--muted)">↩ ' + t('cal.ongoing', 'läuft weiter') + '</span>') : ''))) + '</td>';
           html += '<td style="padding:3px 6px;text-align:right"><button class="btn btn-sm btn-danger" onclick="deleteMeterReading(\\u0027' + esc(m.id) + '\\u0027, ' + Number(r.ts) + ')">×</button></td>';
           html += '</tr>';
         }}
@@ -9955,14 +9973,10 @@ _loadLsSettings();
       }}
       // Aktuell wirksamer Faktor = jüngstes echtes Intervall (nicht :pre). Prominent
       // angezeigt, damit unmissverständlich klar ist, welcher Prozentwert gerade auf
-      // den Zähler angewandt wird — die letzte Ablesungs-Zeile zeigt in "Faktor ab
-      // hier" naturgemäß "—" (es beginnt kein Intervall nach ihr), was zur Verwirrung
-      // führte, der aktuelle Wert werde nicht angezeigt.
-      const curEntry = sharedHist
-        .filter(h => !String(h.note || '').endsWith(':pre'))
-        .reduce((a, h) => (a && Number(a.effective_from_ts) >= Number(h.effective_from_ts) ? a : h), null);
+      // den Zähler angewandt wird. curEntry/curPct wurden bereits oberhalb der Tabelle
+      // bestimmt (die jüngste Ablesungs-Zeile zeigt ihn dort als "läuft weiter").
       if (curEntry) {{
-        const cp = Number(curEntry.percent) || 0;
+        const cp = curPct;
         html += '<div style="font-size:13px;margin:2px 0 8px;padding:6px 10px;background:var(--bg2,rgba(34,197,94,.08));border:1px solid var(--border);border-radius:6px">🎯 <b>' +
           t('cal.current_factor', 'Aktuell wirksamer Faktor') + ': ' +
           (cp >= 0 ? '+' : '') + cp.toFixed(2) + ' %</b> <span style="color:var(--muted);font-size:11px">(' +

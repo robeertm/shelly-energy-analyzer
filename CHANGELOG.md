@@ -1,14 +1,14 @@
 # Changelog
 
-## 16.69.5
+## 16.69.6
 ### Fixed
-- fix(calibration): show currently effective factor under the reading log
-  The newest reading's 'Faktor ab hier' column always shows '—' (no interval
-  begins after the latest reading), so right after entering a fresh reading it
-  looked as if the current percentage was not displayed. Add a prominent
-  'Aktuell wirksamer Faktor: ±X % (seit …)' line under the reading table,
-  derived from the most recent real interval (:pre step excluded). Bump 16.69.5.
-  Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+- **Calibration: the newest reading no longer shows "—" in "Faktor ab hier".**
+  The latest reading is the *endpoint* of the last computed interval, so the
+  factor that applies *from it onward* is exactly the currently effective factor.
+  Showing "—" there read as though the freshly entered reading was ignored
+  ("dieser Wert wird nicht benutzt"). The newest row now shows the effective
+  factor with an "↩ läuft weiter" marker (the "🎯 Aktuell wirksamer Faktor" line
+  below the table is unchanged). Display-only; the derivation is untouched.
 
 ## 16.69.5
 ### Fixed
