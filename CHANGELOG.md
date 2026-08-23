@@ -1,5 +1,22 @@
 # Changelog
 
+## 16.69.4
+### Fixed
+- **Bidirectional grid meter: a new reading with only the import register (1.8.0)
+  is now actually used.** After the −67 % fix, an interval that was missing the
+  feed-in register (2.8.0) at one end was dropped entirely, so a freshly entered
+  meter reading was silently ignored ("value not used for the calculation"). Such
+  an interval now falls back to calibrating the **import register against the grid
+  Shelly's import-only raw energy** (never against its full import+export
+  throughput — that mismatch was the −67 % garbage). The export direction simply
+  stays uncalibrated until a second full (import + export) reading exists.
+- Also fixes a latent bug where, if no child carried feed-in over the whole
+  reading span, the fallback re-added the same children to the "strip" list and
+  wiped the factors it had just written.
+- `POST /api/meters/<id>/reading` now returns `applied` (number of derived
+  intervals) and `factor_percent` (current factor) so the UI can confirm a
+  reading took effect instead of leaving the user guessing.
+
 ## 16.69.3
 ### Fixed
 - perf(costs): cache costs payload so the tab never blanks or reloads on click

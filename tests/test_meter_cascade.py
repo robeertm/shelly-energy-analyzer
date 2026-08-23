@@ -251,13 +251,14 @@ def test_bidirectional_grid_meter():
     print("OK  bidirectional grid meter: throughput factor, tenant excluded, roundtrip")
 
 
-def test_bidirectional_needs_export_at_both_ends():
-    """The −67 % bug: the feed-in register (2.8.0) is logged on only the LATEST
-    reading, not the earlier one. Then no export delta can be formed for that
-    interval, so an import-only meter delta (Δ 1.8.0) must NOT be compared against
-    the Shelly's full import+export throughput — that would yield a garbage factor.
-    Such an incomplete interval is skipped: no factor is derived until a SECOND full
-    (import + export) reading exists."""
+def test_bidirectional_import_only_interval_uses_import_factor():
+    """Regression for Robert's follow-up: after the −67 % fix, a newly entered
+    reading whose interval is missing the feed-in register (2.8.0) at one end was
+    silently DROPPED — "value not used for the calculation". It must instead still
+    be applied, by calibrating the IMPORT register (Δ 1.8.0) against the grid
+    Shelly's IMPORT-only raw energy — NOT its full import+export throughput (that
+    mismatch was the −67 % garbage). The export direction just stays uncalibrated
+    until a second full reading arrives."""
     from shelly_analyzer.io.config import MeterReading
     cfg = AppConfig(
         main_meters=[MainMeter(id="grid", name="Grid connection")],
@@ -265,39 +266,46 @@ def test_bidirectional_needs_export_at_both_ends():
             DeviceConfig(key="solar", name="Netz", host="", kind="em", parent="grid"),
         ],
     )
-    # Over the interval the signed grid Shelly draws 63 kWh but feeds in ~130 kWh
-    # (throughput ~193) — exactly the situation that produced −67 % when the meter
-    # delta counted import only.
-    db = _FakeDB({"solar": {(100, 200): (63.0, 130.0)}})
+    # Over the interval the signed grid Shelly draws 60 kWh but feeds in 130 kWh
+    # (throughput 190). Comparing the import-only meter delta (63) against the full
+    # throughput (190) would give −66.8 % — the garbage we must NOT produce.
+    db = _FakeDB({"solar": {(100, 200): (60.0, 130.0)}})
     app, state = _app(cfg, db)
     with app.test_client() as c:
         # First reading: import register only, NO feed-in (mirrors the 14520 case).
         j = c.post("/api/meters/grid/reading", json={"ts": 100, "kwh": 14520.0}).get_json()
         assert j["ok"] and j["readings"] == 1, j
-        # Second reading carries BOTH registers (14583 / 15497).
+        # Second reading carries BOTH registers, but the interval to it has no
+        # export delta (first end lacks 2.8.0). Import register Δ = 63.
         j = c.post("/api/meters/grid/reading",
                    json={"ts": 200, "kwh": 14583.0, "export_kwh": 15497.0}).get_json()
         assert j["ok"] and j["readings"] == 2, j
-        # No throughput factor can be derived from a single complete reading → the
-        # signed grid child must stay at 0 %, NOT the bogus −67 %.
+        # Import-only factor: 63 / 60 − 1 = +5.0 % — the reading IS used, and it is
+        # nowhere near the −67 % garbage the old full-throughput compare produced.
         sdev = next(d for d in state.cfg.devices if d.key == "solar")
-        assert sdev.compensation_percent == 0.0, ("no garbage factor", sdev.compensation_percent)
-        assert not any(str(e.note).startswith("meter:grid") for e in sdev.compensation_history), \
+        assert abs(sdev.compensation_percent - 5.0) < 0.01, \
+            ("import-only factor applied", sdev.compensation_percent)
+        assert sdev.compensation_percent > -50.0, ("never −67 % garbage", sdev.compensation_percent)
+        assert any(str(e.note) == "meter:grid" for e in sdev.compensation_history), \
             sdev.compensation_history
-        # A second COMPLETE reading enables the throughput factor: import Δ 20, feed-in
-        # Δ 220 → meter throughput 240 vs. Shelly throughput 250 → -4.0 %.
+        # API confirms to the UI that the reading was applied.
+        assert j["applied"] == 1 and abs(j["factor_percent"] - 5.0) < 0.01, j
+        # A COMPLETE interval still uses the full throughput factor: import Δ 20,
+        # feed-in Δ 220 → meter throughput 240 vs. Shelly throughput 250 → -4.0 %.
         db.kwh["solar"][(200, 300)] = (200.0, 50.0)  # throughput 250 over next interval
+        db.kwh["solar"][(100, 300)] = (260.0, 180.0)  # full span carries feed-in → grid child
         j = c.post("/api/meters/grid/reading",
                    json={"ts": 300, "kwh": 14603.0, "export_kwh": 15717.0}).get_json()
         assert j["ok"], j
         sdev = next(d for d in state.cfg.devices if d.key == "solar")
         assert abs(sdev.compensation_percent - (-4.0)) < 0.01, \
-            ("factor from the complete interval only", sdev.compensation_percent)
-        # Only the complete interval (200→300) contributes a factor; the incomplete
-        # one (100→200) does not.
-        real = [e for e in sdev.compensation_history if not str(e.note).endswith(":pre")]
-        assert len(real) == 1 and int(real[0].effective_from_ts) == 200, sdev.compensation_history
-    print("OK  bidirectional: skips intervals missing feed-in at one end (no −67 % garbage)")
+            ("latest interval = full throughput factor", sdev.compensation_percent)
+        # Both intervals now contribute: import-only (100) then throughput (200).
+        real = sorted((e for e in sdev.compensation_history if not str(e.note).endswith(":pre")),
+                      key=lambda e: int(e.effective_from_ts))
+        assert [int(e.effective_from_ts) for e in real] == [100, 200], sdev.compensation_history
+        assert abs(real[0].percent - 5.0) < 0.01, real[0]
+    print("OK  bidirectional: import-only interval uses import factor (used, no −67 % garbage)")
 
 
 def test_removing_last_reading_resets_scalar():
@@ -405,7 +413,7 @@ if __name__ == "__main__":
     test_meter_crud()
     test_reading_log()
     test_bidirectional_grid_meter()
-    test_bidirectional_needs_export_at_both_ends()
+    test_bidirectional_import_only_interval_uses_import_factor()
     test_removing_last_reading_resets_scalar()
     test_deleting_last_history_entry_resets_scalar()
     test_reconcile_heals_persisted_stale_child_scalar()

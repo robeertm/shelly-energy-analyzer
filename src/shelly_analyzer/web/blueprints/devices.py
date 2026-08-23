@@ -1024,7 +1024,7 @@ def _recompute_meter_from_readings(state, meter_id):
             _, exp = _raw_kwh_split_over(state, db, c.key, span0, span1)
             (grid_children if exp > 1e-6 else nongrid_children).append(c)
         if not grid_children:   # no signed child → treat all as grid (best effort)
-            grid_children = children
+            grid_children, nongrid_children = list(children), []
 
     derived = []  # (eff_ts, percent, meter_delta, raw_delta)
     for i in range(len(readings) - 1):
@@ -1035,24 +1035,34 @@ def _recompute_meter_from_readings(state, meter_id):
             # Meter throughput = Δ import register + Δ export register. A throughput
             # factor needs the feed-in register (2.8.0) at BOTH ends of the interval:
             # only then can we form an export delta and compare it against the grid
-            # Shelly's own import+export throughput. If the export register is present
-            # at only one end (e.g. the user logged the feed-in stand on the latest
-            # reading but not the earlier one), we CANNOT form a throughput delta —
-            # comparing an import-only meter delta (Δ 1.8.0) against the Shelly's full
-            # throughput yields a nonsense factor (the −67 % case). Skip such an
-            # interval entirely; the user must log a second full (import + export)
-            # reading before a bidirectional factor can be derived.
+            # Shelly's own import+export throughput.
             e0 = float(getattr(readings[i], "export_kwh", 0.0) or 0.0)
             e1 = float(getattr(readings[i + 1], "export_kwh", 0.0) or 0.0)
-            if not (e0 > 0 and e1 >= e0):
-                continue
             imp_d = float(readings[i + 1].kwh) - float(readings[i].kwh)
-            exp_d = e1 - e0
-            meter_d = max(0.0, imp_d) + exp_d
-            raw_d = 0.0
-            for c in grid_children:
-                ci, ce = _raw_kwh_split_over(state, db, c.key, t0, t1)
-                raw_d += ci + ce
+            if e0 > 0 and e1 >= e0:
+                # Full throughput factor (import + export register at both ends).
+                exp_d = e1 - e0
+                meter_d = max(0.0, imp_d) + exp_d
+                raw_d = 0.0
+                for c in grid_children:
+                    ci, ce = _raw_kwh_split_over(state, db, c.key, t0, t1)
+                    raw_d += ci + ce
+            else:
+                # Feed-in register present at only one end (e.g. the user logged
+                # 2.8.0 on the latest reading but not the earlier one): we CANNOT
+                # form an export delta. But we MUST still use the freshly entered
+                # reading — dropping the interval left it silently unapplied.
+                # Fall back to calibrating the IMPORT register (Δ 1.8.0) against the
+                # grid Shelly's IMPORT-only raw energy (Σ positive hours) ONLY —
+                # never against its full import+export throughput. That mismatch
+                # (Δ 1.8.0 vs. import+export) is exactly what produced the −67 %
+                # garbage; import-vs-import stays sane and only leaves the export
+                # direction uncalibrated until a second full reading arrives.
+                meter_d = imp_d
+                raw_d = 0.0
+                for c in grid_children:
+                    ci, _ce = _raw_kwh_split_over(state, db, c.key, t0, t1)
+                    raw_d += ci
         else:
             meter_d = float(readings[i + 1].kwh) - float(readings[i].kwh)
             # Subtract deducted tenant sub-meters (compensated → their real usage) so a
@@ -1131,7 +1141,21 @@ def add_meter_reading(mid):
     state.cfg = replace(state.cfg, main_meters=meters)  # recompute must see new readings
     new_cfg = _recompute_meter_from_readings(state, mid)
     _comp_save_reload(state, new_cfg)
-    return jsonify({"ok": True, "meter_id": mid, "readings": len(rd)})
+    # Report the current (latest-interval) derived factor so the UI can confirm the
+    # reading was actually applied instead of silently ignored.
+    applied = 0
+    factor_percent = None
+    for c in new_cfg.devices:
+        if str(getattr(c, "parent", "") or "") != mid or str(getattr(c, "kind", "")) != "em":
+            continue
+        derived = [e for e in (getattr(c, "compensation_history", ()) or ())
+                   if str(getattr(e, "note", "")).startswith("meter:" + mid)
+                   and not str(getattr(e, "note", "")).endswith(":pre")]
+        if derived:
+            applied = max(applied, len(derived))
+            factor_percent = float(getattr(c, "compensation_percent", 0.0) or 0.0)
+    return jsonify({"ok": True, "meter_id": mid, "readings": len(rd),
+                    "applied": applied, "factor_percent": factor_percent})
 
 
 @bp.route("/api/meters/<mid>/reading/<ts>", methods=["DELETE"])
