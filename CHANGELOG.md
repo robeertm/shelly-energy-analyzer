@@ -2,6 +2,16 @@
 
 ## 16.69.5
 ### Fixed
+- fix(calibration): show currently effective factor under the reading log
+  The newest reading's 'Faktor ab hier' column always shows '—' (no interval
+  begins after the latest reading), so right after entering a fresh reading it
+  looked as if the current percentage was not displayed. Add a prominent
+  'Aktuell wirksamer Faktor: ±X % (seit …)' line under the reading table,
+  derived from the most recent real interval (:pre step excluded). Bump 16.69.5.
+  Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+
+## 16.69.5
+### Fixed
 - **Calibration: the currently effective factor is now shown explicitly.** In the
   meter reading log, the newest reading's "Faktor ab hier" column necessarily
   shows "—" (no interval begins after the latest reading), so right after entering
