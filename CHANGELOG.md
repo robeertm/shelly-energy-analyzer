@@ -1,5 +1,16 @@
 # Changelog
 
+## 16.69.5
+### Fixed
+- **Calibration: the currently effective factor is now shown explicitly.** In the
+  meter reading log, the newest reading's "Faktor ab hier" column necessarily
+  shows "—" (no interval begins after the latest reading), so right after entering
+  a fresh reading it looked as though the current percentage was not displayed at
+  all. A prominent "🎯 Aktuell wirksamer Faktor: ±X.XX % (seit …)" line now sits
+  directly under the reading table, derived from the most recent real interval
+  (the `:pre` pre-history step is excluded). The per-child read-only factors and
+  the "before the first reading" line are unchanged.
+
 ## 16.69.4
 ### Fixed
 - **Bidirectional grid meter: a new reading with only the import register (1.8.0)

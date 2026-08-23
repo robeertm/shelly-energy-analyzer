@@ -9953,6 +9953,21 @@ _loadLsSettings();
       }} else {{
         html += '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">' + t('cal.no_readings', 'Noch keine Ablesung — trage den aktuellen Zählerstand als Startwert ein.') + '</div>';
       }}
+      // Aktuell wirksamer Faktor = jüngstes echtes Intervall (nicht :pre). Prominent
+      // angezeigt, damit unmissverständlich klar ist, welcher Prozentwert gerade auf
+      // den Zähler angewandt wird — die letzte Ablesungs-Zeile zeigt in "Faktor ab
+      // hier" naturgemäß "—" (es beginnt kein Intervall nach ihr), was zur Verwirrung
+      // führte, der aktuelle Wert werde nicht angezeigt.
+      const curEntry = sharedHist
+        .filter(h => !String(h.note || '').endsWith(':pre'))
+        .reduce((a, h) => (a && Number(a.effective_from_ts) >= Number(h.effective_from_ts) ? a : h), null);
+      if (curEntry) {{
+        const cp = Number(curEntry.percent) || 0;
+        html += '<div style="font-size:13px;margin:2px 0 8px;padding:6px 10px;background:var(--bg2,rgba(34,197,94,.08));border:1px solid var(--border);border-radius:6px">🎯 <b>' +
+          t('cal.current_factor', 'Aktuell wirksamer Faktor') + ': ' +
+          (cp >= 0 ? '+' : '') + cp.toFixed(2) + ' %</b> <span style="color:var(--muted);font-size:11px">(' +
+          t('cal.since', 'seit') + ' ' + esc(_calFmtDate(curEntry.effective_from_ts)) + ')</span></div>';
+      }}
       // Faktor für Verbrauch VOR der ersten Ablesung (gewichteter Gesamtfaktor)
       const preEntry = sharedHist.find(h => String(h.note || '').endsWith(':pre'));
       if (preEntry) {{
