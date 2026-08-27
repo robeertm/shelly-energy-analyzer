@@ -2594,6 +2594,30 @@ function _loadCachedPayload(name) {{
     return (o && o.data) ? o.data : null;
   }} catch(e) {{ return null; }}
 }}
+/* ── Re-render only when the data actually changed ───────────────────────
+   Several tabs re-fetch on a timer (Costs every 30s) and on every activation.
+   Re-running the renderer replaces the pane's whole innerHTML, which redraws
+   the charts, drops the scroll position and reads as "the tab reloads over and
+   over again" even when not a single number moved. Aggregated payloads are
+   identical between most polls, so we compare the payload against the one
+   currently on screen and skip the DOM work when nothing changed. The
+   signature is always updated, and a pane showing a spinner or an error is
+   never skipped — that content must be replaced. */
+var _tabPayloadSig = {{}};
+function _tabSkipRender(name, el, data) {{
+  var sig;
+  try {{ sig = JSON.stringify(data); }} catch(e) {{ return false; }}
+  var vis = !!(el && el.offsetParent !== null);
+  var prev = _tabPayloadSig[name];
+  _tabPayloadSig[name] = {{ sig: sig, vis: vis }};
+  if (!prev || prev.sig !== sig || !el) return false;
+  // A render into a still-hidden pane cannot paint its canvases (they measure
+  // 0x0), so the identical payload must be rendered again once the pane is
+  // open — otherwise the prefetch would leave the tab without its charts.
+  if (!prev.vis || !vis) return false;
+  if (el.querySelector('.error-msg') || el.querySelector('.loading-msg')) return false;
+  return _tabHasContent(el);
+}}
 var _toastTimer = null;
 function _toast(msg, kind) {{
   var box = document.getElementById('sea-toast');
@@ -2705,7 +2729,10 @@ function onPaneActivated(name) {{
    want to duplicate) before the next one starts.
 ────────────────────────────────────────────── */
 var _tabQ = [];            // pending: [{{name, user, prefetch}}]
-var _tabRunning = null;    // {{name, user, prefetch}} currently loading, or null
+var _tabRunning = null;    // background (prefetch) load in flight, or null
+var _tabRunningFg = null;  // user-clicked load in flight, or null. A click must
+                           // never wait behind a background prefetch, so the two
+                           // have separate slots — at most one of each runs.
 var _tabLoadedOnce = {{}}; // name -> ts of last successful load (freshness)
 var _tabRendered = {{}};   // name -> true once its DOM has ever held real content.
                            // Unlike _tabLoadedOnce this is NEVER reset on refocus,
@@ -2756,7 +2783,8 @@ function _setNavBtnLoading(name, on) {{
 function requestTabData(name) {{
   if (!_tabLoaderFor(name)) return;
   _tabQ = _tabQ.filter(function(it) {{ return it.prefetch || it.name === name; }});
-  if (_tabRunning && _tabRunning.name === name) return;           // already loading it
+  if (_tabRunningFg && _tabRunningFg.name === name) return;       // already loading it
+  if (_tabRunning && _tabRunning.name === name) return;
   // Re-click within 1.5s of a fresh load → don't re-hit the backend.
   if (_tabLoadedOnce[name] && (Date.now() - _tabLoadedOnce[name] < 1500)) {{ _pumpTabQueue(); return; }}
   _tabQ = _tabQ.filter(function(it) {{ return it.name !== name; }});
@@ -2765,24 +2793,37 @@ function requestTabData(name) {{
 }}
 
 function _pumpTabQueue() {{
-  if (_tabRunning) return;
-  if (!_tabQ.length) {{
+  // Start as much as the two slots allow: the first pending foreground item
+  // (the tab the user is looking at) and the first pending prefetch item.
+  var started = true;
+  while (started && _tabQ.length) {{
+    started = false;
+    var idx = -1;
+    if (!_tabRunningFg) {{
+      for (var i = 0; i < _tabQ.length; i++) {{ if (!_tabQ[i].prefetch) {{ idx = i; break; }} }}
+    }}
+    if (idx < 0 && !_tabRunning) {{
+      for (var j = 0; j < _tabQ.length; j++) {{ if (_tabQ[j].prefetch) {{ idx = j; break; }} }}
+    }}
+    if (idx < 0) break;
+    started = _startTabItem(_tabQ.splice(idx, 1)[0]) || true;   // dequeued either way
+  }}
+  if (!_tabRunning && !_tabRunningFg && !_tabQ.length) {{
     _prefetchTotal = 0; _prefetchDone = 0;
     _stopLoadTicker();
-    _updateNavProgress();
-    return;
   }}
-  var item = _tabQ.shift();
+  _updateNavProgress();
+}}
+
+function _startTabItem(item) {{
   var fn = _tabLoaderFor(item.name);
-  if (!fn) {{ _pumpTabQueue(); return; }}
+  if (!fn) return false;
   // Skip prefetch of a tab that's already warm.
   if (item.prefetch && _tabLoadedOnce[item.name]) {{
     if (_prefetchTotal > 0) _prefetchDone++;
-    _updateNavProgress();
-    _pumpTabQueue();
-    return;
+    return false;
   }}
-  _tabRunning = item;
+  if (item.prefetch) _tabRunning = item; else _tabRunningFg = item;
   _setNavBtnLoading(item.name, true);
   _startLoadTicker();
   _updateNavProgress();
@@ -2805,12 +2846,17 @@ function _pumpTabQueue() {{
     _tabLoadDur[item.name] = Date.now() - t0;
   }}, function() {{ /* keep going even if one tab errors */ }}).then(function() {{
     _setNavBtnLoading(item.name, false);
-    if (item.prefetch && _prefetchTotal > 0) _prefetchDone++;
-    _tabRunning = null;
+    if (item.prefetch) {{
+      if (_prefetchTotal > 0) _prefetchDone++;
+      _tabRunning = null;
+    }} else {{
+      _tabRunningFg = null;
+    }}
     _updateNavProgress();
     // Small gap so a slow backend isn't hammered back-to-back.
     setTimeout(_pumpTabQueue, _tabQ.length ? 50 : 0);
   }});
+  return true;
 }}
 
 // Walk every visible (feature-enabled) tab in bar order and warm it in the
@@ -2830,6 +2876,7 @@ function prefetchAllTabs() {{
     if (getComputedStyle(b).display === 'none') return;   // feature-disabled tab
     if (_tabLoadedOnce[nm]) return;
     if (nm === (_tabRunning && _tabRunning.name)) return;
+    if (nm === (_tabRunningFg && _tabRunningFg.name)) return;
     if (_tabQ.some(function(it) {{ return it.name === nm; }})) return;
     _tabQ.push({{ name: nm, prefetch: true }});
     added++;
@@ -2870,7 +2917,7 @@ function _startLoadTicker() {{
 }}
 function _stopLoadTicker() {{ if (_loadTicker) {{ clearInterval(_loadTicker); _loadTicker = null; }} }}
 function _navStatusText() {{
-  var r = _tabRunning;
+  var r = _tabRunningFg || _tabRunning;
   if (r && r.prefetch && _prefetchTotal > 0) {{
     var doneN = Math.min(_prefetchDone + 1, _prefetchTotal);
     var s = t('web.prefetch.status', 'Updating tabs … {{n}}/{{total}}', {{ n: doneN, total: _prefetchTotal }});
@@ -2898,12 +2945,12 @@ function _updateNavProgress() {{
   var np = document.getElementById('nav-progress');
   if (!np) return;
   var bar = document.getElementById('nav-progress-bar');
-  if (!_tabRunning && !_tabQ.length) {{
+  if (!_tabRunning && !_tabRunningFg && !_tabQ.length) {{
     np.classList.remove('show', 'indeterminate');
     return;
   }}
   np.classList.add('show');
-  var r = _tabRunning;
+  var r = _tabRunningFg || _tabRunning;
   var determinate = r && r.prefetch && _prefetchTotal > 0;
   if (determinate) {{
     np.classList.remove('indeterminate');
@@ -3789,6 +3836,11 @@ function _drawNilmCategoryDonut(catEntries) {{
   const cx = W / 2, cy = H / 2;
   const R = Math.min(cx, cy) - 10;
   const r = R * 0.55; // inner radius for donut
+  // A pane that is still hidden (the background prefetch renders into it)
+  // measures 0x0, which makes the radius negative and throws — aborting the
+  // rest of the render. Nothing can be painted at this size anyway; the pane
+  // draws for real when it is opened.
+  if (!(R > 0)) return;
 
   const total = catEntries.reduce(function(s, e) {{ return s + e[1]; }}, 0);
   const catColors = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#06b6d4'];
@@ -5488,14 +5540,14 @@ async function loadCosts() {{
   // cached do we fall back to the spinner.
   if (!_tabHasContent(el)) {{
     var cached = _loadCachedPayload('costs');
-    if (cached) renderCosts(cached, el);
+    if (cached) {{ renderCosts(cached, el); _tabSkipRender('costs', el, cached); }}
     else _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   }}
   try {{
     const r = await fetch('/api/costs');
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
-    renderCosts(data, el);
+    if (!_tabSkipRender('costs', el, data)) renderCosts(data, el);
     _saveCachedPayload('costs', data);
   }} catch(e) {{
     _tabFail(el, e, quiet);
@@ -5724,6 +5776,11 @@ function _drawCostsDonut(devs) {{
   canvas.width = rect.width*dpr; canvas.height = rect.height*dpr;
   ctx.scale(dpr,dpr);
   const W = rect.width, H = rect.height, cx = W/2, cy = H/2, R = Math.min(cx,cy)-8, r = R*0.55;
+  // A pane that is still hidden (the background prefetch renders into it)
+  // measures 0x0, which makes the radius negative and throws — aborting the
+  // rest of the render. Nothing can be painted at this size anyway; the pane
+  // draws for real when it is opened.
+  if (!(R > 0)) return;
   const colors = ['#3b82f6','#ef4444','#f59e0b','#22c55e','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#06b6d4'];
   const total = devs.reduce(function(s,d){{ return s + (d.month_eur||0); }},0) || 1;
   let angle = -Math.PI/2;
@@ -6975,6 +7032,11 @@ function _drawCo2FuelDonut(mixKeys, mix, fuelColors) {{
   ctx.scale(dpr, dpr);
   const W = rect.width, H = rect.height;
   const cx = W/2, cy = H/2, R = Math.min(cx,cy)-8, r = R*0.55;
+  // A pane that is still hidden (the background prefetch renders into it)
+  // measures 0x0, which makes the radius negative and throws — aborting the
+  // rest of the render. Nothing can be painted at this size anyway; the pane
+  // draws for real when it is opened.
+  if (!(R > 0)) return;
   const total = mixKeys.reduce(function(s,k){{ return s + (mix[k].mw||0); }}, 0) || 1;
   let angle = -Math.PI/2;
   let legHtml = '<div style="display:flex;flex-wrap:wrap;gap:4px">';
@@ -7007,6 +7069,11 @@ function _drawCo2RenewRing() {{
   ctx.scale(dpr, dpr);
   const W = rect.width, H = rect.height;
   const cx = W/2, cy = H/2, R = Math.min(cx,cy)-4, lw = 10;
+  // A pane that is still hidden (the background prefetch renders into it)
+  // measures 0x0, which makes the radius negative and throws — aborting the
+  // rest of the render. Nothing can be painted at this size anyway; the pane
+  // draws for real when it is opened.
+  if (!(R > lw / 2)) return;
   // Get renewable percentage from the rendered text
   const valEl = canvas.parentElement && canvas.parentElement.querySelector('div[style*="font-weight:800"]');
   const pct = valEl ? parseInt(valEl.textContent) || 0 : 0;
@@ -8042,7 +8109,7 @@ async function loadAnomalies() {{
     const r = await fetch('/api/anomalies');
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
-    renderAnomalies(data, el);
+    if (!_tabSkipRender('anomalies', el, data)) renderAnomalies(data, el);
   }} catch(e) {{
     _tabFail(el, e, quiet);
   }}
@@ -8166,6 +8233,11 @@ function _anomDrawTypeDonut(tc, typeColors, typeLabels, typeIcons) {{
   ctx.scale(dpr,dpr);
   const W = rect.width, H = rect.height;
   const cx = W/2, cy = H/2, R = Math.min(cx,cy)-8, r = R*0.55;
+  // A pane that is still hidden (the background prefetch renders into it)
+  // measures 0x0, which makes the radius negative and throws — aborting the
+  // rest of the render. Nothing can be painted at this size anyway; the pane
+  // draws for real when it is opened.
+  if (!(R > 0)) return;
   const keys = Object.keys(tc);
   const total = keys.reduce(function(s,k){{ return s+tc[k]; }},0)||1;
   let angle = -Math.PI/2;
@@ -8614,6 +8686,11 @@ function _sbDrawCostPie(devs) {{
   ctx.scale(dpr, dpr);
   const W = rect.width, H = rect.height;
   const cx = W/2, cy = H/2, R = Math.min(cx,cy)-10, r = R*0.55;
+  // A pane that is still hidden (the background prefetch renders into it)
+  // measures 0x0, which makes the radius negative and throws — aborting the
+  // rest of the render. Nothing can be painted at this size anyway; the pane
+  // draws for real when it is opened.
+  if (!(R > 0)) return;
   const total = devs.reduce(function(s,x){{ return s+x.annual_standby_cost; }},0) || 1;
   const colors = ['#dc2626','#d97706','#16a34a','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#06b6d4'];
   let angle = -Math.PI/2;
@@ -9451,7 +9528,7 @@ _loadLsSettings();
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
-      renderEvLog(d.data, el);
+      if (!_tabSkipRender('ev_log', el, d.data)) renderEvLog(d.data, el);
     }} catch(e) {{
       el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
     }}
