@@ -945,6 +945,22 @@ class EnergyDB:
         ).fetchone()
         return int(row[0]) if row else 0
 
+    def count_samples(self, device_key: str, end_ts: Optional[int] = None) -> int:
+        """Number of samples for a device, optionally only up to ``end_ts``.
+
+        The bounded form is what makes an incremental cache refresh safe: it
+        counts exactly the rows a cached frame already covers, and is unaffected
+        by the live poller appending new ones while the check runs.
+        """
+        conn = self._conn()
+        if end_ts is None:
+            return self.row_count(device_key)
+        row = conn.execute(
+            "SELECT COUNT(*) FROM samples WHERE device_key = ? AND timestamp <= ?",
+            (device_key, int(end_ts)),
+        ).fetchone()
+        return int(row[0]) if row else 0
+
     def max_timestamp(self, device_key: str) -> Optional[int]:
         """Return the latest sample timestamp (UTC epoch seconds) or None."""
         conn = self._conn()

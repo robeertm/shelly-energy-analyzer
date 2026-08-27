@@ -1,5 +1,48 @@
 # Changelog
 
+## 16.70.0
+### Changed
+- **The dashboard no longer stalls on a cold cache — heavy tabs answer in
+  milliseconds.** Every aggregated tab (Costs, Anomalies, EV log, reports)
+  reads the same per-device history cache. Rebuilding it re-reads every sample
+  a device ever recorded, and that happened *inline*, on whichever request
+  arrived first after the 10-minute TTL expired. On a year of data (~476k rows
+  x 61 columns per meter) that measured **63 s for `/api/costs` and 57 s for
+  `/api/anomalies`** — and because the dashboard loads its tabs through a single
+  serial queue, the whole UI froze behind that one request.
+  - A daemon thread now keeps the cache warm and **refreshes it incrementally**:
+    it appends only the samples that arrived since the cached frame was built.
+    A bounded row count at the cache's watermark proves that nothing older was
+    rewritten (a sync import, a retention compression); only then is the append
+    taken, otherwise it falls back to a full read. `calculate_energy` re-runs
+    over the combined frame, so the result is identical to a full rebuild.
+  - `/api/anomalies` used its own `load_device()` loop and re-read every device
+    from disk on each miss. It now reads the shared snapshot.
+  - The same thread pre-computes the `costs`, `anomalies` and `ev_sessions`
+    payloads, so a click finds them memoised.
+  - Measured on ~950k samples, over 6 minutes of continuous polling after the
+    initial build: costs **0.02-0.07 s**, anomalies **0.02-0.11 s**, EV log
+    **0.09-0.32 s**, heatmap **0.47-0.63 s** — with **no** full rebuild after
+    start-up (previously one every 10 minutes).
+- **Tabs stop re-rendering themselves when nothing changed.** Costs re-fetches
+  every 30 s and on every activation, and each render replaced the pane's whole
+  `innerHTML` — redrawing the charts and dropping the scroll position even when
+  not a single number had moved ("it reloads over and over"). The payload is now
+  compared against the one on screen and the DOM work is skipped when they are
+  identical. Measured: 3 refreshes in 95 s, **1 render** instead of 3. A pane
+  that was rendered while still hidden (by the background prefetch) is never
+  skipped — its canvases could not paint at 0x0 size.
+- **A tab you click no longer waits behind the background prefetch.** The load
+  queue now has one slot for the tab you are looking at and one for the
+  prefetch, instead of a single serial slot for both.
+
+### Fixed
+- **Donut and gauge charts no longer throw while a pane is still hidden.** The
+  background prefetch renders into a pane that measures 0x0, which made the
+  radius negative (`IndexSizeError: The radius provided (-10) is negative`) and
+  aborted the rest of that render. Nothing can be painted at that size, so the
+  six affected charts now skip and draw for real when the pane is opened.
+
 ## 16.69.6
 ### Fixed
 - **Calibration: the newest reading no longer shows "—" in "Faktor ab hier".**

@@ -230,7 +230,27 @@ class ActionDispatcher:
         # reload().
         self._costs_resp_cache: tuple = ()
         self._costs_resp_lock = threading.Lock()
-        self._costs_resp_ttl: float = 30.0  # 30 s
+        # 5 min.  The warm thread below refreshes this payload roughly every
+        # 90 s, so the TTL only has to outlive one warm cycle; it is no longer
+        # the thing a clicking user waits for.
+        self._costs_resp_ttl: float = 300.0
+        # ── Background cache warming ─────────────────────────────────────
+        # Every heavy tab (costs, anomalies, EV log, reports) ultimately reads
+        # `computed`, the full per-device history.  Rebuilding that means
+        # re-reading every sample a device ever recorded: on a year of data
+        # (~476k rows x 61 columns per meter) it measured 32 s of pure SQLite
+        # reads, and it happened *inline* on the first request after the TTL
+        # expired.  Whoever clicked at that moment waited a minute — and since
+        # the dashboard loads its tabs through one serial queue, the whole UI
+        # froze behind it.  A daemon thread now keeps the caches warm and
+        # refreshes them INCREMENTALLY (only the rows newer than the newest one
+        # already cached), so a request never pays for a rebuild.
+        self._computed_meta: Dict[str, tuple] = {}  # key -> (row_count, max_ts)
+        self._computed_build_lock = threading.Lock()
+        self._warm_interval: float = 90.0
+        self._warm_stop = threading.Event()
+        self._warm_thread: Optional[threading.Thread] = None
+        self._start_warm_thread()
 
     def _current_tariff_price_eur_kwh(self) -> float:
         """Mirror of ``LiveFeedLoop._current_tariff_price`` for use inside the
@@ -489,19 +509,186 @@ class ActionDispatcher:
 
     @property
     def computed(self) -> Dict[str, ComputedDevice]:
-        """Lazy-load computed devices from storage, auto-refresh after TTL."""
-        import time as _time
+        """Per-device history, served from a background-refreshed snapshot.
+
+        Readers always get the snapshot that is currently in memory — they never
+        rebuild it themselves.  The warm thread swaps in a fresh one.  Only a
+        request that arrives before the very first build has to wait for it.
+        """
         with self._computed_lock:
-            now = _time.time()
-            if not self._computed or (now - self._computed_ts) > self._computed_ttl:
-                self._computed.clear()
-                for d in self.cfg.devices:
+            if self._computed:
+                return self._computed
+        self._start_warm_thread()
+        self._refresh_computed()
+        with self._computed_lock:
+            if self._computed:
+                return self._computed
+        # The very first build was already running (the warm thread starts one
+        # right after boot).  Wait for it instead of answering with an empty
+        # snapshot — that would render the tab as "no data".
+        with self._computed_build_lock:
+            pass
+        with self._computed_lock:
+            return self._computed
+
+    # ------------------------------------------------------------------
+    # Background cache warming
+    # ------------------------------------------------------------------
+
+    def _start_warm_thread(self) -> None:
+        """Start the (single, daemon) cache-warming thread if it isn't running."""
+        if self._warm_thread is not None and self._warm_thread.is_alive():
+            return
+        try:
+            th = threading.Thread(target=self._warm_loop, name="sea-warm", daemon=True)
+            th.start()
+            self._warm_thread = th
+        except Exception:
+            logger.debug("cache warm thread could not be started", exc_info=True)
+            self._warm_thread = None
+
+    def _warm_loop(self) -> None:
+        # Let the app finish booting before the first (full) build competes with
+        # the live poller and the start-up sync for the DB.
+        if self._warm_stop.wait(20.0):
+            return
+        cycle = 0
+        while not self._warm_stop.is_set():
+            try:
+                self._refresh_computed()
+            except Exception:
+                logger.debug("computed refresh failed", exc_info=True)
+            # Refreshing the history is cheap once it is incremental; rebuilding
+            # the response payloads on top of it is not, and it competes with
+            # request threads for the GIL. Every second cycle still lands well
+            # inside the payload TTLs, so nothing ever expires.
+            if cycle % 2 == 0:
+                try:
+                    self._warm_payloads()
+                except Exception:
+                    logger.debug("payload warm failed", exc_info=True)
+            cycle += 1
+            if self._warm_stop.wait(self._warm_interval):
+                return
+
+    def _warm_payloads(self) -> None:
+        """Pre-compute the response payloads users wait on the longest.
+
+        Each of these memoises its result, so doing it here means the request
+        that follows is a dictionary lookup instead of a recompute.
+        """
+        for action, params in (("costs", {}), ("anomalies", {}), ("ev_sessions", {"days": "30"})):
+            if self._warm_stop.is_set():
+                return
+            try:
+                self.dispatch(action, dict(params))
+            except Exception:
+                logger.debug("warming '%s' failed", action, exc_info=True)
+
+    def _refresh_computed(self, force: bool = False) -> None:
+        """Rebuild the computed-device snapshot without blocking readers.
+
+        The new snapshot is assembled into a local dict and swapped in at the
+        end, so `computed` keeps serving the previous one for the whole
+        (possibly slow) build.  ``force`` skips the incremental path — used
+        after a config change, where history may have been re-scaled.
+        """
+        if not self._computed_build_lock.acquire(blocking=False):
+            return  # a build is already running; its result will be swapped in
+        try:
+            with self._computed_lock:
+                current = dict(self._computed)
+                meta = dict(self._computed_meta)
+            fresh: Dict[str, ComputedDevice] = {}
+            fresh_meta: Dict[str, tuple] = {}
+            for d in self.cfg.devices:
+                prev = None if force else current.get(d.key)
+                prev_meta = None if force else meta.get(d.key)
+                try:
+                    cd, cd_meta = self._load_device_cached(d, prev, prev_meta)
+                except Exception:
+                    logger.debug("device '%s' could not be (re)loaded", d.key, exc_info=True)
+                    # Keep the previous frame rather than dropping the device
+                    # out of the snapshot on a transient read error.
+                    cd, cd_meta = prev, prev_meta
+                if cd is not None:
+                    fresh[d.key] = cd
+                    if cd_meta is not None:
+                        fresh_meta[d.key] = cd_meta
+            with self._computed_lock:
+                self._computed = fresh
+                self._computed_meta = fresh_meta
+                self._computed_ts = time.time()
+        finally:
+            self._computed_build_lock.release()
+
+    def _load_device_cached(self, d, prev, prev_meta):
+        """Return (ComputedDevice, (rows_up_to_ts, ts)) for one device.
+
+        Appends only the samples that landed since the cached frame was built.
+        The meta is a watermark plus the exact number of rows at or below it, so
+        the check stays correct while the live poller keeps writing: rows added
+        *above* the watermark cannot change that count.  A mismatch means older
+        rows were rewritten (a sync import, a retention compression) and we fall
+        back to a full read.  ``calculate_energy`` re-runs over the combined
+        frame — every value it produces derives from the raw columns, so the
+        result is identical to a full rebuild; only the expensive SQL is saved.
+        """
+        db = self.storage.db
+        if prev is not None and prev_meta is not None and getattr(prev, "df", None) is not None and not prev.df.empty:
+            rows_prev, ts_prev = prev_meta
+            # "power-sum" derives total_power by summing every power column,
+            # which on a second pass would pick up the derived total_power —
+            # the one branch that is not idempotent, so never append into it.
+            method = ""
+            try:
+                if "calc_method" in prev.df.columns and len(prev.df):
+                    method = str(prev.df["calc_method"].iloc[-1])
+            except Exception:
+                method = ""
+            if ts_prev is not None and method != "power-sum":
+                try:
+                    unchanged = int(db.count_samples(d.key, end_ts=int(ts_prev))) == int(rows_prev)
+                except Exception:
+                    unchanged = False
+                if unchanged:
                     try:
-                        self._computed[d.key] = load_device(self.storage, d)
+                        tail = self.storage.read_device_df(d.key, start_ts=int(ts_prev) + 1)
+                    except Exception:
+                        tail = None
+                    if tail is None or tail.empty:
+                        return prev, prev_meta                 # nothing new
+                    base = prev.df.drop(
+                        columns=[c for c in ("delta_s", "calc_method") if c in prev.df.columns]
+                    )
+                    merged = pd.concat([base, tail], ignore_index=True)
+                    df = calculate_energy(merged)
+                    df["energy_kwh"] = pd.to_numeric(df["energy_kwh"], errors="coerce").fillna(0.0)
+                    if "total_power" in df.columns:
+                        df["total_power"] = pd.to_numeric(df["total_power"], errors="coerce").fillna(0.0)
+                    else:
+                        df["total_power"] = pd.Series(0.0, index=df.index, dtype="float64")
+                    ts_new = ts_prev
+                    try:
+                        ts_new = int(pd.Timestamp(tail["timestamp"].max()).timestamp())
                     except Exception:
                         pass
-                self._computed_ts = now
-            return self._computed
+                    return (
+                        ComputedDevice(device_key=d.key, device_name=d.name, df=df),
+                        (int(rows_prev) + len(tail), ts_new),
+                    )
+
+        t0 = time.time()
+        cd = load_device(self.storage, d)
+        meta = None
+        try:
+            ts_now = db.max_timestamp(d.key)
+            if ts_now is not None:
+                meta = (int(db.count_samples(d.key, end_ts=int(ts_now))), int(ts_now))
+        except Exception:
+            meta = None
+        logger.info("full history rebuild for '%s' took %.1fs", d.key, time.time() - t0)
+        return cd, meta
 
     def reload(self, cfg: AppConfig, lang: Optional[str] = None) -> None:
         """Hot-reload configuration."""
@@ -510,10 +697,22 @@ class ActionDispatcher:
             self.lang = lang
         with self._computed_lock:
             self._computed.clear()
+            self._computed_meta.clear()
         # Config changed (devices, pricing, tariff schedule, compensation …) →
         # drop the memoised costs payload so the next /api/costs recomputes.
         with self._costs_resp_lock:
             self._costs_resp_cache = ()
+        # Rebuild from scratch off the request thread: compensation history can
+        # re-scale the whole past, so the incremental path is not valid here.
+        # Until it finishes, `computed` builds on demand as it always did.
+        try:
+            threading.Thread(
+                target=lambda: self._refresh_computed(force=True),
+                name="sea-warm-reload",
+                daemon=True,
+            ).start()
+        except Exception:
+            logger.debug("post-reload rebuild could not be started", exc_info=True)
 
     # ------------------------------------------------------------------
     # i18n helper
@@ -4303,9 +4502,14 @@ class ActionDispatcher:
                 if not all_events and enabled:
                     try:
                         from shelly_analyzer.services.anomaly import detect_anomalies as _detect
+                        # Read the shared snapshot — this used to call
+                        # load_device() per device and re-read every sample from
+                        # disk on every miss, which measured ~57 s and blocked
+                        # the whole dashboard behind it.
+                        _snapshot = self.computed
                         for d in self.cfg.devices:
                             try:
-                                cd = load_device(self.storage, d)
+                                cd = _snapshot.get(d.key)
                                 if cd is None or cd.df is None or cd.df.empty:
                                     continue
                                 events = _detect(
