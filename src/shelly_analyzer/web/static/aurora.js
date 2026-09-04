@@ -810,16 +810,28 @@
     var nav = document.getElementById("bottom-nav");
     if (!nav || nav.__auFollow) return;
     nav.__auFollow = true;
+    var last = null;
     var scrollToActive = function () {
       var a = nav.querySelector(".nav-btn.active");
-      if (!a) return;
+      if (!a || a === last) return;
+      last = a;
       var want = a.offsetLeft - (nav.clientWidth - a.offsetWidth) / 2;
       try {
         nav.scrollTo({ left: Math.max(0, want), behavior: REDUCED ? "auto" : "smooth" });
       } catch (e) { nav.scrollLeft = Math.max(0, want); }
     };
-    nav.addEventListener("click", function () { setTimeout(scrollToActive, 30); });
-    setTimeout(scrollToActive, 200);
+    /* 🔴 Watching clicks is not enough: the dashboard restores the last tab
+       from localStorage on load and the command palette switches panes without
+       one, so the rail stayed wherever it was and the active tab sat off-screen.
+       Follow the `active` class itself, whoever moved it. */
+    try {
+      new MutationObserver(scrollToActive).observe(nav, {
+        subtree: true, attributes: true, attributeFilter: ["class"]
+      });
+    } catch (e) {
+      nav.addEventListener("click", function () { setTimeout(scrollToActive, 30); });
+    }
+    setTimeout(scrollToActive, 250);
   }
 
   /* ── 8 · Start ──────────────────────────────────────────────────────── */
