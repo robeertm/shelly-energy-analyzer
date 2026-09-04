@@ -196,6 +196,11 @@ class UiConfig:
     # Desktop theme: "auto" | "light" | "dark"
     theme: str = "auto"
 
+    # Web dashboard skin: "aurora" (glass + animated aurora, the default since
+    # v16.71.0) or "classic" (the flat card design shipped up to v16.70.0).
+    # Independent of ``theme`` — both skins have a light and a dark variant.
+    skin: str = "aurora"
+
     # How much history is SHOWN in Live plots (minutes).
     live_window_minutes: int = 10
 
@@ -1201,6 +1206,20 @@ def _migrate_legacy(raw: Dict[str, Any]) -> Dict[str, Any]:
     return raw
 
 
+def _resolve_device_name(name: str, lang: str) -> str:
+    """Translate a device name that is itself a translation key.
+
+    Only ``a.b.c``-shaped names with no spaces are looked up, and only when the
+    lookup actually finds something — a real device called "Keller" or one a
+    user named "Pool 2.0" is returned untouched.
+    """
+    try:
+        from shelly_analyzer.i18n import resolve_name
+        return resolve_name(lang, name)
+    except Exception:
+        return name
+
+
 def load_config(path: Optional[Path] = None) -> AppConfig:
     path = Path(path) if path else default_config_path()
     if not path.exists():
@@ -1214,6 +1233,11 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     raw_original = _load_json(path)
     raw = _migrate_legacy(raw_original)
 
+    # Read the UI language up front: the device loop below needs it, and the
+    # full ``ui`` block is not parsed until much further down.
+    _ui_early = raw.get("ui") if isinstance(raw.get("ui"), dict) else {}
+    _cfg_lang = str(_ui_early.get("language", UiConfig.language) or "en")
+
     devices_raw = raw.get("devices")
     if not isinstance(devices_raw, list):
         raise ValueError("config.json: 'devices' must be a list")
@@ -1224,7 +1248,11 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         if not isinstance(d, dict):
             raise ValueError(f"config.json: devices[{i}] must be an object")
         key = str(d.get("key", f"shelly{i+1}"))
-        name = str(d.get("name", key))
+        # Demo devices are written with a translation key as their name so the
+        # generated house is labelled in the user's language.  Resolve it here,
+        # once, so every consumer downstream sees a real name — and so the next
+        # config save migrates the key away for good.
+        name = _resolve_device_name(str(d.get("name", key)), _cfg_lang)
         host = str(d.get("host", "127.0.0.1"))
         em_id = _coerce_int(d.get("em_id", 0), 0)
         kind = str(d.get("kind", "em") or "em").strip().lower()
@@ -1370,6 +1398,8 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         plot_redraw_seconds=_coerce_float(ui_raw.get("plot_redraw_seconds", UiConfig.plot_redraw_seconds), UiConfig.plot_redraw_seconds),
         language=str(ui_raw.get("language", UiConfig.language)),
         theme=str(ui_raw.get("theme", UiConfig.theme) or "auto"),
+        skin=("classic" if str(ui_raw.get("skin", UiConfig.skin) or "").strip().lower() == "classic"
+              else UiConfig.skin),
         live_retention_minutes=_coerce_int(ui_raw.get("live_retention_minutes", UiConfig.live_retention_minutes), UiConfig.live_retention_minutes),
         live_window_minutes=_coerce_int(ui_raw.get("live_window_minutes", UiConfig.live_window_minutes), UiConfig.live_window_minutes),
         export_directory=str(ui_raw.get("export_directory", UiConfig.export_directory) or ""),
@@ -2178,6 +2208,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "plot_redraw_seconds": cfg.ui.plot_redraw_seconds,
             "language": getattr(cfg.ui, "language", "de"),
             "theme": getattr(cfg.ui, "theme", "auto"),
+            "skin": getattr(cfg.ui, "skin", "aurora"),
             "live_window_minutes": cfg.ui.live_window_minutes,
             "live_retention_minutes": getattr(cfg.ui, "live_retention_minutes", 120),
             "device_page_index": getattr(cfg.ui, "device_page_index", 0),

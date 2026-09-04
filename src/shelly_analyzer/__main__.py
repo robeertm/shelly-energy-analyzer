@@ -251,6 +251,11 @@ def main(argv: list[str] | None = None) -> int:
         live_store=state.live_store,
         out_dir=out_dir,
         cfg_path=cfg_path,
+        # 🔴 Without this the dispatcher keeps its "de" default forever, and
+        # every string it translates server-side — report labels, invoice
+        # lines, the Weather tab's "no data" — comes back German whatever
+        # language the user picked.
+        lang=getattr(state, "lang", None) or getattr(cfg.ui, "language", "en"),
     )
     state.on_action = dispatcher.dispatch
     state._dispatcher = dispatcher  # type: ignore[attr-defined]

@@ -10427,22 +10427,24 @@ _loadLsSettings();
     }}
   }}
   function renderBattery(data, el) {{
-    const ml = {{charging:'Laden', discharging:'Entladen', idle:'Bereitschaft'}};
+    const ml = {{charging: t('battery.mode.charging','Charging'),
+                 discharging: t('battery.mode.discharging','Discharging'),
+                 idle: t('battery.mode.idle','Idle')}};
     const soc = data.soc_pct || 0;
     const pw = data.power_w || 0;
     const cap = data.capacity_kwh || 0;
     const stored = data.stored_kwh || 0;
     const days = data.window_days || 7;
     const srcBadge = (data.soc_source === 'measured')
-      ? '<span class="badge badge-green">gemessen</span>'
-      : '<span class="badge badge-yellow">geschätzt</span>';
+      ? '<span class="badge badge-green">' + esc(t('battery.src.measured','measured')) + '</span>'
+      : '<span class="badge badge-yellow">' + esc(t('battery.src.estimated','estimated')) + '</span>';
     // Power tile: charge green, discharge red, idle neutral.
     const pwCol = pw > 50 ? '#22c55e' : (pw < -50 ? '#ef4444' : '');
     // ETA to full (charging) / empty (discharging).
     let eta = '—';
     if (cap > 0) {{
-      if (pw > 50) {{ const h = (cap - stored) / (pw/1000.0); if (h > 0 && h < 999) eta = 'voll in ' + _fmtDur(h); }}
-      else if (pw < -50) {{ const h = stored / (Math.abs(pw)/1000.0); if (h > 0 && h < 999) eta = 'leer in ' + _fmtDur(h); }}
+      if (pw > 50) {{ const h = (cap - stored) / (pw/1000.0); if (h > 0 && h < 999) eta = t('battery.eta.full','Full in') + ' ' + _fmtDur(h); }}
+      else if (pw < -50) {{ const h = stored / (Math.abs(pw)/1000.0); if (h > 0 && h < 999) eta = t('battery.eta.empty','Empty in') + ' ' + _fmtDur(h); }}
     }}
     const effTxt = (data.avg_efficiency_pct||0).toFixed(1) + '%' +
       (data.efficiency_measured ? '' : ' <span style="font-size:10px;color:var(--muted)">(nominal)</span>');
@@ -10456,36 +10458,36 @@ _loadLsSettings();
     }};
 
     let html = '<div class="card" style="margin-bottom:10px">' +
-      '<div class="card-title">🔋 Batteriespeicher ' + srcBadge + '</div>' +
+      '<div class="card-title">🔋 ' + esc(t('battery.title','Battery storage')) + ' ' + srcBadge + '</div>' +
       '<div class="metric-grid">' +
-      metricCardHtml('Ladestand', soc.toFixed(0) + '%') +
-      metricCardHtml('Gespeichert', (cap > 0 ? stored.toFixed(1) + ' / ' + cap.toFixed(1) + ' kWh' : '—')) +
-      _mcRaw('Leistung', '<span style="color:' + pwCol + '">' + fmt(Math.abs(pw),0) + ' W</span>') +
-      metricCardHtml('Status', ml[data.mode] || data.mode) +
-      metricCardHtml('Prognose', eta) +
+      metricCardHtml(t('battery.soc','State of charge'), soc.toFixed(0) + '%') +
+      metricCardHtml(t('battery.stored','Stored'), (cap > 0 ? stored.toFixed(1) + ' / ' + cap.toFixed(1) + ' kWh' : '—')) +
+      _mcRaw(t('battery.power','Power'), '<span style="color:' + pwCol + '">' + fmt(Math.abs(pw),0) + ' W</span>') +
+      metricCardHtml(t('battery.status','Status'), ml[data.mode] || data.mode) +
+      metricCardHtml(t('battery.eta','Forecast'), eta) +
       '</div></div>';
 
     // SOC history chart
     const tl = data.soc_timeline || [];
     if (tl.length > 1) {{
-      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">Ladestand-Verlauf (' + days + ' Tage)</div>' +
+      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">' + esc(t('battery.soc_history','Charge history')) + ' (' + days + ' ' + esc(t('battery.days','days')) + ')</div>' +
         '<canvas id="bat-soc-spark" class="bar-chart" style="height:120px"></canvas></div>';
     }}
 
     // Today in/out
-    html += '<div class="card" style="margin-bottom:10px"><div class="card-title">Heute</div>' +
+    html += '<div class="card" style="margin-bottom:10px"><div class="card-title">' + esc(t('battery.today','Today')) + '</div>' +
       '<div class="metric-grid">' +
-      _mcRaw('Geladen', '<span style="color:#22c55e">↓ ' + (data.today_charged_kwh||0).toFixed(2) + ' kWh</span>') +
-      _mcRaw('Entladen', '<span style="color:#ef4444">↑ ' + (data.today_discharged_kwh||0).toFixed(2) + ' kWh</span>') +
+      _mcRaw(t('battery.charged','Charged'), '<span style="color:#22c55e">↓ ' + (data.today_charged_kwh||0).toFixed(2) + ' kWh</span>') +
+      _mcRaw(t('battery.discharged','Discharged'), '<span style="color:#ef4444">↑ ' + (data.today_discharged_kwh||0).toFixed(2) + ' kWh</span>') +
       '</div></div>';
 
     // Window totals + cycles + efficiency
-    html += '<div class="card"><div class="card-title">Zeitraum (' + days + ' Tage)</div>' +
+    html += '<div class="card"><div class="card-title">' + esc(t('battery.period','Period')) + ' (' + days + ' ' + esc(t('battery.days','days')) + ')</div>' +
       '<div class="metric-grid">' +
-      metricCardHtml('Geladen', (data.total_charged_kwh||0).toFixed(2) + ' kWh') +
-      metricCardHtml('Entladen', (data.total_discharged_kwh||0).toFixed(2) + ' kWh') +
-      metricCardHtml('Vollzyklen', (data.equivalent_cycles!=null ? data.equivalent_cycles.toFixed(2) : data.cycle_count)) +
-      _mcRaw('Wirkungsgrad', effTxt) +
+      metricCardHtml(t('battery.charged','Charged'), (data.total_charged_kwh||0).toFixed(2) + ' kWh') +
+      metricCardHtml(t('battery.discharged','Discharged'), (data.total_discharged_kwh||0).toFixed(2) + ' kWh') +
+      metricCardHtml(t('battery.cycles','Full cycles'), (data.equivalent_cycles!=null ? data.equivalent_cycles.toFixed(2) : data.cycle_count)) +
+      _mcRaw(t('battery.efficiency','Efficiency'), effTxt) +
       '</div></div>';
 
     el.innerHTML = html;

@@ -6436,6 +6436,20 @@ def t(lang: str, key: str, *, strip_emoji: bool = False, **kwargs: object) -> st
     return _strip_emoji(result) if strip_emoji else result
 
 
+def resolve_name(lang: str, name: str) -> str:
+    """Translate *name* when it is itself a translation key, else return it.
+
+    Demo devices carry keys like ``demo.device.house_3p`` as their name so the
+    generated house is labelled in the user's language.  Anything a user typed
+    is passed through untouched — a real device called "Keller" stays "Keller".
+    """
+    n = str(name or "")
+    if "." not in n or " " in n:
+        return n
+    out = t(lang, n)
+    return n if out == n else out
+
+
 def normalize_lang(lang: str) -> str:
     lang = (lang or "de").lower().strip()
     return lang if lang in LANGS else "de"
@@ -12341,3 +12355,251 @@ _I18N.setdefault("en", {}).update({
     "cal.bidir_hint": "Grid connection meter with PV? Also log the feed-in register (2.8.0). Calibration then uses total throughput (import + feed-in) — accurate even when barely any grid power is drawn. The factor applies only to the signed grid Shelly; pure loads (e.g. a tenant) are left out.",
     "cal.bidir_need_two": "Bidirectional calibration needs two complete readings — the feed-in register (2.8.0) must be recorded on both. So far it is present on only one reading, so no total-throughput factor can be derived yet. Also enter the feed-in value on your next reading.",
 })
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# v16.71.0 — Aurora skin.  The live hero and the skin picker in Settings.
+# Same layout as the _SECTION_TITLES block above: one dict per language,
+# applied in a single loop so the diff stays reviewable.
+# ───────────────────────────────────────────────────────────────────────────
+
+_AURORA_I18N = {
+    "en": {
+        "aurora.hero.title":   "Right now",
+        "aurora.load.idle":    "Idle",
+        "aurora.load.low":     "Low",
+        "aurora.load.working": "Working",
+        "aurora.load.high":    "High",
+        "aurora.load.peak":    "Peak",
+        "aurora.stat.today":   "Today",
+        "aurora.stat.cost":    "Cost today",
+        "aurora.stat.solar":   "Solar share",
+        "aurora.stat.biggest": "Biggest draw",
+        "settings.field.ui.skin":   "Design",
+        "settings.opts.ui.skin.aurora":  "Aurora (glass + motion)",
+        "settings.opts.ui.skin.classic": "Classic (up to v16.70)",
+        "settings.hint.ui.skin":    "Aurora is the new look. Classic is the design shipped up to v16.70.",
+    },
+    "de": {
+        "aurora.hero.title":   "Jetzt gerade",
+        "aurora.load.idle":    "Ruhe",
+        "aurora.load.low":     "Niedrig",
+        "aurora.load.working": "In Betrieb",
+        "aurora.load.high":    "Hoch",
+        "aurora.load.peak":    "Spitze",
+        "aurora.stat.today":   "Heute",
+        "aurora.stat.cost":    "Kosten heute",
+        "aurora.stat.solar":   "Solaranteil",
+        "aurora.stat.biggest": "Größter Verbraucher",
+        "settings.field.ui.skin":   "Design",
+        "settings.opts.ui.skin.aurora":  "Aurora (Glas + Animation)",
+        "settings.opts.ui.skin.classic": "Klassisch (bis v16.70)",
+        "settings.hint.ui.skin":    "Aurora ist das neue Design. Klassisch ist die Ansicht bis v16.70.",
+    },
+    "es": {
+        "aurora.hero.title":   "Ahora mismo",
+        "aurora.load.idle":    "En reposo",
+        "aurora.load.low":     "Bajo",
+        "aurora.load.working": "En marcha",
+        "aurora.load.high":    "Alto",
+        "aurora.load.peak":    "Pico",
+        "aurora.stat.today":   "Hoy",
+        "aurora.stat.cost":    "Coste hoy",
+        "aurora.stat.solar":   "Cuota solar",
+        "aurora.stat.biggest": "Mayor consumo",
+        "settings.field.ui.skin":   "Diseño",
+        "settings.opts.ui.skin.aurora":  "Aurora (cristal + animación)",
+        "settings.opts.ui.skin.classic": "Clásico (hasta v16.70)",
+        "settings.hint.ui.skin":    "Aurora es el nuevo diseño. Clásico es la vista hasta v16.70.",
+    },
+    "fr": {
+        "aurora.hero.title":   "En ce moment",
+        "aurora.load.idle":    "Au repos",
+        "aurora.load.low":     "Faible",
+        "aurora.load.working": "En marche",
+        "aurora.load.high":    "Élevé",
+        "aurora.load.peak":    "Pointe",
+        "aurora.stat.today":   "Aujourd'hui",
+        "aurora.stat.cost":    "Coût aujourd'hui",
+        "aurora.stat.solar":   "Part solaire",
+        "aurora.stat.biggest": "Plus gros consommateur",
+        "settings.field.ui.skin":   "Apparence",
+        "settings.opts.ui.skin.aurora":  "Aurora (verre + animation)",
+        "settings.opts.ui.skin.classic": "Classique (jusqu'à v16.70)",
+        "settings.hint.ui.skin":    "Aurora est la nouvelle apparence. Classique est la vue jusqu'à v16.70.",
+    },
+    "pt": {
+        "aurora.hero.title":   "Agora mesmo",
+        "aurora.load.idle":    "Em repouso",
+        "aurora.load.low":     "Baixo",
+        "aurora.load.working": "Em funcionamento",
+        "aurora.load.high":    "Alto",
+        "aurora.load.peak":    "Pico",
+        "aurora.stat.today":   "Hoje",
+        "aurora.stat.cost":    "Custo hoje",
+        "aurora.stat.solar":   "Quota solar",
+        "aurora.stat.biggest": "Maior consumo",
+        "settings.field.ui.skin":   "Design",
+        "settings.opts.ui.skin.aurora":  "Aurora (vidro + animação)",
+        "settings.opts.ui.skin.classic": "Clássico (até v16.70)",
+        "settings.hint.ui.skin":    "Aurora é o novo design. Clássico é a vista até v16.70.",
+    },
+    "it": {
+        "aurora.hero.title":   "In questo momento",
+        "aurora.load.idle":    "A riposo",
+        "aurora.load.low":     "Basso",
+        "aurora.load.working": "In funzione",
+        "aurora.load.high":    "Alto",
+        "aurora.load.peak":    "Picco",
+        "aurora.stat.today":   "Oggi",
+        "aurora.stat.cost":    "Costo oggi",
+        "aurora.stat.solar":   "Quota solare",
+        "aurora.stat.biggest": "Maggior consumo",
+        "settings.field.ui.skin":   "Aspetto",
+        "settings.opts.ui.skin.aurora":  "Aurora (vetro + animazione)",
+        "settings.opts.ui.skin.classic": "Classico (fino a v16.70)",
+        "settings.hint.ui.skin":    "Aurora è il nuovo aspetto. Classico è la vista fino alla v16.70.",
+    },
+    "pl": {
+        "aurora.hero.title":   "Teraz",
+        "aurora.load.idle":    "Spoczynek",
+        "aurora.load.low":     "Niskie",
+        "aurora.load.working": "W pracy",
+        "aurora.load.high":    "Wysokie",
+        "aurora.load.peak":    "Szczyt",
+        "aurora.stat.today":   "Dziś",
+        "aurora.stat.cost":    "Koszt dziś",
+        "aurora.stat.solar":   "Udział PV",
+        "aurora.stat.biggest": "Największy pobór",
+        "settings.field.ui.skin":   "Wygląd",
+        "settings.opts.ui.skin.aurora":  "Aurora (szkło + animacja)",
+        "settings.opts.ui.skin.classic": "Klasyczny (do v16.70)",
+        "settings.hint.ui.skin":    "Aurora to nowy wygląd. Klasyczny to widok do wersji v16.70.",
+    },
+    "cs": {
+        "aurora.hero.title":   "Právě teď",
+        "aurora.load.idle":    "Klid",
+        "aurora.load.low":     "Nízké",
+        "aurora.load.working": "V provozu",
+        "aurora.load.high":    "Vysoké",
+        "aurora.load.peak":    "Špička",
+        "aurora.stat.today":   "Dnes",
+        "aurora.stat.cost":    "Náklady dnes",
+        "aurora.stat.solar":   "Podíl FV",
+        "aurora.stat.biggest": "Největší odběr",
+        "settings.field.ui.skin":   "Vzhled",
+        "settings.opts.ui.skin.aurora":  "Aurora (sklo + animace)",
+        "settings.opts.ui.skin.classic": "Klasický (do v16.70)",
+        "settings.hint.ui.skin":    "Aurora je nový vzhled. Klasický je zobrazení do verze v16.70.",
+    },
+    "ru": {
+        "aurora.hero.title":   "Прямо сейчас",
+        "aurora.load.idle":    "Покой",
+        "aurora.load.low":     "Низкая",
+        "aurora.load.working": "В работе",
+        "aurora.load.high":    "Высокая",
+        "aurora.load.peak":    "Пик",
+        "aurora.stat.today":   "Сегодня",
+        "aurora.stat.cost":    "Затраты сегодня",
+        "aurora.stat.solar":   "Доля солнца",
+        "aurora.stat.biggest": "Наибольшее потребление",
+        "settings.field.ui.skin":   "Оформление",
+        "settings.opts.ui.skin.aurora":  "Aurora (стекло + анимация)",
+        "settings.opts.ui.skin.classic": "Классическое (до v16.70)",
+        "settings.hint.ui.skin":    "Aurora — новое оформление. Классическое — вид до версии v16.70.",
+    },
+}
+for _lang, _entries in _AURORA_I18N.items():
+    _I18N.setdefault(_lang, {}).update(_entries)
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# v16.71.0 — the Battery tab was rendered in hard-coded German regardless of
+# the chosen language.  Same layout as the blocks above.
+# ───────────────────────────────────────────────────────────────────────────
+
+_BATTERY_I18N = {
+    "en": {"battery.title": "Battery storage", "battery.soc": "State of charge",
+           "battery.stored": "Stored", "battery.power": "Power", "battery.status": "Status",
+           "battery.eta": "Forecast", "battery.eta.full": "Full in", "battery.eta.empty": "Empty in",
+           "battery.mode.charging": "Charging", "battery.mode.discharging": "Discharging",
+           "battery.mode.idle": "Idle", "battery.src.measured": "measured",
+           "battery.src.estimated": "estimated", "battery.soc_history": "Charge history",
+           "battery.today": "Today", "battery.period": "Period", "battery.days": "days",
+           "battery.charged": "Charged", "battery.discharged": "Discharged",
+           "battery.cycles": "Full cycles", "battery.efficiency": "Efficiency"},
+    "de": {"battery.title": "Batteriespeicher", "battery.soc": "Ladestand",
+           "battery.stored": "Gespeichert", "battery.power": "Leistung", "battery.status": "Status",
+           "battery.eta": "Prognose", "battery.eta.full": "Voll in", "battery.eta.empty": "Leer in",
+           "battery.mode.charging": "Laden", "battery.mode.discharging": "Entladen",
+           "battery.mode.idle": "Bereitschaft", "battery.src.measured": "gemessen",
+           "battery.src.estimated": "geschätzt", "battery.soc_history": "Ladestand-Verlauf",
+           "battery.today": "Heute", "battery.period": "Zeitraum", "battery.days": "Tage",
+           "battery.charged": "Geladen", "battery.discharged": "Entladen",
+           "battery.cycles": "Vollzyklen", "battery.efficiency": "Wirkungsgrad"},
+    "es": {"battery.title": "Batería", "battery.soc": "Estado de carga",
+           "battery.stored": "Almacenado", "battery.power": "Potencia", "battery.status": "Estado",
+           "battery.eta": "Previsión", "battery.eta.full": "Llena en", "battery.eta.empty": "Vacía en",
+           "battery.mode.charging": "Cargando", "battery.mode.discharging": "Descargando",
+           "battery.mode.idle": "En reposo", "battery.src.measured": "medido",
+           "battery.src.estimated": "estimado", "battery.soc_history": "Historial de carga",
+           "battery.today": "Hoy", "battery.period": "Periodo", "battery.days": "días",
+           "battery.charged": "Cargado", "battery.discharged": "Descargado",
+           "battery.cycles": "Ciclos completos", "battery.efficiency": "Rendimiento"},
+    "fr": {"battery.title": "Batterie", "battery.soc": "État de charge",
+           "battery.stored": "Stocké", "battery.power": "Puissance", "battery.status": "État",
+           "battery.eta": "Prévision", "battery.eta.full": "Pleine dans", "battery.eta.empty": "Vide dans",
+           "battery.mode.charging": "En charge", "battery.mode.discharging": "En décharge",
+           "battery.mode.idle": "Au repos", "battery.src.measured": "mesuré",
+           "battery.src.estimated": "estimé", "battery.soc_history": "Historique de charge",
+           "battery.today": "Aujourd'hui", "battery.period": "Période", "battery.days": "jours",
+           "battery.charged": "Chargé", "battery.discharged": "Déchargé",
+           "battery.cycles": "Cycles complets", "battery.efficiency": "Rendement"},
+    "pt": {"battery.title": "Bateria", "battery.soc": "Estado de carga",
+           "battery.stored": "Armazenado", "battery.power": "Potência", "battery.status": "Estado",
+           "battery.eta": "Previsão", "battery.eta.full": "Cheia em", "battery.eta.empty": "Vazia em",
+           "battery.mode.charging": "A carregar", "battery.mode.discharging": "A descarregar",
+           "battery.mode.idle": "Em repouso", "battery.src.measured": "medido",
+           "battery.src.estimated": "estimado", "battery.soc_history": "Histórico de carga",
+           "battery.today": "Hoje", "battery.period": "Período", "battery.days": "dias",
+           "battery.charged": "Carregado", "battery.discharged": "Descarregado",
+           "battery.cycles": "Ciclos completos", "battery.efficiency": "Rendimento"},
+    "it": {"battery.title": "Accumulo", "battery.soc": "Stato di carica",
+           "battery.stored": "Immagazzinato", "battery.power": "Potenza", "battery.status": "Stato",
+           "battery.eta": "Previsione", "battery.eta.full": "Piena tra", "battery.eta.empty": "Scarica tra",
+           "battery.mode.charging": "In carica", "battery.mode.discharging": "In scarica",
+           "battery.mode.idle": "A riposo", "battery.src.measured": "misurato",
+           "battery.src.estimated": "stimato", "battery.soc_history": "Storico di carica",
+           "battery.today": "Oggi", "battery.period": "Periodo", "battery.days": "giorni",
+           "battery.charged": "Caricato", "battery.discharged": "Scaricato",
+           "battery.cycles": "Cicli completi", "battery.efficiency": "Rendimento"},
+    "pl": {"battery.title": "Magazyn energii", "battery.soc": "Stan naładowania",
+           "battery.stored": "Zmagazynowane", "battery.power": "Moc", "battery.status": "Status",
+           "battery.eta": "Prognoza", "battery.eta.full": "Pełna za", "battery.eta.empty": "Pusta za",
+           "battery.mode.charging": "Ładowanie", "battery.mode.discharging": "Rozładowanie",
+           "battery.mode.idle": "Spoczynek", "battery.src.measured": "zmierzone",
+           "battery.src.estimated": "szacowane", "battery.soc_history": "Historia naładowania",
+           "battery.today": "Dziś", "battery.period": "Okres", "battery.days": "dni",
+           "battery.charged": "Naładowano", "battery.discharged": "Rozładowano",
+           "battery.cycles": "Pełne cykle", "battery.efficiency": "Sprawność"},
+    "cs": {"battery.title": "Bateriové úložiště", "battery.soc": "Stav nabití",
+           "battery.stored": "Uloženo", "battery.power": "Výkon", "battery.status": "Stav",
+           "battery.eta": "Předpověď", "battery.eta.full": "Plná za", "battery.eta.empty": "Prázdná za",
+           "battery.mode.charging": "Nabíjení", "battery.mode.discharging": "Vybíjení",
+           "battery.mode.idle": "Klid", "battery.src.measured": "měřeno",
+           "battery.src.estimated": "odhad", "battery.soc_history": "Historie nabití",
+           "battery.today": "Dnes", "battery.period": "Období", "battery.days": "dní",
+           "battery.charged": "Nabito", "battery.discharged": "Vybito",
+           "battery.cycles": "Plné cykly", "battery.efficiency": "Účinnost"},
+    "ru": {"battery.title": "Накопитель", "battery.soc": "Заряд",
+           "battery.stored": "Запасено", "battery.power": "Мощность", "battery.status": "Состояние",
+           "battery.eta": "Прогноз", "battery.eta.full": "Полный через", "battery.eta.empty": "Пустой через",
+           "battery.mode.charging": "Заряд", "battery.mode.discharging": "Разряд",
+           "battery.mode.idle": "Ожидание", "battery.src.measured": "измерено",
+           "battery.src.estimated": "оценка", "battery.soc_history": "История заряда",
+           "battery.today": "Сегодня", "battery.period": "Период", "battery.days": "дн.",
+           "battery.charged": "Заряжено", "battery.discharged": "Разряжено",
+           "battery.cycles": "Полные циклы", "battery.efficiency": "КПД"},
+}
+for _lang, _entries in _BATTERY_I18N.items():
+    _I18N.setdefault(_lang, {}).update(_entries)
