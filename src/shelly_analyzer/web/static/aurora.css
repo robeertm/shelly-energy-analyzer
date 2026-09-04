@@ -373,6 +373,15 @@ html[data-skin="aurora"] #bottom-nav {
     right: auto;
     transform: translateX(-50%);
     max-width: min(var(--pane-max), calc(100vw - 40px));
+    /* 🔴 The base centres the rail with `justify-content: center`.  On a
+       scrolling flex container whose content is wider than the box, centring
+       makes the content overflow on BOTH sides — and the left overflow cannot
+       be reached, because scrollLeft 0 is already the leftmost position.  With
+       24 tabs that put Live and Plots permanently off-screen.  `safe` falls
+       back to flex-start exactly when the content overflows; the plain value
+       stays first for engines that would drop the whole declaration. */
+    justify-content: center;
+    justify-content: safe center;
   }
 }
 

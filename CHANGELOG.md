@@ -1,5 +1,29 @@
 # Changelog
 
+## 16.71.1
+### Fixed
+- **The navigation rail could hide the tab you were on**, in two independent
+  ways — both found by measuring the rail's geometry against a real install
+  rather than by looking at it.
+  - The rail is centred with `justify-content: center`. On a *scrolling* flex
+    container whose content is wider than the box, centring overflows **both**
+    sides, and the left overflow cannot be reached: `scrollLeft: 0` is already
+    the leftmost position. With 24 tabs that left Live and Plots permanently
+    off-screen — measured at −43 px with the rail starting at 130 px. Now
+    `justify-content: safe center`, which falls back to flex-start exactly when
+    the content overflows.
+  - The rail followed *clicks*, but the dashboard restores the last tab from
+    localStorage on load and the command palette switches panes without one, so
+    the rail stayed where it was and the active tab sat outside it. It now
+    follows the `active` class itself, whoever moved it.
+- **Every release ZIP packed the ones built before it.** The three archives are
+  zipped one after another into the same directory with no exclude for `*.zip`,
+  so the Windows archive contained the macOS one and the Linux archive
+  contained both — **73 MB instead of 18** for identical content. The in-app
+  updater picks its asset by platform suffix, so every Linux and Raspberry Pi
+  install downloaded all of that and unpacked two stray archives into its
+  install directory. Present in every release this workflow has produced.
+
 ## 16.71.0
 ### Added
 - **A new look: the Aurora skin, and the background is the house's own
@@ -76,13 +100,6 @@
 - **The Battery tab was hard-coded German** whatever language was selected —
   "Batteriespeicher", "Ladestand", "Vollzyklen", "Wirkungsgrad". All 21 strings
   now go through `t()` and are translated into all nine languages.
-- **Every release ZIP packed the ones built before it.** The three archives are
-  zipped one after another into the same directory with no exclude for `*.zip`,
-  so the Windows archive contained the macOS one and the Linux archive
-  contained both — **73 MB instead of 18** for the same content. The in-app
-  updater picks its asset by platform suffix, so every Linux and Raspberry Pi
-  install downloaded all of that and unpacked two stray archives into its
-  install directory. Present in every release this workflow has produced.
 - **Wide tables had no scroll container on a phone.** The calibration log ran
   445 px wide in a 374 px pane with nothing between it and the page to scroll.
   Under the Aurora skin a narrow-viewport table scrolls inside itself.

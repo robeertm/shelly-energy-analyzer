@@ -176,6 +176,32 @@ def test_js_never_replaces_the_dashboards_own_functions():
     print("OK  the render hook wraps and calls through")
 
 
+def test_navigation_rail_stays_reachable():
+    """Two ways the rail could hide the tab you are on.
+
+    1. The base centres it with ``justify-content: center``.  On a scrolling
+       flex container whose content is wider than the box, centring overflows
+       BOTH sides — and the left overflow cannot be scrolled to, because
+       scrollLeft 0 is already the leftmost position.  With 24 tabs that put
+       Live and Plots permanently off-screen.
+    2. Following clicks is not enough: the dashboard restores the last tab from
+       localStorage on load and the command palette switches panes without a
+       click, so the rail stayed where it was."""
+    css = open(CSS_PATH, encoding="utf-8").read()
+    assert "justify-content: safe center" in css, \
+        "the rail centres unsafely again — the first tabs become unreachable"
+    i = css.index("justify-content: center")
+    j = css.index("justify-content: safe center")
+    assert i < j, "the plain value must come first as the fallback"
+
+    js = open(JS_PATH, encoding="utf-8").read()
+    fn = js[js.index("function followNav("):]
+    fn = fn[:fn.index("\n  }")]
+    assert "MutationObserver" in fn and 'attributeFilter: ["class"]' in fn, \
+        "the rail follows clicks only — a restored or palette-driven tab is missed"
+    print("OK  the rail centres safely and follows the active tab however it moved")
+
+
 # ── The colour rule ───────────────────────────────────────────────────────
 
 def test_colour_rule_documented_thresholds():
@@ -404,6 +430,7 @@ if __name__ == "__main__":
     test_assets_are_served_and_sane()
     test_js_is_a_single_iife()
     test_js_never_replaces_the_dashboards_own_functions()
+    test_navigation_rail_stays_reachable()
     test_colour_rule_documented_thresholds()
     test_no_generated_selector_table_left_behind()
     test_skin_strings_exist_in_every_language()
