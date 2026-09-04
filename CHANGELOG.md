@@ -76,6 +76,13 @@
 - **The Battery tab was hard-coded German** whatever language was selected —
   "Batteriespeicher", "Ladestand", "Vollzyklen", "Wirkungsgrad". All 21 strings
   now go through `t()` and are translated into all nine languages.
+- **Every release ZIP packed the ones built before it.** The three archives are
+  zipped one after another into the same directory with no exclude for `*.zip`,
+  so the Windows archive contained the macOS one and the Linux archive
+  contained both — **73 MB instead of 18** for the same content. The in-app
+  updater picks its asset by platform suffix, so every Linux and Raspberry Pi
+  install downloaded all of that and unpacked two stray archives into its
+  install directory. Present in every release this workflow has produced.
 - **Wide tables had no scroll container on a phone.** The calibration log ran
   445 px wide in a 374 px pane with nothing between it and the page to scroll.
   Under the Aurora skin a narrow-viewport table scrolls inside itself.
