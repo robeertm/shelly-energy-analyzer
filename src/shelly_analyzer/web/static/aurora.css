@@ -1,0 +1,1204 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Aurora skin — Shelly Energy Analyzer
+   ──────────────────────────────────────────────────────────────────────────
+   Everything here is scoped to  html[data-skin="aurora"].  With the classic
+   skin selected the attribute is absent and not one rule below can match, so
+   the classic dashboard renders exactly as it always has.
+
+   Palette: Catppuccin (Mocha for dark, Latte for light) — the same family the
+   Aurora Home-Assistant dashboard uses, so both screens read as one product.
+
+   The one bold move: the aurora ribbons behind the UI take their hue from the
+   house's current load (--load-hue, written by aurora.js).  The ornament is
+   driven by the data instead of bolted on next to it.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1 · Tokens ─────────────────────────────────────────────────────────── */
+
+html[data-skin="aurora"] {
+  /* Catppuccin Mocha — the dark default */
+  --ctp-base:      #1e1e2e;
+  --ctp-mantle:    #181825;
+  --ctp-crust:     #11111b;
+  --ctp-surface0:  #313244;
+  --ctp-surface1:  #45475a;
+  --ctp-surface2:  #585b70;
+  --ctp-overlay0:  #6c7086;
+  --ctp-overlay1:  #7f849c;
+  --ctp-text:      #cdd6f4;
+  --ctp-subtext1:  #bac2de;
+  --ctp-subtext0:  #a6adc8;
+
+  --ctp-mauve:     #cba6f7;
+  --ctp-blue:      #89b4fa;
+  --ctp-sapphire:  #74c7ec;
+  --ctp-sky:       #89dceb;
+  --ctp-teal:      #94e2d5;
+  --ctp-green:     #a6e3a1;
+  --ctp-yellow:    #f9e2af;
+  --ctp-peach:     #fab387;
+  --ctp-maroon:    #eba0ac;
+  --ctp-red:       #f38ba8;
+  --ctp-pink:      #f5c2e7;
+  --ctp-lavender:  #b4befe;
+
+  /* ── Roles the base stylesheet already understands.  Overriding these
+        alone re-skins ~70 % of the app; the rules further down do the rest. */
+  --bg:            var(--ctp-mantle);
+  --card:          rgba(49, 50, 68, 0.55);
+  --surface-2:     rgba(30, 30, 46, 0.55);
+  --fg:            var(--ctp-text);
+  --muted:         var(--ctp-subtext0);
+  --accent:        var(--ctp-mauve);
+  --accent-strong: var(--ctp-lavender);
+  --accent-weak:   rgba(203, 166, 247, 0.16);
+  --border:        rgba(203, 166, 247, 0.14);
+  --chipbg:        rgba(205, 214, 244, 0.06);
+  /* The dashboard classes power as low / medium / high at 100 W and 500 W —
+     thresholds meant for a socket, not for a house meter, so "high" fires on
+     an oven as readily as on a fault.  Mapping it to red made every busy
+     appliance look like an alarm.  The ramp stays green → yellow → peach, and
+     red is left to mean that something is actually wrong. */
+  --pwr-low:       var(--ctp-green);
+  --pwr-med:       var(--ctp-yellow);
+  --pwr-high:      var(--ctp-peach);
+
+  --radius-sm: 12px;
+  --radius:    18px;
+  --radius-lg: 24px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .28), 0 2px 10px rgba(0, 0, 0, .18);
+  --shadow-md: 0 8px 26px rgba(0, 0, 0, .34);
+  --shadow-lg: 0 20px 56px rgba(0, 0, 0, .48);
+  --ring:      rgba(203, 166, 247, .55);
+  --ease:      cubic-bezier(.22, 1, .36, 1);
+  --dur:       .22s;
+
+  /* ── Aurora-specific tokens ── */
+  --au-glass:      rgba(49, 50, 68, .52);
+  --au-glass-hi:   rgba(69, 71, 90, .58);
+  --au-hairline:   rgba(205, 214, 244, .10);
+  --au-edge:       rgba(205, 214, 244, .22);   /* top highlight on glass */
+  --au-blur:       16px;
+  --au-ground-1:   #181825;
+  --au-ground-2:   #1e1e2e;
+  --au-scrim:      rgba(17, 17, 27, .55);
+  --au-shimmer:    rgba(205, 214, 244, .07);
+
+  /* Written by aurora.js from the live total load; the CSS below is the only
+     consumer.  Defaults keep the page correct before the first live poll. */
+  --load-hue:      170;    /* teal — the house is idle */
+  --load-sat:      52%;
+  --load-lift:     0;      /* 0‥1, how hard the ribbons glow */
+
+  --nav-h:         64px;
+  --pane-max:      1180px;
+
+  color-scheme: dark;
+}
+
+/* Catppuccin Latte — the light half.  Not an inversion: Latte is its own
+   palette, with accents darkened enough to hold contrast on a pale ground. */
+html[data-skin="aurora"][data-theme="light"] {
+  --ctp-base:      #eff1f5;
+  --ctp-mantle:    #e6e9ef;
+  --ctp-crust:     #dce0e8;
+  --ctp-surface0:  #ccd0da;
+  --ctp-surface1:  #bcc0cc;
+  --ctp-surface2:  #acb0be;
+  --ctp-overlay0:  #9ca0b0;
+  --ctp-overlay1:  #8c8fa1;
+  --ctp-text:      #4c4f69;
+  --ctp-subtext1:  #5c5f77;
+  --ctp-subtext0:  #6c6f85;
+
+  --ctp-mauve:     #8839ef;
+  --ctp-blue:      #1e66f5;
+  --ctp-sapphire:  #209fb5;
+  --ctp-sky:       #04a5e5;
+  --ctp-teal:      #179299;
+  --ctp-green:     #40a02b;
+  --ctp-yellow:    #df8e1d;
+  --ctp-peach:     #fe640b;
+  --ctp-maroon:    #e64553;
+  --ctp-red:       #d20f39;
+  --ctp-pink:      #ea76cb;
+  --ctp-lavender:  #7287fd;
+
+  --bg:            var(--ctp-base);
+  --card:          rgba(255, 255, 255, .72);
+  --surface-2:     rgba(255, 255, 255, .52);
+  --fg:            var(--ctp-text);
+  --muted:         var(--ctp-subtext0);
+  --accent:        var(--ctp-mauve);
+  --accent-strong: #7287fd;
+  --accent-weak:   rgba(136, 57, 239, .10);
+  --border:        rgba(76, 79, 105, .14);
+  --chipbg:        rgba(76, 79, 105, .06);
+
+  --shadow-sm: 0 1px 2px rgba(76, 79, 105, .10), 0 3px 14px rgba(76, 79, 105, .10);
+  --shadow-md: 0 8px 26px rgba(76, 79, 105, .17);
+  --shadow-lg: 0 20px 56px rgba(76, 79, 105, .24);
+  --ring:      rgba(136, 57, 239, .45);
+
+  --au-glass:      rgba(255, 255, 255, .78);
+  --au-glass-hi:   rgba(255, 255, 255, .92);
+  --au-hairline:   rgba(76, 79, 105, .16);
+  --au-edge:       rgba(255, 255, 255, .95);
+  /* 🔴 The ground has to be clearly darker than the glass or a white card on a
+     near-white page has no edge at all.  Latte's crust, not its base. */
+  --au-ground-1:   #dce0e8;
+  --au-ground-2:   #e6e9ef;
+  --au-scrim:      rgba(255, 255, 255, .55);
+  --au-shimmer:    rgba(76, 79, 105, .06);
+  --load-sat:      64%;
+
+  color-scheme: light;
+}
+
+/* ── 2 · The ground and the aurora ──────────────────────────────────────── */
+
+html[data-skin="aurora"] body {
+  background: var(--au-ground-1);
+  color: var(--fg);
+  font-family: ui-sans-serif, -apple-system, "SF Pro Text", system-ui,
+               "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  letter-spacing: -0.005em;
+}
+
+/* Two fixed layers behind everything: a still vertical ground, and three
+   drifting ribbons whose hue follows the house load.  Both are painted with
+   transforms/opacity only, so they stay on the compositor. */
+html[data-skin="aurora"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -3;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 80% at 50% -10%,
+      hsl(var(--load-hue) var(--load-sat) 50% / calc(.10 + .10 * var(--load-lift))) 0%,
+      transparent 60%),
+    linear-gradient(180deg, var(--au-ground-2) 0%, var(--au-ground-1) 55%, var(--au-ground-1) 100%);
+}
+
+/* The circuit sits between the colour wash and the interface: the wash gives
+   the page its mood, the circuit gives it its subject. */
+html[data-skin="aurora"] #aurora-circuit {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  display: block;
+}
+
+html[data-skin="aurora"] #aurora-sky {
+  position: fixed;
+  inset: -20% -10% auto -10%;
+  height: 78vh;
+  z-index: -2;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+  opacity: calc(.42 + .34 * var(--load-lift));
+  transition: opacity 1.6s linear;
+}
+
+html[data-skin="aurora"] #aurora-sky i {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  filter: blur(58px);
+  will-change: transform;
+  mix-blend-mode: screen;
+}
+
+html[data-skin="aurora"][data-theme="light"] #aurora-sky i {
+  mix-blend-mode: multiply;
+  filter: blur(72px);
+  opacity: .5;
+}
+
+html[data-skin="aurora"] #aurora-sky i:nth-child(1) {
+  left: 2%;  top: 4%;  width: 56%; height: 46%;
+  background: radial-gradient(closest-side,
+    hsl(var(--load-hue) var(--load-sat) 62% / .55), transparent 72%);
+  animation: au-drift-a 47s var(--ease) infinite alternate;
+}
+html[data-skin="aurora"] #aurora-sky i:nth-child(2) {
+  right: -4%; top: -6%; width: 52%; height: 54%;
+  background: radial-gradient(closest-side,
+    hsl(calc(var(--load-hue) + 42) var(--load-sat) 64% / .48), transparent 72%);
+  animation: au-drift-b 61s var(--ease) infinite alternate;
+}
+html[data-skin="aurora"] #aurora-sky i:nth-child(3) {
+  left: 26%; top: 16%; width: 46%; height: 40%;
+  background: radial-gradient(closest-side,
+    hsl(calc(var(--load-hue) - 34) var(--load-sat) 60% / .40), transparent 74%);
+  animation: au-drift-c 73s var(--ease) infinite alternate;
+}
+
+@keyframes au-drift-a {
+  from { transform: translate3d(-6%,  -3%, 0) scale(1.00); }
+  to   { transform: translate3d( 10%,  6%, 0) scale(1.18); }
+}
+@keyframes au-drift-b {
+  from { transform: translate3d( 6%,   4%, 0) scale(1.12); }
+  to   { transform: translate3d(-9%,  -5%, 0) scale(0.96); }
+}
+@keyframes au-drift-c {
+  from { transform: translate3d( 0%,   5%, 0) scale(0.94); }
+  to   { transform: translate3d( 7%,  -6%, 0) scale(1.14); }
+}
+
+/* ── 3 · Typography ─────────────────────────────────────────────────────── */
+
+html[data-skin="aurora"] .card-title,
+html[data-skin="aurora"] .metric-label,
+html[data-skin="aurora"] .au-label {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: .085em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Every figure the eye compares in a column gets tabular digits. */
+html[data-skin="aurora"] .metric-value,
+html[data-skin="aurora"] .dev-power,
+html[data-skin="aurora"] .dev-kv dd,
+html[data-skin="aurora"] .au-hero-value,
+html[data-skin="aurora"] .au-stat-value,
+html[data-skin="aurora"] table td,
+html[data-skin="aurora"] table th {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+html[data-skin="aurora"] .metric-value {
+  font-size: 25px;
+  font-weight: 750;
+  letter-spacing: -.03em;
+  color: var(--fg);
+}
+html[data-skin="aurora"] .metric-sub { color: var(--muted); font-size: 11.5px; }
+
+/* ── 4 · App shell ──────────────────────────────────────────────────────── */
+
+html[data-skin="aurora"] #hdr {
+  background: linear-gradient(180deg,
+      color-mix(in srgb, var(--au-ground-1) 88%, transparent),
+      color-mix(in srgb, var(--au-ground-1) 62%, transparent));
+  backdrop-filter: blur(var(--au-blur)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--au-blur)) saturate(150%);
+  border-bottom: 1px solid var(--au-hairline);
+  box-shadow: none;
+  padding: 12px 18px;
+}
+
+html[data-skin="aurora"] #hdr-title {
+  font-weight: 700;
+  letter-spacing: -.015em;
+  background: linear-gradient(92deg, var(--ctp-mauve), var(--ctp-sky) 65%, var(--ctp-teal));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+html[data-skin="aurora"][data-theme="light"] #hdr-title {
+  background: linear-gradient(92deg, var(--ctp-mauve), var(--ctp-blue) 70%, var(--ctp-teal));
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+html[data-skin="aurora"] .icon-btn,
+html[data-skin="aurora"] #hdr-actions button {
+  border-radius: 12px;
+  border: 1px solid var(--au-hairline);
+  background: var(--chipbg);
+  color: var(--fg);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+              transform var(--dur) var(--ease);
+}
+html[data-skin="aurora"] .icon-btn:hover,
+html[data-skin="aurora"] #hdr-actions button:hover {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+html[data-skin="aurora"] #panes {
+  padding: 16px 16px calc(var(--nav-h) + 34px + env(safe-area-inset-bottom, 0px));
+  scrollbar-width: thin;
+  scrollbar-color: var(--ctp-surface1) transparent;
+}
+html[data-skin="aurora"] #panes::-webkit-scrollbar { width: 10px; }
+html[data-skin="aurora"] #panes::-webkit-scrollbar-thumb {
+  background: var(--ctp-surface1); border-radius: 8px;
+  border: 3px solid transparent; background-clip: content-box;
+}
+
+@media (min-width: 900px) {
+  html[data-skin="aurora"] .pane.active {
+    max-width: var(--pane-max);
+    margin-inline: auto;
+  }
+}
+
+/* Tab change: a short rise, not a fade-from-nothing. */
+html[data-skin="aurora"] .pane { animation: au-pane-in .34s var(--ease) both; }
+@keyframes au-pane-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── 5 · Bottom navigation — a floating glass rail ──────────────────────── */
+
+html[data-skin="aurora"] #bottom-nav {
+  left: 10px;
+  right: 10px;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  padding: 6px;
+  gap: 2px;
+  border: 1px solid var(--au-hairline);
+  border-radius: 20px;
+  background: var(--au-glass);
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  box-shadow: var(--shadow-lg);
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+}
+@media (min-width: 900px) {
+  html[data-skin="aurora"] #bottom-nav {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    max-width: min(var(--pane-max), calc(100vw - 40px));
+  }
+}
+
+/* 24 tabs do not fit any screen.  A soft edge is the only honest signal that
+   the rail continues; a hard cut reads as "that is all there is". */
+html[data-skin="aurora"] #bottom-nav {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 22px,
+                       #000 calc(100% - 22px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 22px,
+               #000 calc(100% - 22px), transparent 100%);
+}
+
+html[data-skin="aurora"] .nav-btn {
+  border-radius: 14px;
+  min-width: 60px;
+  padding: 7px 8px;
+  color: var(--muted);
+  font-weight: 600;
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+html[data-skin="aurora"] .nav-btn .nav-icon {
+  font-size: 17px;
+  filter: saturate(.75) opacity(.8);
+  transition: filter var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+html[data-skin="aurora"] .nav-btn .nav-label { font-size: 9.5px; letter-spacing: .01em; }
+html[data-skin="aurora"] .nav-btn:hover { color: var(--fg); background: var(--chipbg); }
+html[data-skin="aurora"] .nav-btn:hover .nav-icon { filter: none; }
+
+html[data-skin="aurora"] .nav-btn.active {
+  color: var(--fg);
+  background: linear-gradient(180deg, var(--accent-weak), transparent 85%),
+              var(--au-glass-hi);
+  box-shadow: inset 0 1px 0 var(--au-edge);
+}
+html[data-skin="aurora"] .nav-btn.active .nav-icon {
+  filter: none;
+  transform: translateY(-1px) scale(1.06);
+}
+/* The base draws its own indicator bar via ::before — replace it with a short
+   accent underline that sits inside the pill. */
+html[data-skin="aurora"] .nav-btn.active::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  top: auto;
+  width: 18px;
+  height: 2.5px;
+  margin-left: -9px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--ctp-mauve), var(--ctp-sky));
+  box-shadow: 0 0 10px var(--accent);
+  animation: au-ind-in .3s var(--ease) both;
+}
+@keyframes au-ind-in { from { width: 0; margin-left: 0; opacity: 0; } }
+
+html[data-skin="aurora"] #nav-drawer {
+  background: var(--au-glass);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  border-right: 1px solid var(--au-hairline);
+}
+html[data-skin="aurora"] #nav-drawer-overlay { background: var(--au-scrim); backdrop-filter: blur(3px); }
+html[data-skin="aurora"] .drawer-item { border-bottom: 1px solid var(--au-hairline); }
+html[data-skin="aurora"] .drawer-item:hover { background: var(--chipbg); }
+html[data-skin="aurora"] .drawer-item.active { color: var(--accent); background: var(--accent-weak); }
+
+/* ── 6 · Glass cards ────────────────────────────────────────────────────── */
+
+html[data-skin="aurora"] .card,
+html[data-skin="aurora"] .dev-card,
+html[data-skin="aurora"] .metric-card,
+html[data-skin="aurora"] .au-panel {
+  position: relative;
+  background: var(--au-glass);
+  border: 1px solid var(--au-hairline);
+  border-radius: var(--radius);
+  backdrop-filter: blur(var(--au-blur)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--au-blur)) saturate(150%);
+  box-shadow: var(--shadow-sm);
+}
+/* One-pixel highlight along the top edge — what makes glass read as glass. */
+html[data-skin="aurora"] .card::before,
+html[data-skin="aurora"] .dev-card::before,
+html[data-skin="aurora"] .au-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: linear-gradient(90deg, transparent, var(--au-edge) 22%,
+                              var(--au-edge) 78%, transparent);
+  pointer-events: none;
+}
+html[data-skin="aurora"] .card { padding: 16px 18px; margin-bottom: 12px; }
+html[data-skin="aurora"] .card-grid { gap: 12px; }
+
+html[data-skin="aurora"] .metric-card {
+  padding: 14px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+html[data-skin="aurora"] .metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--accent-weak);
+}
+
+/* ── 7 · Live device cards ──────────────────────────────────────────────── */
+
+html[data-skin="aurora"] .dev-card {
+  padding: 16px 18px;
+  overflow: hidden;
+  /* --dev-tint is set per card by aurora.js from the base palette so the
+     device keeps the same identity colour it has on the Plots page. */
+  border-left: none;
+}
+/* A soft wash of the device colour from the left, plus a load-driven glow at
+   the top-right that brightens as the device draws more. */
+html[data-skin="aurora"] .dev-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(100deg, var(--dev-tint, transparent) 0%, transparent 46%),
+    radial-gradient(90% 120% at 108% -20%,
+      hsl(var(--dev-hue, var(--load-hue)) var(--load-sat) 62% /
+          calc(.06 + .20 * var(--dev-lift, 0))) 0%, transparent 62%);
+  transition: background .9s linear;
+}
+html[data-skin="aurora"] .dev-card > * { position: relative; z-index: 1; }
+
+html[data-skin="aurora"] .dev-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -.012em;
+}
+html[data-skin="aurora"] .dev-power {
+  font-size: 30px;
+  font-weight: 780;
+  letter-spacing: -.035em;
+  line-height: 1.05;
+}
+html[data-skin="aurora"] .dev-meta { font-size: 11.5px; gap: 14px; margin-top: 6px; }
+html[data-skin="aurora"] .dev-expand { border-top: 1px solid var(--au-hairline); }
+html[data-skin="aurora"] .dev-kv dt { color: var(--muted); font-weight: 500; }
+html[data-skin="aurora"] .dev-kv dd { font-weight: 650; }
+
+html[data-skin="aurora"] .switch-row {
+  background: var(--chipbg);
+  border: 1px solid var(--au-hairline);
+  border-radius: 12px;
+}
+html[data-skin="aurora"] .switch-state.on {
+  color: var(--ctp-green);
+  background: color-mix(in srgb, var(--ctp-green) 16%, transparent);
+}
+html[data-skin="aurora"] .switch-state.off {
+  color: var(--ctp-red);
+  background: color-mix(in srgb, var(--ctp-red) 16%, transparent);
+}
+html[data-skin="aurora"] .appl-chip {
+  background: var(--chipbg);
+  border: 1px solid var(--au-hairline);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+/* ── 8 · Controls ───────────────────────────────────────────────────────── */
+
+html[data-skin="aurora"] .btn {
+  border-radius: 12px;
+  border: 1px solid var(--au-hairline);
+  background: var(--chipbg);
+  font-weight: 600;
+  letter-spacing: .005em;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+html[data-skin="aurora"] .btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-weak);
+  transform: translateY(-1px);
+}
+html[data-skin="aurora"] .btn:active { transform: translateY(0) scale(.985); }
+html[data-skin="aurora"] .btn-accent {
+  background: linear-gradient(135deg, var(--ctp-mauve), var(--ctp-blue));
+  color: var(--ctp-crust);
+  border: none;
+  font-weight: 700;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+html[data-skin="aurora"] .btn-accent:hover {
+  background: linear-gradient(135deg, var(--ctp-lavender), var(--ctp-sapphire));
+  box-shadow: 0 6px 22px color-mix(in srgb, var(--accent) 46%, transparent);
+}
+html[data-skin="aurora"] .btn-danger {
+  background: color-mix(in srgb, var(--ctp-red) 18%, transparent);
+  border-color: color-mix(in srgb, var(--ctp-red) 45%, transparent);
+  color: var(--ctp-red);
+}
+html[data-skin="aurora"] .btn-primary { background: var(--accent-weak); border-color: var(--accent); color: var(--accent); }
+html[data-skin="aurora"] .btn.active,
+html[data-skin="aurora"] .btn[aria-pressed="true"] {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+html[data-skin="aurora"] select,
+html[data-skin="aurora"] input[type=date],
+html[data-skin="aurora"] input[type=text],
+html[data-skin="aurora"] input[type=number],
+html[data-skin="aurora"] input[type=search] {
+  border-radius: 12px;
+  border: 1px solid var(--au-hairline);
+  background: var(--chipbg);
+  color: var(--fg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+html[data-skin="aurora"] select:focus,
+html[data-skin="aurora"] input:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-weak);
+}
+html[data-skin="aurora"] select option { background: var(--ctp-base); color: var(--fg); }
+
+html[data-skin="aurora"] .controls-row { gap: 8px; margin-bottom: 14px; }
+html[data-skin="aurora"] .filter-bar {
+  background: var(--au-glass);
+  border: 1px solid var(--au-hairline);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(var(--au-blur));
+  -webkit-backdrop-filter: blur(var(--au-blur));
+}
+html[data-skin="aurora"] .ctrl-slider { background: var(--ctp-surface1); }
+html[data-skin="aurora"] .ctrl-toggle input:checked + .ctrl-slider {
+  background: linear-gradient(90deg, var(--ctp-mauve), var(--ctp-blue));
+}
+html[data-skin="aurora"] .ctrl-slider:before { background: var(--ctp-crust); }
+html[data-skin="aurora"] .ctrl-range { background: var(--ctp-surface1); }
+html[data-skin="aurora"] .ctrl-range::-webkit-slider-thumb {
+  background: var(--accent); box-shadow: 0 0 8px var(--accent-weak);
+}
+html[data-skin="aurora"] .ctrl-range::-moz-range-thumb { background: var(--accent); }
+
+/* ── 9 · Badges, pills, messages ────────────────────────────────────────── */
+
+html[data-skin="aurora"] .badge,
+html[data-skin="aurora"] .net-badge,
+html[data-skin="aurora"] .soc-badge {
+  border-radius: 999px;
+  font-weight: 650;
+  letter-spacing: .01em;
+  border: 1px solid transparent;
+}
+html[data-skin="aurora"] .badge-green {
+  background: color-mix(in srgb, var(--ctp-green) 15%, transparent);
+  color: var(--ctp-green);
+  border-color: color-mix(in srgb, var(--ctp-green) 32%, transparent);
+}
+html[data-skin="aurora"] .badge-red {
+  background: color-mix(in srgb, var(--ctp-red) 15%, transparent);
+  color: var(--ctp-red);
+  border-color: color-mix(in srgb, var(--ctp-red) 32%, transparent);
+}
+html[data-skin="aurora"] .badge-yellow {
+  background: color-mix(in srgb, var(--ctp-yellow) 16%, transparent);
+  color: var(--ctp-yellow);
+  border-color: color-mix(in srgb, var(--ctp-yellow) 34%, transparent);
+}
+html[data-skin="aurora"][data-theme="light"] .badge-yellow { color: var(--ctp-peach); }
+html[data-skin="aurora"] .soc-badge { color: var(--ctp-green); }
+
+html[data-skin="aurora"] .error-msg {
+  color: var(--ctp-red);
+  background: color-mix(in srgb, var(--ctp-red) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ctp-red) 26%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+html[data-skin="aurora"] .info-msg {
+  color: var(--muted);
+  background: var(--chipbg);
+  border: 1px solid var(--au-hairline);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+
+/* A loading row should look like the card that is coming, not like the word
+   "Loading".  Three shimmering bars, sized like a typical result. */
+html[data-skin="aurora"] .loading-msg {
+  color: transparent;
+  position: relative;
+  padding: 0;
+  min-height: 132px;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--au-glass);
+  border: 1px solid var(--au-hairline);
+}
+html[data-skin="aurora"] .loading-msg::before {
+  content: "";
+  position: absolute;
+  inset: 18px auto auto 18px;
+  width: min(46%, 260px);
+  height: 13px;
+  border-radius: 7px;
+  background: var(--au-shimmer);
+  box-shadow: 0 34px 0 var(--au-shimmer), 0 68px 0 var(--au-shimmer);
+}
+html[data-skin="aurora"] .loading-msg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%,
+              color-mix(in srgb, var(--fg) 7%, transparent) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: au-shimmer 1.5s linear infinite;
+}
+@keyframes au-shimmer { to { transform: translateX(100%); } }
+
+/* ── 10 · Tables ────────────────────────────────────────────────────────── */
+
+html[data-skin="aurora"] table,
+html[data-skin="aurora"] .data-table,
+html[data-skin="aurora"] .hm-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+html[data-skin="aurora"] table th {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--au-hairline);
+  background: color-mix(in srgb, var(--ctp-surface0) 40%, transparent);
+  position: sticky;
+  top: 0;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 2;
+}
+html[data-skin="aurora"] table th:first-child { border-top-left-radius: 12px; }
+html[data-skin="aurora"] table th:last-child  { border-top-right-radius: 12px; }
+html[data-skin="aurora"] table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--au-hairline) 60%, transparent);
+  font-size: 12.5px;
+}
+html[data-skin="aurora"] table tbody tr { transition: background var(--dur) var(--ease); }
+html[data-skin="aurora"] table tbody tr:hover { background: var(--accent-weak); }
+html[data-skin="aurora"] table tbody tr:last-child td { border-bottom: none; }
+
+/* On a phone several of these tables are wider than the screen and have no
+   scroll container of their own (the calibration log, for one).  Wide content
+   must scroll inside itself; the page must never scroll sideways.  .hm-table
+   is excluded — the heatmap already wraps it in .hm-table-wrap. */
+@media (max-width: 760px) {
+  html[data-skin="aurora"] .pane table:not(.hm-table) {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+  html[data-skin="aurora"] .pane table:not(.hm-table) th { position: static; }
+}
+
+/* ── 11 · The live hero — "the house, right now" ────────────────────────── */
+
+html[data-skin="aurora"] #au-hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 22px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-lg);
+  animation: au-pane-in .4s var(--ease) both;
+}
+html[data-skin="aurora"] #au-hero::before { border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+
+html[data-skin="aurora"] .au-gauge { position: relative; width: 132px; height: 132px; flex: 0 0 auto; }
+html[data-skin="aurora"] .au-gauge svg { width: 100%; height: 100%; transform: rotate(-90deg); display: block; }
+html[data-skin="aurora"] .au-gauge .au-track {
+  fill: none;
+  stroke: color-mix(in srgb, var(--fg) 9%, transparent);
+  stroke-width: 9;
+  stroke-linecap: round;
+}
+html[data-skin="aurora"] .au-gauge .au-arc {
+  fill: none;
+  stroke: url(#au-arc-grad);
+  stroke-width: 9;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 7px hsl(var(--load-hue) var(--load-sat) 60% / .55));
+  transition: stroke-dashoffset .9s var(--ease);
+}
+html[data-skin="aurora"] .au-gauge-mid {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  text-align: center;
+}
+html[data-skin="aurora"] .au-hero-value {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -.04em;
+  line-height: 1;
+  color: var(--fg);
+}
+html[data-skin="aurora"] .au-hero-unit {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+html[data-skin="aurora"] .au-hero-right { min-width: 0; }
+html[data-skin="aurora"] .au-hero-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+html[data-skin="aurora"] .au-hero-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -.015em;
+}
+html[data-skin="aurora"] .au-hero-state {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 999px;
+  color: hsl(var(--load-hue) var(--load-sat) 72%);
+  background: hsl(var(--load-hue) var(--load-sat) 50% / .14);
+  border: 1px solid hsl(var(--load-hue) var(--load-sat) 55% / .32);
+}
+html[data-skin="aurora"][data-theme="light"] .au-hero-state {
+  color: hsl(var(--load-hue) var(--load-sat) 32%);
+}
+
+html[data-skin="aurora"] .au-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 10px;
+}
+html[data-skin="aurora"] .au-stat {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--chipbg);
+  border: 1px solid var(--au-hairline);
+  min-width: 0;
+}
+html[data-skin="aurora"] .au-stat-value {
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html[data-skin="aurora"] .au-stat-label {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html[data-skin="aurora"] .au-stat.solar .au-stat-value { color: var(--ctp-yellow); }
+html[data-skin="aurora"] .au-stat.cost  .au-stat-value { color: var(--ctp-peach); }
+html[data-skin="aurora"] .au-stat.top   .au-stat-value { color: var(--ctp-green); }
+html[data-skin="aurora"] .au-stat.kwh   .au-stat-value { color: var(--ctp-sky); }
+
+@media (max-width: 620px) {
+  html[data-skin="aurora"] #au-hero { grid-template-columns: 1fr; justify-items: center; gap: 14px; }
+  html[data-skin="aurora"] .au-hero-right { width: 100%; }
+  html[data-skin="aurora"] .au-hero-head { justify-content: center; }
+  /* Every other tile holds a number; this one holds a device name, and half a
+     phone width turns it into an ellipsis. */
+  html[data-skin="aurora"] .au-stat.top { grid-column: 1 / -1; }
+}
+
+/* ── 12 · Sparklines and chart frames ───────────────────────────────────── */
+
+/* The wrapper and the canvas inside it both carried a surface, which framed the
+   empty part of a still-filling buffer and made it read as a broken widget.
+   One surface: the canvas. */
+html[data-skin="aurora"] .sparkline-wrap {
+  border-radius: 12px;
+  overflow: hidden;
+  background: transparent;
+  border: none;
+}
+html[data-skin="aurora"] canvas.sparkline,
+html[data-skin="aurora"] canvas.sparkline-sm {
+  background: color-mix(in srgb, var(--ctp-crust) 30%, transparent);
+  transition: background var(--dur) var(--ease);
+}
+html[data-skin="aurora"] .sparkline-wrap:hover canvas {
+  background: color-mix(in srgb, var(--ctp-crust) 44%, transparent);
+}
+html[data-skin="aurora"] .sparkline-label {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+html[data-skin="aurora"] canvas { border-radius: 10px; }
+
+/* ── 13 · Modals, palette, overlays ─────────────────────────────────────── */
+
+html[data-skin="aurora"] .modal-overlay,
+html[data-skin="aurora"] .cmdk-overlay {
+  background: var(--au-scrim);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+html[data-skin="aurora"] .modal-panel,
+html[data-skin="aurora"] .cmdk-panel,
+html[data-skin="aurora"] .chart-detail-panel {
+  background: var(--au-glass-hi);
+  border: 1px solid var(--au-hairline);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(26px) saturate(180%);
+  -webkit-backdrop-filter: blur(26px) saturate(180%);
+  box-shadow: var(--shadow-lg);
+  animation: au-modal-in .26s var(--ease) both;
+}
+@keyframes au-modal-in {
+  from { opacity: 0; transform: translateY(14px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+html[data-skin="aurora"] .modal-header { border-bottom: 1px solid var(--au-hairline); }
+html[data-skin="aurora"] .cmdk-input {
+  background: var(--chipbg);
+  border: 1px solid var(--au-hairline);
+  border-radius: 12px;
+  color: var(--fg);
+}
+html[data-skin="aurora"] .cmdk-item { border-radius: 10px; }
+html[data-skin="aurora"] .cmdk-item.active,
+html[data-skin="aurora"] .cmdk-item:hover { background: var(--accent-weak); }
+html[data-skin="aurora"] .cmdk-foot { border-top: 1px solid var(--au-hairline); color: var(--muted); }
+
+/* ── 14 · Per-tab refinements ───────────────────────────────────────────── */
+
+/* Anomalies — an event list reads better as a rail than as boxes */
+html[data-skin="aurora"] .event-card {
+  background: var(--au-glass);
+  border: 1px solid var(--au-hairline);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px var(--radius-sm) var(--radius-sm) 4px;
+  backdrop-filter: blur(var(--au-blur));
+  -webkit-backdrop-filter: blur(var(--au-blur));
+  transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+html[data-skin="aurora"] .event-card:hover { transform: translateX(3px); }
+html[data-skin="aurora"] .event-dot { box-shadow: 0 0 8px currentColor; }
+html[data-skin="aurora"] .event-type { font-weight: 700; letter-spacing: -.01em; }
+
+/* Heatmap — rounder cells and a hairline so an empty day still reads as a day */
+html[data-skin="aurora"] .hm-day,
+html[data-skin="aurora"] .hm-cell {
+  border-radius: 3px;
+  outline: 1px solid color-mix(in srgb, var(--fg) 5%, transparent);
+  outline-offset: -1px;
+}
+html[data-skin="aurora"] .hm-day:hover { outline-color: var(--accent); }
+html[data-skin="aurora"] #hm-tooltip {
+  background: var(--au-glass-hi);
+  border: 1px solid var(--au-hairline);
+  border-radius: 10px;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: var(--shadow-md);
+}
+
+/* EV chargers — the bricks carry availability, so keep the traffic-light
+   meaning but move it onto the Catppuccin palette. */
+html[data-skin="aurora"] .ev-brick,
+html[data-skin="aurora"] .ev-conn-brick {
+  border-radius: 14px;
+  border: 1px solid var(--au-hairline);
+  color: var(--ctp-crust);
+  font-weight: 650;
+  box-shadow: var(--shadow-sm);
+}
+html[data-skin="aurora"] .ev-brick.ev-green,
+html[data-skin="aurora"] .ev-conn-brick.ev-green  { background: linear-gradient(160deg, var(--ctp-green),  color-mix(in srgb, var(--ctp-green) 74%, #000)); }
+html[data-skin="aurora"] .ev-brick.ev-yellow,
+html[data-skin="aurora"] .ev-conn-brick.ev-yellow { background: linear-gradient(160deg, var(--ctp-yellow), color-mix(in srgb, var(--ctp-yellow) 74%, #000)); }
+html[data-skin="aurora"] .ev-brick.ev-red,
+html[data-skin="aurora"] .ev-conn-brick.ev-red    { background: linear-gradient(160deg, var(--ctp-red),    color-mix(in srgb, var(--ctp-red) 74%, #000)); }
+html[data-skin="aurora"] .ev-brick.ev-gray,
+html[data-skin="aurora"] .ev-conn-brick.ev-gray   { background: linear-gradient(160deg, var(--ctp-overlay1), var(--ctp-surface2)); color: var(--ctp-text); }
+html[data-skin="aurora"] .ev-brick { transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+html[data-skin="aurora"] .ev-brick:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+
+/* NILM */
+html[data-skin="aurora"] .nilm-metric-card,
+html[data-skin="aurora"] .nilm-pattern-card,
+html[data-skin="aurora"] .nilm-sig-item,
+html[data-skin="aurora"] .nilm-stat {
+  background: var(--surface-2);
+  border: 1px solid var(--au-hairline);
+  border-radius: var(--radius-sm);
+}
+html[data-skin="aurora"] .nilm-stat-val { font-weight: 750; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+html[data-skin="aurora"] .nilm-stat-lbl,
+html[data-skin="aurora"] .sparkline-label { color: var(--muted); }
+html[data-skin="aurora"] .nilm-tl-item { border-bottom: 1px solid var(--au-hairline); }
+html[data-skin="aurora"] .nilm-tl-dot { box-shadow: 0 0 8px currentColor; }
+html[data-skin="aurora"] .nilm-timeline { border-radius: var(--radius-sm); }
+
+/* Settings rows inside the dashboard's own modals */
+html[data-skin="aurora"] .settings-device-row { border-bottom: 1px solid var(--au-hairline); }
+html[data-skin="aurora"] .settings-btn { border-radius: 10px; }
+
+/* Update banner — the one place a gradient earns its keep */
+html[data-skin="aurora"] #update-banner {
+  background: linear-gradient(100deg,
+      color-mix(in srgb, var(--ctp-mauve) 88%, transparent),
+      color-mix(in srgb, var(--ctp-sapphire) 88%, transparent));
+  color: var(--ctp-crust);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 22px color-mix(in srgb, var(--ctp-mauve) 32%, transparent);
+  font-weight: 600;
+}
+
+/* Load progress line under the header */
+html[data-skin="aurora"] #nav-progress-bar {
+  background: linear-gradient(90deg, var(--ctp-mauve), var(--ctp-sky), var(--ctp-teal));
+}
+html[data-skin="aurora"] #nav-progress-track { background: var(--chipbg); border-radius: 999px; }
+
+/* Plots tab is an iframe with its own document — give it a frame that matches */
+html[data-skin="aurora"] #plots-frame {
+  background: transparent;
+  border-radius: var(--radius);
+}
+
+/* Sync log — monospace deserves its own surface */
+html[data-skin="aurora"] #sync-log {
+  background: color-mix(in srgb, var(--ctp-crust) 55%, transparent);
+  border: 1px solid var(--au-hairline);
+  border-radius: var(--radius-sm);
+  color: var(--ctp-subtext1);
+}
+
+/* ── 15 · Motion, entrance, accessibility ───────────────────────────────── */
+
+/* Cards rise in sequence when a tab is opened.  Capped at ten so a long
+   table does not animate forever. */
+html[data-skin="aurora"] .pane.active .card,
+html[data-skin="aurora"] .pane.active .dev-card,
+html[data-skin="aurora"] .pane.active .event-card { animation: au-rise .42s var(--ease) both; }
+html[data-skin="aurora"] .pane.active > *:nth-child(1)  { --au-i: 0; }
+html[data-skin="aurora"] .pane.active .card:nth-child(1),
+html[data-skin="aurora"] .pane.active .dev-card:nth-child(1)  { animation-delay: 0ms; }
+html[data-skin="aurora"] .pane.active .card:nth-child(2),
+html[data-skin="aurora"] .pane.active .dev-card:nth-child(2)  { animation-delay: 45ms; }
+html[data-skin="aurora"] .pane.active .card:nth-child(3),
+html[data-skin="aurora"] .pane.active .dev-card:nth-child(3)  { animation-delay: 90ms; }
+html[data-skin="aurora"] .pane.active .card:nth-child(4),
+html[data-skin="aurora"] .pane.active .dev-card:nth-child(4)  { animation-delay: 135ms; }
+html[data-skin="aurora"] .pane.active .card:nth-child(5),
+html[data-skin="aurora"] .pane.active .dev-card:nth-child(5)  { animation-delay: 180ms; }
+html[data-skin="aurora"] .pane.active .card:nth-child(n+6),
+html[data-skin="aurora"] .pane.active .dev-card:nth-child(n+6) { animation-delay: 215ms; }
+@keyframes au-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+html[data-skin="aurora"] :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* Everything decorative stops; nothing structural depends on motion. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-skin="aurora"] #aurora-sky i { animation: none; }
+  html[data-skin="aurora"] .pane,
+  html[data-skin="aurora"] .pane.active .card,
+  html[data-skin="aurora"] .pane.active .dev-card,
+  html[data-skin="aurora"] .pane.active .event-card,
+  html[data-skin="aurora"] .modal-panel,
+  html[data-skin="aurora"] .cmdk-panel,
+  html[data-skin="aurora"] .chart-detail-panel { animation: none; opacity: 1; transform: none; }
+  html[data-skin="aurora"] .loading-msg::after { animation: none; }
+  html[data-skin="aurora"] .nav-btn.active::before { animation: none; }
+}
+
+/* backdrop-filter is the one effect with no graceful degradation: without it
+   the glass is simply translucent and the text sits on the ribbons.  Opaque
+   surfaces for those engines. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html[data-skin="aurora"] {
+    --au-glass:    color-mix(in srgb, var(--ctp-surface0) 92%, var(--ctp-base));
+    --au-glass-hi: color-mix(in srgb, var(--ctp-surface1) 92%, var(--ctp-base));
+  }
+  html[data-skin="aurora"] #hdr,
+  html[data-skin="aurora"] #bottom-nav { background: var(--au-glass); }
+}
+
+/* ── 16 · The other pages ───────────────────────────────────────────────── */
+/* Settings, Setup, Plots and Control are separate documents with their own
+   variable sets.  They get the same palette so the product reads as one. */
+
+html[data-skin="aurora"] {
+  --danger:      var(--ctp-red);
+  --ok:          var(--ctp-green);
+  --input-bg:    var(--chipbg);
+  --hover-bg:    var(--accent-weak);
+  --active-bg:   color-mix(in srgb, var(--accent) 18%, transparent);
+  --card-inset:  var(--surface-2);
+  --btn-sec-bg:  var(--chipbg);
+}
+
+/* The settings shell: sidebar and sections become glass like the dashboard. */
+html[data-skin="aurora"] header {
+  background: linear-gradient(180deg,
+      color-mix(in srgb, var(--au-ground-1) 90%, transparent),
+      color-mix(in srgb, var(--au-ground-1) 66%, transparent));
+  backdrop-filter: blur(var(--au-blur)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--au-blur)) saturate(150%);
+  border-bottom: 1px solid var(--au-hairline);
+}
+html[data-skin="aurora"] .sidebar {
+  background: var(--au-glass);
+  border-right: 1px solid var(--au-hairline);
+  backdrop-filter: blur(var(--au-blur)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--au-blur)) saturate(150%);
+}
+html[data-skin="aurora"] .sidebar a { border-radius: 0 10px 10px 0; margin-right: 8px; }
+html[data-skin="aurora"] .sidebar a.active {
+  background: var(--active-bg);
+  border-left-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+html[data-skin="aurora"] main > section,
+html[data-skin="aurora"] .layout section {
+  background: var(--au-glass);
+  border: 1px solid var(--au-hairline);
+  border-radius: var(--radius);
+  backdrop-filter: blur(var(--au-blur)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--au-blur)) saturate(150%);
+  box-shadow: var(--shadow-sm);
+}
+html[data-skin="aurora"] section h2 {
+  color: var(--accent);
+  border-bottom: 1px solid var(--au-hairline);
+  letter-spacing: -.01em;
+}
+html[data-skin="aurora"] .field.row {
+  background: var(--input-bg);
+  border: 1px solid var(--au-hairline);
+  border-radius: 10px;
+}
+html[data-skin="aurora"] .field.row:hover { background: var(--hover-bg); border-color: var(--accent-weak); }
+html[data-skin="aurora"] .list-item {
+  background: var(--card-inset);
+  border: 1px solid var(--au-hairline);
+  border-radius: 12px;
+}
+html[data-skin="aurora"] .section-actions { border-top: 1px solid var(--au-hairline); }
+html[data-skin="aurora"] input[type="password"],
+html[data-skin="aurora"] input[type="email"],
+html[data-skin="aurora"] input[type="url"],
+html[data-skin="aurora"] textarea {
+  border-radius: 10px;
+  border: 1px solid var(--au-hairline);
+  background: var(--input-bg);
+  color: var(--fg);
+}
+html[data-skin="aurora"] button {
+  border-radius: 10px;
+  font-weight: 600;
+}
+/* The settings page styles bare <button> as the primary action. */
+html[data-skin="aurora"] main button:not(.secondary):not(.danger):not(.small),
+html[data-skin="aurora"] .section-actions button:not(.secondary):not(.danger) {
+  background: linear-gradient(135deg, var(--ctp-mauve), var(--ctp-blue));
+  color: var(--ctp-crust);
+}
+html[data-skin="aurora"] button.secondary { background: var(--btn-sec-bg); color: var(--fg); }
+html[data-skin="aurora"] button.danger    { background: var(--danger); color: var(--ctp-crust); }
+html[data-skin="aurora"] input[type="checkbox"] { accent-color: var(--accent); }
+html[data-skin="aurora"] a { color: var(--accent); }
+
+/* Version badge sits on glass now — give it enough contrast to be legible. */
+html[data-skin="aurora"] #app-version-badge { color: color-mix(in srgb, var(--fg) 42%, transparent) !important; }
+
+/* ── 17 · Inline colours ────────────────────────────────────────────────── */
+/* The dashboard writes literal hex colours into style attributes in dozens of
+   places, and builds many of them at runtime by concatenation (including the
+   `#rrggbbaa` form).  An attribute selector cannot express "this hex followed
+   by an optional alpha pair", and a blanket rule repaints backgrounds as text.
+   So the inline case is handled in aurora.js by the SAME hue-snap the canvas
+   hook uses — one rule, one implementation.  Nothing to declare here. */

@@ -1,5 +1,95 @@
 # Changelog
 
+## 16.71.0
+### Added
+- **A new look: the Aurora skin, and the background is the house's own
+  current.** The dashboard has been rebuilt around a Catppuccin palette — glass
+  cards over a dark (or Latte-light) ground, a floating navigation rail, a type
+  scale with tabular figures, and a live hero above the device cards showing
+  what the house is drawing right now on a banded gauge, next to today's energy,
+  today's cost, the solar share and the biggest consumer.
+  - The background is a circuit: conductors with 45° elbows, junction nodes, and
+    **charge travelling along them at a rate taken from the live draw**. At night
+    it is nearly still; when the oven goes on it comes alive. Measured across the
+    load range, the animated pixels go from **862 at idle to ~14 000 at peak**,
+    and the wires deliberately fade as the current rises so the eye follows the
+    charge rather than the wiring. A mains waveform along the bottom edge grows
+    its amplitude with the same number.
+  - The same value drives `--load-hue`, so the ribbons, the gauge and the sparks
+    all shift together from teal (idle) through green, gold and amber to rose
+    (peak). The colour is not decoration next to the data; it *is* the data.
+  - Cost discipline: 30 fps, device pixel ratio capped at 1.5, paused while the
+    tab is hidden, and no pulses at all under `prefers-reduced-motion`. Measured
+    against the same page with the canvas hidden: **40.7 fps vs 41.3 fps**.
+- **The classic view is untouched and stays one click away.** Settings → Display
+  → *Design* switches between **Aurora** (new default) and **Classic (up to
+  v16.70)**. This is not a promise, it is a structural fact and it is tested:
+  `_inject_skin(html, "classic")` is the identity function, and **all 211 rules**
+  in `aurora.css` are scoped to `html[data-skin="aurora"]`, an attribute the
+  classic page never carries. Serving the same dashboard from v16.70.0 and from
+  this build with the skin off produces byte-identical HTML apart from the 14
+  new translation strings in the injected i18n map, which nothing in the classic
+  page reads.
+- **The 41 canvases and every inline colour now belong to one palette.** The
+  dashboard drew its charts with **91 different literal hex colours** — Material
+  greens beside Tailwind reds beside Flat-UI blues — which is what made the
+  charts read as a different product from the page around them. Instead of a
+  lookup table that goes stale with the next chart, a colour is snapped by *hue*
+  onto the nearest Catppuccin accent, in one place, for both the canvas context
+  and inline `style` attributes.
+  - 🔴 Lightness carries a colour's *role*, and replacing it destroys pairs. The
+    NILM badges are "a pale tint behind dark text of the same hue"; mapping both
+    onto one accent made them the same colour and the text vanished. So
+    mid-tones (L 0.32‥0.72) are identity colours and become the accent outright,
+    while tints and deep shades keep their own lightness and only have their hue
+    moved. Greys, near-black and near-white are left exactly as they are, which
+    is why axis labels and grid lines still read as structure.
+  - A contrast guard runs after the mapping: if an element carries its own solid
+    background and its text no longer stands on it, the text is flipped to ink
+    or paper. It was written because the scheduler's duration pills are white on
+    raw orange, which became white on Catppuccin yellow — 1.3:1.
+
+### Fixed
+- **Demo mode had a live view that never updated.** `DemoMultiLivePoller` has
+  existed since the demo feature shipped and had **no call site**: the poller
+  was always the HTTP one, and `demo://house` is not a reachable host, so every
+  demo user's Live tab sat at "pending" forever while the history tabs worked.
+  Demo devices are now routed to the generator.
+- **The demo house drew exactly 0 W for hours every evening.** The generator's
+  random walk is an AR(1) process with `a=0.985, sigma=18`, which settles at a
+  standard deviation of `18/sqrt(1-0.985²) = 104 W` — wider than the night-time
+  base load — so `max(0.0, …)` clamped the total to zero. The walk is now
+  bounded and the house has a 45 W standby floor. Over a full day it stays
+  between **45 W and ~3.4 kW**, and never reads nothing.
+- **The Weather tab showed a Python error instead of "no data".** `dispatch()`
+  contains `import time as _t` in its `ev_sessions` branch, which makes `_t`
+  local to the whole 3 200-line method — so the translator call 1 300 lines
+  earlier raised `UnboundLocalError: cannot access local variable '_t'` and the
+  message reached the user's screen. The alias is now `_time`. A test walks
+  every function in the package and fails on any name read before its own local
+  import binding; re-introducing the original line makes it fail.
+- **Demo devices were labelled with their translation keys.** Every screen
+  showed `demo.device.house_3p` instead of "Demo House (3-phase)". The name is
+  now resolved once, in the config loader, so all thirty-odd consumers inherit
+  it and the next save migrates the key away. A name a person typed is returned
+  untouched, dots and all.
+- **The Battery tab was hard-coded German** whatever language was selected —
+  "Batteriespeicher", "Ladestand", "Vollzyklen", "Wirkungsgrad". All 21 strings
+  now go through `t()` and are translated into all nine languages.
+- **Wide tables had no scroll container on a phone.** The calibration log ran
+  445 px wide in a 374 px pane with nothing between it and the page to scroll.
+  Under the Aurora skin a narrow-viewport table scrolls inside itself.
+
+### Notes
+- Aurora is the default for new and existing installations. Nothing is removed:
+  the classic design is a picker away and is covered by its own tests.
+- Both skins have a light and a dark variant; the existing Theme setting is
+  unchanged and works in both.
+- Verified with headless Chrome across every one of the 24 tabs in dark, light
+  and at 390 px, 820 px and 1440 px — checking horizontal overflow, text drawn
+  on a background of its own colour, zero-size text, and translation keys left
+  in the DOM.
+
 ## 16.70.0
 ### Changed
 - **The dashboard no longer stalls on a cold cache — heavy tabs answer in

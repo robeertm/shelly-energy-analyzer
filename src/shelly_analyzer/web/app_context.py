@@ -123,6 +123,13 @@ class AppState:
         if new_lang == getattr(self, "lang", None):
             return
         self.lang = new_lang
+        # The dispatcher translates its own strings and holds its own copy.
+        dispatcher = getattr(self, "_dispatcher", None)
+        if dispatcher is not None:
+            try:
+                dispatcher.lang = new_lang
+            except Exception:
+                pass
         try:
             from shelly_analyzer.web import _render_dashboard_html, _render_plots_html, _render_control_html
             self._dashboard_html = _render_dashboard_html(self)
@@ -211,7 +218,7 @@ class AppState:
         dispatcher = getattr(self, "_dispatcher", None)
         if dispatcher is not None:
             try:
-                dispatcher.reload(cfg)
+                dispatcher.reload(cfg, lang=getattr(self, "lang", None))
             except Exception:
                 pass
 

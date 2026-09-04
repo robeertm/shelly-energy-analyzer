@@ -81,7 +81,11 @@ def gen_sample(device: DeviceConfig, t: float, st: DemoState) -> Dict[str, Dict[
     # Small random-walk per device to avoid perfectly smooth/linear curves
     p_rw = st.rw_p.get(device.key, 0.0)
     v_rw = st.rw_v.get(device.key, 0.0)
-    p_rw = 0.985 * p_rw + rnd.gauss(0.0, 18.0)
+    # 🔴 Bounded.  An AR(1) walk with a=0.985 and sigma=18 settles at a standard
+    # deviation of 18/sqrt(1-0.985**2) = 104 W — larger than the night-time base
+    # load, so `max(0.0, ...)` below pinned the house at exactly 0 W for hours
+    # every evening.  A real house never draws nothing.
+    p_rw = max(-90.0, min(90.0, 0.985 * p_rw + rnd.gauss(0.0, 18.0)))
     v_rw = 0.990 * v_rw + rnd.gauss(0.0, 0.08)
     st.rw_p[device.key] = p_rw
     st.rw_v[device.key] = v_rw
@@ -95,7 +99,10 @@ def gen_sample(device: DeviceConfig, t: float, st: DemoState) -> Dict[str, Dict[
     peak2 = 1600.0 * math.exp(-((ph - 0.78) / 0.07) ** 2)   # ~18:45
     noise = 60.0 * math.sin(2 * math.pi * (ph * 6.0)) + 40.0 * math.sin(2 * math.pi * (ph * 17.0))
     # Add stochastic jitter + random-walk component (keeps it "alive")
-    p_total = max(0.0, base + peak1 + peak2 + noise + p_rw + rnd.gauss(0.0, 45.0))
+    # Standby floor: fridge, router, standby losses.  Clamping to zero would
+    # show a house that has been disconnected from the grid.
+    STANDBY_W = 45.0
+    p_total = max(STANDBY_W, base + peak1 + peak2 + noise + p_rw + rnd.gauss(0.0, 45.0))
 
     # Add a few deterministic "events"
     # Kettle event around morning and evening

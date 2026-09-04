@@ -46,6 +46,30 @@ def plotly_js():
     )
 
 
+@bp.route("/static/aurora.css")
+@bp.route("/static/aurora.js")
+def aurora_skin_asset():
+    """Serve the Aurora skin's stylesheet and enhancement script.
+
+    Both are requested with ``?v=<app version>``, so they may be cached hard —
+    an update changes the URL.
+    """
+    from shelly_analyzer.web import skin_asset
+    name = request.path.rsplit("/", 1)[-1]
+    ctype = ("text/css; charset=utf-8" if name.endswith(".css")
+             else "application/javascript; charset=utf-8")
+    try:
+        body = skin_asset(name)
+    except (FileNotFoundError, OSError):
+        logger.warning("Aurora skin asset missing: %s", name)
+        return Response(b"", status=404, content_type=ctype)
+    return Response(
+        body,
+        content_type=ctype,
+        headers={"Cache-Control": "public, max-age=604800, immutable"},
+    )
+
+
 @bp.route("/widget.js")
 def widget_js():
     from flask import request as _req

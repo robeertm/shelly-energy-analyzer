@@ -318,6 +318,7 @@ const SECTIONS = [
   {id:"health", title:"Health Check", group:"Basic", custom:true},
   {id:"ui", title:"Display", group:"Basic", fields:[
     {key:"ui.language", label:"Language", type:"select", opts:Object.entries(LANGS)},
+    {key:"ui.skin", label:"Design", type:"select", opts:[["aurora","Aurora (glass + motion)"],["classic","Classic (up to v16.70)"]], hint:"Aurora is the new look. Classic is the design shipped up to v16.70."},
     {key:"ui.theme", label:"Theme", type:"select", opts:[["auto","Auto"],["light","Light"],["dark","Dark"]]},
     {key:"ui.plot_theme_mode", label:"Plot theme", type:"select", opts:[["auto","Auto"],["day","Day"],["night","Night"]]},
     {key:"ui.live_poll_seconds", label:"Live polling (s)", type:"number", step:"0.1"},
@@ -1020,7 +1021,7 @@ function renderDevices() {
             👁
           </label>
           <button type="button" class="secondary small" onclick="probeDevice('${esckey}')" title="${T("settings.devices.probe","Test connection")}">🔌</button>
-          <button type="button" class="small" onclick="saveDevice('${esckey}')">💾 ${T("settings.btn.save","Save")}</button>
+          <button type="button" class="small" onclick="saveDevice('${esckey}')">${T("settings.btn.save","💾 Save")}</button>
           <button type="button" class="small danger" onclick="deleteDevice('${esckey}')">✕</button>
         </div>
       </div>

@@ -5167,7 +5167,7 @@ class ActionDispatcher:
 
         if action == "ev_sessions":
             try:
-                import time as _t
+                import time as _time   # NOT _t: that name is the translator, and a local binding here shadowed it across the whole method
                 from shelly_analyzer.services.ev_charging_log import detect_charging_sessions, get_monthly_summary
                 dev_key = str(getattr(self.cfg.ev_charging, "wallbox_device_key", "") or "")
                 if not dev_key:
@@ -5217,7 +5217,7 @@ class ActionDispatcher:
                     if (
                         _cached is not None
                         and _cached[0] == _resp_token
-                        and (_t.time() - _cached[1]) < self._ev_resp_ttl
+                        and (_time.time() - _cached[1]) < self._ev_resp_ttl
                     ):
                         return {"ok": True, "data": _cached[2]}
 
@@ -5343,7 +5343,7 @@ class ActionDispatcher:
                     ],
                 }
                 with self._ev_resp_lock:
-                    self._ev_resp_cache[_resp_key] = (_resp_token, _t.time(), _payload)
+                    self._ev_resp_cache[_resp_key] = (_resp_token, _time.time(), _payload)
                 return {"ok": True, "data": _payload}
             except Exception as e:
                 return {"ok": False, "error": str(e)}

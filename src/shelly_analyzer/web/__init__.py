@@ -101,6 +101,65 @@ def _inject_version_badge(html: str) -> str:
     return html + badge
 
 
+# ── Aurora skin ───────────────────────────────────────────────────────────
+# The skin is a stylesheet plus a small enhancement script, injected into the
+# already-rendered page.  Nothing in the page templates knows about it, so the
+# classic skin renders byte-for-byte the way it always has.
+
+_SKIN_DIR = Path(__file__).parent / "static"
+
+
+def skin_asset(name: str) -> bytes:
+    """Read one skin asset (``aurora.css`` / ``aurora.js``) from disk."""
+    if name not in ("aurora.css", "aurora.js"):
+        raise FileNotFoundError(name)
+    return (_SKIN_DIR / name).read_bytes()
+
+
+def active_skin(state: Any) -> str:
+    """The configured skin, normalised.  Anything unknown means classic —
+    an unreadable config must never leave the user without a usable page."""
+    try:
+        val = str(getattr(state.cfg.ui, "skin", "aurora") or "").strip().lower()
+    except Exception:
+        return "classic"
+    return "aurora" if val == "aurora" else "classic"
+
+
+def _inject_skin(html: str, skin: str) -> str:
+    """Stamp the skin on <html> and pull in its stylesheet and script.
+
+    Returns *html* unchanged for the classic skin, so there is exactly one
+    code path difference between the two and it is this function.
+    """
+    if skin != "aurora":
+        return html
+    from shelly_analyzer import __version__
+
+    if 'data-skin=' not in html:
+        idx = html.find("<html")
+        if idx >= 0:
+            end = html.find(">", idx)
+            if end > idx:
+                html = html[:end] + ' data-skin="aurora"' + html[end:]
+
+    v = str(__version__)
+    link = '<link rel="stylesheet" href="/static/aurora.css?v=%s">' % v
+    script = '<script defer src="/static/aurora.js?v=%s"></script>' % v
+
+    if link not in html:
+        if "</head>" in html:
+            html = html.replace("</head>", link + "\n</head>", 1)
+        else:
+            html = link + html
+    if script not in html:
+        if "</body>" in html:
+            html = html.replace("</body>", script + "\n</body>", 1)
+        else:
+            html = html + script
+    return html
+
+
 def _render_dashboard_html(state: "AppState") -> bytes:
     """Render the main dashboard HTML using the existing template engine."""
     from shelly_analyzer.web.app_context import AppState  # noqa: F811
@@ -218,7 +277,7 @@ def _render_dashboard_html(state: "AppState") -> bytes:
     # template itself) already redirects to /settings#sec-devices, so no
     # extra icon injection is needed here — there was previously a 🔧
     # button alongside ⚙ which doubled up after v16.17.0.
-    return _inject_version_badge(rendered).encode("utf-8")
+    return _inject_version_badge(_inject_skin(rendered, active_skin(state))).encode("utf-8")
 
 
 def _render_control_html(state: "AppState") -> bytes:
@@ -271,7 +330,7 @@ def _render_control_html(state: "AppState") -> bytes:
         "t_job_started": _t(lang, "web.job_started"),
     }
     rendered = _render_template(tpl, values)
-    return _inject_version_badge(rendered).encode("utf-8")
+    return _inject_version_badge(_inject_skin(rendered, active_skin(state))).encode("utf-8")
 
 
 def _render_plots_html(state: "AppState") -> bytes:
@@ -324,7 +383,7 @@ def _render_plots_html(state: "AppState") -> bytes:
     rendered = _render_template_tokens(tpl, values)
     # No version badge in plots — it's embedded as an iframe in the dashboard
     # which already has its own badge, resulting in a duplicate.
-    return rendered.encode("utf-8")
+    return _inject_skin(rendered, active_skin(state)).encode("utf-8")
 
 
 def create_app(config_path: Optional[str] = None) -> Flask:

@@ -177,13 +177,26 @@ class BackgroundServiceManager:
             return
 
         try:
-            from shelly_analyzer.services.live import MultiLivePoller
+            from shelly_analyzer.services.live import MultiLivePoller, DemoMultiLivePoller
 
-            self._live_poller = MultiLivePoller(
-                devices=list(self.cfg.devices),
-                download_cfg=self.cfg.download,
-                poll_seconds=float(self.cfg.ui.live_poll_seconds),
-            )
+            # Demo devices have no reachable host (``demo://…``); polling them
+            # over HTTP yields nothing but timeouts, so the live view stays
+            # empty forever. Route those to the generator instead.
+            devices = list(self.cfg.devices)
+            demo_devices = [d for d in devices
+                            if str(getattr(d, "host", "")).startswith("demo://")]
+            if demo_devices and len(demo_devices) == len(devices):
+                self._live_poller = DemoMultiLivePoller(
+                    devices=devices,
+                    demo_cfg=self.cfg.demo,
+                    poll_seconds=float(self.cfg.ui.live_poll_seconds),
+                )
+            else:
+                self._live_poller = MultiLivePoller(
+                    devices=devices,
+                    download_cfg=self.cfg.download,
+                    poll_seconds=float(self.cfg.ui.live_poll_seconds),
+                )
             self._live_poller.start()
 
             # Start feed thread: reads from poller queue and feeds LiveStateStore
