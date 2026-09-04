@@ -56,6 +56,13 @@ jobs:
             "*.db"
             ".DS_Store"
             "release_notes.md"
+            # The three archives are built one after another into the same
+            # directory, so without this each one packs the ones before it:
+            # the Linux ZIP shipped the Windows and macOS ZIPs inside it and
+            # came to 73 MB instead of 18, and the in-app updater — which picks
+            # by platform suffix — downloaded all of that to every Linux box
+            # and unpacked two stray archives into the install directory.
+            "shelly_energy_analyzer_*.zip"
           )
 
           # Build one source bundle and name it per platform (same content, different start script)
