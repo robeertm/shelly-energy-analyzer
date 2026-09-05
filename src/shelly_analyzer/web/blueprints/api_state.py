@@ -306,6 +306,28 @@ def api_state():
         except Exception:
             pass
 
+    # Which tile hangs behind which other tile. Without this the Live hero adds a
+    # sub-meter to the very parent that already contains it: a 1 960 W water
+    # heater fed through a 2 281 W house meter made "now" read 4 288 W instead
+    # of 2 327 W.
+    # Only a parent that is itself a DEVICE here counts — a main-meter id (the
+    # calibration cascade) is not a tile and cannot double-count.
+    try:
+        _cfg2 = getattr(state, "cfg", None)
+        _dev_cfgs = list(getattr(_cfg2, "devices", []) or []) if _cfg2 else []
+        _parent_of = {}
+        for _d in _dev_cfgs:
+            _k = str(getattr(_d, "key", "") or "").strip()
+            _p = str(getattr(_d, "parent", "") or "").strip()
+            if _k and _p and _p != _k:
+                _parent_of[_k] = _p
+        _tile_keys = {str(t.get("key") or "") for t in devices_list}
+        for _t in devices_list:
+            _p = _parent_of.get(str(_t.get("key") or ""), "")
+            _t["parent"] = _p if _p in _tile_keys else ""
+    except Exception:
+        pass
+
     # Chain-aware "today" cost per tile (they depend on each other): grid nets
     # import@tariff − export@feed-in, owner circuits pay only their grid share,
     # tenant pays full, PV/battery cost nothing. Safe no-op if it can't compute.

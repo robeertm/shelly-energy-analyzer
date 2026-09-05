@@ -1622,3 +1622,56 @@ html[data-skin="aurora"] .sparkline-wrap[data-metric]:hover { transform: transla
   html[data-skin="aurora"] .co2fc-cell:hover,
   html[data-skin="aurora"] .sparkline-wrap[data-metric]:hover { transform: none; }
 }
+
+/* ── 22 · Pause the charge ──────────────────────────────────────────────
+   A viewer who does not want moving pixels should not have to leave the skin
+   to stop them. It sits in the hero head, hard right, and remembers itself. */
+html[data-skin="aurora"] .au-anim-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .04em;
+  color: var(--muted);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--au-hairline);
+  background: var(--au-glass);
+  cursor: pointer;
+  align-self: center;
+  transition: color var(--au-hover, 190ms cubic-bezier(.2,.7,.3,1)),
+              border-color var(--au-hover, 190ms cubic-bezier(.2,.7,.3,1)),
+              transform var(--au-hover, 190ms cubic-bezier(.2,.7,.3,1));
+}
+html[data-skin="aurora"] .au-anim-btn:hover {
+  color: var(--fg);
+  border-color: var(--au-edge);
+  transform: translateY(-1px);
+}
+html[data-skin="aurora"] .au-anim-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+html[data-skin="aurora"] .au-anim-ico { font-size: 11px; line-height: 1; }
+/* Paused reads as a state, not just a different glyph. */
+html[data-skin="aurora"] .au-anim-btn[aria-pressed="true"] {
+  color: hsl(var(--load-hue) var(--load-sat) 72%);
+  border-color: hsl(var(--load-hue) var(--load-sat) 55% / .40);
+}
+html[data-skin="aurora"][data-theme="light"] .au-anim-btn[aria-pressed="true"] {
+  color: hsl(var(--load-hue) var(--load-sat) 32%);
+}
+/* On a narrow hero the word goes; the icon and the label still carry it. */
+@media (max-width: 560px) {
+  html[data-skin="aurora"] .au-anim-lbl { display: none; }
+  html[data-skin="aurora"] .au-anim-btn { padding: 5px 9px; }
+}
+@media (hover: none) {
+  html[data-skin="aurora"] .au-anim-btn:hover { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-skin="aurora"] .au-anim-btn { transition: none; }
+}

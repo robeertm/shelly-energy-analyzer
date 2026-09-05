@@ -421,13 +421,42 @@ def test_english_ui_never_shows_german():
     assert len(calls) > 400, f"only {len(calls)} t() calls found — did the scan break?"
 
     from shelly_analyzer.i18n import _I18N
-    german = re.compile(r"[äöüÄÖÜß]|\b(der|die|das|und|nicht|werden|Bitte|Geräte|"
-                        r"keine|Keine|Zähler|löschen|eingeben|Rohdaten|Verbrauch)\b")
+    # 🔴 The first version of this guard listed a handful of German words and
+    # therefore passed while 20 fallbacks read "Kumuliert", "Bewertung",
+    # "Verlorene Energie", "Konfidenz", "Basierend auf" and the German weekday
+    # abbreviations to every English user. A word list cannot be the detector;
+    # these are the endings and forms that do not occur in English text.
+    german = re.compile(
+        r"[äöüÄÖÜß]"
+        r"|\b(der|die|das|und|nicht|werden|Bitte|Geräte|keine|Keine|Zähler|"
+        r"löschen|eingeben|Rohdaten|Verbrauch|Kumuliert|Bewertung|Erneuerbare|"
+        r"Konfidenz|Verlauf|Anteil|Verlorene|Basierend|Analyse|Typen|erkannt|"
+        r"Mo|Di|Mi|Do|Sa|So)\b"
+        r"|\w+(ung|ungen|keit|heit|schaft|lich|isch)\b")
     leaks = [(k, v) for k, v in calls.items()
              if k not in _I18N.get("en", {}) and german.search(v)]
     assert not leaks, ("keys with no English translation and a German fallback:\n  "
                        + "\n  ".join(f"{k}: {v[:60]!r}" for k, v in leaks[:8]))
     print(f"OK  {len(calls)} dashboard keys — none falls back to German in English")
+
+
+def test_the_german_ui_is_actually_german():
+    """The mirror of the guard above, and the one that was missing: a key with
+    no German entry falls back to its English text, so a German page read
+    "Cost breakdown", "Month projection", "Daily average", "tree-days".
+    Measured before the fix: 234 of 615 requested keys had no entry in ANY
+    language, which is 38 % of the dashboard."""
+    from shelly_analyzer.i18n import t as _tt
+    webdash = open(WEBDASH_PATH, encoding="utf-8").read()
+    tpl = webdash[webdash.index('_HTML_TEMPLATE = """'):webdash.index('_PLOTS_TEMPLATE = """')]
+    keys = set(re.findall(r"""\bt\(\s*'([a-z0-9_.]+)'""", tpl))
+    # keys assembled at runtime ("appliance." + id) are not real keys
+    keys = {k for k in keys if not k.endswith(".")}
+    assert len(keys) > 400, f"only {len(keys)} keys found — did the scan break?"
+    missing = sorted(k for k in keys if _tt("de", k) == k)
+    assert not missing, (f"{len(missing)} dashboard keys have no German and fall "
+                         f"back to English: {missing[:8]}")
+    print(f"OK  all {len(keys)} dashboard keys have a German translation")
 
 
 def test_dispatcher_speaks_the_configured_language():
@@ -891,6 +920,84 @@ def test_the_clock_follows_the_ui_language():
     print("OK  the forecast formats its clock from <html lang>")
 
 
+def test_a_submeter_is_not_counted_twice():
+    """🔴 Reported from a live installation: "now" read 4 288 W while the tiles
+    showed a house meter at 2 281 W, a wallbox at 46 W and a water heater at
+    1 960 W. 2281 + 46 + 1960 = 4287. The heater is wired BEHIND the house
+    meter, so its load is already inside the 2 281 W — the hero added it a
+    second time. The wiring was already configured (parent = the house meter's
+    key); the hero simply never looked at it, and /api/state did not carry the
+    field."""
+    js = _strip_js_comments(open(JS_PATH, encoding="utf-8").read())
+    assert "function counts(d)" in js, "the hero has no notion of a sub-meter"
+    assert "if (!counts(d)) continue;" in js, "the sum does not use it"
+    # a parent that has GIVEN UP the child must still count it, or the total loses it
+    fn = js[js.index("function counts(d)"):]
+    fn = fn[:fn.index("var totalW")]
+    assert "net_of_children" in fn, "a net parent would silently drop its child"
+
+    api = open(os.path.join(SRC, "web", "blueprints", "api_state.py"), encoding="utf-8").read()
+    assert '_t["parent"] = _p if _p in _tile_keys else ""' in api, \
+        "/api/state does not expose which tile hangs behind which"
+
+    # Replay the rule on Robert's real numbers, in both configurations.
+    def total(tiles):
+        shown = {t["key"]: t for t in tiles}
+        out = 0.0
+        for t in tiles:
+            p = shown.get(t.get("parent") or "")
+            if p and t["key"] not in (p.get("net_of_children") or []):
+                continue
+            out += t["power_w"]
+        return out
+
+    gross = [
+        {"key": "haus",  "power_w": 2281.0, "parent": ""},
+        {"key": "wall",  "power_w":   46.0, "parent": ""},
+        {"key": "boil",  "power_w": 1960.0, "parent": "haus"},
+        {"key": "light", "power_w":    0.0, "parent": "haus"},
+    ]
+    assert sum(t["power_w"] for t in gross) == 4287.0, "the reported symptom changed"
+    assert total(gross) == 2327.0, total(gross)
+
+    # Same house, but with display-subtraction on: the parent shows net and the
+    # children must be added back. The total has to be identical.
+    net = [dict(t) for t in gross]
+    net[0]["power_w"] = 2281.0 - 1960.0
+    net[0]["net_of_children"] = ["boil", "light"]
+    assert total(net) == 2327.0, total(net)
+    print("OK  a sub-meter is counted once: 4287 W -> 2327 W, either configuration")
+
+
+def test_the_animation_can_be_paused_and_stays_paused():
+    """A pause that the watchdog undoes 1.3 s later is not a pause."""
+    js = _strip_js_comments(open(JS_PATH, encoding="utf-8").read())
+    assert "var paused = false;" in js
+    assert 'localStorage.getItem("au-anim")' in js, "the choice is not remembered"
+    assert "if (raf || !alive || paused) return;" in js, "schedule ignores the pause"
+    wd = js[js.index("setInterval(function () {"):]
+    wd = wd[:wd.index("}, 1300);")]
+    assert "paused" in wd, "🔴 the watchdog would restart the animation 1.3 s later"
+    vis = js[js.index('document.addEventListener("visibilitychange"'):]
+    vis = vis[:vis.index("});")]
+    assert "!paused" in vis, "coming back to the tab would restart it"
+    # resuming must not rewind the slow layers
+    sp = js[js.index("function setPaused(v)"):]
+    sp = sp[:sp.index("document.documentElement.setAttribute")]
+    assert "prev = 0;" in sp and "t0 = 0" not in sp, \
+        "resuming resets t0 and makes the field jump"
+    # the control itself
+    assert 'id="au-anim"' in js and 'aria-pressed' in js, "no button, or no state on it"
+    assert "function wireAnimButton" in js
+    css = _strip_css_comments(open(CSS_PATH, encoding="utf-8").read())
+    assert ".au-anim-btn" in css and ':focus-visible' in css
+    from shelly_analyzer.i18n import t as _tt
+    for lang in LANGS:
+        for key in ("aurora.anim.pause", "aurora.anim.resume", "aurora.anim.short"):
+            assert _tt(lang, key) != key, f"{key} missing for {lang}"
+    print("OK  the pause survives the watchdog, a tab switch and a reload")
+
+
 if __name__ == "__main__":
     test_classic_injection_is_identity()
     test_every_css_rule_is_scoped_to_the_skin()
@@ -908,6 +1015,7 @@ if __name__ == "__main__":
     test_skin_strings_exist_in_every_language()
     test_battery_tab_is_translated()
     test_english_ui_never_shows_german()
+    test_the_german_ui_is_actually_german()
     test_dispatcher_speaks_the_configured_language()
     test_resolve_name()
     test_demo_device_names_resolve_once_at_load()
@@ -930,6 +1038,8 @@ if __name__ == "__main__":
     test_values_are_addressed_by_name_not_by_position()
     test_co2_forecast_strings_are_translated()
     test_the_clock_follows_the_ui_language()
+    test_a_submeter_is_not_counted_twice()
+    test_the_animation_can_be_paused_and_stays_paused()
     test_the_floating_rail_leaves_room_at_the_end()
     test_phones_get_a_real_background()
 
