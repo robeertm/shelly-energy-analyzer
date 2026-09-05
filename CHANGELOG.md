@@ -1,5 +1,65 @@
 # Changelog
 
+## 16.73.0
+### Changed
+- **The background drifts with the load instead of twitching at every change,
+  and everything flows one way.** Both were real defects, not taste:
+  - The charge's position was computed as `elapsed time × speed`. With the
+    speed following a gliding load, *every* change moved the pulses by
+    `elapsed × Δspeed` — an error that grows with how long the page has been
+    open. Replaying the real filter: **1 190 px in a single frame after five
+    minutes, 7 134 px after half an hour**, on lanes barely 1 400 px long. The
+    pulses were teleporting several times a second. Distance is integrated
+    frame by frame now, so a load change alters the **pace** and nothing else:
+    **under 4 px per frame at any uptime.**
+  - The pulse loop reversed direction on every odd lane, and branches hanging
+    off the right-hand bus were built inwards, so their charge ran against the
+    trunks. Lanes are oriented once at build time — the drawn board is
+    unchanged, and the whole picture now drifts one way.
+  - Peak speed drops from 266 px/s to 120 px/s, and the number of pulses no
+    longer follows the load: a pulse used to appear or vanish each time the
+    gliding value crossed a rounding boundary. The load sets pace, brightness
+    and colour.
+- **The live card's detail panel was rebuilt.** Measured on a 1 143 px card:
+  every value sat in the left 270 px, leaving **873 px (76 %) empty**, under a
+  294 px stack of five identical full-width sparklines.
+  - The readings are tiles now, each carrying the colour its own curve is drawn
+    in; six fit one row on a desktop and wrap to three on a phone.
+  - The phase split is a bar with the percentages in it, plus one aligned row
+    per phase — three side by side on a desktop — instead of the run-on string
+    `229.3 V · 0.52 A · 112 W`.
+  - The sparklines share the width two-up, each with its live value in its own
+    header. Dead space **76 % → 0 %**, panel height **547 px → 339 px**.
+  - Every value is addressed by its own hook. The old code wrote `dd[0..3]`
+    positionally, so re-ordering the list would have put the current under the
+    voltage label with nothing raising an error.
+- **The CO₂ 6h forecast reads as a curve.** Each hour is a cell whose fill
+  rises with its intensity, so the six hours can be read at a glance instead of
+  compared as six numbers; the cleanest hour is marked, and the arrow now
+  states the difference from the 14-day trend (`↓ 12`) rather than pointing.
+  The strip wraps to 3×2 on a phone instead of six slivers.
+
+### Fixed
+- **The CO₂ forecast strip was rewritten once a second for data that changes
+  once an hour.** Measured on the running dashboard: 12 polls in 12 s produced
+  **12 full DOM replacements** of the strip and **0 changes** to the payload
+  behind it. Every rebuild threw away the tiles mid-transition — that was the
+  flicker. The strip, the headline figure and the per-device table are now
+  compared against the payload and only touched when it differs: **0
+  replacements while nothing changes, exactly one when it does.**
+- **The whole forecast block spoke English in every language.** Nine keys
+  (`forecast_6h`, `forecast_hint`, `forecast_waiting`, `forecast_label`,
+  `trend_hint`, `avg`, `min`, `max`, and the new `best_hour`) had no
+  translation at all, so a German page read “Based on 14-day trend for this
+  hour…”. German, English and Spanish added.
+- **The forecast formatted its clock with a hard-coded `de-DE`**, so an English
+  or Spanish page still showed German times. It follows `<html lang>` now.
+- **Unreadable labels on the phase bar.** White on the L3 green measured
+  **1.79:1** and on the L2 blue **2.78:1**. The label ink is chosen from each
+  segment's own luminance, clearing 4.9:1 on all three.
+- **Amber and green trend text on the light theme** measured 2.15:1 and 2.28:1
+  on white. Both now come from a token that darkens with the ground: 5.0:1.
+
 ## 16.72.1
 ### Fixed
 - **The floating rail sat on the last card, and a phone had no background at

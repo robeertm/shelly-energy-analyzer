@@ -1164,8 +1164,14 @@ _HTML_TEMPLATE = """<!doctype html>
       --ring: rgba(37,99,235,0.45);
       --ease: cubic-bezier(0.4, 0, 0.2, 1);
       --dur: 0.18s;
+      /* "worse"/"better" text. The bright amber and green are only legible on
+         a dark ground: measured 2.15:1 and 2.28:1 on white. */
+      --sem-up: #b45309;
+      --sem-down: #15803d;
     }}
     :root[data-theme="dark"] {{
+      --sem-up: #f59e0b;
+      --sem-down: #22c55e;
       --bg: #0b0f14;
       --card: #121821;
       --surface-2: #18212c;
@@ -1535,9 +1541,102 @@ _HTML_TEMPLATE = """<!doctype html>
     .soc-badge {{ color: #4caf50; font-weight: 600; }}
     .dev-expand {{ display: none; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }}
     .dev-expand.open {{ display: block; }}
-    .dev-kv {{ display: grid; grid-template-columns: minmax(100px, auto) 1fr; gap: 4px 12px; font-size: 12px; }}
-    .dev-kv dt {{ color: var(--muted); min-width: 100px; }}
-    .dev-kv dd {{ margin: 0; font-weight: 600; }}
+    /* ── Live card detail ──────────────────────────────────────────────
+       The old two-column <dl> parked every value in the left 270px and left
+       three quarters of the card empty. Metrics are tiles now, the phase split
+       is a bar, and the five sparklines share the width instead of stacking. */
+    .dev-metrics {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+      gap: 8px;
+    }}
+    .mtile {{
+      position: relative;
+      display: flex; flex-direction: column; gap: 3px;
+      padding: 8px 10px 9px;
+      border-radius: 10px;
+      background: var(--chipbg);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      min-width: 0;
+    }}
+    /* the tile carries the colour its own sparkline is drawn in */
+    .mtile::before {{
+      content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+      background: var(--mt-accent, var(--accent)); opacity: .85;
+    }}
+    .mtile[data-m="v"]  {{ --mt-accent: #f59e0b; }}
+    .mtile[data-m="a"]  {{ --mt-accent: #10b981; }}
+    .mtile[data-m="q"]  {{ --mt-accent: #ef4444; }}
+    .mtile[data-m="in"] {{ --mt-accent: #a855f7; }}
+    .mtile[data-m="hz"] {{ --mt-accent: #06b6d4; }}
+    .mtile[data-m="pf"] {{ --mt-accent: #94a3b8; }}
+    /* cos φ and Iₙ are symbols; uppercasing them gives "COS Φ" */
+    .mtile[data-m="pf"] .mt-l, .mtile[data-m="in"] .mt-l {{ text-transform: none; }}
+    .mt-l {{
+      font-size: 10px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .5px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }}
+    .mt-v {{ font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }}
+
+    .phase-block {{ margin-top: 10px; }}
+    .pb-head {{
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 8px; font-size: 11px; color: var(--muted); margin-bottom: 5px;
+      text-transform: uppercase; letter-spacing: .4px;
+    }}
+    .pb-spread {{ font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }}
+    .pb-bar {{
+      display: flex; height: 20px; border-radius: 999px; overflow: hidden;
+      background: var(--chipbg); border: 1px solid var(--border);
+    }}
+    .pb-bar i {{
+      display: flex; align-items: center; justify-content: center;
+      min-width: 0; overflow: hidden;
+      transition: width .35s cubic-bezier(.2,.7,.3,1);
+    }}
+    .pb-bar b {{
+      font-size: 10px; font-weight: 700; font-style: normal;
+      white-space: nowrap; padding: 0 4px;
+    }}
+    .pb-rows {{
+      margin-top: 6px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 6px;
+    }}
+    .pb-row {{
+      display: grid; grid-template-columns: 30px repeat(3, 1fr);
+      gap: 6px; align-items: center; font-size: 12px;
+      padding: 5px 8px; border-radius: 8px;
+      background: var(--chipbg); border: 1px solid var(--border);
+      min-width: 0;
+    }}
+    .pb-tag {{
+      font-size: 10px; font-weight: 700; text-align: center;
+      border-radius: 999px; padding: 2px 0;
+    }}
+    .pb-n {{ font-variant-numeric: tabular-nums; text-align: right; color: var(--muted); }}
+    .pb-n.pb-w {{ color: var(--fg); font-weight: 650; }}
+
+    .spark-grid {{ display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 12px; }}
+    @media (min-width: 760px) {{
+      .spark-grid {{ grid-template-columns: 1fr 1fr; }}
+      /* a lone last chart takes the whole row instead of half of one */
+      .spark-grid > .sparkline-wrap:last-child:nth-child(odd) {{ grid-column: 1 / -1; }}
+    }}
+    .spark-grid > .sparkline-wrap {{ margin-top: 0; min-width: 0; }}
+    .sparkline-label {{ display: flex; align-items: center; gap: 6px; }}
+    .sl-dot {{ width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }}
+    .sl-name {{
+      text-transform: uppercase; letter-spacing: .4px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }}
+    .sl-now {{
+      margin-left: auto; font-weight: 700; color: var(--fg);
+      font-variant-numeric: tabular-nums; white-space: nowrap;
+    }}
     /* Switch toggle row */
     .switch-row {{
       display: flex;
@@ -1687,6 +1786,66 @@ _HTML_TEMPLATE = """<!doctype html>
     #chart-detail-canvas:active {{ cursor: grabbing; }}
     .sparkline-wrap[data-metric] {{ cursor: pointer; transition: opacity .15s; }}
     .sparkline-wrap[data-metric]:hover {{ opacity: .7; }}
+    /* ── CO₂ 6h forecast strip ── */
+    .co2fc-card {{ padding: 12px 14px; }}
+    .co2fc-wait {{ font-size: 12px; color: var(--muted); }}
+    .co2fc-head {{
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; flex-wrap: wrap; margin-bottom: 10px;
+    }}
+    .co2fc-title {{
+      font-size: 12px; font-weight: 650; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .5px;
+    }}
+    .co2fc-headright {{ display: flex; align-items: center; gap: 8px; }}
+    .co2fc-best-chip {{
+      font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+      background: rgba(34,197,94,.14); color: var(--sem-down);
+      border: 1px solid rgba(34,197,94,.30); white-space: nowrap;
+    }}
+    .co2fc-upd {{ font-size: 10px; color: var(--muted); }}
+    /* auto-fit: six hours across on a desktop, two or three rows on a phone —
+       never six 55px slivers. */
+    .co2fc-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+      gap: 6px;
+    }}
+    .co2fc-cell {{
+      position: relative;
+      overflow: hidden;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--chipbg);
+      min-height: 98px;
+      isolation: isolate;
+      transition: transform .18s cubic-bezier(.2,.7,.3,1), border-color .18s;
+    }}
+    .co2fc-cell:hover {{ transform: translateY(-2px); }}
+    /* the fill IS the bar chart: read the six hours as a curve, not as six numbers */
+    .co2fc-fill {{
+      position: absolute; left: 0; right: 0; bottom: 0;
+      opacity: .34; z-index: 0; pointer-events: none;
+      border-radius: 0 0 9px 9px;
+    }}
+    .co2fc-body {{
+      position: relative; z-index: 1; height: 100%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 1px; padding: 8px 4px;
+    }}
+    .co2fc-hour {{ font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }}
+    .co2fc-val {{ font-size: 20px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; }}
+    .co2fc-unit {{ font-size: 9px; color: var(--muted); letter-spacing: .3px; }}
+    .co2fc-delta {{
+      font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums;
+      margin-top: 2px; padding: 1px 6px; border-radius: 999px;
+      background: var(--chipbg); color: var(--muted);
+    }}
+    .co2fc-delta.down {{ color: var(--sem-down); }}
+    .co2fc-delta.up {{ color: var(--sem-up); }}
+    .co2fc-wx {{ font-size: 11px; margin-top: 3px; }}
+    .co2fc-cell[data-best="1"] {{ border-color: rgba(34,197,94,.55); }}
+    .co2fc-hint {{ font-size: 10px; color: var(--muted); margin-top: 8px; text-align: center; }}
     /* ── Heatmap ── */
     .hm-calendar {{ overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }}
     .hm-grid {{ display: flex; flex-wrap: nowrap; gap: 2px; }}
@@ -2530,6 +2689,14 @@ function t(k, fbOrVars, maybeVars) {{
   let s = (I18N && I18N[k]) ? I18N[k] : (fb || k);
   if (vars) Object.keys(vars).forEach(function(kk){{ s = s.split('{{'+kk+'}}').join(String(vars[kk])); }});
   return s;
+}}
+// Clock/number formatting follows the UI language from <html lang>, so a
+// French user does not read a German 24h stamp. undefined = browser default.
+function _locale() {{
+  try {{
+    var l = (document.documentElement.getAttribute('lang') || '').trim();
+    return l || undefined;
+  }} catch (e) {{ return undefined; }}
 }}
 
 /* ── State ── */
@@ -4875,16 +5042,70 @@ function _devName(k) {{
   }} catch(e){{}}
   return k;
 }}
+// A metric tile: label over value, carrying the same accent colour its
+// sparkline is drawn in, so the number and the curve read as one thing.
+function _mTile(m, label, value) {{
+  return '<div class="mtile" data-m="' + m + '">' +
+    '<span class="mt-l">' + esc(label) + '</span>' +
+    '<span class="mt-v" data-mv="' + m + '">' + value + '</span></div>';
+}}
+function _mSpark(key, m, label, colour, value) {{
+  return '<div class="sparkline-wrap" data-metric="' + m + '" data-devkey="' + key + '">' +
+    '<div class="sparkline-label">' +
+      '<span class="sl-dot" style="background:' + colour + '"></span>' +
+      '<span class="sl-name">' + esc(label) + '</span>' +
+      '<span class="sl-now" data-slnow="' + m + '">' + (value || '') + '</span>' +
+    '</div>' +
+    '<canvas class="sparkline-sm" id="sp-' + m + '-' + key + '"></canvas></div>';
+}}
+// White on the L3 green measured 1.79:1 — the phase colours are not equally
+// dark, so the label ink has to follow the segment it sits on.
+function _inkOn(hex) {{
+  var h = String(hex).replace('#', '');
+  if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+  var r = parseInt(h.slice(0,2),16)/255, g = parseInt(h.slice(2,4),16)/255, b = parseInt(h.slice(4,6),16)/255;
+  var f = function(v) {{ return v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); }};
+  var L = 0.2126*f(r) + 0.7152*f(g) + 0.0722*f(b);
+  return L > 0.18 ? '#10151f' : '#ffffff';
+}}
+function _phaseBarInner(phases) {{
+  const total = phases.reduce(function(s, ph) {{ return s + Math.abs(ph.power_w || 0); }}, 0) || 1;
+  return phases.map(function(ph, i) {{
+    const pct = Math.round(Math.abs(ph.power_w || 0) / total * 100);
+    var col = _PHASE_COLORS[i] || '#888';
+    return '<i style="width:' + pct + '%;background:' + col + '">' +
+           '<b style="color:' + _inkOn(col) + '">L' + (i+1) + ' ' + pct + '%</b></i>';
+  }}).join('');
+}}
+function _phaseRowsInner(phases) {{
+  return phases.map(function(ph, i) {{
+    return '<div class="pb-row">' +
+      '<span class="pb-tag" style="background:' + (_PHASE_COLORS[i] || '#888') +
+        ';color:' + _inkOn(_PHASE_COLORS[i] || '#888') + '">L' + (i+1) + '</span>' +
+      '<span class="pb-n">' + fmt(ph.voltage_v, 1, 'V') + '</span>' +
+      '<span class="pb-n">' + fmt(ph.current_a, 2, 'A') + '</span>' +
+      '<span class="pb-n pb-w">' + fmt(ph.power_w, 0, 'W') + '</span></div>';
+  }}).join('');
+}}
+function _phaseSpread(phases) {{
+  const total = phases.reduce(function(s, ph) {{ return s + Math.abs(ph.power_w || 0); }}, 0) || 1;
+  const pcts = phases.map(function(ph) {{ return Math.abs(ph.power_w || 0) / total * 100; }});
+  return Math.round(Math.max.apply(null, pcts) - Math.min.apply(null, pcts));
+}}
+
 function devCardHTML(d) {{
   const pc = pwrClass(d.power_w || 0);
   const phases = (d.phases && d.phases.length > 0) ? d.phases : null;
+  // Three phases used to be three run-on strings ("229.3 V · 0.52 A · 112 W").
+  // They are a table: one aligned row each, over a bar that shows the split.
   let phaseHtml = '';
   if (phases) {{
-    phaseHtml = '<dl class="dev-kv" id="kv-phases-' + d.key + '">';
-    phases.forEach(function(ph, i) {{
-      phaseHtml += '<dt>' + t('web.dash.phase', 'Phase') + ' ' + (i+1) + '</dt><dd>' + fmt(ph.voltage_v,1,'V') + ' \xb7 ' + fmt(ph.current_a,2,'A') + ' \xb7 ' + fmt(ph.power_w,0,'W') + '</dd>';
-    }});
-    phaseHtml += '</dl>';
+    phaseHtml = '<div class="phase-block" id="kv-phases-' + d.key + '">' +
+      '<div class="pb-head"><span>' + t('web.kv.balance', 'Phase balance') + '</span>' +
+      '<span class="pb-spread">\u0394 ' + _phaseSpread(phases) + '%</span></div>' +
+      '<div class="pb-bar">' + _phaseBarInner(phases) + '</div>' +
+      '<div class="pb-rows">' + _phaseRowsInner(phases) + '</div>' +
+    '</div>';
   }}
   // Flow devices from the external source (PV/battery) carry no voltage/current/
   // phase data \u2014 only show what's really there, and drop the NILM appliance hint
@@ -4895,18 +5116,9 @@ function devCardHTML(d) {{
   const nilm = showNilm
     ? '<div class="appl-list">' + ((d.appliances && d.appliances.length) ? d.appliances.map(function(a) {{ return '<span class="appl-chip">' + esc(a.icon + ' ' + t('appliance.' + a.id + '.name', a.id)) + '</span>'; }}).join('') : '') + '</div>'
     : '';
-  const inHtml = (hasElec && d.i_n && d.i_n > 0.01) ? '<dl class="dev-kv" id="kv-in-' + d.key + '"><dt>I\u2099 (N)</dt><dd>' + fmt(d.i_n, 2, 'A') + '</dd></dl>' : '';
-  const qHtml = hasElec ? '<dl class="dev-kv" id="kv-q-' + d.key + '"><dt>' + t('web.kv.var', 'Reactive power') + '</dt><dd>' + fmt(d.q_total_var || 0, 1, 'VAR') + '</dd></dl>' : '';
-  let balanceHtml = '';
-  if (hasElec && phases && phases.length > 1) {{
-    const totalP = phases.reduce(function(s, ph) {{ return s + Math.abs(ph.power_w || 0); }}, 0) || 1;
-    balanceHtml = '<dl class="dev-kv" id="kv-bal-' + d.key + '"><dt>' + t('web.kv.balance', 'Phase balance') + '</dt><dd>';
-    balanceHtml += phases.map(function(ph, i) {{
-      const pct = Math.round(Math.abs(ph.power_w || 0) / totalP * 100);
-      return 'L' + (i+1) + '&nbsp;' + pct + '%';
-    }}).join(' \xb7 ');
-    balanceHtml += '</dd></dl>';
-  }}
+  const inHtml = (hasElec && d.i_n && d.i_n > 0.01) ? _mTile('in', 'I\u2099 (N)', fmt(d.i_n, 2, 'A')) : '';
+  const qHtml = hasElec ? _mTile('q', t('web.kv.var', 'Reactive power'), fmt(d.q_total_var || 0, 1, 'VAR')) : '';
+  // (the old "L1 42% · L2 33% · L3 25%" text now lives inside the bar above)
   return (
     '<div class="dev-header">' +
       '<div>' +
@@ -4938,21 +5150,21 @@ function devCardHTML(d) {{
     (d.kind === 'switch' ? '<div class="switch-row" id="sw-' + d.key + '"><span class="switch-label">' + t('live.cards.switch', 'Switch') + ':</span> <span class="switch-state ' + (d.switch_on ? 'on' : 'off') + '">' + (d.switch_on ? t('live.switch.on', 'On') : t('live.switch.off', 'Off')) + '</span> <button class="switch-btn" data-devkey="' + d.key + '">' + t('live.switch.toggle', 'Toggle') + '</button></div>' : '') +
     '<div class="sparkline-wrap" data-metric="w" data-devkey="' + d.key + '"><canvas class="sparkline" id="sp-' + d.key + '"></canvas></div>' +
     (hasElec ? ('<div class="dev-expand">' +
-      '<dl class="dev-kv">' +
-        '<dt>' + t('web.kv.u', 'Voltage') + '</dt><dd>' + fmt(d.voltage_v, 1, 'V') + '</dd>' +
-        '<dt>' + t('web.kv.i', 'Current') + '</dt><dd>' + fmt(d.current_a, 2, 'A') + '</dd>' +
-        '<dt>cos \u03c6</dt><dd>' + (d.pf !== undefined ? fmt(d.pf, 2) : '\u2014') + '</dd>' +
-        '<dt>' + t('web.kv.freq', 'Freq') + '</dt><dd>' + (d.freq_hz !== undefined ? fmt(d.freq_hz, 1, 'Hz') : '\u2014') + '</dd>' +
-      '</dl>' +
-      qHtml +
-      balanceHtml +
+      '<div class="dev-metrics">' +
+        _mTile('v',  t('web.kv.u', 'Voltage'),          fmt(d.voltage_v, 1, 'V')) +
+        _mTile('a',  t('web.kv.i', 'Current'),          fmt(d.current_a, 2, 'A')) +
+        _mTile('pf', 'cos \u03c6',                       (d.pf !== undefined ? fmt(d.pf, 2) : '\u2014')) +
+        _mTile('hz', t('web.kv.freq', 'Freq'),         (d.freq_hz !== undefined ? fmt(d.freq_hz, 1, 'Hz') : '\u2014')) +
+        qHtml + inHtml +
+      '</div>' +
       phaseHtml +
-      inHtml +
-      '<div class="sparkline-wrap" style="margin-top:8px" data-metric="v" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.u', 'Voltage') + '</div><canvas class="sparkline-sm" id="sp-v-' + d.key + '"></canvas></div>' +
-      '<div class="sparkline-wrap" style="margin-top:6px" data-metric="a" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.i', 'Current') + '</div><canvas class="sparkline-sm" id="sp-a-' + d.key + '"></canvas></div>' +
-      '<div class="sparkline-wrap" style="margin-top:6px" data-metric="q" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.var', 'Reactive power') + ' (VAR)</div><canvas class="sparkline-sm" id="sp-q-' + d.key + '"></canvas></div>' +
-      (phases ? '<div class="sparkline-wrap" style="margin-top:6px" data-metric="in" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.chart.neutral_current', 'I\u2099 Neutral (A)') + '</div><canvas class="sparkline-sm" id="sp-in-' + d.key + '"></canvas></div>' : '') +
-      '<div class="sparkline-wrap" style="margin-top:6px" data-metric="hz" data-devkey="' + d.key + '"><div class="sparkline-label">' + t('web.kv.freq', 'Frequency') + ' (Hz)</div><canvas class="sparkline-sm" id="sp-hz-' + d.key + '"></canvas></div>' +
+      '<div class="spark-grid">' +
+        _mSpark(d.key, 'v',  t('web.kv.u', 'Voltage'),                              '#f59e0b', fmt(d.voltage_v, 1, 'V')) +
+        _mSpark(d.key, 'a',  t('web.kv.i', 'Current'),                              '#10b981', fmt(d.current_a, 2, 'A')) +
+        _mSpark(d.key, 'q',  t('web.kv.var', 'Reactive power') + ' (VAR)',          '#ef4444', fmt(d.q_total_var || 0, 1, 'VAR')) +
+        (phases ? _mSpark(d.key, 'in', t('web.chart.neutral_current', 'I\u2099 Neutral (A)'), '#a855f7', fmt(d.i_n || 0, 2, 'A')) : '') +
+        _mSpark(d.key, 'hz', t('web.kv.freq', 'Frequency') + ' (Hz)',               '#06b6d4', (d.freq_hz !== undefined ? fmt(d.freq_hz, 1, 'Hz') : '\u2014')) +
+      '</div>' +
     '</div>') : '') +
     nilm
   );
@@ -5027,49 +5239,58 @@ function updateDeviceCard(card, d) {{
   // Frequency (Hz) sparkline – relative scale (grid freq varies narrowly)
   const sphz = document.getElementById('sp-hz-' + d.key);
   if (sphz && buf) drawSparkline(sphz, wndVals(buf, 'hz'), '#06b6d4', true, false, bt);
-  // Update expand section detail values (voltage, current, cos φ, freq, phases)
+  // Update the detail panel. Every value is addressed by its own data-* hook
+  // inside THIS card, so a changed layout can never shift values onto the wrong
+  // label the way positional dd[0..3] lookups could.
   const exp = card.querySelector('.dev-expand');
   if (exp) {{
-    const firstKv = exp.querySelector('.dev-kv');
-    if (firstKv) {{
-      const kvDds = firstKv.querySelectorAll('dd');
-      if (kvDds[0]) kvDds[0].textContent = fmt(d.voltage_v, 1, 'V');
-      if (kvDds[1]) kvDds[1].textContent = fmt(d.current_a, 2, 'A');
-      if (kvDds[2]) kvDds[2].textContent = d.pf !== undefined ? fmt(d.pf, 2) : '\u2014';
-      if (kvDds[3]) kvDds[3].textContent = d.freq_hz !== undefined ? fmt(d.freq_hz, 1, 'Hz') : '\u2014';
-    }}
+    const setM = function(m, txt) {{
+      const el = exp.querySelector('.mt-v[data-mv="' + m + '"]');
+      if (el && el.textContent !== txt) el.textContent = txt;
+      const now = exp.querySelector('.sl-now[data-slnow="' + m + '"]');
+      if (now && now.textContent !== txt) now.textContent = txt;
+    }};
+    setM('v',  fmt(d.voltage_v, 1, 'V'));
+    setM('a',  fmt(d.current_a, 2, 'A'));
+    setM('pf', d.pf !== undefined ? fmt(d.pf, 2) : '\u2014');
+    setM('hz', d.freq_hz !== undefined ? fmt(d.freq_hz, 1, 'Hz') : '\u2014');
+    setM('q',  fmt(d.q_total_var || 0, 1, 'VAR'));
+    if (d.i_n !== undefined) setM('in', fmt(d.i_n, 2, 'A'));
+
     const phases = d.phases && d.phases.length > 0 ? d.phases : null;
-    if (phases) {{
-      const phaseDl = exp.querySelector('#kv-phases-' + d.key);
-      if (phaseDl) {{
-        const pDds = phaseDl.querySelectorAll('dd');
+    const pb = exp.querySelector('.phase-block');
+    if (pb && phases) {{
+      const bar = pb.querySelector('.pb-bar');
+      const rows = pb.querySelector('.pb-rows');
+      // Rebuild only when the phase COUNT changes; otherwise move the existing
+      // widths and numbers, so the bar animates instead of jumping.
+      if (bar && bar.children.length !== phases.length) bar.innerHTML = _phaseBarInner(phases);
+      else if (bar) {{
+        const total = phases.reduce(function(s, ph) {{ return s + Math.abs(ph.power_w || 0); }}, 0) || 1;
         phases.forEach(function(ph, i) {{
-          if (pDds[i]) pDds[i].textContent = fmt(ph.voltage_v,1,'V') + ' \xb7 ' + fmt(ph.current_a,2,'A') + ' \xb7 ' + fmt(ph.power_w,0,'W');
+          const seg = bar.children[i];
+          if (!seg) return;
+          const pct = Math.round(Math.abs(ph.power_w || 0) / total * 100);
+          seg.style.width = pct + '%';
+          const lbl = seg.querySelector('b');
+          const txt = 'L' + (i+1) + ' ' + pct + '%';
+          if (lbl && lbl.textContent !== txt) lbl.textContent = txt;
         }});
       }}
-    }}
-    // Update I_N neutral current if present
-    const inDl = exp.querySelector('#kv-in-' + d.key);
-    if (inDl) {{
-      const inDd = inDl.querySelector('dd');
-      if (inDd) inDd.textContent = fmt(d.i_n, 2, 'A');
-    }}
-    // Update reactive power
-    const qDl = exp.querySelector('#kv-q-' + d.key);
-    if (qDl) {{
-      const qDd = qDl.querySelector('dd');
-      if (qDd) qDd.textContent = fmt(d.q_total_var || 0, 1, 'VAR');
-    }}
-    // Update phase balance
-    const balDl = exp.querySelector('#kv-bal-' + d.key);
-    if (balDl && phases) {{
-      const balDd = balDl.querySelector('dd');
-      if (balDd) {{
-        const totalP = phases.reduce(function(s, ph) {{ return s + Math.abs(ph.power_w || 0); }}, 0) || 1;
-        balDd.innerHTML = phases.map(function(ph, i) {{
-          const pct = Math.round(Math.abs(ph.power_w || 0) / totalP * 100);
-          return 'L' + (i+1) + '&nbsp;' + pct + '%';
-        }}).join(' \xb7 ');
+      if (rows && rows.children.length !== phases.length) rows.innerHTML = _phaseRowsInner(phases);
+      else if (rows) {{
+        phases.forEach(function(ph, i) {{
+          const cells = rows.children[i] ? rows.children[i].querySelectorAll('.pb-n') : null;
+          if (!cells) return;
+          if (cells[0]) cells[0].textContent = fmt(ph.voltage_v, 1, 'V');
+          if (cells[1]) cells[1].textContent = fmt(ph.current_a, 2, 'A');
+          if (cells[2]) cells[2].textContent = fmt(ph.power_w, 0, 'W');
+        }});
+      }}
+      const spread = pb.querySelector('.pb-spread');
+      if (spread) {{
+        const s = '\u0394 ' + _phaseSpread(phases) + '%';
+        if (spread.textContent !== s) spread.textContent = s;
       }}
     }}
   }}
@@ -6669,6 +6890,13 @@ function hideHmTooltip() {{
    CO₂ TAB
 ────────────────────────────────────────────── */
 let _co2LiveTimer = null;
+// The 6h forecast changes once an HOUR. Re-rendering its DOM once a SECOND
+// threw away every tile (and, under a skin, re-ran the colour pass over the
+// fresh nodes) — that was the visible flicker. These signatures gate the
+// rebuild on the payload actually differing.
+let _co2FcSig = '';
+let _co2HeroSig = '';
+let _co2RatesSig = '';
 
 let _co2Range = '24h';
 async function loadCo2(range) {{
@@ -6706,8 +6934,12 @@ async function _refreshCo2LiveRates() {{
     // Update hero intensity
     const hero = document.getElementById('co2-hero-value');
     if (hero && data.current_intensity !== undefined) {{
-      hero.innerHTML = data.current_intensity.toFixed(0) + ' <span style="font-size:16px">g/kWh</span>';
-      hero.style.color = _co2Color(data.current_intensity, data.green_threshold || 150, data.dirty_threshold || 400);
+      const hsig = data.current_intensity.toFixed(0) + '|' + (data.green_threshold||150) + '|' + (data.dirty_threshold||400);
+      if (hsig !== _co2HeroSig) {{
+        _co2HeroSig = hsig;
+        hero.innerHTML = data.current_intensity.toFixed(0) + ' <span style="font-size:16px">g/kWh</span>';
+        hero.style.color = _co2Color(data.current_intensity, data.green_threshold || 150, data.dirty_threshold || 400);
+      }}
     }}
     // Update timestamp
     const heroTs = document.getElementById('co2-hero-ts');
@@ -6716,57 +6948,105 @@ async function _refreshCo2LiveRates() {{
       const _tsStr = _d.toLocaleDateString('de-DE', {{day:'2-digit',month:'2-digit',year:'numeric'}}) + ' ' + _d.toLocaleTimeString('de-DE', {{hour:'2-digit',minute:'2-digit'}});
       heroTs.textContent = heroTs.textContent.replace(/\xb7[^\xb7]*$/, '\xb7 ' + _tsStr);
     }}
-    // Refresh 6h forecast strip (re-renders in place)
+    // Refresh the 6h forecast strip — but only when it actually changed.
     const fcWrap = document.getElementById('co2-forecast-wrap');
     if (fcWrap && data.forecast !== undefined) {{
-      fcWrap.innerHTML = _renderCo2Forecast(data, data.green_threshold || 150, data.dirty_threshold || 400);
+      const fsig = _co2FcSignature(data);
+      if (fsig !== _co2FcSig) {{
+        _co2FcSig = fsig;
+        fcWrap.innerHTML = _renderCo2Forecast(data, data.green_threshold || 150, data.dirty_threshold || 400);
+      }}
     }}
     // Update device rates table
     const tbody = document.getElementById('co2-rates-tbody');
     if (tbody && data.device_rates) {{
-      let rows = '';
-      data.device_rates.forEach(function(r) {{
-        rows += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px">' + esc(r.name) + '</td><td style="text-align:right;padding:4px">' + r.watts.toFixed(0) + '</td><td style="text-align:right;padding:4px;font-weight:600">' + r.co2_g_h.toFixed(1) + '</td></tr>';
-      }});
-      tbody.innerHTML = rows;
+      // Same devices in the same order? Then only the two numbers move — rewriting
+      // the rows would drop the row under the cursor on every tick.
+      const rsig = data.device_rates.map(function(r) {{ return r.name; }}).join('\u0001');
+      if (rsig === _co2RatesSig && tbody.rows.length === data.device_rates.length) {{
+        data.device_rates.forEach(function(r, i) {{
+          const cells = tbody.rows[i].cells;
+          if (cells[1]) cells[1].textContent = r.watts.toFixed(0);
+          if (cells[2]) cells[2].textContent = r.co2_g_h.toFixed(1);
+        }});
+      }} else {{
+        _co2RatesSig = rsig;
+        let rows = '';
+        data.device_rates.forEach(function(r) {{
+          rows += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px">' + esc(r.name) + '</td><td style="text-align:right;padding:4px">' + r.watts.toFixed(0) + '</td><td style="text-align:right;padding:4px;font-weight:600">' + r.co2_g_h.toFixed(1) + '</td></tr>';
+        }});
+        tbody.innerHTML = rows;
+      }}
     }}
   }} catch(e) {{}}
+}}
+
+function _co2FcSignature(data) {{
+  const fc = (data && data.forecast) || [];
+  let s = String(data && data.forecast_updated_ts || 0) + '|' +
+          String(data && data.green_threshold || 0) + '|' +
+          String(data && data.dirty_threshold || 0) + '|' + fc.length;
+  for (let i = 0; i < fc.length; i++) {{
+    const p = fc[i];
+    s += '|' + p.hour_ts + ',' + p.intensity_g_per_kwh + ',' + p.baseline_g_per_kwh +
+         ',' + p.cloud_cover_pct + ',' + p.wind_ms + ',' + p.temp_c;
+  }}
+  return s;
 }}
 
 function _renderCo2Forecast(data, green, dirty) {{
   const fc = (data && data.forecast) || [];
   if (!fc.length) {{
-    return '<div class="card" style="padding:10px 14px;font-size:12px;color:var(--muted)">' +
+    return '<div class="card co2fc-card"><div class="co2fc-wait">' +
       t('web.co2.forecast_waiting', '6h forecast being computed (trend + Open-Meteo weather) \u2026') +
-      '</div>';
+      '</div></div>';
   }}
-  let html = '<div class="card" style="padding:12px 14px">';
-  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
-  html += '<div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">' +
-    t('web.co2.forecast_6h', '6h forecast (trend + weather)') + '</div>';
+  // Heights are relative to THIS window, so six similar hours still read as a
+  // curve instead of six identical full bars.
+  const vals = fc.map(function(p) {{ return p.intensity_g_per_kwh; }});
+  const lo = Math.min.apply(null, vals);
+  const hi = Math.max.apply(null, vals);
+  const span = (hi - lo) || 1;
+  let bestI = 0;
+  for (let k = 1; k < vals.length; k++) {{ if (vals[k] < vals[bestI]) bestI = k; }}
+  const bestD = new Date(fc[bestI].hour_ts * 1000);
+  const bestHH = bestD.toLocaleTimeString(_locale(), {{hour:'2-digit',minute:'2-digit'}});
+
+  let html = '<div class="card co2fc-card">';
+  html += '<div class="co2fc-head">';
+  html += '<div class="co2fc-title">' + t('web.co2.forecast_6h', '6h forecast (trend + weather)') + '</div>';
+  html += '<div class="co2fc-headright">';
+  html += '<span class="co2fc-best-chip">\u2605 ' + t('web.co2.best_hour', 'best hour') + ' ' + bestHH + '</span>';
   const upd = data.forecast_updated_ts ? new Date(data.forecast_updated_ts * 1000) : null;
-  const updStr = upd ? upd.toLocaleTimeString('de-DE', {{hour:'2-digit',minute:'2-digit'}}) : '';
-  html += '<div style="font-size:10px;color:var(--muted)">' + (updStr ? '\u21bb ' + updStr : '') + '</div>';
-  html += '</div>';
-  html += '<div style="display:grid;grid-template-columns:repeat(' + fc.length + ',1fr);gap:6px">';
-  fc.forEach(function(p) {{
+  if (upd) html += '<span class="co2fc-upd">\u21bb ' + upd.toLocaleTimeString(_locale(), {{hour:'2-digit',minute:'2-digit'}}) + '</span>';
+  html += '</div></div>';
+
+  html += '<div class="co2fc-grid">';
+  fc.forEach(function(p, idx) {{
     const d = new Date(p.hour_ts * 1000);
-    const hh = d.toLocaleTimeString('de-DE', {{hour:'2-digit',minute:'2-digit'}});
+    const hh = d.toLocaleTimeString(_locale(), {{hour:'2-digit',minute:'2-digit'}});
     const col = _co2Color(p.intensity_g_per_kwh, green, dirty);
-    const delta = p.intensity_g_per_kwh - p.baseline_g_per_kwh;
+    const pct = Math.round(22 + 78 * ((p.intensity_g_per_kwh - lo) / span));
+    const delta = Math.round(p.intensity_g_per_kwh - p.baseline_g_per_kwh);
     const arrow = delta < -3 ? '\u2193' : (delta > 3 ? '\u2191' : '\u2192');
+    const dCls = delta < -3 ? 'down' : (delta > 3 ? 'up' : 'flat');
     const wicon = p.cloud_cover_pct < 30 ? '\u2600\ufe0f' : (p.cloud_cover_pct > 70 ? '\u2601\ufe0f' : '\u26c5');
     const windHint = p.wind_ms >= 8 ? ' \U0001F4A8' : '';
-    html += '<div style="text-align:center;padding:6px 4px;border-radius:8px;background:var(--bg-alt,rgba(255,255,255,.03));border:1px solid var(--border,rgba(255,255,255,.08))">';
-    html += '<div style="font-size:10px;color:var(--muted);margin-bottom:2px">' + hh + '</div>';
-    html += '<div style="font-size:18px;font-weight:700;color:' + col + '">' + p.intensity_g_per_kwh.toFixed(0) + '</div>';
-    html += '<div style="font-size:10px;color:var(--muted)">g/kWh ' + arrow + '</div>';
-    html += '<div style="font-size:11px;margin-top:3px" title="Wolken: ' + p.cloud_cover_pct.toFixed(0) + '% \u00b7 Wind: ' + p.wind_ms.toFixed(1) + ' m/s \u00b7 ' + p.temp_c.toFixed(0) + '\u00b0C">' + wicon + ' ' + p.temp_c.toFixed(0) + '\u00b0' + windHint + '</div>';
-    html += '</div>';
+    const tip = t('web.co2.tip_clouds','Clouds') + ': ' + p.cloud_cover_pct.toFixed(0) + '% \u00b7 ' +
+                t('web.co2.tip_wind','Wind') + ': ' + p.wind_ms.toFixed(1) + ' m/s \u00b7 ' + p.temp_c.toFixed(0) + '\u00b0C';
+    html += '<div class="co2fc-cell"' + (idx === bestI ? ' data-best="1"' : '') + ' title="' + esc(tip) + '">';
+    html += '<span class="co2fc-fill" style="height:' + pct + '%;background:linear-gradient(to top, ' + col + ', transparent)"></span>';
+    html += '<span class="co2fc-body">';
+    html += '<span class="co2fc-hour">' + hh + '</span>';
+    html += '<span class="co2fc-val" style="color:' + col + '">' + p.intensity_g_per_kwh.toFixed(0) + '</span>';
+    html += '<span class="co2fc-unit">g/kWh</span>';
+    html += '<span class="co2fc-delta ' + dCls + '">' + arrow + ' ' + (delta === 0 ? '0' : (delta > 0 ? '+' : '') + delta) + '</span>';
+    html += '<span class="co2fc-wx">' + wicon + ' ' + p.temp_c.toFixed(0) + '\u00b0' + windHint + '</span>';
+    html += '</span></div>';
   }});
   html += '</div>';
-  html += '<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:center">' +
-    t('web.co2.forecast_hint', 'Based on 14-day trend for this hour × weather forecast (wind, sun, temperature)') + '</div>';
+  html += '<div class="co2fc-hint">' +
+    t('web.co2.forecast_hint', 'Based on 14-day trend for this hour \u00d7 weather forecast (wind, sun, temperature)') + '</div>';
   html += '</div>';
   return html;
 }}
@@ -6805,6 +7085,7 @@ function renderCo2(data, el) {{
 
   // ── 6h Forecast strip (trend + weather) ──
   html += '<div id="co2-forecast-wrap" style="margin-top:8px">' + _renderCo2Forecast(data, green, dirty) + '</div>';
+  _co2FcSig = _co2FcSignature(data);
 
   // ── Summary cards ──
   html += '<div class="card" style="margin-top:8px"><div class="metric-grid">';
