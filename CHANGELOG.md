@@ -1,5 +1,21 @@
 # Changelog
 
+## 16.75.4
+### Fixed
+- **`/api/battery` took 15 s because it read sixty-five columns to use two.**
+  Measured on a live installation and split: the computation is **0.13 s** for
+  300 000 samples — the rest was `SELECT *` over a seven-day window of a
+  65-column table. `query_samples` can now be given the columns a caller
+  actually reads; the battery asks for `timestamp` and `total_power`. On a
+  synthetic database with only those two populated the query drops from
+  **1.64 s to 0.11 s**; where every column carries values the gap is far wider.
+  The Standby and Forecast fallbacks read the same wide table for two columns
+  and were narrowed with it.
+- 🔴 **Six of eleven test files ran nothing.** They had no `__main__` block, so
+  `python3 tests/<file>.py` imported them, exited 0 and executed **none** of
+  their 40 tests — a green run that proved nothing. Every file now runs its own
+  tests either way; all **122** pass under pytest as well.
+
 ## 16.75.3
 ### Fixed
 - **A slow source's card appeared a refresh too late.** Each round of the

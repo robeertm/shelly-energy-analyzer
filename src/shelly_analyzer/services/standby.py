@@ -73,7 +73,12 @@ def analyze_standby(
     # Fallback: if no hourly data, try to compute from raw samples
     if hourly.empty or len(hourly) < 6:
         try:
-            samples = db.query_samples(device_key, start_ts=start_ts, end_ts=end_ts)
+            # Only these columns are read below; the samples table has ~65.
+            try:
+                samples = db.query_samples(device_key, start_ts=start_ts, end_ts=end_ts,
+                                           columns=("timestamp", "total_power", "energy_kwh"))
+            except TypeError:
+                samples = db.query_samples(device_key, start_ts=start_ts, end_ts=end_ts)
             logger.debug("Standby %s: fallback query_samples returned %d rows", device_key, 0 if samples is None else len(samples))
             if samples is not None and not samples.empty and ("total_power" in samples.columns or "energy_kwh" in samples.columns):
                 # Synthesize hourly from samples

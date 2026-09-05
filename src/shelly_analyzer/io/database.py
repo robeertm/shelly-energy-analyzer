@@ -13,7 +13,7 @@ import sqlite3
 import threading
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -801,11 +801,20 @@ class EnergyDB:
         device_key: str,
         start_ts: Optional[int] = None,
         end_ts: Optional[int] = None,
+        columns: Optional[Sequence[str]] = None,
     ) -> pd.DataFrame:
         """Read samples as a pandas DataFrame, optionally filtered by time range.
 
         Transparently merges monthly aggregated data for periods that have been
         compressed by the retention policy.
+
+        ``columns`` restricts the SELECT to the named columns (``timestamp`` is
+        always included).  The samples table carries every column the schema
+        knows — around forty — so a caller that needs two of them otherwise
+        pulls twenty times the data it uses.  Measured on a live installation:
+        a seven-day battery window is ~300k rows, and ``SELECT *`` made
+        /api/battery take **15 s**; the two columns it actually reads take
+        well under a second.
         """
         conn = self._conn()
         conditions = ["device_key = ?"]
@@ -818,7 +827,19 @@ class EnergyDB:
             params.append(int(end_ts))
 
         where = " AND ".join(conditions)
-        sql = f"SELECT * FROM samples WHERE {where} ORDER BY timestamp"
+        if columns:
+            # Only ever name columns the table really has, so a stale caller
+            # cannot turn a subset into an SQL error.
+            try:
+                have = {r[1] for r in conn.execute("PRAGMA table_info(samples)")}
+            except Exception:
+                have = set()
+            wanted = ["timestamp"] + [c for c in columns if c != "timestamp"]
+            cols = [c for c in wanted if not have or c in have]
+            select = ", ".join(f'"{c}"' for c in cols) if cols else "*"
+        else:
+            select = "*"
+        sql = f"SELECT {select} FROM samples WHERE {where} ORDER BY timestamp"
         df = pd.read_sql_query(sql, conn, params=params)
 
         # Convert integer timestamps → pandas datetime (UTC).
@@ -853,6 +874,9 @@ class EnergyDB:
                     oldest_raw = df["timestamp"].min()
                     monthly_df = monthly_df[monthly_df["timestamp"] < oldest_raw]
                     if not monthly_df.empty:
+                        if columns:
+                            keep = [c for c in df.columns if c in monthly_df.columns]
+                            monthly_df = monthly_df[keep]
                         df = pd.concat([monthly_df, df], ignore_index=True)
         except Exception:
             logger.debug("Failed to merge monthly data", exc_info=True)
