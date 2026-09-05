@@ -1,5 +1,19 @@
 # Changelog
 
+## 16.75.1
+### Fixed
+- **The "right now" summary sat empty for six seconds on a real installation.**
+  Found where it matters — a house with PV, a battery and years of history, not
+  the demo. The panel gathered every endpoint before painting anything, so it
+  waited for the slowest: **`/api/battery` 5.9 s, `/api/goals` 2.0 s** there,
+  against ~0.1 s on the demo. A single hanging endpoint would have held the
+  panel empty indefinitely. It now paints from the live state immediately and
+  fills in as each answer lands, with a 12 s timeout per request. Verified in a
+  browser with `/api/battery` delayed 8 s and `/api/goals` never answering:
+  **4 cards after 1 second**, no unhandled rejections. While requests are still
+  in flight an empty panel says nothing rather than claiming there is nothing
+  to summarise.
+
 ## 16.75.0
 ### Fixed
 - **Three tabs rebuilt themselves every few seconds for data that had not
