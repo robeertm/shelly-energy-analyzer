@@ -1,5 +1,16 @@
 # Changelog
 
+## 16.75.6
+### Fixed
+- **The same expensive answer was recomputed for every caller.** The Battery
+  tab refreshes every five seconds and `/api/battery` is a seven-day
+  integration, so on a live installation that second of work was redone twelve
+  times a minute — while the summary panel asked for it as well. A read action
+  that takes **longer than a second** is now served from a 20 s hold; anything
+  faster is never cached, so nothing else changes. Which actions those are is
+  **measured, not listed** — the same principle the summary panel uses for its
+  own cadence. Failures and parameterised reads are never held.
+
 ## 16.75.5
 ### Fixed
 - **The summary fired all ten sources at once and they queued on the server.**

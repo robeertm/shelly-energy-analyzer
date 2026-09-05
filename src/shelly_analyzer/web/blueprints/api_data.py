@@ -18,17 +18,45 @@ def _get_qs_params() -> Dict[str, Any]:
     return {k: v for k, v in request.args.items()}
 
 
+# A read action that turns out to be expensive is held briefly instead of being
+# recomputed for every caller.  Which ones those are is not a list here — it is
+# measured: an action that took longer than _SLOW_S is served from the hold for
+# _HOLD_S, everything faster is never cached at all.  Measured on a live
+# installation: the Battery tab refreshes every 5 s and /api/battery is a
+# seven-day integration, so the same second of work was being redone twelve
+# times a minute while the summary panel asked for it as well.
+_SLOW_S = 1.0
+_HOLD_S = 20.0
+_action_hold: Dict[str, Any] = {}
+
+
 def _action_endpoint(action_name: str):
     """Generic handler: delegate to on_action callback with query params."""
+    import time as _time
+
     state = _get_state()
+    params = _get_qs_params()
+    # Only ever hold the plain, parameter-free read — anything with a query
+    # string is a different question and answers for itself.
+    holdable = not params
+    if holdable:
+        hit = _action_hold.get(action_name)
+        if hit and (_time.monotonic() - hit[0]) < _HOLD_S:
+            return jsonify(hit[1])
+    t0 = _time.monotonic()
     try:
-        params = _get_qs_params()
         if state.on_action:
             payload = state.on_action(action_name, params)
         else:
             payload = {"ok": False, "error": "not available"}
     except Exception as e:
         payload = {"ok": False, "error": str(e)}
+    took = _time.monotonic() - t0
+    # Never hold a failure, and never hold something that was cheap anyway.
+    if holdable and took >= _SLOW_S and isinstance(payload, dict) and payload.get("ok", True):
+        _action_hold[action_name] = (_time.monotonic(), payload)
+    elif holdable and took < _SLOW_S:
+        _action_hold.pop(action_name, None)
     return jsonify(payload)
 
 
