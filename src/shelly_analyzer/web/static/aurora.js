@@ -322,6 +322,11 @@
 
     var W = 0, H = 0, DPR = 1, board = { lanes: [], pads: [], vias: [], path: null };
     var t0 = 0, raf = 0, prev = 0, lastFrameAt = 0, faults = 0, alive = true;
+    /* Paused BY THE USER, which is not the same as stopped: the watchdog exists
+       to revive a loop that died, so it must be told the difference or it would
+       restart the animation 1.3 s after every pause. */
+    var paused = false;
+    try { paused = localStorage.getItem("au-anim") === "off"; } catch (e) {}
     var hueNow = null, liftNow = 0;
     /* Distance travelled, integrated frame by frame.  It must NOT be
        recomputed as t * speed: with the load — and therefore the speed —
@@ -523,7 +528,7 @@
     }
 
     function schedule() {
-      if (raf || !alive) return;
+      if (raf || !alive || paused) return;
       raf = requestAnimationFrame(frame);
     }
 
@@ -538,11 +543,13 @@
       rt = setTimeout(function () {
         alive = true;
         try { resize(); } catch (e) {}
-        if (REDUCED) { raf = 0; requestAnimationFrame(frame); } else schedule();
+        /* A resize still redraws once while paused, so the board is not left
+           stretched — it just does not carry on running. */
+        if (REDUCED || paused) { raf = 0; requestAnimationFrame(frame); } else schedule();
       }, 200);
     });
     document.addEventListener("visibilitychange", function () {
-      if (!document.hidden) { lastFrameAt = now(); prev = 0; t0 = 0; schedule(); }
+      if (!document.hidden && !paused) { lastFrameAt = now(); prev = 0; t0 = 0; schedule(); }
     });
     try {
       new MutationObserver(function () {
@@ -558,7 +565,7 @@
        loop had no way back and the background stayed dead until a reload.
        setInterval keeps running in that state. */
     setInterval(function () {
-      if (REDUCED || document.hidden) return;
+      if (REDUCED || document.hidden || paused) return;
       if (now() - lastFrameAt < 1600) return;
       alive = true;
       if (raf) { try { cancelAnimationFrame(raf); } catch (e) {} raf = 0; }
@@ -571,13 +578,33 @@
     schedule();
     circuit = cv;
 
+    function setPaused(v) {
+      paused = !!v;
+      try { localStorage.setItem("au-anim", paused ? "off" : "on"); } catch (e) {}
+      if (paused) {
+        if (raf) { try { cancelAnimationFrame(raf); } catch (e) {} raf = 0; }
+      } else {
+        alive = true;
+        prev = 0;                 // ...but NOT t0: keep the field where it was
+        lastFrameAt = now();
+        schedule();
+      }
+      document.documentElement.setAttribute("data-anim", paused ? "off" : "on");
+      return paused;
+    }
+    document.documentElement.setAttribute("data-anim", paused ? "off" : "on");
+    if (paused && raf) { try { cancelAnimationFrame(raf); } catch (e) {} raf = 0; }
+
     // Exposed so a test can assert the loop is actually running.
     window.__auCircuit = {
       frames: function () { return frames; },
       lanes: function () { return board.lanes.length; },
       pads: function () { return board.pads.length; },
       alive: function () { return alive; },
-      hue: function () { return hueNow; }
+      hue: function () { return hueNow; },
+      paused: function () { return paused; },
+      setPaused: setPaused,
+      toggle: function () { return setPaused(!paused); }
     };
   }
 
@@ -694,6 +721,10 @@
         '<div class="au-hero-head">' +
           '<span class="au-hero-title" id="au-hero-title"></span>' +
           '<span class="au-hero-state" id="au-state"></span>' +
+          '<button type="button" class="au-anim-btn" id="au-anim" aria-pressed="false">' +
+            '<span class="au-anim-ico" aria-hidden="true"></span>' +
+            '<span class="au-anim-lbl"></span>' +
+          '</button>' +
         '</div>' +
         '<div class="au-stats" id="au-stats"></div>' +
       '</div>'
@@ -712,7 +743,37 @@
     grid.parentNode.insertBefore(hero, grid);
     var title = hero.querySelector("#au-hero-title");
     if (title) title.textContent = T("aurora.hero.title", "Right now");
+    wireAnimButton(hero);
     return hero;
+  }
+
+  /* Pause/resume the charge. The state is remembered, so a viewer who does not
+     want the motion is not asked again on every reload. */
+  function wireAnimButton(hero) {
+    var btn = hero.querySelector("#au-anim");
+    if (!btn || btn.__auWired) return;
+    btn.__auWired = 1;
+    var sync = function () {
+      var c = window.__auCircuit;
+      var p = !!(c && c.paused && c.paused());
+      var action = p ? T("aurora.anim.resume", "Resume animation")
+                     : T("aurora.anim.pause", "Pause animation");
+      btn.setAttribute("aria-pressed", p ? "true" : "false");
+      btn.setAttribute("aria-label", action);
+      btn.title = action;
+      var ico = btn.querySelector(".au-anim-ico");
+      var lbl = btn.querySelector(".au-anim-lbl");
+      if (ico) ico.textContent = p ? "\u25B6" : "\u23F8";
+      if (lbl) lbl.textContent = T("aurora.anim.short", "Animation");
+    };
+    btn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var c = window.__auCircuit;
+      if (c && c.toggle) c.toggle();
+      sync();
+    });
+    sync();
   }
 
   function stat(cls, value, label) {
@@ -741,9 +802,26 @@
     var devs = (data && data.devices) || [];
     var draw = devs.filter(isDraw);
 
+    /* A sub-meter sits BEHIND another meter, so its load is already inside that
+       meter's reading: adding it again counted a 1 960 W water heater twice, and
+       "now" read 4 288 W on a house pulling 2 327 W.  Skip a child whose parent
+       is one of these tiles — unless the parent is shown net of exactly this
+       child (subtract_from_parent_display), in which case the parent no longer
+       contains it and it has to be counted after all. */
+    var shown = {};
+    for (var s = 0; s < draw.length; s++) shown[String(draw[s].key)] = draw[s];
+    function counts(d) {
+      var p = shown[String(d.parent || "")];
+      if (!p) return true;                       // no parent among the tiles
+      var net = p.net_of_children;
+      if (net && net.indexOf(d.key) >= 0) return true;   // parent already gave it up
+      return false;                              // already inside the parent
+    }
+
     var totalW = 0, kwh = 0, cost = 0, top = null;
     for (var i = 0; i < draw.length; i++) {
       var d = draw[i];
+      if (!counts(d)) continue;
       var w = Number(d.power_w) || 0;
       totalW += w;
       kwh  += Number(d.today_kwh)  || 0;

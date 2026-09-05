@@ -47,6 +47,59 @@ def net_display_children(devices: Iterable[Any]) -> Dict[str, List[str]]:
     return out
 
 
+def flow_children(devices: Iterable[Any]) -> Dict[str, List[str]]:
+    """``{parent_key: [child_key, ...]}`` from the WIRING alone.
+
+    ``net_display_children`` answers a display preference — "show the parent tile
+    net of this child" — and is deliberately opt-in. A flow diagram is not a
+    preference: a meter fed through another meter is a branch off it whether or
+    not the user wants the parent tile to read net. Summing both made the arrows
+    add up to more energy than the house actually drew.
+    """
+    dev_list = list(devices or [])
+    keys = {str(getattr(d, "key", "") or "") for d in dev_list}
+    keys.discard("")
+    out: Dict[str, List[str]] = {}
+    for d in dev_list:
+        child = str(getattr(d, "key", "") or "").strip()
+        parent = str(getattr(d, "parent", "") or "").strip()
+        if not child or not parent or parent == child or parent not in keys:
+            continue
+        out.setdefault(parent, []).append(child)
+    return out
+
+
+def household_keys(devices: Iterable[Any]) -> set:
+    """Keys that may be summed into a WHOLE-HOUSE total, each meter once.
+
+    A device whose ``parent`` is another device sits physically behind it, so its
+    load is already inside that device's reading — summing both counts it twice.
+    Reported from a live installation: a 1 960 W water heater behind a 2 281 W
+    house meter made the total read 4 288 W instead of 2 327 W, and the same
+    error ran through every figure on the Costs tab, euros included.
+
+    The one exception is a parent that has *given the child up*: with
+    ``subtract_from_parent_display`` the parent is shown net of it, so the child
+    must be counted or the total loses it. Either way the house is counted once.
+
+    A ``parent`` that is a main-meter id rather than a device is not a
+    double-count (there is no tile for it), so those keys stay in.
+    """
+    dev_list = list(devices or [])
+    keys = {str(getattr(d, "key", "") or "") for d in dev_list}
+    keys.discard("")
+    out = set(keys)
+    for d in dev_list:
+        child = str(getattr(d, "key", "") or "").strip()
+        parent = str(getattr(d, "parent", "") or "").strip()
+        if not child or not parent or parent == child or parent not in keys:
+            continue
+        if bool(getattr(d, "subtract_from_parent_display", False)):
+            continue          # the parent no longer contains it
+        out.discard(child)
+    return out
+
+
 def apply_live_subtraction(tiles: List[Dict[str, Any]],
                            submap: Dict[str, List[str]]) -> None:
     """Mutate live ``tiles`` in place so each parent shows net of its children.

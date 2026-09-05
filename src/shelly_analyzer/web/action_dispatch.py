@@ -3157,7 +3157,13 @@ class ActionDispatcher:
                             _feed_in_c = float(_kwh_col_c[_kwh_col_c < 0].abs().sum())
                             _self_kwh_c = 0.0
                             _grid_c = float(_kwh_col_c[_kwh_col_c >= 0].sum())
-                            _hh_c = sum(d_o.get("month_kwh", 0.0) for d_o in devices_out)
+                            try:
+                                from shelly_analyzer.services.net_display import household_keys
+                                _hk_c = household_keys(_cost_devices)
+                            except Exception:
+                                _hk_c = None
+                            _hh_c = sum(d_o.get("month_kwh", 0.0) for d_o in devices_out
+                                        if _hk_c is None or str(d_o.get("key", "")) in _hk_c)
                             _self_kwh_c = max(0.0, _hh_c - _grid_c)
                             _pv_kwh_c = _self_kwh_c + _feed_in_c
                             _solar_co2_saved_month_kg = _pv_kwh_c * _co2_g / 1000.0
@@ -3337,11 +3343,23 @@ class ActionDispatcher:
                     if _past:
                         _current_spot_ct = _past[-1]["total_ct"]
 
-                # Build summary from device totals
+                # Build summary from device totals — counting each METER once.
+                # A sub-meter's energy is already inside its parent's reading, so
+                # adding both double-counted the house: measured 22.558 kWh where
+                # the true figure was 11.311, and the euro columns with it.
+                try:
+                    from shelly_analyzer.services.net_display import household_keys
+                    _hh_keys = household_keys(_cost_devices)
+                except Exception:
+                    _hh_keys = None
+                _summable = [d for d in devices_out
+                             if _hh_keys is None or str(d.get("key", "")) in _hh_keys]
                 _s = {}
                 for rk in ["today", "week", "month", "year", "last_month"]:
-                    _s[rk + "_kwh"] = round(sum(d.get(rk + "_kwh", 0) for d in devices_out), 3)
-                    _s[rk + "_eur"] = round(sum(d.get(rk + "_eur", 0) for d in devices_out), 2)
+                    _s[rk + "_kwh"] = round(sum(d.get(rk + "_kwh", 0) for d in _summable), 3)
+                    _s[rk + "_eur"] = round(sum(d.get(rk + "_eur", 0) for d in _summable), 2)
+                _s["submeters_excluded"] = sorted(
+                    str(d.get("key", "")) for d in devices_out if d not in _summable)
                 try:
                     _dim_s = calendar.monthrange(_now.year, _now.month)[1]
                     _el_s = max(1, (_now - _month_start).total_seconds() / 86400.0)
@@ -4781,8 +4799,12 @@ class ActionDispatcher:
                 _raw_sk = str(params.get("raw", "")).strip().lower() in ("1", "true", "yes", "on")
                 _submap_sk = {}
                 try:
-                    from shelly_analyzer.services.net_display import net_display_children
-                    _submap_sk = {} if _raw_sk else net_display_children(list(self.cfg.devices))
+                    # The flow diagram follows the WIRING, not the Live tile's
+                    # display preference: a sub-meter is a branch off its parent
+                    # either way, and summing both made the arrows carry more
+                    # energy than the house drew.
+                    from shelly_analyzer.services.net_display import flow_children
+                    _submap_sk = {} if _raw_sk else flow_children(list(self.cfg.devices))
                 except Exception:
                     _submap_sk = {}
                 data = compute_sankey(self.storage.db, self.cfg.devices, self.cfg.solar,

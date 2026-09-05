@@ -1,5 +1,44 @@
 # Changelog
 
+## 16.74.0
+### Fixed
+- **A sub-meter was counted twice in every whole-house figure.** Reported from
+  a live installation: the Live view read **4 288 W** while the tiles showed a
+  house meter at 2 281 W, a wallbox at 46 W and a water heater at 1 960 W. The
+  heater is wired *behind* the house meter, so its load is already inside the
+  2 281 W — adding it again inflated the total by the heater's entire draw. The
+  wiring was already configured (`parent`); nothing looked at it, and
+  `/api/state` did not even carry the field.
+  - **Live "now"**: 4 288 W → **2 327 W**, and today's kWh with it.
+  - **Costs summary**: every figure, euros included — measured **22.558 kWh
+    where 11.311 was right**, so today's cost read 7.36 € instead of 3.68 €.
+    Today, week, month, year, last month and both projections were all wrong.
+  - **Sankey**: the flow diagram carried more energy than the house drew
+    (6.89 kWh against 4.89 in the regression case).
+  - The rule is one line: a meter fed through another meter is counted once.
+    Where the parent is *shown* net of its child (`subtract_from_parent_display`)
+    the child is counted instead, so the total is identical either way. That
+    display flag stays opt-in for per-device views — it is a preference. A
+    whole-house total is not a preference; it follows the wiring.
+- **234 of 615 dashboard labels had no translation in any language** and fell
+  back to their English text, so a German page read "Cost breakdown", "Month
+  projection", "Daily average", "tree-days" — 38 % of the interface. 157 keys
+  translated; the dashboard is now 100 % German.
+- **The mirror of that bug: 20 fallbacks were German**, so an *English* page
+  read "Kumuliert", "Bewertung", "Konfidenz", "Verlorene Energie", "Basierend
+  auf" and the German weekday abbreviations. The guard that should have caught
+  this matched a hand-written list of German words and missed every one of
+  them; it now tests German word *forms*, and a second guard checks the
+  opposite direction — that no key falls back to English on a German page.
+
+### Added
+- **A button to stop the background animation**, in the Live view's header. The
+  choice is remembered. A plain `stop()` would not have held: the watchdog that
+  revives a stalled loop runs every 1.3 s and would have restarted it — a pause
+  has to be distinguishable from a failure. Measured: 0 frames in 5 s while
+  paused, still paused after a reload, and resuming does not rewind the slow
+  layers.
+
 ## 16.73.0
 ### Changed
 - **The background drifts with the load instead of twitching at every change,

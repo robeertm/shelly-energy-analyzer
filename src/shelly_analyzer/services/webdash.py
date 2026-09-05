@@ -7152,7 +7152,7 @@ function renderCo2(data, el) {{
 
     html += '<div class="nilm-two-col" style="margin-top:8px">';
     // Analytics card
-    html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">' + t('web.co2.analytics','CO₂ Analyse') + '</div>';
+    html += '<div class="card"><div style="font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">' + t('web.co2.analytics','CO₂ analysis') + '</div>';
     html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
     html += '<div class="nilm-stat"><span class="nilm-stat-val" style="color:' + _co2Color(avgI,green,dirty) + '">' + avgI.toFixed(0) + '</span><span class="nilm-stat-lbl">' + t('web.co2.avg','Average') + ' g/kWh</span></div>';
     html += '<div class="nilm-stat"><span class="nilm-stat-val" style="color:' + _co2Color(minI,green,dirty) + '">' + minI.toFixed(0) + '</span><span class="nilm-stat-lbl">' + t('web.co2.min','Minimum') + ' (' + esc(minH.hour) + ')</span></div>';
@@ -7171,7 +7171,7 @@ function renderCo2(data, el) {{
     html += '<div style="text-align:center">';
     html += '<canvas id="co2-renew-ring" style="width:120px;height:120px"></canvas>';
     html += '<div style="font-size:24px;font-weight:800;margin-top:-76px;position:relative;color:' + scoreColor + '">' + renewPct + '%</div>';
-    html += '<div style="font-size:11px;color:var(--muted);position:relative;margin-top:2px">' + t('web.co2.renewables','Erneuerbare') + '</div>';
+    html += '<div style="font-size:11px;color:var(--muted);position:relative;margin-top:2px">' + t('web.co2.renewables','Renewables') + '</div>';
     html += '<div style="margin-top:28px"></div>';
     html += '</div>';
     // Current intensity score
@@ -7184,7 +7184,7 @@ function renderCo2(data, el) {{
       html += '<div style="width:28px;height:28px;border-radius:6px;background:' + bg + ';color:' + fg + ';display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">' + s + '</div>';
     }});
     html += '</div>';
-    html += '<div style="text-align:center;font-size:11px;color:var(--muted);margin-top:4px">' + t('web.co2.rating','Bewertung') + ': ' + score + '</div>';
+    html += '<div style="text-align:center;font-size:11px;color:var(--muted);margin-top:4px">' + t('web.co2.rating','Rating') + ': ' + score + '</div>';
     html += '</div></div>';
   }}
 
@@ -8157,7 +8157,7 @@ function renderCompare(data, el) {{
   html += '<div class="nilm-metrics" style="margin-bottom:12px">';
   html += _nilmMetricCard('🔵', esc(data.name_a || data.device_a || 'A'), fmt(ta,1,unit), (data.days_a||0) + ' ' + t('web.cmp.days','Days'));
   html += _nilmMetricCard('🟠', esc(data.name_b || data.device_b || 'B'), fmt(tb,1,unit), (data.days_b||0) + ' ' + t('web.cmp.days','Days'));
-  html += _nilmMetricCard(deltaIcon, t('web.cmp.delta','Differenz'), '<span style="color:'+deltaColor+'">' + (delta>=0?'+':'') + fmt(delta,1,unit) + '</span>', (pct>=0?'+':'') + fmt(pct,1) + '%');
+  html += _nilmMetricCard(deltaIcon, t('web.cmp.delta','Difference'), '<span style="color:'+deltaColor+'">' + (delta>=0?'+':'') + fmt(delta,1,unit) + '</span>', (pct>=0?'+':'') + fmt(pct,1) + '%');
   const avgA = data.avg_a || 0, avgB = data.avg_b || 0;
   const avgDelta = avgA - avgB;
   const avgCol = avgDelta > 0 ? '#dc2626' : avgDelta < 0 ? '#16a34a' : 'var(--muted)';
@@ -8200,7 +8200,7 @@ function renderCompare(data, el) {{
 
   /* ── Cumulative chart ── */
   if (data.values_a && data.values_b && data.values_a.length > 1) {{
-    html += '<div class="card" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.cmp.cumulative','Kumuliert') + '</div>';
+    html += '<div class="card" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.cmp.cumulative','Cumulative') + '</div>';
     html += '<canvas id="cmp-cumul-chart" style="width:100%;height:180px"></canvas></div>';
   }}
 
@@ -8427,7 +8427,7 @@ function renderAnomalies(data, el) {{
   /* ── Overview metrics ── */
   html += '<div class="nilm-metrics" style="margin-bottom:12px">';
   html += _nilmMetricCard('🔍', t('web.anom.total','Total anomalies'), data.total_count || events.length, t('web.anom.last_days','Last 7 days'));
-  html += _nilmMetricCard('📊', t('web.anom.types','Typen erkannt'), Object.keys(tc).length, Object.keys(tc).map(function(k){{ return (typeIcons[k]||'') + ' ' + (tc[k]||0); }}).join('  '));
+  html += _nilmMetricCard('📊', t('web.anom.types','Types detected'), Object.keys(tc).length, Object.keys(tc).map(function(k){{ return (typeIcons[k]||'') + ' ' + (tc[k]||0); }}).join('  '));
   html += _nilmMetricCard('📡', t('web.anom.devices','Devices affected'), Object.keys(dc).length, t('web.anom.of_total','of all devices'));
   html += _nilmMetricCard('⚠️', t('web.anom.max_sigma','Max deviation'), (data.max_sigma||0) + '\u03c3', t('web.anom.avg','Avg') + ': ' + (data.avg_sigma||0) + '\u03c3');
   html += '</div>';
@@ -8470,7 +8470,7 @@ function renderAnomalies(data, el) {{
   html += '<canvas id="anom-sigma-chart" style="width:100%;height:120px"></canvas></div>';
 
   /* ── Event timeline ── */
-  html += '<div class="card" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.anom.timeline','Event-Timeline') + '</div>';
+  html += '<div class="card" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.anom.timeline','Event timeline') + '</div>';
   html += '<div class="nilm-timeline">';
   events.slice(0, 50).forEach(function(ev) {{
     const ts = ev.timestamp ? new Date(ev.timestamp) : null;
@@ -8671,11 +8671,11 @@ function renderForecast(d) {{
   /* ── Trend + cost comparison ── */
   html += '<div class="nilm-two-col" style="margin-bottom:12px">';
   // Trend card
-  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.trend_analysis','Trend-Analyse') + '</div>';
+  html += '<div class="card"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.trend_analysis','Trend analysis') + '</div>';
   html += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">';
   html += '<span style="font-size:36px">' + trendIcon + '</span>';
   html += '<div><div style="font-size:20px;font-weight:800;color:' + trendColor + '">' + (trendPct > 0 ? '+' : '') + trendPct.toFixed(1) + '% / ' + t('web.fc.month','Month') + '</div>';
-  html += '<div style="font-size:12px;color:var(--muted)">' + t('web.fc.based_on','Basierend auf') + ' ' + histDays + ' ' + t('web.fc.days_data','days of data') + '</div></div></div>';
+  html += '<div style="font-size:12px;color:var(--muted)">' + t('web.fc.based_on','Based on') + ' ' + histDays + ' ' + t('web.fc.days_data','days of data') + '</div></div></div>';
   // History summary
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
   html += '<div style="background:var(--bg);border-radius:8px;padding:8px;text-align:center"><div style="font-size:18px;font-weight:700">' + totalHistKwh.toFixed(0) + '</div><div style="font-size:10px;color:var(--muted)">kWh (' + histDays + 'd)</div></div>';
@@ -8691,9 +8691,9 @@ function renderForecast(d) {{
   /* ── Main chart with confidence band ── */
   html += '<div class="card" style="margin-bottom:12px"><div style="font-size:14px;font-weight:700;margin-bottom:8px">' + t('web.fc.history_forecast','History + forecast') + '</div>';
   html += '<div style="display:flex;gap:12px;font-size:11px;color:var(--muted);margin-bottom:6px">';
-  html += '<span><span style="display:inline-block;width:12px;height:4px;background:#3b82f6;border-radius:2px;vertical-align:middle;margin-right:3px"></span>' + t('web.fc.history','Verlauf') + '</span>';
+  html += '<span><span style="display:inline-block;width:12px;height:4px;background:#3b82f6;border-radius:2px;vertical-align:middle;margin-right:3px"></span>' + t('web.fc.history','History') + '</span>';
   html += '<span><span style="display:inline-block;width:12px;height:4px;background:#ef4444;border-radius:2px;vertical-align:middle;margin-right:3px"></span>' + t('web.fc.forecast','Forecast') + '</span>';
-  if (d.forecast_upper && d.forecast_upper.length) html += '<span><span style="display:inline-block;width:12px;height:8px;background:rgba(239,68,68,0.15);border-radius:2px;vertical-align:middle;margin-right:3px"></span>' + t('web.fc.confidence','Konfidenz') + '</span>';
+  if (d.forecast_upper && d.forecast_upper.length) html += '<span><span style="display:inline-block;width:12px;height:8px;background:rgba(239,68,68,0.15);border-radius:2px;vertical-align:middle;margin-right:3px"></span>' + t('web.fc.confidence','Confidence') + '</span>';
   html += '</div>';
   html += '<canvas id="fc-main-chart" style="width:100%;height:200px"></canvas></div>';
 
@@ -8716,7 +8716,7 @@ function renderForecast(d) {{
     _fcDrawCostBars(d);
     // Weekday profile
     if (d.weekday_profile) {{
-      const days = [t('web.fc.mon','Mo'),t('web.fc.tue','Di'),t('web.fc.wed','Mi'),t('web.fc.thu','Do'),t('web.fc.fri','Fr'),t('web.fc.sat','Sa'),t('web.fc.sun','So')];
+      const days = [t('web.fc.mon','Mon'),t('web.fc.tue','Tue'),t('web.fc.wed','Wed'),t('web.fc.thu','Thu'),t('web.fc.fri','Fri'),t('web.fc.sat','Sat'),t('web.fc.sun','Sun')];
       const vals = days.map(function(_, i) {{ return d.weekday_profile[String(i)] || d.weekday_profile[i] || 1.0; }});
       const wdColors = vals.map(function(v) {{ return v > 1.1 ? '#e74c3c' : v < 0.9 ? '#27ae60' : '#3498db'; }});
       _drawBarChart('fc-weekday-chart', days, vals, {{ colors: wdColors, threshold: 1.0, thresholdColor: 'rgba(128,128,128,0.4)', thresholdLabel: '1.0', decimals: 2 }});
@@ -8861,7 +8861,7 @@ function renderStandby(d) {{
 
   let html = '<div class="nilm-metrics" style="margin-bottom:12px">';
   html += _nilmMetricCard('\u26a0\ufe0f', t('web.standby.annual_cost','Standby cost/year'), (d.total_annual_standby_cost||0).toFixed(0) + ' \u20ac', t('web.standby.all_devices','All devices'));
-  html += _nilmMetricCard('\u26a1', t('web.standby.annual_kwh','Standby kWh/year'), (d.total_annual_standby_kwh||0).toFixed(0) + ' kWh', t('web.standby.wasted','Verlorene Energie'));
+  html += _nilmMetricCard('\u26a1', t('web.standby.annual_kwh','Standby kWh/year'), (d.total_annual_standby_kwh||0).toFixed(0) + ' kWh', t('web.standby.wasted','Wasted energy'));
   html += _nilmMetricCard('📊', t('web.standby.avg_base','Average base load'), avgBase + ' W', nDev + ' ' + t('web.standby.devices','Devices'));
   html += _nilmMetricCard('🚨', t('web.standby.risk_overview','Risk overview'),
     '<span style="color:#dc2626">' + highCount + '</span> / <span style="color:#d97706">' + medCount + '</span> / <span style="color:#16a34a">' + lowCount + '</span>',
@@ -8907,7 +8907,7 @@ function renderStandby(d) {{
     cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + (dev.standby_pct||0).toFixed(0) + '%</span><span class="nilm-stat-lbl">' + t('web.standby.time_pct','Standby time') + '</span></div>';
     cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.annual_standby_kwh + '</span><span class="nilm-stat-lbl">kWh/' + t('web.standby.year','Year') + '</span></div>';
     cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.annual_standby_cost + ' \u20ac</span><span class="nilm-stat-lbl">\u20ac/' + t('web.standby.year','Year') + '</span></div>';
-    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.standby_share_pct + '%</span><span class="nilm-stat-lbl">' + t('web.standby.share','Anteil') + '</span></div>';
+    cards += '<div class="nilm-stat"><span class="nilm-stat-val">' + dev.standby_share_pct + '%</span><span class="nilm-stat-lbl">' + t('web.standby.share','Share') + '</span></div>';
     cards += '</div>';
     // Standby vs active mini bar
     const activePct = Math.max(0, 100 - (dev.standby_share_pct||0));
