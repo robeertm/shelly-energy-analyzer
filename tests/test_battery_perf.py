@@ -134,6 +134,54 @@ def test_only_the_columns_it_reads_are_selected():
     assert 'columns=("timestamp", "total_power")' in src, "battery still pulls the wide table"
     print("OK  the battery reads two columns, not sixty-five")
 
+def test_a_slow_read_is_held_briefly_a_fast_one_never():
+    """Which actions get held is measured, not listed.
+
+    The Battery tab refreshes every 5 s and /api/battery is a seven-day
+    integration, so on a live installation the same second of work was redone
+    twelve times a minute while the summary panel asked for it too.  A read
+    that takes longer than a second is served from a short hold; anything
+    faster is never cached, so nothing else changes behaviour.
+    """
+    import time as _t
+    from shelly_analyzer.web.blueprints import api_data
+
+    api_data._action_hold.clear()
+    calls = {"slow": 0, "fast": 0}
+
+    def fake_on_action(name, params):
+        calls[name] += 1
+        if name == "slow":
+            _t.sleep(api_data._SLOW_S + 0.05)
+        return {"ok": True, "n": calls[name]}
+
+    class _App:
+        extensions = {"state": type("S", (), {"on_action": staticmethod(fake_on_action)})()}
+
+    import flask
+    app = flask.Flask(__name__)
+    app.extensions["state"] = _App.extensions["state"]
+
+    with app.test_request_context("/api/slow"):
+        api_data._action_endpoint("slow")
+        api_data._action_endpoint("slow")
+        api_data._action_endpoint("slow")
+    assert calls["slow"] == 1, "a slow read was recomputed %d times" % calls["slow"]
+
+    with app.test_request_context("/api/fast"):
+        api_data._action_endpoint("fast")
+        api_data._action_endpoint("fast")
+    assert calls["fast"] == 2, "a fast read must never be held"
+
+    # a query string is a different question and is never served from the hold
+    with app.test_request_context("/api/slow?period=week"):
+        api_data._action_endpoint("slow")
+    assert calls["slow"] == 2, "a parameterised read was served from the hold"
+
+    api_data._action_hold.clear()
+    print("OK  a slow read is held for a moment, a fast one never")
+
+
 if __name__ == "__main__":
     # Running this file directly must actually run its tests — six of the eleven
     # test files had no such block, so `python3 tests/<file>.py` imported them,
