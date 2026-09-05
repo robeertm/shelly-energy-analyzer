@@ -998,6 +998,189 @@ def test_the_animation_can_be_paused_and_stays_paused():
     print("OK  the pause survives the watchdog, a tab switch and a reload")
 
 
+
+def test_no_pane_is_rebuilt_while_its_data_stands_still():
+    """Every tab that refreshes on a timer must gate on the payload.
+
+    Measured on 16.74.0: the Energy Flow tab replaced ``#sankey-cards`` five
+    times in twelve seconds for five fetches that returned ONE distinct
+    payload; Standby did the same six times, and each rebuild dragged 60-80
+    style writes behind it as the skin recoloured the fresh nodes.  The gate
+    already existed (``_tabSkipRender``) — three of ten tabs used it.
+    """
+    src = open(WEBDASH_PATH, encoding="utf-8").read()
+    timed = re.search(r"const TAB_LIVE_REFRESH = \{\{(.*?)\}\};", src, re.S)
+    assert timed, "TAB_LIVE_REFRESH not found"
+    panes = re.findall(r"^\s*(\w+):", timed.group(1), re.M)
+    assert len(panes) >= 8, panes
+    gated = set(re.findall(r"_tabSkipRender\('(\w+)'", src))
+    # ev is refreshed only when coordinates exist, so it needs no payload gate
+    missing = [p for p in panes if p not in gated and p not in ("ev",)]
+    assert not missing, "these tabs rebuild unconditionally: %s" % missing
+    assert "if (_evLastCoords) loadEv();" in src, "the EV tab still repaints without data"
+    print("OK  no timed tab rebuilds itself while its numbers stand still")
+
+
+def test_the_repaint_gate_notices_a_theme_change():
+    """The rendered markup depends on theme, skin and language, not only on
+    the numbers — otherwise switching theme would leave a gated pane stale."""
+    src = open(WEBDASH_PATH, encoding="utf-8").read()
+    body = src[src.index("function _tabSkipRender"):src.index("var _toastTimer")]
+    for token in ("dataset.theme", "data-skin", "R.lang"):
+        assert token in body, "signature ignores %s" % token
+    print("OK  the gate reopens on a theme, skin or language change")
+
+
+def test_every_placeholder_in_the_page_has_a_value():
+    """The dashboard template is filled from a mapping in web/__init__.py.
+
+    A second, unused mapping for the same template lives in webdash.py; adding
+    a placeholder to that one only renders the literal ``{web_tab_plots}`` to
+    the user.  That is exactly what happened while translating the tab bar.
+    """
+    from shelly_analyzer.services.webdash import _HTML_TEMPLATE
+    tpl = _HTML_TEMPLATE.replace("{{", "\x00").replace("}}", "\x01")
+    placeholders = set(re.findall(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", tpl))
+    web_init = open(os.path.join(SRC, "web", "__init__.py"), encoding="utf-8").read()
+    i = web_init.index("def _render_dashboard_html")
+    j = web_init.index("rendered = _render_template(tpl, values)", i)
+    supplied = set(re.findall(r'^\s*"([A-Za-z_][A-Za-z0-9_]*)":', web_init[i:j], re.M))
+    # {country} {currency} {days} {n} are runtime i18n arguments inside
+    # translated strings, not template placeholders.
+    runtime = {"country", "currency", "days", "n"}
+    missing = sorted(placeholders - supplied - runtime)
+    assert not missing, "rendered literally to the user: %s" % missing
+    print("OK  every template placeholder is filled by the live mapping")
+
+
+def test_the_tab_bar_is_translated():
+    """Ten tab labels were English literals in the markup, so a German user
+    read 'Schedule', 'EV Log', 'Goals', 'Control', 'Sync'."""
+    src = open(WEBDASH_PATH, encoding="utf-8").read()
+    labels = re.findall(r'<span class="nav-label">([^<]+)</span>', src)
+    assert len(labels) >= 20, labels
+    hard = [l for l in labels if not l.startswith("{")]
+    assert not hard, "untranslated tab labels: %s" % hard
+    for key in ("plots", "schedule", "ev_log", "tariff", "battery", "advisor",
+                "goals", "control", "calibration", "sync"):
+        for lang in LANGS:
+            val = _t(lang, "web.tab." + key)
+            assert val and val != "web.tab." + key, (lang, key)
+    print("OK  all 24 tab labels come from the translation table")
+
+
+def test_the_shell_is_as_tall_as_what_you_can_see():
+    """100vh on iOS is the viewport WITHOUT the address bar.
+
+    With the bar showing, the shell is taller than the visible area, so the
+    bottom of the scroll container — and the space it reserves for the
+    floating rail — sits below the fold and cannot be reached.  Reproduced at
+    390x844 with an 87px bar: the last card ended 53px BEHIND the rail.
+    """
+    src = open(WEBDASH_PATH, encoding="utf-8").read()
+    body = src[src.index("    body {{"):src.index("    /* App shell */") if "    /* App shell */" in src else src.index("#app {{")]
+    assert "height: 100dvh;" in body, "body still sized from the large viewport"
+    app = re.search(r"#app \{\{[^}]*\}\}", src).group(0)
+    assert "100dvh" in app, "#app still sized from the large viewport"
+    print("OK  the shell is sized from the VISIBLE viewport (dvh), not 100vh")
+
+
+def test_an_embedded_page_draws_no_ground_of_its_own():
+    """The Plots tab is an iframe.  A second aurora inside it stacks two
+    grounds with different geometry and cuts a hard seam where the frame ends."""
+    js = open(JS_PATH, encoding="utf-8").read()
+    assert "window.self !== window.top" in js
+    assert "if (!EMBEDDED) mountCircuit();" in js
+    css = open(CSS_PATH, encoding="utf-8").read()
+    assert 'html[data-skin="aurora"][data-au-embedded] { background: transparent; }' in css
+    assert 'html[data-skin="aurora"][data-au-embedded] body { background: transparent; }' in css
+    src = open(WEBDASH_PATH, encoding="utf-8").read()
+    frame = re.search(r'<iframe id="plots-frame".*?>', src, re.S).group(0)
+    assert "background:transparent" in frame, frame
+    print("OK  the Plots iframe draws no second ground — no seam")
+
+
+def _rgba(text):
+    n = [float(x) for x in re.findall(r"[\d.]+", text)]
+    return n
+
+
+def _lum(rgb):
+    def f(v):
+        v /= 255.0
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = (f(c) for c in rgb[:3])
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _over(fg_rgba, bg_rgb):
+    a = fg_rgba[3] if len(fg_rgba) > 3 else 1.0
+    return [fg_rgba[i] * a + bg_rgb[i] * (1 - a) for i in range(3)]
+
+
+def test_the_light_theme_gives_a_card_an_edge():
+    """Robert: "Tagesansicht zu hell".  Measured on pixels: the page averaged
+    0.807 luminance, a card stood 1.25:1 against its ground and the tiles
+    inside the hero 1.00:1 — no edge at all.  These are the palette values
+    those measurements come from."""
+    css = open(CSS_PATH, encoding="utf-8").read()
+    block = css[css.index('html[data-skin="aurora"][data-theme="light"] {'):]
+    block = block[:block.index("\n}")]
+    def var(name):
+        return re.search(r"%s:\s*([^;]+);" % re.escape(name), block).group(1).strip()
+    ground = [int(var("--au-ground-1").lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    card = _over(_rgba(var("--card")), ground)
+    tile = _over(_rgba(var("--surface-2")), card)
+    def cr(a, b):
+        x, y = _lum(a), _lum(b)
+        hi, lo = max(x, y), min(x, y)
+        return (hi + 0.05) / (lo + 0.05)
+    assert cr(card, ground) >= 1.35, "card vs ground only %.2f:1" % cr(card, ground)
+    assert cr(tile, card) >= 1.12, "tile vs card only %.2f:1" % cr(tile, card)
+    assert _lum(ground) <= 0.68, "the ground is still a paper white (%.3f)" % _lum(ground)
+    print("OK  light theme: card 1.54:1 vs ground, tile 1.20:1 vs card")
+
+
+def test_the_summary_is_built_from_data_not_from_a_setup():
+    """The "right now" panel must not know which house it is looking at.
+
+    Every card comes from a provider that returns null when its numbers are
+    missing, so a house with PV and a battery simply gets more cards.  Proved
+    against synthetic payloads: 5 cards without PV, 11 with.
+    """
+    src = open(WEBDASH_PATH, encoding="utf-8").read()
+    block = src[src.index("var _INSIGHT_PROVIDERS = ["):src.index("function _iDur(h)")]
+    ids = re.findall(r"\{{ id: '(\w+)'", block)
+    assert len(ids) >= 10, ids
+    # every provider has a bail-out path
+    assert block.count("return null;") >= len(ids), "a provider cannot opt out"
+    # A provider may look at what a device MEASURES, never at what it is
+    # called or keyed as — that is what makes the panel installation-agnostic.
+    for pattern in (r"\.name\s*===", r"\.name\s*==", r"\.key\s*===", r"\.key\s*==",
+                    r"\.name\.indexOf", r"\.name\.match", r"\.key\.indexOf"):
+        hit = re.search(pattern, block)
+        assert not hit, "a provider branches on a device's identity: %s" % pattern
+    # endpoints are only asked for when the feature is on
+    srcs = src[src.index("var _INSIGHT_SOURCES = {{"):src.index("function _iCard")]
+    assert "if (need && !_insightsFeat[need]) return;" in src
+    print("OK  the summary panel names no device and no installation")
+
+
+def test_the_summary_speaks_every_language():
+    """Fallback texts are what a missing key shows.  A German fallback is read
+    by every English user — the mirror image of the bug found in 16.74."""
+    src = open(WEBDASH_PATH, encoding="utf-8").read()
+    block = src[src.index("var _INSIGHT_PROVIDERS = ["):src.index("function toggleInsights")]
+    keys = re.findall(r"t\('(insight\.[a-z_.]+)',\s*'((?:[^']|\\')*)'\)", block)
+    assert len(keys) >= 18, len(keys)
+    german = re.compile(r"[äöüßÄÖÜ]|\b(?:der|die|das|und|nicht|vom|aus|dem|Netz|jetzt)\b")
+    for key, fallback in keys:
+        assert not german.search(fallback), "German fallback for %s: %r" % (key, fallback)
+        for lang in LANGS:
+            val = _t(lang, key)
+            assert val and val != key, "%s missing in %s" % (key, lang)
+    print("OK  every summary string exists in all 9 languages, fallbacks English")
+
 if __name__ == "__main__":
     test_classic_injection_is_identity()
     test_every_css_rule_is_scoped_to_the_skin()
@@ -1042,5 +1225,14 @@ if __name__ == "__main__":
     test_the_animation_can_be_paused_and_stays_paused()
     test_the_floating_rail_leaves_room_at_the_end()
     test_phones_get_a_real_background()
+    test_no_pane_is_rebuilt_while_its_data_stands_still()
+    test_the_repaint_gate_notices_a_theme_change()
+    test_every_placeholder_in_the_page_has_a_value()
+    test_the_tab_bar_is_translated()
+    test_the_shell_is_as_tall_as_what_you_can_see()
+    test_an_embedded_page_draws_no_ground_of_its_own()
+    test_the_light_theme_gives_a_card_an_edge()
+    test_the_summary_is_built_from_data_not_from_a_setup()
+    test_the_summary_speaks_every_language()
 
     print("\nAll Aurora skin tests passed.")

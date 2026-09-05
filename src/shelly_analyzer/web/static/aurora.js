@@ -739,8 +739,17 @@
     hero = document.createElement("div");
     hero.id = "au-hero";
     hero.className = "au-panel";
+    /* The hero opens the summary panel, so it has to behave like a control:
+       reachable by keyboard and announced with its state. */
+    hero.setAttribute("role", "button");
+    hero.setAttribute("tabindex", "0");
+    hero.setAttribute("aria-controls", "live-insights");
+    hero.setAttribute("aria-expanded", "false");
     hero.innerHTML = heroMarkup();
-    grid.parentNode.insertBefore(hero, grid);
+    /* The summary panel belongs UNDER the hero it is opened from, so the
+       hero goes in front of it, not in front of the device grid. */
+    var below = document.getElementById("live-insights") || grid;
+    grid.parentNode.insertBefore(hero, below);
     var title = hero.querySelector("#au-hero-title");
     if (title) title.textContent = T("aurora.hero.title", "Right now");
     wireAnimButton(hero);
@@ -1530,8 +1539,18 @@
 
   /* ── 8 · Start ──────────────────────────────────────────────────────── */
 
+  /* The Plots tab is an iframe.  Painting a second, independent aurora inside
+     it stacks two grounds with different geometry: the traces do not line up
+     across the boundary and the iframe's opaque background cuts a hard
+     horizontal seam where its box ends.  An embedded page therefore keeps the
+     skin's typography and card styling but draws no ground of its own — the
+     parent's shows through. */
+  var EMBEDDED = false;
+  try { EMBEDDED = window.self !== window.top; } catch (e) { EMBEDDED = true; }
+
   function boot() {
-    try { mountCircuit(); } catch (e) {}
+    if (EMBEDDED) ROOT.setAttribute("data-au-embedded", "1");
+    try { if (!EMBEDDED) mountCircuit(); } catch (e) {}
     hookInlineColours();
     takeOverTint();
     hookRenderLive();

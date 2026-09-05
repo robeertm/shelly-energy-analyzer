@@ -126,32 +126,34 @@ html[data-skin="aurora"][data-theme="light"] {
   --ctp-lavender:  #7287fd;
 
   --bg:            var(--ctp-base);
-  --card:          rgba(255, 255, 255, .72);
-  --surface-2:     rgba(255, 255, 255, .52);
+  --card:          rgba(255, 255, 255, .93);
+  --surface-2:     rgba(223, 228, 240, .86);
   --fg:            var(--ctp-text);
   --muted:         var(--ctp-subtext0);
   --accent:        var(--ctp-mauve);
   --accent-strong: #7287fd;
   --accent-weak:   rgba(136, 57, 239, .10);
-  --border:        rgba(76, 79, 105, .14);
-  --chipbg:        rgba(76, 79, 105, .06);
+  --border:        rgba(76, 79, 105, .20);
+  --chipbg:        rgba(76, 79, 105, .09);
 
-  --shadow-sm: 0 1px 2px rgba(76, 79, 105, .10), 0 3px 14px rgba(76, 79, 105, .10);
-  --shadow-md: 0 8px 26px rgba(76, 79, 105, .17);
+  --shadow-sm: 0 1px 2px rgba(76, 79, 105, .14), 0 4px 16px rgba(76, 79, 105, .14);
+  --shadow-md: 0 10px 28px rgba(76, 79, 105, .20);
   --shadow-lg: 0 20px 56px rgba(76, 79, 105, .24);
   --ring:      rgba(136, 57, 239, .45);
 
-  --au-glass:      rgba(255, 255, 255, .78);
-  --au-rail-veil:  rgba(255, 255, 255, .72);
+  --au-glass:      rgba(255, 255, 255, .94);
+  --au-rail-veil:  rgba(255, 255, 255, .88);
   --au-glass-hi:   rgba(255, 255, 255, .92);
-  --au-hairline:   rgba(76, 79, 105, .16);
+  --au-hairline:   rgba(76, 79, 105, .24);
   --au-edge:       rgba(255, 255, 255, .95);
   /* 🔴 The ground has to be clearly darker than the glass or a white card on a
-     near-white page has no edge at all.  Latte's crust, not its base. */
-  --au-ground-1:   #dce0e8;
-  --au-ground-2:   #e6e9ef;
+     near-white page has no edge at all.  Latte's crust was still not enough:
+     measured, a card stood 1.25:1 against it and the tiles inside 1.00:1.
+     These sit a full surface step lower. */
+  --au-ground-1:   #c9cfdc;
+  --au-ground-2:   #d8dde8;
   --au-scrim:      rgba(255, 255, 255, .55);
-  --au-shimmer:    rgba(76, 79, 105, .06);
+  --au-shimmer:    rgba(76, 79, 105, .09);
   --load-sat:      64%;
 
   color-scheme: light;
@@ -168,6 +170,14 @@ html[data-skin="aurora"][data-theme="light"] {
 html[data-skin="aurora"] {
   background: var(--au-ground-1);
 }
+
+/* Embedded in an iframe (the Plots tab): no ground, no wash, no circuit — the
+   host page already draws all three, and a second copy only produces a seam
+   where the frame ends. */
+html[data-skin="aurora"][data-au-embedded] { background: transparent; }
+html[data-skin="aurora"][data-au-embedded] body { background: transparent; }
+html[data-skin="aurora"][data-au-embedded] body::before,
+html[data-skin="aurora"][data-au-embedded] body::after { display: none !important; }
 html[data-skin="aurora"] body {
   background: transparent;
   color: var(--fg);
@@ -854,6 +864,12 @@ html[data-skin="aurora"] .au-stat {
   background: var(--chipbg);
   border: 1px solid var(--au-hairline);
   min-width: 0;
+}
+/* On the light ground the hero card is nearly white, and a chip tint of a few
+   percent leaves the tiles at 1.01:1 against it — measured, not guessed. They
+   need to be a surface of their own, not a wash. */
+html[data-skin="aurora"][data-theme="light"] .au-stat {
+  background: var(--surface-2);
 }
 html[data-skin="aurora"] .au-stat-value {
   font-size: 17px;
@@ -1675,3 +1691,57 @@ html[data-skin="aurora"][data-theme="light"] .au-anim-btn[aria-pressed="true"] {
 @media (prefers-reduced-motion: reduce) {
   html[data-skin="aurora"] .au-anim-btn { transition: none; }
 }
+
+/* ── 23 · The "Right now" summary ────────────────────────────────────────
+   The hero is the control: clicking it opens a panel that pulls one line out
+   of every other tab.  Which cards appear is decided by the data, not by the
+   installation — a house with PV and a battery gets more of them. */
+html[data-skin="aurora"] #au-hero {
+  cursor: pointer;
+}
+html[data-skin="aurora"] #au-hero::after {
+  content: "⌄";
+  position: absolute;
+  right: 14px;
+  bottom: 8px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--muted);
+  opacity: .7;
+  transition: transform .22s var(--ease);
+  pointer-events: none;
+}
+html[data-skin="aurora"] #au-hero[aria-expanded="true"]::after { transform: rotate(180deg); }
+/* With a hero present the hero IS the toggle, so the fallback bar goes away. */
+html[data-skin="aurora"] #li-toggle { display: none; }
+
+html[data-skin="aurora"] #live-insights {
+  margin: -4px 0 12px;
+  animation: au-pane-in .28s var(--ease) both;
+}
+html[data-skin="aurora"] .li-card {
+  background: var(--au-glass);
+  border: 1px solid var(--au-hairline);
+  border-radius: var(--radius-md, 16px);
+  backdrop-filter: blur(var(--au-blur, 14px)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--au-blur, 14px)) saturate(140%);
+  box-shadow: var(--shadow-sm);
+}
+html[data-skin="aurora"] .li-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+}
+html[data-skin="aurora"] .li-card:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+/* The tone is carried by a spine, not by tinting the whole card — the same
+   device the metric tiles use, so the panel reads as part of the hero. */
+html[data-skin="aurora"] .li-card { position: relative; overflow: hidden; }
+html[data-skin="aurora"] .li-card::before {
+  content: "";
+  position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--accent);
+  opacity: .55;
+}
+html[data-skin="aurora"] .li-good::before { background: var(--ctp-green); opacity: .8; }
+html[data-skin="aurora"] .li-warn::before { background: var(--ctp-peach); opacity: .8; }
+html[data-skin="aurora"] .li-good .li-value { color: var(--ctp-green); }
+html[data-skin="aurora"] .li-warn .li-value { color: var(--ctp-peach); }
