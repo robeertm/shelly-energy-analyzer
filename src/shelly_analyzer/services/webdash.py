@@ -5243,10 +5243,16 @@ async function loadInsights() {{
       if (data) {{
         _insightAge[name] = Date.now();
         _insightCache[name] = data;
+        /* 🔴 Into the CURRENT context, not the one this request set out with.
+           A source that answers slowly (battery: ~16 s under load) outlives
+           its own round — writing into the captured ctx meant its card only
+           appeared a refresh later, measured at 50 s instead of 16. */
         ctx[name] = data;
+        if (_insightsData && _insightsData !== ctx) _insightsData[name] = data;
       }}
       if (done >= started) _insightSettled = true;
-      renderInsights(ctx, el, _insightSettled);
+      var live = _insightsData || ctx;
+      renderInsights(live, el, _insightSettled);
     }});
   }});
   if (!started) _insightSettled = true;

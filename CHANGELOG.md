@@ -1,5 +1,14 @@
 # Changelog
 
+## 16.75.3
+### Fixed
+- **A slow source's card appeared a refresh too late.** Each round of the
+  summary built its own context and its responses wrote into that one — but a
+  source that answers slowly outlives its own round. On a real installation
+  `/api/battery` takes ~16 s under load, so its card landed in a context that
+  had already been replaced and only showed up on the *next* pass: measured
+  **50 s instead of 16 s**. Late answers now render into the current context.
+
 ## 16.75.2
 ### Fixed
 - **The summary dropped exactly the card the installation had.** `/api/battery`
