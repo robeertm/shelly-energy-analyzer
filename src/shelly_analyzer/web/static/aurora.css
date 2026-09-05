@@ -159,8 +159,17 @@ html[data-skin="aurora"][data-theme="light"] {
 
 /* ── 2 · The ground and the aurora ──────────────────────────────────────── */
 
-html[data-skin="aurora"] body {
+/* 🔴 The ground goes on the ROOT, and body stays transparent.  Both
+   background layers sit at a negative z-index inside body, and they are only
+   visible because an unset html background makes the browser propagate body's
+   background to the viewport instead of painting it on body itself.  That is a
+   rule engines have differed on; putting the colour where it cannot be
+   painted over removes the question. */
+html[data-skin="aurora"] {
   background: var(--au-ground-1);
+}
+html[data-skin="aurora"] body {
+  background: transparent;
   color: var(--fg);
   font-family: ui-sans-serif, -apple-system, "SF Pro Text", system-ui,
                "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -1280,6 +1289,30 @@ html[data-skin="aurora"] #app-version-badge { color: color-mix(in srgb, var(--fg
    by an optional alpha pair", and a blanket rule repaints backgrounds as text.
    So the inline case is handled in aurora.js by the SAME hue-snap the canvas
    hook uses — one rule, one implementation.  Nothing to declare here. */
+
+/* The rail FLOATS, so unlike the classic one it sits ON the content.  The
+   scroller (#panes) already reserves room at the end — but a fixed 98px is a
+   guess against a rail whose height the skin changed, so make it the rail's
+   MEASURED height instead.  Putting it on .pane as well simply double-counted
+   it: 190px of dead space at the bottom of every tab.
+
+   Mid-scroll a floating bar covers what passes under it; that is inherent to
+   the pattern.  What it must not do is CUT a card in half, so the content
+   dissolves into the rail instead of ending against a hard edge. */
+html[data-skin="aurora"] #panes {
+  padding-bottom: calc(var(--au-rail-h, 62px) + 34px + env(safe-area-inset-bottom, 0px));
+}
+html[data-skin="aurora"] #panes::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--au-rail-h, 62px) + 10px + env(safe-area-inset-bottom, 0px));
+  height: 26px;
+  z-index: 99;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, var(--au-ground-1));
+}
 
 /* ── 18 · Live cards, and motion under the pointer ──────────────────────── */
 
