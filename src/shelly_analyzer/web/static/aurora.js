@@ -150,11 +150,12 @@
 
     var lanes = [], pads = [], vias = [];
     var narrow = w < 720;
-    var mx = Math.max(14, Math.min(40, Math.round(w * 0.021)));
+    var mx = narrow ? 8 : Math.max(14, Math.min(40, Math.round(w * 0.021)));
     // How far a branch may reach before it would sit under the text.
     /* Stop short of the reading column rather than reaching into it: a
        conductor behind a paragraph is a distraction, however faint. */
-    var reach = Math.max(44, Math.min(280, Math.round((w - pane) / 2) - 10));
+    var reach = narrow ? 58
+                       : Math.max(44, Math.min(280, Math.round((w - pane) / 2) - 10));
     var seed = 0;
     function rnd() {                       // deterministic: same board every load
       seed = (seed * 1103515245 + 12345) & 0x7fffffff;
@@ -224,23 +225,40 @@
       seal(pts, "bus");
     }
 
-    if (narrow) {
-      /* No margins to speak of.  One conductor along the very bottom edge with
-         short stubs — anything more would sit under the content. */
-      var yb = h - 6;
-      var p = [{ x: -40, y: yb }];
-      for (var x = -10; x < w + 40; x += 96) {
-        p.push({ x: x, y: yb });
-        p.push({ x: x + 20, y: yb - 20 });
-        p.push({ x: x + 48, y: yb - 20 });
-        p.push({ x: x + 68, y: yb });
-        pads.push({ x: x + 34, y: yb - 20, r: 1.7 });
+    /* 🔴 A phone used to get ONE conductor along the very bottom edge — which
+       is precisely where the floating rail sits, so the background was
+       invisible on every phone.  Measured: 1 lane, 5 pads, all of it hidden.
+       Phones get the same two bus bars as everything else, pushed into the
+       outer margin and with short branches; the cards are glass, so what does
+       pass behind them reads as texture rather than as a line through text. */
+    bus(mx, 1);
+    bus(w - mx, -1);
+
+    /* Trunks: full-width runs with 45-degree elbows that tie the two bus bars
+       together.  The first version kept every conductor OUT of the reading
+       column — which is defensible, and wrong for this product: Robert wants
+       the board to run through the whole picture.  It works because the
+       content sits on glass: a trace behind a card is muted by the card's own
+       surface, and only the gaps between cards show it at full strength. */
+    var rows = Math.max(3, Math.min(narrow ? 6 : 8, Math.round(h / 165)));
+    for (var r = 0; r < rows; r++) {
+      var y = Math.round((h * (r + 0.5)) / rows) + (r % 2 ? -12 : 12);
+      var pts = [{ x: mx, y: y }];
+      var x = mx, dir = r % 2 ? -1 : 1, yy = y;
+      while (x < w - mx - 20) {
+        var run = 70 + ((r * 97 + pts.length * 53) % 150);
+        x = Math.min(w - mx, x + run);
+        pts.push({ x: x, y: yy });
+        if (x >= w - mx - 20) break;
+        var el = 18 + ((r * 31 + pts.length * 17) % 26);
+        x = Math.min(w - mx, x + el);
+        yy = Math.max(16, Math.min(h - 16, yy + el * dir));
+        pts.push({ x: x, y: yy });
+        if (rnd() < 0.34) pads.push({ x: x, y: yy, r: 1.9 });
+        dir = -dir;
       }
-      p.push({ x: w + 40, y: yb });
-      seal(p, "bus");
-    } else {
-      bus(mx, 1);
-      bus(w - mx, -1);
+      pts.push({ x: w - mx, y: yy });
+      seal(pts, "trunk");
     }
 
     var path = null;
@@ -422,6 +440,7 @@
       var mob = board.narrow;
       var speed = 26 + l * 240;                            // px/s
       var busN = (mob ? 2 : 3) + Math.round(l * (mob ? 2 : 4));
+      var trN = (mob ? 1 : 2) + Math.round(l * (mob ? 1 : 2));
       var brN = l > 0.16 ? 1 : 0;
       var head = 0.20 + 0.42 * l;
       var TRAIL = mob ? 6 : 11;
@@ -430,7 +449,7 @@
       ctx.globalCompositeOperation = LIGHT ? "source-over" : "lighter";
       for (var i = 0; i < board.lanes.length; i++) {
         var ln = board.lanes[i];
-        var n = ln.kind === "bus" ? busN : brN;
+        var n = ln.kind === "bus" ? busN : (ln.kind === "trunk" ? trN : brN);
         if (!n) continue;
         var dir = (i % 2) ? -1 : 1;
         for (var c2 = 0; c2 < n; c2++) {
@@ -1024,6 +1043,21 @@
                      "borderTopColor", "borderRightColor", "borderBottomColor",
                      "fill", "stroke", "outlineColor", "caretColor"];
 
+  /* What is actually behind this element: the first ancestor that paints a
+     solid colour, and the root if none does. */
+  function backdropOf(el) {
+    var n = el;
+    while (n) {
+      var cs = getComputedStyle(n);
+      if (cs.backgroundImage && cs.backgroundImage !== "none") return null;
+      var c = parseColour(cs.backgroundColor);
+      if (c && c.a > 0.55) return c.rgb;
+      n = n.parentElement;
+    }
+    var root = parseColour(getComputedStyle(ROOT).backgroundColor);
+    return root && root.a > 0.55 ? root.rgb : null;
+  }
+
   function relLum(rgb) {
     function f(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
     return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2]);
@@ -1051,8 +1085,38 @@
        which becomes white on Catppuccin yellow — 1.3:1, unreadable.  So after
        mapping, if an element carries its own solid background, make sure its
        own text still stands on it. */
+    /* 🔴 The guard used to fire only when the element painted its OWN solid
+       background.  A colour that is merely written as text sits on whatever
+       is behind it — and lightness is deliberately preserved by the mapper, so
+       a mid-light amber lands on a white card at 2.0:1.  Measured on the CO2
+       tab in the light theme.  Find the real backing colour and, if the pair
+       fails, move the LIGHTNESS of the text until it passes; hue and
+       saturation are what carry the meaning, so they stay. */
     var bgv = st.backgroundColor;
-    if (!bgv) return;
+    if (!bgv || (parseColour(bgv) || { a: 0 }).a < 0.6) {
+      var fgOwn = st.color;
+      if (!fgOwn) return;
+      var f = parseColour(fgOwn);
+      if (!f) return;
+      var back = backdropOf(el);
+      if (!back) return;
+      if (contrast(f.rgb, back) >= 3.0) return;
+      var hsl = rgbToHsl(f.rgb);
+      var up = relLum(back) < 0.45;             // dark ground -> lighten
+      for (var k = 1; k <= 14; k++) {
+        var L = Math.max(0.06, Math.min(0.96, hsl[2] + (up ? k * 0.05 : -k * 0.05)));
+        var cand = hslToRgb(hsl[0], hsl[1], L);
+        if (contrast(cand, back) >= 3.0) {
+          var out = f.a >= 0.999
+            ? "rgb(" + cand[0] + ", " + cand[1] + ", " + cand[2] + ")"
+            : "rgba(" + cand[0] + ", " + cand[1] + ", " + cand[2] + ", " + f.a + ")";
+          produced[_ckey(out)] = 1;
+          try { st.color = out; } catch (e) {}
+          return;
+        }
+      }
+      return;
+    }
     var bg = parseColour(bgv);
     if (!bg || bg.a < 0.6) return;
     var fgv = st.color || getComputedStyle(el).color;

@@ -1,5 +1,40 @@
 # Changelog
 
+## 16.72.1
+### Fixed
+- **The floating rail sat on the last card, and a phone had no background at
+  all.** Two separate mobile defects, both measured on a 390×844 viewport:
+  - The rail floats, so unlike the classic one it covers what passes under it.
+    The scroller already reserved a fixed 98 px — a guess against a rail whose
+    height this skin changed — and 16.72.0 then reserved it a *second* time on
+    the pane, for 190 px of dead space. It is reserved once now, from the
+    rail's **measured** height, and content dissolves into the rail through a
+    scrim instead of ending against a hard edge.
+  - Phones got **one** conductor along the very bottom edge — which is exactly
+    where the rail sits, so the background was invisible on every phone
+    (measured: 1 lane, 5 pads, all of it hidden). A phone now gets the same
+    board as everything else: 23 lanes, 30 pads, and 73 % of sampled pixels
+    change between two frames.
+- **Amber on white, 2.0:1.** The contrast guard only ever fired for an element
+  that painted its own solid background. A colour written as *text* sits on
+  whatever is behind it, and the colour rule preserves lightness by design — so
+  a mid-light amber landed on a white card unreadable. The real backing colour
+  is resolved now, and only the lightness moves until the pair passes 3:1;
+  hue and saturation carry the meaning and stay.
+- The page background moved from `body` to the **root**. Both background
+  layers sit at a negative z-index inside body and were only visible because an
+  unset `html` background makes the browser propagate body's background to the
+  viewport — a rule engines have differed on. Putting the colour where it
+  cannot be painted over removes the question.
+
+### Changed
+- **The board runs through the whole picture.** 16.72.0 kept every conductor
+  out of the reading column; full-width trunks now tie the two bus bars
+  together across the viewport. It works because the content sits on glass: a
+  trace behind a card is muted by the card's own surface, and only the gaps
+  between cards show it at full strength. Measured: 32 lanes and 48 pads at
+  1440 px, 23 and 30 on a phone, 60 fps on both.
+
 ## 16.72.0
 ### Fixed
 - **The dashboard froze, and then nothing worked.** The animated background

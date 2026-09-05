@@ -696,6 +696,45 @@ def test_heatmap_keeps_the_gaps_that_make_it_a_grid():
     print("OK  the heatmap keeps its spacing and reads as a grid")
 
 
+def test_the_floating_rail_leaves_room_at_the_end():
+    """A rail that floats sits ON the content, so the scroller has to reserve
+    room for it — and exactly once.  The base reserves a fixed 98px, which is a
+    guess against a rail whose height this skin changed; putting the same
+    reservation on .pane as well simply double-counted it (190px of dead space
+    at the bottom of every tab)."""
+    css = _strip_css_comments(open(CSS_PATH, encoding="utf-8").read())
+    assert 'html[data-skin="aurora"] #panes {' in css, "the scroller reserves nothing"
+    # there is more than one #panes rule; the reservation is in whichever one
+    # carries padding-bottom
+    blocks = [css[i:css.index("}", i)] for i in
+              [m.start() for m in re.finditer(r'html\[data-skin="aurora"\] #panes \{', css)]]
+    pad = [b for b in blocks if "padding-bottom" in b]
+    assert pad, "the scroller reserves no room for the floating rail"
+    assert any("--au-rail-h" in b for b in pad), \
+        "the reservation is a guess again, not the rail's measured height"
+    assert 'html[data-skin="aurora"] .pane {\n  padding-bottom' not in css, \
+        "the reservation is counted twice"
+    print("OK  the scroller reserves the rail's measured height, once")
+
+
+def test_phones_get_a_real_background():
+    """A phone used to get ONE conductor along the very bottom edge — which is
+    exactly where the floating rail sits, so the background was invisible on
+    every phone (measured: 1 lane, 5 pads, all of it hidden).  Phones get the
+    same bus bars as everything else now, pushed into the outer margin."""
+    js = _strip_js_comments(open(JS_PATH, encoding="utf-8").read())
+    board = js[js.index("function buildBoard("):]
+    board = board[:board.index("\n  }\n")]
+    assert "if (narrow) {" not in board, "phones are back on the special-case one-liner"
+    assert board.count("bus(") >= 2, "the bus bars are gone"
+    # the margin and the branch budget must both stay usable at 390px
+    m = re.search(r"var reach = narrow \? (\d+)", board)
+    assert m and int(m.group(1)) > 54, (
+        "a narrow reach at or below the branch gate produces bus bars with no "
+        "branches at all")
+    print("OK  phones get bus bars with branches, not one line under the rail")
+
+
 def test_touch_devices_get_no_sticky_hover():
     """Every lift added for the pointer would stick after a tap on a phone."""
     css = open(CSS_PATH, encoding="utf-8").read()
@@ -737,5 +776,7 @@ if __name__ == "__main__":
     test_sparkline_wrapper_does_not_clip_its_label()
     test_heatmap_keeps_the_gaps_that_make_it_a_grid()
     test_touch_devices_get_no_sticky_hover()
+    test_the_floating_rail_leaves_room_at_the_end()
+    test_phones_get_a_real_background()
 
     print("\nAll Aurora skin tests passed.")
