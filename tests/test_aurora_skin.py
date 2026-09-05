@@ -18,6 +18,8 @@ import ast
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -35,6 +37,15 @@ JS_PATH = os.path.join(SRC, "web", "static", "aurora.js")
 
 SAMPLE = ('<!doctype html>\n<html lang="en">\n<head><title>x</title></head>\n'
           '<body><div id="app"></div></body>\n</html>')
+
+
+def _strip_css_comments(text):
+    return re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
+
+
+def _strip_js_comments(text):
+    text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
+    return re.sub(r"(?m)^\s*//.*$", " ", text)
 
 
 class _State:
@@ -194,12 +205,32 @@ def test_navigation_rail_stays_reachable():
     j = css.index("justify-content: safe center")
     assert i < j, "the plain value must come first as the fallback"
 
+    # 🔴 And it must not be capped to the reading column.  Measured on a real
+    # instance: 24 tabs need 1348px, --pane-max is 1180, and Control,
+    # Calibration and Sync sat at x=1282..1473 outside a box that ended at
+    # 1310 — three tabs with no way to reach them.
+    rail = css[css.index('html[data-skin="aurora"] #bottom-nav {'):]
+    rail = rail[:rail.index("/* A soft edge")]
+    assert "min(var(--pane-max)" not in rail, \
+        "the rail is capped to the pane again — the last tabs become unreachable"
+    assert "max-width: calc(100vw - 20px)" in rail, "the rail lost its width"
+
     js = open(JS_PATH, encoding="utf-8").read()
-    fn = js[js.index("function followNav("):]
-    fn = fn[:fn.index("\n  }")]
+    fn = js[js.index("function railSetup("):]
+    fn = fn[:fn.index("\n  }\n\n")]
     assert "MutationObserver" in fn and 'attributeFilter: ["class"]' in fn, \
         "the rail follows clicks only — a restored or palette-driven tab is missed"
-    print("OK  the rail centres safely and follows the active tab however it moved")
+    # A desktop mouse has no horizontal-scroll gesture; without this the fade
+    # promises more tabs the user cannot get to.
+    assert 'addEventListener("wheel"' in fn, "the rail cannot be scrolled with a wheel"
+    # The end fade has to be decided AFTER the buttons tighten, or it hangs off
+    # a rail that now fits exactly.
+    e = fn[fn.index("function edges()"):]
+    e = e[:e.index("\n    }")]
+    assert e.index("toggleAttribute") < e.index("var over ="), \
+        "the overflow is measured before the dense toggle changes it"
+    print("OK  the rail centres safely, spans the window, scrolls by wheel, "
+          "and follows the active tab however it moved")
 
 
 # ── The colour rule ───────────────────────────────────────────────────────
@@ -212,14 +243,124 @@ def test_colour_rule_documented_thresholds():
     assert m, "the grey/extreme guard is gone"
     sat, lo, hi = (float(x) for x in m.groups())
     assert 0.2 < sat < 0.5 and 0.05 < lo < 0.3 and 0.8 < hi < 0.99, (sat, lo, hi)
-    # The identity band is what separates "a chart colour" from "a tint".
-    assert re.search(r"hsl\[2\] >= 0\.\d+ && hsl\[2\] <= 0\.\d+", js), \
-        "the mid-tone identity band is gone — tint/text pairs will collapse"
     # Both input notations must be understood, or half the dashboard slips past.
     assert "rgba?\\(" in js or "rgba?(" in js
     assert "hsla?" in js, "hsl() inputs would bypass the mapper"
     assert "function hslToRgb" in js
-    print("OK  the colour rule keeps its guard, its identity band and both notations")
+    print("OK  the colour rule keeps its guard and both notations")
+
+
+def test_colour_rule_is_bounded_attraction_not_a_snap():
+    """A heatmap's meaning IS its gradient, so the rule may not quantise.
+
+    The first version replaced any mid-lightness colour with the nearest of ten
+    accents.  Measured against the live dashboard, that turned a heatmap drawn
+    as a smooth ramp into FOUR colours.  The rule now moves a hue toward the
+    nearest accent by a bounded amount and never touches lightness.  Two facts
+    make "a ramp stays a ramp" structural rather than hopeful:
+
+      · the shift is clamped, so two inputs can converge but never cross;
+      · lightness is carried through untouched, so a light tint stays lighter
+        than the deep shade beside it.
+    """
+    js = open(JS_PATH, encoding="utf-8").read()
+    pull = re.search(r"var HUE_PULL = ([\d.]+);", js)
+    mix = re.search(r"var SAT_MIX = ([\d.]+);", js)
+    assert pull and mix, "the attraction constants are gone"
+    assert 4 <= float(pull.group(1)) <= 24, pull.group(1)
+    assert 0.0 <= float(mix.group(1)) <= 0.65, mix.group(1)
+    # The snap returned the accent's own css verbatim; that must be gone.
+    body = js[js.index("function mapColour("):]
+    body = body[:body.index("\n  }\n")]
+    assert "best.css" not in body, "mapColour still returns an accent verbatim — that is a snap"
+    assert "hsl[2] * 1000" in body or "hsl[2]" in body, "lightness must be carried through"
+    print("OK  the colour rule is a bounded attraction, and lightness survives it")
+
+
+def test_measured_heatmap_ramp_survives_the_colour_rule():
+    """Run the real rule over the ramp measured on the live heatmap.
+
+    These are the actual values the dashboard painted, read out of the DOM with
+    the mapper switched off.  Before the fix they came out as four colours.
+    """
+    node = shutil.which("node")
+    if not node:
+        print("--  node not installed; skipping the executable colour check")
+        return
+    js = open(JS_PATH, encoding="utf-8").read()
+    # The measured ramp, low to high.
+    ramp = [(85, 192, 72), (98, 191, 67), (111, 190, 61), (146, 187, 46),
+            (175, 184, 34), (186, 183, 29), (203, 182, 22), (215, 181, 16),
+            (224, 180, 12), (234, 172, 12), (236, 141, 28), (237, 117, 42),
+            (238, 87, 58)]
+    harness = """
+      var ROOT = {}, palette = null, mine = null;
+      var TOKENS = [], ACCENTS = [];
+      %s
+      // A stand-in for the browser: the Mocha accents, straight from the CSS.
+      palette = ACC.map(function (h) {
+        var a = rgbToHsl(hexToRgb(h));
+        return { hue: a[0], sat: a[1], css: h };
+      });
+      mine = Object.create(null);
+      var out = IN.map(function (c) {
+        return mapColour("rgb(" + c[0] + "," + c[1] + "," + c[2] + ")");
+      });
+      // Feeding the output back in must change nothing.  Without that the
+      // inline-style observer rewrites every element seven times over.
+      var again = out.map(mapColour);
+      console.log(JSON.stringify({ out: out, idempotent:
+        JSON.stringify(out) === JSON.stringify(again) }));
+    """
+    keep = []
+    for fn in ("function hexToRgb", "function rgbToHsl", "function hslToRgb",
+               "function parseColour", "var HUE_PULL", "var HUE_FRAC",
+               "var SAT_MIX", "var produced", "var memo", "function _ckey",
+               "function mapColour"):
+        i = js.index(fn)
+        if fn.startswith("var "):
+            keep.append(js[i:js.index("\n", i) + 1])
+            continue
+        keep.append(js[i:js.index("\n  }\n", i) + len("\n  }\n")])
+    accents = re.findall(r"--ctp-(?:red|peach|yellow|green|teal|sky|blue|lavender|mauve|pink):\s*(#[0-9a-f]{6})",
+                         open(CSS_PATH, encoding="utf-8").read())[:10]
+    assert len(accents) == 10, f"expected 10 accents in the CSS, found {len(accents)}"
+    prog = ("var ACC = " + json.dumps(accents) + ";\n"
+            "var IN = " + json.dumps(ramp) + ";\n"
+            + (harness % "\n".join(keep)))
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
+        f.write(prog)
+        path = f.name
+    try:
+        res = subprocess.run([node, path], capture_output=True, text=True, timeout=30)
+        assert res.returncode == 0, res.stderr[:500]
+        payload = json.loads(res.stdout.strip())
+        got = payload["out"]
+        assert payload["idempotent"], (
+            "mapping our own output changes it — the inline-style observer "
+            "will rewrite every element until it converges, seven passes deep")
+    finally:
+        os.unlink(path)
+
+    assert len(set(got)) == len(ramp), (
+        f"the ramp collapsed: {len(ramp)} inputs became {len(set(got))} colours")
+    def _hue(css):
+        r, g_, b = (int(x) for x in re.findall(r"\d+", css)[:3])
+        r, g_, b = r / 255, g_ / 255, b / 255
+        mx, mn = max(r, g_, b), min(r, g_, b)
+        d = mx - mn
+        if not d:
+            return 0.0
+        h = (((g_ - b) / d) % 6 if mx == r else
+             (b - r) / d + 2 if mx == g_ else (r - g_) / d + 4) * 60
+        return h + 360 if h < 0 else h
+    hues = [_hue(g) for g in got]
+    # Green (~120) down to red (~0): the ramp must stay strictly ordered.
+    for i in range(1, len(hues)):
+        assert hues[i] < hues[i - 1] + 1e-6, (
+            f"the ramp reordered at step {i}: {hues[i-1]:.1f} -> {hues[i]:.1f}")
+    print(f"OK  the measured heatmap ramp stays {len(set(got))} distinct colours, "
+          f"hue {hues[0]:.0f} to {hues[-1]:.0f}, monotone, and idempotent")
 
 
 def test_no_generated_selector_table_left_behind():
@@ -421,6 +562,150 @@ def test_no_local_import_shadows_a_module_global():
     print("OK  no function reads a name before its own local binding")
 
 
+# ── The background, and why it stopped freezing ───────────────────────────
+
+def test_background_opts_out_of_the_colour_hook_at_call_time():
+    """The skin's own canvas must keep the live load hue.
+
+    The first attempt captured the "raw" property setter inside mountCircuit —
+    but the colour hook is armed before boot(), so what it captured WAS the
+    patched setter and the bypass never bypassed anything.  Measured: a
+    conductor asked for hsla(26,40%,68%,.13) and got rgb(254,100,11).  A flag
+    checked at call time cannot be defeated by ordering.
+    """
+    js = open(JS_PATH, encoding="utf-8").read()
+    assert "this.__auRaw ? v : mapColour(v)" in js, \
+        "the canvas setter no longer honours the opt-out"
+    assert "g.__auRaw = true" in js, "the background context never claims the opt-out"
+    # A gradient must follow the same rule as the context that made it.
+    assert "rawGrads" in js and "addColorStop" in js, \
+        "gradient stops still go through the mapper regardless of their context"
+    # And the broken approach must not come back.
+    assert "getOwnPropertyDescriptor(\n      window.CanvasRenderingContext2D" not in js
+    assert "raw.set.call" not in js, "the descriptor-capture bypass is back"
+    print("OK  the background canvas opts out of the colour rule at call time")
+
+
+def test_the_animation_cannot_die():
+    """The freeze, and the two things that caused it.
+
+    Measured against the live dashboard: with the skin the whole page fell from
+    ~29 fps to zero within minutes and never recovered; without it the page held
+    59 fps for ten minutes.  Two defects, both fixed here:
+
+      · a frame that threw left `raf` at 0 with nothing scheduled, so ONE
+        exception froze the background for the life of the page;
+      · requestAnimationFrame stops being delivered when the window is merely
+        covered by another one, and that does NOT fire visibilitychange — so
+        there was no way back at all.  A timer keeps running in that state.
+    """
+    js = open(JS_PATH, encoding="utf-8").read()
+    fn = js[js.index("    function frame(ts) {"):]
+    fn = fn[:fn.index("\n    }\n")]
+    assert "try {" in fn and "catch (e)" in fn, "a throwing frame kills the loop again"
+    assert "schedule();" in fn, "the frame does not reschedule itself"
+    assert "lastFrameAt = now();" in fn, "nothing records that a frame happened"
+    wd = js[js.index("setInterval(function () {"):]
+    wd = wd[:wd.index("}, 1300);")]
+    assert "lastFrameAt" in wd and "schedule()" in wd, "the watchdog does not restart the loop"
+    assert "document.hidden" in wd, "the watchdog would run in a hidden tab"
+    print("OK  a throwing frame reschedules, and a watchdog revives a stalled loop")
+
+
+def test_the_expensive_dom_background_is_gone():
+    """Bisected against the live dashboard: the blurred DOM ribbons cost three
+    quarters of the frame budget (14 fps with, 52 fps without), while removing
+    the canvas changed nothing at all.  The field is painted from pre-rendered
+    sprites on the canvas now."""
+    # 🔴 Strip comments first.  The note explaining WHY these are gone names
+    # every one of them, and a plain grep counts the explanation as the crime.
+    css = _strip_css_comments(open(CSS_PATH, encoding="utf-8").read())
+    js = _strip_js_comments(open(JS_PATH, encoding="utf-8").read())
+    assert "aurora-sky" not in css and "aurora-sky" not in js, \
+        "the blurred DOM background is back"
+    assert "blur(58px)" not in css and "blur(72px)" not in css, \
+        "a large blur filter is animated again"
+    assert "mix-blend-mode" not in css, "a blend mode is back on an animated element"
+    js_all = open(JS_PATH, encoding="utf-8").read()
+    assert "fieldSprite" in js_all and "fieldCv" in js_all, "the field is no longer buffered"
+    print("OK  no animated blur+blend in the DOM; the field is a buffered sprite")
+
+
+def test_charge_follows_the_load_on_the_scale_the_gauge_uses():
+    """Faster and redder as the house pulls more — and on the banded scale, so
+    the difference between a quiet evening and the oven being on is visible."""
+    js = open(JS_PATH, encoding="utf-8").read()
+    stops = re.findall(r"\{\s*w:\s*(\d+),\s*hue:\s*(-?\d+)", js)
+    assert len(stops) == 5, stops
+    watts = [int(w) for w, _ in stops]
+    hues = [int(h) for _, h in stops]
+    assert watts == sorted(watts), watts
+    assert hues == sorted(hues, reverse=True), "the hue must fall monotonically toward red"
+    assert hues[0] > 150, "idle should be teal"
+    assert hues[-1] <= 0, "peak should reach red"
+    assert watts[-1] <= 5000, "red arrives too late for a household"
+    lc = js[js.index("function loadColour("):]
+    lc = lc[:lc.index("\n  }\n")]
+    assert "(i + f) / (STOPS.length - 1)" in lc.replace("\n", " ").replace("  ", " "), \
+        "the lift is back on a straight watt scale"
+    assert "l * 240" in js, "the charge speed no longer follows the load"
+    print(f"OK  {watts[0]}..{watts[-1]} W maps hue {hues[0]} to {hues[-1]}, banded")
+
+
+# ── The three things that were visibly wrong ──────────────────────────────
+
+def test_the_loading_pill_clears_the_rail():
+    """The base pins the progress strip to bottom: 52px — the height of the
+    CLASSIC rail, which sits flush on the bottom edge.  The Aurora rail floats
+    and is taller, so the strip drew a blue line across the middle of the
+    icons.  It is positioned from the rail's MEASURED height now."""
+    css = open(CSS_PATH, encoding="utf-8").read()
+    js = open(JS_PATH, encoding="utf-8").read()
+    blk = css[css.index('html[data-skin="aurora"] #nav-progress {'):]
+    blk = blk[:blk.index("}")]
+    assert "--au-rail-h" in blk, "the pill is positioned from a hard-coded number again"
+    assert "52px" not in blk
+    assert "--au-rail-h" in js, "nothing measures the rail"
+    print("OK  the loading pill is placed from the rail's measured height")
+
+
+def test_sparkline_wrapper_does_not_clip_its_label():
+    """border-radius + overflow:hidden on the wrapper put a rounded corner over
+    the top-left of the caption inside it.  Pixel-checked on the live page: "U"
+    rendered as "J".  Layout metrics show nothing; only the pixels do."""
+    css = open(CSS_PATH, encoding="utf-8").read()
+    blk = css[css.index('html[data-skin="aurora"] .sparkline-wrap {'):]
+    blk = blk[:blk.index("}")]
+    assert "overflow: visible" in blk, "the wrapper clips its own label again"
+    assert "border-radius: 0" in blk, "a rounded corner will eat the first glyph"
+    print("OK  the sparkline wrapper cannot clip its caption")
+
+
+def test_heatmap_keeps_the_gaps_that_make_it_a_grid():
+    """A heatmap is the one table whose GAPS carry meaning.  Collapsing its
+    spacing welded the cells into one field of colour."""
+    css = open(CSS_PATH, encoding="utf-8").read()
+    blk = css[css.index('html[data-skin="aurora"] .hm-table {'):]
+    blk = blk[:blk.index("}")]
+    m = re.search(r"border-spacing:\s*([\d.]+)px", blk)
+    assert m and float(m.group(1)) >= 2, "the heatmap cells are welded together again"
+    # and it must not be swept up by the generic table rule
+    generic = css[css.index('html[data-skin="aurora"] table,'):]
+    generic = generic[:generic.index("}")]
+    assert ".hm-table" not in generic, "the heatmap is back under the border-spacing: 0 rule"
+    print("OK  the heatmap keeps its spacing and reads as a grid")
+
+
+def test_touch_devices_get_no_sticky_hover():
+    """Every lift added for the pointer would stick after a tap on a phone."""
+    css = open(CSS_PATH, encoding="utf-8").read()
+    assert "@media (hover: none)" in css, "no hover fallback for touch"
+    blk = css[css.index("@media (hover: none)"):]
+    assert "transform: none" in blk[:900], "the lifts still apply on touch"
+    assert "prefers-reduced-motion" in css
+    print("OK  touch gets no sticky hover, and reduced motion is honoured")
+
+
 if __name__ == "__main__":
     test_classic_injection_is_identity()
     test_every_css_rule_is_scoped_to_the_skin()
@@ -432,6 +717,8 @@ if __name__ == "__main__":
     test_js_never_replaces_the_dashboards_own_functions()
     test_navigation_rail_stays_reachable()
     test_colour_rule_documented_thresholds()
+    test_colour_rule_is_bounded_attraction_not_a_snap()
+    test_measured_heatmap_ramp_survives_the_colour_rule()
     test_no_generated_selector_table_left_behind()
     test_skin_strings_exist_in_every_language()
     test_battery_tab_is_translated()
@@ -442,4 +729,13 @@ if __name__ == "__main__":
     test_demo_mode_gets_the_demo_poller()
     test_demo_house_never_draws_nothing()
     test_no_local_import_shadows_a_module_global()
+    test_background_opts_out_of_the_colour_hook_at_call_time()
+    test_the_animation_cannot_die()
+    test_the_expensive_dom_background_is_gone()
+    test_charge_follows_the_load_on_the_scale_the_gauge_uses()
+    test_the_loading_pill_clears_the_rail()
+    test_sparkline_wrapper_does_not_clip_its_label()
+    test_heatmap_keeps_the_gaps_that_make_it_a_grid()
+    test_touch_devices_get_no_sticky_hover()
+
     print("\nAll Aurora skin tests passed.")

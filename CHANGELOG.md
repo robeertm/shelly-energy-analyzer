@@ -1,5 +1,88 @@
 # Changelog
 
+## 16.72.0
+### Fixed
+- **The dashboard froze, and then nothing worked.** The animated background
+  took the whole page down with it. Bisected against a live install: with the
+  skin the page fell from ~29 fps to **zero** within three minutes and never
+  came back; with `aurora.js` disabled the same page held **59 fps for ten
+  minutes**. Removing the canvas changed nothing — **14 fps with it, 14 fps
+  without** — while removing the three drifting DOM ribbons took it to **52**.
+  They carried `filter: blur(58px)` and `mix-blend-mode` on elements the size
+  of the screen, *and* an animated `scale()`, so every frame re-rasterised a
+  full-screen blur. The soft field is now painted from pre-rendered sprites on
+  the canvas that was already there. Measured on the same install afterwards:
+  **60.2 fps**, held flat for 26 minutes.
+  Two further defects kept the freeze permanent once it started, and both are
+  fixed: a frame that threw left nothing scheduled, so a single exception
+  stopped the background for the life of the page; and `requestAnimationFrame`
+  simply stops being delivered when the window is *covered by another window* —
+  which does **not** fire `visibilitychange`, so there was no way back at all.
+  A timer-based watchdog restarts the loop, because timers keep running in that
+  state.
+- **Three tabs could not be reached.** The rail was capped at the reading
+  column's width. Measured on a real install: 24 tabs need **1348 px**, the
+  column is 1180, and Control, Calibration and Sync sat at x=1282–1473 in a box
+  that ended at 1310. The rail is chrome, not content — it may use the whole
+  window. Where it still has to scroll (narrow screens), a mouse wheel over it
+  now scrolls it sideways, the end fades appear only on the side that actually
+  continues, and the buttons tighten only when they must.
+- **The tab-loading bar drew a line through the icons.** It is pinned to
+  `bottom: 52px` — exactly the height of the *classic* rail, which sits flush
+  on the bottom edge. The Aurora rail floats and is taller. It is now a glass
+  pill above the rail, placed from the rail's **measured** height, and its bar
+  carries the live load colour.
+- **The heatmap lost its gradient.** The colour rule replaced any mid-lightness
+  colour with the nearest of ten accents. Read out of the live page, the
+  dashboard paints the heatmap as a smooth ramp — rgb(85,192,72), (146,187,46),
+  (186,183,29), (224,180,12), (236,134,32), (238,87,58) and dozens between —
+  and the rule collapsed all of it to **four colours**. A heatmap whose meaning
+  is its gradient had no gradient left, and two series of a chart could come
+  out identical. The hue is now *attracted* toward the nearest accent by at
+  most 16°, saturation blends part of the way, and **lightness is never
+  touched**. Accents are 30–90° apart, so a bounded shift cannot reorder or
+  merge two colours: the same measured ramp now comes through as **96 distinct
+  colours**, still in order. The skin's own `border-spacing: 0` had also welded
+  the cells into one field of colour; the heatmap keeps its gaps.
+- **Sparkline captions lost their first letter.** `border-radius` plus
+  `overflow: hidden` on the wrapper put a rounded corner over the top-left of
+  the caption inside it: "U" rendered as "J", "Iₙ Neutralleiter (A)" as
+  "ₙ Neutralleiter (A)". Layout metrics show nothing — only the pixels do.
+- **Content overflowed the pane at tablet widths.** A grid item's default
+  `min-width: auto` stops a `1fr` track from shrinking. Measured at 820 px on
+  the Costs tab: the pane ended at x=804 and a card ran to x=850, 16 elements
+  with it.
+
+### Changed
+- **The background is a circuit board now, and it stays out of the way.** Bus
+  bars run up each margin with branches forking inward, junction pads and vias
+  where they meet — and none of it crosses the reading column, where the first
+  version drew nine conductors straight through the text. The charge follows
+  the live draw on the *banded* scale the gauge already uses, so the range a
+  household actually lives in gets the whole span: **26 px/s and teal when
+  idle, 215 px/s and orange at 2.4 kW, 266 px/s and red at 4.5 kW**. Hue and
+  speed glide toward their targets instead of stepping, the comet has a longer
+  tail, and it runs at 60 fps. The skin's own canvas is exempt from the chart
+  colour rule — the first attempt captured the "raw" setter *inside* the
+  drawing code, but the hook is armed before it, so the bypass had never
+  bypassed anything: a conductor asked for `hsla(26,40%,68%,.13)` and got
+  `rgb(254,100,11)`.
+- **The Plots page is laid out per device, not per chart.** It stacked one
+  520 px chart per metric per device in a single column — four devices meant
+  twelve full-height charts. Now one row per device with its metrics side by
+  side, and charts sized to leave the next row visible. Plotly is themed
+  through its own API rather than by fighting the inline styles it writes, so
+  its near-white default grid (`rgb(238,238,238)`) no longer runs across a dark
+  page.
+- **Live cards read at a glance.** Each carries a spine in its own colour whose
+  brightness and glow follow what that device is drawing right now.
+- **Everything under the pointer moves the same way.** One easing token for
+  cards, buttons, chips, rows, heatmap cells and links: lift and settle, with a
+  press state. Table rows grow an accent edge from the left so the eye can
+  follow a row across a wide table. Touch devices get none of it — a lift with
+  no pointer to leave would simply stick after a tap — and `prefers-reduced-
+  motion` turns all of it off.
+
 ## 16.71.1
 ### Fixed
 - **The navigation rail could hide the tab you were on**, in two independent

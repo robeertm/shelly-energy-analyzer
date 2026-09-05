@@ -75,6 +75,7 @@ html[data-skin="aurora"] {
 
   /* ── Aurora-specific tokens ── */
   --au-glass:      rgba(49, 50, 68, .52);
+  --au-rail-veil:  rgba(24, 24, 37, .74);
   --au-glass-hi:   rgba(69, 71, 90, .58);
   --au-hairline:   rgba(205, 214, 244, .10);
   --au-edge:       rgba(205, 214, 244, .22);   /* top highlight on glass */
@@ -141,6 +142,7 @@ html[data-skin="aurora"][data-theme="light"] {
   --ring:      rgba(136, 57, 239, .45);
 
   --au-glass:      rgba(255, 255, 255, .78);
+  --au-rail-veil:  rgba(255, 255, 255, .72);
   --au-glass-hi:   rgba(255, 255, 255, .92);
   --au-hairline:   rgba(76, 79, 105, .16);
   --au-edge:       rgba(255, 255, 255, .95);
@@ -186,69 +188,16 @@ html[data-skin="aurora"] body::before {
 html[data-skin="aurora"] #aurora-circuit {
   position: fixed;
   inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  display: block;
-}
-
-html[data-skin="aurora"] #aurora-sky {
-  position: fixed;
-  inset: -20% -10% auto -10%;
-  height: 78vh;
   z-index: -2;
   pointer-events: none;
-  overflow: hidden;
-  contain: strict;
-  opacity: calc(.42 + .34 * var(--load-lift));
-  transition: opacity 1.6s linear;
-}
-
-html[data-skin="aurora"] #aurora-sky i {
-  position: absolute;
   display: block;
-  border-radius: 50%;
-  filter: blur(58px);
-  will-change: transform;
-  mix-blend-mode: screen;
 }
 
-html[data-skin="aurora"][data-theme="light"] #aurora-sky i {
-  mix-blend-mode: multiply;
-  filter: blur(72px);
-  opacity: .5;
-}
-
-html[data-skin="aurora"] #aurora-sky i:nth-child(1) {
-  left: 2%;  top: 4%;  width: 56%; height: 46%;
-  background: radial-gradient(closest-side,
-    hsl(var(--load-hue) var(--load-sat) 62% / .55), transparent 72%);
-  animation: au-drift-a 47s var(--ease) infinite alternate;
-}
-html[data-skin="aurora"] #aurora-sky i:nth-child(2) {
-  right: -4%; top: -6%; width: 52%; height: 54%;
-  background: radial-gradient(closest-side,
-    hsl(calc(var(--load-hue) + 42) var(--load-sat) 64% / .48), transparent 72%);
-  animation: au-drift-b 61s var(--ease) infinite alternate;
-}
-html[data-skin="aurora"] #aurora-sky i:nth-child(3) {
-  left: 26%; top: 16%; width: 46%; height: 40%;
-  background: radial-gradient(closest-side,
-    hsl(calc(var(--load-hue) - 34) var(--load-sat) 60% / .40), transparent 74%);
-  animation: au-drift-c 73s var(--ease) infinite alternate;
-}
-
-@keyframes au-drift-a {
-  from { transform: translate3d(-6%,  -3%, 0) scale(1.00); }
-  to   { transform: translate3d( 10%,  6%, 0) scale(1.18); }
-}
-@keyframes au-drift-b {
-  from { transform: translate3d( 6%,   4%, 0) scale(1.12); }
-  to   { transform: translate3d(-9%,  -5%, 0) scale(0.96); }
-}
-@keyframes au-drift-c {
-  from { transform: translate3d( 0%,   5%, 0) scale(0.94); }
-  to   { transform: translate3d( 7%,  -6%, 0) scale(1.14); }
-}
+/* The soft field used to be three DOM elements with filter: blur(58px),
+   mix-blend-mode and an animated scale().  Measured against the live
+   dashboard that cost three quarters of the frame budget — 14 fps with them,
+   52 fps without, while removing the canvas changed nothing.  It is painted
+   on the canvas now, from pre-rendered sprites. */
 
 /* ── 3 · Typography ─────────────────────────────────────────────────────── */
 
@@ -360,9 +309,12 @@ html[data-skin="aurora"] #bottom-nav {
   gap: 2px;
   border: 1px solid var(--au-hairline);
   border-radius: 20px;
-  background: var(--au-glass);
-  backdrop-filter: blur(20px) saturate(170%);
-  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  /* 🔴 A heatmap scrolling underneath came straight through the glass and made
+     the labels unreadable.  The rail is the one surface that must stay legible
+     over ANY content, so it is mostly opaque and only slightly translucent. */
+  background: linear-gradient(var(--au-rail-veil), var(--au-rail-veil)), var(--au-glass);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
   box-shadow: var(--shadow-lg);
   scroll-behavior: smooth;
   overscroll-behavior-x: contain;
@@ -372,7 +324,12 @@ html[data-skin="aurora"] #bottom-nav {
     left: 50%;
     right: auto;
     transform: translateX(-50%);
-    max-width: min(var(--pane-max), calc(100vw - 40px));
+    /* 🔴 Capping the rail at the pane width was a bug you could measure:
+       24 tabs need 1348px, the pane is 1180, so Control, Calibration and Sync
+       sat outside the box at x=1282..1473 with scrollLeft pinned at 0 — three
+       tabs that simply could not be reached.  The rail is chrome, not content;
+       it may use the window. */
+    max-width: calc(100vw - 20px);
     /* 🔴 The base centres the rail with `justify-content: center`.  On a
        scrolling flex container whose content is wider than the box, centring
        makes the content overflow on BOTH sides — and the left overflow cannot
@@ -385,14 +342,38 @@ html[data-skin="aurora"] #bottom-nav {
   }
 }
 
-/* 24 tabs do not fit any screen.  A soft edge is the only honest signal that
-   the rail continues; a hard cut reads as "that is all there is". */
-html[data-skin="aurora"] #bottom-nav {
-  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 22px,
-                       #000 calc(100% - 22px), transparent 100%);
-  mask-image: linear-gradient(90deg, transparent 0, #000 22px,
-               #000 calc(100% - 22px), transparent 100%);
+/* A soft edge is the honest signal that the rail continues — but only on the
+   side that actually continues.  Fading both ends of a rail that fits made the
+   first and last tab look clipped when they were not, and fading neither made
+   a clipped rail look complete.  aurora.js writes data-of as it scrolls. */
+html[data-skin="aurora"] #bottom-nav[data-of="r"] {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent 100%);
+          mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent 100%);
 }
+html[data-skin="aurora"] #bottom-nav[data-of="l"] {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 30px);
+          mask-image: linear-gradient(90deg, transparent 0, #000 30px);
+}
+html[data-skin="aurora"] #bottom-nav[data-of="both"] {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 30px,
+                       #000 calc(100% - 30px), transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0, #000 30px,
+                       #000 calc(100% - 30px), transparent 100%);
+}
+/* Tighten the buttons only when the rail is genuinely too narrow. */
+html[data-skin="aurora"] #bottom-nav[data-dense] .nav-btn {
+  min-width: 52px;
+  padding: 6px 5px;
+}
+html[data-skin="aurora"] #bottom-nav[data-dense] .nav-btn .nav-label {
+  font-size: 9px;
+  letter-spacing: 0;
+}
+/* Scrollbar: present on touch, invisible on desktop where the fade says it. */
+html[data-skin="aurora"] #bottom-nav::-webkit-scrollbar { height: 0; }
+/* A swipe should land on a tab, not between two. */
+html[data-skin="aurora"] #bottom-nav[data-of] { scroll-snap-type: x proximity; }
+html[data-skin="aurora"] #bottom-nav[data-of] .nav-btn { scroll-snap-align: center; }
 
 html[data-skin="aurora"] .nav-btn {
   border-radius: 14px;
@@ -714,11 +695,19 @@ html[data-skin="aurora"] .loading-msg::after {
 /* ── 10 · Tables ────────────────────────────────────────────────────────── */
 
 html[data-skin="aurora"] table,
-html[data-skin="aurora"] .data-table,
-html[data-skin="aurora"] .hm-table {
+html[data-skin="aurora"] .data-table {
   border-collapse: separate;
   border-spacing: 0;
   width: 100%;
+}
+/* 🔴 The heatmap is the one table whose GAPS carry meaning.  Collapsing its
+   spacing to 0 (which the rule above used to do) welded the cells into one
+   continuous field of colour — it stopped reading as a grid of hours and
+   started reading as a smear.  It keeps its own spacing, and a little more of
+   it, so each cell is a tile. */
+html[data-skin="aurora"] .hm-table {
+  border-collapse: separate;
+  border-spacing: 3px;
 }
 html[data-skin="aurora"] table th {
   font-size: 10.5px;
@@ -894,10 +883,17 @@ html[data-skin="aurora"] .au-stat.kwh   .au-stat-value { color: var(--ctp-sky); 
 
 /* The wrapper and the canvas inside it both carried a surface, which framed the
    empty part of a still-filling buffer and made it read as a broken widget.
-   One surface: the canvas. */
+   One surface: the canvas.
+
+   🔴 And the wrapper must NOT clip.  It held `border-radius: 12px` with
+   `overflow: hidden`, and the label sits in its top-left corner — so the
+   rounded corner ate the first glyph of every caption.  "U" rendered as "J",
+   "I" as a sliver, "Iₙ Neutralleiter (A)" as "ₙ Neutralleiter (A)".  Layout
+   metrics show nothing; only the pixels do.  The rounding belongs to the
+   canvas, which has its own. */
 html[data-skin="aurora"] .sparkline-wrap {
-  border-radius: 12px;
-  overflow: hidden;
+  border-radius: 0;
+  overflow: visible;
   background: transparent;
   border: none;
 }
@@ -972,11 +968,18 @@ html[data-skin="aurora"] .event-type { font-weight: 700; letter-spacing: -.01em;
 /* Heatmap — rounder cells and a hairline so an empty day still reads as a day */
 html[data-skin="aurora"] .hm-day,
 html[data-skin="aurora"] .hm-cell {
-  border-radius: 3px;
+  border-radius: 4px;
   outline: 1px solid color-mix(in srgb, var(--fg) 5%, transparent);
   outline-offset: -1px;
+  transition: transform var(--au-hover, 190ms ease), outline-color var(--au-hover, 190ms ease);
 }
-html[data-skin="aurora"] .hm-day:hover { outline-color: var(--accent); }
+html[data-skin="aurora"] .hm-cell:hover {
+  outline-color: var(--fg);
+  transform: scale(1.06);
+  position: relative;
+  z-index: 2;
+}
+html[data-skin="aurora"] .hm-day:hover { outline-color: var(--fg); transform: scale(1.14); }
 html[data-skin="aurora"] #hm-tooltip {
   background: var(--au-glass-hi);
   border: 1px solid var(--au-hairline);
@@ -1038,11 +1041,78 @@ html[data-skin="aurora"] #update-banner {
   font-weight: 600;
 }
 
-/* Load progress line under the header */
-html[data-skin="aurora"] #nav-progress-bar {
-  background: linear-gradient(90deg, var(--ctp-mauve), var(--ctp-sky), var(--ctp-teal));
+/* ── Tab-loading progress ───────────────────────────────────────────────
+
+   🔴 The base pins this strip to `bottom: calc(52px + safe-area)` — exactly
+   the height of the CLASSIC rail, which sits flush on the bottom edge.  The
+   Aurora rail floats 10px up and is taller, so the strip landed across the
+   middle of the icons and drew a blue line through them.  Here it becomes a
+   pill of its own that sits above the rail, and it is positioned from the
+   rail's measured height (--au-rail-h, written by aurora.js) rather than from
+   a number that happens to match one of the two skins. */
+
+html[data-skin="aurora"] #nav-progress {
+  left: 50%;
+  right: auto;
+  bottom: calc(var(--au-rail-h, 62px) + 20px + env(safe-area-inset-bottom, 0px));
+  width: min(360px, calc(100vw - 28px));
+  padding: 7px 13px 9px;
+  gap: 7px;
+  border: 1px solid var(--au-hairline);
+  border-radius: 15px;
+  background: var(--au-glass);
+  backdrop-filter: blur(18px) saturate(165%);
+  -webkit-backdrop-filter: blur(18px) saturate(165%);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-50%) translateY(8px) scale(.97);
+  transition: opacity .24s var(--ease), transform .24s var(--ease);
 }
-html[data-skin="aurora"] #nav-progress-track { background: var(--chipbg); border-radius: 999px; }
+html[data-skin="aurora"] #nav-progress.show {
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+html[data-skin="aurora"] #nav-progress-text {
+  align-self: stretch;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .012em;
+  color: var(--fg);
+}
+html[data-skin="aurora"] #nav-progress-track {
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ctp-overlay0) 34%, transparent);
+}
+/* The bar carries the live load colour, so the one moving thing on screen and
+   the house's draw agree. */
+html[data-skin="aurora"] #nav-progress-bar {
+  border-radius: 999px;
+  background: linear-gradient(90deg,
+      hsl(var(--load-hue) var(--load-sat) 58%),
+      hsl(calc(var(--load-hue) + 30) var(--load-sat) 70%));
+  box-shadow: 0 0 12px hsl(var(--load-hue) var(--load-sat) 58% / .55);
+  transition: width .32s var(--ease);
+}
+html[data-skin="aurora"] #nav-progress.indeterminate #nav-progress-bar {
+  width: 32%;
+}
+
+/* The spinner the base parks in the corner of a loading tab is a hard dot on a
+   14px pill — replace it with the icon breathing, which reads at that size. */
+html[data-skin="aurora"] .nav-btn.tab-loading::after { display: none; }
+html[data-skin="aurora"] .nav-btn.tab-loading .nav-icon {
+  animation: au-nav-pulse 1.15s var(--ease) infinite;
+}
+@keyframes au-nav-pulse {
+  0%, 100% { opacity: 1;   transform: translateY(0)     scale(1);    filter: none; }
+  50%      { opacity: .55; transform: translateY(-1.5px) scale(1.12); filter: none; }
+}
 
 /* Plots tab is an iframe with its own document — give it a frame that matches */
 html[data-skin="aurora"] #plots-frame {
@@ -1091,7 +1161,6 @@ html[data-skin="aurora"] :focus-visible {
 
 /* Everything decorative stops; nothing structural depends on motion. */
 @media (prefers-reduced-motion: reduce) {
-  html[data-skin="aurora"] #aurora-sky i { animation: none; }
   html[data-skin="aurora"] .pane,
   html[data-skin="aurora"] .pane.active .card,
   html[data-skin="aurora"] .pane.active .dev-card,
@@ -1211,3 +1280,239 @@ html[data-skin="aurora"] #app-version-badge { color: color-mix(in srgb, var(--fg
    by an optional alpha pair", and a blanket rule repaints backgrounds as text.
    So the inline case is handled in aurora.js by the SAME hue-snap the canvas
    hook uses — one rule, one implementation.  Nothing to declare here. */
+
+/* ── 18 · Live cards, and motion under the pointer ──────────────────────── */
+
+/* One transition token, so everything that reacts to a pointer reacts the same
+   way.  A hover that is instant on one control and eased on the next reads as
+   two different products. */
+html[data-skin="aurora"] {
+  --au-hover: 190ms cubic-bezier(.2, .7, .3, 1);
+  --au-lift-sm: translateY(-1px);
+  --au-lift-md: translateY(-2px);
+}
+
+/* A device card carries a spine in its own colour whose brightness follows
+   what that device is drawing right now — the card says "this one is busy"
+   before you read the number. */
+html[data-skin="aurora"] .dev-card {
+  transition: transform var(--au-hover), box-shadow var(--au-hover),
+              border-color var(--au-hover);
+}
+html[data-skin="aurora"] .dev-card::before {
+  inset: 0 auto 0 0;
+  width: 3px;
+  height: auto;
+  border-radius: var(--radius) 0 0 var(--radius);
+  background: linear-gradient(180deg,
+      hsl(var(--dev-hue, var(--load-hue)) 70% 62% / calc(.28 + .62 * var(--dev-lift, 0))),
+      hsl(var(--dev-hue, var(--load-hue)) 70% 58% / calc(.10 + .34 * var(--dev-lift, 0))));
+  box-shadow: 0 0 calc(4px + 14px * var(--dev-lift, 0))
+              hsl(var(--dev-hue, var(--load-hue)) 78% 60% / calc(.10 + .40 * var(--dev-lift, 0)));
+  transition: background .9s linear, box-shadow .9s linear;
+}
+html[data-skin="aurora"] .dev-card:hover {
+  transform: var(--au-lift-md);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--au-hairline));
+  box-shadow: var(--shadow-lg);
+}
+html[data-skin="aurora"] .dev-power {
+  transition: text-shadow var(--au-hover), transform var(--au-hover);
+  text-shadow: 0 0 calc(10px * var(--dev-lift, 0))
+               hsl(var(--dev-hue, var(--load-hue)) 82% 62% / calc(.30 * var(--dev-lift, 0)));
+}
+
+/* The appliance chips NILM puts under a card. */
+html[data-skin="aurora"] .dev-card .chip,
+html[data-skin="aurora"] .nilm-chip,
+html[data-skin="aurora"] .appliance-chip {
+  transition: transform var(--au-hover), background var(--au-hover),
+              border-color var(--au-hover);
+}
+html[data-skin="aurora"] .dev-card .chip:hover,
+html[data-skin="aurora"] .nilm-chip:hover,
+html[data-skin="aurora"] .appliance-chip:hover {
+  transform: var(--au-lift-sm);
+  border-color: color-mix(in srgb, var(--accent) 44%, transparent);
+  background: var(--accent-weak);
+}
+
+/* A filled area chart on a dark ground reads as a solid block.  Letting the
+   card show through turns it back into a chart. */
+html[data-skin="aurora"] canvas.sparkline,
+html[data-skin="aurora"] canvas.sparkline-sm {
+  opacity: .92;
+}
+html[data-skin="aurora"] .sparkline-wrap { transition: opacity var(--au-hover); }
+html[data-skin="aurora"] .sparkline-wrap[data-metric]:hover { opacity: 1; }
+html[data-skin="aurora"] .sparkline-wrap[data-metric]:hover canvas { opacity: 1; }
+
+/* ── Pointer feedback, everywhere ───────────────────────────────────────── */
+
+html[data-skin="aurora"] .card,
+html[data-skin="aurora"] .au-panel {
+  transition: transform var(--au-hover), box-shadow var(--au-hover),
+              border-color var(--au-hover);
+}
+html[data-skin="aurora"] .card:hover,
+html[data-skin="aurora"] .au-panel:hover {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--au-hairline));
+  box-shadow: var(--shadow-md);
+}
+
+html[data-skin="aurora"] button,
+html[data-skin="aurora"] .icon-btn,
+html[data-skin="aurora"] .btn,
+html[data-skin="aurora"] .chip,
+html[data-skin="aurora"] .range-btn,
+html[data-skin="aurora"] .seg-btn {
+  transition: transform var(--au-hover), background var(--au-hover),
+              border-color var(--au-hover), box-shadow var(--au-hover),
+              color var(--au-hover), filter var(--au-hover);
+}
+html[data-skin="aurora"] button:hover,
+html[data-skin="aurora"] .icon-btn:hover,
+html[data-skin="aurora"] .btn:hover {
+  transform: var(--au-lift-sm);
+  filter: brightness(1.07);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+html[data-skin="aurora"] button:active,
+html[data-skin="aurora"] .icon-btn:active,
+html[data-skin="aurora"] .btn:active {
+  transform: translateY(0) scale(.975);
+  filter: none;
+  box-shadow: none;
+}
+
+/* A row highlights with an accent edge that slides in from the left, so the
+   eye can follow which row it is on down a long table. */
+html[data-skin="aurora"] .pane tbody tr {
+  transition: background var(--au-hover);
+}
+html[data-skin="aurora"] .pane tbody tr td:first-child {
+  position: relative;
+}
+html[data-skin="aurora"] .pane tbody tr td:first-child::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 3px; bottom: 3px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform var(--au-hover);
+}
+html[data-skin="aurora"] .pane tbody tr:hover { background: var(--chipbg); }
+html[data-skin="aurora"] .pane tbody tr:hover td:first-child::before { transform: scaleY(1); }
+
+html[data-skin="aurora"] a { transition: color var(--au-hover), opacity var(--au-hover); }
+html[data-skin="aurora"] a:hover { opacity: .82; }
+
+html[data-skin="aurora"] .nav-btn:hover .nav-icon { transform: translateY(-1px) scale(1.09); }
+
+/* Focus must stay obvious for anyone driving this from the keyboard. */
+html[data-skin="aurora"] :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-skin="aurora"] * {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+  html[data-skin="aurora"] .dev-card:hover,
+  html[data-skin="aurora"] button:hover,
+  html[data-skin="aurora"] .icon-btn:hover,
+  html[data-skin="aurora"] .btn:hover { transform: none; }
+}
+
+/* Touch has no hover.  Every lift above would stick after a tap on a phone. */
+@media (hover: none) {
+  html[data-skin="aurora"] .dev-card:hover,
+  html[data-skin="aurora"] .card:hover,
+  html[data-skin="aurora"] .au-panel:hover,
+  html[data-skin="aurora"] button:hover,
+  html[data-skin="aurora"] .icon-btn:hover,
+  html[data-skin="aurora"] .btn:hover,
+  html[data-skin="aurora"] .chip:hover {
+    transform: none;
+    filter: none;
+    box-shadow: var(--shadow-sm);
+  }
+}
+
+/* ── 19 · The Plots page ────────────────────────────────────────────────── */
+
+/* The page stacked one 520px chart per metric per device in a single column —
+   four devices meant twelve full-height charts and a great deal of scrolling
+   to compare two of them.  Plotly is configured `responsive: true`, so the
+   layout is the container's to decide: one ROW per device, its metrics side by
+   side, and a chart height that leaves room for the row below it. */
+@media (min-width: 1000px) {
+  html[data-skin="aurora"] .plot-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
+  html[data-skin="aurora"] .plot-group > .card { margin-bottom: 0; }
+}
+html[data-skin="aurora"] .plot-group { margin-bottom: 14px; }
+html[data-skin="aurora"] .js-plotly-plot,
+html[data-skin="aurora"] .plot-container {
+  height: clamp(240px, 32vh, 380px) !important;
+  width: 100% !important;
+}
+/* Plotly writes its own inline styles onto the SVG; these are the few that the
+   theme has to win.  The rest is set through Plotly.relayout in aurora.js,
+   which is the supported route and survives a redraw. */
+html[data-skin="aurora"] .js-plotly-plot .modebar {
+  background: transparent !important;
+}
+html[data-skin="aurora"] .js-plotly-plot .modebar-btn path { fill: var(--muted) !important; }
+html[data-skin="aurora"] .js-plotly-plot .modebar-btn:hover path { fill: var(--accent) !important; }
+html[data-skin="aurora"] .js-plotly-plot .main-svg { background: transparent !important; }
+
+/* The chip row that picks devices. */
+html[data-skin="aurora"] .devchip {
+  border-radius: 999px;
+  border: 1px solid var(--au-hairline);
+  background: var(--chipbg);
+  padding: 6px 13px;
+  transition: transform var(--au-hover, 190ms ease), background var(--au-hover, 190ms ease),
+              border-color var(--au-hover, 190ms ease);
+}
+html[data-skin="aurora"] .devchip:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+}
+html[data-skin="aurora"] .devchip:has(input:checked) {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+/* ── 20 · Grids that can actually shrink ────────────────────────────────── */
+
+/* 🔴 A grid item's default `min-width: auto` means it refuses to go below its
+   own min-content width, and a `1fr` track then grows past the container.
+   Measured at 820px on the Costs tab: the pane ended at x=804 and a card ran
+   to x=850, taking 16 elements with it.  `min-width: 0` lets the track win;
+   the content wraps instead of pushing. */
+html[data-skin="aurora"] .card-grid > *,
+html[data-skin="aurora"] .metric-grid > *,
+html[data-skin="aurora"] .plot-group > * {
+  min-width: 0;
+}
+html[data-skin="aurora"] .metric-card,
+html[data-skin="aurora"] .metric-value,
+html[data-skin="aurora"] .metric-label,
+html[data-skin="aurora"] .card-title {
+  overflow-wrap: anywhere;
+}
+/* A number is the one thing that must never be broken across lines. */
+html[data-skin="aurora"] .metric-value { overflow-wrap: normal; }
