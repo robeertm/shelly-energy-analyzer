@@ -163,6 +163,16 @@
     }
 
     function seal(pts, kind) {
+      /* Point every lane the same way before measuring it.  The charge walks a
+         lane from pts[0] to the last point, so a branch built from the RIGHT
+         bus inwards would carry its charge leftwards while everything else ran
+         right — two flows meeting in the middle.  Reversing the point list
+         leaves the drawn board identical (the stroke is the same polyline) and
+         makes the whole picture drift one way: right, and down on the bus. */
+      var first = pts[0], last = pts[pts.length - 1];
+      var dx = last.x - first.x, dy = last.y - first.y;
+      if ((Math.abs(dx) >= Math.abs(dy) ? dx : dy) < 0) pts = pts.slice().reverse();
+
       var acc = [0], total = 0;
       for (var i = 1; i < pts.length; i++) {
         total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
@@ -313,6 +323,13 @@
     var W = 0, H = 0, DPR = 1, board = { lanes: [], pads: [], vias: [], path: null };
     var t0 = 0, raf = 0, prev = 0, lastFrameAt = 0, faults = 0, alive = true;
     var hueNow = null, liftNow = 0;
+    /* Distance travelled, integrated frame by frame.  It must NOT be
+       recomputed as t * speed: with the load — and therefore the speed —
+       changing under it, every change would teleport the charge by
+       t * delta-speed, and that error grows with how long the page has been
+       open.  That was the twitch.  Integrating means a change alters the
+       PACE and nothing else. */
+    var travel = 0;
     var frames = 0;
     var fieldCv = null, fctx = null, fieldAt = -1e9, fieldDirty = true;
 
@@ -438,10 +455,16 @@
       var spr = glowSprite(bk, LIGHT);
       if (!spr) return;
       var mob = board.narrow;
-      var speed = 26 + l * 240;                            // px/s
-      var busN = (mob ? 2 : 3) + Math.round(l * (mob ? 2 : 4));
-      var trN = (mob ? 1 : 2) + Math.round(l * (mob ? 1 : 2));
-      var brN = l > 0.16 ? 1 : 0;
+      /* Load sets the PACE — a slow drift when the house is quiet, brisk when
+         the oven is on.  The old 26..266 px/s was frantic at the top end. */
+      var speed = 18 + l * 102;                            // px/s
+      travel += speed * dt;
+      /* Counts stay fixed.  Deriving them from the load made pulses pop in and
+         out every time the rounding boundary was crossed, which read as noise
+         rather than as "the house is drawing more". */
+      var busN = mob ? 3 : 5;
+      var trN = mob ? 2 : 3;
+      var brN = 1;
       var head = 0.20 + 0.42 * l;
       var TRAIL = mob ? 6 : 11;
       var R0 = 5.4 + 3.0 * l;
@@ -451,12 +474,14 @@
         var ln = board.lanes[i];
         var n = ln.kind === "bus" ? busN : (ln.kind === "trunk" ? trN : brN);
         if (!n) continue;
-        var dir = (i % 2) ? -1 : 1;
+        /* Every lane runs the same way along its own path.  Alternating the
+           direction by lane index made neighbouring tracks flow against each
+           other, which is not how a board carries current. */
         for (var c2 = 0; c2 < n; c2++) {
-          var d = (t * speed * dir + ln.phase * ln.len + (c2 * ln.len) / n) % ln.len;
+          var d = (travel + ln.phase * ln.len + (c2 * ln.len) / n) % ln.len;
           for (var q = 0; q < TRAIL; q++) {
             var u = q / TRAIL;
-            var pt = pointAt(ln, d - q * (mob ? 6 : 4.6) * dir);
+            var pt = pointAt(ln, d - q * (mob ? 6 : 4.6));
             var a = head * (1 - u) * (1 - u) * (1 - u * 0.35);
             var s = R0 * (1 - u * 0.55);
             ctx.globalAlpha = a > 1 ? 1 : (a < 0 ? 0 : a);

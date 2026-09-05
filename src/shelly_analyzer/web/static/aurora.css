@@ -1549,3 +1549,76 @@ html[data-skin="aurora"] .card-title {
 }
 /* A number is the one thing that must never be broken across lines. */
 html[data-skin="aurora"] .metric-value { overflow-wrap: normal; }
+
+/* ── 21 · The detail panel and the CO₂ forecast ─────────────────────────── */
+
+/* The base stylesheet gives these a plain chip background.  Under Aurora they
+   are glass, like every other surface, and they carry the metric's own accent
+   instead of a flat border. */
+html[data-skin="aurora"] .mtile,
+html[data-skin="aurora"] .pb-row,
+html[data-skin="aurora"] .co2fc-cell {
+  background: var(--au-glass);
+  border-color: var(--au-hairline);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+}
+html[data-skin="aurora"] .mtile {
+  box-shadow: inset 0 1px 0 var(--au-edge);
+  transition: transform var(--au-hover, 190ms cubic-bezier(.2,.7,.3,1)),
+              border-color var(--au-hover, 190ms cubic-bezier(.2,.7,.3,1));
+}
+html[data-skin="aurora"] .mtile:hover { transform: translateY(-2px); }
+/* the accent spine glows rather than sitting flat on the edge */
+html[data-skin="aurora"] .mtile::before {
+  box-shadow: 0 0 12px 1px var(--mt-accent, var(--accent));
+  opacity: .9;
+}
+/* On the light ground the same glow washes half the tile, so it is pulled in
+   to a hairline that still reads as the series' colour. */
+@media (prefers-color-scheme: light) {
+  html[data-skin="aurora"]:not([data-theme="dark"]) .mtile::before {
+    box-shadow: 0 0 5px 0 var(--mt-accent, var(--accent));
+  }
+}
+html[data-skin="aurora"][data-theme="light"] .mtile::before {
+  box-shadow: 0 0 5px 0 var(--mt-accent, var(--accent));
+}
+html[data-skin="aurora"] .mt-v { text-shadow: 0 1px 10px rgba(0, 0, 0, .35); }
+
+html[data-skin="aurora"] .pb-bar {
+  background: var(--au-scrim);
+  border-color: var(--au-hairline);
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, .25);
+}
+html[data-skin="aurora"] .pb-bar i { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22); }
+
+html[data-skin="aurora"] .co2fc-card { background: var(--au-glass); }
+html[data-skin="aurora"] .co2fc-cell[data-best="1"] {
+  border-color: rgba(166, 227, 161, .55);
+  box-shadow: 0 0 0 1px rgba(166, 227, 161, .18), 0 6px 20px rgba(166, 227, 161, .12);
+}
+html[data-skin="aurora"] .co2fc-val { text-shadow: 0 2px 14px rgba(0, 0, 0, .40); }
+
+/* The sparkline header is a label row now, not a caption: a dot in the series'
+   own colour, the name, and the live value hard right. */
+html[data-skin="aurora"] .sl-dot { box-shadow: 0 0 8px 1px currentColor; }
+html[data-skin="aurora"] .sparkline-wrap[data-metric]:hover { opacity: 1; }
+html[data-skin="aurora"] .sparkline-wrap[data-metric] {
+  border-radius: 10px;
+  transition: transform var(--au-hover, 190ms cubic-bezier(.2,.7,.3,1));
+}
+html[data-skin="aurora"] .sparkline-wrap[data-metric]:hover { transform: translateY(-1px); }
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-skin="aurora"] .mtile,
+  html[data-skin="aurora"] .co2fc-cell,
+  html[data-skin="aurora"] .sparkline-wrap[data-metric],
+  html[data-skin="aurora"] .pb-bar i { transition: none; }
+}
+/* Touch: no hover state may stick after a tap. */
+@media (hover: none) {
+  html[data-skin="aurora"] .mtile:hover,
+  html[data-skin="aurora"] .co2fc-cell:hover,
+  html[data-skin="aurora"] .sparkline-wrap[data-metric]:hover { transform: none; }
+}

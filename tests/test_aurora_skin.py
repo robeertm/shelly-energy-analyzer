@@ -34,6 +34,7 @@ from shelly_analyzer.web import _inject_skin, active_skin, skin_asset  # noqa: E
 SRC = os.path.join(os.path.dirname(__file__), "..", "src", "shelly_analyzer")
 CSS_PATH = os.path.join(SRC, "web", "static", "aurora.css")
 JS_PATH = os.path.join(SRC, "web", "static", "aurora.js")
+WEBDASH_PATH = os.path.join(SRC, "services", "webdash.py")
 
 SAMPLE = ('<!doctype html>\n<html lang="en">\n<head><title>x</title></head>\n'
           '<body><div id="app"></div></body>\n</html>')
@@ -648,7 +649,8 @@ def test_charge_follows_the_load_on_the_scale_the_gauge_uses():
     lc = lc[:lc.index("\n  }\n")]
     assert "(i + f) / (STOPS.length - 1)" in lc.replace("\n", " ").replace("  ", " "), \
         "the lift is back on a straight watt scale"
-    assert "l * 240" in js, "the charge speed no longer follows the load"
+    assert re.search(r"var speed = \d+ \+ l \* \d+;", js), \
+        "the charge speed no longer follows the load"
     print(f"OK  {watts[0]}..{watts[-1]} W maps hue {hues[0]} to {hues[-1]}, banded")
 
 
@@ -745,6 +747,150 @@ def test_touch_devices_get_no_sticky_hover():
     print("OK  touch gets no sticky hover, and reduced motion is honoured")
 
 
+# ── v16.73: the twitch, the direction, and the two rebuilt views ──────────
+
+def test_the_charge_is_integrated_not_recomputed():
+    """🔴 The bug behind "zu hektisch".
+
+    Position used to be `t * speed`.  With the load — and therefore the speed —
+    gliding underneath it, EVERY change moved the charge by `t * delta-speed`,
+    an error that grows with how long the page has been open.  Simulated with
+    the real glide filter it reached 1 190 px per frame after five minutes and
+    7 134 px after half an hour, against lanes barely 1 400 px long: the pulses
+    were effectively teleporting several times a second.
+
+    Integrating `speed * dt` makes a load change alter the PACE and nothing
+    else, at any uptime."""
+    js = _strip_js_comments(open(JS_PATH, encoding="utf-8").read())
+    assert "travel += speed * dt" in js, "the charge is not integrated"
+    assert re.search(r"var d = \(travel \+", js), "the pulse position is not read from travel"
+    assert not re.search(r"\bt \* speed\b", js), "the old t*speed rule is still there"
+
+    # Replay both rules and compare the worst single-frame step.
+    import math
+
+    def worst(mode, uptime):
+        dt, t, lift, travel, prev, w = 1 / 60, 0.0, 0.0, 0.0, None, 0.0
+        steps = int(uptime / dt)
+        for i in range(steps + int(20 / dt)):
+            target = 0.05 if i < steps else 0.95
+            lift += (target - lift) * (1 - math.exp(-dt / 0.9))
+            t += dt
+            speed = (26 + lift * 240) if mode == "old" else (18 + lift * 102)
+            travel += speed * dt
+            pos = t * speed if mode == "old" else travel
+            if prev is not None and i > steps - 5:
+                w = max(w, pos - prev)
+            prev = pos
+        return w
+
+    for uptime, floor in ((300, 900), (1800, 5000)):
+        assert worst("old", uptime) > floor, "the old rule was not the problem after all"
+        assert worst("new", uptime) < 4, "the new rule still jumps"
+    print("OK  a load change moves the charge <4 px/frame at any uptime (was 7134 px at 30 min)")
+
+
+def test_everything_flows_one_way():
+    """Neighbouring tracks used to run against each other: the pulse loop
+    flipped direction on every odd lane, and branches hanging off the RIGHT bus
+    were built inwards, so their charge ran left while the trunks ran right.
+
+    Lanes are oriented once, at build time, so the drawn board is unchanged and
+    the whole picture drifts the same way."""
+    js = _strip_js_comments(open(JS_PATH, encoding="utf-8").read())
+    loop = js[js.index("for (var c2 = 0"):]
+    loop = loop[:loop.index("ctx.globalCompositeOperation = \"source-over\"")]
+    assert "dir" not in loop, "the pulse loop still carries a per-lane direction"
+    seal = js[js.index("function seal("):]
+    seal = seal[:seal.index("lanes.push(lane)")]
+    assert "pts.slice().reverse()" in seal, "lanes are no longer oriented at build time"
+    assert "Math.abs(dx) >= Math.abs(dy)" in seal, "the dominant axis is not what decides"
+    print("OK  every lane is oriented before it is measured; no lane runs backwards")
+
+
+def test_pulse_counts_do_not_pop():
+    """Deriving the number of pulses from the load meant one appeared or
+    vanished each time the gliding value crossed a rounding boundary — noise,
+    not information.  The load drives the pace, the brightness and the colour."""
+    js = _strip_js_comments(open(JS_PATH, encoding="utf-8").read())
+    for name in ("busN", "trN", "brN"):
+        m = re.search(r"var %s = ([^;]+);" % name, js)
+        assert m, name
+        assert "l" not in re.sub(r"[A-Za-z_$][\w$]*", lambda x: "" if x.group() in ("mob",) else x.group(), m.group(1)).replace("mob", ""), \
+            f"{name} still varies with the load: {m.group(1)}"
+    print("OK  pulse counts are fixed; the load sets pace, brightness and hue")
+
+
+def test_the_co2_forecast_is_not_rebuilt_every_second():
+    """Measured on the running dashboard: 12 fetches in 12 s produced 12 full
+    DOM replacements of the 6h strip, for a payload that changed 0 times.  The
+    forecast moves once an HOUR."""
+    src = open(WEBDASH_PATH, encoding="utf-8").read()
+    assert "function _co2FcSignature(data)" in src, "no signature to compare against"
+    blk = src[src.index("// Refresh the 6h forecast strip"):]
+    blk = blk[:blk.index("const tbody")]
+    assert "if (fsig !== _co2FcSig)" in blk, "the strip is rebuilt unconditionally"
+    assert blk.index("_co2FcSig = fsig") < blk.index("fcWrap.innerHTML"), \
+        "the signature must be stored before the rebuild, or it rebuilds forever"
+    # the hero and the per-device table are gated too
+    assert "if (hsig !== _co2HeroSig)" in src
+    assert "if (rsig === _co2RatesSig" in src
+    print("OK  the forecast strip only touches the DOM when the forecast changes")
+
+
+def test_the_detail_panel_uses_the_whole_card():
+    """The old two-column <dl> parked every value in the left 270 px of an
+    1 143 px card — 76% dead — and stacked five sparklines 294 px tall."""
+    src = open(WEBDASH_PATH, encoding="utf-8").read()
+    css = _strip_css_comments(src)
+    assert ".dev-kv" not in src, "the old key/value list is still emitted"
+    assert "repeat(auto-fit, minmax(104px, 1fr))" in css, "the metrics do not fill the width"
+    assert ".spark-grid" in css and "grid-template-columns: 1fr 1fr" in css, \
+        "the sparklines still stack"
+    assert ":last-child:nth-child(odd) {{ grid-column: 1 / -1; }}" in css, \
+        "a lone last chart is left at half width"
+    # the phase split is a bar, and every phase row is aligned
+    assert "_phaseBarInner" in src and "_phaseRowsInner" in src
+    assert "font-variant-numeric: tabular-nums" in css, "the numbers do not line up"
+    print("OK  metrics fill the card, phases are a bar, sparklines share the width")
+
+
+def test_values_are_addressed_by_name_not_by_position():
+    """The old update path wrote dd[0..3] positionally, so re-ordering the list
+    would have put the current under the voltage label without any error."""
+    src = open(WEBDASH_PATH, encoding="utf-8").read()
+    assert "querySelectorAll('dd')" not in src, "positional dd lookups survive"
+    assert "'.mt-v[data-mv=\"' + m + '\"]'" in src, "metric values are not addressed by name"
+    print("OK  every live value is addressed by its own hook")
+
+
+def test_co2_forecast_strings_are_translated():
+    """Robert reads a German UI; the whole forecast block fell back to English
+    because none of these keys existed in any language."""
+    from shelly_analyzer.i18n import t
+    for key in ("web.co2.forecast_6h", "web.co2.forecast_hint", "web.co2.forecast_waiting",
+                "web.co2.best_hour", "web.co2.trend_hint", "web.co2.avg",
+                "web.co2.min", "web.co2.max", "web.co2.forecast_label"):
+        for lang in ("de", "en", "es"):
+            got = t(lang, key)
+            assert got and got != key, f"{key} missing for {lang}"
+        assert t("de", key) != t("en", key) or key in ("web.co2.min", "web.co2.max"), \
+            f"{key} is still English in German"
+    print("OK  the CO\u2082 forecast speaks the configured language")
+
+
+def test_the_clock_follows_the_ui_language():
+    """The strip formatted its hours with a hardcoded de-DE, so an English user
+    read German 24h stamps in an otherwise English page."""
+    src = open(WEBDASH_PATH, encoding="utf-8").read()
+    assert "function _locale()" in src
+    blk = src[src.index("function _renderCo2Forecast"):]
+    blk = blk[:blk.index("function _co2Color")]
+    assert "'de-DE'" not in blk, "the forecast still hardcodes a German locale"
+    assert blk.count("_locale()") >= 3
+    print("OK  the forecast formats its clock from <html lang>")
+
+
 if __name__ == "__main__":
     test_classic_injection_is_identity()
     test_every_css_rule_is_scoped_to_the_skin()
@@ -776,6 +922,14 @@ if __name__ == "__main__":
     test_sparkline_wrapper_does_not_clip_its_label()
     test_heatmap_keeps_the_gaps_that_make_it_a_grid()
     test_touch_devices_get_no_sticky_hover()
+    test_the_charge_is_integrated_not_recomputed()
+    test_everything_flows_one_way()
+    test_pulse_counts_do_not_pop()
+    test_the_co2_forecast_is_not_rebuilt_every_second()
+    test_the_detail_panel_uses_the_whole_card()
+    test_values_are_addressed_by_name_not_by_position()
+    test_co2_forecast_strings_are_translated()
+    test_the_clock_follows_the_ui_language()
     test_the_floating_rail_leaves_room_at_the_end()
     test_phones_get_a_real_background()
 
