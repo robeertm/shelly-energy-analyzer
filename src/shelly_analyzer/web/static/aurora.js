@@ -36,60 +36,224 @@
 
   /* ── 1 · The ribbons ────────────────────────────────────────────────── */
 
-  function mountSky() {
-    if (document.getElementById("aurora-sky")) return;
-    var sky = document.createElement("div");
-    sky.id = "aurora-sky";
-    sky.setAttribute("aria-hidden", "true");
-    sky.innerHTML = "<i></i><i></i><i></i>";
-    document.body.insertBefore(sky, document.body.firstChild);
-  }
 
-  /* ── 1b · The circuit ───────────────────────────────────────────────── */
+  /* ── 1b · The board ─────────────────────────────────────────────────── */
 
   /* An energy analyzer should not have a generic gradient behind it.  The
-     ground here is a circuit board: conductors with 45-degree elbows, junction
-     nodes, and charge travelling along them.  The speed and the number of
-     pulses come from the live draw, so at three in the morning the background
-     is nearly still and when the oven goes on it comes alive.  The colour is
-     the same --load-hue the ribbons and the gauge use.
+     ground here is the house's own wiring: bus bars up the margins, branches
+     forking inward toward the content, pads and vias where they meet, and
+     charge running through all of it.  Speed, colour and how many pulses are
+     moving all come from the live draw — at three in the morning it is a slow
+     teal trickle, and when the oven goes on it runs fast and red.
 
-     Cost discipline: 30 fps, device pixel ratio capped at 1.5, paused while the
-     tab is hidden, and no pulses at all under prefers-reduced-motion — this
-     runs on a phone against a Raspberry Pi. */
+     Everything the background does happens on THIS canvas.  That is the
+     lesson of the first version, and it was measured, not guessed: the soft
+     field used to be three DOM elements with `filter: blur(58px)`,
+     `mix-blend-mode` and an animated `scale()`.  A bisection against the live
+     dashboard put the whole page at 14 fps with them and 52 fps without —
+     while removing the canvas changed nothing at all.  A blur that is
+     re-rasterised every frame is the most expensive thing on a page; a
+     pre-rendered sprite blitted with drawImage is nearly free.
+
+     Rules this file keeps:
+       · Nothing is allocated per frame.  Traces are one Path2D built at
+         resize; every glow is a cached sprite.
+       · The charge stays in the MARGINS — conductors across a column of text
+         are a distraction, not atmosphere.
+       · The loop cannot die.  A frame that throws still reschedules, and a
+         watchdog restarts it when the browser stops delivering frames at all:
+         an occluded window does that WITHOUT firing visibilitychange, which is
+         why the background froze and never came back.
+       · Phones get less of everything, and `prefers-reduced-motion` gets one
+         static frame. */
 
   var circuit = null;
+  var SPR = Object.create(null);     // pulse glow, by hue bucket
+  var FIELD = Object.create(null);   // the soft field, by hue bucket
+  var GRD = Object.create(null);     // ground wash, by hue bucket
 
-  function buildCircuit(w, h) {
-    // Mostly-horizontal runs with 45-degree elbows: the shape that reads as
-    // wiring rather than as decoration.
-    var rows = Math.max(4, Math.min(9, Math.round(h / 130)));
-    var lanes = [];
-    for (var r = 0; r < rows; r++) {
-      var y = (h * (r + 0.5)) / rows + (r % 2 ? -14 : 14);
-      var pts = [{ x: -40, y: y }];
-      var x = -40;
-      var dir = r % 2 ? -1 : 1;
-      while (x < w + 40) {
-        var run = 60 + ((r * 97 + pts.length * 53) % 130);      // deterministic
-        x += run;
-        pts.push({ x: x, y: y });
-        var elbow = 22 + ((r * 31 + pts.length * 17) % 30);
-        x += elbow;
-        y += elbow * dir;
-        y = Math.max(18, Math.min(h - 18, y));
-        pts.push({ x: x, y: y });
-        dir = -dir;
-      }
-      // Cumulative length, so a pulse can be placed by distance travelled.
+  function rawCtx(cv) {
+    var g = cv.getContext ? cv.getContext("2d") : null;
+    /* The chart colour hook must not touch the background: it is already drawn
+       in the live load hue, and snapping it to the nearest accent is what made
+       the first version garish — every soft hsla(26,40%,68%,.13) conductor
+       came out as full-strength rgb(254,100,11). */
+    if (g) { try { g.__auRaw = true; } catch (e) {} }
+    return g;
+  }
+
+  function bucket(hue) { return ((Math.round(hue / 6) * 6) % 360 + 360) % 360; }
+
+  function glowSprite(hue, light) {
+    var key = hue + ":" + (light ? "l" : "d");
+    if (SPR[key]) return SPR[key];
+    var R = 24, c = document.createElement("canvas");
+    c.width = c.height = R * 2;
+    var g = rawCtx(c);
+    if (!g) return null;
+    var L = light ? 50 : 74;
+    var rg = g.createRadialGradient(R, R, 0, R, R, R);
+    rg.addColorStop(0.00, "hsla(" + hue + ", 96%, " + (light ? 62 : 92) + "%, 1)");
+    rg.addColorStop(0.16, "hsla(" + hue + ", 96%, " + L + "%, 0.78)");
+    rg.addColorStop(0.44, "hsla(" + hue + ", 92%, " + L + "%, 0.20)");
+    rg.addColorStop(1.00, "hsla(" + hue + ", 92%, " + L + "%, 0)");
+    g.fillStyle = rg;
+    g.fillRect(0, 0, R * 2, R * 2);
+    SPR[key] = c;
+    return c;
+  }
+
+  function fieldSprite(hue, light) {
+    var key = hue + ":" + (light ? "l" : "d");
+    if (FIELD[key]) return FIELD[key];
+    var S = 256, c = document.createElement("canvas");
+    c.width = c.height = S;
+    var g = rawCtx(c);
+    if (!g) return null;
+    var L = light ? 62 : 58, sat = light ? 62 : 68;
+    var rg = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    rg.addColorStop(0.00, "hsla(" + hue + ", " + sat + "%, " + L + "%, 1)");
+    rg.addColorStop(0.42, "hsla(" + hue + ", " + sat + "%, " + L + "%, 0.42)");
+    rg.addColorStop(0.72, "hsla(" + hue + ", " + sat + "%, " + L + "%, 0.11)");
+    rg.addColorStop(1.00, "hsla(" + hue + ", " + sat + "%, " + L + "%, 0)");
+    g.fillStyle = rg;
+    g.fillRect(0, 0, S, S);
+    FIELD[key] = c;
+    return c;
+  }
+
+  function groundSprite(hue, light) {
+    var key = hue + ":" + (light ? "l" : "d");
+    if (GRD[key]) return GRD[key];
+    var c = document.createElement("canvas");
+    c.width = 8; c.height = 128;
+    var g = rawCtx(c);
+    if (!g) return null;
+    var lg = g.createLinearGradient(0, 0, 0, 128);
+    lg.addColorStop(0.0, "hsla(" + hue + ", 74%, " + (light ? 54 : 60) + "%, 0)");
+    lg.addColorStop(0.6, "hsla(" + hue + ", 76%, " + (light ? 52 : 58) + "%, 0.34)");
+    lg.addColorStop(1.0, "hsla(" + hue + ", 80%, " + (light ? 48 : 56) + "%, 1)");
+    g.fillStyle = lg;
+    g.fillRect(0, 0, 8, 128);
+    GRD[key] = c;
+    return c;
+  }
+
+  /* The wiring.  Bus bars up each margin; branches fork inward but stop short
+     of the reading column, so nothing is ever drawn under a paragraph. */
+  function buildBoard(w, h) {
+    var pane = 1180;
+    try {
+      var pv = parseFloat(getComputedStyle(ROOT).getPropertyValue("--pane-max"));
+      if (isFinite(pv) && pv > 320) pane = pv;
+    } catch (e) {}
+
+    var lanes = [], pads = [], vias = [];
+    var narrow = w < 720;
+    var mx = Math.max(14, Math.min(40, Math.round(w * 0.021)));
+    // How far a branch may reach before it would sit under the text.
+    /* Stop short of the reading column rather than reaching into it: a
+       conductor behind a paragraph is a distraction, however faint. */
+    var reach = Math.max(44, Math.min(280, Math.round((w - pane) / 2) - 10));
+    var seed = 0;
+    function rnd() {                       // deterministic: same board every load
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    }
+
+    function seal(pts, kind) {
       var acc = [0], total = 0;
       for (var i = 1; i < pts.length; i++) {
         total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
         acc.push(total);
       }
-      lanes.push({ pts: pts, acc: acc, len: total, phase: (r * 137) % 1000 / 1000 });
+      if (total < 8) return null;
+      var lane = { pts: pts, acc: acc, len: total, kind: kind,
+                   phase: rnd() };
+      lanes.push(lane);
+      return lane;
     }
-    return lanes;
+
+    /* A branch: horizontal run, 45-degree elbow, run — and at depth 0 it may
+       fork once more.  Two levels is what makes it read as a board rather than
+       as a comb. */
+    function branch(x0, y0, side, depth, budget) {
+      if (budget < 34) return;
+      var run1 = budget * (0.38 + rnd() * 0.26);
+      var el = 14 + rnd() * 20;
+      var down = rnd() < 0.5 ? 1 : -1;
+      var x1 = x0 + run1 * side;
+      var x2 = x1 + el * side, y2 = y0 + el * down;
+      var run2 = (budget - run1 - el) * (0.5 + rnd() * 0.5);
+      var x3 = x2 + run2 * side;
+      seal([{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x2, y: y2 }, { x: x3, y: y2 }],
+           "branch");
+      pads.push({ x: x3, y: y2, r: 2.4 + rnd() });
+      if (rnd() < 0.55) vias.push({ x: x1, y: y0, r: 2.6 });
+      /* Two forks per level, not one: a single chain of elbows reads as a
+         comb, a tree reads as a board. */
+      var rest = budget - run1 - el;
+      if (depth < 2 && rest > 46) {
+        branch(x2, y2, side, depth + 1, rest * 0.78);
+        if (rnd() < 0.62) {
+          var stub = [{ x: x1, y: y0 },
+                      { x: x1 + 15 * side, y: y0 - 15 * down },
+                      { x: x1 + (14 + rest * 0.42) * side, y: y0 - 15 * down }];
+          seal(stub, "branch");
+          pads.push({ x: stub[2].x, y: stub[2].y, r: 2.1 });
+        }
+      }
+    }
+
+    function bus(x0, side) {
+      var pts = [{ x: x0, y: -40 }];
+      var steps = Math.max(3, Math.min(8, Math.round(h / 155)));
+      for (var i = 1; i <= steps; i++) {
+        var y = Math.round((h + 80) * i / steps) - 40;
+        var jog = (i % 2 ? 11 : -11) * side;
+        pts.push({ x: x0, y: y - 30 });
+        pts.push({ x: x0 + jog, y: y - 30 + 11 });
+        pts.push({ x: x0 + jog, y: y });
+        pads.push({ x: x0 + jog, y: y, r: 2.0 });
+        if (reach > 54) {
+          branch(x0 + jog, y, side, 0, reach);
+          if (rnd() < 0.55) branch(x0, y - 30, side, 1, reach * 0.6);
+        }
+      }
+      pts.push({ x: x0, y: h + 40 });
+      seal(pts, "bus");
+    }
+
+    if (narrow) {
+      /* No margins to speak of.  One conductor along the very bottom edge with
+         short stubs — anything more would sit under the content. */
+      var yb = h - 6;
+      var p = [{ x: -40, y: yb }];
+      for (var x = -10; x < w + 40; x += 96) {
+        p.push({ x: x, y: yb });
+        p.push({ x: x + 20, y: yb - 20 });
+        p.push({ x: x + 48, y: yb - 20 });
+        p.push({ x: x + 68, y: yb });
+        pads.push({ x: x + 34, y: yb - 20, r: 1.7 });
+      }
+      p.push({ x: w + 40, y: yb });
+      seal(p, "bus");
+    } else {
+      bus(mx, 1);
+      bus(w - mx, -1);
+    }
+
+    var path = null;
+    try {
+      path = new Path2D();
+      for (var i = 0; i < lanes.length; i++) {
+        var pts = lanes[i].pts;
+        path.moveTo(pts[0].x, pts[0].y);
+        for (var j = 1; j < pts.length; j++) path.lineTo(pts[j].x, pts[j].y);
+      }
+    } catch (e) { path = null; }
+
+    return { lanes: lanes, pads: pads, vias: vias, path: path, narrow: narrow };
   }
 
   function pointAt(lane, dist) {
@@ -106,6 +270,18 @@
     return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
   }
 
+  function now() {
+    try { return performance.now(); } catch (e) { return +new Date(); }
+  }
+
+  /* Three soft masses that drift.  Sine-driven rather than keyframed, so they
+     never loop visibly and cost three drawImage calls. */
+  var BLOBS = [
+    { dh:   0, x: 0.26, y: 0.16, r: 0.62, sx: 0.055, sy: 0.041, ss: 0.031, ph: 0.0, a: 1.00 },
+    { dh:  40, x: 0.76, y: 0.09, r: 0.56, sx: 0.043, sy: 0.052, ss: 0.024, ph: 2.3, a: 0.86 },
+    { dh: -34, x: 0.50, y: 0.36, r: 0.48, sx: 0.034, sy: 0.029, ss: 0.019, ph: 4.4, a: 0.66 }
+  ];
+
   function mountCircuit() {
     if (document.getElementById("aurora-circuit")) return;
     var cv = document.createElement("canvas");
@@ -113,17 +289,20 @@
     cv.setAttribute("aria-hidden", "true");
     document.body.insertBefore(cv, document.body.firstChild);
 
-    var ctx = cv.getContext("2d");
+    var ctx = rawCtx(cv);
     if (!ctx) return;
-    // The colour hook must not touch the background: it is already drawn in the
-    // load hue and snapping it would fight itself.
-    var raw = Object.getOwnPropertyDescriptor(
-      window.CanvasRenderingContext2D.prototype, "strokeStyle");
 
-    var W = 0, H = 0, DPR = 1, lanes = [], t0 = 0, raf = 0;
+    var W = 0, H = 0, DPR = 1, board = { lanes: [], pads: [], vias: [], path: null };
+    var t0 = 0, raf = 0, prev = 0, lastFrameAt = 0, faults = 0, alive = true;
+    var hueNow = null, liftNow = 0;
+    var frames = 0;
+    var fieldCv = null, fctx = null, fieldAt = -1e9, fieldDirty = true;
 
     function resize() {
-      DPR = Math.min(1.5, window.devicePixelRatio || 1);
+      /* Phones: cap the backing store hard.  A 3x device ratio on a 430px
+         screen is 1.7 megapixels of background nobody looks at. */
+      var cap = window.innerWidth < 720 ? 1.25 : 1.5;
+      DPR = Math.min(cap, window.devicePixelRatio || 1);
       W = window.innerWidth;
       H = window.innerHeight;
       cv.width = Math.round(W * DPR);
@@ -131,136 +310,231 @@
       cv.style.width = W + "px";
       cv.style.height = H + "px";
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-      lanes = buildCircuit(W, H);
+      if (!fieldCv) { fieldCv = document.createElement("canvas"); fctx = rawCtx(fieldCv); }
+      if (fctx) {
+        fieldCv.width = Math.max(2, Math.round(W / 4));
+        fieldCv.height = Math.max(2, Math.round(H / 4));
+      } else { fieldCv = null; }
+      fieldDirty = true;
+      board = buildBoard(W, H);
     }
 
-    function hue() {
-      var v = parseFloat(getComputedStyle(ROOT).getPropertyValue("--load-hue"));
-      return isFinite(v) ? v : 170;
-    }
-    function lift() {
-      var v = parseFloat(getComputedStyle(ROOT).getPropertyValue("--load-lift"));
-      return isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
+    function cssNum(name, fallback) {
+      var v = parseFloat(getComputedStyle(ROOT).getPropertyValue(name));
+      return isFinite(v) ? v : fallback;
     }
 
     var LIGHT = false;
     function readTheme() { LIGHT = ROOT.getAttribute("data-theme") === "light"; }
     readTheme();
 
-    function frame(ts) {
-      raf = 0;
-      if (document.hidden) return;                 // resumed by visibilitychange
-      if (!t0) t0 = ts;
+    function draw(ts) {
+      if (!t0) { t0 = ts; prev = ts; }
       var t = (ts - t0) / 1000;
-      var h = hue(), l = lift();
-      // As the draw rises the wires recede and the charge takes over: at peak
-      // the eye should follow the current, not the wiring.
-      var trace = (LIGHT ? 0.10 : 0.13) * (1 - 0.45 * l);
-      var glow  = LIGHT ? 0.44 : 0.62;
+      var dt = Math.min(0.25, Math.max(0.001, (ts - prev) / 1000));
+      prev = ts;
+
+      /* Glide toward the live values instead of jumping to them.  The poller
+         updates in steps; the eye should see a slide. */
+      var hueT = cssNum("--load-hue", 170);
+      var liftT = Math.max(0, Math.min(1, cssNum("--load-lift", 0)));
+      if (hueNow === null) { hueNow = hueT; liftNow = liftT; }
+      var k = 1 - Math.exp(-dt / 0.9);
+      hueNow += (hueT - hueNow) * k;
+      liftNow += (liftT - liftNow) * k;
+      var hue = hueNow, l = liftNow, bk = bucket(hue);
 
       ctx.clearRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
 
-      // 1 · the conductors themselves — always there, barely visible
-      ctx.lineWidth = 1;
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
-      for (var i = 0; i < lanes.length; i++) {
-        var lane = lanes[i];
-        ctx.beginPath();
-        ctx.moveTo(lane.pts[0].x, lane.pts[0].y);
-        for (var j = 1; j < lane.pts.length; j++) ctx.lineTo(lane.pts[j].x, lane.pts[j].y);
-        raw.set.call(ctx, "hsla(" + h.toFixed(0) + ", 40%, " + (LIGHT ? "42%" : "68%") +
-                          ", " + trace.toFixed(3) + ")");
-        ctx.stroke();
-        // junction nodes
-        for (var k = 1; k < lane.pts.length - 1; k += 2) {
+      // 0 · the field.  It drifts over tens of seconds, so it is composed at a
+      //     quarter of the resolution into its own buffer and refreshed a few
+      //     times a second; every frame just blits that buffer.  Composing it
+      //     directly costs three oversized full-screen blends per frame — the
+      //     single most expensive thing the background did.
+      if (fieldCv && (ts - fieldAt > 110 || fieldDirty)) {
+        fieldAt = ts; fieldDirty = false;
+        var fw = fieldCv.width, fh = fieldCv.height, sc = fw / W;
+        fctx.clearRect(0, 0, fw, fh);
+        var base = (LIGHT ? 0.22 : 0.26) + 0.22 * l;
+        for (var bi = 0; bi < BLOBS.length; bi++) {
+          var B = BLOBS[bi];
+          var f2 = fieldSprite(bucket(hue + B.dh), LIGHT);
+          if (!f2) continue;
+          var cx = (W * B.x + Math.sin(t * B.sx * 6.283 + B.ph) * W * 0.07) * sc;
+          var cy = (H * B.y + Math.cos(t * B.sy * 6.283 + B.ph) * H * 0.06) * sc;
+          var rr = W * B.r * (1 + 0.09 * Math.sin(t * B.ss * 6.283 + B.ph)) * sc;
+          var rh = rr * 0.80;
+          fctx.globalAlpha = Math.min(1, base * B.a);
+          fctx.drawImage(f2, cx - rr, cy - rh, rr * 2, rh * 2);
+        }
+        /* Clear the top band.  The header sits there, and a wash of colour
+           behind small text is the difference between atmosphere and haze. */
+        fctx.globalAlpha = 1;
+        fctx.globalCompositeOperation = "destination-out";
+        var vg = fctx.createLinearGradient(0, 0, 0, fh * 0.34);
+        vg.addColorStop(0, "rgba(0,0,0,0.92)");
+        vg.addColorStop(1, "rgba(0,0,0,0)");
+        fctx.fillStyle = vg;
+        fctx.fillRect(0, 0, fw, Math.ceil(fh * 0.34));
+        fctx.globalCompositeOperation = "source-over";
+      }
+      if (fieldCv) ctx.drawImage(fieldCv, 0, 0, W, H);
+
+      // 1 · the conductors — one stroke for all of them
+      if (board.path) {
+        ctx.lineWidth = 1;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.strokeStyle = "hsla(" + hue.toFixed(0) + ", 38%, " +
+                          (LIGHT ? "40%" : "74%") + ", " +
+                          ((LIGHT ? 0.30 : 0.27) + 0.12 * l).toFixed(3) + ")";
+        ctx.stroke(board.path);
+      }
+
+      // 2 · pads and vias
+      var padA = (LIGHT ? 0.30 : 0.28) + 0.16 * l;
+      ctx.fillStyle = "hsla(" + hue.toFixed(0) + ", 48%, " +
+                      (LIGHT ? "38%" : "80%") + ", " + padA.toFixed(3) + ")";
+      for (var p = 0; p < board.pads.length; p++) {
+        var pd = board.pads[p];
+        ctx.fillRect(pd.x - pd.r, pd.y - pd.r, pd.r * 2, pd.r * 2);
+      }
+      if (board.vias.length) {
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "hsla(" + hue.toFixed(0) + ", 48%, " +
+                          (LIGHT ? "40%" : "78%") + ", " + (padA * 0.8).toFixed(3) + ")";
+        for (var v = 0; v < board.vias.length; v++) {
+          var vi = board.vias[v];
           ctx.beginPath();
-          ctx.arc(lane.pts[k].x, lane.pts[k].y, 1.6, 0, 6.2832);
-          ctx.fillStyle = "hsla(" + h.toFixed(0) + ", 45%, " + (LIGHT ? "38%" : "72%") +
-                          ", " + (trace * 1.5).toFixed(3) + ")";
-          ctx.fill();
+          ctx.arc(vi.x, vi.y, vi.r, 0, 6.2832);
+          ctx.stroke();
         }
       }
 
-      // 2 · the charge — count and speed both follow the live draw
-      if (!REDUCED) {
-        var perLane = 2 + Math.round(l * 3);
-        var speed = 40 + l * 200;                   // px/s
-        for (var a = 0; a < lanes.length; a++) {
-          var ln = lanes[a];
-          for (var b = 0; b < perLane; b++) {
-            var d = (t * speed + ln.phase * ln.len + (b * ln.len) / perLane) % ln.len;
-            var head = pointAt(ln, d);
-            var tail = pointAt(ln, d - 34 - l * 46);
-            var alpha = glow * (0.62 + 0.38 * l);
-            var g = ctx.createLinearGradient(tail.x, tail.y, head.x, head.y);
-            g.addColorStop(0, "hsla(" + h.toFixed(0) + ", 80%, 70%, 0)");
-            g.addColorStop(1, "hsla(" + h.toFixed(0) + ", 90%, " + (LIGHT ? "50%" : "78%") +
-                              ", " + alpha.toFixed(3) + ")");
-            ctx.beginPath();
-            ctx.moveTo(tail.x, tail.y);
-            ctx.lineTo(head.x, head.y);
-            ctx.lineWidth = 2.4;
-            raw.set.call(ctx, g);
-            ctx.stroke();
-            // The head is the spark: a small bright dot with a halo.  Drawn
-            // last so nothing paints over it.
-            ctx.shadowBlur = 9;
-            ctx.shadowColor = "hsla(" + h.toFixed(0) + ", 95%, 70%, " + (alpha * 0.8).toFixed(3) + ")";
-            ctx.beginPath();
-            ctx.arc(head.x, head.y, 2.6, 0, 6.2832);
-            ctx.fillStyle = "hsla(" + h.toFixed(0) + ", 95%, " + (LIGHT ? "46%" : "86%") +
-                            ", " + Math.min(1, alpha * 1.5).toFixed(3) + ")";
-            ctx.fill();
-            ctx.shadowBlur = 0;
+      if (REDUCED) return;
+
+      // 3 · the charge.  Buses always carry a trickle; branches light up once
+      //     the house is actually pulling something.
+      var spr = glowSprite(bk, LIGHT);
+      if (!spr) return;
+      var mob = board.narrow;
+      var speed = 26 + l * 240;                            // px/s
+      var busN = (mob ? 2 : 3) + Math.round(l * (mob ? 2 : 4));
+      var brN = l > 0.16 ? 1 : 0;
+      var head = 0.20 + 0.42 * l;
+      var TRAIL = mob ? 6 : 11;
+      var R0 = 5.4 + 3.0 * l;
+
+      ctx.globalCompositeOperation = LIGHT ? "source-over" : "lighter";
+      for (var i = 0; i < board.lanes.length; i++) {
+        var ln = board.lanes[i];
+        var n = ln.kind === "bus" ? busN : brN;
+        if (!n) continue;
+        var dir = (i % 2) ? -1 : 1;
+        for (var c2 = 0; c2 < n; c2++) {
+          var d = (t * speed * dir + ln.phase * ln.len + (c2 * ln.len) / n) % ln.len;
+          for (var q = 0; q < TRAIL; q++) {
+            var u = q / TRAIL;
+            var pt = pointAt(ln, d - q * (mob ? 6 : 4.6) * dir);
+            var a = head * (1 - u) * (1 - u) * (1 - u * 0.35);
+            var s = R0 * (1 - u * 0.55);
+            ctx.globalAlpha = a > 1 ? 1 : (a < 0 ? 0 : a);
+            ctx.drawImage(spr, pt.x - s, pt.y - s, s * 2, s * 2);
           }
         }
-
-        // 3 · mains, along the bottom edge: 50 Hz slowed to something the eye
-        //     can follow, amplitude growing with the draw
-        var amp = 5 + l * 26;
-        var yb = H - 26;
-        ctx.beginPath();
-        for (var x = 0; x <= W; x += 6) {
-          var y = yb + Math.sin((x / 78) + t * 1.7) * amp;
-          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.lineWidth = 1.4;
-        raw.set.call(ctx, "hsla(" + h.toFixed(0) + ", 70%, " + (LIGHT ? "45%" : "74%") +
-                          ", " + (0.16 + 0.20 * l).toFixed(3) + ")");
-        ctx.stroke();
       }
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1;
 
+      // 4 · the ground: a slow breath along the bottom edge, brighter the more
+      //     the house is pulling.  It sits under the nav rail's glass.
+      var gh = Math.min(240, H * 0.32);
+      var gg = groundSprite(bk, LIGHT);
+      if (gg) {
+        ctx.globalAlpha = (LIGHT ? 0.12 : 0.15) + 0.24 * l +
+                          0.03 * Math.sin(t * 0.62);
+        ctx.drawImage(gg, 0, H - gh, W, gh);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    function frame(ts) {
+      raf = 0;
+      lastFrameAt = now();
+      frames++;
+      if (document.hidden) return;              // the watchdog brings it back
+      try {
+        draw(ts);
+      } catch (e) {
+        /* A frame that throws must not take the animation with it.  The first
+           version left `raf` at 0 with nothing scheduled, so a single
+           exception froze the background for the life of the page. */
+        if (faults++ === 0 && window.console) console.warn("[aurora] frame:", e);
+        if (faults > 90) { stop(); return; }
+      }
+      if (REDUCED) { stop(); return; }          // one static frame is enough
       schedule();
     }
 
-    var last = 0;
     function schedule() {
-      if (raf) return;
-      raf = requestAnimationFrame(function (ts) {
-        // 30 fps is plenty for something this slow, and halves the work.
-        if (ts - last < 33) { raf = 0; schedule(); return; }
-        last = ts;
-        frame(ts);
-      });
+      if (raf || !alive) return;
+      raf = requestAnimationFrame(frame);
+    }
+
+    function stop() {
+      alive = false;
+      if (raf) { try { cancelAnimationFrame(raf); } catch (e) {} raf = 0; }
     }
 
     var rt = 0;
     window.addEventListener("resize", function () {
       clearTimeout(rt);
-      rt = setTimeout(function () { resize(); schedule(); }, 180);
+      rt = setTimeout(function () {
+        alive = true;
+        try { resize(); } catch (e) {}
+        if (REDUCED) { raf = 0; requestAnimationFrame(frame); } else schedule();
+      }, 200);
     });
     document.addEventListener("visibilitychange", function () {
-      if (!document.hidden) schedule();
+      if (!document.hidden) { lastFrameAt = now(); prev = 0; t0 = 0; schedule(); }
     });
     try {
-      new MutationObserver(readTheme)
-        .observe(ROOT, { attributes: true, attributeFilter: ["data-theme"] });
+      new MutationObserver(function () {
+        readTheme();
+        fieldDirty = true;
+        if (REDUCED) { raf = 0; requestAnimationFrame(frame); }
+      }).observe(ROOT, { attributes: true, attributeFilter: ["data-theme"] });
     } catch (e) {}
 
+    /* 🔴 The watchdog is the fix for the freeze, and it has to be a timer:
+       requestAnimationFrame stops being delivered when the window is merely
+       covered by another one, and that does NOT fire visibilitychange — so the
+       loop had no way back and the background stayed dead until a reload.
+       setInterval keeps running in that state. */
+    setInterval(function () {
+      if (REDUCED || document.hidden) return;
+      if (now() - lastFrameAt < 1600) return;
+      alive = true;
+      if (raf) { try { cancelAnimationFrame(raf); } catch (e) {} raf = 0; }
+      lastFrameAt = now();
+      schedule();
+    }, 1300);
+
     resize();
+    lastFrameAt = now();
     schedule();
     circuit = cv;
+
+    // Exposed so a test can assert the loop is actually running.
+    window.__auCircuit = {
+      frames: function () { return frames; },
+      lanes: function () { return board.lanes.length; },
+      pads: function () { return board.pads.length; },
+      alive: function () { return alive; },
+      hue: function () { return hueNow; }
+    };
   }
 
   /* ── 2 · Load → colour ──────────────────────────────────────────────── */
@@ -270,11 +544,11 @@
      -12 rather than 348 so a plain interpolation never sweeps the long way
      round the colour wheel. */
   var STOPS = [
-    {   w: 0,    hue: 172, key: "aurora.load.idle",    fb: "Idle"    },
-    {   w: 300,  hue: 130, key: "aurora.load.low",     fb: "Low"     },
-    {   w: 1200, hue: 48,  key: "aurora.load.working", fb: "Working" },
-    {   w: 3000, hue: 26,  key: "aurora.load.high",    fb: "High"    },
-    {   w: 6000, hue: -12, key: "aurora.load.peak",    fb: "Peak"    }
+    {   w: 0,    hue: 174, key: "aurora.load.idle",    fb: "Idle"    },
+    {   w: 250,  hue: 140, key: "aurora.load.low",     fb: "Low"     },
+    {   w: 800,  hue: 68,  key: "aurora.load.working", fb: "Working" },
+    {   w: 2000, hue: 30,  key: "aurora.load.high",    fb: "High"    },
+    {   w: 4500, hue: -12, key: "aurora.load.peak",    fb: "Peak"    }
   ];
 
   function loadColour(watts) {
@@ -292,7 +566,13 @@
     var band = (i + f) / (STOPS.length - 1);
     return {
       hue: a.hue + (b.hue - a.hue) * f,
-      lift: Math.min(1, w / 6000),
+      /* The lift drives the speed of the charge, the brightness of the field
+         and the ground glow.  It follows the SAME banded scale as the arc,
+         not a straight 0..6000 W line: on a linear scale a house doing 2.4 kW
+         sits at 0.40 and the background barely reacts to the difference
+         between a quiet evening and the oven being on.  Banded, the range a
+         household actually lives in gets the whole span. */
+      lift: Math.max(0, Math.min(1, (i + f) / (STOPS.length - 1))),
       arc: Math.max(0.03, Math.min(1, band)),
       // The label follows the stop the value has actually reached.
       label: T((f > 0.5 ? b : a).key, (f > 0.5 ? b : a).fb),
@@ -564,7 +844,10 @@
     for (var i = 0; i < ACCENTS.length; i++) {
       var hex = (cs.getPropertyValue("--ctp-" + ACCENTS[i]) || "").trim();
       var rgb = hexToRgb(hex);
-      if (rgb) out.push({ hue: rgbToHsl(rgb)[0], css: hex });
+      if (rgb) {
+        var a = rgbToHsl(rgb);
+        out.push({ hue: a[0], sat: a[1], css: hex });
+      }
     }
     return out.length ? out : null;
   }
@@ -653,31 +936,82 @@
        · tints and deep shades keep their own lightness and only have their hue
          moved onto the accent, so a tint stays a tint and dark text stays dark.
      Greys and the extremes are left exactly as they are. */
+  /* 🔴 The rule used to SNAP: any colour of middling lightness was replaced
+     outright by the nearest of ten accents.  That reads well on a single
+     badge and destroys anything continuous.  Measured on the live heatmap:
+     the dashboard paints it as a smooth ramp — rgb(85,192,72), (146,187,46),
+     (186,183,29), (224,180,12), (236,134,32), (238,87,58) and dozens between
+     — and the snap collapsed the whole thing to FOUR colours.  A heatmap whose
+     meaning is its gradient had no gradient left, and two series of a chart
+     could come out the same colour.
+
+     So the hue is ATTRACTED, not replaced: it moves toward the nearest accent
+     by at most 16 degrees, saturation blends part of the way, and lightness is
+     never touched.  Accents are 30-90 degrees apart, so a bounded shift cannot
+     reorder two colours or merge them — a ramp stays a ramp, and it still
+     lands in the palette's family.  Lightness carrying the role is what keeps
+     white-on-orange from becoming white-on-yellow. */
+  var HUE_PULL = 16;      // degrees, the most a colour may be moved
+  var HUE_FRAC = 0.6;     // and it only ever closes this much of the gap
+  var SAT_MIX = 0.42;     // how far saturation blends toward the accent
+
+  /* 🔴 The rule MUST be idempotent, and an attraction is not idempotent by
+     itself: feeding its own output back in moves the colour again, a little
+     less each time.  Measured — rgb(186,183,29) needs SEVEN passes to reach a
+     fixed point.  That matters because the inline-style observer writes the
+     mapped value back onto the element, which fires the observer, which maps
+     it again... ~2200 styled elements times seven round-trips, each with a
+     getComputedStyle in the contrast guard, is enough to wedge the main
+     thread: with the skin the page stopped answering at all, without it the
+     same page was fine.
+
+     So the output is remembered and recognised.  It is emitted as rgb()/rgba()
+     — the form the DOM serialises to — so what comes back on the second pass
+     is character-for-character what went out. */
+  var produced = Object.create(null);
+  var memo = Object.create(null);
+
+  function _ckey(c) { return String(c).replace(/\s+/g, "").toLowerCase(); }
+
   function mapColour(c) {
     if (!palette) palette = readPalette();
     if (!palette) return c;
+    if (typeof c !== "string") return c;
+    var key = _ckey(c);
+    if (produced[key]) return c;                    // our own output, unchanged
     if (mine && mine[String(c).trim().toLowerCase()]) return c;   // already ours
+    if (memo[key] !== undefined) return memo[key];
     var p = parseColour(c);
     if (!p) return c;                                    // gradients, patterns, 'none'
     var hsl = rgbToHsl(p.rgb);
     if (hsl[1] < 0.34 || hsl[2] < 0.18 || hsl[2] > 0.90) return c;
-    var best = palette[0], bestD = 999;
+
+    var best = palette[0], bestD = 999, bestSigned = 0;
     for (var i = 0; i < palette.length; i++) {
-      var d = Math.abs(palette[i].hue - hsl[0]);
-      if (d > 180) d = 360 - d;
-      if (d < bestD) { bestD = d; best = palette[i]; }
+      var raw = palette[i].hue - hsl[0];
+      while (raw > 180) raw -= 360;
+      while (raw < -180) raw += 360;
+      var d = Math.abs(raw);
+      if (d < bestD) { bestD = d; best = palette[i]; bestSigned = raw; }
     }
-    if (hsl[2] >= 0.32 && hsl[2] <= 0.72) {
-      if (p.a >= 0.999) return best.css;
-      var rgb = hexToRgb(best.css);
-      return rgb ? "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + "," + p.a + ")" : best.css;
-    }
-    var h = Math.round(best.hue);
-    var sat = Math.round(Math.min(1, hsl[1] * 0.9) * 100);
-    var lum = Math.round(hsl[2] * 100);
-    return p.a >= 0.999
-      ? "hsl(" + h + ", " + sat + "%, " + lum + "%)"
-      : "hsla(" + h + ", " + sat + "%, " + lum + "%, " + p.a + ")";
+
+    /* Close a FRACTION of the gap, then cap it.  Closing it completely is a
+       snap in miniature: every colour within the cap lands on the accent
+       exactly, and five neighbouring steps of a ramp come out at the same
+       hue.  At 60 % two inputs keep 40 % of their separation, and inputs on
+       either side of a boundary move apart rather than together. */
+    var shift = bestSigned * HUE_FRAC;
+    shift = Math.max(-HUE_PULL, Math.min(HUE_PULL, shift));
+    var h = ((hsl[0] + shift) % 360 + 360) % 360;
+    var sAcc = best.sat == null ? hsl[1] : best.sat;
+    var sat = hsl[1] + (sAcc - hsl[1]) * SAT_MIX;
+    var rgb = hslToRgb(h, Math.max(0, Math.min(1, sat)), hsl[2]);
+    var out = p.a >= 0.999
+      ? "rgb(" + rgb[0] + ", " + rgb[1] + ", " + rgb[2] + ")"
+      : "rgba(" + rgb[0] + ", " + rgb[1] + ", " + rgb[2] + ", " + p.a + ")";
+    produced[_ckey(out)] = 1;
+    memo[key] = out;
+    return out;
   }
 
   /* The same rule applied to inline style attributes.  The dashboard assembles
@@ -758,6 +1092,16 @@
     } catch (e) {}
   }
 
+  /* 🔴 A context may opt OUT.  The skin's own background canvas paints in the
+     live load hue; running that through the snapper turned every soft
+     hsla(26,40%,68%,.13) conductor into full-strength rgb(254,100,11) and was
+     the reason the background looked garish.  The first attempt at an opt-out
+     captured the "raw" setter inside mountCircuit — but this hook is armed
+     before boot(), so what it captured WAS the patched setter and the bypass
+     never bypassed anything.  A flag on the context is checked at call time
+     and cannot be defeated by ordering. */
+  var rawGrads = (typeof WeakSet === "function") ? new WeakSet() : null;
+
   function hookCanvasColours() {
     var C = window.CanvasRenderingContext2D;
     if (!C || C.prototype.__auColours) return;
@@ -768,18 +1112,37 @@
         configurable: true,
         enumerable: d.enumerable,
         get: function () { return d.get.call(this); },
-        set: function (v) { d.set.call(this, mapColour(v)); }
+        set: function (v) { d.set.call(this, this.__auRaw ? v : mapColour(v)); }
       });
     });
+    // A gradient remembers the context it came from, so its stops follow the
+    // same rule as the fill that will use it.
+    ["createLinearGradient", "createRadialGradient", "createConicGradient"]
+      .forEach(function (fn) {
+        var base = C.prototype[fn];
+        if (typeof base !== "function") return;
+        C.prototype[fn] = function () {
+          var g = base.apply(this, arguments);
+          if (this.__auRaw && rawGrads && g) { try { rawGrads.add(g); } catch (e) {} }
+          return g;
+        };
+      });
     var G = window.CanvasGradient;
     if (G && G.prototype.addColorStop) {
-      var base = G.prototype.addColorStop;
-      G.prototype.addColorStop = function (o, c) { return base.call(this, o, mapColour(c)); };
+      var addStop = G.prototype.addColorStop;
+      G.prototype.addColorStop = function (o, c) {
+        var raw = rawGrads && rawGrads.has(this);
+        return addStop.call(this, o, raw ? c : mapColour(c));
+      };
     }
     C.prototype.__auColours = true;
     // The theme toggle swaps Mocha for Latte — re-read on the next paint.
     try {
-      new MutationObserver(function () { palette = null; mine = null; })
+      new MutationObserver(function () {
+        palette = null; mine = null;
+        produced = Object.create(null);
+        memo = Object.create(null);
+      })
         .observe(ROOT, { attributes: true, attributeFilter: ["data-theme"] });
     } catch (e) {}
   }
@@ -804,45 +1167,209 @@
     return true;
   }
 
-  /* ── 7 · Keep the active tab visible in the rail ────────────────────── */
+  /* ── 7 · The rail: reachable, measured, and it follows you ─────────── */
 
-  function followNav() {
+  /* 🔴 24 tabs do not fit any screen, and the first version simply let the
+     surplus fall off the end: Control, Calibration and Sync sat at
+     x=1282..1473 in a box that ended at 1310, with scrollLeft pinned at 0.
+     Three tabs you could not reach at all.  Four things fix that, and all of
+     them are needed:
+       · the rail may use the whole window (CSS), which alone seats 24 tabs at
+         1440px and wider;
+       · a mouse wheel over the rail scrolls it sideways — without this a
+         desktop mouse has no gesture for a horizontal scroller;
+       · the ends fade only where there is actually more, so a full rail has
+         crisp edges and a clipped one says so;
+       · the buttons tighten when, and only when, the rail overflows. */
+
+  function railSetup() {
     var nav = document.getElementById("bottom-nav");
-    if (!nav || nav.__auFollow) return;
-    nav.__auFollow = true;
+    if (!nav || nav.__auRail) return;
+    nav.__auRail = true;
+
+    /* The loading pill above the rail is positioned from this. */
+    function measure() {
+      var h = Math.round(nav.getBoundingClientRect().height);
+      if (h > 0) ROOT.style.setProperty("--au-rail-h", h + "px");
+    }
+
+    function edges() {
+      /* 🔴 Tightening the buttons CHANGES scrollWidth, so the overflow has to
+         be read again afterwards — the first version decided the end-fades
+         from the measurement it took before shrinking them, and left a fade
+         hanging off a rail that now fit exactly. */
+      nav.toggleAttribute("data-dense", nav.scrollWidth - nav.clientWidth > 0);
+      var over = nav.scrollWidth - nav.clientWidth;
+      if (over <= 1) { nav.removeAttribute("data-of"); return; }
+      var l = nav.scrollLeft > 2, r = nav.scrollLeft < over - 2;
+      nav.setAttribute("data-of", l && r ? "both" : (l ? "l" : "r"));
+    }
+
     var last = null;
-    var scrollToActive = function () {
+    function scrollToActive() {
       var a = nav.querySelector(".nav-btn.active");
       if (!a || a === last) return;
       last = a;
       var want = a.offsetLeft - (nav.clientWidth - a.offsetWidth) / 2;
+      want = Math.max(0, Math.min(nav.scrollWidth - nav.clientWidth, want));
       try {
-        nav.scrollTo({ left: Math.max(0, want), behavior: REDUCED ? "auto" : "smooth" });
-      } catch (e) { nav.scrollLeft = Math.max(0, want); }
-    };
+        nav.scrollTo({ left: want, behavior: REDUCED ? "auto" : "smooth" });
+      } catch (e) { nav.scrollLeft = want; }
+    }
+
+    /* A wheel over the rail scrolls it sideways.  Only claim the gesture when
+       there is somewhere to go in that direction, so the page still scrolls
+       when the rail is already at its end. */
+    nav.addEventListener("wheel", function (ev) {
+      var over = nav.scrollWidth - nav.clientWidth;
+      if (over <= 1) return;
+      var d = Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY;
+      if (!d) return;
+      var at = nav.scrollLeft;
+      if ((d < 0 && at <= 0) || (d > 0 && at >= over)) return;
+      ev.preventDefault();
+      nav.scrollLeft = at + d;
+    }, { passive: false });
+
+    nav.addEventListener("scroll", edges, { passive: true });
+    window.addEventListener("resize", function () { measure(); edges(); });
+
     /* 🔴 Watching clicks is not enough: the dashboard restores the last tab
        from localStorage on load and the command palette switches panes without
-       one, so the rail stayed wherever it was and the active tab sat off-screen.
-       Follow the `active` class itself, whoever moved it. */
+       one, so the rail stayed put and the active tab sat off-screen.  Follow
+       the `active` class itself, whoever moved it. */
     try {
-      new MutationObserver(scrollToActive).observe(nav, {
-        subtree: true, attributes: true, attributeFilter: ["class"]
-      });
+      new MutationObserver(function () { scrollToActive(); edges(); })
+        .observe(nav, { subtree: true, attributes: true, attributeFilter: ["class"] });
     } catch (e) {
       nav.addEventListener("click", function () { setTimeout(scrollToActive, 30); });
     }
-    setTimeout(scrollToActive, 250);
+
+    measure(); edges();
+    setTimeout(function () { measure(); edges(); scrollToActive(); }, 250);
+    setTimeout(function () { measure(); edges(); }, 1200);
+  }
+
+  /* ── 7b · Plotly, themed through Plotly ─────────────────────────────── */
+
+  /* The Plots page draws with Plotly, which renders SVG and writes its colours
+     as inline style attributes on the paths.  The chart colour hook only sees
+     canvas, so the charts came out with the library's defaults — near-white
+     grid lines (rgb(238,238,238)) straight across a dark page.  Fighting that
+     with `!important` selectors breaks on the next redraw; handing Plotly the
+     palette through relayout does not. */
+
+  function themePlots() {
+    var P = window.Plotly;
+    if (!P || typeof P.relayout !== "function") return false;
+    var plots = document.querySelectorAll(".js-plotly-plot");
+    if (!plots.length) return false;
+
+    var cs = getComputedStyle(ROOT);
+    function tok(name, fb) {
+      var v = (cs.getPropertyValue(name) || "").trim();
+      return v || fb;
+    }
+    var ink = tok("--muted", "#9399b2");
+    /* Take the hairline straight from the palette.  Building it with
+       color-mix and resolving it through a probe element produced a near-black
+       grid (rgb(1,1,1)) on the plots page; --border is already exactly this
+       colour, needs no round trip, and Plotly splits its alpha into
+       stroke-opacity by itself. */
+    var grid = tok("--border", tok("--ctp-surface1", "#45475a"));
+    var font = getComputedStyle(document.body).fontFamily;
+
+    for (var i = 0; i < plots.length; i++) {
+      var el = plots[i];
+      var lay = el.layout || {};
+      var patch = {
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        "font.color": ink,
+        "font.family": font,
+        "font.size": 11,
+        "legend.bgcolor": "rgba(0,0,0,0)",
+        "legend.bordercolor": "rgba(0,0,0,0)",
+        "hoverlabel.bgcolor": tok("--card", "#313244"),
+        "hoverlabel.bordercolor": tok("--border", "#45475a"),
+        "hoverlabel.font.color": tok("--fg", "#cdd6f4"),
+        "margin.t": 28, "margin.r": 14, "margin.b": 34, "margin.l": 48
+      };
+      for (var k in lay) {
+        if (!/^[xy]axis\d*$/.test(k)) continue;
+        patch[k + ".gridcolor"] = grid;
+        patch[k + ".zerolinecolor"] = grid;
+        patch[k + ".linecolor"] = grid;
+        patch[k + ".tickcolor"] = grid;
+      }
+      try { P.relayout(el, patch); } catch (e) {}
+    }
+    return true;
+  }
+
+  function hookPlots() {
+    /* 🔴 Gate on the PAGE, not on the plots being there yet.  Plotly renders
+       after its data arrives, which is long after this file runs — checking
+       for a chart at boot meant the theme was never applied on a real load,
+       only in a test that happened to look later. */
+    var isPlots = /\/plots(\/|$)/.test(location.pathname) ||
+                  !!document.querySelector(".plot-group");
+    if (!isPlots || window.__auPlots) return;
+    window.__auPlots = true;
+
+    /* 🔴 And it must not chase its own tail.  themePlots() calls
+       Plotly.relayout, which rewrites the SVG, which fires the observer that
+       called it — with a resize event thrown in for good measure.  Two guards:
+       a busy flag while our own writes land, and a signature so the work only
+       happens when something it depends on has actually changed. */
+    var timer = 0, busy = false, sig = "";
+
+    function run() {
+      var plots = document.querySelectorAll(".js-plotly-plot");
+      var s = plots.length + "|" + (ROOT.getAttribute("data-theme") || "") +
+              "|" + window.innerWidth;
+      if (s === sig) return;
+      sig = s;
+      busy = true;
+      try {
+        themePlots();
+        // The skin lays the groups out as a grid; Plotly is responsive but
+        // only reacts to a resize event, so tell it.
+        try { window.dispatchEvent(new Event("resize")); } catch (e) {}
+      } finally {
+        setTimeout(function () { busy = false; }, 400);
+      }
+    }
+
+    function later() {
+      if (busy) return;
+      clearTimeout(timer);
+      timer = setTimeout(run, 140);
+    }
+
+    try {
+      new MutationObserver(later).observe(document.body,
+        { childList: true, subtree: true });
+    } catch (e) {}
+    try {
+      new MutationObserver(function () { sig = ""; later(); }).observe(ROOT,
+        { attributes: true, attributeFilter: ["data-theme"] });
+    } catch (e) {}
+    window.addEventListener("resize", function () { sig = ""; later(); });
+    later();
+    setTimeout(later, 1200);
+    setTimeout(later, 3000);
   }
 
   /* ── 8 · Start ──────────────────────────────────────────────────────── */
 
   function boot() {
-    mountSky();
     try { mountCircuit(); } catch (e) {}
     hookInlineColours();
     takeOverTint();
     hookRenderLive();
-    followNav();
+    railSetup();
+    hookPlots();
     // If live data already arrived before this file was evaluated, adopt it.
     try {
       if (window._liveLatest) updateHero(window._liveLatest);
