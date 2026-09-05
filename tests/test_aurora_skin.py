@@ -1181,6 +1181,31 @@ def test_the_summary_speaks_every_language():
             assert val and val != key, "%s missing in %s" % (key, lang)
     print("OK  every summary string exists in all 9 languages, fallbacks English")
 
+
+def test_the_summary_does_not_wait_for_the_slowest_endpoint():
+    """Found on a real installation, not on the demo.
+
+    /api/battery took 5.9 s there and /api/goals 2.0 s, and the first version
+    awaited all of them together — so the panel sat empty for six seconds, and
+    one hanging endpoint would have held it empty for good.  It now paints from
+    the live state immediately and fills in as each answer lands, with a
+    per-request timeout.  Verified in a browser with /api/battery delayed 8 s
+    and /api/goals never answering: 4 cards after 1 s.
+    """
+    src = open(WEBDASH_PATH, encoding="utf-8").read()
+    block = src[src.index("async function loadInsights()"):src.index("function renderInsights(")]
+    assert "Promise.all(urls.map" not in block, "still gathers every endpoint before painting"
+    assert block.count("renderInsights(ctx, el, false)") >= 2, "no incremental repaint"
+    assert "_insightFetch(" in block, "endpoints are fetched without a timeout"
+    a = src.index("function _insightFetch(url)")
+    fetcher = src[a:a + 700]
+    assert "AbortController" in fetcher and "ctl.abort()" in fetcher, fetcher[:200]
+    # an empty panel while requests are in flight must not claim there is nothing
+    r = src[src.index("function renderInsights(ctx, el, done)"):]
+    r = r[:r.index("\n}}")]
+    assert "if (!done) return;" in r, "flashes the empty state while still loading"
+    print("OK  the summary paints at once and cannot be held up by one endpoint")
+
 if __name__ == "__main__":
     test_classic_injection_is_identity()
     test_every_css_rule_is_scoped_to_the_skin()
@@ -1234,5 +1259,6 @@ if __name__ == "__main__":
     test_the_light_theme_gives_a_card_an_edge()
     test_the_summary_is_built_from_data_not_from_a_setup()
     test_the_summary_speaks_every_language()
+    test_the_summary_does_not_wait_for_the_slowest_endpoint()
 
     print("\nAll Aurora skin tests passed.")

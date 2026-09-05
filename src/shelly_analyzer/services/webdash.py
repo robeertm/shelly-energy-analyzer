@@ -5201,23 +5201,40 @@ async function loadInsights() {{
         _insightsFeat = (await rc.json()).features || {{}};
       }} catch(e) {{ _insightsFeat = {{}}; }}
     }}
-    var names = [], urls = [];
-    Object.keys(_INSIGHT_SOURCES).forEach(function(k) {{
-      var need = _INSIGHT_SOURCES[k];
-      if (need && !_insightsFeat[need]) return;      // feature off → endpoint not asked
-      names.push(k); urls.push('/api/' + k);
-    }});
-    var res = await Promise.all(urls.map(function(u) {{
-      return fetch(u).then(function(r) {{ return r.ok ? r.json() : null; }}).catch(function() {{ return null; }});
-    }}));
+    /* Paint from what we already have, then let each endpoint fill in as it
+       arrives.  Waiting for all of them means waiting for the slowest: on a
+       real installation /api/battery took 5.9s and /api/goals 2.0s, so the
+       panel sat empty for six seconds — and a single hanging endpoint would
+       have held it empty for good. */
     var ctx = {{ state: _liveLatest }};
-    names.forEach(function(n, i) {{ if (res[i]) ctx[n] = res[i]; }});
     _insightsData = ctx;
-    renderInsights(ctx, el);
+    renderInsights(ctx, el, false);
+    var pending = [];
+    Object.keys(_INSIGHT_SOURCES).forEach(function(name) {{
+      var need = _INSIGHT_SOURCES[name];
+      if (need && !_insightsFeat[need]) return;    // feature off → not asked
+      pending.push(_insightFetch('/api/' + name).then(function(data) {{
+        if (!data) return;
+        ctx[name] = data;
+        renderInsights(ctx, el, false);            // gated: only paints on change
+      }}));
+    }});
+    await Promise.all(pending);
+    renderInsights(ctx, el, true);             // now an empty panel really is empty
   }} finally {{ _insightsBusy = false; }}
 }}
 
-function renderInsights(ctx, el) {{
+/* One slow or dead endpoint must not hold the panel. */
+function _insightFetch(url) {{
+  var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var timer = setTimeout(function() {{ if (ctl) ctl.abort(); }}, 12000);
+  return fetch(url, ctl ? {{ signal: ctl.signal }} : undefined)
+    .then(function(r) {{ return r.ok ? r.json() : null; }})
+    .catch(function() {{ return null; }})
+    .then(function(v) {{ clearTimeout(timer); return v; }});
+}}
+
+function renderInsights(ctx, el, done) {{
   var cards = [], i;
   for (i = 0; i < _INSIGHT_PROVIDERS.length; i++) {{
     var card = null;
@@ -5229,6 +5246,9 @@ function renderInsights(ctx, el) {{
   var sig = cards.map(function(c) {{ return c.label + '|' + c.value + '|' + c.sub + '|' + c.tone; }});
   if (_tabSkipRender('insights', el, sig)) return;
   if (!cards.length) {{
+    // While the slower endpoints are still in flight, an empty panel is not a
+    // verdict — say nothing rather than flash "nothing to summarise".
+    if (!done) return;
     el.innerHTML = '<div class="li-empty">' +
       t('insight.empty', 'Nothing to summarise yet — not enough measurements.') + '</div>';
     return;
