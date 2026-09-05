@@ -1,5 +1,24 @@
 # Changelog
 
+## 16.75.2
+### Fixed
+- **The summary dropped exactly the card the installation had.** `/api/battery`
+  answers in **~10 s with a 180 KB payload** on a real house — it carries a full
+  SoC history so the panel can read four numbers — and 16.75.1's 12 s ceiling
+  fell over it under concurrent load, so the *battery* card was the one missing
+  on the house with a battery. The ceiling is now 25 s: slow is a property of
+  the installation, not a fault, and the timeout only exists so a source that
+  never answers cannot leak.
+- **A self-tuning cadence.** A source that answered slowly last time is not
+  asked again every 15 s; it drops to 60 s. Measured from its own response
+  time — nothing in the panel knows which house it is looking at. Verified:
+  fast sources fetched twice in 50 s, the 10 s one once.
+- 🔴 **One lock around the whole batch meant a single source that never
+  answered stopped the panel refreshing at all** — the opposite of what the
+  guard is for. In-flight is now tracked per source. Verified with
+  `/api/goals` never answering: every other source keeps its cadence, cards
+  from 1.5 s, no unhandled rejections.
+
 ## 16.75.1
 ### Fixed
 - **The "right now" summary sat empty for six seconds on a real installation.**
