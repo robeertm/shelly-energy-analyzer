@@ -1206,6 +1206,11 @@ def test_the_summary_does_not_wait_for_the_slowest_endpoint():
     # expensive sources must not be re-asked every 15s: /api/battery answers in
     # ~10s with a 180 KB payload on a real installation
     assert "_insightCost[name]" in block and "60000" in block, "no self-tuning cadence"
+    # 🔴 Ten requests at once queue on the server: /api/battery answers in 0.8 s
+    # alone and took 10.7 s in the browser behind the other nine plus the
+    # once-a-second live poll.  Cheapest first, a couple at a time.
+    assert "queue.sort(" in block, "sources are not ordered by measured cost"
+    assert block.count("pump();") >= 2, "no bounded concurrency"
     a = src.index("function _insightFetch(url)")
     fetcher = src[a:a + 700]
     assert "AbortController" in fetcher and "ctl.abort()" in fetcher, fetcher[:200]
