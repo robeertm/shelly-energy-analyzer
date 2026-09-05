@@ -1,5 +1,73 @@
 # Changelog
 
+## 16.75.0
+### Fixed
+- **Three tabs rebuilt themselves every few seconds for data that had not
+  moved.** Reported for Energy Flow, Standby and Goals; measured with a
+  MutationObserver: Energy Flow replaced its whole card container **5 times in
+  12 s for 5 fetches that returned ONE distinct payload**, Standby 6 times, and
+  each rebuild dragged 60–80 style writes behind it as the skin recoloured the
+  fresh nodes (NILM: 2 replacements + 82 attribute writes in a single burst).
+  The guard for this already existed — `_tabSkipRender`, added for the CO₂
+  strip — and **three of ten timed tabs used it**. All ten do now: Energy Flow,
+  Standby, Goals, NILM, Solar, Battery and the Heatmap join Costs, Anomalies
+  and the EV log. Measured after: **0 replacements** on every one of them
+  while the numbers stand still. Two further points:
+  - the signature now includes theme, skin and language, so switching any of
+    them still forces a repaint;
+  - the EV tab no longer refreshes at all without coordinates — it was
+    rewriting the same "no location" hint every five seconds.
+- **Ten tab labels were English literals in the markup**, so a German page read
+  *Plots, Schedule, EV Log, Tariff, Battery, Advisor, Goals, Control, Sync* and
+  — through a hardcoded fallback — *Calibration*. All ten now come from the
+  translation table in **all nine languages**. The Energy Flow tab was English
+  inside as well: its four period buttons, its four metric captions, its title
+  and its empty-state message.
+  - 🔴 The reason a translated key still rendered as `{web_tab_plots}` is that
+    the dashboard template is filled from **two independent mappings** — the
+    live one in `web/__init__.py` and an unused copy in `webdash.py`. A new
+    test now asserts the live mapping covers every placeholder in the template.
+  - A third guard was added, because neither existing one could see this class
+    of bug: both compared `t(key, fallback)` pairs, and text that never calls
+    `t()` is invisible to them. The new one renders **every tab in German in a
+    browser** and flags any visible string that matches an English translation
+    value. It found six more leaks after the tab bar was fixed.
+- **The light theme was washed out.** Measured on pixels: the page averaged
+  **0.807 luminance**, a card stood **1.25:1** against its ground and the metric
+  tiles inside the hero **1.00:1** — no edge at all. The ground drops a full
+  surface step, the glass becomes nearly opaque, hairlines and shadows
+  strengthen, and the hero tiles get a surface of their own instead of a 6 %
+  wash. After: card **1.54:1**, tile **1.20:1**, page 0.771.
+- **On a phone the last card could not be scrolled clear of the floating rail.**
+  `body` and `#app` were sized with `100vh`, which on iOS is the viewport *as
+  if the address bar were hidden*. With the bar showing, the scroll container's
+  end — and the space it reserves for the rail — sits below the fold. Simulated
+  at 390×844 with an 87 px bar: the last card ended **53 px behind the rail**.
+  The shell is now sized with `100dvh`, the *visible* height, with `100vh` left
+  as the fallback.
+- **The Plots tab drew a hard seam across the page.** It is an iframe, and it
+  was painting a second, independent aurora inside itself: its own opaque
+  ground ended where its box ended, and its circuit did not line up with the
+  one behind it. An embedded page now keeps the skin's typography and cards but
+  draws no ground of its own — the host's shows through, unbroken.
+
+### Added
+- **The live hero opens a summary.** Clicking "Right now" expands a panel that
+  pulls the one line worth knowing out of every other tab: what the house is
+  drawing and how much of it comes from the roof, PV output and self-use,
+  battery charge with time to full or empty, today's and the month's cost
+  against last month, the grid's carbon intensity right now, open anomalies,
+  what standby costs per year, the monthly goal and its streak, the advisor's
+  best tip, next month's forecast, and phase imbalance when it is real.
+  Each card jumps to its tab.
+  - It is built from **providers**, not from a setup: every card returns
+    nothing when its numbers are missing, and endpoints are only fetched when
+    their feature is on. Proved against synthetic payloads — the same code
+    renders **5 cards for a house without PV and 11 for one with PV and a
+    battery**, with no per-installation branch anywhere.
+  - The panel repaints through the same changed-data gate as every other tab,
+    and remembers whether it was open.
+
 ## 16.74.0
 ### Fixed
 - **A sub-meter was counted twice in every whole-house figure.** Reported from

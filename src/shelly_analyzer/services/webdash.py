@@ -1195,7 +1195,14 @@ _HTML_TEMPLATE = """<!doctype html>
       background: var(--bg);
       color: var(--fg);
       overflow: hidden;
+      /* 100vh on iOS is the LARGE viewport — the height the page would have if
+         the address bar were hidden.  With the bar showing, the shell is taller
+         than what you can see, so the scroll container's bottom (and the space
+         it reserves for the floating rail) ends up below the fold and cannot be
+         reached: the last card stays cut off under the bar.  dvh is the visible
+         height; vh stays as the fallback for browsers without it. */
       height: 100vh;
+      height: 100dvh;
       -webkit-font-smoothing: antialiased;
       text-rendering: optimizeLegibility;
     }}
@@ -1205,7 +1212,7 @@ _HTML_TEMPLATE = """<!doctype html>
       *, *::before, *::after {{ animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }}
     }}
     /* ── App shell ── */
-    #app {{ display: flex; flex-direction: column; height: 100vh; }}
+    #app {{ display: flex; flex-direction: column; height: 100vh; height: 100dvh; }}
     #hdr {{
       display: flex;
       justify-content: space-between;
@@ -1446,8 +1453,55 @@ _HTML_TEMPLATE = """<!doctype html>
       padding-bottom: 0 !important;
     }}
     @media (min-width: 900px) {{
-      #pane-plots.active {{ height: calc(100vh - 96px); }}
+      #pane-plots.active {{ height: calc(100dvh - 96px); }}
     }}
+    /* ── "Right now" summary panel ────────────────────────────────────
+       Opened from the live hero.  One card per thing worth knowing, built
+       from whatever this installation actually measures. */
+    .li-toggle {{
+      display: flex; align-items: center; justify-content: space-between;
+      width: 100%; margin: 0 0 8px 0; padding: 8px 12px;
+      background: var(--card); color: var(--fg);
+      border: 1px solid var(--border); border-radius: 12px;
+      font-size: 13px; font-weight: 650; cursor: pointer;
+    }}
+    .li-chev {{ transition: transform .2s ease; }}
+    .li-chev.open {{ transform: rotate(180deg); }}
+    #live-insights {{ margin: 0 0 10px 0; }}
+    .li-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+      gap: 8px;
+    }}
+    .li-card {{
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 12px; text-align: left;
+      background: var(--surface-2); color: var(--fg);
+      border: 1px solid var(--border); border-radius: 14px;
+      cursor: pointer; min-width: 0;
+      transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+    }}
+    .li-card:hover {{ transform: translateY(-1px); box-shadow: var(--shadow-sm); }}
+    .li-card[disabled] {{ cursor: default; }}
+    .li-ico {{ font-size: 18px; line-height: 1.1; flex-shrink: 0; }}
+    .li-body {{ display: flex; flex-direction: column; min-width: 0; }}
+    .li-label {{
+      font-size: 10px; font-weight: 650; letter-spacing: .07em;
+      text-transform: uppercase; color: var(--muted);
+    }}
+    .li-value {{
+      font-size: 17px; font-weight: 750; letter-spacing: -.02em;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }}
+    .li-sub {{
+      font-size: 11px; color: var(--muted);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }}
+    .li-good .li-value {{ color: var(--sem-down, #15803d); }}
+    .li-warn .li-value {{ color: var(--sem-up, #b45309); }}
+    .li-empty {{ padding: 10px 12px; color: var(--muted); font-size: 12px; }}
+
     /* ── Metric grid ── */
     .metric-grid {{
       display: grid;
@@ -2285,13 +2339,17 @@ _HTML_TEMPLATE = """<!doctype html>
         <span style="opacity:0.85;margin-left:10px">→ {web_update_banner_open}</span>
       </div>
       <div id="live-timescale" style="display:flex;gap:6px;flex-wrap:wrap;padding:0 0 8px 0"></div>
+      <button type="button" id="li-toggle" class="li-toggle" onclick="toggleInsights()">
+        <span>{web_insights_title}</span><span class="li-chev" aria-hidden="true">⌄</span>
+      </button>
+      <div id="live-insights" hidden></div>
       <div id="live-grid" class="card-grid"></div>
     </div>
 
     <!-- Plots (historical W/V/A/VAR/cos φ, phases + totals, time ranges, kWh) -->
     <div id="pane-plots" class="pane">
       <iframe id="plots-frame" src="about:blank" loading="lazy"
-        style="width:100%;height:100%;border:0;border-radius:0;background:var(--card);display:block"></iframe>
+        style="width:100%;height:100%;border:0;border-radius:0;background:transparent;display:block"></iframe>
     </div>
 
     <!-- Costs -->
@@ -2472,7 +2530,7 @@ _HTML_TEMPLATE = """<!doctype html>
     </button>
     <button class="nav-btn" onclick="switchPane('plots',this)">
       <span class="nav-icon">📊</span>
-      <span class="nav-label">Plots</span>
+      <span class="nav-label">{web_tab_plots}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('costs',this)">
       <span class="nav-icon">💰</span>
@@ -2520,27 +2578,27 @@ _HTML_TEMPLATE = """<!doctype html>
     </button>
     <button class="nav-btn" data-feature="smart_sched" onclick="switchPane('smart_sched',this)">
       <span class="nav-icon">⏱</span>
-      <span class="nav-label">Schedule</span>
+      <span class="nav-label">{web_tab_schedule}</span>
     </button>
     <button class="nav-btn" data-feature="ev_log" onclick="switchPane('ev_log',this)">
       <span class="nav-icon">🚗</span>
-      <span class="nav-label">EV Log</span>
+      <span class="nav-label">{web_tab_ev_log}</span>
     </button>
     <button class="nav-btn" data-feature="tariff" onclick="switchPane('tariff',this)">
       <span class="nav-icon">💱</span>
-      <span class="nav-label">Tariff</span>
+      <span class="nav-label">{web_tab_tariff}</span>
     </button>
     <button class="nav-btn" data-feature="battery" onclick="switchPane('battery',this)">
       <span class="nav-icon">🔋</span>
-      <span class="nav-label">Battery</span>
+      <span class="nav-label">{web_tab_battery}</span>
     </button>
     <button class="nav-btn" data-feature="advisor" onclick="switchPane('advisor',this)">
       <span class="nav-icon">🤖</span>
-      <span class="nav-label">Advisor</span>
+      <span class="nav-label">{web_tab_advisor}</span>
     </button>
     <button class="nav-btn" data-feature="goals" onclick="switchPane('goals',this)">
       <span class="nav-icon">🏆</span>
-      <span class="nav-label">Goals</span>
+      <span class="nav-label">{web_tab_goals}</span>
     </button>
     <button class="nav-btn" data-feature="tenants" onclick="switchPane('tenants',this)">
       <span class="nav-icon">🏘</span>
@@ -2548,11 +2606,11 @@ _HTML_TEMPLATE = """<!doctype html>
     </button>
     <button class="nav-btn" onclick="switchPane('nilm',this)">
       <span class="nav-icon">🧠</span>
-      <span class="nav-label">NILM</span>
+      <span class="nav-label">{web_tab_nilm}</span>
     </button>
     <button class="nav-btn" data-feature="device_control" onclick="switchPane('control',this)">
       <span class="nav-icon">🎛</span>
-      <span class="nav-label">Control</span>
+      <span class="nav-label">{web_tab_control}</span>
     </button>
     <button class="nav-btn" onclick="switchPane('calibration',this)">
       <span class="nav-icon">📏</span>
@@ -2560,7 +2618,7 @@ _HTML_TEMPLATE = """<!doctype html>
     </button>
     <button class="nav-btn" onclick="switchPane('sync',this)">
       <span class="nav-icon">🔄</span>
-      <span class="nav-label">Sync</span>
+      <span class="nav-label">{web_tab_sync}</span>
     </button>
   </nav>
 
@@ -2568,7 +2626,7 @@ _HTML_TEMPLATE = """<!doctype html>
   <div id="nav-drawer-overlay" onclick="toggleNavDrawer()"></div>
   <aside id="nav-drawer">
     <button class="drawer-item active" onclick="switchPaneFromDrawer('live',this)"><span class="drawer-ico">📡</span>{web_tab_live}</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('plots',this)"><span class="drawer-ico">📊</span>Plots</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('plots',this)"><span class="drawer-ico">📊</span>{web_tab_plots}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('costs',this)"><span class="drawer-ico">💰</span>{web_tab_costs}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('heatmap',this)"><span class="drawer-ico">🔥</span>{web_tab_heatmap}</button>
     <button class="drawer-item" data-feature="solar" onclick="switchPaneFromDrawer('solar',this)"><span class="drawer-ico">☀️</span>{web_tab_solar}</button>
@@ -2580,17 +2638,17 @@ _HTML_TEMPLATE = """<!doctype html>
     <button class="drawer-item" onclick="switchPaneFromDrawer('standby',this)"><span class="drawer-ico">🔌</span>{web_tab_standby}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('sankey',this)"><span class="drawer-ico">⚡</span>{web_tab_sankey}</button>
     <button class="drawer-item" data-feature="ev" onclick="switchPaneFromDrawer('ev',this)"><span class="drawer-ico">🔌</span>{web_tab_ev}</button>
-    <button class="drawer-item" data-feature="smart_sched" onclick="switchPaneFromDrawer('smart_sched',this)"><span class="drawer-ico">⏱</span>Schedule</button>
-    <button class="drawer-item" data-feature="ev_log" onclick="switchPaneFromDrawer('ev_log',this)"><span class="drawer-ico">🚗</span>EV Log</button>
-    <button class="drawer-item" data-feature="tariff" onclick="switchPaneFromDrawer('tariff',this)"><span class="drawer-ico">💱</span>Tariff</button>
-    <button class="drawer-item" data-feature="battery" onclick="switchPaneFromDrawer('battery',this)"><span class="drawer-ico">🔋</span>Battery</button>
-    <button class="drawer-item" data-feature="advisor" onclick="switchPaneFromDrawer('advisor',this)"><span class="drawer-ico">🤖</span>Advisor</button>
-    <button class="drawer-item" data-feature="goals" onclick="switchPaneFromDrawer('goals',this)"><span class="drawer-ico">🏆</span>Goals</button>
+    <button class="drawer-item" data-feature="smart_sched" onclick="switchPaneFromDrawer('smart_sched',this)"><span class="drawer-ico">⏱</span>{web_tab_schedule}</button>
+    <button class="drawer-item" data-feature="ev_log" onclick="switchPaneFromDrawer('ev_log',this)"><span class="drawer-ico">🚗</span>{web_tab_ev_log}</button>
+    <button class="drawer-item" data-feature="tariff" onclick="switchPaneFromDrawer('tariff',this)"><span class="drawer-ico">💱</span>{web_tab_tariff}</button>
+    <button class="drawer-item" data-feature="battery" onclick="switchPaneFromDrawer('battery',this)"><span class="drawer-ico">🔋</span>{web_tab_battery}</button>
+    <button class="drawer-item" data-feature="advisor" onclick="switchPaneFromDrawer('advisor',this)"><span class="drawer-ico">🤖</span>{web_tab_advisor}</button>
+    <button class="drawer-item" data-feature="goals" onclick="switchPaneFromDrawer('goals',this)"><span class="drawer-ico">🏆</span>{web_tab_goals}</button>
     <button class="drawer-item" data-feature="tenants" onclick="switchPaneFromDrawer('tenants',this)"><span class="drawer-ico">🏘</span>{web_tab_tenants}</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('nilm',this)"><span class="drawer-ico">🧠</span>NILM</button>
-    <button class="drawer-item" data-feature="device_control" onclick="switchPaneFromDrawer('control',this)"><span class="drawer-ico">🎛</span>Control</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('nilm',this)"><span class="drawer-ico">🧠</span>{web_tab_nilm}</button>
+    <button class="drawer-item" data-feature="device_control" onclick="switchPaneFromDrawer('control',this)"><span class="drawer-ico">🎛</span>{web_tab_control}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('calibration',this)"><span class="drawer-ico">📏</span>{web_tab_calibration}</button>
-    <button class="drawer-item" onclick="switchPaneFromDrawer('sync',this)"><span class="drawer-ico">🔄</span>Sync</button>
+    <button class="drawer-item" onclick="switchPaneFromDrawer('sync',this)"><span class="drawer-ico">🔄</span>{web_tab_sync}</button>
   </aside>
 </div>
 
@@ -2773,7 +2831,14 @@ function _loadCachedPayload(name) {{
 var _tabPayloadSig = {{}};
 function _tabSkipRender(name, el, data) {{
   var sig;
-  try {{ sig = JSON.stringify(data); }} catch(e) {{ return false; }}
+  /* The rendered output depends on more than the payload: theme, skin and
+     language all change the markup. Folding them into the signature means a
+     switch always forces a re-render, without every caller having to know. */
+  try {{
+    var R = document.documentElement;
+    sig = JSON.stringify(data) + '|' + (R.dataset.theme || '') + '|' +
+          (R.getAttribute('data-skin') || '') + '|' + (R.lang || '');
+  }} catch(e) {{ return false; }}
   var vis = !!(el && el.offsetParent !== null);
   var prev = _tabPayloadSig[name];
   _tabPayloadSig[name] = {{ sig: sig, vis: vis }};
@@ -3036,7 +3101,7 @@ function prefetchAllTabs() {{
   var added = 0;
   document.querySelectorAll('#bottom-nav .nav-btn').forEach(function(b) {{
     var oc = b.getAttribute('onclick') || '';
-    var m = /switchPane\('([^']+)'/.exec(oc);
+    var m = /switchPane\\('([^']+)'/.exec(oc);
     if (!m) return;
     var nm = m[1];
     if (!_tabLoaderFor(nm)) return;                       // live/plots/sync skipped
@@ -3558,7 +3623,7 @@ async function loadNilm() {{
     if (!_nilmCurrentDevice || eligible.indexOf(_nilmCurrentDevice) < 0) {{
       _nilmCurrentDevice = eligible.length > 0 ? eligible[0] : null;
     }}
-    renderNilm(_nilmData, el);
+    if (!_tabSkipRender('nilm', el, _nilmData)) renderNilm(_nilmData, el);
   }} catch(e) {{
     _tabFail(el, e, quiet);
   }}
@@ -4890,7 +4955,9 @@ function _runTabRefresh(pane) {{
     else if (pane === 'solar')   {{ try {{ loadSolar(typeof solarPeriod !== 'undefined' ? solarPeriod : 'month'); }} catch(e) {{}} }}
     else if (pane === 'standby') loadStandby();
     else if (pane === 'sankey')  loadSankey();
-    else if (pane === 'ev')      loadEv();
+    /* Without coordinates the charger list cannot be built, so a periodic
+       refresh would only rewrite the same hint every few seconds. */
+    else if (pane === 'ev')      {{ if (_evLastCoords) loadEv(); }}
     else if (pane === 'battery') {{ if (typeof loadBattery === 'function') loadBattery(); }}
     else if (pane === 'goals')   {{ if (typeof loadGoals === 'function') loadGoals(); }}
     else if (pane === 'nilm')    loadNilm();
@@ -4901,6 +4968,281 @@ function _runTabRefresh(pane) {{
     setTimeout(function() {{ _quietRefresh = false; }}, 0);
   }}
 }}
+/* ── The "Right now" panel ────────────────────────────────────────────────
+   Clicking the live hero opens a summary that pulls the one line worth
+   knowing out of every other tab.  It is built from PROVIDERS: each one is
+   handed whatever payloads this installation actually serves and returns a
+   card, or null when it has nothing to say.  A house with PV and a battery
+   therefore shows more cards than one without — with no per-installation
+   branch anywhere in the code. */
+var _insightsOpen = false;
+var _insightsData = {{}};
+var _insightsFeat = null;
+var _insightsBusy = false;
+var _insightsTimer = null;
+
+try {{ _insightsOpen = localStorage.getItem('sea_insights') === '1'; }} catch(e) {{}}
+
+/* endpoint → the feature key that must be on for it to exist at all.
+   null = always available. */
+var _INSIGHT_SOURCES = {{
+  costs: null, standby: null, sankey: null,
+  solar: 'solar', battery: 'battery', co2: 'co2',
+  anomalies: 'anomalies', forecast: 'forecast', goals: 'goals', advisor: 'advisor'
+}};
+
+function _iCard(o) {{
+  /* data-tab instead of an inline handler: no quoting to get wrong, and the
+     listener is bound once per render. */
+  return '<button type="button" class="li-card' + (o.tone ? ' li-' + o.tone : '') + '"' +
+    (o.tab ? ' data-tab="' + esc(o.tab) + '"' : ' disabled') + '>' +
+    '<span class="li-ico" aria-hidden="true">' + o.icon + '</span>' +
+    '<span class="li-body"><span class="li-label">' + esc(o.label) + '</span>' +
+    '<span class="li-value">' + o.value + '</span>' +
+    (o.sub ? '<span class="li-sub">' + esc(o.sub) + '</span>' : '') +
+    '</span></button>';
+}}
+function _iNum(v, d) {{ var n = Number(v); return isFinite(n) ? n.toFixed(d === undefined ? 1 : d) : null; }}
+
+var _INSIGHT_PROVIDERS = [
+  /* Where the power is coming from right now. Always available. */
+  {{ id: 'grid', build: function(c) {{
+      var st = c.state; if (!st || !st.devices) return null;
+      var w = 0, i;
+      for (i = 0; i < st.devices.length; i++) {{
+        var d = st.devices[i];
+        if (d.parent && String(d.parent)) continue;      // sub-meters are inside their parent
+        w += Number(d.power_w || 0);
+      }}
+      var share = Number(st.solar_share_now);
+      var sub = isFinite(share) && share > 0
+        ? t('insight.grid.share', '{{p}}% from the roof').replace('{{p}}', share.toFixed(0))
+        : t('insight.grid.all', 'all from the grid');
+      return {{ icon: '⚡', label: t('insight.grid.label', 'Drawing now'),
+               value: Math.round(w) + ' W', sub: sub, tab: 'sankey',
+               tone: w > 3000 ? 'warn' : '' }};
+    }}}},
+  /* Photovoltaics — only where a PV meter is actually configured. */
+  {{ id: 'pv', build: function(c) {{
+      var s = c.solar; if (!s || s.configured === false) return null;
+      var pv = 0, dv = s.devices || [], i;
+      for (i = 0; i < dv.length; i++) pv += Number(dv[i].pv_w || dv[i].power_w || 0);
+      var sk = c.sankey || {{}};
+      var prod = Number(sk.pv_production_kwh || 0);
+      if (!pv && !prod) return null;
+      var self = Number(sk.self_consumption_kwh || 0);
+      var sub = prod > 0
+        ? t('insight.pv.self', '{{p}}% self-used').replace('{{p}}', (100 * self / prod).toFixed(0))
+        : '';
+      return {{ icon: '☀️', label: t('insight.pv.label', 'PV now'),
+               value: pv >= 1000 ? (pv / 1000).toFixed(2) + ' kW' : Math.round(pv) + ' W',
+               sub: sub, tab: 'solar', tone: 'good' }};
+    }}}},
+  /* Home battery — only where one is configured and has a capacity. */
+  {{ id: 'battery', build: function(c) {{
+      var b = c.battery && c.battery.data; if (!b || !Number(b.capacity_kwh)) return null;
+      var soc = Number(b.soc_pct || 0), pw = Number(b.power_w || 0);
+      var mode = b.mode === 'charging' ? t('battery.mode.charging', 'Charging')
+               : b.mode === 'discharging' ? t('battery.mode.discharging', 'Discharging')
+               : t('battery.mode.idle', 'Idle');
+      var sub = mode, h;
+      if (b.mode === 'charging' && pw > 50) {{
+        h = (Number(b.capacity_kwh) * (100 - soc) / 100) / (pw / 1000);
+        sub = mode + ' · ' + t('insight.bat.full', 'full in {{h}}').replace('{{h}}', _iDur(h));
+      }} else if (b.mode === 'discharging' && pw < -50) {{
+        h = (Number(b.capacity_kwh) * soc / 100) / (Math.abs(pw) / 1000);
+        sub = mode + ' · ' + t('insight.bat.empty', 'lasts {{h}}').replace('{{h}}', _iDur(h));
+      }}
+      return {{ icon: '🔋', label: t('insight.bat.label', 'Battery'),
+               value: soc.toFixed(0) + ' %', sub: sub, tab: 'battery',
+               tone: soc < 15 ? 'warn' : 'good' }};
+    }}}},
+  /* Today in money — the number people actually check. */
+  {{ id: 'today', build: function(c) {{
+      var s = c.costs && c.costs.summary; if (!s) return null;
+      if (!Number(s.today_kwh) && !Number(s.today_eur)) return null;
+      return {{ icon: '💶', label: t('insight.today.label', 'Today'),
+               value: fmt(s.today_eur, 2, '€'),
+               sub: fmt(s.today_kwh, 2, 'kWh'), tab: 'costs' }};
+    }}}},
+  /* Where the month is heading. */
+  {{ id: 'month', build: function(c) {{
+      var s = c.costs && c.costs.summary; if (!s || !Number(s.proj_eur)) return null;
+      var last = Number(s.last_month_eur || 0), proj = Number(s.proj_eur);
+      var sub = last > 0
+        ? t('insight.month.vs', 'vs last month {{v}}').replace('{{v}}', (proj >= last ? '+' : '') +
+            (100 * (proj - last) / last).toFixed(0) + ' %')
+        : t('insight.month.sub', 'projection');
+      return {{ icon: '📈', label: t('insight.month.label', 'This month'),
+               value: fmt(proj, 2, '€'), sub: sub, tab: 'costs',
+               tone: last > 0 && proj > last * 1.1 ? 'warn' : '' }};
+    }}}},
+  /* Grid carbon intensity right now. */
+  {{ id: 'co2', build: function(c) {{
+      var g = c.co2; if (!g || !Number(g.current_intensity)) return null;
+      var v = Number(g.current_intensity), dirty = Number(g.dirty_threshold || 400);
+      return {{ icon: '🌍', label: t('insight.co2.label', 'Grid mix'),
+               value: v.toFixed(0) + ' g/kWh',
+               sub: v <= dirty * 0.6 ? t('insight.co2.clean', 'clean — good time')
+                  : v >= dirty ? t('insight.co2.dirty', 'dirty — better later')
+                  : t('insight.co2.mid', 'average'),
+               tab: 'co2', tone: v >= dirty ? 'warn' : (v <= dirty * 0.6 ? 'good' : '') }};
+    }}}},
+  /* Anything the anomaly detector has open. */
+  {{ id: 'anomalies', build: function(c) {{
+      var a = c.anomalies; if (!a || a.enabled === false) return null;
+      var n = Number(a.total_count || 0);
+      if (!n) return null;
+      var ev = (a.events || [])[0] || {{}};
+      return {{ icon: '🔍', label: t('insight.anom.label', 'Anomalies'),
+               value: String(n),
+               sub: ev.device_name || ev.device || '', tab: 'anomalies', tone: 'warn' }};
+    }}}},
+  /* What standing-by costs per year — the classic hidden bill. */
+  {{ id: 'standby', build: function(c) {{
+      var s = c.standby; if (!s) return null;
+      var eur = Number(s.total_annual_standby_cost || 0);
+      if (eur < 1) return null;
+      return {{ icon: '🔌', label: t('insight.standby.label', 'Standby'),
+               value: fmt(eur, 0, '€') + '/a',
+               sub: fmt(s.total_annual_standby_kwh, 0, 'kWh') + '/a', tab: 'standby',
+               tone: eur > 60 ? 'warn' : '' }};
+    }}}},
+  /* Progress against the daily goal, where goals are used. */
+  {{ id: 'goals', build: function(c) {{
+      var g = c.goals && c.goals.data; if (!g) return null;
+      var tgt = Number(g.daily_target_kwh || 0); if (!tgt) return null;
+      var streak = (g.streak || {{}}).current_days;
+      var mg = g.monthly_goal || {{}};
+      var pct = Number(mg.progress_pct || 0);
+      return {{ icon: '🏆', label: t('insight.goals.label', 'Monthly goal'),
+               value: pct.toFixed(0) + ' %',
+               sub: streak ? t('insight.goals.streak', '{{n}} days in a row').replace('{{n}}', streak) : '',
+               tab: 'goals', tone: pct > 100 ? 'warn' : 'good' }};
+    }}}},
+  /* The advisor's best single tip, when it found one worth money. */
+  {{ id: 'advisor', build: function(c) {{
+      var a = c.advisor && c.advisor.data; if (!a) return null;
+      var tips = a.tips || []; if (!tips.length) return null;
+      var top = tips[0], save = Number(a.total_savings_potential_eur || top.savings_eur || 0);
+      if (!(save > 0)) return null;
+      return {{ icon: '🤖', label: t('insight.advisor.label', 'Savings potential'),
+               value: fmt(save, 0, '€') + '/a',
+               sub: top.title || top.text || '', tab: 'advisor' }};
+    }}}},
+  /* Where the next month is heading, from the trend. */
+  {{ id: 'forecast', build: function(c) {{
+      var f = c.forecast; if (!f || !Number(f.forecast_next_month_kwh)) return null;
+      return {{ icon: '📉', label: t('insight.fc.label', 'Next month'),
+               value: fmt(f.forecast_next_month_kwh, 0, 'kWh'),
+               sub: Number(f.forecast_next_month_cost) ? fmt(f.forecast_next_month_cost, 2, '€') : '',
+               tab: 'forecast' }};
+    }}}},
+  /* Phase balance — three-phase houses only, and only when it is off. */
+  {{ id: 'phases', build: function(c) {{
+      var st = c.state; if (!st || !st.devices) return null;
+      var worst = null, i, j;
+      for (i = 0; i < st.devices.length; i++) {{
+        var ph = st.devices[i].phases;
+        if (!ph || ph.length < 3) continue;
+        var vals = [], sum = 0;
+        for (j = 0; j < ph.length; j++) {{ var p = Number(ph[j].power_w || 0); vals.push(p); sum += p; }}
+        if (sum < 300) continue;
+        var mx = Math.max.apply(null, vals), mn = Math.min.apply(null, vals);
+        var spread = sum > 0 ? (mx - mn) / (sum / vals.length) : 0;
+        if (!worst || spread > worst.spread) worst = {{ spread: spread, name: st.devices[i].name, d: mx - mn }};
+      }}
+      if (!worst || worst.spread < 0.6) return null;
+      return {{ icon: '⚖️', label: t('insight.phase.label', 'Phases'),
+               value: 'Δ ' + Math.round(worst.d) + ' W',
+               sub: worst.name || '', tab: 'live', tone: 'warn' }};
+    }}}}
+];
+
+function _iDur(h) {{
+  if (!isFinite(h) || h <= 0) return '–';
+  if (h < 1) return Math.round(h * 60) + ' min';
+  var hh = Math.floor(h), mm = Math.round((h - hh) * 60);
+  return hh + ':' + (mm < 10 ? '0' : '') + mm + ' h';
+}}
+
+function toggleInsights(force) {{
+  var el = document.getElementById('live-insights');
+  if (!el) return;
+  _insightsOpen = (force === undefined) ? !_insightsOpen : !!force;
+  try {{ localStorage.setItem('sea_insights', _insightsOpen ? '1' : '0'); }} catch(e) {{}}
+  el.hidden = !_insightsOpen;
+  var hero = document.getElementById('au-hero');
+  if (hero) hero.setAttribute('aria-expanded', _insightsOpen ? 'true' : 'false');
+  document.querySelectorAll('.li-chev').forEach(function(c) {{
+    c.classList.toggle('open', _insightsOpen);
+  }});
+  if (_insightsOpen) {{ loadInsights(); startInsightsRefresh(); }}
+  else stopInsightsRefresh();
+}}
+function startInsightsRefresh() {{
+  stopInsightsRefresh();
+  _insightsTimer = setInterval(function() {{
+    if (_insightsOpen && currentPane === 'live' && !frozen) loadInsights();
+  }}, 15000);
+}}
+function stopInsightsRefresh() {{
+  if (_insightsTimer) {{ clearInterval(_insightsTimer); _insightsTimer = null; }}
+}}
+
+async function loadInsights() {{
+  var el = document.getElementById('live-insights');
+  if (!el || _insightsBusy) return;
+  _insightsBusy = true;
+  try {{
+    if (!_insightsFeat) {{
+      try {{
+        var rc = await fetch('/api/config');
+        _insightsFeat = (await rc.json()).features || {{}};
+      }} catch(e) {{ _insightsFeat = {{}}; }}
+    }}
+    var names = [], urls = [];
+    Object.keys(_INSIGHT_SOURCES).forEach(function(k) {{
+      var need = _INSIGHT_SOURCES[k];
+      if (need && !_insightsFeat[need]) return;      // feature off → endpoint not asked
+      names.push(k); urls.push('/api/' + k);
+    }});
+    var res = await Promise.all(urls.map(function(u) {{
+      return fetch(u).then(function(r) {{ return r.ok ? r.json() : null; }}).catch(function() {{ return null; }});
+    }}));
+    var ctx = {{ state: _liveLatest }};
+    names.forEach(function(n, i) {{ if (res[i]) ctx[n] = res[i]; }});
+    _insightsData = ctx;
+    renderInsights(ctx, el);
+  }} finally {{ _insightsBusy = false; }}
+}}
+
+function renderInsights(ctx, el) {{
+  var cards = [], i;
+  for (i = 0; i < _INSIGHT_PROVIDERS.length; i++) {{
+    var card = null;
+    try {{ card = _INSIGHT_PROVIDERS[i].build(ctx); }} catch(e) {{ card = null; }}
+    if (card) cards.push(card);
+  }}
+  /* The panel repaints on a timer, so it goes through the same
+     changed-data gate as every other periodic pane. */
+  var sig = cards.map(function(c) {{ return c.label + '|' + c.value + '|' + c.sub + '|' + c.tone; }});
+  if (_tabSkipRender('insights', el, sig)) return;
+  if (!cards.length) {{
+    el.innerHTML = '<div class="li-empty">' +
+      t('insight.empty', 'Nothing to summarise yet — not enough measurements.') + '</div>';
+    return;
+  }}
+  el.innerHTML = '<div class="li-grid">' + cards.map(_iCard).join('') + '</div>';
+  el.querySelectorAll('.li-card[data-tab]').forEach(function(b) {{
+    b.addEventListener('click', function() {{
+      var pane = b.getAttribute('data-tab');
+      var btn = document.querySelector('.nav-btn[onclick*="\\'' + pane + '\\'"]');
+      switchPane(pane, btn);
+    }});
+  }});
+}}
+
 function startTabLiveRefresh(pane) {{
   stopTabLiveRefresh();
   var ms = TAB_LIVE_REFRESH[pane];
@@ -6363,6 +6705,9 @@ function _hmRender(data, unit) {{
   var hrWrap = document.getElementById('hm-hourly-wrap');
   var stWrap = document.getElementById('hm-stats-wrap');
   var chWrap = document.getElementById('hm-charts-wrap');
+  /* Called from the cache on every activation and every 30s refresh — four
+     containers rebuilt for a year of history that changes once an hour. */
+  if (_tabSkipRender('heatmap', calWrap, [data, unit])) return;
   syncHmDevices(data.devices);
   if (data.summary && stWrap) renderHmStats(data, stWrap, unit);
   else if (stWrap) stWrap.innerHTML = '';
@@ -7593,7 +7938,7 @@ async function loadSolar(period) {{
     const r = await fetch('/api/solar?period=' + period);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
-    renderSolar(data, el);
+    if (!_tabSkipRender('solar', el, data)) renderSolar(data, el);
   }} catch(e) {{
     _tabFail(el, e, quiet);
   }}
@@ -8843,7 +9188,7 @@ async function loadStandby() {{
     const r = await fetch('/api/standby');
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
-    renderStandby(data);
+    if (!_tabSkipRender('standby', cont, data)) renderStandby(data);
   }} catch(e) {{
     _tabFail(cont, e, quiet);
   }}
@@ -9115,7 +9460,8 @@ let _sankeyBands = [];      // captured flow-band centre lines for the animation
 function initSankeyPeriods() {{
   const el = document.getElementById('sankey-periods');
   if (el.children.length) return;
-  const labels = {{ today: 'Today', week: 'Week', month: 'Month', year: 'Year' }};
+  const labels = {{ today: t('web.costs.today', 'Today'), week: t('web.costs.week', 'Week'),
+                   month: t('web.costs.month', 'Month'), year: t('web.costs.year', 'Year') }};
   ['today','week','month','year'].forEach(function(p) {{
     const btn = document.createElement('button');
     btn.className = 'btn btn-outline btn-sm' + (p === _sankeyPeriod ? ' btn-accent' : '');
@@ -9132,25 +9478,26 @@ function initSankeyPeriods() {{
 async function loadSankey() {{
   initSankeyPeriods();
   const cont = document.getElementById('sankey-cards');
-  _spinner(cont, _quietRefresh, '<p class="loading-msg">Loading\u2026</p>');
+  _spinner(cont, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading\u2026') + '</p>');
   try {{
     const r = await fetch('/api/sankey?period=' + _sankeyPeriod + (_rawView ? '&raw=1' : ''));
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
-    renderSankey(data);
+    if (!_tabSkipRender('sankey', cont, data)) renderSankey(data);
   }} catch(e) {{
     cont.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
   }}
 }}
 function renderSankey(d) {{
-  let html = '<div class="card" style="margin-bottom:10px"><div class="card-title">Energy Flow</div><div class="metric-grid">' +
-    metricCardHtml('Grid', (d.grid_import_kwh||0).toFixed(2) + ' kWh', '') +
-    metricCardHtml('Total', (d.total_consumption_kwh||0).toFixed(2) + ' kWh', '') +
-    metricCardHtml('PV', (d.pv_production_kwh||0).toFixed(2) + ' kWh', '') +
-    metricCardHtml('Feed-in', (d.feed_in_kwh||0).toFixed(2) + ' kWh', '') +
+  let html = '<div class="card" style="margin-bottom:10px"><div class="card-title">' +
+    t('web.tab.sankey', 'Energy Flow') + '</div><div class="metric-grid">' +
+    metricCardHtml(t('web.sankey.grid', 'Grid'), (d.grid_import_kwh||0).toFixed(2) + ' kWh', '') +
+    metricCardHtml(t('web.sankey.total', 'Total'), (d.total_consumption_kwh||0).toFixed(2) + ' kWh', '') +
+    metricCardHtml(t('web.dash.pv', 'PV'), (d.pv_production_kwh||0).toFixed(2) + ' kWh', '') +
+    metricCardHtml(t('web.dash.feed_in', 'Feed-in'), (d.feed_in_kwh||0).toFixed(2) + ' kWh', '') +
     '</div></div>';
   if (!d.sankey || !d.sankey.node || !d.sankey.link || !d.sankey.link.value || d.sankey.link.value.length === 0) {{
-    html += '<div class="card"><p class="info-msg">No energy flow data for this period.</p></div>';
+    html += '<div class="card"><p class="info-msg">' + t('web.sankey.no_data', 'No energy flow data for this period.') + '</p></div>';
     document.getElementById('sankey-cards').innerHTML = html;
     return;
   }}
@@ -9724,7 +10071,7 @@ _loadLsSettings();
   function renderSmartSched(data, el) {{
     const durOpts = [1,2,3,4,6,8];
     let durSel = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">' +
-      '<span style="font-size:12px;color:var(--muted)">Duration:</span>';
+      '<span style="font-size:12px;color:var(--muted)">' + t('smart_sched.duration', 'Duration:') + '</span>';
     durOpts.forEach(function(h){{
       const active = h === Number(window._ssDuration);
       durSel += '<button onclick="window._ssDuration=' + h + ';loadSmartSched()" style="padding:4px 10px;border-radius:6px;border:1px solid ' + (active?'#ff9800':'var(--border)') + ';background:' + (active?'#ff9800':'transparent') + ';color:' + (active?'#fff':'var(--fg)') + ';cursor:pointer;font-size:12px;font-weight:' + (active?'600':'400') + '">' + h + ' h</button>';
@@ -10702,7 +11049,7 @@ _loadLsSettings();
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
-      renderBattery(d.data, el);
+      if (!_tabSkipRender('battery', el, d.data)) renderBattery(d.data, el);
     }} catch(e) {{
       el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
     }}
@@ -10829,7 +11176,7 @@ _loadLsSettings();
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
-      renderGoals(d.data, el);
+      if (!_tabSkipRender('goals', el, d.data)) renderGoals(d.data, el);
     }} catch(e) {{
       el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
     }}
@@ -11117,6 +11464,24 @@ _loadLsSettings();
       }}
     }}).catch(function(){{}});
   }})();
+
+  /* The hero is built by the skin, asynchronously — a delegated listener is
+     bound before it exists and keeps working when it is rebuilt.  The pause
+     button inside the hero must stay a button, so it is excluded. */
+  document.addEventListener('click', function(ev) {{
+    var t0 = ev.target;
+    if (!t0 || !t0.closest) return;
+    if (t0.closest('#au-anim') || t0.closest('.li-card') || t0.closest('#li-toggle')) return;
+    if (!t0.closest('#au-hero')) return;
+    toggleInsights();
+  }});
+  document.addEventListener('keydown', function(ev) {{
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    var h = document.activeElement;
+    if (!h || h.id !== 'au-hero') return;
+    ev.preventDefault(); toggleInsights();
+  }});
+  try {{ if (_insightsOpen) toggleInsights(true); }} catch(e) {{}}
 
   // Always start the persistent /api/state polling regardless of which pane
   // is initially active so cross-tab live updates work from page load.
@@ -14385,7 +14750,18 @@ class LiveWebDashboard:
                 "web_ev_apikey_hint": _t(self.lang, "web.ev.apikey_hint"),
                 "web_ev_save": _t(self.lang, "web.ev.save"),
                 "web_tab_export": _t(self.lang, "web.tab.export"),
-                "web_tab_calibration": _t(self.lang, "web.tab.calibration") if _t(self.lang, "web.tab.calibration") != "web.tab.calibration" else "Calibration",
+                "web_tab_calibration": _t(self.lang, "web.tab.calibration"),
+                "web_insights_title": _t(self.lang, "web.insights.title"),
+                "web_tab_plots": _t(self.lang, "web.tab.plots"),
+                "web_tab_schedule": _t(self.lang, "web.tab.schedule"),
+                "web_tab_ev_log": _t(self.lang, "web.tab.ev_log"),
+                "web_tab_tariff": _t(self.lang, "web.tab.tariff"),
+                "web_tab_battery": _t(self.lang, "web.tab.battery"),
+                "web_tab_advisor": _t(self.lang, "web.tab.advisor"),
+                "web_tab_goals": _t(self.lang, "web.tab.goals"),
+                "web_tab_nilm": _t(self.lang, "web.tab.nilm"),
+                "web_tab_control": _t(self.lang, "web.tab.control"),
+                "web_tab_sync": _t(self.lang, "web.tab.sync"),
                 # New feature pane titles
                 "smart_sched_title": _t(self.lang, "smart_sched.title") if _t(self.lang, "smart_sched.title") != "smart_sched.title" else "Smart scheduling",
                 "ev_log_title": _t(self.lang, "ev_log.title") if _t(self.lang, "ev_log.title") != "ev_log.title" else "EV charge log",
