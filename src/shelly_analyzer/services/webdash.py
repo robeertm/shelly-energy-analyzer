@@ -4978,7 +4978,12 @@ function _runTabRefresh(pane) {{
 var _insightsOpen = false;
 var _insightsData = {{}};
 var _insightsFeat = null;
-var _insightsBusy = false;
+var _insightsFeatBusy = false;
+var _insightInFlight = {{}}; // per source, never one lock for the batch
+var _insightSettled = false;
+var _insightCache = {{}};   // last good payload per source
+var _insightAge = {{}};     // when it arrived
+var _insightCost = {{}};    // how long it took last time
 var _insightsTimer = null;
 
 try {{ _insightsOpen = localStorage.getItem('sea_insights') === '1'; }} catch(e) {{}}
@@ -5192,42 +5197,67 @@ function stopInsightsRefresh() {{
 
 async function loadInsights() {{
   var el = document.getElementById('live-insights');
-  if (!el || _insightsBusy) return;
-  _insightsBusy = true;
-  try {{
-    if (!_insightsFeat) {{
-      try {{
-        var rc = await fetch('/api/config');
-        _insightsFeat = (await rc.json()).features || {{}};
-      }} catch(e) {{ _insightsFeat = {{}}; }}
-    }}
-    /* Paint from what we already have, then let each endpoint fill in as it
-       arrives.  Waiting for all of them means waiting for the slowest: on a
-       real installation /api/battery took 5.9s and /api/goals 2.0s, so the
-       panel sat empty for six seconds — and a single hanging endpoint would
-       have held it empty for good. */
-    var ctx = {{ state: _liveLatest }};
-    _insightsData = ctx;
-    renderInsights(ctx, el, false);
-    var pending = [];
-    Object.keys(_INSIGHT_SOURCES).forEach(function(name) {{
-      var need = _INSIGHT_SOURCES[name];
-      if (need && !_insightsFeat[need]) return;    // feature off → not asked
-      pending.push(_insightFetch('/api/' + name).then(function(data) {{
-        if (!data) return;
+  if (!el) return;
+  if (!_insightsFeat) {{
+    if (_insightsFeatBusy) return;
+    _insightsFeatBusy = true;
+    try {{
+      var rc = await fetch('/api/config');
+      _insightsFeat = (await rc.json()).features || {{}};
+    }} catch(e) {{ _insightsFeat = {{}}; }}
+    finally {{ _insightsFeatBusy = false; }}
+  }}
+  /* Paint from what we already have, then let each source fill in as it
+     arrives.  Waiting for all of them means waiting for the slowest: on a real
+     installation /api/battery answers in ~10s with a 180 KB payload (it
+     carries a full SoC history for four numbers) while the demo needs 0.1s.
+     Gathering them first left the panel empty for that whole time. */
+  var ctx = {{ state: _liveLatest }};
+  var k;
+  for (k in _insightCache) ctx[k] = _insightCache[k];   // keep what we know
+  _insightsData = ctx;
+  renderInsights(ctx, el, _insightSettled);
+
+  /* 🔴 In flight is tracked PER SOURCE.  A single lock around the whole batch
+     means one source that never answers stops the panel refreshing at all —
+     the opposite of what the guard is for. */
+  var now = Date.now();
+  var started = 0, done = 0;
+  Object.keys(_INSIGHT_SOURCES).forEach(function(name) {{
+    var need = _INSIGHT_SOURCES[name];
+    if (need && !_insightsFeat[need]) return;      // feature off → not asked
+    if (_insightInFlight[name]) return;            // still waiting for the last one
+    /* Self-tuning cadence: a source that answered slowly last time is
+       expensive, so it is not asked again every quarter minute.  Measured,
+       not configured — nothing here knows which house it is looking at. */
+    var slow = (_insightCost[name] || 0) > 2000;
+    var minAge = slow ? 60000 : 15000;
+    if (_insightAge[name] && (now - _insightAge[name]) < minAge) return;
+    _insightInFlight[name] = true;
+    started++;
+    var t0 = Date.now();
+    _insightFetch('/api/' + name).then(function(data) {{
+      _insightInFlight[name] = false;
+      _insightCost[name] = Date.now() - t0;
+      done++;
+      if (data) {{
+        _insightAge[name] = Date.now();
+        _insightCache[name] = data;
         ctx[name] = data;
-        renderInsights(ctx, el, false);            // gated: only paints on change
-      }}));
+      }}
+      if (done >= started) _insightSettled = true;
+      renderInsights(ctx, el, _insightSettled);
     }});
-    await Promise.all(pending);
-    renderInsights(ctx, el, true);             // now an empty panel really is empty
-  }} finally {{ _insightsBusy = false; }}
+  }});
+  if (!started) _insightSettled = true;
 }}
 
-/* One slow or dead endpoint must not hold the panel. */
+/* One slow or dead source must not hold the panel.  The ceiling is generous
+   because "slow" is a property of the installation, not a fault — 10s answers
+   are real; it exists so a source that never answers cannot leak. */
 function _insightFetch(url) {{
   var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-  var timer = setTimeout(function() {{ if (ctl) ctl.abort(); }}, 12000);
+  var timer = setTimeout(function() {{ if (ctl) ctl.abort(); }}, 25000);
   return fetch(url, ctl ? {{ signal: ctl.signal }} : undefined)
     .then(function(r) {{ return r.ok ? r.json() : null; }})
     .catch(function() {{ return null; }})

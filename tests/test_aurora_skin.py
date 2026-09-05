@@ -1194,9 +1194,15 @@ def test_the_summary_does_not_wait_for_the_slowest_endpoint():
     """
     src = open(WEBDASH_PATH, encoding="utf-8").read()
     block = src[src.index("async function loadInsights()"):src.index("function renderInsights(")]
-    assert "Promise.all(urls.map" not in block, "still gathers every endpoint before painting"
-    assert block.count("renderInsights(ctx, el, false)") >= 2, "no incremental repaint"
-    assert "_insightFetch(" in block, "endpoints are fetched without a timeout"
+    assert "Promise.all" not in block, "still gathers every source before painting"
+    assert block.count("renderInsights(ctx, el, _insightSettled)") >= 2, "no incremental repaint"
+    assert "_insightFetch(" in block, "sources are fetched without a timeout"
+    # 🔴 one lock around the whole batch means a single source that never
+    # answers stops the panel refreshing at all — the opposite of the guard
+    assert "_insightInFlight[name]" in block, "in-flight is not tracked per source"
+    # expensive sources must not be re-asked every 15s: /api/battery answers in
+    # ~10s with a 180 KB payload on a real installation
+    assert "_insightCost[name]" in block and "60000" in block, "no self-tuning cadence"
     a = src.index("function _insightFetch(url)")
     fetcher = src[a:a + 700]
     assert "AbortController" in fetcher and "ctl.abort()" in fetcher, fetcher[:200]
