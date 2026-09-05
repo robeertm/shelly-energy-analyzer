@@ -62,7 +62,11 @@ def compute_forecast(
     # Fallback to samples if hourly is empty
     if df.empty or len(df) < 6:
         try:
-            samples = db.query_samples(device_key, start_ts=start_ts, end_ts=end_ts)
+            try:
+                samples = db.query_samples(device_key, start_ts=start_ts, end_ts=end_ts,
+                                           columns=("timestamp", "energy_kwh"))
+            except TypeError:
+                samples = db.query_samples(device_key, start_ts=start_ts, end_ts=end_ts)
             if samples is not None and not samples.empty and "energy_kwh" in samples.columns:
                 samples["hour_ts"] = (pd.to_datetime(samples["timestamp"]).astype(int) // 10**9 // 3600) * 3600
                 df = samples.groupby("hour_ts").agg(kwh=("energy_kwh", "sum")).reset_index()

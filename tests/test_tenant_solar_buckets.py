@@ -104,3 +104,18 @@ def test_no_tenant_load_is_zero():
     # No tenant consumption in the bucket → nothing to colour (0.0).
     db = _FakeDB({"grid": {0: -2.0}, "pv": {0: 5.0}, "ten": {}})
     assert tsb(db, _cfg(), [(0, 3600)]) == [0.0]
+
+if __name__ == "__main__":
+    # Running this file directly must actually run its tests — six of the eleven
+    # test files had no such block, so `python3 tests/<file>.py` imported them,
+    # exited 0 and ran nothing.  Every test_* in the module, in source order.
+    import inspect as _inspect
+    import sys as _sys
+    _mod = _sys.modules[__name__]
+    _fns = [(n, f) for n, f in vars(_mod).items()
+            if n.startswith("test_") and callable(f)]
+    _fns.sort(key=lambda kv: _inspect.getsourcelines(kv[1])[1])
+    for _n, _f in _fns:
+        _f()
+        print("OK  %s" % _n)
+    print("\n%d tests passed (%s)." % (len(_fns), os.path.basename(__file__)))

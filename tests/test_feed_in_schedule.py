@@ -89,3 +89,18 @@ def test_config_round_trip_preserves_schedule():
 def test_empty_schedule_serializes_as_empty_list():
     s = SolarConfig()
     assert s.feed_in_schedule == []
+
+if __name__ == "__main__":
+    # Running this file directly must actually run its tests — six of the eleven
+    # test files had no such block, so `python3 tests/<file>.py` imported them,
+    # exited 0 and ran nothing.  Every test_* in the module, in source order.
+    import inspect as _inspect
+    import sys as _sys
+    _mod = _sys.modules[__name__]
+    _fns = [(n, f) for n, f in vars(_mod).items()
+            if n.startswith("test_") and callable(f)]
+    _fns.sort(key=lambda kv: _inspect.getsourcelines(kv[1])[1])
+    for _n, _f in _fns:
+        _f()
+        print("OK  %s" % _n)
+    print("\n%d tests passed (%s)." % (len(_fns), os.path.basename(__file__)))
