@@ -1,5 +1,15 @@
 # Changelog
 
+## 16.75.5
+### Fixed
+- **The summary fired all ten sources at once and they queued on the server.**
+  Measured on a live installation *after* the query fix: `/api/battery` answers
+  in **0.78 s on its own** but took **10.7 s in the browser**, because nine
+  other requests and the once-a-second live poll were ahead of it. The panel now
+  runs them **two at a time, cheapest first** — the order comes from each
+  source's own last measured response time, so it sorts itself out per
+  installation with nothing configured.
+
 ## 16.75.4
 ### Fixed
 - **`/api/battery` took 15 s because it read sixty-five columns to use two.**

@@ -5222,7 +5222,7 @@ async function loadInsights() {{
      means one source that never answers stops the panel refreshing at all —
      the opposite of what the guard is for. */
   var now = Date.now();
-  var started = 0, done = 0;
+  var queue = [];
   Object.keys(_INSIGHT_SOURCES).forEach(function(name) {{
     var need = _INSIGHT_SOURCES[name];
     if (need && !_insightsFeat[need]) return;      // feature off → not asked
@@ -5233,8 +5233,21 @@ async function loadInsights() {{
     var slow = (_insightCost[name] || 0) > 2000;
     var minAge = slow ? 60000 : 15000;
     if (_insightAge[name] && (now - _insightAge[name]) < minAge) return;
+    queue.push(name);
+  }});
+  /* Cheapest first, and only a couple at a time.  Firing all ten at once put
+     them in a queue on the server: /api/battery answers in 0.8s on its own and
+     took 10.7s in the browser, because nine other requests and the once-a-
+     second live poll were ahead of it.  Order comes from each source's own
+     last measured time, so the panel fills fastest-first by itself. */
+  queue.sort(function(a, b) {{ return (_insightCost[a] || 0) - (_insightCost[b] || 0); }});
+  var started = queue.length, done = 0;
+  if (!started) {{ _insightSettled = true; return; }}
+  var next = 0;
+  function pump() {{
+    if (next >= queue.length) return;
+    var name = queue[next++];
     _insightInFlight[name] = true;
-    started++;
     var t0 = Date.now();
     _insightFetch('/api/' + name).then(function(data) {{
       _insightInFlight[name] = false;
@@ -5244,18 +5257,18 @@ async function loadInsights() {{
         _insightAge[name] = Date.now();
         _insightCache[name] = data;
         /* 🔴 Into the CURRENT context, not the one this request set out with.
-           A source that answers slowly (battery: ~16 s under load) outlives
-           its own round — writing into the captured ctx meant its card only
-           appeared a refresh later, measured at 50 s instead of 16. */
+           A source that answers slowly outlives its own round — writing into
+           the captured ctx meant its card only appeared a refresh later,
+           measured at 50 s instead of 16. */
         ctx[name] = data;
         if (_insightsData && _insightsData !== ctx) _insightsData[name] = data;
       }}
       if (done >= started) _insightSettled = true;
-      var live = _insightsData || ctx;
-      renderInsights(live, el, _insightSettled);
+      renderInsights(_insightsData || ctx, el, _insightSettled);
+      pump();
     }});
-  }});
-  if (!started) _insightSettled = true;
+  }}
+  pump(); pump();     // two in flight; the live poll needs the server too
 }}
 
 /* One slow or dead source must not hold the panel.  The ceiling is generous
