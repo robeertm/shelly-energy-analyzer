@@ -1195,7 +1195,10 @@ def test_the_summary_does_not_wait_for_the_slowest_endpoint():
     src = open(WEBDASH_PATH, encoding="utf-8").read()
     block = src[src.index("async function loadInsights()"):src.index("function renderInsights(")]
     assert "Promise.all" not in block, "still gathers every source before painting"
-    assert block.count("renderInsights(ctx, el, _insightSettled)") >= 2, "no incremental repaint"
+    assert block.count("renderInsights(") >= 2, "no incremental repaint"
+    # a late answer must land in the CURRENT context, not the one its own round
+    # set out with — otherwise its card waits for the next refresh
+    assert "_insightsData[name] = data;" in block, "late answers write into a stale context"
     assert "_insightFetch(" in block, "sources are fetched without a timeout"
     # 🔴 one lock around the whole batch means a single source that never
     # answers stops the panel refreshing at all — the opposite of the guard
