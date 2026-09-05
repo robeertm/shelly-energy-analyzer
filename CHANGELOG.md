@@ -1,5 +1,29 @@
 # Changelog
 
+## 16.76.0
+### Added
+- **All nine languages are complete.** 557 dashboard strings × 9 languages, **0
+  keys without an entry**. Before: German was done, but **157 keys existed only
+  as an English literal in the code** (correct on screen, invisible to every
+  guard and to the seven languages built on top of English), and Spanish,
+  French, Portuguese, Italian, Polish, Czech and Russian fell back to English
+  for **430 of 557 strings** — meter calibration, standby, NILM, weather,
+  goals, the heatmap, the command palette and the CO₂ analysis were English on
+  those pages. 3 164 translations added. A test now asserts every `t()` key
+  resolves in every language **and** that no `{placeholder}` was lost on the way.
+
+### Fixed
+- 🔴 **Six of eleven test files ran nothing** when invoked directly — no
+  `__main__` block, so `python3 tests/<file>.py` imported them, exited 0 and
+  executed none of their 40 tests. Every file now runs its own tests either
+  way; 125 pass under pytest as well.
+- **The live day counter after a restart** — carried as an open question — is
+  verified, not open: it loads its baseline from the same computed data the
+  Costs tab uses. Measured on a live installation after six restarts in one
+  afternoon: **Live 6.354 kWh vs Costs 6.349 kWh**, the 5 Wh being the live
+  integration since the last settled hour. A test pins the baseline to that
+  source so the two cannot drift apart again.
+
 ## 16.75.6
 ### Fixed
 - **The same expensive answer was recomputed for every caller.** The Battery

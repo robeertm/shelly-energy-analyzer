@@ -1220,6 +1220,72 @@ def test_the_summary_does_not_wait_for_the_slowest_endpoint():
     assert "if (!done) return;" in r, "flashes the empty state while still loading"
     print("OK  the summary paints at once and cannot be held up by one endpoint")
 
+
+def test_every_dashboard_string_exists_in_every_language():
+    """The vault carried this as an open item for weeks: ~165 keys had no DE/EN
+    entry and ~230 none in the seven extra languages, so those pages read
+    English.  All 557 dashboard keys now resolve in all nine languages.
+
+    A key that is legitimately the same word in a language (PDF, Total, Type,
+    Position) is fine — what this guards is a MISSING entry, which is how the
+    English text leaked into every other page.
+    """
+    src = open(WEBDASH_PATH, encoding="utf-8").read()
+    keys = sorted({k for k in
+                   re.findall(r"[^A-Za-z_.]t\(\s*'([a-z][a-z0-9_.]*)'\s*,", src) +
+                   re.findall(r'[^A-Za-z_.]t\(\s*"([a-z][a-z0-9_.]*)"\s*,', src)
+                   if not k.endswith(".")})
+    assert len(keys) > 500, "key extraction broke: only %d" % len(keys)
+    from shelly_analyzer.i18n import get_lang_map
+    holes = {}
+    for lang in LANGS:
+        m = get_lang_map(lang)
+        missing = [k for k in keys if k not in m]
+        if missing:
+            holes[lang] = missing
+    assert not holes, "keys without an entry: %s" % {
+        l: (len(v), v[:5]) for l, v in holes.items()}
+
+    # and the placeholders must survive translation — a lost {n} shows as text
+    import re as _re
+    en = get_lang_map("en")
+    bad = []
+    for k in keys:
+        want = set(_re.findall(r"\{([a-z_]+)\}", str(en.get(k, ""))))
+        if not want:
+            continue
+        for lang in LANGS:
+            got = set(_re.findall(r"\{([a-z_]+)\}", str(get_lang_map(lang).get(k, ""))))
+            if got != want:
+                bad.append((lang, k, sorted(want), sorted(got)))
+    assert not bad, "placeholders lost in translation: %s" % bad[:5]
+    print("OK  all %d dashboard strings exist in all %d languages" % (len(keys), len(LANGS)))
+
+
+def test_the_live_day_counter_starts_from_the_same_source_as_the_costs_tab():
+    """After a restart at midday the Live tile must not start again at zero.
+
+    It integrates power live, so on its own it would only know the time since
+    the process started — while the Costs tab reads the day from history. The
+    accumulator therefore loads a BASELINE first, and that baseline has to come
+    from the computed data the Costs tab uses, not from a second source that
+    can lag. Verified on a live installation after six restarts in one
+    afternoon: Live 6.354 kWh vs Costs 6.349 kWh — the 5 Wh are the live
+    integration since the last settled hour.
+    """
+    bg = open(os.path.join(SRC, "web", "background.py"), encoding="utf-8").read()
+    fn = bg[bg.index("def _load_today_baseline"):]
+    fn = fn[:fn.index("\n    def ")]
+    assert "dispatcher.computed" in fn, "baseline no longer reads the Costs source"
+    assert "energy_kwh" in fn, "baseline does not read the energy column"
+    # and it must remember where the baseline ends, or live accumulation
+    # double-counts the hours it already contains
+    assert "base_last_ts" in bg, "baseline end is not tracked"
+    acc = bg[bg.index("def _accumulate_today_kwh"):]
+    acc = acc[:acc.index("\n    def ")]
+    assert "_load_today_baseline" in acc, "the accumulator ignores the baseline"
+    print("OK  the live day counter resumes from the Costs source, not from zero")
+
 if __name__ == "__main__":
     test_classic_injection_is_identity()
     test_every_css_rule_is_scoped_to_the_skin()
@@ -1274,5 +1340,7 @@ if __name__ == "__main__":
     test_the_summary_is_built_from_data_not_from_a_setup()
     test_the_summary_speaks_every_language()
     test_the_summary_does_not_wait_for_the_slowest_endpoint()
+    test_every_dashboard_string_exists_in_every_language()
+    test_the_live_day_counter_starts_from_the_same_source_as_the_costs_tab()
 
     print("\nAll Aurora skin tests passed.")
