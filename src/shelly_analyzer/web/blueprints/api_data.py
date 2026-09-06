@@ -345,7 +345,11 @@ def api_v1(subpath=""):
         payload = api_v1_mod.handle_v1_request(
             "/api/v1/" + subpath,
             dict(request.args),
-            state.storage,
+            # The v1 handlers call query_samples/query_hourly, which live on the
+            # database, not on Storage — passing the wrapper made every data
+            # endpoint answer "'Storage' object has no attribute 'query_samples'".
+            # Only /devices, /status and /health worked, because they read config.
+            state.storage.db,
             state.cfg,
         )
     except Exception as e:

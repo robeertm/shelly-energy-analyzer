@@ -967,6 +967,20 @@ class EvChargingConfig:
     # detection_threshold_w.
     group_surplus_floor_w: float = 0.0
 
+    # ── Where the charged energy came from decides what it cost ─────────────
+    # A wallbox on surplus (PV) charging buys almost nothing from the grid, so
+    # pricing every kWh at the consumer tariff overstates the cost several-fold.
+    # "auto"  — split by measured source whenever a grid meter and a PV or
+    #           battery series cover the charge; flat tariff otherwise.
+    # "split" — always attempt the split (still flat where data is missing).
+    # "flat"  — every kWh at the consumer tariff (behaviour up to v16.77).
+    cost_source_mode: str = "auto"
+    # What a self-produced kWh costs. "free" = 0 (it was never bought — the
+    # convention the Costs tab already prices owner circuits with), "feed_in" =
+    # the feed-in tariff it would have earned had it been exported (opportunity
+    # cost), "full" = the consumer tariff.
+    solar_cost_model: str = "free"
+
 
 @dataclass(frozen=True)
 class TariffTemplate:
@@ -1915,6 +1929,12 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         group_sessions=bool(evc_raw.get("group_sessions", True)),
         group_gap_minutes=_coerce_int(evc_raw.get("group_gap_minutes", 240), 240),
         group_surplus_floor_w=_coerce_float(evc_raw.get("group_surplus_floor_w", 0.0), 0.0),
+        cost_source_mode=(str(evc_raw.get("cost_source_mode", "auto") or "auto").strip().lower()
+                          if str(evc_raw.get("cost_source_mode", "auto") or "auto").strip().lower()
+                          in ("auto", "split", "flat") else "auto"),
+        solar_cost_model=(str(evc_raw.get("solar_cost_model", "free") or "free").strip().lower()
+                          if str(evc_raw.get("solar_cost_model", "free") or "free").strip().lower()
+                          in ("free", "feed_in", "full") else "free"),
     )
 
     tc_raw = raw.get("tariff_compare", {}) if isinstance(raw.get("tariff_compare"), dict) else {}
@@ -2601,6 +2621,8 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "group_sessions": bool(getattr(cfg.ev_charging, "group_sessions", True)),
             "group_gap_minutes": int(getattr(cfg.ev_charging, "group_gap_minutes", 240)),
             "group_surplus_floor_w": float(getattr(cfg.ev_charging, "group_surplus_floor_w", 0.0)),
+            "cost_source_mode": str(getattr(cfg.ev_charging, "cost_source_mode", "auto") or "auto"),
+            "solar_cost_model": str(getattr(cfg.ev_charging, "solar_cost_model", "free") or "free"),
         },
         "tariff_compare": {
             "enabled": bool(getattr(cfg.tariff_compare, "enabled", False)),

@@ -1,5 +1,72 @@
 # Changelog
 
+## 16.78.0
+### Added
+- **The EV log now prices a charge by where its energy actually came from.**
+  Until now every charged kWh was billed at the consumer tariff. On a house with
+  PV that is wrong by a wide margin: a wallbox on surplus charging buys almost
+  nothing from the grid. Measured on a real installation — 29 charges, 377 kWh
+  over 90 days — the log showed **113.91 €** where the grid actually supplied
+  about a quarter of the energy; the rest was sun and battery.
+
+  Each charge is now split into **solar / battery / grid**, and only the grid
+  part is charged. The split runs on the samples *inside* the charge, not on
+  whole hours: a surplus charge follows the sun and therefore collects a larger
+  solar share than the hour's average load does, and a charge that starts at
+  17:50 must not be priced with the whole 17:00 hour.
+
+  The physics is the one the Costs tab already prices every owner circuit with
+  (`energy_balance.compute_grid_cost_share`), so the two tabs cannot disagree.
+  Per interval, with the app's sign conventions (grid + import / − export,
+  battery + charge / − discharge, PV ≥ 0):
+
+      PV_direct = max(0, pv − export − battery_charge)   # PV that reached the loads
+      pool      = PV_direct + grid_import                # the non-battery supply bus
+      own_nb    = max(0, pool − tenant_load)             # a tenant is grid-parallel,
+      own_total = own_nb + battery_discharge             # never battery-fed
+
+  and the wallbox, being one of the owner's loads, takes its **proportional**
+  share — the same rule every other owner circuit gets. Charging the car is not
+  what made the grid import happen, and no measurement could say otherwise.
+
+- **Two settings, under Features › EV Charging.**
+  - *Surplus charging*: **Detect automatically** (default) splits by measured
+    source wherever a grid meter plus a PV or battery series covers the charge
+    and keeps the full tariff everywhere else; *Always split by source*; *Off —
+    full tariff* reproduces the pre-16.78 numbers exactly.
+  - *Value of self-produced energy*: **Free** (default, matching what the Costs
+    tab already applies to owner circuits), *Lost feed-in tariff* (the
+    opportunity cost, using the tariff effective on each charge's own day), or
+    *Full consumer tariff*.
+
+- **In the tab**: a "Where the energy came from" card with solar / battery /
+  grid kWh, the self-supplied share and what was saved against buying it all;
+  a three-colour source bar on every charge; and a *Surplus charge* badge when
+  a charge bought 10 % or less from the grid.
+
+- **An unmeasured charge is never presented as free sunshine.** A charge is
+  re-priced only when the supply meters really covered at least half its
+  window; otherwise it keeps the full tariff, keeps `cost_model: "fixed"`, and
+  the tab says why — no meters configured, or no measurement in this window.
+
+### Fixed
+- **`/api/v1/devices/<key>/samples`, `/hourly`, `/costs`, `/spot_prices` and
+  `/co2` never worked.** The route handed the v1 handlers the `Storage`
+  wrapper where they expect the database, so every data endpoint answered
+  `'Storage' object has no attribute 'query_samples'`. Only `/devices`,
+  `/status` and `/health` responded, because they read configuration.
+- **The charging-session detection cache handed out its own objects.** Copying
+  the list was not enough once anything writes to a session: the first caller's
+  prices were baked into the cache, so switching the pricing mode back to flat
+  changed nothing until the cache expired.
+
+### Notes
+- 37 new tests (162 total): the attribution for every way a car can be fed —
+  sun, battery, both, partly grid, PV going into the battery, exported PV, a
+  tenant on the same bus — plus the whole endpoint on a real SQLite house, and
+  the tab's JavaScript *executed* (not merely parsed) against a real payload.
+- 25 new strings in all nine languages, placeholders included.
+
 ## 16.77.0
 ### Removed
 - **The EV Chargers tab is gone.** The nearby-charging-station finder

@@ -465,6 +465,34 @@ class ActionDispatcher:
             self._ev_window_cache[key] = (db_max, now, df)
         return df
 
+    @staticmethod
+    def _ev_power_arrays(df: "pd.DataFrame"):
+        """``(ts[], watt[])`` from the wallbox frame the EV log already holds.
+
+        The source split needs the consumer's own power series; reading it a
+        second time would double the endpoint's heaviest query for data that is
+        already in hand — including the live tail, so a charge still running is
+        attributed up to the current second.
+        """
+        import numpy as _np
+        if df is None or getattr(df, "empty", True):
+            return None, None
+        col = "total_power" if "total_power" in df.columns else None
+        if col is None or "timestamp" not in df.columns:
+            return None, None
+        ts = df["timestamp"]
+        if pd.api.types.is_datetime64_any_dtype(ts):
+            if getattr(ts.dt, "tz", None) is not None:
+                ts = ts.dt.tz_convert("UTC").dt.tz_localize(None)
+            ts = ts.astype("datetime64[s]").astype("int64").to_numpy()
+        else:
+            ts = pd.to_numeric(ts, errors="coerce").fillna(0).astype("int64").to_numpy()
+        w = pd.to_numeric(df[col], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+        if ts.size == 0:
+            return None, None
+        order = _np.argsort(ts, kind="stable")
+        return ts[order], w[order]
+
     def _ev_live_fingerprint(self, dev_key: str) -> tuple:
         """Cheap fingerprint of the live-store tail for ``dev_key``.
 
@@ -5231,6 +5259,10 @@ class ActionDispatcher:
                     float(getattr(_ec, "group_surplus_floor_w", 0.0) or 0.0),
                     int(getattr(_ec, "group_gap_minutes", 240)),
                     str(getattr(getattr(self.cfg, "solar", None), "grid_meter_device_key", "") or ""),
+                    str(getattr(_ec, "cost_source_mode", "auto") or "auto"),
+                    str(getattr(_ec, "solar_cost_model", "free") or "free"),
+                    float(getattr(getattr(self.cfg, "solar", None),
+                                  "feed_in_tariff_eur_per_kwh", 0.0) or 0.0),
                 )
                 _resp_key = (dev_key, days)
                 _resp_token = (_db_max, self._ev_live_fingerprint(dev_key), _del_fp, _cfg_fp)
@@ -5262,7 +5294,67 @@ class ActionDispatcher:
                     _del = set()
                 if _del:
                     sessions = [s for s in sessions if s.session_id not in _del]
+
+                # ── What the charge actually cost ────────────────────────────
+                # Priced flat, a wallbox on surplus (PV) charging looks as
+                # expensive as one on the grid. Split each charge into the
+                # energy that came from PV, from the battery and from the grid,
+                # and charge only the grid part. Same physics the Costs tab
+                # already prices every owner circuit with
+                # (energy_balance.compute_grid_cost_share), but evaluated on the
+                # samples *inside* the charge: a surplus charge follows the sun,
+                # so it collects a larger solar share than the hour's average
+                # load, and a charge starting at 17:50 must not be priced with
+                # the whole 17:00 hour.
+                _src_mode = str(getattr(_ec, "cost_source_mode", "auto") or "auto")
+                _src_priced = 0
+                _src_reason = "off" if _src_mode == "flat" else "no_data"
+                if sessions and _src_mode in ("auto", "split"):
+                    try:
+                        from shelly_analyzer.services.energy_balance import (
+                            consumer_source_split, _resolve_source_keys)
+                        from shelly_analyzer.services.ev_charging_log import price_by_source
+                        _gk, _pk, _bk = _resolve_source_keys(self.cfg)
+                        if _gk and (_pk or _bk):
+                            _l_ts, _l_w = self._ev_power_arrays(df_ev)
+                            _splits = consumer_source_split(
+                                self.storage.db, self.cfg,
+                                [(x.start_ts, x.end_ts) for x in sessions],
+                                load_key=dev_key, load_ts=_l_ts, load_w=_l_w)
+                            _solar_c = getattr(self.cfg, "solar", None)
+                            _model = str(getattr(_ec, "solar_cost_model", "free") or "free")
+                            if _model == "full":
+                                _sp = float(self.cfg.pricing.electricity_price_eur_per_kwh)
+                            elif _model == "feed_in" and _solar_c is not None:
+                                # The tariff effective on each charge's own day —
+                                # a feed-in rate that changed in 2024 must not be
+                                # applied to a charge from 2023.
+                                from datetime import date as _date
+                                def _sp(_se, _sc=_solar_c):
+                                    try:
+                                        return float(_sc.effective_feed_in_for_date(
+                                            _date.fromtimestamp(_se.start_ts)))
+                                    except Exception:
+                                        return float(getattr(_sc, "feed_in_tariff_eur_per_kwh", 0.0) or 0.0)
+                            else:
+                                _sp = 0.0
+                            _src_priced = price_by_source(
+                                sessions, _splits,
+                                float(self.cfg.pricing.electricity_price_eur_per_kwh),
+                                solar_price_eur_per_kwh=_sp)
+                            if _src_priced:
+                                _src_reason = "ok"
+                        else:
+                            _src_reason = "no_meter"
+                    except Exception:
+                        logger.debug("EV source split failed", exc_info=True)
+                        _src_reason = "error"
+
                 summary_ev = get_monthly_summary(sessions)
+                # What the same energy would have cost bought entirely from the
+                # grid — the reference the saving is measured against.
+                summary_ev.cost_if_all_grid = round(
+                    summary_ev.total_kwh * float(self.cfg.pricing.electricity_price_eur_per_kwh), 2)
 
                 # Group fragmented sessions of ONE physical charge into a single
                 # entry. Surplus (PV) charging pauses when the sun drops below the
@@ -5327,10 +5419,14 @@ class ActionDispatcher:
                              "energy_kwh": g.energy_kwh, "peak_power_w": g.peak_power_w,
                              "avg_power_w": g.avg_power_w, "cost_eur": g.cost_eur,
                              "session_count": g.session_count,
+                             "solar_kwh": g.solar_kwh, "battery_kwh": g.battery_kwh,
+                             "grid_kwh": g.grid_kwh, "cost_model": g.cost_model,
                              "sessions": [
                                  {"session_id": s.session_id, "start_ts": s.start_ts, "end_ts": s.end_ts,
                                   "energy_kwh": s.energy_kwh, "peak_power_w": s.peak_power_w,
-                                  "avg_power_w": s.avg_power_w, "cost_eur": s.cost_eur}
+                                  "avg_power_w": s.avg_power_w, "cost_eur": s.cost_eur,
+                                  "solar_kwh": s.solar_kwh, "battery_kwh": s.battery_kwh,
+                                  "grid_kwh": s.grid_kwh, "cost_model": s.cost_model}
                                  for s in g.sessions],
                              }
                             for g in _charges
@@ -5357,10 +5453,24 @@ class ActionDispatcher:
                     "monthly_kwh": monthly.get("months", []),
                     "monthly_price_eur_kwh": monthly.get("price_eur_kwh"),
                     "monthly_threshold_w": monthly.get("threshold_w"),
+                    "total_solar_kwh": summary_ev.total_solar_kwh,
+                    "total_battery_kwh": summary_ev.total_battery_kwh,
+                    "total_grid_kwh": summary_ev.total_grid_kwh,
+                    "cost_if_all_grid": summary_ev.cost_if_all_grid,
+                    "source_pricing": {
+                        "mode": _src_mode,
+                        "active": bool(_src_priced),
+                        "priced": _src_priced,
+                        "reason": _src_reason,
+                        "solar_cost_model": str(getattr(_ec, "solar_cost_model", "free") or "free"),
+                        "price_eur_kwh": float(self.cfg.pricing.electricity_price_eur_per_kwh),
+                    },
                     "sessions": [
                         {"session_id": s.session_id, "start_ts": s.start_ts, "end_ts": s.end_ts,
                          "energy_kwh": s.energy_kwh, "peak_power_w": s.peak_power_w,
-                         "avg_power_w": s.avg_power_w, "cost_eur": s.cost_eur}
+                         "avg_power_w": s.avg_power_w, "cost_eur": s.cost_eur,
+                         "solar_kwh": s.solar_kwh, "battery_kwh": s.battery_kwh,
+                         "grid_kwh": s.grid_kwh, "cost_model": s.cost_model}
                         for s in sessions
                     ],
                 }
