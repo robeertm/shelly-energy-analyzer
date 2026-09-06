@@ -175,6 +175,10 @@ class ActionDispatcher:
         self.cfg_path = cfg_path
         self.lang = lang
         self._live_frozen_state = False
+        # Per-charge curve cache: a finished charge never changes, and the panel
+        # is opened and closed while the tab keeps refreshing behind it.
+        self._ev_curve_cache: Dict[tuple, tuple] = {}
+        self._ev_curve_lock = threading.Lock()
         # Anomaly log (populated externally or by on-demand detection)
         self._anomaly_log: list = []
         # Cache of computed devices (loaded on demand)
@@ -5495,6 +5499,52 @@ class ActionDispatcher:
                 with self._ev_resp_lock:
                     self._ev_resp_cache[_resp_key] = (_resp_token, _time.time(), _payload)
                 return {"ok": True, "data": _payload}
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+
+        if action == "ev_charge_curve":
+            # One charge, as a curve: the wallbox power over the charge, split
+            # into the watts that came from sun, battery and grid at each
+            # moment. Same attribution the price uses (energy_balance._attribute),
+            # so the picture and the number under it cannot disagree.
+            try:
+                import time as _time
+                dev_key = str(getattr(self.cfg.ev_charging, "wallbox_device_key", "") or "")
+                if not dev_key:
+                    return {"ok": False, "error": "no wallbox configured"}
+                try:
+                    a = int(float((params or {}).get("start", 0)))
+                    b = int(float((params or {}).get("end", 0)))
+                except (TypeError, ValueError):
+                    return {"ok": False, "error": "bad window"}
+                # A charge is at most a couple of days; anything wider is a
+                # mistyped request, not a charge, and would read the whole DB.
+                if not (0 < a < b) or (b - a) > 3 * 86400:
+                    return {"ok": False, "error": "bad window"}
+
+                _ck = (dev_key, a, b,
+                       str(getattr(getattr(self.cfg, "solar", None),
+                                   "grid_meter_device_key", "") or ""))
+                with self._ev_curve_lock:
+                    hit = self._ev_curve_cache.get(_ck)
+                    if hit is not None and (_time.time() - hit[0]) < 300:
+                        return {"ok": True, "data": hit[1]}
+
+                from shelly_analyzer.services.energy_balance import consumer_source_series
+                df = self.storage.read_device_df(dev_key, start_ts=a, end_ts=b)
+                df = self._ev_extend_with_live(df, dev_key)
+                l_ts, l_w = self._ev_power_arrays(df)
+                curve = consumer_source_series(self.storage.db, self.cfg, a, b,
+                                               load_key=dev_key, load_ts=l_ts, load_w=l_w)
+                if curve is None:
+                    return {"ok": True, "data": {"available": False,
+                                                 "start_ts": a, "end_ts": b}}
+                curve.update({"available": True, "start_ts": a, "end_ts": b})
+                with self._ev_curve_lock:
+                    if len(self._ev_curve_cache) > 32:
+                        self._ev_curve_cache.clear()
+                    self._ev_curve_cache[_ck] = (_time.time(), curve)
+                return {"ok": True, "data": curve}
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 

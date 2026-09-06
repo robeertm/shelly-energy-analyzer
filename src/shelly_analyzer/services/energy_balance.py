@@ -805,6 +805,50 @@ def _hold(grid_ts, src_ts, src_w):
     return vals, age
 
 
+def _attribute(db, a, b, pad, g_ts, g_w, gr_ts, gr_w, pv_ts, pv_w,
+               bt_ts, bt_w, tenant_keys):
+    """Per sample: what fed the consumer, in watts.
+
+    The one place the attribution is written down. :func:`consumer_source_split`
+    integrates the result, :func:`consumer_source_series` plots it — if the rule
+    lived in both, one copy would drift and the chart would stop matching the
+    price under it.
+
+    Returns ``(load_w, solar_w, battery_w, grid_w, grid_age_s)``, all aligned
+    with ``g_ts``. The three source arrays add up to ``load_w`` wherever a
+    supply was measured, and to less where none was.
+    """
+    import numpy as np
+
+    grid_v, grid_age = _hold(g_ts, gr_ts, gr_w)
+    pv_v, _ = _hold(g_ts, pv_ts, pv_w)
+    bt_v, _ = _hold(g_ts, bt_ts, bt_w)
+
+    ten_v = np.zeros(g_ts.size)
+    for tk in tenant_keys:
+        t_ts, t_w = _power_series(db, tk, a - pad, b)
+        tv, _ = _hold(g_ts, t_ts, t_w)
+        ten_v += np.maximum(0.0, tv)
+
+    g_imp = np.maximum(0.0, grid_v)
+    g_exp = np.maximum(0.0, -grid_v)
+    b_chg = np.maximum(0.0, bt_v)
+    b_dis = np.maximum(0.0, -bt_v)
+    pv_direct = np.maximum(0.0, np.maximum(0.0, pv_v) - g_exp - b_chg)
+    pool = pv_direct + g_imp
+    t_load = np.minimum(ten_v, pool)
+    own_nb = np.maximum(0.0, pool - t_load)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        own_grid = np.where(pool > 0, own_nb * g_imp / pool, 0.0)
+        own_solar = np.where(pool > 0, own_nb * pv_direct / pool, 0.0)
+    own_total = own_nb + b_dis
+    load = np.maximum(0.0, g_w)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        share = np.where(own_total > 0, np.minimum(1.0, load / own_total), 0.0)
+
+    return (load, share * own_solar, share * b_dis, share * own_grid, grid_age)
+
+
 def consumer_source_split(db, cfg, windows, load_key: str = "",
                           load_ts=None, load_w=None) -> List["SourceSplit"]:
     """Split one consumer's energy per window into solar / battery / grid.
@@ -885,31 +929,9 @@ def consumer_source_split(db, cfg, windows, load_key: str = "",
             out.append(res)
             continue
 
-        grid_v, grid_age = _hold(g_ts, gr_ts, gr_w)
-        pv_v, _ = _hold(g_ts, pv_ts, pv_w)
-        bt_v, _ = _hold(g_ts, bt_ts, bt_w)
-
-        ten_v = np.zeros(g_ts.size)
-        for tk in tenant_keys:
-            t_ts, t_w = _power_series(db, tk, a - pad, b)
-            tv, _ = _hold(g_ts, t_ts, t_w)
-            ten_v += np.maximum(0.0, tv)
-
-        g_imp = np.maximum(0.0, grid_v)
-        g_exp = np.maximum(0.0, -grid_v)
-        b_chg = np.maximum(0.0, bt_v)
-        b_dis = np.maximum(0.0, -bt_v)
-        pv_direct = np.maximum(0.0, np.maximum(0.0, pv_v) - g_exp - b_chg)
-        pool = pv_direct + g_imp
-        t_load = np.minimum(ten_v, pool)
-        own_nb = np.maximum(0.0, pool - t_load)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            own_grid = np.where(pool > 0, own_nb * g_imp / pool, 0.0)
-            own_solar = np.where(pool > 0, own_nb * pv_direct / pool, 0.0)
-        own_total = own_nb + b_dis
-        load = np.maximum(0.0, g_w)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            share = np.where(own_total > 0, np.minimum(1.0, load / own_total), 0.0)
+        parts = _attribute(db, a, b, pad, g_ts, g_w, gr_ts, gr_w, pv_ts, pv_w,
+                           bt_ts, bt_w, tenant_keys)
+        load, sol_w, bat_w, grd_w, grid_age = parts
 
         # Trapezoidal integration over the consumer's own intervals; an interval
         # longer than the gap cap is data loss, not a measurement.
@@ -920,9 +942,9 @@ def consumer_source_split(db, cfg, windows, load_key: str = "",
         def _integrate(v):
             return float(np.sum((v[:-1] + v[1:]) * 0.5 * dt)) / 3600.0 / 1000.0
 
-        res.solar_kwh = _integrate(share * own_solar)
-        res.battery_kwh = _integrate(share * b_dis)
-        res.grid_kwh = _integrate(share * own_grid)
+        res.solar_kwh = _integrate(sol_w)
+        res.battery_kwh = _integrate(bat_w)
+        res.grid_kwh = _integrate(grd_w)
         res.load_kwh = _integrate(load)
 
         # Only stretches where the grid meter really had a recent sample count as
@@ -934,3 +956,117 @@ def consumer_source_split(db, cfg, windows, load_key: str = "",
         out.append(res)
 
     return out
+
+
+def consumer_source_series(db, cfg, start_ts: int, end_ts: int,
+                           load_key: str = "", load_ts=None, load_w=None,
+                           max_points: int = 360) -> Optional[dict]:
+    """The same attribution, kept as a curve instead of a single number.
+
+    Answers "when exactly was there grid draw, sun, battery — or all three at
+    once" for one charge: per bucket the consumer's power and how many watts of
+    it came from each source. The three always add up to the load wherever a
+    supply was measured.
+
+    Two things are worth keeping apart when reading it:
+
+    * **Which sources were flowing** at a given minute is a measurement — the
+      grid meter's sign, the battery's sign, the PV reading. Exact.
+    * **How much of the car's power each one contributed** is an allocation:
+      several loads share one bus, and electrons carry no labels. It follows the
+      same pro-rata rule the price does, so the curve and the price under it can
+      never tell different stories.
+
+    Buckets are means over equal time slices (never every n-th sample: dropping
+    samples would hide exactly the short grid spikes this is meant to show).
+    Returns ``None`` when the window cannot be attributed at all.
+    """
+    import numpy as np
+
+    grid_key, pv_key, batt_key = _resolve_source_keys(cfg)
+    if not grid_key or not (pv_key or batt_key):
+        return None
+    a, b = int(start_ts), int(end_ts)
+    if b <= a:
+        return None
+
+    if load_ts is not None and load_w is not None and len(load_ts):
+        g_ts, g_w = load_ts, load_w
+    else:
+        g_ts, g_w = _power_series(db, load_key, a, b)
+    if g_ts is None or g_ts.size == 0:
+        return None
+    m = (g_ts >= a) & (g_ts <= b)
+    g_ts, g_w = g_ts[m], g_w[m]
+    if g_ts.size < 2:
+        return None
+
+    pad = 3600
+    gr_ts, gr_w = _power_series(db, grid_key, a - pad, b)
+    if gr_ts is None:
+        return None
+    pv_ts, pv_w = _power_series(db, pv_key, a - pad, b)
+    bt_ts, bt_w = _power_series(db, batt_key, a - pad, b)
+    tenant_keys, _ = _tenant_key_map(cfg)
+
+    load, sol, bat, grd, grid_age = _attribute(
+        db, a, b, pad, g_ts, g_w, gr_ts, gr_w, pv_ts, pv_w, bt_ts, bt_w, tenant_keys)
+    seen = grid_age <= _SPLIT_MAX_DT_S
+
+    n = int(max(1, min(int(max_points), g_ts.size)))
+    if g_ts.size > n:
+        edges = np.linspace(float(g_ts[0]), float(g_ts[-1]) + 1e-6, n + 1)
+        idx = np.clip(np.searchsorted(edges, g_ts, side="right") - 1, 0, n - 1)
+        cnt = np.bincount(idx, minlength=n).astype(float)
+        keep = cnt > 0
+
+        def _mean(v):
+            return (np.bincount(idx, weights=v, minlength=n) /
+                    np.where(cnt > 0, cnt, 1.0))[keep]
+
+        ts_out = _mean(g_ts.astype(float)).astype("int64")
+        load_o, sol_o, bat_o, grd_o = _mean(load), _mean(sol), _mean(bat), _mean(grd)
+        seen_o = _mean(seen.astype(float)) >= 0.5
+    else:
+        ts_out = g_ts.astype("int64")
+        load_o, sol_o, bat_o, grd_o, seen_o = load, sol, bat, grd, seen
+
+    # ── Make the three bands meet the load curve ───────────────────────────
+    # The supply meters and the wallbox are separate devices sampled at
+    # different instants, so at a ramp the bus can read 6.0 kW while the car
+    # reads 6.6 kW. That gap is measurement skew, not a fourth source: spread it
+    # over the three proportionally, exactly as the energy totals already do
+    # (price_by_source applies the *fractions* to the measured energy). Without
+    # this the stacked area would show a hole under the curve and invite the
+    # reader to look for a source that does not exist.
+    # Where nothing was measured the bands stay at zero and `measured` says so —
+    # scaling zeros up would invent a mix out of nothing.
+    tot_o = sol_o + bat_o + grd_o
+    with np.errstate(divide="ignore", invalid="ignore"):
+        k = np.where((tot_o > 1e-6) & seen_o, load_o / np.maximum(tot_o, 1e-9), 0.0)
+    sol_o, bat_o, grd_o = sol_o * k, bat_o * k, grd_o * k
+
+    # How long each source actually flowed — the exact half of the answer, and
+    # the one a stacked band makes hard to read when a sliver is 2 % tall.
+    dt = np.diff(g_ts).astype(float)
+    dt = np.clip(dt, 0.0, float(_SPLIT_MAX_DT_S))
+    def _secs(v, floor=1.0):
+        on = (v[:-1] > floor) | (v[1:] > floor)
+        return float(np.sum(dt[on]))
+
+    return {
+        "ts": [int(x) for x in ts_out],
+        "load_w": [round(float(x), 1) for x in load_o],
+        "solar_w": [round(float(x), 1) for x in sol_o],
+        "battery_w": [round(float(x), 1) for x in bat_o],
+        "grid_w": [round(float(x), 1) for x in grd_o],
+        "measured": [bool(x) for x in seen_o],
+        "seconds": {
+            "solar": round(_secs(sol), 0),
+            "battery": round(_secs(bat), 0),
+            "grid": round(_secs(grd), 0),
+            "total": round(float(np.sum(dt)), 0),
+        },
+        "points": int(len(ts_out)),
+        "raw_points": int(g_ts.size),
+    }

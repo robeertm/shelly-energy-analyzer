@@ -16812,3 +16812,88 @@ _I18N.setdefault('it', {}).update({'web.ev.src_unmeasured': '{k} kWh non misurat
 _I18N.setdefault('pl', {}).update({'web.ev.src_unmeasured': '{k} kWh bez pomiaru, pełna taryfa'})
 _I18N.setdefault('cs', {}).update({'web.ev.src_unmeasured': '{k} kWh bez měření, plný tarif'})
 _I18N.setdefault('ru', {}).update({'web.ev.src_unmeasured': '{k} кВт·ч без измерения, полный тариф'})
+
+
+# ── i18n: the charge curve coloured by source (16.79.0) ──
+
+_I18N.setdefault('de', {}).update({
+    'web.ev.curve_failed': 'Die Ladekurve ließ sich nicht laden.',
+    'web.ev.curve_flowed': 'wie lange was floss — von {t}',
+    'web.ev.curve_loading': 'Ladekurve wird geholt …',
+    'web.ev.curve_none': 'Für diesen Ladevorgang gibt es keine Quellenmessung.',
+    'web.ev.curve_title': 'Ladekurve nach Quelle',
+    'web.ev.show_curve': 'Ladekurve anzeigen',
+})
+
+_I18N.setdefault('en', {}).update({
+    'web.ev.curve_failed': 'The charge curve could not be loaded.',
+    'web.ev.curve_flowed': 'how long each source flowed — of {t}',
+    'web.ev.curve_loading': 'Loading charge curve…',
+    'web.ev.curve_none': 'No source measurement covers this charge.',
+    'web.ev.curve_title': 'Charge curve by source',
+    'web.ev.show_curve': 'Show charge curve',
+})
+
+_I18N.setdefault('es', {}).update({
+    'web.ev.curve_failed': 'No se pudo cargar la curva de carga.',
+    'web.ev.curve_flowed': 'cuánto tiempo fluyó cada fuente — de {t}',
+    'web.ev.curve_loading': 'Cargando la curva…',
+    'web.ev.curve_none': 'Ninguna medición de fuente cubre esta carga.',
+    'web.ev.curve_title': 'Curva de carga por fuente',
+    'web.ev.show_curve': 'Ver curva de carga',
+})
+
+_I18N.setdefault('fr', {}).update({
+    'web.ev.curve_failed': 'La courbe de charge n’a pas pu être chargée.',
+    'web.ev.curve_flowed': 'durée de chaque source — sur {t}',
+    'web.ev.curve_loading': 'Chargement de la courbe…',
+    'web.ev.curve_none': 'Aucune mesure de source ne couvre cette charge.',
+    'web.ev.curve_title': 'Courbe de charge par source',
+    'web.ev.show_curve': 'Voir la courbe de charge',
+})
+
+_I18N.setdefault('pt', {}).update({
+    'web.ev.curve_failed': 'Não foi possível carregar a curva.',
+    'web.ev.curve_flowed': 'quanto tempo cada fonte fluiu — de {t}',
+    'web.ev.curve_loading': 'A carregar a curva…',
+    'web.ev.curve_none': 'Nenhuma medição de fonte cobre este carregamento.',
+    'web.ev.curve_title': 'Curva de carregamento por fonte',
+    'web.ev.show_curve': 'Ver curva de carregamento',
+})
+
+_I18N.setdefault('it', {}).update({
+    'web.ev.curve_failed': 'Non è stato possibile caricare la curva.',
+    'web.ev.curve_flowed': 'per quanto ha erogato ciascuna sorgente — su {t}',
+    'web.ev.curve_loading': 'Caricamento della curva…',
+    'web.ev.curve_none': 'Nessuna misura di sorgente copre questa ricarica.',
+    'web.ev.curve_title': 'Curva di ricarica per sorgente',
+    'web.ev.show_curve': 'Mostra la curva di ricarica',
+})
+
+_I18N.setdefault('pl', {}).update({
+    'web.ev.curve_failed': 'Nie udało się wczytać krzywej ładowania.',
+    'web.ev.curve_flowed': 'jak długo płynęło z każdego źródła — z {t}',
+    'web.ev.curve_loading': 'Wczytywanie krzywej…',
+    'web.ev.curve_none': 'Żaden pomiar źródeł nie obejmuje tego ładowania.',
+    'web.ev.curve_title': 'Krzywa ładowania wg źródła',
+    'web.ev.show_curve': 'Pokaż krzywą ładowania',
+})
+
+_I18N.setdefault('cs', {}).update({
+    'web.ev.curve_failed': 'Křivku nabíjení se nepodařilo načíst.',
+    'web.ev.curve_flowed': 'jak dlouho tekl který zdroj — z {t}',
+    'web.ev.curve_loading': 'Načítám křivku…',
+    'web.ev.curve_none': 'Toto nabíjení nepokrývá žádné měření zdrojů.',
+    'web.ev.curve_title': 'Křivka nabíjení podle zdroje',
+    'web.ev.show_curve': 'Zobrazit křivku nabíjení',
+})
+
+_I18N.setdefault('ru', {}).update({
+    'web.ev.curve_failed': 'Не удалось загрузить кривую зарядки.',
+    'web.ev.curve_flowed': 'сколько времени шёл каждый источник — из {t}',
+    'web.ev.curve_loading': 'Загружается кривая…',
+    'web.ev.curve_none': 'Эту зарядку не покрывает ни одно измерение источников.',
+    'web.ev.curve_title': 'Кривая зарядки по источникам',
+    'web.ev.show_curve': 'Показать кривую зарядки',
+})
+

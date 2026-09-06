@@ -251,6 +251,60 @@ def test_an_uncovered_charge_is_counted_and_named_not_hidden():
               f"{sp['unpriced_kwh']} kWh named as unmeasured")
 
 
+def test_the_charge_curve_endpoint_matches_the_price_beside_it():
+    with tempfile.TemporaryDirectory() as tmp:
+        d = _build(Path(tmp))
+        data = _sessions(d)
+        item = (data["charges"] or data["sessions"])[0]
+        r = d.dispatch("ev_charge_curve", {"start": str(item["start_ts"]),
+                                           "end": str(item["end_ts"])})
+        assert r.get("ok"), r
+        c = r["data"]
+        assert c["available"] and c["points"] > 5
+        for i in range(c["points"]):
+            if not c["measured"][i]:
+                continue
+            parts = c["solar_w"][i] + c["battery_w"][i] + c["grid_w"][i]
+            if parts <= 0:
+                continue
+            assert abs(parts - c["load_w"][i]) < 1.0, (i, c["load_w"][i], parts)
+        # …and the curve must not tell a different story than the price shown.
+        tot = sum(c["solar_w"]) + sum(c["battery_w"]) + sum(c["grid_w"])
+        cf = [sum(c[k]) / tot for k in ("solar_w", "battery_w", "grid_w")]
+        e = item["energy_kwh"]
+        pf = [item["solar_kwh"]/e, item["battery_kwh"]/e, item["grid_kwh"]/e]
+        assert max(abs(a-b) for a, b in zip(cf, pf)) < 0.03, (cf, pf)
+        print(f"OK  curve endpoint: {c['points']} points, bands meet the load, "
+              f"mix within 3 pp of the price")
+
+
+def test_the_curve_endpoint_refuses_a_silly_window():
+    """`start`/`end` come from the browser: a month-wide window would read the
+    whole database on one click."""
+    with tempfile.TemporaryDirectory() as tmp:
+        d = _build(Path(tmp))
+        for p in ({"start": "0", "end": "0"}, {"start": "5", "end": "1"},
+                  {"start": "1000000", "end": str(1000000 + 40 * 86400)},
+                  {"start": "x", "end": "y"}, {}):
+            r = d.dispatch("ev_charge_curve", p)
+            assert not r.get("ok"), (p, r)
+        print("OK  the curve endpoint refuses empty, reversed and month-wide windows")
+
+
+def test_a_charge_without_supply_data_returns_unavailable_not_an_error():
+    with tempfile.TemporaryDirectory() as tmp:
+        d = _build(Path(tmp))
+        _d = _sessions(d)
+        item = (_d["charges"] or _d["sessions"])[0]
+        object.__setattr__(d.cfg.solar, "pv_production_device_key", "")
+        object.__setattr__(d.cfg.pv_source, "pv_power_entity", "")
+        object.__setattr__(d.cfg.pv_source, "battery_power_entity", "")
+        r = d.dispatch("ev_charge_curve", {"start": str(item["start_ts"]),
+                                           "end": str(item["end_ts"])})
+        assert r.get("ok") and r["data"]["available"] is False, r
+        print("OK  no meters ⇒ available:false, not an error the tab must guess at")
+
+
 def test_the_v1_data_endpoints_actually_answer():
     """They never did: the route passed Storage where the handlers want the DB,
     and behind that a pandas Timestamp went into int()."""

@@ -16,7 +16,7 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from shelly_analyzer.services.energy_balance import (
-    SourceSplit, consumer_source_split,
+    SourceSplit, consumer_source_series, consumer_source_split,
 )
 from shelly_analyzer.services.ev_charging_log import (
     ChargingSession, group_sessions_into_charges, price_by_source,
@@ -320,6 +320,90 @@ def test_grouping_without_pricing_stays_at_zero():
     print("OK  an unpriced log keeps zeros and 'fixed'")
 
 
+# ── the curve: the same attribution, kept as a series ───────────────────────
+
+def _series(watts, start=BASE, end=BASE + HOUR, **kw):
+    return consumer_source_series(FakeDb(watts), Cfg(), start, end,
+                                  load_key="wb", **kw)
+
+
+def test_the_curve_bands_add_up_to_the_charge_curve():
+    """A stacked area that does not reach the load line reads as a hole."""
+    c = _series({"wb": 6000, "grid": 2000, "pv": 5000, "battery": -1000})
+    assert c and c["points"] > 10
+    for i, (l, s_, b, g) in enumerate(zip(c["load_w"], c["solar_w"],
+                                          c["battery_w"], c["grid_w"])):
+        if not c["measured"][i] or (s_ + b + g) <= 0:
+            continue
+        assert abs(s_ + b + g - l) < 0.5, (i, l, s_, b, g)
+    print(f"OK  all {c['points']} points: the three bands meet the load curve")
+
+
+def test_the_curve_and_the_price_tell_the_same_story():
+    """They come from one function on purpose — a chart that disagrees with the
+    number under it is worse than no chart."""
+    watts = {"wb": 6000, "grid": 2000, "pv": 5000, "battery": -1000}
+    c = _series(watts)
+    sp, _ = _split(watts)
+    tot = sum(c["solar_w"]) + sum(c["battery_w"]) + sum(c["grid_w"])
+    curve = [sum(c[k]) / tot for k in ("solar_w", "battery_w", "grid_w")]
+    price = sp.fractions()
+    assert max(abs(a - b) for a, b in zip(curve, price)) < 0.01, (curve, price)
+    print("OK  curve and price agree to under one percentage point")
+
+
+def test_the_curve_reports_when_all_three_ran_at_once():
+    """Robert's question: when was there grid, sun, battery — or all together."""
+    c = _series({"wb": 6000, "grid": 2000, "pv": 5000, "battery": -1000})
+    both = sum(1 for i in range(c["points"])
+               if c["solar_w"][i] > 1 and c["battery_w"][i] > 1 and c["grid_w"][i] > 1)
+    assert both > 0, "all three fed the car here, and the series does not show it"
+    sec = c["seconds"]
+    # Overlapping on purpose: the parts sum to more than the charge lasted.
+    assert sec["solar"] > 0 and sec["battery"] > 0 and sec["grid"] > 0
+    assert sec["solar"] + sec["battery"] + sec["grid"] > sec["total"]
+    print(f"OK  {both} points with all three at once; "
+          f"the run times overlap as they must")
+
+
+def test_a_long_charge_is_bucketed_by_time_not_thinned():
+    """Dropping every n-th sample would hide exactly the short grid spikes."""
+    n = 5
+    ts = np.arange(BASE, BASE + 6 * HOUR, 30, dtype="int64")
+    w = np.full(ts.size, 6000.0)
+    db = FakeDb({"grid": -1000, "pv": 8000, "battery": 0})
+    c = consumer_source_series(db, Cfg(), BASE, BASE + 6 * HOUR,
+                               load_ts=ts, load_w=w, max_points=n)
+    assert c["points"] <= n and c["raw_points"] == ts.size
+    assert c["ts"][0] >= BASE and c["ts"][-1] <= BASE + 6 * HOUR
+    # Buckets are means: a constant 6 kW must stay 6 kW, not become a sample.
+    assert all(abs(v - 6000.0) < 1.0 for v in c["load_w"]), c["load_w"]
+    print(f"OK  {ts.size} samples bucketed into {c['points']} means, values intact")
+
+
+def test_a_spike_survives_the_bucketing():
+    """The one thing thinning would destroy: a two-minute grid burst."""
+    ts = np.arange(BASE, BASE + 4 * HOUR, 60, dtype="int64")
+    w = np.full(ts.size, 6000.0)
+    grid = np.full(ts.size, -2000.0)
+    grid[100:102] = 6000.0                    # two minutes of real import
+    db = FakeDb({"pv": 8000, "battery": 0, "grid": (ts, grid)})
+    c = consumer_source_series(db, Cfg(), BASE, BASE + 4 * HOUR,
+                               load_ts=ts, load_w=w, max_points=60)
+    assert max(c["grid_w"]) > 100, "the grid burst vanished in the buckets"
+    assert c["seconds"]["grid"] > 0
+    print("OK  a two-minute grid burst is still visible after bucketing")
+
+
+def test_no_supply_meter_means_no_curve():
+    cfg = Cfg()
+    cfg.solar.grid_meter_device_key = ""
+    cfg.pv_source.enabled = False
+    assert consumer_source_series(FakeDb({"wb": 6000}), cfg, BASE, BASE + HOUR,
+                                  load_key="wb") is None
+    print("OK  no meters, no curve — nothing invented")
+
+
 # ── the promise that this is usable in every language ───────────────────────
 
 def test_every_new_string_exists_in_all_nine_languages():
@@ -333,7 +417,9 @@ def test_every_new_string_exists_in_all_nine_languages():
         "web.ev.source_title", "web.ev.source_sub", "web.ev.self_supplied",
         "web.ev.of_charged", "web.ev.saved_vs_grid", "web.ev.vs_all_grid",
         "web.ev.src_no_meter", "web.ev.src_no_data", "web.ev.src_error",
-        "web.ev.src_unmeasured",
+        "web.ev.src_unmeasured", "web.ev.show_curve", "web.ev.curve_title",
+        "web.ev.curve_flowed", "web.ev.curve_loading", "web.ev.curve_failed",
+        "web.ev.curve_none",
         "settings.field.ev_charging.cost_source_mode",
         "settings.hint.ev_charging.cost_source_mode",
         "settings.opts.ev_charging.cost_source_mode.auto",
@@ -356,6 +442,7 @@ def test_every_new_string_exists_in_all_nine_languages():
         assert "{n}" in _t(l, "web.ev.source_sub") and "{m}" in _t(l, "web.ev.source_sub"), l
         assert "{c}" in _t(l, "web.ev.vs_all_grid"), l
         assert "{k}" in _t(l, "web.ev.src_unmeasured"), l
+        assert "{t}" in _t(l, "web.ev.curve_flowed"), l
     print(f"OK  {len(keys)} strings in all {len(LANGS)} languages, placeholders intact")
 
 

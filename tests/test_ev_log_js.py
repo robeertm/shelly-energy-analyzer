@@ -59,14 +59,24 @@ const _el = () => ({
   scrollIntoView(){}, getBoundingClientRect(){ return {top:0,left:0,width:800,height:400,right:800,bottom:400} },
   getContext(){ return _ctx() }, toDataURL(){ return '' },
 });
+globalThis.__paint = { fills: [], strokes: [], texts: [] };
 // A 2-D canvas context that swallows everything: the tab draws a heatmap.
-const _ctx = () => new Proxy({}, { get: (_, k) =>
+// It also records the fill colours, so a test can ask what was actually
+// painted instead of only that nothing threw.
+const _ctx = () => { const st = { fillStyle: '', strokeStyle: '' }; return new Proxy(st, {
+  set: (o, k, v) => { o[k] = v; return true },
+  get: (o, k) =>
+  (k === 'fillStyle' || k === 'strokeStyle') ? o[k] :
+  (k === 'fill') ? (() => globalThis.__paint.fills.push(String(o.fillStyle))) :
+  (k === 'stroke') ? (() => globalThis.__paint.strokes.push(String(o.strokeStyle))) :
+  (k === 'fillText') ? ((t) => globalThis.__paint.texts.push(String(t))) :
+  (k === 'fillRect') ? (() => globalThis.__paint.fills.push('rect:' + String(o.fillStyle))) :
   (k === 'canvas') ? _el() :
   (k === 'measureText') ? (() => ({ width: 10 })) :
   (k === 'createLinearGradient' || k === 'createPattern') ? (() => ({ addColorStop(){} })) :
   (k === 'getImageData') ? (() => ({ data: new Uint8ClampedArray(4) })) :
-  (typeof k === 'string' && /^(fillStyle|strokeStyle|font|lineWidth|textAlign|textBaseline|globalAlpha)$/.test(k))
-    ? '' : (() => {}) });
+  (typeof k === 'string' && /^(font|lineWidth|textAlign|textBaseline|globalAlpha)$/.test(k))
+    ? '' : (() => {}) }) };
 globalThis.document = {
   documentElement: _el(), body: _el(), head: _el(),
   // Every lookup answers with a fresh stub: the dashboard's top level wires
@@ -103,9 +113,14 @@ process.stdout.write('<<<HTML>>>' + out.innerHTML);
 """
 
 
-def _run(payload: dict) -> str:
+def _run(payload: dict, _lang: str = "en") -> str:
+    script = _script()
+    if _lang != "en":
+        from shelly_analyzer.i18n import get_lang_map
+        script = script.replace("const I18N = {};", "const I18N = "
+                                + json.dumps(get_lang_map(_lang), ensure_ascii=False) + ";")
     src = (HARNESS + "\nconst PAYLOAD = " + json.dumps(payload) + ";\n"
-           + _script() + "\n" + TAIL)
+           + script + "\n" + TAIL)
     p = subprocess.run(["node", "-e", src], capture_output=True, text=True, timeout=120)
     assert p.returncode == 0, f"node failed:\n{p.stderr[-3000:]}"
     assert "<<<HTML>>>" in p.stdout, p.stdout[-2000:]
@@ -123,7 +138,7 @@ def _charge(**kw):
     return base
 
 
-def _payload(charges, **kw):
+def _payload(charges, _lang=None, **kw):
     sessions = [s for c in charges for s in c["sessions"]]
     d = {"total_sessions": len(sessions), "total_kwh": round(sum(c["energy_kwh"] for c in charges), 2),
          "total_cost": round(sum(c["cost_eur"] for c in charges), 2),
@@ -173,6 +188,156 @@ def test_the_unmeasured_remainder_is_named_on_screen():
     assert "1 of 2 charges measured" in html, "the count is wrong or missing"
     assert "13.2 kWh not measured" in html, "the uncovered energy is not named"
     print("OK  the tab names the uncovered kWh and counts in charges")
+
+
+def test_every_coloured_bar_has_a_named_legend():
+    """Robert: „was ist gelb grün und rot für ein anteil, legende fehlt".
+
+    Three colours carried the whole meaning and only a hover title explained
+    them — useless on a phone, and red against green is exactly the pair a
+    colour-blind reader cannot separate. Every bar must have a dot-and-name
+    key within reach: under the overview bar, above the list, and on each card.
+    """
+    charges = [_charge(group_id="a", energy_kwh=29.0, solar_kwh=19.38,
+                       battery_kwh=6.44, grid_kwh=3.14, cost_eur=0.95),
+               _charge(group_id="b", energy_kwh=1.01, solar_kwh=0.0,
+                       battery_kwh=0.0, grid_kwh=1.01, cost_eur=0.31)]
+    html = _run(_payload(charges))
+
+    # A legend chip is a coloured dot immediately followed by its name.
+    chips = re.findall(r"border-radius:50%;background:(#[0-9a-f]{6})[^>]*>"
+                       r"</span>\s*([A-Za-zÄÖÜäöüß]{2,20})", html)
+    mapping = {}
+    for col, label in chips:
+        mapping.setdefault(col, set()).add(label)
+    for colour, want in (("#fdd835", "Solar"), ("#22c55e", "Battery"),
+                         ("#ef4444", "Grid")):
+        assert colour in mapping, f"{want} has no labelled dot anywhere"
+        assert mapping[colour] == {want}, f"{colour} is labelled {mapping[colour]}"
+
+    # …and each of the three colours must be named more than once: once for the
+    # whole list is not enough when 50 cards scroll past it.
+    for colour in ("#fdd835", "#22c55e", "#ef4444"):
+        n = len(re.findall(r"border-radius:50%;background:" + colour, html))
+        assert n >= 3, f"{colour} is explained only {n}× (overview, key, cards)"
+
+    # No coloured bar may sit far from a key.
+    bar = html.index('background:#fdd835"')
+    keys = [m.start() for m in re.finditer(r"border-radius:50%;background:#fdd835", html)]
+    assert any(abs(k - bar) < 4000 for k in keys), "a bar with no legend in reach"
+    print(f"OK  {len(chips)} legend chips; each colour named exactly once, everywhere")
+
+
+def test_the_legend_is_translated_not_english_everywhere():
+    """A key that only reads in English is not a key for a German user."""
+    from shelly_analyzer.i18n import get_lang_map
+    charges = [_charge(group_id="a", energy_kwh=29.0, solar_kwh=19.38,
+                       battery_kwh=6.44, grid_kwh=3.14, cost_eur=0.95)]
+    html = _run(_payload(charges), _lang="de")
+    assert "Akku" in html and "Netz" in html, "the German labels are missing"
+    assert not re.search(r"background:#22c55e[^>]*></span>\s*Battery", html), \
+        "the battery chip is still English in a German page"
+    print("OK  the legend speaks the page's language")
+
+
+CURVE_TAIL = r"""
+const out = { innerHTML: '' };
+renderEvLog(PAYLOAD, out);
+// Unfold the first charge the way a click does, with the fetch answered from
+// the payload we planted — then paint it and report what landed on the canvas.
+globalThis.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ok: true, data: CURVE}) });
+globalThis.document.getElementById = (id) => (globalThis.__boxes[id] = globalThis.__boxes[id] || _el());
+evToggleCurve('a', CURVE.start_ts, CURVE.end_ts).then(() => {
+  process.stdout.write('<<<HTML>>>' + (globalThis.__boxes['evc-a'] || {}).innerHTML +
+    '\n<<<PAINT>>>' + JSON.stringify(globalThis.__paint));
+});
+"""
+
+
+def _run_curve(payload, curve):
+    src = (HARNESS + "\nglobalThis.__boxes = {};\n"
+           + "const PAYLOAD = " + json.dumps(payload) + ";\n"
+           + "const CURVE = " + json.dumps(curve) + ";\n"
+           + _script() + "\n" + CURVE_TAIL)
+    p = subprocess.run(["node", "-e", src], capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, f"node failed:\n{p.stderr[-3000:]}"
+    body, paint = p.stdout.split("<<<HTML>>>", 1)[1].split("\n<<<PAINT>>>", 1)
+    return body, json.loads(paint)
+
+
+def _curve(n=60):
+    """A charge that starts on sun, dips onto the battery, then pulls the grid."""
+    ts = [1786023600 + i * 60 for i in range(n)]
+    sol, bat, grid, load = [], [], [], []
+    for i in range(n):
+        if i < n // 3:
+            s_, b_, g_ = 6600.0, 0.0, 0.0
+        elif i < 2 * n // 3:
+            s_, b_, g_ = 3000.0, 3600.0, 0.0
+        else:
+            s_, b_, g_ = 1000.0, 600.0, 5000.0
+        sol.append(s_); bat.append(b_); grid.append(g_); load.append(s_ + b_ + g_)
+    return {"available": True, "start_ts": ts[0], "end_ts": ts[-1], "ts": ts,
+            "load_w": load, "solar_w": sol, "battery_w": bat, "grid_w": grid,
+            "measured": [True] * n, "points": n, "raw_points": n,
+            "seconds": {"solar": n * 60, "battery": 2 * n // 3 * 60,
+                        "grid": n // 3 * 60, "total": n * 60}}
+
+
+def test_a_charge_unfolds_into_a_curve_coloured_by_source():
+    """Robert: „wenn man so ladevorgangs balken anklickt und er aufklappt und
+    die ladekurve zeigt und diese auch je nach stromart … farblich einfärbt"."""
+    charges = [_charge(group_id="a", energy_kwh=29.0, solar_kwh=19.4,
+                       battery_kwh=6.5, grid_kwh=3.1, cost_eur=0.94)]
+    body, paint = _run_curve(_payload(charges), _curve())
+    assert "<canvas" in body, "no canvas was placed in the panel"
+    for colour in ("#fdd835", "#22c55e", "#ef4444"):
+        assert colour in paint["fills"], f"the {colour} band was never filled"
+    # The bands are stacked, so exactly three area fills plus the load stroke.
+    assert paint["strokes"], "the measured wallbox curve was not drawn"
+    assert any("kW" in t for t in paint["texts"]), "no power axis was labelled"
+    # …and the panel says how long each source flowed, named.
+    for word in ("Solar", "Battery", "Grid"):
+        assert word in body, f"{word} is not named under the curve"
+    print(f"OK  the curve paints {len(paint['fills'])} bands, "
+          f"{len(paint['texts'])} axis labels, and names every source")
+
+
+def test_a_charge_without_a_measurement_says_so_instead_of_drawing():
+    charges = [_charge(group_id="a", solar_kwh=14.17)]
+    body, paint = _run_curve(_payload(charges),
+                             {"available": False, "start_ts": 1, "end_ts": 2})
+    assert "<canvas" not in body
+    assert "No source measurement" in body
+    assert "#fdd835" not in paint["fills"], "it painted a band with no data"
+    print("OK  an unmeasured charge explains itself instead of drawing a curve")
+
+
+def test_the_hover_readout_names_all_three_at_once():
+    """The case Robert asked about: sun, battery and grid feeding at the same
+    minute. The readout must show all three, not pick a winner."""
+    charges = [_charge(group_id="a", energy_kwh=29.0, solar_kwh=19.4,
+                       battery_kwh=6.5, grid_kwh=3.1, cost_eur=0.94)]
+    curve = _curve()
+    src = (HARNESS + "\nglobalThis.__boxes = {};\n"
+           + "const PAYLOAD = " + json.dumps(_payload(charges)) + ";\n"
+           + "const CURVE = " + json.dumps(curve) + ";\n" + _script() + r"""
+const out = { innerHTML: '' };
+renderEvLog(PAYLOAD, out);
+globalThis.fetch = () => Promise.resolve({ ok:true, json: () => Promise.resolve({ok:true,data:CURVE}) });
+globalThis.document.getElementById = (id) => (globalThis.__boxes[id] = globalThis.__boxes[id] || _el());
+evToggleCurve('a', CURVE.start_ts, CURVE.end_ts).then(() => {
+  _evPaintCurve('a', 700);          // hover near the end, where all three run
+  process.stdout.write('<<<TIP>>>' + (globalThis.__boxes['evct-a']||{}).innerHTML);
+});
+""")
+    p = subprocess.run(["node", "-e", src], capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, p.stderr[-2000:]
+    tip = p.stdout.split("<<<TIP>>>", 1)[1]
+    for colour in ("#fdd835", "#22c55e", "#ef4444"):
+        assert colour in tip, f"the readout omits {colour}"
+    assert tip.count("kW") >= 4, tip[:300]
+    print("OK  the hover readout gives all three sources for that minute")
 
 
 def test_a_grid_charge_gets_no_surplus_badge():
