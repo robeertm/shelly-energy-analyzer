@@ -219,6 +219,25 @@ def test_the_split_does_not_blow_up_the_endpoint():
         assert split < max(1.0, flat * 4 + 0.3), (flat, split)
 
 
+def test_the_v1_data_endpoints_actually_answer():
+    """They never did: the route passed Storage where the handlers want the DB,
+    and behind that a pandas Timestamp went into int()."""
+    from shelly_analyzer.services.api_v1 import handle_v1_request
+    with tempfile.TemporaryDirectory() as tmp:
+        d = _build(Path(tmp))
+        for route, field in (("/api/v1/devices/wallbox/samples", "samples"),
+                             ("/api/v1/devices/wallbox/hourly", "hourly"),
+                             ("/api/v1/costs", "devices")):
+            r = handle_v1_request(route, {"limit": "5"}, d.storage.db, d.cfg)
+            assert r.get("ok"), (route, r.get("error"))
+            assert field in r["data"], (route, sorted(r["data"]))
+        r = handle_v1_request("/api/v1/devices/wallbox/samples", {"limit": "5"},
+                              d.storage.db, d.cfg)
+        for smp in r["data"]["samples"]:
+            assert isinstance(smp["timestamp"], int) and smp["timestamp"] > 1_500_000_000, smp
+        print("OK  /api/v1 samples, hourly and costs answer with real values")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items())
            if k.startswith("test_") and callable(v)]
