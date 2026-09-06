@@ -1,5 +1,53 @@
 # Changelog
 
+## 16.79.0
+### Added
+- **Open a charge and see its curve, coloured by what fed the car.** The area
+  under the wallbox curve is stacked sun / battery / grid minute by minute, so
+  *when* there was grid draw is a glance rather than a calculation — including
+  the case that turns out to be the most common of all: several sources feeding
+  at the same moment. On a measured 3 h 15 min surplus charge: sun flowed for
+  188 minutes, the battery for 137, the grid for 103, and **all three at once
+  for 46 of 100 points**. The run times overlap on purpose; that overlap *is*
+  the answer.
+
+  The panel also names how long each source ran, and hovering reads out the
+  exact kW per source for that minute. Stretches no supply meter covered are
+  hatched, never coloured — the curve may not invent a mix where none was
+  measured.
+
+  It is the same attribution the price uses: both call one function
+  (`energy_balance._attribute`), because a picture that disagrees with the
+  number under it is worse than no picture. New endpoint
+  `/api/ev_charge_curve?start=&end=`, capped at a three-day window and cached
+  per charge. Samples are bucketed by **time-mean**, never thinned by taking
+  every n-th point — thinning would drop exactly the two-minute grid bursts the
+  chart exists to show.
+
+- **A legend, wherever there is a coloured bar.** The three colours carried the
+  whole meaning and only a hover title explained them: useless on a phone, and
+  red against green is the one pair a colour-blind reader cannot separate. Now
+  a dot-and-name key sits under the overview bar, above the charge list, and on
+  every single card — following the same shape the NILM and cost donuts already
+  use. Six new strings in all nine languages.
+
+### Fixed
+- **The per-instant bands now meet the load curve.** The supply meters and the
+  wallbox are separate devices sampled at different moments, so at a ramp the
+  bus can read 6.0 kW while the car reads 6.6 kW. That gap is measurement skew,
+  not a fourth source: it is spread over the three proportionally, exactly as
+  the energy totals already do. Without it the stacked area showed a hole and
+  invited the reader to look for a source that does not exist.
+
+### Notes
+- The attribution now lives in exactly one function. It used to be inline in the
+  integrating path; a second copy for the chart would have drifted from the
+  first, and the drift would have been invisible.
+- 179 tests (from 167): the curve's bands adding up to the load, curve and price
+  agreeing, a two-minute grid burst surviving the bucketing, the endpoint
+  refusing empty/reversed/month-wide windows, and the chart *painted* in node
+  with a canvas that records what was drawn.
+
 ## 16.78.1
 ### Fixed
 - **The source card mixed its units and lost the unmeasured energy.** Verified

@@ -10102,19 +10102,47 @@ _loadLsSettings();
       '<div style="height:100%;width:' + fillPct.toFixed(1) + '%;display:flex;border-radius:3px;overflow:hidden">' +
       inner + '</div></div>';
   }}
+  /* One chip: the colour of the bar segment, then what it is, then how much.
+     Same shape the NILM and cost donuts use for their legends — a 10 px round
+     dot in the series colour followed by the name. The name is not optional:
+     a yellow/green/red bar with only ☀/■/⚡ next to it says nothing, and red
+     against green is exactly the pair a colour-blind reader cannot separate. */
+  function _evChip(col, label, value, title) {{
+    return '<span style="font-size:11px;display:flex;align-items:center;gap:4px;white-space:nowrap"' +
+      (title ? ' title="' + esc(title) + '"' : '') + '>' +
+      '<span style="width:10px;height:10px;border-radius:50%;background:' + col +
+        ';display:inline-block;flex:none"></span>' + esc(label) +
+      (value ? ' <span style="color:var(--muted)">' + esc(value) + '</span>' : '') +
+    '</span>';
+  }}
+  function _evLegendRow(parts, style) {{
+    const chips = parts.filter(Boolean).map(function(p) {{ return _evChip(p[0], p[1], p[2], p[3]); }});
+    if (!chips.length) return '';
+    return '<div style="display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;' +
+      (style || '') + '">' + chips.join('') + '</div>';
+  }}
+  /* The full key, shown once above the list so every little bar below it can
+     be read — and repeated under the overview bar, because that is the other
+     place a coloured bar appears. */
+  function _evSourceKey(style) {{
+    return _evLegendRow([[EV_SRC.solar, t('web.ev.src_solar','Solar'), ''],
+                         [EV_SRC.battery, t('web.ev.src_battery','Battery'), ''],
+                         [EV_SRC.grid, t('web.ev.src_grid','Grid'), '']], style);
+  }}
   function _evSourceLine(x) {{
     const p = _evSourceParts(x);
     if (!p) return '';
-    const bit = function(f, kwh, c, ico, label) {{
-      if (f <= 0.0005) return '';
-      return '<span style="white-space:nowrap" title="' + esc(label + ' ' + kwh.toFixed(2) + ' kWh') + '">' +
-        '<span style="color:' + c + '">' + ico + '</span> ' + Math.round(f*100) + '%</span>';
+    const bit = function(f, kwh, c, label) {{
+      if (f <= 0.0005) return null;
+      // Percent on screen, kWh in the tooltip: three "67 % · 19.38 kWh" chips
+      // wrap to three lines on a phone, and the kWh follow from the charge's
+      // own total anyway. The overview card carries the kWh per source.
+      return [c, label, Math.round(f*100) + '%', label + ' ' + kwh.toFixed(2) + ' kWh'];
     }};
-    const parts = [bit(p.s, p.sk, EV_SRC.solar, '\u2600', t('web.ev.src_solar','Solar')),
-                   bit(p.b, p.bk, EV_SRC.battery, '\u25a0', t('web.ev.src_battery','Battery')),
-                   bit(p.g, p.gk, EV_SRC.grid, '\u26a1', t('web.ev.src_grid','Grid'))].filter(Boolean);
-    return '<div style="font-size:11px;color:var(--muted);margin-top:6px;display:flex;gap:10px;flex-wrap:wrap">' +
-      parts.join('') + '</div>';
+    return _evLegendRow([bit(p.s, p.sk, EV_SRC.solar, t('web.ev.src_solar','Solar')),
+                         bit(p.b, p.bk, EV_SRC.battery, t('web.ev.src_battery','Battery')),
+                         bit(p.g, p.gk, EV_SRC.grid, t('web.ev.src_grid','Grid'))],
+                        'margin-top:7px;color:var(--fg)');
   }}
   /* A charge is "surplus" when almost nothing was bought for it. The threshold
      is deliberately not 0 %: a wallbox ramps and the house blinks, so a real
@@ -10132,6 +10160,198 @@ _loadLsSettings();
       'padding:1px 6px;border-radius:10px;margin-left:4px" title="' +
       esc(t('web.ev.surplus_hint','Charged from your own PV and battery — only the grid share costs money')) +
       '">\u2600 ' + esc(lbl) + '</span>';
+  }}
+  /* ── The charge curve, coloured by what fed the car ────────────────────
+     Click a charge to unfold it. The area under the wallbox curve is stacked
+     sun / battery / grid at every minute, so "when was there grid draw" is a
+     glance rather than a calculation — including the very common case of all
+     three at once.
+
+     The open panels are kept in a module-level set, not in the DOM: the tab
+     refreshes on a timer, and a repaint that closed the panel the user is
+     reading would be worse than no panel at all. */
+  const _evOpen = new Set();
+  const _evCurves = {{}};        // id -> payload, so a repaint redraws instantly
+
+  function _evCurveBox(id) {{
+    return document.getElementById('evc-' + id);
+  }}
+  async function evToggleCurve(id, start, end) {{
+    const box = _evCurveBox(id);
+    if (!box) return;
+    if (_evOpen.has(id)) {{
+      _evOpen.delete(id); box.innerHTML = ''; box.style.display = 'none'; return;
+    }}
+    _evOpen.add(id);
+    box.style.display = 'block';
+    if (_evCurves[id]) {{ _evDrawCurve(id); return; }}
+    box.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">' +
+      esc(t('web.ev.curve_loading', 'Loading charge curve…')) + '</div>';
+    try {{
+      const r = await fetch('/api/ev_charge_curve?start=' + start + '&end=' + end);
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'unknown');
+      _evCurves[id] = d.data;
+      _evDrawCurve(id);
+    }} catch (e) {{
+      box.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">' +
+        esc(t('web.ev.curve_failed', 'The charge curve could not be loaded.')) + '</div>';
+    }}
+  }}
+
+  function _evFmtMin(sec) {{
+    const m = Math.round((sec || 0) / 60);
+    return m >= 60 ? Math.floor(m/60) + ' h ' + (m%60) + ' min' : m + ' min';
+  }}
+
+  function _evDrawCurve(id) {{
+    const box = _evCurveBox(id), d = _evCurves[id];
+    if (!box || !d) return;
+    if (!d.available || !d.ts || d.ts.length < 2) {{
+      box.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">' +
+        esc(t('web.ev.curve_none', 'No source measurement covers this charge.')) + '</div>';
+      return;
+    }}
+    const sec = d.seconds || {{}};
+    // How long each source flowed. These overlap on purpose — the sum is larger
+    // than the charge when several fed the car at once, which is the point.
+    const runs = _evLegendRow(
+      [[EV_SRC.solar, t('web.ev.src_solar','Solar'), _evFmtMin(sec.solar)],
+       [EV_SRC.battery, t('web.ev.src_battery','Battery'), _evFmtMin(sec.battery)],
+       [EV_SRC.grid, t('web.ev.src_grid','Grid'), _evFmtMin(sec.grid)]],
+      'margin-top:6px');
+    box.innerHTML =
+      '<div style="font-size:11px;color:var(--muted);margin:2px 0 4px">' +
+        esc(t('web.ev.curve_title', 'Charge curve by source')) + ' \u00b7 ' +
+        esc(t('web.ev.curve_flowed', 'how long each source flowed \u2014 of {{t}}',
+                {{t: _evFmtMin(sec.total)}})) +
+      '</div>' +
+      '<canvas id="evcv-' + esc(id) + '" style="width:100%;height:150px;display:block"></canvas>' +
+      '<div id="evct-' + esc(id) + '" style="font-size:11px;color:var(--muted);min-height:15px;margin-top:2px"></div>' +
+      runs;
+    _evPaintCurve(id);
+  }}
+
+  function _evPaintCurve(id, hoverX) {{
+    const d = _evCurves[id];
+    const cv = document.getElementById('evcv-' + id);
+    if (!cv || !d) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = cv.getBoundingClientRect();
+    // A pane still hidden measures 0×0; painting then throws and kills the rest
+    // of the render (same trap the cost donut documents).
+    if (!(rect.width > 0 && rect.height > 0)) return;
+    cv.width = rect.width * dpr; cv.height = rect.height * dpr;
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const W = rect.width, H = rect.height, PL = 34, PR = 6, PT = 8, PB = 16;
+    const iw = W - PL - PR, ih = H - PT - PB;
+    ctx.clearRect(0, 0, W, H);
+
+    const ts = d.ts, n = ts.length;
+    const peak = Math.max.apply(null, d.load_w) || 1;
+    const yMax = peak * 1.08;
+    const x = function(i) {{ return PL + (ts[i]-ts[0]) / Math.max(1, ts[n-1]-ts[0]) * iw; }};
+    const y = function(v) {{ return PT + ih - (v / yMax) * ih; }};
+
+    const css = getComputedStyle(document.body);
+    const grid = (css.getPropertyValue('--border') || '#ddd').trim() || '#ddd';
+    const muted = (css.getPropertyValue('--muted') || '#888').trim() || '#888';
+
+    // Grid + kW labels
+    ctx.strokeStyle = grid; ctx.fillStyle = muted;
+    ctx.font = '9px system-ui,sans-serif'; ctx.textAlign = 'right'; ctx.lineWidth = 1;
+    for (let k = 0; k <= 3; k++) {{
+      const v = yMax * k / 3, yy = Math.round(y(v)) + 0.5;
+      ctx.globalAlpha = 0.5; ctx.beginPath();
+      ctx.moveTo(PL, yy); ctx.lineTo(W - PR, yy); ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.fillText((v/1000).toFixed(1) + ' kW', PL - 4, yy + 3);
+    }}
+
+    // Stacked bands, sun at the bottom: the free part carries the curve and the
+    // bought part sits visibly on top of it.
+    const bands = [[d.solar_w, EV_SRC.solar], [d.battery_w, EV_SRC.battery],
+                   [d.grid_w, EV_SRC.grid]];
+    const base = new Float64Array(n);
+    bands.forEach(function(b) {{
+      const arr = b[0];
+      ctx.fillStyle = b[1]; ctx.globalAlpha = 0.85;
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) ctx.lineTo(x(i), y(base[i] + (arr[i]||0)));
+      for (let i = n - 1; i >= 0; i--) ctx.lineTo(x(i), y(base[i]));
+      ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+      for (let i = 0; i < n; i++) base[i] += (arr[i]||0);
+    }});
+
+    // The measured wallbox curve on top — the bands must meet it everywhere.
+    ctx.strokeStyle = muted; ctx.lineWidth = 1.2; ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) ctx.lineTo(x(i), y(d.load_w[i]));
+    ctx.stroke(); ctx.globalAlpha = 1;
+
+    // Stretches no supply meter saw: hatched, never coloured.
+    if (d.measured) {{
+      ctx.fillStyle = muted; ctx.globalAlpha = 0.12;
+      for (let i = 0; i < n; i++) if (!d.measured[i]) {{
+        const x0 = x(i), x1 = (i+1 < n ? x(i+1) : x0 + 1);
+        ctx.fillRect(x0, PT, Math.max(1, x1-x0), ih);
+      }}
+      ctx.globalAlpha = 1;
+    }}
+
+    // Time axis: first and last stamp.
+    ctx.fillStyle = muted; ctx.font = '9px system-ui,sans-serif';
+    const hhmm = function(tsec) {{
+      return new Date(tsec*1000).toLocaleTimeString(_locale(),
+        {{hour:'2-digit', minute:'2-digit'}});
+    }};
+    ctx.textAlign = 'left';  ctx.fillText(hhmm(ts[0]), PL, H - 4);
+    ctx.textAlign = 'right'; ctx.fillText(hhmm(ts[n-1]), W - PR, H - 4);
+
+    if (hoverX != null) {{
+      let i = 0, best = 1e9;
+      for (let k = 0; k < n; k++) {{ const dd = Math.abs(x(k) - hoverX); if (dd < best) {{ best = dd; i = k; }} }}
+      ctx.strokeStyle = muted; ctx.globalAlpha = 0.6; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x(i), PT); ctx.lineTo(x(i), PT+ih); ctx.stroke();
+      ctx.globalAlpha = 1;
+      const tip = document.getElementById('evct-' + id);
+      if (tip) {{
+        const kw = function(v) {{ return ((v||0)/1000).toFixed(2) + ' kW'; }};
+        tip.innerHTML = hhmm(ts[i]) + ' \u00b7 ' + kw(d.load_w[i]) + ' \u00b7 ' +
+          _evLegendRow([[EV_SRC.solar, t('web.ev.src_solar','Solar'), kw(d.solar_w[i])],
+                        [EV_SRC.battery, t('web.ev.src_battery','Battery'), kw(d.battery_w[i])],
+                        [EV_SRC.grid, t('web.ev.src_grid','Grid'), kw(d.grid_w[i])]],
+                       'display:inline-flex;vertical-align:middle;margin-left:6px');
+      }}
+    }}
+  }}
+
+  // One delegated listener for every curve, installed once: a listener per card
+  // would stack up on each of the tab's timed repaints.
+  if (!window.__evCurveHover) {{
+    window.__evCurveHover = true;
+    document.addEventListener('mousemove', function(e) {{
+      const cv = e.target && e.target.id && String(e.target.id).indexOf('evcv-') === 0
+        ? e.target : null;
+      if (!cv) return;
+      const id = cv.id.slice(5);
+      _evPaintCurve(id, e.clientX - cv.getBoundingClientRect().left);
+    }}, true);
+  }}
+
+  /* The click target and the box the curve unfolds into. Only offered where a
+     source split exists — without one there is nothing to colour. */
+  function _evCurveHandle(x, id) {{
+    if (!_evSourceParts(x)) return '';
+    const open = _evOpen.has(id);
+    return '<div style="margin-top:6px">' +
+      '<button onclick="evToggleCurve(&#39;' + esc(id) + '&#39;,' + x.start_ts + ',' + x.end_ts + ')" ' +
+        'style="background:none;border:none;padding:0;cursor:pointer;color:var(--muted);' +
+        'font-size:11px;display:flex;align-items:center;gap:4px">' +
+        '<span id="evx-' + esc(id) + '">' + (open ? '\u25be' : '\u25b8') + '</span>' +
+        esc(t('web.ev.show_curve', 'Show charge curve')) + '</button>' +
+      '<div id="evc-' + esc(id) + '" style="display:' + (open ? 'block' : 'none') + '"></div>' +
+    '</div>';
   }}
   function _evSessionCard(se) {{
     const sd = new Date(se.start_ts*1000);
@@ -10159,6 +10379,7 @@ _loadLsSettings();
         '</div>' +
       '</div>' +
       _evEnergyBar(se, fillPct) + _evSourceLine(se) +
+      _evCurveHandle(se, se.session_id) +
     '</div>';
   }}
   function _evChargeCard(g) {{
@@ -10206,6 +10427,7 @@ _loadLsSettings();
         '</div>' +
       '</div>' +
       _evEnergyBar(g, fillPct) + _evSourceLine(g) +
+      _evCurveHandle(g, g.group_id) +
       '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:11px;color:var(--muted)">' +
         esc(t('web.ev.show_parts', 'Show {{n}} individual sessions', {{n: g.session_count}})) + '</summary>' +
         '<div style="margin-top:2px">' + sub + '</div>' +
@@ -10274,6 +10496,10 @@ _loadLsSettings();
                          t('web.ev.vs_all_grid','vs. {{c}} € all from the grid', {{c: wouldBe.toFixed(2)}})) +
         '</div>' +
         _evSourceStackedBar(solK, batK, gridK) +
+        _evLegendRow([[EV_SRC.solar, t('web.ev.src_solar','Solar'), solK.toFixed(1) + ' kWh'],
+                      [EV_SRC.battery, t('web.ev.src_battery','Battery'), batK.toFixed(1) + ' kWh'],
+                      [EV_SRC.grid, t('web.ev.src_grid','Grid'), gridK.toFixed(1) + ' kWh']],
+                     'margin-top:8px') +
       '</div>';
     }} else if (sp.mode && sp.mode !== 'flat') {{
       const why = ({{
@@ -10334,14 +10560,27 @@ _loadLsSettings();
     const countNote = useCharges
       ? t('web.ev.n_charges_note', '{{c}} charges · {{s}} sessions', {{c: data.charges.length, s: sessions.length}})
       : t('web.ev.n_total', '{{n}} total', {{n: sessions.length}});
+    // The key sits with the list, not only up in the overview: 50 cards of
+    // three-colour bars scroll far past anything explained at the top.
+    const listKey = (sp.active && srcKwh > 0)
+      ? _evSourceKey('margin:2px 0 8px;font-weight:400') : '';
     const head = '<div class="card-title" style="display:flex;justify-content:space-between;align-items:baseline">' +
       '<span>' + headLabel + '</span>' +
       '<span style="font-size:11px;color:var(--muted);font-weight:400">' + countNote + '</span>' +
-    '</div>';
+    '</div>' + listKey;
     const list = items.slice().reverse().slice(0, 50).map(renderFn).join('');
     html += '<div>' + head + list + '</div>';
 
     el.innerHTML = html;
+    // The tab repaints on a timer. Anything the user had unfolded must come
+    // back, drawn, without a second request — otherwise the panel he is reading
+    // vanishes under him every refresh cycle.
+    _evOpen.forEach(function(id) {{
+      const box = _evCurveBox(id);
+      if (!box) return;                       // that charge is out of the window now
+      box.style.display = 'block';
+      if (_evCurves[id]) _evDrawCurve(id);
+    }});
   }}
   async function deleteEvSession(id) {{
     if (!id) return;

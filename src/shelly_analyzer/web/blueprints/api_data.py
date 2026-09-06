@@ -190,6 +190,11 @@ def api_ev_sessions():
     return _action_endpoint("ev_sessions")
 
 
+@bp.route("/api/ev_charge_curve")
+def api_ev_charge_curve():
+    return _action_endpoint("ev_charge_curve")
+
+
 @bp.route("/api/ev_session_delete")
 def api_ev_session_delete():
     return _action_endpoint("ev_session_delete")
