@@ -1753,48 +1753,6 @@ _HTML_TEMPLATE = """<!doctype html>
       border-radius: 6px;
       background: var(--chipbg);
     }}
-    /* ── EV Charger Grid ── */
-    .ev-grid {{ display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0; }}
-    .ev-brick {{
-      width: calc(33.333% - 4px);
-      min-width: 90px;
-      max-width: 140px;
-      aspect-ratio: 1;
-      border-radius: 10px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      font-size: 11px;
-      color: #fff;
-      text-align: center;
-      padding: 6px;
-      transition: transform .1s;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.18);
-    }}
-    .ev-brick:active {{ transform: scale(0.95); }}
-    .ev-brick.ev-green {{ background: #16a34a; }}
-    .ev-brick.ev-yellow {{ background: #d97706; }}
-    .ev-brick.ev-red {{ background: #dc2626; }}
-    .ev-brick.ev-gray {{ background: #6b7280; }}
-    .ev-brick-name {{ font-weight: 700; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }}
-    .ev-brick-dist {{ font-size: 14px; font-weight: 700; opacity: 0.95; margin-top: 3px; }}
-    .ev-brick-info {{ font-size: 14px; font-weight: 700; margin-top: 2px; }}
-    .ev-conn-grid {{ display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }}
-    .ev-conn-brick {{
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-size: 11px;
-      color: #fff;
-      text-align: center;
-      min-width: 70px;
-      flex: 1;
-    }}
-    .ev-conn-brick.ev-green {{ background: #16a34a; }}
-    .ev-conn-brick.ev-yellow {{ background: #d97706; }}
-    .ev-conn-brick.ev-red {{ background: #dc2626; }}
-    .ev-conn-brick.ev-gray {{ background: #6b7280; }}
     /* ── Chart detail modal ── */
     .chart-detail-panel {{
       background: var(--card);
@@ -2422,42 +2380,6 @@ _HTML_TEMPLATE = """<!doctype html>
       <div id="sankey-cards"></div>
     </div>
 
-    <!-- EV Chargers -->
-    <div id="pane-ev" class="pane">
-      <div class="controls-row" style="flex-wrap:wrap;gap:6px">
-        <input id="ev-city" type="text" placeholder="{web_ev_city_placeholder}" style="flex:1;min-width:120px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--fg);font-size:13px" onkeydown="if(event.key==='Enter')loadEv()">
-        <select id="ev-radius" onchange="loadEv()" style="font-size:12px">
-          <option value="500" selected>500 m</option>
-          <option value="1000">1 km</option>
-          <option value="2000">2 km</option>
-          <option value="5000">5 km</option>
-          <option value="10000">10 km</option>
-        </select>
-        <select id="ev-minkw" onchange="loadEv()" style="font-size:12px">
-          <option value="0">{web_ev_all_power}</option>
-          <option value="11">\u226511 kW</option>
-          <option value="22">\u226522 kW</option>
-          <option value="50">\u226550 kW</option>
-          <option value="150">\u2265150 kW</option>
-        </select>
-        <select id="ev-plug" onchange="loadEv()" style="font-size:12px">
-          <option value="">{web_ev_all_plugs}</option>
-          <option value="typ 2">Typ 2</option>
-          <option value="ccs">CCS</option>
-          <option value="chademo">CHAdeMO</option>
-          <option value="schuko">Schuko</option>
-        </select>
-      </div>
-      <div id="ev-apikey-row" style="display:none;padding:6px 0">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">{web_ev_apikey_hint}</div>
-        <div style="display:flex;gap:6px">
-          <input id="ev-apikey" type="text" placeholder="API Key" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--fg);font-size:12px">
-          <button class="btn btn-outline" onclick="_evSaveKey()" style="font-size:12px">{web_ev_save}</button>
-        </div>
-      </div>
-      <div id="ev-grid-wrap"></div>
-    </div>
-
     <!-- Export -->
     <!-- v16.40.0: Export tab removed. The 5 generic export buttons (PDF
          summary, Excel, day-report, month-report, bundle, per-device
@@ -2572,10 +2494,6 @@ _HTML_TEMPLATE = """<!doctype html>
       <span class="nav-icon">⚡</span>
       <span class="nav-label">{web_tab_sankey}</span>
     </button>
-    <button class="nav-btn" data-feature="ev" onclick="switchPane('ev',this)">
-      <span class="nav-icon">🔌</span>
-      <span class="nav-label">{web_tab_ev}</span>
-    </button>
     <button class="nav-btn" data-feature="smart_sched" onclick="switchPane('smart_sched',this)">
       <span class="nav-icon">⏱</span>
       <span class="nav-label">{web_tab_schedule}</span>
@@ -2637,7 +2555,6 @@ _HTML_TEMPLATE = """<!doctype html>
     <button class="drawer-item" data-feature="forecast" onclick="switchPaneFromDrawer('forecast',this)"><span class="drawer-ico">📈</span>{web_tab_forecast}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('standby',this)"><span class="drawer-ico">🔌</span>{web_tab_standby}</button>
     <button class="drawer-item" onclick="switchPaneFromDrawer('sankey',this)"><span class="drawer-ico">⚡</span>{web_tab_sankey}</button>
-    <button class="drawer-item" data-feature="ev" onclick="switchPaneFromDrawer('ev',this)"><span class="drawer-ico">🔌</span>{web_tab_ev}</button>
     <button class="drawer-item" data-feature="smart_sched" onclick="switchPaneFromDrawer('smart_sched',this)"><span class="drawer-ico">⏱</span>{web_tab_schedule}</button>
     <button class="drawer-item" data-feature="ev_log" onclick="switchPaneFromDrawer('ev_log',this)"><span class="drawer-ico">🚗</span>{web_tab_ev_log}</button>
     <button class="drawer-item" data-feature="tariff" onclick="switchPaneFromDrawer('tariff',this)"><span class="drawer-ico">💱</span>{web_tab_tariff}</button>
@@ -2661,16 +2578,6 @@ _HTML_TEMPLATE = """<!doctype html>
            autocapitalize="off" spellcheck="false" oninput="renderPalette()" onkeydown="paletteKey(event)"/>
     <div id="cmdk-list" class="cmdk-list"></div>
     <div id="cmdk-foot" class="cmdk-foot"></div>
-  </div>
-</div>
-
-<div id="ev-detail-modal" class="modal-overlay" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="modal-panel" style="width:min(94vw,420px);-webkit-overflow-scrolling:touch">
-    <div class="modal-header">
-      <span id="ev-detail-title" style="font-weight:700"></span>
-      <button class="modal-close" onclick="document.getElementById('ev-detail-modal').classList.remove('open')">&times;</button>
-    </div>
-    <div id="ev-detail-body"></div>
   </div>
 </div>
 
@@ -2989,11 +2896,6 @@ var _TAB_LOADER_NAMES = {{
   tenants:'loadTenants', nilm:'loadNilm', control:'loadControl', calibration:'loadCalibration'
 }};
 function _tabLoaderFor(name) {{
-  if (name === 'ev') {{
-    return (typeof loadEv === 'function')
-      ? function() {{ try {{ _evInitKeyRow(); }} catch(e) {{}} return loadEv(); }}
-      : null;
-  }}
   var fn = _TAB_LOADER_NAMES[name];
   if (fn && typeof window[fn] === 'function') return window[fn];
   return null;
@@ -4938,7 +4840,6 @@ const TAB_LIVE_REFRESH = {{
   solar: 5000,
   standby: 5000,
   sankey: 3000,
-  ev: 5000,
   battery: 5000,
   goals: 10000,
   nilm: 15000,
@@ -4955,9 +4856,6 @@ function _runTabRefresh(pane) {{
     else if (pane === 'solar')   {{ try {{ loadSolar(typeof solarPeriod !== 'undefined' ? solarPeriod : 'month'); }} catch(e) {{}} }}
     else if (pane === 'standby') loadStandby();
     else if (pane === 'sankey')  loadSankey();
-    /* Without coordinates the charger list cannot be built, so a periodic
-       refresh would only rewrite the same hint every few seconds. */
-    else if (pane === 'ev')      {{ if (_evLastCoords) loadEv(); }}
     else if (pane === 'battery') {{ if (typeof loadBattery === 'function') loadBattery(); }}
     else if (pane === 'goals')   {{ if (typeof loadGoals === 'function') loadGoals(); }}
     else if (pane === 'nilm')    loadNilm();
@@ -9940,167 +9838,6 @@ function esc(s) {{
     .replace(/</g,'&lt;')
     .replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;');
-}}
-
-/* ──────────────────────────────────────────────
-   EV CHARGER TAB
-────────────────────────────────────────────── */
-let _evLastCoords = null;
-let _evApiKey = localStorage.getItem('sea_ocm_key') || '';
-
-function _evInitKeyRow() {{
-  const row = document.getElementById('ev-apikey-row');
-  const inp = document.getElementById('ev-apikey');
-  if (!row || !inp) return;
-  if (!_evApiKey) {{ row.style.display = 'block'; }}
-  inp.value = _evApiKey;
-}}
-function _evSaveKey() {{
-  const inp = document.getElementById('ev-apikey');
-  if (!inp) return;
-  _evApiKey = inp.value.trim();
-  localStorage.setItem('sea_ocm_key', _evApiKey);
-  document.getElementById('ev-apikey-row').style.display = 'none';
-  loadEv();
-}}
-function _evShowKeyRow() {{
-  const row = document.getElementById('ev-apikey-row');
-  if (row) row.style.display = 'block';
-}}
-
-async function _evGeocode(city) {{
-  // Use Nominatim (OpenStreetMap) for free geocoding
-  const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(city));
-  if (!r.ok) return null;
-  const data = await r.json();
-  if (data && data.length > 0) return {{ lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) }};
-  return null;
-}}
-
-async function loadEv() {{
-  const wrap = document.getElementById('ev-grid-wrap');
-  if (!wrap) return;
-  const quiet = _quietRefresh;
-  _spinner(wrap, quiet, '<p class="loading-msg">' + t('web.ev.loading', 'Loading chargers\u2026') + '</p>');
-
-  const cityInput = document.getElementById('ev-city');
-  const cityVal = (cityInput ? cityInput.value.trim() : '');
-
-  // Priority: 1) City input, 2) GPS, 3) Cached coords
-  if (cityVal) {{
-    const geo = await _evGeocode(cityVal);
-    if (geo) {{
-      _evLastCoords = geo;
-    }} else {{
-      wrap.innerHTML = '<p class="error-msg">' + t('web.ev.city_not_found', 'City not found.') + '</p>';
-      return;
-    }}
-  }} else if (!_evLastCoords) {{
-    // Try GPS
-    if (navigator.geolocation) {{
-      try {{
-        const pos = await new Promise(function(resolve, reject) {{
-          navigator.geolocation.getCurrentPosition(resolve, reject, {{
-            enableHighAccuracy: true, timeout: 10000, maximumAge: 60000
-          }});
-        }});
-        _evLastCoords = {{ lat: pos.coords.latitude, lon: pos.coords.longitude }};
-      }} catch(e) {{
-        wrap.innerHTML = '<p class="info-msg">' + t('web.ev.enter_city', 'Enter a city name or allow GPS access.') + '</p>';
-        return;
-      }}
-    }} else {{
-      wrap.innerHTML = '<p class="info-msg">' + t('web.ev.enter_city', 'Enter a city name or allow GPS access.') + '</p>';
-      return;
-    }}
-  }}
-
-  const radius = document.getElementById('ev-radius').value || '500';
-  const minKw = document.getElementById('ev-minkw').value || '0';
-  const plugFilter = document.getElementById('ev-plug').value || '';
-  let url = '/api/ev_chargers?lat=' + _evLastCoords.lat + '&lon=' + _evLastCoords.lon + '&radius=' + radius;
-  if (_evApiKey) url += '&key=' + encodeURIComponent(_evApiKey);
-  if (minKw !== '0') url += '&min_kw=' + minKw;
-  if (plugFilter) url += '&plug=' + encodeURIComponent(plugFilter);
-  try {{
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(r.status);
-    const data = await r.json();
-    if (!data.ok) {{
-      if ((data.error || '').indexOf('403') !== -1 || (data.error || '').indexOf('Forbidden') !== -1) {{
-        _evShowKeyRow();
-        wrap.innerHTML = '<p class="error-msg">' + t('web.ev.need_key', 'API key required. Get a free key at openchargemap.org/site/develop/api') + '</p>';
-        return;
-      }}
-      throw new Error(data.error || 'unknown');
-    }}
-    _evRenderGrid(data.stations || [], data.sources || []);
-  }} catch(e) {{
-    if (e.message === '403') {{
-      _evShowKeyRow();
-      wrap.innerHTML = '<p class="error-msg">' + t('web.ev.need_key', 'API key required. Get a free key at openchargemap.org/site/develop/api') + '</p>';
-    }} else {{
-      _tabFail(wrap, e, quiet);
-    }}
-  }}
-}}
-
-function _evRenderGrid(stations, sources) {{
-  const wrap = document.getElementById('ev-grid-wrap');
-  if (!stations.length) {{
-    wrap.innerHTML = '<p class="info-msg">' + t('web.ev.no_results', 'No chargers found') + '</p>';
-    return;
-  }}
-  wrap._evStations = stations;
-  const srcMap = {{ocm:'OpenChargeMap', bna:'Bundesnetzagentur', osm:'OpenStreetMap'}};
-  const srcLabel = (sources || []).map(function(s) {{ return srcMap[s] || s; }}).join(' + ');
-  let html = '<div style="font-size:10px;color:var(--muted);margin-bottom:4px">' + stations.length + ' Stationen' + (srcLabel ? ' \xb7 ' + srcLabel : '') + '</div>';
-  html += '<div class="ev-grid">';
-  stations.forEach(function(s) {{
-    const cls = s.status === 'available' ? 'ev-green' : s.status === 'occupied' ? 'ev-yellow' : s.status === 'unavailable' ? 'ev-red' : 'ev-gray';
-    const distLabel = s.distance_m < 1000 ? s.distance_m + ' m' : (s.distance_m / 1000).toFixed(1) + ' km';
-    let statusLabel;
-    if (s.status === 'available') statusLabel = s.free_connectors + '/' + s.total_connectors + ' ' + t('web.ev.free', 'free');
-    else if (s.status === 'occupied') statusLabel = '0/' + s.total_connectors + ' ' + t('web.ev.free', 'free');
-    else if (s.status === 'unavailable') statusLabel = t('web.ev.unavailable', 'unavailable');
-    else statusLabel = s.total_connectors + ' ' + t('web.ev.connectors', 'Connectors');
-    var srcBadge = s.source === 'enbw' ? ' \u26a1' : '';
-    html += '<div class="ev-brick ' + cls + '" onclick="_evShowDetail(' + s.id + ')">' +
-      '<div class="ev-brick-name">' + esc(s.name || '?') + '</div>' +
-      '<div class="ev-brick-dist">' + distLabel + '</div>' +
-      '<div class="ev-brick-info">' + statusLabel + srcBadge + '</div>' +
-      '</div>';
-  }});
-  html += '</div>';
-  wrap.innerHTML = html;
-}}
-
-function _evShowDetail(stationId) {{
-  const wrap = document.getElementById('ev-grid-wrap');
-  const stations = wrap._evStations || [];
-  const s = stations.find(function(x) {{ return x.id === stationId; }});
-  if (!s) return;
-
-  document.getElementById('ev-detail-title').textContent = s.name || 'Station #' + s.id;
-  const distLabel = s.distance_m < 1000 ? s.distance_m + ' m' : (s.distance_m / 1000).toFixed(1) + ' km';
-  let body = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">' + esc(s.address || '') + '</div>';
-  body += '<div style="font-size:12px;margin-bottom:10px">' + t('web.ev.distance', 'Distance') + ': <b>' + distLabel + '</b></div>';
-  body += '<div style="font-weight:700;margin-bottom:6px">' + t('web.ev.connectors', 'Connectors') + ' (' + s.total_connectors + ')</div>';
-  body += '<div class="ev-conn-grid">';
-  (s.connectors || []).forEach(function(c) {{
-    const cls = c.status === 'free' ? 'ev-green' : c.status === 'occupied' ? 'ev-yellow' : c.status === 'unavailable' ? 'ev-red' : 'ev-gray';
-    const statusTxt = c.status === 'free' ? t('web.ev.free', 'free') : c.status === 'occupied' ? t('web.ev.occupied', 'occupied') : c.status === 'unavailable' ? t('web.ev.unavailable', 'unavailable') : t('web.ev.unknown', 'unknown');
-    let since = '';
-    if (c.status_since) {{
-      const d = new Date(c.status_since);
-      if (!isNaN(d.getTime())) since = '<br><span style="font-size:10px;opacity:0.85">' + t('web.ev.since', 'since') + ' ' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {{hour:'2-digit',minute:'2-digit'}}) + '</span>';
-    }}
-    body += '<div class="ev-conn-brick ' + cls + '"><b>' + esc(c.type || '?') + '</b>' + (c.kw ? '<br>' + c.kw + ' kW' : '') + '<br>' + statusTxt + since + '</div>';
-  }});
-  body += '</div>';
-
-  document.getElementById('ev-detail-body').innerHTML = body;
-  document.getElementById('ev-detail-modal').classList.add('open');
 }}
 
 /* ──────────────────────────────────────────────

@@ -1,5 +1,23 @@
 # Changelog
 
+## 16.77.0
+### Removed
+- **The EV Chargers tab is gone.** The nearby-charging-station finder
+  (OpenChargeMap lookup with radius, power and plug filters) served no purpose
+  in an energy analyzer for your own house, and it was the only feature that
+  asked the user for a third-party API key. Removed in full: the
+  `ev_charger` service, the `/api/ev_chargers` endpoint, the pane, its CSS,
+  the navigation entry, the drawer item, the detail modal, the JavaScript, the
+  six template placeholders and 20 translation keys in all nine languages
+  (2 716 → 2 696 keys each). `webdash.py` shrank by 263 lines.
+
+  **Untouched:** the **EV Log** tab (your own wallbox charging sessions), the
+  charging-session grouping, and the `ev_charger` appliance signature used by
+  NILM detection — three different things that merely share the letters "ev".
+
+  The timed-repaint test lost its EV exception and is now stricter: *every*
+  tab on a refresh timer must gate on its payload, with no exceptions.
+
 ## 16.76.0
 ### Added
 - **All nine languages are complete.** 557 dashboard strings × 9 languages, **0
