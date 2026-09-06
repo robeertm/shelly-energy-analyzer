@@ -798,45 +798,87 @@
       .replace(/"/g, "&quot;");
   }
 
-  /* Devices that represent generation or storage must not be summed into the
-     household draw — the dashboard marks them with flow_role. */
-  function isDraw(d) {
-    var r = String(d && d.flow_role || "");
-    return r !== "pv" && r !== "battery";
-  }
+  function flowRole(d) { return String(d && d.flow_role || ""); }
 
-  function updateHero(data) {
-    var hero = ensureHero();
-    if (!hero) return;
-    var devs = (data && data.devices) || [];
-    var draw = devs.filter(isDraw);
+  /* What the household is drawing, watts / kWh today / € today, from the device
+     tiles alone.  Exposed as window.__auHeroSum because this one sum has now
+     been wrong twice, and both times the error was only visible on a real
+     installation — it gets executed by tests/test_aurora_hero_sum.py. */
+  function heroSum(devs) {
+    /* Generation and storage are never a draw.  Neither is the GRID meter, as
+       long as the installation HAS generation: it reads the net exchange with
+       the public grid (import − export, after PV and battery), which is nothing
+       like what the house consumes.  Summing it as if it were an appliance put
+       one installation's "right now" at 35.0 kWh / 2.80 € on a day the house
+       had actually used 47.7 kWh for 2.04 € — and, worse, the house meter hung
+       off the grid meter and was then skipped as a "sub-meter", so the single
+       largest consumer fell out of the total entirely.
+       Without PV or a battery the grid meter IS the house meter: there it stays
+       in, and anything metered behind it is skipped below, exactly as before. */
+    var hasGen = devs.some(function (d) {
+      var r = flowRole(d);
+      return r === "pv" || r === "battery";
+    });
+    var draw = devs.filter(function (d) {
+      var r = flowRole(d);
+      if (r === "pv" || r === "battery") return false;
+      return !(hasGen && r === "grid");
+    });
+    /* An installation that meters nothing but its grid connection would be left
+       with no tiles at all; there the grid reading is the best measure of the
+       draw that exists. */
+    if (!draw.length) {
+      draw = devs.filter(function (d) { return flowRole(d) === "grid"; });
+    }
 
     /* A sub-meter sits BEHIND another meter, so its load is already inside that
        meter's reading: adding it again counted a 1 960 W water heater twice, and
        "now" read 4 288 W on a house pulling 2 327 W.  Skip a child whose parent
        is one of these tiles — unless the parent is shown net of exactly this
        child (subtract_from_parent_display), in which case the parent no longer
-       contains it and it has to be counted after all. */
+       contains it and it has to be counted after all.
+       A house meter fed by the grid connection is NOT such a child: with
+       generation present the grid tile is not among these tiles at all, so the
+       house is counted — which is the whole point of the rule above. */
     var shown = {};
     for (var s = 0; s < draw.length; s++) shown[String(draw[s].key)] = draw[s];
-    function counts(d) {
+    function counts(d, tiefe) {
+      tiefe = tiefe || 0;
+      if (tiefe > 8) return false;               // a cycle in the wiring
       var p = shown[String(d.parent || "")];
       if (!p) return true;                       // no parent among the tiles
       var net = p.net_of_children;
-      if (net && net.indexOf(d.key) >= 0) return true;   // parent already gave it up
+      if (net && net.indexOf(d.key) >= 0) {
+        /* The parent's tile no longer shows this child — but the child is still
+           physically behind whatever the parent sits behind.  Counting it
+           unconditionally added a 1 960 W boiler on top of the 2 327 W grid
+           meter that already contained it.  So: count it exactly when the
+           parent itself is counted. */
+        return counts(p, tiefe + 1);
+      }
       return false;                              // already inside the parent
     }
 
-    var totalW = 0, kwh = 0, cost = 0, top = null;
+    var out = { totalW: 0, kwh: 0, cost: 0, top: null };
     for (var i = 0; i < draw.length; i++) {
       var d = draw[i];
       if (!counts(d)) continue;
       var w = Number(d.power_w) || 0;
-      totalW += w;
-      kwh  += Number(d.today_kwh)  || 0;
-      cost += Number(d.cost_today) || 0;
-      if (!top || w > (Number(top.power_w) || 0)) top = d;
+      out.totalW += w;
+      out.kwh    += Number(d.today_kwh)  || 0;
+      out.cost   += Number(d.cost_today) || 0;
+      if (!out.top || w > (Number(out.top.power_w) || 0)) out.top = d;
     }
+    return out;
+  }
+  window.__auHeroSum = heroSum;
+
+  function updateHero(data) {
+    var hero = ensureHero();
+    if (!hero) return;
+    var devs = (data && data.devices) || [];
+    var sum = heroSum(devs);
+    var totalW = sum.totalW, kwh = sum.kwh, cost = sum.cost, top = sum.top;
 
     var c = paintLoad(totalW);
 
