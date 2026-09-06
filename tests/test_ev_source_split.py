@@ -333,6 +333,7 @@ def test_every_new_string_exists_in_all_nine_languages():
         "web.ev.source_title", "web.ev.source_sub", "web.ev.self_supplied",
         "web.ev.of_charged", "web.ev.saved_vs_grid", "web.ev.vs_all_grid",
         "web.ev.src_no_meter", "web.ev.src_no_data", "web.ev.src_error",
+        "web.ev.src_unmeasured",
         "settings.field.ev_charging.cost_source_mode",
         "settings.hint.ev_charging.cost_source_mode",
         "settings.opts.ev_charging.cost_source_mode.auto",
@@ -354,6 +355,7 @@ def test_every_new_string_exists_in_all_nine_languages():
     for l in LANGS:
         assert "{n}" in _t(l, "web.ev.source_sub") and "{m}" in _t(l, "web.ev.source_sub"), l
         assert "{c}" in _t(l, "web.ev.vs_all_grid"), l
+        assert "{k}" in _t(l, "web.ev.src_unmeasured"), l
     print(f"OK  {len(keys)} strings in all {len(LANGS)} languages, placeholders intact")
 
 

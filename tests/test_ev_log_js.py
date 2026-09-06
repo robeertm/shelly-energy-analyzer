@@ -134,7 +134,8 @@ def _payload(charges, **kw):
          "total_battery_kwh": round(sum(c["battery_kwh"] for c in charges), 2),
          "total_grid_kwh": round(sum(c["grid_kwh"] for c in charges), 2),
          "cost_if_all_grid": round(sum(c["energy_kwh"] for c in charges) * 0.3025, 2),
-         "source_pricing": {"mode": "auto", "active": True, "priced": len(sessions),
+         "source_pricing": {"mode": "auto", "active": True, "priced": len(charges),
+                            "entries": len(charges), "unpriced_kwh": 0.0,
                             "reason": "ok", "solar_cost_model": "free",
                             "price_eur_kwh": 0.3025}}
     d.update(kw)
@@ -157,6 +158,21 @@ def test_the_tab_renders_with_a_source_split():
     assert "Surplus charge" in html, "a 100 % solar charge got no surplus badge"
     assert "Saved" in html and "vs." in html
     print("OK  the EV tab renders solar/battery/grid segments and the badge")
+
+
+def test_the_unmeasured_remainder_is_named_on_screen():
+    """Otherwise the three parts visibly miss the total with no explanation."""
+    charges = [_charge(group_id="a", solar_kwh=14.17),
+               _charge(group_id="b", cost_model="fixed", solar_kwh=0.0,
+                       energy_kwh=13.18, cost_eur=3.99)]
+    d = _payload(charges)
+    d["source_pricing"].update(priced=1, entries=2, unpriced_kwh=13.18)
+    d["total_solar_kwh"] = 14.17
+    d["total_battery_kwh"] = d["total_grid_kwh"] = 0.0
+    html = _run(d)
+    assert "1 of 2 charges measured" in html, "the count is wrong or missing"
+    assert "13.2 kWh not measured" in html, "the uncovered energy is not named"
+    print("OK  the tab names the uncovered kWh and counts in charges")
 
 
 def test_a_grid_charge_gets_no_surplus_badge():

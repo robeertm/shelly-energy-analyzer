@@ -10258,7 +10258,11 @@ _loadLsSettings();
         '<div class="card-title">\u2600 ' + t('web.ev.source_title', 'Where the energy came from') +
           ' <span style="font-size:11px;color:var(--muted);font-weight:400">' +
           esc(t('web.ev.source_sub', '{{n}} of {{m}} charges measured',
-                {{n: sp.priced || 0, m: (data.charge_count != null ? data.charge_count : data.total_sessions) || 0}})) +
+                {{n: sp.priced || 0, m: sp.entries || 0}})) +
+          ((+sp.unpriced_kwh > 0.05)
+            ? ' \u00b7 ' + esc(t('web.ev.src_unmeasured', '{{k}} kWh not measured, full tariff',
+                                 {{k: (+sp.unpriced_kwh).toFixed(1)}}))
+            : '') +
           '</span></div>' +
         '<div class="metric-grid">' +
           swatch(EV_SRC.solar, t('web.ev.src_solar','Solar'), solK.toFixed(1) + ' kWh', pctOf(solK)) +
