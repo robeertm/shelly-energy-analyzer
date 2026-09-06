@@ -340,6 +340,20 @@ evToggleCurve('a', CURVE.start_ts, CURVE.end_ts).then(() => {
     print("OK  the hover readout gives all three sources for that minute")
 
 
+def test_the_tab_uses_one_clock_format():
+    """Seen on a screenshot: the card header read "17:28" and the curve axis
+    right under it "05:28 PM". [] is the *browser's* locale, _locale() follows
+    <html lang> — mixing them puts two clock formats in one card."""
+    import os as _os
+    src = open(_os.path.join(_os.path.dirname(__file__), "..", "src", "shelly_analyzer",
+                             "services", "webdash.py"), encoding="utf-8").read()
+    ev = src[src.index("function _evSessionCard(se)"):src.index("async function deleteEvSession")]
+    stray = re.findall(r"toLocale(?:Date|Time)String\(\[\]", ev)
+    assert not stray, f"{len(stray)} date/time call(s) in the EV tab still use the browser locale"
+    assert ev.count("_locale()") >= 6, "the EV tab lost its locale-aware formatting"
+    print("OK  the EV tab formats every clock and date the same way")
+
+
 def test_a_grid_charge_gets_no_surplus_badge():
     html = _run(_payload([_charge(group_id="n", energy_kwh=1.01, solar_kwh=0.0,
                                   grid_kwh=1.01, cost_eur=0.31)]))

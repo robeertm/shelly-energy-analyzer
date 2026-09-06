@@ -1,5 +1,55 @@
 # Changelog
 
+## 16.80.0
+### Added
+- **Demo mode has a supply side now — so the EV log's source split, the solar
+  dashboard and the battery tab can be tried without owning any hardware.** The
+  simulated house gained a **wallbox**, a **signed grid meter** (+ import /
+  − export), a **4.2 kWp PV array** and a **5 kWh battery**. PV and battery are
+  written to the same synthetic series an external inverter source uses, so the
+  demo exercises the real code path rather than a special case.
+
+  The simulated month deliberately contains all three stories a source split has
+  to tell apart: sunny midday surplus charges, afternoon charges that run into
+  the evening (sun → battery → grid), and night charges that are pure grid. A
+  demo that could only ever show one of them would prove nothing about the
+  feature.
+
+  The installation is sized to the house the generator actually produces. The
+  first attempt used 9.8 kWp and 11 kWh: on a house drawing 45 W at night the
+  battery never fell below 90 %, the grid never imported a watt, and every
+  charge came out 100 % solar.
+
+- **Screenshots of the charge log and the charge curve**, on the README — the
+  feature had no picture at all. Desktop dark, desktop with a charge unfolded,
+  light, phone, and phone with the curve open. All five come from the app's own
+  demo mode, which is what the README promises of every image on it.
+
+- `solar.battery_device_key` — name the series carrying battery power directly.
+  Covers a battery measured by a Shelly, and lets demo mode show the
+  battery-aware pages without pretending an inverter integration is configured.
+  Falls back to the external source's synthetic series as before.
+
+### Fixed
+- **A slowly sampled installation silently lost its source split.** The gap cap
+  was a flat 10 minutes, so on an installation polling every 15 minutes every
+  interval was clipped from 900 s to 600 s and a fully measured window reported
+  two-thirds coverage; at a 20-minute poll it fell under the coverage floor and
+  the split disappeared without a word. The cap now follows the series' own
+  cadence, and only a real hole still counts as one — verified from 60 s to
+  30 min sampling, and that a four-hour outage still reads as an outage.
+- **The EV tab mixed two clock formats.** The card header read "17:28" while the
+  charge-curve axis right under it read "05:28 PM": the cards used the browser's
+  locale, the axis the page language. The whole tab now follows `<html lang>`,
+  which is what the dashboard documents.
+
+### Notes
+- 194 tests (from 180). New guards: the four demo series reconcile
+  (`grid = load − pv + battery`) at every sample; the demo grid meter really
+  swings both ways; the power factor survives a negative meter; every image the
+  README shows exists and no new one is orphaned; every in-page link resolves to
+  a heading.
+
 ## 16.79.0
 ### Added
 - **Open a charge and see its curve, coloured by what fed the car.** The area

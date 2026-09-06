@@ -132,9 +132,14 @@ def _resolve_source_keys(cfg) -> tuple:
             or getattr(pv_source, "mqtt_pv_power_topic", "")):
         pv_key = _PV_KEY
 
-    batt_key = ""
-    if _pv_enabled and (getattr(pv_source, "battery_power_entity", "")
-                        or getattr(pv_source, "mqtt_battery_power_topic", "")):
+    # A battery named in SolarConfig wins: it covers a battery measured by a
+    # Shelly, and lets demo mode show the battery-aware pages without claiming
+    # an inverter integration is set up. Falls back to the synthetic series an
+    # external source writes.
+    batt_key = str(getattr(solar, "battery_device_key", "") or "") if solar else ""
+    if not batt_key and _pv_enabled and (
+            getattr(pv_source, "battery_power_entity", "")
+            or getattr(pv_source, "mqtt_battery_power_topic", "")):
         batt_key = _BATTERY_KEY
     return grid_key, pv_key, batt_key
 
@@ -705,6 +710,27 @@ def compute_balance(db, cfg, start_ts: int, end_ts: int,
 _SPLIT_MAX_DT_S = 600
 
 
+def _gap_cap(ts) -> float:
+    """How long an interval may be before it counts as a hole, for THIS series.
+
+    🔴 A fixed 10 minutes is only right for an installation that samples faster
+    than that. On one polling every 15 minutes — demo mode does, and so does a
+    Shelly on a slow schedule — every interval was clipped from 900 s to 600 s,
+    so the window came out two-thirds "covered" and a 20-minute poll would have
+    fallen under the coverage floor and silently lost its source split
+    altogether. The cap follows the series' own cadence, and only a real hole
+    (well beyond the normal spacing) is still treated as one.
+    """
+    import numpy as np
+
+    if ts is None or len(ts) < 3:
+        return float(_SPLIT_MAX_DT_S)
+    step = float(np.median(np.diff(ts)))
+    if not (step > 0):
+        return float(_SPLIT_MAX_DT_S)
+    return max(float(_SPLIT_MAX_DT_S), 2.5 * step)
+
+
 @dataclass
 class SourceSplit:
     """Where one consumer's energy came from over one window (all kWh)."""
@@ -935,8 +961,9 @@ def consumer_source_split(db, cfg, windows, load_key: str = "",
 
         # Trapezoidal integration over the consumer's own intervals; an interval
         # longer than the gap cap is data loss, not a measurement.
+        cap = _gap_cap(g_ts)
         dt = np.diff(g_ts).astype(float)
-        dt = np.minimum(dt, float(_SPLIT_MAX_DT_S))
+        dt = np.minimum(dt, cap)
         dt = np.maximum(dt, 0.0)
 
         def _integrate(v):
@@ -950,7 +977,7 @@ def consumer_source_split(db, cfg, windows, load_key: str = "",
         # Only stretches where the grid meter really had a recent sample count as
         # covered — a charge in a window the meter did not see must fall back to
         # flat pricing rather than silently read as 100 % grid.
-        fresh = (grid_age[:-1] <= _SPLIT_MAX_DT_S) & (grid_age[1:] <= _SPLIT_MAX_DT_S)
+        fresh = (grid_age[:-1] <= cap) & (grid_age[1:] <= cap)
         res.covered_s = float(np.sum(dt[fresh]))
         res.resolution = "samples"
         out.append(res)
@@ -1011,7 +1038,7 @@ def consumer_source_series(db, cfg, start_ts: int, end_ts: int,
 
     load, sol, bat, grd, grid_age = _attribute(
         db, a, b, pad, g_ts, g_w, gr_ts, gr_w, pv_ts, pv_w, bt_ts, bt_w, tenant_keys)
-    seen = grid_age <= _SPLIT_MAX_DT_S
+    seen = grid_age <= _gap_cap(g_ts)
 
     n = int(max(1, min(int(max_points), g_ts.size)))
     if g_ts.size > n:
@@ -1049,7 +1076,7 @@ def consumer_source_series(db, cfg, start_ts: int, end_ts: int,
     # How long each source actually flowed — the exact half of the answer, and
     # the one a stacked band makes hard to read when a sliver is 2 % tall.
     dt = np.diff(g_ts).astype(float)
-    dt = np.clip(dt, 0.0, float(_SPLIT_MAX_DT_S))
+    dt = np.clip(dt, 0.0, _gap_cap(g_ts))
     def _secs(v, floor=1.0):
         on = (v[:-1] > floor) | (v[1:] > floor)
         return float(np.sum(dt[on]))

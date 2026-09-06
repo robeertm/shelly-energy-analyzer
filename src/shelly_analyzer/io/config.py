@@ -557,6 +557,13 @@ class SolarConfig:
     # PvSourceConfig). When set and it has data, the analyzer uses the measured
     # PV production instead of deriving it from the grid meter. Empty = derive.
     pv_production_device_key: str = ""
+    # Optional: key of the device carrying *battery* power (+ charging, −
+    # discharging). Usually the synthetic "battery" device fed by an external
+    # source (see PvSourceConfig), but naming it here also covers a battery
+    # measured by a Shelly — and lets demo mode show the battery-aware pages
+    # without pretending an inverter integration is configured. Empty = derive
+    # from the external source when one is set up.
+    battery_device_key: str = ""
     # Feed-in tariff in €/kWh
     feed_in_tariff_eur_per_kwh: float = 0.082
     # Future feed-in tariff periods. Each overrides feed_in_tariff_eur_per_kwh
@@ -1611,6 +1618,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         grid_meter_device_key=str(solar_raw.get("grid_meter_device_key", SolarConfig.grid_meter_device_key) or ""),
         grid_display_device_key=str(solar_raw.get("grid_display_device_key", SolarConfig.grid_display_device_key) or ""),
         pv_production_device_key=str(solar_raw.get("pv_production_device_key", SolarConfig.pv_production_device_key) or ""),
+        battery_device_key=str(solar_raw.get("battery_device_key", SolarConfig.battery_device_key) or ""),
         feed_in_tariff_eur_per_kwh=_coerce_float(
             solar_raw.get("feed_in_tariff_eur_per_kwh", SolarConfig.feed_in_tariff_eur_per_kwh),
             SolarConfig.feed_in_tariff_eur_per_kwh,
@@ -2348,6 +2356,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "grid_meter_device_key": str(getattr(cfg.solar, "grid_meter_device_key", "") or ""),
             "grid_display_device_key": str(getattr(cfg.solar, "grid_display_device_key", "") or ""),
             "pv_production_device_key": str(getattr(cfg.solar, "pv_production_device_key", "") or ""),
+            "battery_device_key": str(getattr(cfg.solar, "battery_device_key", "") or ""),
             "feed_in_tariff_eur_per_kwh": float(getattr(cfg.solar, "feed_in_tariff_eur_per_kwh", 0.082)),
             "feed_in_schedule": [
                 {

@@ -10354,13 +10354,17 @@ _loadLsSettings();
     '</div>';
   }}
   function _evSessionCard(se) {{
+    // _locale(), not []: [] is the *browser's* locale, so the card header read
+    // "17:28" while the curve axis right under it read "05:28 PM" — two clock
+    // formats in one card. _locale() follows <html lang>, which is what the
+    // dashboard documents ("a French user does not read a German 24h stamp").
     const sd = new Date(se.start_ts*1000);
     const dur = Math.max(1, Math.round((se.end_ts - se.start_ts) / 60));
     const hh = dur >= 60 ? Math.floor(dur/60) + 'h ' + (dur%60) + 'm' : dur + ' min';
     const peakKw = (se.peak_power_w/1000).toFixed(1);
     const avgKw  = (se.avg_power_w/1000).toFixed(1);
-    const dateStr = sd.toLocaleDateString([], {{weekday:'short', day:'2-digit', month:'short'}});
-    const timeStr = sd.toLocaleTimeString([], {{hour:'2-digit', minute:'2-digit'}});
+    const dateStr = sd.toLocaleDateString(_locale(), {{weekday:'short', day:'2-digit', month:'short'}});
+    const timeStr = sd.toLocaleTimeString(_locale(), {{hour:'2-digit', minute:'2-digit'}});
     const fillPct = Math.min(100, (se.energy_kwh / 30) * 100);
     const delTitle = t('web.ev.delete_entry', 'Delete entry');
     const idAttr = esc(se.session_id || '');
@@ -10395,9 +10399,9 @@ _loadLsSettings();
     const spanStr = spanMin >= 60 ? Math.floor(spanMin/60) + 'h ' + (spanMin%60) + 'm' : spanMin + ' min';
     const avgKw = (g.avg_power_w/1000).toFixed(1);
     const peakKw = (g.peak_power_w/1000).toFixed(1);
-    const dateStr = sd.toLocaleDateString([], {{weekday:'short', day:'2-digit', month:'short'}});
-    const t1 = sd.toLocaleTimeString([], {{hour:'2-digit', minute:'2-digit'}});
-    const t2 = ed.toLocaleTimeString([], {{hour:'2-digit', minute:'2-digit'}});
+    const dateStr = sd.toLocaleDateString(_locale(), {{weekday:'short', day:'2-digit', month:'short'}});
+    const t1 = sd.toLocaleTimeString(_locale(), {{hour:'2-digit', minute:'2-digit'}});
+    const t2 = ed.toLocaleTimeString(_locale(), {{hour:'2-digit', minute:'2-digit'}});
     const fillPct = Math.min(100, (g.energy_kwh / 30) * 100);
     const badge = t('web.ev.part_sessions', '{{n}}× interrupted', {{n: g.session_count}});
     const delTitle = t('web.ev.delete_entry', 'Delete entry');
@@ -10406,7 +10410,7 @@ _loadLsSettings();
       const sdur = Math.max(1, Math.round((se.end_ts - se.start_ts) / 60));
       const idAttr = esc(se.session_id || '');
       return '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--border);font-size:11px;color:var(--muted)">' +
-        '<span>' + ssd.toLocaleTimeString([], {{hour:'2-digit', minute:'2-digit'}}) + ' · ' + sdur + ' min</span>' +
+        '<span>' + ssd.toLocaleTimeString(_locale(), {{hour:'2-digit', minute:'2-digit'}}) + ' · ' + sdur + ' min</span>' +
         '<span>' + se.energy_kwh.toFixed(2) + ' kWh · ' + se.cost_eur.toFixed(2) + ' € ' +
           '<button onclick="deleteEvSession(&#39;' + idAttr + '&#39;)" title="' + esc(delTitle) +
             '" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:12px;padding:0 2px;line-height:1">🗑</button></span>' +
