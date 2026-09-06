@@ -219,6 +219,38 @@ def test_the_split_does_not_blow_up_the_endpoint():
         assert split < max(1.0, flat * 4 + 0.3), (flat, split)
 
 
+def test_an_uncovered_charge_is_counted_and_named_not_hidden():
+    """Found on a live installation: one charge predated the PV logging, so
+    13.2 kWh counted in the total but had no source — the three parts silently
+    missed the total, and the card read "32 of 29 charges measured" because it
+    compared sessions against charges."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        d = _build(tmp)
+        # Drop the supply series before the last generated day, so that day's
+        # charges stay measured and the earlier ones cannot be.
+        day0 = (datetime.now() - timedelta(days=4)).replace(hour=0, minute=0, second=0,
+                                                            microsecond=0)
+        cut = int((day0 + timedelta(days=3)).timestamp())
+        con = d.storage.db._conn()
+        con.execute("DELETE FROM samples WHERE device_key IN ('pv','battery','grid') "
+                    "AND timestamp < ?", (cut,))
+        con.commit()
+        d.storage.db._conn().execute("PRAGMA optimize")
+        data = _sessions(d)
+        sp = data["source_pricing"]
+        assert sp["active"], sp
+        assert 0 < sp["priced"] < sp["entries"], sp
+        assert sp["entries"] == len(data["charges"] or data["sessions"]), sp
+        parts = (data["total_solar_kwh"] + data["total_battery_kwh"]
+                 + data["total_grid_kwh"])
+        assert sp["unpriced_kwh"] > 0.1, sp
+        assert abs(parts + sp["unpriced_kwh"] - data["total_kwh"]) < 0.05, (
+            parts, sp["unpriced_kwh"], data["total_kwh"])
+        print(f"OK  {sp['priced']}/{sp['entries']} measured, "
+              f"{sp['unpriced_kwh']} kWh named as unmeasured")
+
+
 def test_the_v1_data_endpoints_actually_answer():
     """They never did: the route passed Storage where the handlers want the DB,
     and behind that a pandas Timestamp went into int()."""

@@ -16801,3 +16801,14 @@ _I18N.setdefault("ru", {}).update({
     'web.ev.vs_all_grid': 'против {c} € полностью из сети',
 })
 
+# One more, added with the unmeasured-remainder line in 16.78.1.
+
+_I18N.setdefault('en', {}).update({'web.ev.src_unmeasured': '{k} kWh not measured, full tariff'})
+_I18N.setdefault('de', {}).update({'web.ev.src_unmeasured': '{k} kWh ohne Messung, voller Tarif'})
+_I18N.setdefault('es', {}).update({'web.ev.src_unmeasured': '{k} kWh sin medir, tarifa completa'})
+_I18N.setdefault('fr', {}).update({'web.ev.src_unmeasured': '{k} kWh non mesurés, tarif plein'})
+_I18N.setdefault('pt', {}).update({'web.ev.src_unmeasured': '{k} kWh sem medição, tarifa cheia'})
+_I18N.setdefault('it', {}).update({'web.ev.src_unmeasured': '{k} kWh non misurati, tariffa piena'})
+_I18N.setdefault('pl', {}).update({'web.ev.src_unmeasured': '{k} kWh bez pomiaru, pełna taryfa'})
+_I18N.setdefault('cs', {}).update({'web.ev.src_unmeasured': '{k} kWh bez měření, plný tarif'})
+_I18N.setdefault('ru', {}).update({'web.ev.src_unmeasured': '{k} кВт·ч без измерения, полный тариф'})

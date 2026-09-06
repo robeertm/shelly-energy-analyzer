@@ -5434,6 +5434,17 @@ class ActionDispatcher:
                     except Exception:
                         charges_payload = None
 
+                # Energy the meters did not cover: it counts in total_kwh but has
+                # no source, so the three parts would otherwise silently miss the
+                # total. The tab names the remainder instead of hiding it.
+                _src_unpriced_kwh = round(
+                    max(0.0, summary_ev.total_kwh - (summary_ev.total_solar_kwh
+                                                     + summary_ev.total_battery_kwh
+                                                     + summary_ev.total_grid_kwh)), 3)
+                _src_charges_priced = (
+                    sum(1 for c in charges_payload if c.get("cost_model") == "source")
+                    if charges_payload is not None else _src_priced)
+
                 # Wallbox real-charging consumption per month, last 24 months.
                 # Filters out the wallbox's permanent standby base load so the
                 # chart only shows months with actual EV charging activity.
@@ -5460,7 +5471,14 @@ class ActionDispatcher:
                     "source_pricing": {
                         "mode": _src_mode,
                         "active": bool(_src_priced),
-                        "priced": _src_priced,
+                        # Counted in the units the tab actually lists — charges
+                        # when they are grouped, sessions otherwise. Reporting
+                        # sessions against a charge count read "32 of 29".
+                        "priced": (_src_charges_priced if charges_payload is not None
+                                   else _src_priced),
+                        "entries": (len(charges_payload) if charges_payload is not None
+                                    else len(sessions)),
+                        "unpriced_kwh": round(_src_unpriced_kwh, 2),
                         "reason": _src_reason,
                         "solar_cost_model": str(getattr(_ec, "solar_cost_model", "free") or "free"),
                         "price_eur_kwh": float(self.cfg.pricing.electricity_price_eur_per_kwh),

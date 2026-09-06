@@ -1,5 +1,17 @@
 # Changelog
 
+## 16.78.1
+### Fixed
+- **The source card mixed its units and lost the unmeasured energy.** Verified
+  against a live installation right after the 16.78.0 rollout: one charge
+  predated the PV logging, so 13.2 kWh counted in the total but had no source —
+  solar + battery + grid visibly missed the total with no explanation, and the
+  subtitle compared *sessions* against *charges* and read "32 of 29 charges
+  measured". The count is now in the units the tab lists, and the uncovered
+  energy is named: "1 of 29 charges measured · 13.2 kWh not measured, full
+  tariff". New payload fields `source_pricing.entries` and
+  `source_pricing.unpriced_kwh`; one new string in all nine languages.
+
 ## 16.78.0
 ### Added
 - **The EV log now prices a charge by where its energy actually came from.**
