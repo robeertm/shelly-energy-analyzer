@@ -3,7 +3,7 @@ import hashlib
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import List, Optional
 
 import numpy as np
@@ -23,6 +23,14 @@ class ChargingSession:
     avg_power_w: float
     cost_eur: float = 0.0
     cost_model: str = "fixed"
+    # Where the energy came from. Zero and cost_model "fixed" while the session
+    # is priced at the flat tariff; filled in by :func:`price_by_source` once a
+    # grid/PV/battery measurement covers the charge. The three always add up to
+    # ``energy_kwh`` so the log and the totals cannot drift apart.
+    solar_kwh: float = 0.0
+    battery_kwh: float = 0.0
+    grid_kwh: float = 0.0
+    source_coverage: float = 0.0   # 0..1, how much of the window was measured
 
 
 @dataclass
@@ -32,6 +40,10 @@ class ChargingSummary:
     total_cost: float = 0.0
     avg_kwh_per_session: float = 0.0
     avg_duration_min: float = 0.0
+    total_solar_kwh: float = 0.0
+    total_battery_kwh: float = 0.0
+    total_grid_kwh: float = 0.0
+    cost_if_all_grid: float = 0.0   # what the same energy would have cost bought
     sessions: List[ChargingSession] = field(default_factory=list)
 
 
@@ -39,6 +51,17 @@ class ChargingSummary:
 # price, max_gap). Hit while the underlying samples haven't grown.
 _DETECT_CACHE: dict = {}
 _DETECT_LOCK = threading.Lock()
+
+
+def _fresh(sessions: List["ChargingSession"]) -> List["ChargingSession"]:
+    """Hand every caller its own session objects.
+
+    The cache used to return the very objects it stored, and copying only the
+    *list* was not enough: :func:`price_by_source` writes the source split onto
+    each session, so the second caller found the first one's prices baked into
+    the cache — switching the pricing mode back to flat then changed nothing.
+    """
+    return [replace(s) for s in sessions]
 
 
 def detect_charging_sessions(
@@ -104,7 +127,7 @@ def detect_charging_sessions(
     with _DETECT_LOCK:
         cached = _DETECT_CACHE.get(cache_key)
         if cached and cached[0] == max_ts and cached[1] == n:
-            return list(cached[2])
+            return _fresh(cached[2])
 
     above_low = power >= threshold_w * 0.5
     above_trigger = power >= threshold_w
@@ -170,7 +193,7 @@ def detect_charging_sessions(
 
     with _DETECT_LOCK:
         _DETECT_CACHE[cache_key] = (max_ts, n, sessions)
-    return sessions
+    return _fresh(sessions)
 
 
 def get_monthly_summary(sessions: List[ChargingSession]) -> ChargingSummary:
@@ -188,6 +211,9 @@ def get_monthly_summary(sessions: List[ChargingSession]) -> ChargingSummary:
         total_cost=round(total_cost, 2),
         avg_kwh_per_session=round(total_kwh / len(sessions), 2),
         avg_duration_min=round(sum(durations) / len(durations), 1),
+        total_solar_kwh=round(sum(s.solar_kwh for s in sessions), 2),
+        total_battery_kwh=round(sum(s.battery_kwh for s in sessions), 2),
+        total_grid_kwh=round(sum(s.grid_kwh for s in sessions), 2),
         sessions=sessions,
     )
 
@@ -204,6 +230,10 @@ class ChargingGroup:
     avg_power_w: float
     cost_eur: float
     session_count: int
+    solar_kwh: float = 0.0
+    battery_kwh: float = 0.0
+    grid_kwh: float = 0.0
+    cost_model: str = "fixed"
     sessions: List[ChargingSession] = field(default_factory=list)
 
 
@@ -268,6 +298,67 @@ def group_sessions_into_charges(
             start_ts=start, end_ts=end,
             energy_kwh=energy, peak_power_w=round(peak, 0),
             avg_power_w=avg, cost_eur=cost,
-            session_count=len(grp), sessions=list(grp),
+            session_count=len(grp),
+            # The merged charge is the sum of its parts — never a second
+            # attribution run over the whole span, which would also swallow the
+            # pauses in between (when the car drew nothing but the house did).
+            solar_kwh=round(sum(x.solar_kwh for x in grp), 3),
+            battery_kwh=round(sum(x.battery_kwh for x in grp), 3),
+            grid_kwh=round(sum(x.grid_kwh for x in grp), 3),
+            cost_model=("source" if any(x.cost_model == "source" for x in grp)
+                        else grp[0].cost_model),
+            sessions=list(grp),
         ))
     return groups
+
+
+# Below this share of the charge window covered by the supply meters the split
+# is a guess, not a measurement — the session keeps the flat tariff and says so.
+# Half the window is already generous: the meters poll every 15 s … 1 min, so a
+# genuinely measured charge comes back at ~1.0 and only real outages fall short.
+MIN_SOURCE_COVERAGE = 0.5
+
+
+def price_by_source(sessions: List[ChargingSession], splits,
+                    price_eur_per_kwh: float,
+                    solar_price_eur_per_kwh=0.0,
+                    min_coverage: float = MIN_SOURCE_COVERAGE) -> int:
+    """Re-price sessions from where their energy actually came from. In place.
+
+    ``splits`` is aligned with ``sessions`` (one
+    :class:`~shelly_analyzer.services.energy_balance.SourceSplit` each).
+    ``solar_price_eur_per_kwh`` may be a number or a callable taking the session,
+    so a feed-in tariff that changes over the years prices each charge with the
+    tariff that was effective on its own day.
+
+    A session is re-priced only when its window was really measured: the split
+    must exist and cover at least ``min_coverage`` of the window. Everything
+    else keeps the flat tariff and ``cost_model == "fixed"`` — an unmeasured
+    charge must never be *presented* as free solar.
+
+    Returns the number of sessions actually re-priced.
+    """
+    n = 0
+    for se, sp in zip(sessions, splits):
+        fr = sp.fractions() if sp is not None else None
+        if fr is None or sp.coverage < min_coverage:
+            continue
+        fs, fb, fg = fr
+        # The shares come from the supply meters, the energy from the wallbox
+        # meter: applying one to the other keeps the three parts adding up to
+        # exactly the kWh shown for the charge, whatever drift is between the
+        # two meters.
+        se.solar_kwh = round(se.energy_kwh * fs, 3)
+        se.battery_kwh = round(se.energy_kwh * fb, 3)
+        # The remainder rather than energy·fg, so rounding can never make the
+        # three parts miss the total by a watt-hour.
+        se.grid_kwh = round(se.energy_kwh - se.solar_kwh - se.battery_kwh, 3)
+        sp_price = (float(solar_price_eur_per_kwh(se))
+                    if callable(solar_price_eur_per_kwh)
+                    else float(solar_price_eur_per_kwh))
+        se.cost_eur = round(se.grid_kwh * float(price_eur_per_kwh)
+                            + (se.solar_kwh + se.battery_kwh) * sp_price, 2)
+        se.cost_model = "source"
+        se.source_coverage = round(float(sp.coverage), 3)
+        n += 1
+    return n

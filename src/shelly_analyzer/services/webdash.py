@@ -10056,6 +10056,83 @@ _loadLsSettings();
       '</span>' +
     '</div>';
   }}
+  function _evSourceStackedBar(sol, bat, grid) {{
+    const tot = sol + bat + grid;
+    if (tot <= 0) return '';
+    const seg = function(v, c, label) {{
+      if (v <= 0) return '';
+      return '<div title="' + esc(label + ' ' + v.toFixed(2) + ' kWh') +
+        '" style="height:100%;width:' + (v/tot*100).toFixed(2) + '%;background:' + c + '"></div>';
+    }};
+    return '<div style="margin-top:4px;height:10px;border-radius:5px;overflow:hidden;display:flex;background:var(--border)">' +
+      seg(sol, EV_SRC.solar, t('web.ev.src_solar','Solar')) +
+      seg(bat, EV_SRC.battery, t('web.ev.src_battery','Battery')) +
+      seg(grid, EV_SRC.grid, t('web.ev.src_grid','Grid')) +
+      '</div>';
+  }}
+  /* ── Where a charge's energy came from ─────────────────────────────────
+     Colours follow the ones the app already uses: the solar yellow of the
+     generation mix, the battery tab's green, and its red for what had to be
+     bought. Anything not attributed keeps the old neutral green bar — a charge
+     nobody measured must not look like free sunshine. */
+  const EV_SRC = {{solar:'#fdd835', battery:'#22c55e', grid:'#ef4444'}};
+  function _evSourceParts(x) {{
+    if (!x || x.cost_model !== 'source') return null;
+    const sk = +x.solar_kwh || 0, bk = +x.battery_kwh || 0, gk = +x.grid_kwh || 0;
+    const tot = sk + bk + gk;
+    if (tot <= 0) return null;
+    return {{s: sk/tot, b: bk/tot, g: gk/tot, sk: sk, bk: bk, gk: gk}};
+  }}
+  function _evEnergyBar(x, fillPct) {{
+    const p = _evSourceParts(x);
+    let inner;
+    if (!p) {{
+      inner = '<div style="height:100%;width:100%;background:linear-gradient(90deg,#4caf50,#81c784)"></div>';
+    }} else {{
+      const seg = function(f, c, label) {{
+        if (f <= 0.0005) return '';
+        return '<div title="' + esc(label) + '" style="height:100%;width:' +
+          (f*100).toFixed(2) + '%;background:' + c + '"></div>';
+      }};
+      inner = seg(p.s, EV_SRC.solar, t('web.ev.src_solar','Solar') + ' ' + p.sk.toFixed(2) + ' kWh') +
+              seg(p.b, EV_SRC.battery, t('web.ev.src_battery','Battery') + ' ' + p.bk.toFixed(2) + ' kWh') +
+              seg(p.g, EV_SRC.grid, t('web.ev.src_grid','Grid') + ' ' + p.gk.toFixed(2) + ' kWh');
+    }}
+    return '<div style="margin-top:8px;height:5px;background:var(--border);border-radius:3px;overflow:hidden">' +
+      '<div style="height:100%;width:' + fillPct.toFixed(1) + '%;display:flex;border-radius:3px;overflow:hidden">' +
+      inner + '</div></div>';
+  }}
+  function _evSourceLine(x) {{
+    const p = _evSourceParts(x);
+    if (!p) return '';
+    const bit = function(f, kwh, c, ico, label) {{
+      if (f <= 0.0005) return '';
+      return '<span style="white-space:nowrap" title="' + esc(label + ' ' + kwh.toFixed(2) + ' kWh') + '">' +
+        '<span style="color:' + c + '">' + ico + '</span> ' + Math.round(f*100) + '%</span>';
+    }};
+    const parts = [bit(p.s, p.sk, EV_SRC.solar, '\u2600', t('web.ev.src_solar','Solar')),
+                   bit(p.b, p.bk, EV_SRC.battery, '\u25a0', t('web.ev.src_battery','Battery')),
+                   bit(p.g, p.gk, EV_SRC.grid, '\u26a1', t('web.ev.src_grid','Grid'))].filter(Boolean);
+    return '<div style="font-size:11px;color:var(--muted);margin-top:6px;display:flex;gap:10px;flex-wrap:wrap">' +
+      parts.join('') + '</div>';
+  }}
+  /* A charge is "surplus" when almost nothing was bought for it. The threshold
+     is deliberately not 0 %: a wallbox ramps and the house blinks, so a real
+     surplus charge still buys a few hundred watt-hours at the edges. */
+  function _evIsSurplus(x) {{
+    const p = _evSourceParts(x);
+    return !!p && p.g <= 0.10;
+  }}
+  function _evSurplusBadge(x) {{
+    if (!_evIsSurplus(x)) return '';
+    const p = _evSourceParts(x);
+    const lbl = p.g <= 0.0005 ? t('web.ev.surplus_full','Surplus charge')
+                              : t('web.ev.surplus_mostly','Mostly surplus');
+    return '<span style="font-size:10px;font-weight:600;color:#b58900;background:rgba(253,216,53,0.18);' +
+      'padding:1px 6px;border-radius:10px;margin-left:4px" title="' +
+      esc(t('web.ev.surplus_hint','Charged from your own PV and battery — only the grid share costs money')) +
+      '">\u2600 ' + esc(lbl) + '</span>';
+  }}
   function _evSessionCard(se) {{
     const sd = new Date(se.start_ts*1000);
     const dur = Math.max(1, Math.round((se.end_ts - se.start_ts) / 60));
@@ -10072,7 +10149,8 @@ _loadLsSettings();
         '" style="position:absolute;top:8px;right:8px;background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:4px;line-height:1">🗑</button>' +
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-right:24px">' +
         '<div>' +
-          '<div style="font-weight:600;font-size:13px">' + esc(dateStr) + ' · ' + esc(timeStr) + '</div>' +
+          '<div style="font-weight:600;font-size:13px">' + esc(dateStr) + ' · ' + esc(timeStr) +
+            _evSurplusBadge(se) + '</div>' +
           '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + hh + ' · ⌀ ' + avgKw + ' kW · peak ' + peakKw + ' kW</div>' +
         '</div>' +
         '<div style="text-align:right">' +
@@ -10080,9 +10158,7 @@ _loadLsSettings();
           '<div style="font-size:12px;color:var(--muted)">' + se.cost_eur.toFixed(2) + ' €</div>' +
         '</div>' +
       '</div>' +
-      '<div style="margin-top:8px;height:5px;background:var(--border);border-radius:3px;overflow:hidden">' +
-        '<div style="height:100%;width:' + fillPct.toFixed(1) + '%;background:linear-gradient(90deg,#4caf50,#81c784);border-radius:3px"></div>' +
-      '</div>' +
+      _evEnergyBar(se, fillPct) + _evSourceLine(se) +
     '</div>';
   }}
   function _evChargeCard(g) {{
@@ -10120,7 +10196,8 @@ _loadLsSettings();
         '<div>' +
           '<div style="font-weight:600;font-size:13px">' + esc(dateStr) + ' · ' + esc(t1) + '–' + esc(t2) +
             ' <span style="font-size:10px;font-weight:600;color:#4caf50;background:rgba(76,175,80,0.14);padding:1px 6px;border-radius:10px;margin-left:4px" title="' +
-              esc(t('web.ev.grouped_hint', 'Surplus charging paused and resumed — merged into one charge')) + '">⚡ ' + esc(badge) + '</span></div>' +
+              esc(t('web.ev.grouped_hint', 'Surplus charging paused and resumed — merged into one charge')) + '">⚡ ' + esc(badge) + '</span>' +
+            _evSurplusBadge(g) + '</div>' +
           '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + spanStr + ' · ⌀ ' + avgKw + ' kW · peak ' + peakKw + ' kW</div>' +
         '</div>' +
         '<div style="text-align:right">' +
@@ -10128,9 +10205,7 @@ _loadLsSettings();
           '<div style="font-size:12px;color:var(--muted)">' + g.cost_eur.toFixed(2) + ' €</div>' +
         '</div>' +
       '</div>' +
-      '<div style="margin-top:8px;height:5px;background:var(--border);border-radius:3px;overflow:hidden">' +
-        '<div style="height:100%;width:' + fillPct.toFixed(1) + '%;background:linear-gradient(90deg,#4caf50,#81c784);border-radius:3px"></div>' +
-      '</div>' +
+      _evEnergyBar(g, fillPct) + _evSourceLine(g) +
       '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:11px;color:var(--muted)">' +
         esc(t('web.ev.show_parts', 'Show {{n}} individual sessions', {{n: g.session_count}})) + '</summary>' +
         '<div style="margin-top:2px">' + sub + '</div>' +
@@ -10158,6 +10233,57 @@ _loadLsSettings();
       metricCardHtml(t('web.ev.avg_per_session', '⌀ per session'), (data.avg_kwh_per_session || 0).toFixed(1) + ' kWh') +
       metricCardHtml(t('web.ev.avg_duration', '⌀ duration'), (data.avg_duration_min || 0).toFixed(0) + ' min') +
       '</div></div>';
+
+    // ── Where the charged energy came from ──────────────────────────────────
+    // Only shown once at least one charge was really attributed; when it was
+    // not, the note below says why instead of quietly showing three zeros.
+    const sp = data.source_pricing || {{}};
+    const srcKwh = (+data.total_solar_kwh || 0) + (+data.total_battery_kwh || 0) +
+                   (+data.total_grid_kwh || 0);
+    if (sp.active && srcKwh > 0) {{
+      const solK = +data.total_solar_kwh || 0, batK = +data.total_battery_kwh || 0,
+            gridK = +data.total_grid_kwh || 0;
+      const pctOf = function(v) {{ return Math.round(v / srcKwh * 100) + '%'; }};
+      const wouldBe = +data.cost_if_all_grid || 0;
+      const paid = +data.total_cost || 0;
+      const saved = Math.max(0, wouldBe - paid);
+      const ownPct = Math.round((solK + batK) / srcKwh * 100);
+      const swatch = function(c, label, value, sub) {{
+        return '<div class="metric-card">' +
+          '<div class="metric-label"><span style="color:' + c + '">\u25a0</span> ' + esc(label) + '</div>' +
+          '<div class="metric-value">' + esc(value) + '</div>' +
+          '<div class="metric-sub">' + esc(sub) + '</div></div>';
+      }};
+      html += '<div class="card" style="margin-bottom:10px">' +
+        '<div class="card-title">\u2600 ' + t('web.ev.source_title', 'Where the energy came from') +
+          ' <span style="font-size:11px;color:var(--muted);font-weight:400">' +
+          esc(t('web.ev.source_sub', '{{n}} of {{m}} charges measured',
+                {{n: sp.priced || 0, m: (data.charge_count != null ? data.charge_count : data.total_sessions) || 0}})) +
+          '</span></div>' +
+        '<div class="metric-grid">' +
+          swatch(EV_SRC.solar, t('web.ev.src_solar','Solar'), solK.toFixed(1) + ' kWh', pctOf(solK)) +
+          swatch(EV_SRC.battery, t('web.ev.src_battery','Battery'), batK.toFixed(1) + ' kWh', pctOf(batK)) +
+          swatch(EV_SRC.grid, t('web.ev.src_grid','Grid'), gridK.toFixed(1) + ' kWh', pctOf(gridK)) +
+          metricCardHtml(t('web.ev.self_supplied','Self-supplied'), ownPct + '%',
+                         t('web.ev.of_charged','of the charged energy')) +
+          metricCardHtml(t('web.ev.saved_vs_grid','Saved'), saved.toFixed(2) + ' €',
+                         t('web.ev.vs_all_grid','vs. {{c}} € all from the grid', {{c: wouldBe.toFixed(2)}})) +
+        '</div>' +
+        _evSourceStackedBar(solK, batK, gridK) +
+      '</div>';
+    }} else if (sp.mode && sp.mode !== 'flat') {{
+      const why = ({{
+        no_meter: t('web.ev.src_no_meter',
+          'No grid meter with a PV or battery series is configured — every kWh is priced at the full tariff. Set them under Settings › Solar and PV/battery data source.'),
+        no_data: t('web.ev.src_no_data',
+          'No charge in this window is covered by the grid/PV measurement, so all of them keep the full tariff.'),
+        error: t('web.ev.src_error', 'The source split could not be computed for this window.')
+      }})[sp.reason];
+      if (why) {{
+        html += '<div class="card" style="margin-bottom:10px;padding:10px 12px">' +
+          '<p class="info-msg" style="margin:0">\u2139 ' + esc(why) + '</p></div>';
+      }}
+    }}
 
     // 24-month wallbox consumption chart (independent of the days-filter — shows
     // the whole tracked history regardless of how the session window is set).

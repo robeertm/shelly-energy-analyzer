@@ -686,3 +686,251 @@ def compute_balance(db, cfg, start_ts: int, end_ts: int,
     bal.self_sufficiency_pct = bal.autarky_pct
 
     return bal
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-consumer source attribution at sample resolution
+#
+# compute_grid_cost_share() answers "what fraction of the owner's energy came
+# from the grid in this hour" — enough to price a whole day, but not to price a
+# single charge: a surplus (PV) charge modulates *with* the sun, so it collects
+# a larger solar share than the hour's average load does, and a charge that
+# starts at 17:50 must not be priced with the whole 17:00 hour.  The functions
+# below do the same physics on the raw samples inside a given window.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# An interval longer than this is a data gap, not a measurement: cap it so a
+# missing hour cannot be integrated as if the last known power had persisted.
+# Same cap the Shelly sample ingest uses when it integrates interval energy.
+_SPLIT_MAX_DT_S = 600
+
+
+@dataclass
+class SourceSplit:
+    """Where one consumer's energy came from over one window (all kWh)."""
+
+    solar_kwh: float = 0.0        # PV consumed directly, never stored or exported
+    battery_kwh: float = 0.0      # discharged from the house battery
+    grid_kwh: float = 0.0         # bought from the grid
+    load_kwh: float = 0.0         # the consumer's own energy over the window
+    covered_s: float = 0.0        # seconds of the window backed by supply samples
+    window_s: float = 0.0
+    resolution: str = "none"      # "samples" | "none"
+
+    @property
+    def coverage(self) -> float:
+        """0..1 — how much of the window the supply meters actually covered."""
+        if self.window_s <= 0:
+            return 0.0
+        return min(1.0, max(0.0, self.covered_s / self.window_s))
+
+    def fractions(self) -> Optional[tuple]:
+        """(solar, battery, grid) normalised to 1, or None when nothing is known.
+
+        The three parts are *shares*, deliberately not absolute energies: the
+        caller applies them to the consumer's own measured energy so the parts
+        always add up to the whole the user sees, whatever small drift there is
+        between the wallbox meter and the supply meters.
+        """
+        total = self.solar_kwh + self.battery_kwh + self.grid_kwh
+        if total <= 1e-9:
+            return None
+        return (self.solar_kwh / total, self.battery_kwh / total,
+                self.grid_kwh / total)
+
+
+def _ts_seconds(series):
+    """A pandas timestamp/epoch column as an int64 epoch-seconds numpy array."""
+    import numpy as np
+    import pandas as pd
+
+    if pd.api.types.is_datetime64_any_dtype(series):
+        if getattr(series.dt, "tz", None) is not None:
+            series = series.dt.tz_convert("UTC").dt.tz_localize(None)
+        return series.astype("datetime64[s]").astype("int64").to_numpy()
+    return pd.to_numeric(series, errors="coerce").fillna(0).astype("int64").to_numpy()
+
+
+def _power_series(db, key: str, start_ts: int, end_ts: int):
+    """``(ts[], watt[])`` for one device over a range, or ``(None, None)``.
+
+    Reads **only** ``total_power``: the samples table carries around forty
+    columns, and a ``SELECT *`` over a multi-hour window costs twenty times what
+    the one column needed here does.
+    """
+    import numpy as np
+    import pandas as pd
+
+    if not key:
+        return None, None
+    df = None
+    try:
+        df = db.query_samples(key, start_ts=int(start_ts), end_ts=int(end_ts),
+                              columns=["total_power"])
+    except TypeError:
+        # A storage backend (or a test double) without the columns parameter.
+        try:
+            df = db.query_samples(key, start_ts=int(start_ts), end_ts=int(end_ts))
+        except Exception:
+            return None, None
+    except Exception:
+        return None, None
+    if df is None or getattr(df, "empty", True):
+        return None, None
+    if "timestamp" not in df.columns or "total_power" not in df.columns:
+        return None, None
+    ts = _ts_seconds(df["timestamp"])
+    w = pd.to_numeric(df["total_power"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    if ts.size == 0:
+        return None, None
+    order = np.argsort(ts, kind="stable")
+    return ts[order], w[order]
+
+
+def _hold(grid_ts, src_ts, src_w):
+    """Forward-fill ``src`` onto ``grid_ts``: value and age of the sample used.
+
+    Returns ``(values, age_s)``; ``age_s`` is ``inf`` before the first sample so
+    the caller can refuse to attribute a stretch no meter has seen.
+    """
+    import numpy as np
+
+    if src_ts is None or src_ts.size == 0:
+        return (np.zeros(grid_ts.size), np.full(grid_ts.size, np.inf))
+    idx = np.searchsorted(src_ts, grid_ts, side="right") - 1
+    ok = idx >= 0
+    safe = np.where(ok, idx, 0)
+    vals = np.where(ok, src_w[safe], 0.0)
+    age = np.where(ok, grid_ts - src_ts[safe], np.inf)
+    return vals, age
+
+
+def consumer_source_split(db, cfg, windows, load_key: str = "",
+                          load_ts=None, load_w=None) -> List["SourceSplit"]:
+    """Split one consumer's energy per window into solar / battery / grid.
+
+    ``windows`` is a list of ``(start_ts, end_ts)``. The consumer's own power
+    series is read from ``load_key`` unless ``load_ts``/``load_w`` are supplied
+    (the EV log already holds the wallbox samples and must not read them twice).
+
+    The physics is the one the Costs tab already prices every owner circuit
+    with — :func:`compute_grid_cost_share` — evaluated on samples instead of
+    whole hours. Per interval, with the module's sign conventions:
+
+        G_imp = max(0, grid)              G_exp = max(0, −grid)
+        B_chg = max(0, batt)              B_dis = max(0, −batt)
+        PV_direct = max(0, pv − G_exp − B_chg)   # PV that reached the loads
+        pool      = PV_direct + G_imp            # the non-battery supply bus
+
+    The tenant is grid-parallel and never battery-fed, so it takes its slice of
+    the pool first; the battery serves the owner only:
+
+        own_nb   = max(0, pool − tenant_load)
+        own_total = own_nb + B_dis
+
+    and the consumer, being one of the owner's loads, takes its **proportional**
+    share of what fed the owner in that instant:
+
+        w = min(1, P_consumer / own_total)
+
+    Proportional and not "the EV is the marginal load, so it gets the grid
+    first": every other owner circuit in this app is priced pro-rata, and the
+    shares of all consumers then add up to exactly what the house drew. Charging
+    the car is not what made the grid import happen, and there is no measurement
+    that could say otherwise.
+    """
+    import numpy as np
+
+    out: List[SourceSplit] = []
+    grid_key, pv_key, batt_key = _resolve_source_keys(cfg)
+    tenant_keys, _ = _tenant_key_map(cfg)
+    # No supply-side meter at all ⇒ nothing can be attributed; every window
+    # comes back empty and the caller keeps flat pricing.
+    if not grid_key or not (pv_key or batt_key):
+        return [SourceSplit(window_s=max(0.0, float(b - a))) for a, b in windows]
+
+    have_load = load_ts is not None and load_w is not None and len(load_ts) > 0
+
+    for (a, b) in windows:
+        a, b = int(a), int(b)
+        res = SourceSplit(window_s=max(0.0, float(b - a)))
+        if b <= a:
+            out.append(res)
+            continue
+
+        # The consumer's timestamps are the natural grid: its energy is what we
+        # are attributing, and the supply series only has to say what fed it.
+        if have_load:
+            g_ts, g_w = load_ts, load_w
+        else:
+            g_ts, g_w = _power_series(db, load_key, a, b)
+        if g_ts is not None and g_ts.size:
+            # Clip here and not only at the caller: a storage backend that
+            # answers a range generously (or a live tail concatenated on) would
+            # otherwise integrate energy from outside the charge into it.
+            m = (g_ts >= a) & (g_ts <= b)
+            g_ts, g_w = g_ts[m], g_w[m]
+        if g_ts is None or g_ts.size < 2:
+            out.append(res)
+            continue
+
+        # Supply series are read one window wider than the window itself so the
+        # forward fill has a value at the very first sample instead of starting
+        # blind (they are polled every 15 s … 1 min, an hour is plenty).
+        pad = 3600
+        gr_ts, gr_w = _power_series(db, grid_key, a - pad, b)
+        pv_ts, pv_w = _power_series(db, pv_key, a - pad, b)
+        bt_ts, bt_w = _power_series(db, batt_key, a - pad, b)
+        if gr_ts is None:
+            out.append(res)
+            continue
+
+        grid_v, grid_age = _hold(g_ts, gr_ts, gr_w)
+        pv_v, _ = _hold(g_ts, pv_ts, pv_w)
+        bt_v, _ = _hold(g_ts, bt_ts, bt_w)
+
+        ten_v = np.zeros(g_ts.size)
+        for tk in tenant_keys:
+            t_ts, t_w = _power_series(db, tk, a - pad, b)
+            tv, _ = _hold(g_ts, t_ts, t_w)
+            ten_v += np.maximum(0.0, tv)
+
+        g_imp = np.maximum(0.0, grid_v)
+        g_exp = np.maximum(0.0, -grid_v)
+        b_chg = np.maximum(0.0, bt_v)
+        b_dis = np.maximum(0.0, -bt_v)
+        pv_direct = np.maximum(0.0, np.maximum(0.0, pv_v) - g_exp - b_chg)
+        pool = pv_direct + g_imp
+        t_load = np.minimum(ten_v, pool)
+        own_nb = np.maximum(0.0, pool - t_load)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            own_grid = np.where(pool > 0, own_nb * g_imp / pool, 0.0)
+            own_solar = np.where(pool > 0, own_nb * pv_direct / pool, 0.0)
+        own_total = own_nb + b_dis
+        load = np.maximum(0.0, g_w)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            share = np.where(own_total > 0, np.minimum(1.0, load / own_total), 0.0)
+
+        # Trapezoidal integration over the consumer's own intervals; an interval
+        # longer than the gap cap is data loss, not a measurement.
+        dt = np.diff(g_ts).astype(float)
+        dt = np.minimum(dt, float(_SPLIT_MAX_DT_S))
+        dt = np.maximum(dt, 0.0)
+
+        def _integrate(v):
+            return float(np.sum((v[:-1] + v[1:]) * 0.5 * dt)) / 3600.0 / 1000.0
+
+        res.solar_kwh = _integrate(share * own_solar)
+        res.battery_kwh = _integrate(share * b_dis)
+        res.grid_kwh = _integrate(share * own_grid)
+        res.load_kwh = _integrate(load)
+
+        # Only stretches where the grid meter really had a recent sample count as
+        # covered — a charge in a window the meter did not see must fall back to
+        # flat pricing rather than silently read as 100 % grid.
+        fresh = (grid_age[:-1] <= _SPLIT_MAX_DT_S) & (grid_age[1:] <= _SPLIT_MAX_DT_S)
+        res.covered_s = float(np.sum(dt[fresh]))
+        res.resolution = "samples"
+        out.append(res)
+
+    return out

@@ -430,7 +430,7 @@ Browser-based 12-step wizard at `/setup` (auto-redirected on first launch when n
   - **NILM** — ML pattern statistics: top-10 patterns with sparkline plots, hourly activity heatmap, category donut, per-device breakdown, transitions timeline, appliance signature database
   - **Export** — PDF summaries, reports, invoices, Excel, ZIP bundles; inline preview
   - **Schedule** — smart time-based scheduling for Shelly switches
-  - **EV Log** — electric vehicle charging session history
+  - **EV Log** — electric vehicle charging session history, each charge split into the energy that came from PV, from the battery and from the grid, with only the grid share billed (surplus charging: auto / always / off)
   - **Tariff** — electricity tariff comparison
   - **Battery** — home battery / storage simulation
   - **Advisor** — AI energy advisor with personalised tips
