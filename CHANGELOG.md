@@ -1,5 +1,37 @@
 # Changelog
 
+## 16.80.1
+### Fixed
+- **The Aurora "right now" panel counted the grid meter as if it were an
+  appliance, and dropped the house meter that hangs off it.** On an
+  installation with PV, a battery, a signed grid meter, a house meter wired
+  behind that grid meter, a wallbox behind the house and a grid-parallel
+  tenant, the panel read **35.0 kWh / 2.80 €** on a day the household had
+  really used **47.7 kWh for 2.04 €**.
+
+  Two mistakes compounded. A grid meter is a *source*: it reads the net
+  exchange with the public grid — import minus export, after PV and battery —
+  which is nothing like what the house consumes; it was nevertheless summed
+  into the household draw. And because the house meter names the grid meter as
+  its parent, the sub-meter rule then skipped the house as "already inside the
+  parent" — so the single largest consumer fell out of the total entirely.
+
+  The grid meter is now excluded from the draw whenever the installation has
+  generation (a PV or battery role). Without PV or a battery the grid meter
+  *is* the house meter, so it stays in and anything metered behind it is
+  skipped exactly as before; an installation that meters nothing but its grid
+  connection still shows that reading.
+
+- **A net-displayed meter added its child on top of an ancestor that already
+  contained it.** `counts()` only looked one level up: a house shown net of its
+  boiler (`subtract_from_parent_display`) let the boiler be added to the grid
+  meter that already included it — 4 287 W on a house drawing 2 327 W. The rule
+  now follows the whole cascade.
+
+- `tests/test_aurora_hero_sum.py` executes the real `aurora.js` in node against
+  real-shaped payloads. This sum had been wrong twice and reviewed clean both
+  times; the source-text assertions that guarded it could not see behaviour.
+
 ## 16.80.0
 ### Added
 - **Demo mode has a supply side now — so the EV log's source split, the solar

@@ -929,12 +929,18 @@ def test_a_submeter_is_not_counted_twice():
     key); the hero simply never looked at it, and /api/state did not carry the
     field."""
     js = _strip_js_comments(open(JS_PATH, encoding="utf-8").read())
-    assert "function counts(d)" in js, "the hero has no notion of a sub-meter"
+    assert "function counts(" in js, "the hero has no notion of a sub-meter"
     assert "if (!counts(d)) continue;" in js, "the sum does not use it"
     # a parent that has GIVEN UP the child must still count it, or the total loses it
-    fn = js[js.index("function counts(d)"):]
-    fn = fn[:fn.index("var totalW")]
+    fn = js[js.index("function counts("):]
+    fn = fn[:fn.index("var out = {")]
     assert "net_of_children" in fn, "a net parent would silently drop its child"
+    # 🔴 Everything above only reads the source, and the replay below is a
+    # SECOND implementation of the rule — it would happily agree with itself
+    # while the shipped JavaScript was broken. The rule is executed for real in
+    # tests/test_aurora_hero_sum.py; that file must not disappear.
+    hero = os.path.join(os.path.dirname(__file__), "test_aurora_hero_sum.py")
+    assert os.path.exists(hero), "the test that actually RUNS the hero sum is gone"
 
     api = open(os.path.join(SRC, "web", "blueprints", "api_state.py"), encoding="utf-8").read()
     assert '_t["parent"] = _p if _p in _tile_keys else ""' in api, \
