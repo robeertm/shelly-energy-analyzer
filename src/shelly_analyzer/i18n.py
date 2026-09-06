@@ -16897,3 +16897,51 @@ _I18N.setdefault('ru', {}).update({
     'web.ev.show_curve': 'Показать кривую зарядки',
 })
 
+
+# ── i18n: the demo house grew a wallbox and a grid meter (16.80.0) ──
+
+_I18N.setdefault('de', {}).update({
+    "demo.device.wallbox": 'Demo Wallbox (3-phasig)',
+    "demo.device.grid": 'Demo Netzanschluss (3-phasig)',
+})
+
+_I18N.setdefault('en', {}).update({
+    "demo.device.wallbox": 'Demo Wallbox (3-phase)',
+    "demo.device.grid": 'Demo Grid connection (3-phase)',
+})
+
+_I18N.setdefault('es', {}).update({
+    "demo.device.wallbox": 'Wallbox de demo (3 fases)',
+    "demo.device.grid": 'Conexión a red de demo (3 fases)',
+})
+
+_I18N.setdefault('fr', {}).update({
+    "demo.device.wallbox": 'Wallbox de démo (3 phases)',
+    "demo.device.grid": 'Raccordement réseau de démo (3 phases)',
+})
+
+_I18N.setdefault('pt', {}).update({
+    "demo.device.wallbox": 'Wallbox de demo (3 fases)',
+    "demo.device.grid": 'Ligação à rede de demo (3 fases)',
+})
+
+_I18N.setdefault('it', {}).update({
+    "demo.device.wallbox": 'Wallbox demo (trifase)',
+    "demo.device.grid": 'Allacciamento di rete demo (trifase)',
+})
+
+_I18N.setdefault('pl', {}).update({
+    "demo.device.wallbox": 'Wallbox demo (3-fazowy)',
+    "demo.device.grid": 'Przyłącze sieciowe demo (3-fazowe)',
+})
+
+_I18N.setdefault('cs', {}).update({
+    "demo.device.wallbox": 'Demo wallbox (třífázový)',
+    "demo.device.grid": 'Demo přípojka sítě (třífázová)',
+})
+
+_I18N.setdefault('ru', {}).update({
+    "demo.device.wallbox": 'Демо-зарядка (3 фазы)',
+    "demo.device.grid": 'Демо-подключение к сети (3 фазы)',
+})
+

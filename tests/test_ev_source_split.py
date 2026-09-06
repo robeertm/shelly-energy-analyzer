@@ -320,6 +320,40 @@ def test_grouping_without_pricing_stays_at_zero():
     print("OK  an unpriced log keeps zeros and 'fixed'")
 
 
+def test_a_slowly_sampled_installation_still_gets_its_split():
+    """🔴 The gap cap used to be a flat 10 minutes. On an installation polling
+    every 15 minutes — demo mode, and any Shelly on a slow schedule — every
+    interval was clipped from 900 s to 600 s, so a fully measured window
+    reported two-thirds coverage; at a 20-minute poll it fell under the
+    coverage floor and the split disappeared without a word."""
+    for step in (60, 300, 900, 1200, 1800):
+        n = int(4 * HOUR / step) + 1
+        ts = np.arange(BASE, BASE + n * step, step, dtype="int64")
+        w = np.full(ts.size, 6000.0)
+        db = FakeDb({"grid": 2000, "pv": 5000, "battery": -1000}, spacing=step)
+        sp = consumer_source_split(db, Cfg(), [(int(ts[0]), int(ts[-1]))],
+                                   load_ts=ts, load_w=w)[0]
+        assert sp.coverage > 0.95, f"{step} s sampling → coverage {sp.coverage:.2f}"
+        assert sp.fractions() is not None, f"{step} s sampling lost its split"
+        # …and the energy is not under-integrated either.
+        hours = (ts[-1] - ts[0]) / 3600.0
+        assert abs(sp.load_kwh - 6.0 * hours) < 0.2 * hours, (step, sp.load_kwh)
+    print("OK  60 s … 30 min sampling all keep full coverage and the right energy")
+
+
+def test_a_real_hole_still_counts_as_one():
+    """The adaptive cap must not turn a genuine outage into 'measured'."""
+    ts = np.concatenate([np.arange(BASE, BASE + HOUR, 60, dtype="int64"),
+                         np.arange(BASE + 5 * HOUR, BASE + 6 * HOUR, 60, dtype="int64")])
+    w = np.full(ts.size, 6000.0)
+    db = FakeDb({"grid": 2000, "pv": 5000, "battery": 0})
+    sp = consumer_source_split(db, Cfg(), [(int(ts[0]), int(ts[-1]))],
+                               load_ts=ts, load_w=w)[0]
+    # Two measured hours inside a six-hour window: about a third.
+    assert 0.2 < sp.coverage < 0.55, sp.coverage
+    print(f"OK  a four-hour outage shows as {sp.coverage:.0%} coverage, not 100 %")
+
+
 # ── the curve: the same attribution, kept as a series ───────────────────────
 
 def _series(watts, start=BASE, end=BASE + HOUR, **kw):

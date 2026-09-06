@@ -111,7 +111,27 @@ def setup_enable_demo():
         for d in default_demo_devices():
             if d.key not in existing_keys:
                 new_devices.append(d)
-        new_cfg = replace(state.cfg, demo=new_demo, devices=new_devices)
+        # Point the solar and EV settings at the demo house, unless the user has
+        # already configured their own — demo mode must never overwrite a real
+        # installation's meter assignment.
+        from shelly_analyzer.services.demo import (
+            BATTERY_KWH, DEMO_BATTERY_KEY, DEMO_GRID_KEY, DEMO_PV_KEY,
+            DEMO_WALLBOX_KEY, PV_KWP)
+        new_solar = state.cfg.solar
+        if not str(getattr(new_solar, "grid_meter_device_key", "") or ""):
+            new_solar = replace(
+                new_solar, enabled=True, grid_meter_device_key=DEMO_GRID_KEY,
+                pv_production_device_key=DEMO_PV_KEY,
+                battery_device_key=DEMO_BATTERY_KEY,
+                kw_peak=(new_solar.kw_peak or PV_KWP),
+                battery_kwh=(new_solar.battery_kwh or BATTERY_KWH))
+        new_ev = state.cfg.ev_charging
+        if not str(getattr(new_ev, "wallbox_device_key", "") or ""):
+            new_ev = replace(new_ev, enabled=True,
+                             wallbox_device_key=DEMO_WALLBOX_KEY,
+                             detection_threshold_w=1400.0)
+        new_cfg = replace(state.cfg, demo=new_demo, devices=new_devices,
+                          solar=new_solar, ev_charging=new_ev)
         cfg_path = getattr(state, "_cfg_path", None)
         if cfg_path:
             save_config(new_cfg, cfg_path)

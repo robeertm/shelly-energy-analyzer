@@ -109,6 +109,11 @@ def sync_one_device(
         # Create demo CSV history on-demand (lightweight) so Plots/Export work.
         try:
             ensure_demo_csv(storage, [device], cfg.demo, days=fallback_last_days)
+            # The supply side (PV + battery) belongs to the house, not to one
+            # meter, so it is written once — guarded by has_usable_data, so the
+            # other demo devices passing through here do not redo it.
+            from shelly_analyzer.services.demo import ensure_demo_supply
+            ensure_demo_supply(storage, cfg.demo, days=fallback_last_days)
         except Exception:
             # Even if CSV generation fails, we still allow the app to run in Live demo mode.
             pass
