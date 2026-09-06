@@ -103,6 +103,27 @@ def _list_devices(cfg) -> Dict:
     return {"ok": True, "data": {"devices": devices}}
 
 
+def _epoch(v) -> int:
+    """Seconds since the epoch from whatever the query returned.
+
+    ``query_samples`` hands back a pandas ``Timestamp`` for the time column,
+    which ``int()`` refuses outright — the same coercion the battery status
+    needed in 16.44.1. Masked until 16.78.0 because the route passed the wrong
+    object and these handlers never ran at all.
+    """
+    if v is None:
+        return 0
+    if hasattr(v, "timestamp"):
+        try:
+            return int(v.timestamp())
+        except (ValueError, OSError):
+            return 0
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _get_samples(db, key: str, params: Dict) -> Dict:
     start = int(params.get("start", 0) or 0)
     end = int(params.get("end", 0) or 0)
@@ -121,7 +142,7 @@ def _get_samples(db, key: str, params: Dict) -> Dict:
         df = df.head(limit)
         samples = []
         for _, row in df.iterrows():
-            s = {"timestamp": int(row.get("timestamp", 0))}
+            s = {"timestamp": _epoch(row.get("timestamp"))}
             for col in ["total_power", "energy_kwh", "a_act_power", "b_act_power", "c_act_power",
                         "a_voltage", "b_voltage", "c_voltage", "a_current", "b_current", "c_current"]:
                 val = row.get(col)
@@ -151,7 +172,7 @@ def _get_hourly(db, key: str, params: Dict) -> Dict:
         hourly = []
         for _, row in df.iterrows():
             hourly.append({
-                "hour_ts": int(row.get("hour_ts", 0)),
+                "hour_ts": _epoch(row.get("hour_ts")),
                 "kwh": round(float(row.get("kwh", 0) or 0), 4),
                 "avg_power_w": round(float(row.get("avg_power_w", 0) or 0), 1),
                 "max_power_w": round(float(row.get("max_power_w", 0) or 0), 1),

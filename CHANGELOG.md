@@ -54,14 +54,16 @@
   `/co2` never worked.** The route handed the v1 handlers the `Storage`
   wrapper where they expect the database, so every data endpoint answered
   `'Storage' object has no attribute 'query_samples'`. Only `/devices`,
-  `/status` and `/health` responded, because they read configuration.
+  `/status` and `/health` responded, because they read configuration. Behind
+  that sat a second one the first had hidden: the sample and hourly handlers
+  put a pandas `Timestamp` into `int()`, which refuses it outright.
 - **The charging-session detection cache handed out its own objects.** Copying
   the list was not enough once anything writes to a session: the first caller's
   prices were baked into the cache, so switching the pricing mode back to flat
   changed nothing until the cache expired.
 
 ### Notes
-- 37 new tests (162 total): the attribution for every way a car can be fed —
+- 38 new tests (163 total): the attribution for every way a car can be fed —
   sun, battery, both, partly grid, PV going into the battery, exported PV, a
   tenant on the same bus — plus the whole endpoint on a real SQLite house, and
   the tab's JavaScript *executed* (not merely parsed) against a real payload.
