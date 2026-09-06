@@ -427,7 +427,6 @@ Browser-based 12-step wizard at `/setup` (auto-redirected on first launch when n
   - **Forecast** — consumption forecast with history + prediction bar chart, weekday and hourly profile charts (Canvas-based, matching CO2 tab style)
   - **Standby** — standby cost summary, per-device cards with risk badges, cost bar chart and 24h load profile (Canvas-based)
   - **Energy Flow** — summary cards + per-device consumption breakdown chart with period selector
-  - **EV Chargers** — nearby EV charging stations via OpenChargeMap API with radius, power, and plug filters
   - **NILM** — ML pattern statistics: top-10 patterns with sparkline plots, hourly activity heatmap, category donut, per-device breakdown, transitions timeline, appliance signature database
   - **Export** — PDF summaries, reports, invoices, Excel, ZIP bundles; inline preview
   - **Schedule** — smart time-based scheduling for Shelly switches

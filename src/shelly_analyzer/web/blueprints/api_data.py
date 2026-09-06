@@ -327,22 +327,6 @@ def api_nilm_detail():
     return jsonify(payload)
 
 
-@bp.route("/api/ev_chargers")
-def api_ev_chargers():
-    try:
-        lat = float(request.args.get("lat", 0))
-        lon = float(request.args.get("lon", 0))
-        radius = max(100, min(10000, int(request.args.get("radius", 500))))
-        api_key = str(request.args.get("key", "") or "")
-        min_kw = float(request.args.get("min_kw", 0) or 0)
-        plug = str(request.args.get("plug", "") or "")
-        from shelly_analyzer.services.ev_charger import fetch_ev_chargers
-        payload = fetch_ev_chargers(lat, lon, radius_m=radius, api_key=api_key, min_kw=min_kw, plug_filter=plug)
-    except Exception as e:
-        payload = {"ok": False, "error": str(e), "stations": []}
-    return jsonify(payload)
-
-
 @bp.route("/api/traffic")
 def api_traffic():
     try:

@@ -1014,10 +1014,10 @@ def test_no_pane_is_rebuilt_while_its_data_stands_still():
     panes = re.findall(r"^\s*(\w+):", timed.group(1), re.M)
     assert len(panes) >= 8, panes
     gated = set(re.findall(r"_tabSkipRender\('(\w+)'", src))
-    # ev is refreshed only when coordinates exist, so it needs no payload gate
-    missing = [p for p in panes if p not in gated and p not in ("ev",)]
+    # v16.77.0: the EV-charger tab (and its coordinate guard) is gone; every
+    # remaining timed tab must gate on the payload, no exceptions.
+    missing = [p for p in panes if p not in gated]
     assert not missing, "these tabs rebuild unconditionally: %s" % missing
-    assert "if (_evLastCoords) loadEv();" in src, "the EV tab still repaints without data"
     print("OK  no timed tab rebuilds itself while its numbers stand still")
 
 
