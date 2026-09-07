@@ -1553,12 +1553,20 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     def _party_from_raw(obj: Any, defaults: BillingParty) -> BillingParty:
         if not isinstance(obj, dict):
             return defaults
-        lines = obj.get("address_lines")
-        if not isinstance(lines, list):
-            addr_str = obj.get("address", "")
-            if isinstance(addr_str, str) and addr_str.strip():
-                lines = [ln.strip() for ln in addr_str.split("\n") if ln.strip()]
-            else:
+        # The settings page edits ONE textarea, `address`; the model stores
+        # `address_lines`. The JSON the page merges into carries both, because
+        # the dump derives `address` from the lines. So after any save the
+        # object holds the NEW `address` next to the OLD `address_lines` —
+        # and reading the list first meant the typed text was silently thrown
+        # away and the previous address came back ("die verschwindet immer").
+        # Whenever an `address` string is present it is therefore the one the
+        # user last saw and edited, and it wins. This round-trips exactly:
+        # the dump joins the lines with "\n" and this splits on "\n" again.
+        if isinstance(obj.get("address"), str):
+            lines = [ln.strip() for ln in obj["address"].split("\n") if ln.strip()]
+        else:
+            lines = obj.get("address_lines")
+            if not isinstance(lines, list):
                 lines = defaults.address_lines
         return BillingParty(
             name=str(obj.get("name", defaults.name)),

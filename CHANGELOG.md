@@ -1,5 +1,33 @@
 # Changelog
 
+## 16.82.1
+### Fixed
+- **The invoice address could be typed but never saved.** Settings → Invoicing →
+  *Issuer address*: enter an address, save, and the previous value comes back.
+  It had never worked — on a fresh installation the field silently kept the
+  built-in example address.
+
+  The settings page edits one textarea, `billing.issuer.address`; the config
+  model stores `address_lines`, a list. The settings dump emits **both**, and
+  `PUT /api/settings` deep-merges the incoming keys into that dump — so after a
+  save the object holds the new `address` beside the **old** `address_lines`.
+  The parser read the list first and only fell back to the string when the list
+  was absent, which after the first dump it never is. The typed text reached
+  `config.json` and was dropped on the reload that follows every save.
+
+  An `address` string, when present, is now the authoritative one: it is what
+  the user last saw in the field and edited. This round-trips exactly — the
+  dump joins the lines with a newline and the parser splits on the same
+  newline — and a config written by hand with only `address_lines` still works.
+  The same applied to the customer address and is fixed with it.
+
+### Tests
+- `tests/test_billing_address_roundtrip.py` — five tests through the real
+  save/load pair and the real settings dump, not a re-implementation of the
+  merge: a typed address survives the first save and a second edit, three lines
+  stay three lines, saving an unrelated field does not wipe the address, and a
+  hand-written `address_lines` config is still honoured.
+
 ## 16.82.0
 ### Changed
 - **The EV log's month presets are now whole calendar months, and the running
