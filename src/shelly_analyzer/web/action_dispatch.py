@@ -521,11 +521,31 @@ class ActionDispatcher:
             return (0, 0)
         if not pts:
             return (0, 0)
+        # Only the *charging* tail may bust the cache.  The live store ticks
+        # every ~2 s whether or not a car is plugged in — an idle wallbox
+        # reports 0 W, and counting those points moved the fingerprint on every
+        # single call, so the response cache never hit once.  Measured on a live
+        # installation: /api/ev_sessions stayed at 9.92 / 3.07 / 3.53 s over
+        # three consecutive requests, while every other cached endpoint dropped
+        # to under 0.15 s on its second.  A sample below the detection threshold
+        # can neither start nor extend a session, so ignoring it changes no
+        # result — it only stops the cache from being thrown away for nothing.
+        schwelle = 1500.0
         try:
-            last_ts = max(int(p.get("ts") or 0) for p in pts)
+            schwelle = float(getattr(self.cfg.ev_charging,
+                                     "detection_threshold_w", 1500.0) or 1500.0)
         except Exception:
-            last_ts = 0
-        return (len(pts), last_ts)
+            pass
+        laden = []
+        for p in pts:
+            try:
+                if float(p.get("power_total_w") or 0.0) >= schwelle:
+                    laden.append(int(p.get("ts") or 0))
+            except Exception:
+                continue
+        if not laden:
+            return (0, 0)
+        return (len(laden), max(laden))
 
     def _resolve_customer(self, device_key: str) -> Dict[str, object]:
         """Return customer data for an invoice — tenant data if available, else billing.customer fallback."""
