@@ -435,7 +435,9 @@ class ActionDispatcher:
             return tail_df
         return pd.concat([df, tail_df], ignore_index=True)
 
-    def _ev_read_window_df(self, dev_key: str, days: int) -> "pd.DataFrame":
+    def _ev_read_window_df(self, dev_key: str, days: int,
+                           start_ts: "int | None" = None,
+                           end_ts: "int | None" = None) -> "pd.DataFrame":
         """Cached raw-window read for the EV log.
 
         Returns the persisted samples for ``dev_key`` over the last ``days``
@@ -452,7 +454,10 @@ class ActionDispatcher:
             db_max = self.storage.db.max_timestamp(dev_key)
         except Exception:
             db_max = None
-        key = (dev_key, int(days))
+        # A rolling window is keyed by its LENGTH, not by its start: the start
+        # moves every second, which would make the cache miss on every call.
+        # An explicit range is fixed, so it is keyed by its own bounds.
+        key = (dev_key, int(days)) if start_ts is None else (dev_key, int(start_ts), int(end_ts or 0))
         now = _t.time()
         with self._ev_window_lock:
             cached = self._ev_window_cache.get(key)
@@ -463,8 +468,12 @@ class ActionDispatcher:
             ):
                 return cached[2]
 
-        start_ts = int(now) - int(days) * 86400
-        df = self.storage.read_device_df(dev_key, start_ts=start_ts)
+        if start_ts is None:
+            start_ts = int(now) - int(days) * 86400
+            df = self.storage.read_device_df(dev_key, start_ts=start_ts)
+        else:
+            df = self.storage.read_device_df(dev_key, start_ts=int(start_ts),
+                                             end_ts=int(end_ts) if end_ts else None)
         with self._ev_window_lock:
             self._ev_window_cache[key] = (db_max, now, df)
         return df
@@ -5226,14 +5235,40 @@ class ActionDispatcher:
                 dev_key = str(getattr(self.cfg.ev_charging, "wallbox_device_key", "") or "")
                 if not dev_key:
                     return {"ok": True, "data": {"total_sessions": 0, "total_kwh": 0, "total_cost": 0, "sessions": [], "window_days": 0}}
-                # Time window: default last 30 days; ?days=N overrides (capped 1..730).
-                # 30d keeps the DB query under ~300 ms on Pi; longer windows are
-                # available via the UI's filter bar (7d / 30d / 90d / 1y).
+                # Time window.  Two shapes, because they cache differently:
+                #   • rolling  — ?days=N (default 30, capped 1..730). The filter
+                #     bar's presets (week / month / 3 months / 6 months) use this.
+                #     Keyed by LENGTH, so the cache survives the start moving.
+                #   • explicit — ?start=YYYY-MM-DD&end=YYYY-MM-DD, the bar's own
+                #     range. Fixed bounds, so it is keyed by the bounds.
+                # The explicit form wins when both dates parse; a half-filled or
+                # reversed range falls back to the rolling window rather than
+                # returning nothing.
                 try:
                     days = int((params or {}).get("days", 30))
                 except (TypeError, ValueError):
                     days = 30
                 days = max(1, min(days, 730))
+
+                def _tag_zu_ts(text, ende=False):
+                    """'YYYY-MM-DD' -> Epoche (lokale Mitternacht; Ende = Tagesende)."""
+                    import datetime as _dt
+                    try:
+                        d = _dt.datetime.strptime(str(text).strip()[:10], "%Y-%m-%d")
+                    except (TypeError, ValueError):
+                        return None
+                    if ende:
+                        d = d + _dt.timedelta(days=1)
+                    return int(d.timestamp())
+
+                win_start = _tag_zu_ts((params or {}).get("start"))
+                win_end = _tag_zu_ts((params or {}).get("end"), ende=True)
+                if win_start is None or win_end is None or win_end <= win_start:
+                    win_start = win_end = None
+                else:
+                    # Der gemeldete Zeitraum bleibt in TAGEN lesbar, damit jede
+                    # bestehende Anzeige ("letzte N Tage") weiter stimmt.
+                    days = max(1, min(730, int(round((win_end - win_start) / 86400.0))))
 
                 # --- Full-response cache -------------------------------------
                 # Idle re-loads (tab switches, quiet auto-refresh, toggling the
@@ -5268,7 +5303,7 @@ class ActionDispatcher:
                     float(getattr(getattr(self.cfg, "solar", None),
                                   "feed_in_tariff_eur_per_kwh", 0.0) or 0.0),
                 )
-                _resp_key = (dev_key, days)
+                _resp_key = (dev_key, days, win_start, win_end)
                 _resp_token = (_db_max, self._ev_live_fingerprint(dev_key), _del_fp, _cfg_fp)
                 with self._ev_resp_lock:
                     _cached = self._ev_resp_cache.get(_resp_key)
@@ -5279,7 +5314,7 @@ class ActionDispatcher:
                     ):
                         return {"ok": True, "data": _cached[2]}
 
-                df_ev = self._ev_read_window_df(dev_key, days)
+                df_ev = self._ev_read_window_df(dev_key, days, win_start, win_end)
                 df_ev = self._ev_extend_with_live(df_ev, dev_key)
                 sessions = detect_charging_sessions(
                     df_ev, dev_key,
@@ -5462,6 +5497,12 @@ class ActionDispatcher:
                     "avg_kwh_per_session": summary_ev.avg_kwh_per_session,
                     "avg_duration_min": summary_ev.avg_duration_min,
                     "window_days": days,
+                    # Only set for an explicit range, so the UI can tell a custom
+                    # period from a rolling one without guessing from the dates.
+                    "window_start": (None if win_start is None else
+                                     _time.strftime("%Y-%m-%d", _time.localtime(win_start))),
+                    "window_end": (None if win_end is None else
+                                   _time.strftime("%Y-%m-%d", _time.localtime(win_end - 1))),
                     "grouping_enabled": _grouping_on,
                     "charge_count": len(charges_payload) if charges_payload is not None else None,
                     "charges": charges_payload,

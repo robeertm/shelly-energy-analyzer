@@ -9954,11 +9954,20 @@ _loadLsSettings();
 
   /* ── EV Log ── */
   let _evWindowDays = 30;
+  // Custom range (both set = explicit period, presets cleared). Mirrors the
+  // tenants tab: preset pills first, an own From/To underneath.
+  let _evStart = '';
+  let _evEnd = '';
+  function _evQuery() {{
+    return (_evStart && _evEnd)
+      ? ('start=' + encodeURIComponent(_evStart) + '&end=' + encodeURIComponent(_evEnd))
+      : ('days=' + _evWindowDays);
+  }}
   async function loadEvLog() {{
     const el = document.getElementById('ev-content');
     _spinner(el, _quietRefresh, '<p class="loading-msg">Loading…</p>');
     try {{
-      const r = await fetch('/api/ev_sessions?days=' + _evWindowDays);
+      const r = await fetch('/api/ev_sessions?' + _evQuery());
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
@@ -9969,8 +9978,26 @@ _loadLsSettings();
   }}
   window.evSetWindow = function(days, btn) {{
     _evWindowDays = days;
+    _evStart = ''; _evEnd = '';          // a preset always leaves the custom range
     const bar = btn && btn.parentElement;
     if (bar) bar.querySelectorAll('button').forEach(function(b) {{ b.classList.toggle('active', b === btn); }});
+    loadEvLog();
+  }};
+  // Show/hide the From/To row. Kept in the DOM (not re-rendered) so the two
+  // date fields never lose what the user has typed while the tab reloads.
+  window.evToggleCustom = function(btn) {{
+    const row = document.getElementById('ev-custom-row');
+    if (!row) return;
+    const auf = row.style.display === 'none' || !row.style.display;
+    row.style.display = auf ? 'flex' : 'none';
+    if (btn) btn.classList.toggle('active', auf && !!(_evStart && _evEnd));
+  }};
+  window.evApplyCustom = function() {{
+    const a = document.getElementById('ev-cust-from');
+    const b = document.getElementById('ev-cust-to');
+    if (!a || !b || !a.value || !b.value) return;
+    if (a.value > b.value) {{ const h = a.value; a.value = b.value; b.value = h; }}
+    _evStart = a.value; _evEnd = b.value;
     loadEvLog();
   }};
   function _evHeatmap(sessions, days) {{
@@ -10442,16 +10469,33 @@ _loadLsSettings();
     const win = data.window_days || _evWindowDays;
     const sessions = data.sessions || [];
     const winBtn = function(d, label) {{
-      const active = d === _evWindowDays ? ' active' : '';
+      const active = (!(data.window_start && data.window_end) && d === _evWindowDays) ? ' active' : '';
       return '<button class="filter-btn' + active + '" onclick="evSetWindow(' + d + ',this)">' + label + '</button>';
     }};
-    let html = '<div class="filter-bar" style="margin-bottom:10px">' +
-      winBtn(7,'7d') + winBtn(30,'30d') + winBtn(90,'90d') + winBtn(365,'1y') +
+    const eigen = !!(data.window_start && data.window_end);
+    let html = '<div class="filter-bar" style="margin-bottom:6px">' +
+      winBtn(7,   t('web.ev.win_week',     'Week')) +
+      winBtn(30,  t('web.ev.win_month',    'Month')) +
+      winBtn(90,  t('web.ev.win_3months',  '3 months')) +
+      winBtn(180, t('web.ev.win_6months',  '6 months')) +
+      '<button class="filter-btn' + (eigen ? ' active' : '') + '" onclick="evToggleCustom(this)">' +
+        esc(t('web.ev.win_custom', 'Custom')) + '</button>' +
+    '</div>' +
+    '<div id="ev-custom-row" style="display:' + (eigen ? 'flex' : 'none') +
+      ';gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);margin-bottom:10px">' +
+      '<label>' + esc(t('web.ev.from', 'From')) +
+        ' <input type="date" id="ev-cust-from" value="' + esc(data.window_start || '') + '"></label>' +
+      '<label>' + esc(t('web.ev.to', 'To')) +
+        ' <input type="date" id="ev-cust-to" value="' + esc(data.window_end || '') + '"></label>' +
+      '<button class="btn small" onclick="evApplyCustom()">' +
+        esc(t('web.ev.apply', 'Apply')) + '</button>' +
     '</div>';
 
     html += '<div class="card" style="margin-bottom:10px"><div class="card-title">🚗 ' +
       t('web.ev.overview', 'Charging overview') + ' · ' +
-      t('web.ev.last_n_days', 'last {n} days', {{n: win}}) + '</div>' +
+      ((data.window_start && data.window_end)
+        ? (esc(data.window_start) + ' – ' + esc(data.window_end))
+        : t('web.ev.last_n_days', 'last {n} days', {{n: win}})) + '</div>' +
       '<div class="metric-grid">' +
       metricCardHtml(t('web.ev.sessions', 'Sessions'), String(data.total_sessions || 0)) +
       metricCardHtml(t('web.ev.total_energy', 'Total energy'), (data.total_kwh || 0).toFixed(1) + ' kWh') +
