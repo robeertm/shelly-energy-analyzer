@@ -22,6 +22,28 @@
 
   All eight new labels are translated in all nine shipped languages.
 
+### Fixed
+- **The EV log's response cache never hit once, so the tab recomputed from
+  scratch on every single request.** Measured on a live installation:
+  `/api/ev_sessions` took **9.92 / 3.07 / 3.53 s** over three consecutive
+  requests, while `/api/goals` went 3.32 s → **0.05 s** on its second and
+  `/api/battery` 1.70 s → 0.15 s. On the dashboard's serial tab prefetch the
+  EV log alone was about a third of the whole wait — and on a phone, where the
+  page is dropped from memory constantly, that wait is paid again on every
+  visit.
+
+  The cache is keyed on a freshness token that folds in a fingerprint of the
+  wallbox's live-store tail, so that a charge in progress always recomputes.
+  But the live store is fed by the poller, not by the car: an idle wallbox is
+  still sampled every ~2 seconds and reports 0 W. Counting those points moved
+  the token on every call, and the cache was thrown away each time for a
+  reading that cannot change any result.
+
+  The fingerprint now counts only samples at or above the configured detection
+  threshold — the same threshold the session detector itself uses, so both
+  agree on what "charging" means. A sample below it can neither start nor
+  extend a session, so no output changes; the cache simply survives.
+
 ## 16.80.1
 ### Fixed
 - **The Aurora "right now" panel counted the grid meter as if it were an

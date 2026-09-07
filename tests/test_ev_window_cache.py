@@ -102,10 +102,51 @@ def test_live_fingerprint_changes_with_new_points():
     assert fp2 == (2, 102)
 
 
-def test_live_fingerprint_stable_when_idle():
+def test_live_fingerprint_deterministic():
+    """Same snapshot twice = same fingerprint.
+
+    NB this used to be called ``..._stable_when_idle`` while feeding it a
+    7000 W point and never changing the snapshot — it proved determinism, not
+    idleness, and that is precisely why the bug below survived it.
+    """
     snap = {"wb": [{"ts": 100, "power_total_w": 7000}]}
     obj = _make(max_ts=1, live_snap=snap)
     assert obj._ev_live_fingerprint("wb") == obj._ev_live_fingerprint("wb")
+
+
+def test_live_fingerprint_ignores_idle_ticks():
+    """🔴 The regression: an idle wallbox still ticks every ~2 s.
+
+    The live store is fed by the poller, not by the car. With no car plugged
+    in the wallbox reports 0 W — and the old fingerprint counted those points,
+    so the response-cache token differed on every single call and the cache
+    never hit once. Measured against a live installation before the fix:
+    /api/ev_sessions took 9.92 / 3.07 / 3.53 s over three consecutive
+    requests, while /api/goals went 3.32 s → 0.05 s on its second.
+    """
+    snap = {"wb": [{"ts": 100, "power_total_w": 0.0}]}
+    obj = _make(max_ts=1, live_snap=snap)
+    vorher = obj._ev_live_fingerprint("wb")
+    for i in range(1, 6):                       # zehn Sekunden Leerlauf-Ticken
+        snap["wb"].append({"ts": 100 + 2 * i, "power_total_w": 0.0})
+        assert obj._ev_live_fingerprint("wb") == vorher, (
+            "Leerlauf-Punkt hat den Cache-Token verändert — der Cache trifft wieder nie")
+    # ...und sobald wirklich geladen wird, MUSS er sich ändern.
+    snap["wb"].append({"ts": 120, "power_total_w": 7000.0})
+    assert obj._ev_live_fingerprint("wb") != vorher, "Ladepunkt bustet den Cache nicht"
+
+
+def test_live_fingerprint_uses_the_configured_threshold():
+    """Langsames AC-Laden ist Laden — die Schwelle kommt aus der Konfiguration,
+    damit Kennung und Erkennung denselben Begriff von „lädt" benutzen."""
+    import types as _types
+    snap = {"wb": [{"ts": 100, "power_total_w": 1450.0}]}
+    obj = _make(max_ts=1, live_snap=snap)
+    # ohne Konfiguration: Rückfall 1500 W -> 1450 W gilt als Leerlauf
+    assert obj._ev_live_fingerprint("wb") == (0, 0)
+    obj.cfg = _types.SimpleNamespace(
+        ev_charging=_types.SimpleNamespace(detection_threshold_w=1400.0))
+    assert obj._ev_live_fingerprint("wb") == (1, 100)
 
 
 def test_live_fingerprint_no_store():
