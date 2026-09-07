@@ -9953,15 +9953,56 @@ _loadLsSettings();
   }}
 
   /* ── EV Log ── */
-  let _evWindowDays = 30;
-  // Custom range (both set = explicit period, presets cleared). Mirrors the
-  // tenants tab: preset pills first, an own From/To underneath.
+  let _evWindowDays = 7;               // only the week preset is still a rolling window
+  let _evPreset = 'month_now';         // '' = the user's own From/To range
   let _evStart = '';
   let _evEnd = '';
+  function _evIso(d) {{
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+           '-' + String(d.getDate()).padStart(2, '0');
+  }}
+  // Month presets are WHOLE calendar months and never reach into the running
+  // one — "letzter Monat" means the month before this one, not the last 30
+  // days. `new Date(y, m, 0)` is day 0 of the following month, i.e. the last
+  // day of month m-1; same construction the tenants tab uses for its invoice
+  // periods (_tenantsLastFullPeriod), so both agree on what a full month is.
+  function _evPresetRange(name) {{
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth();
+    const letzterVollerMonat = new Date(y, m, 0);
+    if (name === 'month_now')  return {{ start: _evIso(new Date(y, m, 1)),     end: _evIso(now) }};
+    if (name === 'month_prev') return {{ start: _evIso(new Date(y, m - 1, 1)), end: _evIso(letzterVollerMonat) }};
+    if (name === 'm3')         return {{ start: _evIso(new Date(y, m - 3, 1)), end: _evIso(letzterVollerMonat) }};
+    if (name === 'm6')         return {{ start: _evIso(new Date(y, m - 6, 1)), end: _evIso(letzterVollerMonat) }};
+    return null;                       // 'week' rolls, '' is the custom range
+  }}
   function _evQuery() {{
-    return (_evStart && _evEnd)
-      ? ('start=' + encodeURIComponent(_evStart) + '&end=' + encodeURIComponent(_evEnd))
+    if (_evPreset === 'week') return 'days=' + _evWindowDays;
+    const r = _evPreset ? _evPresetRange(_evPreset) : null;
+    const a = r ? r.start : _evStart, b = r ? r.end : _evEnd;
+    return (a && b)
+      ? ('start=' + encodeURIComponent(a) + '&end=' + encodeURIComponent(b))
       : ('days=' + _evWindowDays);
+  }}
+  // Name the period the way a person would: a whole month is "September 2026",
+  // a run of whole months "June – August 2026". Falls back to the two dates.
+  function _evPeriodLabel(data) {{
+    const a = data.window_start, b = data.window_end;
+    if (!a || !b) {{
+      return t('web.ev.last_n_days', 'last {{n}} days', {{n: data.window_days || _evWindowDays}});
+    }}
+    const da = new Date(a + 'T00:00:00'), db = new Date(b + 'T00:00:00');
+    const istMonatsanfang = da.getDate() === 1;
+    const istMonatsende = db.getDate() === new Date(db.getFullYear(), db.getMonth() + 1, 0).getDate();
+    if (istMonatsanfang && istMonatsende) {{
+      try {{
+        const opt = {{ month: 'long', year: 'numeric' }};
+        const sa = da.toLocaleDateString(_locale(), opt);
+        const sb = db.toLocaleDateString(_locale(), opt);
+        return (sa === sb) ? sa : (sa + ' – ' + sb);
+      }} catch (e) {{}}
+    }}
+    return a + ' – ' + b;
   }}
   async function loadEvLog() {{
     const el = document.getElementById('ev-content');
@@ -9976,11 +10017,13 @@ _loadLsSettings();
       el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
     }}
   }}
-  window.evSetWindow = function(days, btn) {{
-    _evWindowDays = days;
+  window.evSetPreset = function(name, btn) {{
+    _evPreset = name;
     _evStart = ''; _evEnd = '';          // a preset always leaves the custom range
     const bar = btn && btn.parentElement;
     if (bar) bar.querySelectorAll('button').forEach(function(b) {{ b.classList.toggle('active', b === btn); }});
+    const row = document.getElementById('ev-custom-row');
+    if (row) row.style.display = 'none';
     loadEvLog();
   }};
   // Show/hide the From/To row. Kept in the DOM (not re-rendered) so the two
@@ -9998,10 +10041,15 @@ _loadLsSettings();
     if (!a || !b || !a.value || !b.value) return;
     if (a.value > b.value) {{ const h = a.value; a.value = b.value; b.value = h; }}
     _evStart = a.value; _evEnd = b.value;
+    _evPreset = '';                      // von jetzt an gilt der eigene Zeitraum
     loadEvLog();
   }};
-  function _evHeatmap(sessions, days) {{
-    const today = new Date(); today.setHours(0,0,0,0);
+  function _evHeatmap(sessions, days, endeIso) {{
+    // Am ENDE des gewaehlten Zeitraums verankern, nicht an heute: mit
+    // Kalendermonaten kann das Fenster komplett in der Vergangenheit liegen,
+    // und ein von heute rueckwaerts gezaehltes Gitter waere dann leer.
+    const today = endeIso ? new Date(endeIso + 'T00:00:00') : new Date();
+    today.setHours(0,0,0,0);
     const byDay = {{}};
     let maxKwh = 0;
     sessions.forEach(function(se) {{
@@ -10019,7 +10067,9 @@ _loadLsSettings();
       const bg = kwh > 0
         ? 'rgba(76,175,80,' + (0.18 + ratio*0.72).toFixed(2) + ')'
         : 'rgba(255,255,255,0.04)';
-      const lbl = d.toLocaleDateString([], {{day:'2-digit', month:'2-digit'}}) + ': ' + kwh.toFixed(1) + ' kWh';
+      // _locale(): die Sprache der SEITE, nicht die des Browsers — im EV-Tab
+      // schon einmal auseinandergelaufen (zwei Uhrzeitformate in einer Karte).
+      const lbl = d.toLocaleDateString(_locale(), {{day:'2-digit', month:'2-digit'}}) + ': ' + kwh.toFixed(1) + ' kWh';
       cells.push('<div title="' + esc(lbl) + '" style="aspect-ratio:1;border-radius:4px;background:' + bg + ';border:1px solid var(--border)"></div>');
     }}
     return '<div style="display:grid;grid-template-columns:repeat(' + Math.min(days, 30) + ',1fr);gap:3px">' + cells.join('') + '</div>';
@@ -10468,16 +10518,18 @@ _loadLsSettings();
   function renderEvLog(data, el) {{
     const win = data.window_days || _evWindowDays;
     const sessions = data.sessions || [];
-    const winBtn = function(d, label) {{
-      const active = (!(data.window_start && data.window_end) && d === _evWindowDays) ? ' active' : '';
-      return '<button class="filter-btn' + active + '" onclick="evSetWindow(' + d + ',this)">' + label + '</button>';
+    const winBtn = function(name, label) {{
+      const active = (_evPreset === name) ? ' active' : '';
+      return '<button class="filter-btn' + active + '" onclick="evSetPreset(\\u0027' + name +
+             '\\u0027,this)">' + esc(label) + '</button>';
     }};
-    const eigen = !!(data.window_start && data.window_end);
+    const eigen = (_evPreset === '');
     let html = '<div class="filter-bar" style="margin-bottom:6px">' +
-      winBtn(7,   t('web.ev.win_week',     'Week')) +
-      winBtn(30,  t('web.ev.win_month',    'Month')) +
-      winBtn(90,  t('web.ev.win_3months',  '3 months')) +
-      winBtn(180, t('web.ev.win_6months',  '6 months')) +
+      winBtn('week',       t('web.ev.win_week',       'Week')) +
+      winBtn('month_now',  t('web.ev.win_month_now',  'This month')) +
+      winBtn('month_prev', t('web.ev.win_month_prev', 'Previous month')) +
+      winBtn('m3',         t('web.ev.win_3months',    '3 months')) +
+      winBtn('m6',         t('web.ev.win_6months',    '6 months')) +
       '<button class="filter-btn' + (eigen ? ' active' : '') + '" onclick="evToggleCustom(this)">' +
         esc(t('web.ev.win_custom', 'Custom')) + '</button>' +
     '</div>' +
@@ -10493,9 +10545,7 @@ _loadLsSettings();
 
     html += '<div class="card" style="margin-bottom:10px"><div class="card-title">🚗 ' +
       t('web.ev.overview', 'Charging overview') + ' · ' +
-      ((data.window_start && data.window_end)
-        ? (esc(data.window_start) + ' – ' + esc(data.window_end))
-        : t('web.ev.last_n_days', 'last {n} days', {{n: win}})) + '</div>' +
+      esc(_evPeriodLabel(data)) + '</div>' +
       '<div class="metric-grid">' +
       metricCardHtml(t('web.ev.sessions', 'Sessions'), String(data.total_sessions || 0)) +
       metricCardHtml(t('web.ev.total_energy', 'Total energy'), (data.total_kwh || 0).toFixed(1) + ' kWh') +
@@ -10593,10 +10643,19 @@ _loadLsSettings();
     }}
 
     const heatDays = Math.min(30, win);
+    // Deckt das Gitter den ganzen Zeitraum ab, tragt es dessen Namen; deckt es
+    // nur dessen Ende ab (Fenster > 30 Tage), nennt es die zwei Tage ehrlich.
+    let heatLabel;
+    if (heatDays >= win) {{
+      heatLabel = _evPeriodLabel(data);
+    }} else {{
+      const hE = data.window_end ? new Date(data.window_end + 'T00:00:00') : new Date();
+      const hS = new Date(hE.getTime() - (heatDays - 1) * 86400000);
+      heatLabel = _evIso(hS) + ' – ' + _evIso(hE);
+    }}
     html += '<div class="card" style="margin-bottom:10px"><div class="card-title">' +
-      t('web.ev.daily_energy', 'Daily energy') + ' · ' +
-      t('web.ev.last_n_days', 'last {n} days', {{n: heatDays}}) + '</div>' +
-      _evHeatmap(sessions, heatDays) +
+      t('web.ev.daily_energy', 'Daily energy') + ' · ' + esc(heatLabel) + '</div>' +
+      _evHeatmap(sessions, heatDays, data.window_end) +
     '</div>';
 
     // When grouping is on, show one entry per physical charge (fragmented

@@ -1,5 +1,37 @@
 # Changelog
 
+## 16.82.0
+### Changed
+- **The EV log's month presets are now whole calendar months, and the running
+  month has its own button.** "Month" was a rolling 30-day window: asked for
+  the last month on 7 September it answered 8 August – 7 September, a period
+  that belongs to neither month. The bar now reads **Week · This month ·
+  Previous month · 3 months · 6 months · Custom**, and every month preset
+  starts on a 1st and ends on a month's last day:
+
+  | Preset | on 7 September 2026 |
+  |---|---|
+  | This month | 1 – 7 September |
+  | Previous month | 1 – 31 August |
+  | 3 months | 1 June – 31 August |
+  | 6 months | 1 March – 31 August |
+
+  No preset reaches into the running month except the one named after it, so
+  two periods never show the same day twice. The ranges are built the same way
+  the tenants tab builds its invoice periods (`new Date(y, m, 0)` — day 0 of
+  the following month), so both sides agree on what a full month is.
+
+  The overview now names the period the way a person would — "September 2026",
+  or "June – August 2026" for a run of whole months — instead of "last N days".
+
+  The daily-energy heatmap is anchored on the **end of the selected period**
+  rather than on today. With a period that lies entirely in the past, a grid
+  counted back from today would have been empty. Its dates now also follow the
+  page's language rather than the browser's, like the rest of the tab.
+
+  Week and Custom are unchanged: the week is still a rolling 7 days, and a
+  custom range is still whatever two dates you pick.
+
 ## 16.81.0
 ### Changed
 - **The EV log's period bar now offers named periods instead of raw day

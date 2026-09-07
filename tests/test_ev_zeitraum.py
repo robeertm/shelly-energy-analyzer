@@ -124,34 +124,30 @@ def test_datumsauswertung():
     print("OK  Datumsauswertung: Ende ist Tagesende, Unsinn ergibt None")
 
 
-def test_oberflaeche_hat_die_fuenf_knoepfe():
-    """Die Leiste im gelieferten JS — der Nutzer sieht diesen Text, nicht die Absicht."""
+def test_oberflaeche_hat_den_eigenen_zeitraum():
+    """Nur das, was DIESE Datei besitzt: die Von/Bis-Felder und dass die alten
+    Tageszahl-Labels weg sind. Die Voreinstellungen selbst prüft
+    ``test_ev_monatsgrenzen.py`` — dort laufen sie wirklich."""
     pfad = os.path.join(os.path.dirname(__file__), "..", "src", "shelly_analyzer",
                         "services", "webdash.py")
     ganz = open(pfad, encoding="utf-8").read()
-    # Nur den EV-Log-Bereich ansehen: andere Tabs haben eigene Kurzlabels
-    # ('24h'/'7d'/'30d'/'all'), die hier nichts zu suchen haben.
     i = ganz.index("function renderEvLog(")
     js = ganz[i:i + 4000]
-    for schluessel in ("web.ev.win_week", "web.ev.win_month", "web.ev.win_3months",
-                       "web.ev.win_6months", "web.ev.win_custom"):
-        assert schluessel in js, schluessel
-    for tage in ("winBtn(7,", "winBtn(30,", "winBtn(90,", "winBtn(180,"):
-        assert tage in js, tage
-    assert "winBtn(365," not in js, "das alte 1y ist noch da"
     for alt_label in ("'7d'", "'30d'", "'90d'", "'1y'"):
         assert alt_label not in js, "altes Kurzlabel %s noch in der EV-Leiste" % alt_label
     assert "ev-cust-from" in js and "ev-cust-to" in js, "Datumsfelder fehlen"
+    assert "web.ev.win_custom" in js
     assert "evApplyCustom" in ganz and "evToggleCustom" in ganz
-    print("OK  Leiste: Woche/Monat/3/6 Monate + eigener Zeitraum, kein 7d/90d/1y mehr")
+    assert "evSetWindow" not in ganz, "der alte Tageszahl-Umschalter lebt noch"
+    print("OK  eigener Zeitraum: Von/Bis-Felder da, keine Tageszahl-Labels mehr")
 
 
 def test_uebersetzt_in_allen_sprachen():
     """🔴 Lehre aus früher: ein fehlender Schlüssel fällt still auf Englisch zurück."""
     from shelly_analyzer.i18n import t, LANGS
-    neu = ("web.ev.win_week", "web.ev.win_month", "web.ev.win_3months",
-           "web.ev.win_6months", "web.ev.win_custom", "web.ev.from",
-           "web.ev.to", "web.ev.apply")
+    neu = ("web.ev.win_week", "web.ev.win_month_now", "web.ev.win_month_prev",
+           "web.ev.win_3months", "web.ev.win_6months", "web.ev.win_custom",
+           "web.ev.from", "web.ev.to", "web.ev.apply")
     englisch = [t("en", k) for k in neu]
     for lang in LANGS:
         werte = [t(lang, k) for k in neu]
