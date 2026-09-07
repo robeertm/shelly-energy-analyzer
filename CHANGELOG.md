@@ -1,5 +1,27 @@
 # Changelog
 
+## 16.81.0
+### Changed
+- **The EV log's period bar now offers named periods instead of raw day
+  counts, and lets you pick your own range.** It read `7d · 30d · 90d · 1y`;
+  it now reads **Week · Month · 3 months · 6 months · Custom**. "Custom"
+  reveals a From/To pair of date fields — the same shape the tenants tab
+  already uses for its invoice period — and the overview headline then names
+  the two dates instead of saying "last N days".
+
+  `/api/ev_sessions` accepts `?start=YYYY-MM-DD&end=YYYY-MM-DD` alongside the
+  existing `?days=N`, and reports the resolved range back as `window_start` /
+  `window_end` so the page can tell a chosen period from a rolling one. A
+  half-filled, reversed or unparsable range falls back to the rolling window
+  rather than returning nothing. The end date is inclusive.
+
+  The two window shapes cache differently and are keyed accordingly: a rolling
+  window moves its start every second, so it is keyed by its *length*; an
+  explicit range has fixed bounds and is keyed by those. Keying both the same
+  way would have served one window's data for the other.
+
+  All eight new labels are translated in all nine shipped languages.
+
 ## 16.80.1
 ### Fixed
 - **The Aurora "right now" panel counted the grid meter as if it were an
