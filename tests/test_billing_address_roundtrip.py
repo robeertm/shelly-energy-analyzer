@@ -65,8 +65,8 @@ def test_a_typed_address_survives_the_save():
     print("OK  erste Eingabe kommt an")
 
     # ...und jetzt das Entscheidende: ein ZWEITES Mal ändern.
-    cfg = _speichern_wie_die_oberflaeche(p, {"billing": {"issuer": {"address": "Hauptstraße 5\n01099 Dresden"}}})
-    assert cfg.billing.issuer.address_lines == ["Hauptstraße 5", "01099 Dresden"], \
+    cfg = _speichern_wie_die_oberflaeche(p, {"billing": {"issuer": {"address": "Other Road 2\n54321 Other Town"}}})
+    assert cfg.billing.issuer.address_lines == ["Other Road 2", "54321 Other Town"], \
         ("die zweite Eingabe wurde verworfen: %r" % (cfg.billing.issuer.address_lines,))
     print("OK  Änderung einer bestehenden Adresse kommt an")
 
