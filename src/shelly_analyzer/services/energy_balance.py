@@ -163,6 +163,51 @@ def instantaneous_solar_share(pv_w: float, grid_w: float,
     return max(0.0, min(1.0, export / tl))
 
 
+def household_solar_share(pv_w: float, grid_w: float, batt_w: float):
+    """Fraction (0..1) of the household's CURRENT draw served directly by PV.
+
+    A different question from :func:`instantaneous_solar_share`, which answers
+    it for a tenant circuit: a tenant is served last and never touches the
+    battery, so it is green only while the property EXPORTS. The household
+    itself is served first, so its share is genuine self-consumption and does
+    not depend on export at all.
+
+    Signs follow the house convention: grid ``+`` = import / ``-`` = export,
+    battery ``+`` = charging / ``-`` = discharging (see services/battery.py).
+
+    ``pv_direct`` is what the roof serves to the house right now — production
+    minus what leaves it (export) and what is put aside (battery charging).
+    The load it is measured against is that same PV plus the grid import and
+    the battery discharge, i.e. everything currently feeding the house.
+
+    Battery discharge counts towards the LOAD, never towards the solar share:
+    it is stored sunshine, not sunshine now, and the CO2 attribution keeps the
+    two apart for the same reason. Returns ``None`` when nothing is drawing —
+    a share of a zero load is not zero, it is undefined.
+    """
+    try:
+        pv = float(pv_w or 0.0)
+        grid = float(grid_w or 0.0)
+        batt = float(batt_w or 0.0)
+    except (TypeError, ValueError):
+        return None
+    # A meter that reports NaN must not turn into `NaN` in the JSON response —
+    # strict parsers reject that outright, and the card would rather show
+    # nothing than a broken payload.
+    if not all(v == v for v in (pv, grid, batt)):
+        return None
+    pv = max(0.0, pv)
+    export = max(0.0, -grid)
+    imported = max(0.0, grid)
+    charging = max(0.0, batt)
+    discharging = max(0.0, -batt)
+    pv_direct = max(0.0, pv - export - charging)
+    load = pv_direct + imported + discharging
+    if load <= 1e-9:
+        return None
+    return max(0.0, min(1.0, pv_direct / load))
+
+
 def _tenant_key_map(cfg) -> tuple:
     """Return (tenant_keys, key_to_tenant_name)."""
     tenant_keys: List[str] = []

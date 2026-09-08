@@ -341,9 +341,11 @@ def api_state():
     # and never uses the battery, so the household's instantaneous solar share is
     # exactly the tenant's. Marks tenant tiles so the Live view can badge/tint them.
     _share_now = None
+    _share_home = None
     try:
         from shelly_analyzer.services.energy_balance import (
-            _resolve_source_keys, _tenant_key_map, instantaneous_solar_share)
+            _resolve_source_keys, _tenant_key_map, household_solar_share,
+            instantaneous_solar_share)
         _cfg2 = getattr(state, "cfg", None)
         if _cfg2 is not None:
             _gk, _pk, _bk = _resolve_source_keys(_cfg2)
@@ -353,6 +355,15 @@ def api_state():
                 if isinstance(_pts, list) and _pts:
                     return float(_pts[-1].get("power_total_w") or 0.0)
                 return 0.0
+
+            # The household's own share — what the Live header means by "solar
+            # share". Independent of whether a tenant exists at all: the house
+            # is served first, so its share is self-consumption, not surplus.
+            if _pk:
+                _share_home = household_solar_share(
+                    _latest_w(_pk), _latest_w(_gk), _latest_w(_bk))
+                if _share_home is not None:
+                    _share_home = round(_share_home, 4)
 
             _tset, _ = _tenant_key_map(_cfg2)
             _tset = set(_tset)
@@ -373,7 +384,14 @@ def api_state():
     except Exception:
         _share_now = None
 
-    return jsonify({"devices": devices_list, "solar_share_now": _share_now})
+    # Two different questions, two numbers — telling them apart is the whole
+    # point: `solar_share_now` is the TENANT's (surplus reaching a circuit that
+    # is served last), `solar_share_home` is the HOUSEHOLD's (own PV serving own
+    # load). The header used to show the first under the second's name, which
+    # read as "0 % solar" on a day the roof was producing over a kilowatt.
+    return jsonify({"devices": devices_list,
+                    "solar_share_now": _share_now,
+                    "solar_share_home": _share_home})
 
 
 @bp.route("/api/history")
