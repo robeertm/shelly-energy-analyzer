@@ -287,42 +287,41 @@ class LiveStateStore:
                     loaded += len(dq)
         return loaded
 
-    def snapshot(self) -> Dict[str, List[Dict[str, Any]]]:
-        # Hold lock only long enough to copy references — serialize outside.
-        with self._lock:
-            snap = {k: list(dq) for k, dq in self._by_device.items()}
-        out: Dict[str, List[Dict[str, Any]]] = {}
-        for k, arr in snap.items():
-            out[k] = [
-                {
-                    "ts": p.ts,
-                    # Ensure JSON-safe floats (no NaN/Inf) because browsers reject them.
-                    "power_total_w": _safe_f(p.power_total_w),
-                    "pa": _safe_f(p.pa),
-                    "pb": _safe_f(p.pb),
-                    "pc": _safe_f(p.pc),
-                    "va": _safe_f(p.va),
-                    "vb": _safe_f(p.vb),
-                    "vc": _safe_f(p.vc),
-                    "ia": _safe_f(p.ia),
-                    "ib": _safe_f(p.ib),
-                    "ic": _safe_f(p.ic),
-                    "q_total_var": _safe_f(p.q_total_var),
-                    "qa": _safe_f(p.qa),
-                    "qb": _safe_f(p.qb),
-                    "qc": _safe_f(p.qc),
-                    "cosphi_total": _safe_f(p.cosphi_total),
-                    "pfa": _safe_f(p.pfa),
-                    "pfb": _safe_f(p.pfb),
-                    "pfc": _safe_f(p.pfc),
-                    "kwh_today": _safe_f(p.kwh_today),
-                    "cost_today": _safe_f(p.cost_today),
-                    "freq_hz": _safe_f(p.freq_hz),
-                    "i_n": _safe_f(p.i_n),
-                    "soc_pct": _safe_f(p.soc_pct),
-                }
-                for p in arr
-            ]
+    def _point_dict(self, p) -> Dict[str, Any]:
+        """One live sample as the browser wants it. Twenty-two float conversions
+        and a dict — cheap once, and the reason a full snapshot is not."""
+        return {
+            "ts": p.ts,
+            # Ensure JSON-safe floats (no NaN/Inf) because browsers reject them.
+            "power_total_w": _safe_f(p.power_total_w),
+            "pa": _safe_f(p.pa),
+            "pb": _safe_f(p.pb),
+            "pc": _safe_f(p.pc),
+            "va": _safe_f(p.va),
+            "vb": _safe_f(p.vb),
+            "vc": _safe_f(p.vc),
+            "ia": _safe_f(p.ia),
+            "ib": _safe_f(p.ib),
+            "ic": _safe_f(p.ic),
+            "q_total_var": _safe_f(p.q_total_var),
+            "qa": _safe_f(p.qa),
+            "qb": _safe_f(p.qb),
+            "qc": _safe_f(p.qc),
+            "cosphi_total": _safe_f(p.cosphi_total),
+            "pfa": _safe_f(p.pfa),
+            "pfb": _safe_f(p.pfb),
+            "pfc": _safe_f(p.pfc),
+            "kwh_today": _safe_f(p.kwh_today),
+            "cost_today": _safe_f(p.cost_today),
+            "freq_hz": _safe_f(p.freq_hz),
+            "i_n": _safe_f(p.i_n),
+            "soc_pct": _safe_f(p.soc_pct),
+        }
+
+    def _attach_meta(self, snap, out) -> None:
+        """Appliance hints and switch states — both read only the tail of each
+        series, so they cost the same whether the caller took the whole history
+        or just the newest point."""
         # Appliance hints for the latest reading per device
         appliances: Dict[str, List[Dict[str, Any]]] = {}
         _ml_clusters = getattr(self, "_nilm_clusters", [])
@@ -370,6 +369,59 @@ class LiveStateStore:
                 switch_states[k] = sw
         if switch_states:
             out["_switch_states"] = switch_states
+
+    def snapshot(self, tail_full_s: Optional[int] = None,
+                 head_pts: int = 700) -> Dict[str, List[Dict[str, Any]]]:
+        """The history per device. Only /api/history needs this.
+
+        With ``tail_full_s`` set, the thinning /api/history wants happens HERE,
+        on the stored samples, instead of afterwards on the finished dicts: the
+        rule keeps roughly 700 points of the older part plus the last twenty
+        minutes in full, so on a two-hour window three quarters of the dicts
+        used to be built only to be dropped again on the next line.
+        """
+        # Hold lock only long enough to copy references — serialize outside.
+        with self._lock:
+            snap = {k: list(dq) for k, dq in self._by_device.items()}
+        out: Dict[str, List[Dict[str, Any]]] = {}
+        for k, arr in snap.items():
+            sel = arr
+            if tail_full_s is not None and len(arr) > head_pts * 2:
+                cut = int(getattr(arr[-1], "ts", 0) or 0) - int(tail_full_s)
+                head = [p for p in arr if int(getattr(p, "ts", 0) or 0) < cut]
+                tail = arr[len(head):]     # chronological → head is a prefix
+                if len(head) > head_pts:
+                    stride = (len(head) + head_pts - 1) // head_pts
+                    head = head[::stride]
+                sel = head + tail
+            out[k] = [self._point_dict(p) for p in sel]
+        self._attach_meta(snap, out)
+        return out
+
+    def latest_snapshot(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Only the newest sample per device — the shape /api/state needs.
+
+        🔴 /api/state is polled once a SECOND and reads nothing but
+        ``points[-1]``, yet it used to call snapshot() and so materialised every
+        point of every ring buffer into a 22-field dict each time. On a
+        multi-meter installation with a couple of hours of history that is on
+        the order of a million float conversions per request — for a 4 KB
+        answer. Measured on a running installation: 6 s per poll, which kept
+        the process permanently busy and pushed every other endpoint into the
+        queue behind it.
+
+        The tail of seven is what the appliance hints already median over; the
+        switch states need only the last one.
+        """
+        with self._lock:
+            snap = {}
+            for k, dq in self._by_device.items():
+                n = len(dq)
+                snap[k] = [dq[i] for i in range(max(0, n - 7), n)]
+        out: Dict[str, List[Dict[str, Any]]] = {
+            k: ([self._point_dict(arr[-1])] if arr else []) for k, arr in snap.items()
+        }
+        self._attach_meta(snap, out)
         return out
 
 
