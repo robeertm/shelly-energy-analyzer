@@ -4917,9 +4917,13 @@ var _INSIGHT_PROVIDERS = [
         if (d.parent && String(d.parent)) continue;      // sub-meters are inside their parent
         w += Number(d.power_w || 0);
       }}
-      var share = Number(st.solar_share_now);
+      /* The HOUSEHOLD's share, not the tenant's (that one has its own card
+         below). And it arrives as a fraction 0..1 — printing it straight gave
+         "1 % from the roof" for a house running three quarters on solar. */
+      var share = Number(st.solar_share_home);
       var sub = isFinite(share) && share > 0
-        ? t('insight.grid.share', '{{p}}% from the roof').replace('{{p}}', share.toFixed(0))
+        ? t('insight.grid.share', '{{p}}% from the roof')
+            .replace('{{p}}', Math.round(share * 100))
         : t('insight.grid.all', 'all from the grid');
       return {{ icon: '⚡', label: t('insight.grid.label', 'Drawing now'),
                value: Math.round(w) + ' W', sub: sub, tab: 'sankey',
@@ -4928,8 +4932,20 @@ var _INSIGHT_PROVIDERS = [
   /* Photovoltaics — only where a PV meter is actually configured. */
   {{ id: 'pv', build: function(c) {{
       var s = c.solar; if (!s || s.configured === false) return null;
-      var pv = 0, dv = s.devices || [], i;
-      for (i = 0; i < dv.length; i++) pv += Number(dv[i].pv_w || dv[i].power_w || 0);
+      /* 🔴 The instantaneous value comes from the LIVE meter, the same source
+         the PV strip below draws. It used to be summed out of /api/solar's
+         device list — which carries the house, the grid and the tenant, but
+         NOT the PV meter, and no power field on any of them. The sum was
+         therefore always 0, and the card sat next to a strip showing 1.2 kW. */
+      var pv = 0, i;
+      var lv = (c.state && c.state.devices) || [];
+      for (i = 0; i < lv.length; i++) {{
+        if (String(lv[i].flow_role || '') === 'pv') pv += Number(lv[i].power_w || 0);
+      }}
+      if (!pv) {{
+        var dv = s.devices || [];
+        for (i = 0; i < dv.length; i++) pv += Number(dv[i].pv_w || dv[i].power_w || 0);
+      }}
       var sk = c.sankey || {{}};
       var prod = Number(sk.pv_production_kwh || 0);
       if (!pv && !prod) return null;
@@ -4940,6 +4956,25 @@ var _INSIGHT_PROVIDERS = [
       return {{ icon: '☀️', label: t('insight.pv.label', 'PV now'),
                value: pv >= 1000 ? (pv / 1000).toFixed(2) + ' kW' : Math.round(pv) + ' W',
                sub: sub, tab: 'solar', tone: 'good' }};
+    }}}},
+  /* Tenant circuit — its own card, because its green share is a DIFFERENT
+     quantity from the household's: a tenant is served last and never touches
+     the battery, so it is only green while the property actually exports.
+     Shown only where a tenant is configured. */
+  {{ id: 'tenant', build: function(c) {{
+      var st = c.state; if (!st || !st.devices) return null;
+      var share = Number(st.solar_share_now);
+      var w = 0, seen = false, i;
+      for (i = 0; i < st.devices.length; i++) {{
+        if (st.devices[i].is_tenant) {{ seen = true; w += Number(st.devices[i].power_w || 0); }}
+      }}
+      if (!seen || !isFinite(share)) return null;
+      var pct = Math.round(share * 100);
+      return {{ icon: '🏠', label: t('insight.tenant.label', 'Tenant, solar'),
+               value: pct + ' %',
+               sub: pct > 0 ? t('insight.tenant.surplus', 'from export surplus')
+                            : t('insight.tenant.grid', 'grid — nothing left over'),
+               tab: 'tenants', tone: pct >= 50 ? 'good' : '' }};
     }}}},
   /* Home battery — only where one is configured and has a capacity. */
   {{ id: 'battery', build: function(c) {{

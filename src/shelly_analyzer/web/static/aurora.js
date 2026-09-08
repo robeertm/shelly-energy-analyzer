@@ -910,7 +910,12 @@
       if (cost > 0) {
         html += stat("cost", cost.toFixed(2) + " €", T("aurora.stat.cost", "Cost today"));
       }
-      var share = data && data.solar_share_now;
+      /* The household's own share. `solar_share_now` is the TENANT's — it is
+         zero whenever the property imports even a few watts, which read as
+         "0 % solar" on a header sitting above a roof making 1.2 kW. Kept as a
+         fallback so an older server still fills the card. */
+      var share = data && (data.solar_share_home != null ? data.solar_share_home
+                                                         : data.solar_share_now);
       if (share !== null && share !== undefined && !isNaN(Number(share))) {
         html += stat("solar", Math.round(Number(share) * (Number(share) <= 1 ? 100 : 1)) + " %",
                      T("aurora.stat.solar", "Solar share"));

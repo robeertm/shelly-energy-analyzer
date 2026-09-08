@@ -1,5 +1,37 @@
 # Changelog
 
+## 16.83.0
+### Fixed
+- **The Live header said "0 % solar share" while the roof was making 1.2 kW.**
+  Both statements were true about different things. The header was showing the
+  *tenant's* share, which answers a different question: a tenant circuit is
+  served last and never touches the battery, so it is green only while the
+  property actually **exports**. With the house importing even a few watts that
+  is zero by definition — and photovoltaic production does not enter that
+  formula at all.
+
+  The header now shows the **household's** share: the power the roof is serving
+  to the house right now (production minus what is exported and what goes into
+  the battery), against everything currently feeding the house. Battery
+  discharge counts towards the load, never towards the solar share — it is
+  stored sunshine, not sunshine now, and the CO₂ attribution keeps the two
+  apart for the same reason. With nothing drawing, the card shows nothing: a
+  share of a zero load is undefined, not zero.
+
+  The tenant's share keeps its meaning and gets **its own card**, named for
+  what it is.
+
+- **"PV now" could only ever show 0 W.** It summed a power field over the
+  device list of `/api/solar` — a list that carries the house, the grid meter
+  and the tenant, but not the PV meter, and no power field on any of them. It
+  now reads the live meter, the same source the PV strip below it draws, so the
+  two can no longer contradict each other on the same screen.
+
+- **A fraction was printed as a percent.** The "Drawing now" card rendered the
+  0..1 share directly, which would have read "1 % from the roof" for a house
+  running three quarters on solar. Invisible until now, because the value it
+  was reading was always exactly zero — one fault was hiding the other.
+
 ## 16.82.1
 ### Fixed
 - **The invoice address could be typed but never saved.** Settings → Invoicing →
