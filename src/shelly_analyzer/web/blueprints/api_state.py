@@ -132,7 +132,12 @@ def _apply_today_chain_costs(state, devices_list) -> None:
 @bp.route("/api/state")
 def api_state():
     state = _get_state()
-    raw_snap = state.live_store.snapshot()
+    # 🔴 Only the NEWEST sample per device is read below (`points[-1]`), and this
+    # endpoint is polled once a second. Taking a full snapshot rebuilt every
+    # point of every ring buffer into a 22-field dict on every poll — measured
+    # at 6 s per request on a running installation, for a 4 KB answer, which
+    # kept the process busy enough to push every other endpoint into the queue.
+    raw_snap = state.live_store.latest_snapshot()
 
     # Flow devices (coloured green/red by direction in the live view) + today's
     # battery charge/discharge. ``grid`` = the configured signed grid meter (± Netz)
@@ -397,7 +402,6 @@ def api_state():
 @bp.route("/api/history")
 def api_history():
     state = _get_state()
-    raw_snap = state.live_store.snapshot()
     hist: Dict[str, List[Dict[str, Any]]] = {}
 
     # Tiered per-series resolution. Serving every raw sample at full poll
@@ -414,20 +418,17 @@ def api_history():
     _TAIL_FULL_S = 1200   # keep the last 20 min at full resolution
     _HEAD_PTS = 700       # thin everything older than that to ~this many points
 
+    # The thinning happens inside the store, on the stored samples: done here it
+    # meant building every point of the window into a dict first and dropping
+    # three quarters of them on the very next line.
+    raw_snap = state.live_store.snapshot(
+        tail_full_s=None if _full else _TAIL_FULL_S, head_pts=_HEAD_PTS)
+
     for dkey, points in raw_snap.items():
         if dkey.startswith("_") or not isinstance(points, list) or not points:
             continue
-        src_points = points
-        if not _full and len(points) > _HEAD_PTS * 2:
-            cut = int(points[-1].get("ts") or 0) - _TAIL_FULL_S
-            head = [p for p in points if int(p.get("ts") or 0) < cut]
-            tail = points[len(head):]  # chronological → head is a prefix
-            if len(head) > _HEAD_PTS:
-                stride = (len(head) + _HEAD_PTS - 1) // _HEAD_PTS
-                head = head[::stride]
-            src_points = head + tail
         pts_out = []
-        for p in src_points:
+        for p in points:
             va = float(p.get("va") or 0)
             vb = float(p.get("vb") or 0)
             vc = float(p.get("vc") or 0)

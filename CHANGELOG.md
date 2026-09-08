@@ -1,5 +1,39 @@
 # Changelog
 
+## 16.84.0
+### Fixed
+- **The live poll rebuilt the entire history once a second.** Reported as "it
+  loads forever and never finishes". Measured against a running installation,
+  read-only:
+
+  | endpoint | time | answer |
+  |---|---|---|
+  | `/api/version` | 0.14 s | — |
+  | `/api/nilm_status` | 0.50 s | in-memory only |
+  | `/api/state` | 3.5 – 7.5 s | **3855 bytes** |
+  | `/api/solar` | 15 s | 789 bytes |
+  | `/api/history` | 12 s | 374 KB gzipped |
+  | `/api/battery`, `/api/goals` | > 60 s | — |
+
+  The tiny answers rule out payload size and the fast endpoints rule out a
+  stuck web layer, so the time was inside the handlers. `/api/state` reads
+  nothing but the newest sample per device — yet it took a full snapshot of the
+  live store, which turns **every** point of **every** ring buffer into a
+  twenty-two-field dictionary. On a two-hour window at one sample a second
+  across several meters that is on the order of a million float conversions,
+  once a second, for every open browser. The process was never idle, so
+  everything else queued behind it.
+
+  The store now offers the newest sample per device on its own. On a machine
+  where the full snapshot of that shape costs 51 ms, the new call is under
+  0.05 ms.
+
+- **The history endpoint threw away three quarters of what it had just built.**
+  It kept roughly 700 points of the older window plus the last twenty minutes
+  in full — but only after every point had already been turned into a
+  dictionary. The thinning now happens inside the store, on the stored samples.
+  The selection rule is unchanged, down to the stride.
+
 ## 16.83.0
 ### Fixed
 - **The Live header said "0 % solar share" while the roof was making 1.2 kW.**
