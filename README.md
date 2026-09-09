@@ -19,6 +19,33 @@ No cloud. No subscription. No data lock-in.
 
 ---
 
+> ### ⚠️ Please read before installing
+>
+> **This project is written with AI assistance.** Code, documentation and this
+> README are largely AI-generated and reviewed by a human, not the other way
+> round. Treat it as a hobby project, not as audited software.
+>
+> **It is provided "as is", with no warranty and no liability of any kind** —
+> for errors, for wrong numbers, for lost or corrupted data, for damage to
+> connected equipment, or for anything that follows from using it. **You use it
+> at your own risk.**
+>
+> Two things deserve saying plainly, because they touch money and real hardware:
+>
+> - **The figures are estimates, not meter readings.** Consumption, cost, CO2
+>   and the tenant sub-metering reports are derived from what the devices
+>   report and from the tariff you configure. They are not calibrated,
+>   billing-grade measurements. **Do not use them as the sole basis of a
+>   utility bill, a tenant settlement or any other claim** — check them against
+>   the official meter first.
+> - **The automations switch real devices.** PV-surplus control turns boilers,
+>   wallboxes and similar loads on and off. Wrong configuration switches the
+>   wrong thing; set it up deliberately and watch it before you leave it alone.
+>
+> Not affiliated with, endorsed by, or supported by Shelly / Allterco. Product
+> and brand names belong to their respective owners.
+
+
 ## 🎯 Why Shelly Energy Analyzer?
 
 You bought Shelly EM / 3EM meters. You want to know **how much you spend**, **when you spend it**, and **what to change** — without your data leaving your home and without a monthly bill.
