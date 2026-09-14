@@ -558,6 +558,13 @@ Browser-based 12-step wizard at `/setup` (auto-redirected on first launch when n
 - **Automatic detection** of electric vehicle charging sessions from wallbox power patterns
 - Logs each session: start/end time, energy (kWh), peak power, duration, and cost
 - Monthly summary with total sessions, kWh, and cost breakdown
+- **Charge-log link for a car app** — a read-only `/api/v1/ev/*` a car tracker
+  (e.g. [EV Charge Tracker](https://github.com/robeertm/ev-charge-tracker)) can
+  *pull* finished charges from: kWh, the split into sun / battery / grid, the
+  cost of that mix, and the charge curve itself. It has a key of its own, which
+  opens nothing but the charge log, and only hands out charges that have been
+  over for a while — while a car is still drawing, the entry keeps growing and
+  its id moves with it. Off by default; the switch in Settings brings its own key
 
 ### 💱 Tariff Comparison
 - Compare actual consumption costs across **8 pre-defined German electricity tariffs** (Stadtwerke, Tibber, 1Komma5°, Ostrom, E.ON, Vattenfall, EnBW, HT/NT)
@@ -574,6 +581,7 @@ Browser-based 12-step wizard at `/setup` (auto-redirected on first launch when n
 
 ### 🔌 REST API v1
 - Formalized API: `/api/v1/devices`, `/api/v1/devices/{key}/samples`, `/api/v1/costs`, `/api/v1/spot_prices`, `/api/v1/co2`, `/api/v1/openapi.json`
+- `/api/v1/ev/info`, `/api/v1/ev/charges`, `/api/v1/ev/curve` — the charge-log link above, behind its own token
 - **Bearer token authentication**, CORS headers, rate limiting
 
 ### 🤖 AI Energy Advisor

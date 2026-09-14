@@ -342,6 +342,30 @@ def api_traffic():
     return jsonify(payload)
 
 
+@bp.route("/api/v1/ev/", defaults={"subpath": ""})
+@bp.route("/api/v1/ev/<path:subpath>")
+def api_v1_ev(subpath=""):
+    """The read-only charge-log link a car app pulls from.
+
+    Kept out of the generic ``/api/v1`` handler because it needs the dashboard's
+    action layer (the very code the EV-Log tab is drawn from, caches included),
+    not the bare database — reimplementing detection here would be a second
+    answer that could drift away from the tab.
+    """
+    state = _get_state()
+    try:
+        from shelly_analyzer.services import ev_link
+        from shelly_analyzer import __version__ as _ver
+        payload = ev_link.handle(subpath, _get_qs_params(), state.cfg,
+                                 state.on_action, _ver)
+    except Exception as e:
+        payload = {"ok": False, "error": str(e)}
+    resp = jsonify(payload)
+    # A poll every few minutes must never be served a stale answer by a proxy.
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @bp.route("/api/v1/<path:subpath>")
 def api_v1(subpath=""):
     state = _get_state()

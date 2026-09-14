@@ -988,6 +988,23 @@ class EvChargingConfig:
     # cost), "full" = the consumer tariff.
     solar_cost_model: str = "free"
 
+    # ── Handing the charge log to a car app (the EV-Tracker link) ───────────
+    # A car app knows which car charged and how its battery filled; this
+    # analyzer knows how much energy went through the wallbox and where it came
+    # from. Neither can answer the other's half. The link lets the car app
+    # *fetch* finished charges — it never pushes, never writes, and reaches
+    # nothing but the charge log.
+    link_enabled: bool = False
+    # A token of its own, deliberately not the web token: it opens
+    # /api/v1/ev/* and nothing else, so handing it to another program does not
+    # hand over the installation. Empty = the link stays shut even with
+    # link_enabled on — an empty token would otherwise match an empty header.
+    link_token: str = ""
+    # A charge is only offered once it has been over for this long. While the
+    # car still draws, the log keeps extending the entry and its id moves with
+    # it, so a reader that fetched early would file the same charge twice.
+    link_settle_minutes: int = 20
+
 
 @dataclass(frozen=True)
 class TariffTemplate:
@@ -1951,6 +1968,9 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         solar_cost_model=(str(evc_raw.get("solar_cost_model", "free") or "free").strip().lower()
                           if str(evc_raw.get("solar_cost_model", "free") or "free").strip().lower()
                           in ("free", "feed_in", "full") else "free"),
+        link_enabled=bool(evc_raw.get("link_enabled", False)),
+        link_token=str(evc_raw.get("link_token", "") or "").strip(),
+        link_settle_minutes=max(0, _coerce_int(evc_raw.get("link_settle_minutes", 20), 20)),
     )
 
     tc_raw = raw.get("tariff_compare", {}) if isinstance(raw.get("tariff_compare"), dict) else {}
@@ -2640,6 +2660,9 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "group_surplus_floor_w": float(getattr(cfg.ev_charging, "group_surplus_floor_w", 0.0)),
             "cost_source_mode": str(getattr(cfg.ev_charging, "cost_source_mode", "auto") or "auto"),
             "solar_cost_model": str(getattr(cfg.ev_charging, "solar_cost_model", "free") or "free"),
+            "link_enabled": bool(getattr(cfg.ev_charging, "link_enabled", False)),
+            "link_token": str(getattr(cfg.ev_charging, "link_token", "") or ""),
+            "link_settle_minutes": int(getattr(cfg.ev_charging, "link_settle_minutes", 20)),
         },
         "tariff_compare": {
             "enabled": bool(getattr(cfg.tariff_compare, "enabled", False)),
