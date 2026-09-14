@@ -461,3 +461,66 @@ def test_the_curve_button_no_longer_needs_a_source_split():
                          total_solar_kwh=0.0, total_battery_kwh=0.0, total_grid_kwh=0.0))
     assert "Show charge curve" in html, "no curve button on a fixed-price charge"
     print("OK  the curve button is there even with no source split")
+
+
+def _run_curve_gemessen(curve, breite=360.0):
+    """Like _run_curve, but with a canvas that behaves like a real one.
+
+    The shared harness answers every ``measureText`` with 10 px and forgets
+    where text was drawn — fine for "was it drawn at all", useless for "did it
+    fit". So this variant measures proportionally to the font size and records
+    the x position of every label.
+    """
+    harness = HARNESS.replace(
+        "(k === 'measureText') ? (() => ({ width: 10 })) :",
+        "(k === 'measureText') ? ((t) => ({ width: String(t).length * "
+        "(parseFloat(String(o.__font || '9px')) || 9) * 0.56 })) :"
+    ).replace(
+        "(k === 'fillText') ? ((t) => globalThis.__paint.texts.push(String(t))) :",
+        "(k === 'fillText') ? ((t, x) => globalThis.__paint.texts.push("
+        "String(t) + '@' + x)) :"
+    ).replace(
+        "  set: (o, k, v) => { o[k] = v; return true },",
+        "  set: (o, k, v) => { o[k] = v; if (k === 'font') o.__font = v; return true },"
+    ).replace("width: 800, height: 400, right: 800", "width: %d, height: 400, right: %d"
+              % (int(breite), int(breite))).replace(
+        "offsetWidth: 800", "offsetWidth: %d" % int(breite))
+    src = (harness + "\nglobalThis.__boxes = {};\n"
+           + "const PAYLOAD = " + json.dumps(_payload([_charge(group_id="a", cost_model="fixed")])) + ";\n"
+           + "const CURVE = " + json.dumps(curve) + ";\n"
+           + _script() + "\n" + CURVE_TAIL)
+    p = subprocess.run(["node", "-e", src], capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, f"node failed:\n{p.stderr[-3000:]}"
+    paint = json.loads(p.stdout.split("\n<<<PAINT>>>", 1)[1])
+    return paint
+
+
+def test_an_eleven_kilowatt_axis_label_is_not_cut_in_half():
+    """Robert, from a phone screenshot: „Statt 11kw steht 1,6 kw".
+
+    The gutter was a fixed 34 px — enough for "9.9 kW", not for "11.8 kW". The
+    leading digit fell off the left edge, and the axis then claimed a tenth of
+    the real power. A chart that is wrong is worse than one with no axis.
+    """
+    n = 20
+    ts = [1786023600 + i * 60 for i in range(n)]
+    load = [10857.0] * n
+    curve = {"available": True, "start_ts": ts[0], "end_ts": ts[-1], "ts": ts,
+             "load_w": load, "solar_w": [0.0] * n, "battery_w": [0.0] * n,
+             "grid_w": list(load), "measured": [True] * n, "points": n,
+             "raw_points": n, "split": "grid_only",
+             "seconds": {"solar": 0.0, "battery": 0.0, "grid": n * 60.0,
+                         "total": n * 60.0}}
+    paint = _run_curve_gemessen(curve)
+    labels = [t for t in paint["texts"] if "kW" in t]
+    assert labels, "no axis labels at all"
+    schrift = 9.0
+    for eintrag in labels:
+        text, _, x = eintrag.rpartition("@")
+        breite = len(text) * schrift * 0.56          # the same measure node used
+        links = float(x) - breite                    # right-aligned at x
+        assert links >= 0, (f"{text!r} starts at {links:.1f} px — "
+                            f"cut off on the left, exactly the 1.6 kW bug")
+    assert any(t.startswith("11.") for t in labels), \
+        f"the top label should read around 11 kW, got {labels}"
+    print(f"OK  every axis label fits: {[t.split('@')[0] for t in labels]}")
