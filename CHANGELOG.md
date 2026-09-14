@@ -1,5 +1,13 @@
 # Changelog
 
+## 16.87.0
+### Added
+- **A word for the companion app.** Settings › About now carries one sentence
+  and a link to the EV Charge Tracker — the other half of the wallbox link
+  this version already speaks: it keeps a car's charges, trips and costs and
+  pulls the measured kWh of every home charge from here, split into sun,
+  battery and grid. Same author, free, self-hosted. In all nine languages.
+
 ## 16.86.0
 ### Changed
 - **The charge curve no longer depends on the solar equipment.** A house with

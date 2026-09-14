@@ -17185,3 +17185,37 @@ _I18N.setdefault("ru", {}).update({
     'web.ev.curve_title_plain': 'Кривая зарядки',
     'web.ev.curve_split_unknown': 'ход зарядки измерен, источники за ним — нет',
 })
+
+
+# ── i18n block 8/8: a word for the companion app (16.87.0) ──
+# Robert: „der shelly analyzer darf in der app irgendwo bei einstellungen ruhig
+# werbung für den ev-tracker machen mit link zum github". One sentence in
+# About, in every language the settings page speaks.
+
+_I18N.setdefault("de", {}).update({
+    'settings.about.companion': 'Lädt bei Ihnen ein Auto zu Hause? Der EV Charge Tracker führt dessen Ladungen, Fahrten und Kosten — und kann sich die Messung jeder Wallbox-Ladung von hier holen, samt Aufteilung in Sonne, Akku und Netz. Kostenlos, selbst gehostet, vom selben Autor.',
+})
+_I18N.setdefault("en", {}).update({
+    'settings.about.companion': 'Charge a car at home? The EV Charge Tracker keeps its charges, trips and costs — and can pull the measurement of every wallbox charge from here, including the split into sun, battery and grid. Free, self-hosted, by the same author.',
+})
+_I18N.setdefault("es", {}).update({
+    'settings.about.companion': '¿Carga un coche en casa? EV Charge Tracker lleva sus cargas, viajes y costes, y puede recoger de aquí la medición de cada carga en la pared, con el reparto entre sol, batería y red. Gratuito, autoalojado, del mismo autor.',
+})
+_I18N.setdefault("fr", {}).update({
+    'settings.about.companion': 'Vous rechargez une voiture à la maison ? EV Charge Tracker tient ses charges, trajets et coûts — et peut récupérer ici la mesure de chaque charge, avec la répartition soleil / batterie / réseau. Gratuit, auto-hébergé, du même auteur.',
+})
+_I18N.setdefault("pt", {}).update({
+    'settings.about.companion': 'Carrega um carro em casa? O EV Charge Tracker guarda os carregamentos, viagens e custos — e pode buscar aqui a medição de cada carregamento, com a divisão entre sol, bateria e rede. Gratuito, auto-hospedado, do mesmo autor.',
+})
+_I18N.setdefault("it", {}).update({
+    'settings.about.companion': 'Ricarichi un’auto a casa? EV Charge Tracker tiene ricariche, viaggi e costi — e può prendere da qui la misura di ogni ricarica al muro, con la divisione tra sole, batteria e rete. Gratuito, self-hosted, dello stesso autore.',
+})
+_I18N.setdefault("pl", {}).update({
+    'settings.about.companion': 'Ładujesz auto w domu? EV Charge Tracker prowadzi ładowania, trasy i koszty — i potrafi pobrać stąd pomiar każdego ładowania wraz z podziałem na słońce, magazyn i sieć. Za darmo, na własnym serwerze, tego samego autora.',
+})
+_I18N.setdefault("cs", {}).update({
+    'settings.about.companion': 'Nabíjíte auto doma? EV Charge Tracker vede jeho nabíjení, jízdy a náklady — a umí si odsud vzít měření každého nabíjení včetně rozdělení na slunce, baterii a síť. Zdarma, na vlastním serveru, od stejného autora.',
+})
+_I18N.setdefault("ru", {}).update({
+    'settings.about.companion': 'Заряжаете машину дома? EV Charge Tracker ведёт её зарядки, поездки и расходы — и может забирать отсюда измерение каждой зарядки вместе с разделением на солнце, аккумулятор и сеть. Бесплатно, на своём сервере, от того же автора.',
+})

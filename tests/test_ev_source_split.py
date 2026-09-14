@@ -478,6 +478,10 @@ def test_every_new_string_exists_in_all_nine_languages():
         "web.ev.src_unmeasured", "web.ev.show_curve", "web.ev.curve_title",
         "web.ev.curve_flowed", "web.ev.curve_loading", "web.ev.curve_failed",
         "web.ev.curve_none",
+        # 16.86.0 / 16.87.0
+        "web.ev.curve_title_grid", "web.ev.curve_grid_note",
+        "web.ev.curve_title_plain", "web.ev.curve_split_unknown",
+        "settings.about.companion",
         "settings.field.ev_charging.cost_source_mode",
         "settings.hint.ev_charging.cost_source_mode",
         "settings.opts.ev_charging.cost_source_mode.auto",
