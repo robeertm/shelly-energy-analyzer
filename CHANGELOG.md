@@ -24,6 +24,15 @@
   nothing was measured — "no sun measured" and "no sun" remain different
   statements.
 
+### Fixed
+- **The kW axis of the charge curve no longer cuts its own labels in half.**
+  The left gutter was a fixed 34 px — enough for "9.9 kW", not for "11.8 kW",
+  so a charge that pulled eleven kilowatts was labelled 1.8. The gutter is now
+  measured with the font the labels are drawn in. Same in the car app's copy of
+  the chart. And a band that is zero everywhere is no longer filled at all: an
+  invisible zero-height fill still put a colour on the canvas for a source the
+  house may not have.
+
 ## 16.85.0
 ### Added
 - **The charge log can be handed to a car app.** Two programs know half of a

@@ -10425,13 +10425,27 @@ _loadLsSettings();
     cv.width = rect.width * dpr; cv.height = rect.height * dpr;
     const ctx = cv.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const W = rect.width, H = rect.height, PL = 34, PR = 6, PT = 8, PB = 16;
-    const iw = W - PL - PR, ih = H - PT - PB;
+    const W = rect.width, H = rect.height, PR = 6, PT = 8, PB = 16;
     ctx.clearRect(0, 0, W, H);
 
     const ts = d.ts, n = ts.length;
     const peak = Math.max.apply(null, d.load_w) || 1;
     const yMax = peak * 1.08;
+
+    const ACHSENSCHRIFT = '9px system-ui,sans-serif';
+    const _kwLabel = function(v) {{ return (v/1000).toFixed(1) + ' kW'; }};
+    // The left gutter is MEASURED, not assumed. A fixed 34 px fit "9.9 kW" and
+    // cut the leading digit off "11.8 kW" — the axis then read 1.8 kW for a
+    // charge that pulled eleven, which is worse than no axis at all. Measured
+    // with the font the labels are actually drawn in, not a guessed average.
+    ctx.font = ACHSENSCHRIFT;
+    let _breit = 0;
+    for (let k = 0; k <= 3; k++) {{
+      const m = ctx.measureText ? ctx.measureText(_kwLabel(yMax * k / 3)) : null;
+      if (m && m.width) _breit = Math.max(_breit, m.width);
+    }}
+    const PL = Math.max(34, Math.ceil(_breit) + 9);
+    const iw = W - PL - PR, ih = H - PT - PB;
     const x = function(i) {{ return PL + (ts[i]-ts[0]) / Math.max(1, ts[n-1]-ts[0]) * iw; }};
     const y = function(v) {{ return PT + ih - (v / yMax) * ih; }};
 
@@ -10441,12 +10455,12 @@ _loadLsSettings();
 
     // Grid + kW labels
     ctx.strokeStyle = grid; ctx.fillStyle = muted;
-    ctx.font = '9px system-ui,sans-serif'; ctx.textAlign = 'right'; ctx.lineWidth = 1;
+    ctx.font = ACHSENSCHRIFT; ctx.textAlign = 'right'; ctx.lineWidth = 1;
     for (let k = 0; k <= 3; k++) {{
       const v = yMax * k / 3, yy = Math.round(y(v)) + 0.5;
       ctx.globalAlpha = 0.5; ctx.beginPath();
       ctx.moveTo(PL, yy); ctx.lineTo(W - PR, yy); ctx.stroke(); ctx.globalAlpha = 1;
-      ctx.fillText((v/1000).toFixed(1) + ' kW', PL - 4, yy + 3);
+      ctx.fillText(_kwLabel(v), PL - 4, yy + 3);
     }}
 
     // Stacked bands, sun at the bottom: the free part carries the curve and the
