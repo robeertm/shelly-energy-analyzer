@@ -291,18 +291,29 @@ def test_the_curve_endpoint_refuses_a_silly_window():
         print("OK  the curve endpoint refuses empty, reversed and month-wide windows")
 
 
-def test_a_charge_without_supply_data_returns_unavailable_not_an_error():
+def test_a_charge_without_supply_data_still_returns_its_course():
+    """16.86.0: a house with no PV and no battery gets its charge curve too.
+
+    It used to get ``available: false`` and an empty box — yet its wallbox
+    meter had recorded every minute of the charge. Only the colouring needed
+    the supply meters.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         d = _build(Path(tmp))
         _d = _sessions(d)
         item = (_d["charges"] or _d["sessions"])[0]
         object.__setattr__(d.cfg.solar, "pv_production_device_key", "")
+        object.__setattr__(d.cfg.solar, "battery_device_key", "")
         object.__setattr__(d.cfg.pv_source, "pv_power_entity", "")
         object.__setattr__(d.cfg.pv_source, "battery_power_entity", "")
         r = d.dispatch("ev_charge_curve", {"start": str(item["start_ts"]),
                                            "end": str(item["end_ts"])})
-        assert r.get("ok") and r["data"]["available"] is False, r
-        print("OK  no meters ⇒ available:false, not an error the tab must guess at")
+        assert r.get("ok"), r
+        data = r["data"]
+        assert data["available"] is True and data["split"] == "grid_only", data
+        assert data["grid_w"] == data["load_w"], "the whole curve is grid here"
+        assert max(data["load_w"]) > 0, data["load_w"][:5]
+        print("OK  no PV meter ⇒ the course anyway, entirely in grid red")
 
 
 def test_the_v1_data_endpoints_actually_answer():

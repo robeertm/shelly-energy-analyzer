@@ -10379,16 +10379,33 @@ _loadLsSettings();
     const sec = d.seconds || {{}};
     // How long each source flowed. These overlap on purpose — the sum is larger
     // than the charge when several fed the car at once, which is the point.
-    const runs = _evLegendRow(
-      [[EV_SRC.solar, t('web.ev.src_solar','Solar'), _evFmtMin(sec.solar)],
-       [EV_SRC.battery, t('web.ev.src_battery','Battery'), _evFmtMin(sec.battery)],
-       [EV_SRC.grid, t('web.ev.src_grid','Grid'), _evFmtMin(sec.grid)]],
+    // Three houses, three headings. A house with no PV and no battery gets the
+    // whole curve in grid red \u2014 that is its truth, not a fallback \u2014 and its
+    // legend must not name two sources it does not have. A house that HAS
+    // generation but no attribution for this window gets the course of the
+    // charge and is told plainly that the colours are missing, not zero.
+    const nurNetz = d.split === 'grid_only', ohneSplit = d.split === 'unknown';
+    const runs = ohneSplit ? '' : _evLegendRow(
+      nurNetz
+        ? [[EV_SRC.grid, t('web.ev.src_grid','Grid'), _evFmtMin(sec.grid)]]
+        : [[EV_SRC.solar, t('web.ev.src_solar','Solar'), _evFmtMin(sec.solar)],
+           [EV_SRC.battery, t('web.ev.src_battery','Battery'), _evFmtMin(sec.battery)],
+           [EV_SRC.grid, t('web.ev.src_grid','Grid'), _evFmtMin(sec.grid)]],
       'margin-top:6px');
+    const kopf = nurNetz
+      ? esc(t('web.ev.curve_title_grid', 'Charge curve \u2014 all from the grid'))
+        + ' \u00b7 ' + esc(t('web.ev.curve_grid_note',
+                          'no PV or battery meter set up here'))
+      : (ohneSplit
+        ? esc(t('web.ev.curve_title_plain', 'Charge curve')) + ' \u00b7 ' +
+          esc(t('web.ev.curve_split_unknown',
+                'the course is measured, the sources behind it are not'))
+        : esc(t('web.ev.curve_title', 'Charge curve by source')) + ' \u00b7 ' +
+          esc(t('web.ev.curve_flowed', 'how long each source flowed \u2014 of {{t}}',
+                  {{t: _evFmtMin(sec.total)}})));
     box.innerHTML =
       '<div style="font-size:11px;color:var(--muted);margin:2px 0 4px">' +
-        esc(t('web.ev.curve_title', 'Charge curve by source')) + ' \u00b7 ' +
-        esc(t('web.ev.curve_flowed', 'how long each source flowed \u2014 of {{t}}',
-                {{t: _evFmtMin(sec.total)}})) +
+        kopf +
       '</div>' +
       '<canvas id="evcv-' + esc(id) + '" style="width:100%;height:150px;display:block"></canvas>' +
       '<div id="evct-' + esc(id) + '" style="font-size:11px;color:var(--muted);min-height:15px;margin-top:2px"></div>' +
@@ -10506,7 +10523,11 @@ _loadLsSettings();
   /* The click target and the box the curve unfolds into. Only offered where a
      source split exists — without one there is nothing to colour. */
   function _evCurveHandle(x, id) {{
-    if (!_evSourceParts(x)) return '';
+    // The curve used to hang on the source split: no PV meter, no
+    // button \u2014 although the wallbox meter knows the exact course of every
+    // charge, split or not. What needs a split is the COLOURING, not the
+    // curve. A house on pure grid power gets it in one colour.
+    if (!x || !x.start_ts || !x.end_ts) return '';
     const open = _evOpen.has(id);
     return '<div style="margin-top:6px">' +
       '<button onclick="evToggleCurve(&#39;' + esc(id) + '&#39;,' + x.start_ts + ',' + x.end_ts + ')" ' +
