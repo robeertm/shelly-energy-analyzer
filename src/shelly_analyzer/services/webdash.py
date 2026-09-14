@@ -10456,6 +10456,10 @@ _loadLsSettings();
     const base = new Float64Array(n);
     bands.forEach(function(b) {{
       const arr = b[0];
+      // A band that is zero everywhere is not drawn at all. It used to be
+      // filled with zero height — invisible, but it put a colour on the canvas
+      // for a source this house may not even have.
+      if (!arr || !arr.some(function(v) {{ return v > 0; }})) return;
       ctx.fillStyle = b[1]; ctx.globalAlpha = 0.85;
       ctx.beginPath();
       for (let i = 0; i < n; i++) ctx.lineTo(x(i), y(base[i] + (arr[i]||0)));

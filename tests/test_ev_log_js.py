@@ -405,3 +405,59 @@ if __name__ == "__main__":
     for f in fns:
         f()
     print(f"\n{len(fns)} Tests bestanden")
+
+
+def _curve_grid_only(n=40):
+    """The house with a wallbox and nothing else: one band, and it IS the load."""
+    ts = [1786023600 + i * 60 for i in range(n)]
+    load = [7000.0] * n
+    return {"available": True, "start_ts": ts[0], "end_ts": ts[-1], "ts": ts,
+            "load_w": load, "solar_w": [0.0] * n, "battery_w": [0.0] * n,
+            "grid_w": list(load), "measured": [True] * n, "points": n,
+            "raw_points": n, "split": "grid_only",
+            "seconds": {"solar": 0.0, "battery": 0.0, "grid": n * 60, "total": n * 60}}
+
+
+def test_a_home_on_pure_grid_power_gets_its_curve_in_one_colour():
+    """Robert: „auch nur netzlader … dann ist die ganze kurve halt rot, aber ich
+    habe den exakten ladeverlauf". Before 16.86.0 this box stayed empty."""
+    charges = [_charge(group_id="a", cost_model="fixed", energy_kwh=8.6,
+                       solar_kwh=0.0, cost_eur=2.83)]
+    body, paint = _run_curve(_payload(charges), _curve_grid_only())
+    assert "<canvas" in body, "no canvas — the curve was refused again"
+    assert "#ef4444" in paint["fills"], "the grid band was never painted"
+    for colour in ("#fdd835", "#22c55e"):
+        assert colour not in paint["fills"], f"{colour} was painted out of nothing"
+    assert paint["strokes"], "the measured wallbox curve was not drawn"
+    # And it says why it is one colour, instead of listing two sources at 0 min.
+    assert "grid" in body.lower(), "the heading does not mention the grid"
+    for word in ("Solar", "Battery"):
+        assert word not in body, f"{word} is named although this house has none"
+    print("OK  a grid-only house gets the whole curve, in grid red, and is told why")
+
+
+def test_a_window_without_attribution_shows_the_course_but_claims_nothing():
+    """The other house without a split: it HAS generation, nothing covers this
+    charge. Painting it red here would be a guess about the weather."""
+    n = 30
+    ts = [1786023600 + i * 60 for i in range(n)]
+    curve = {"available": True, "start_ts": ts[0], "end_ts": ts[-1], "ts": ts,
+             "load_w": [7000.0] * n, "solar_w": [0.0] * n, "battery_w": [0.0] * n,
+             "grid_w": [0.0] * n, "measured": [False] * n, "points": n,
+             "raw_points": n, "split": "unknown",
+             "seconds": {"solar": 0.0, "battery": 0.0, "grid": 0.0, "total": n * 60}}
+    body, paint = _run_curve(_payload([_charge(group_id="a", cost_model="fixed")]), curve)
+    assert "<canvas" in body, "the course was withheld"
+    for colour in ("#fdd835", "#22c55e", "#ef4444"):
+        assert colour not in paint["fills"], f"{colour} claims a source nobody measured"
+    assert paint["strokes"], "not even the load curve was drawn"
+    print("OK  an unattributed window shows the course and colours nothing")
+
+
+def test_the_curve_button_no_longer_needs_a_source_split():
+    """The gate that made all of this invisible: the handle was only rendered
+    where a split existed, so a house without PV never saw the button at all."""
+    html = _run(_payload([_charge(cost_model="fixed", solar_kwh=0.0, cost_eur=4.29)],
+                         total_solar_kwh=0.0, total_battery_kwh=0.0, total_grid_kwh=0.0))
+    assert "Show charge curve" in html, "no curve button on a fixed-price charge"
+    print("OK  the curve button is there even with no source split")
