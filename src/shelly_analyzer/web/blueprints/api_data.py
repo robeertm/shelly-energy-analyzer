@@ -356,8 +356,13 @@ def api_v1_ev(subpath=""):
     try:
         from shelly_analyzer.services import ev_link
         from shelly_analyzer import __version__ as _ver
-        payload = ev_link.handle(subpath, _get_qs_params(), state.cfg,
-                                 state.on_action, _ver)
+        payload = ev_link.handle(
+            subpath, _get_qs_params(), state.cfg, state.on_action, _ver,
+            # The key is checked in the service as well as in the auth guard:
+            # an installation without a web token has no guard at all.
+            presented_token=(request.headers.get("X-EV-Link-Token")
+                             or request.headers.get("X-API-Key")
+                             or request.args.get("link_token") or ""))
     except Exception as e:
         payload = {"ok": False, "error": str(e)}
     resp = jsonify(payload)

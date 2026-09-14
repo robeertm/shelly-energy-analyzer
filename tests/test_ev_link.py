@@ -139,7 +139,7 @@ def test_02_only_a_charge_that_is_over():
     print("== Only a charge that is over ==")
     with tempfile.TemporaryDirectory() as tmp:
         cfg, d = _build(Path(tmp), running_now=True, settle=20)
-        r = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch)
+        r = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch, presented_token="s3cret")
         assert r["ok"], r
         data = r["data"]
         now = int(time.time())
@@ -151,7 +151,7 @@ def test_02_only_a_charge_that_is_over():
         pruefe("finished charges are still there", len(data["charges"]) >= 6, True)
         # Same question twice: a reader polls, and must not be handed new ids for
         # charges it already filed.
-        r2 = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch)
+        r2 = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch, presented_token="s3cret")
         ids1 = [c["id"] for c in data["charges"]]
         ids2 = [c["id"] for c in r2["data"]["charges"]]
         pruefe("ids are stable between two polls", ids1, ids2)
@@ -164,7 +164,7 @@ def test_03_what_the_numbers_say_and_what_they_refuse_to_say():
     print("== What the numbers say, and what they refuse to say ==")
     with tempfile.TemporaryDirectory() as tmp:
         cfg, d = _build(Path(tmp))
-        data = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch)["data"]
+        data = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch, presented_token="s3cret")["data"]
         measured = [c for c in data["charges"] if c["cost_model"] == "source"]
         pruefe("the split is reported where it was measured", len(measured) > 0, True)
         ok_sum = all(abs((c["solar_kwh"] + c["battery_kwh"] + c["grid_kwh"])
@@ -183,7 +183,7 @@ def test_04_no_measurement_is_said_out_loud_not_passed_off_as_zero():
     print("== No measurement is said out loud, not passed off as zero ==")
     with tempfile.TemporaryDirectory() as tmp:
         cfg, d = _build(Path(tmp), with_sources=False)
-        data = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch)["data"]
+        data = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch, presented_token="s3cret")["data"]
         pruefe("there are charges to report", len(data["charges"]) > 0, True)
         # 🔴 The trap: reporting solar_kwh=0.0 here would read in the other program
         # as "charged at night", when the truth is "nobody measured".
@@ -199,9 +199,9 @@ def test_05_since_the_poll_a_car_app_actually_makes():
     print("== since: the poll a car app actually makes ==")
     with tempfile.TemporaryDirectory() as tmp:
         cfg, d = _build(Path(tmp))
-        alle = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch)["data"]["charges"]
+        alle = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch, presented_token="s3cret")["data"]["charges"]
         mitte = sorted(c["end_ts"] for c in alle)[len(alle) // 2]
-        teil = ev_link.handle("charges", {"since": str(mitte)}, cfg, d.dispatch)["data"]["charges"]
+        teil = ev_link.handle("charges", {"since": str(mitte)}, cfg, d.dispatch, presented_token="s3cret")["data"]["charges"]
         pruefe("since returns the newer half", all(c["end_ts"] >= mitte for c in teil), True)
         pruefe("and nothing that was already fetched", len(teil) < len(alle), True)
         pruefe("the ids are the same objects, not new ones",
@@ -212,7 +212,7 @@ def test_06_info_and_the_routes_that_do_not_exist():
     print("== info, and the routes that do not exist ==")
     with tempfile.TemporaryDirectory() as tmp:
         cfg, d = _build(Path(tmp))
-        inf = ev_link.handle("info", {}, cfg, d.dispatch, version="16.85.0")["data"]
+        inf = ev_link.handle("info", {}, cfg, d.dispatch, version="16.85.0", presented_token="s3cret")["data"]
         pruefe("it names the wallbox it speaks for", inf["wallbox"]["device_key"], "wallbox")
         pruefe("with its display name", inf["wallbox"]["name"], "Wallbox Garage")
         pruefe("it reports the version", inf["version"], "16.85.0")
@@ -220,17 +220,17 @@ def test_06_info_and_the_routes_that_do_not_exist():
                (inf["sources"]["grid"], inf["sources"]["solar"], inf["sources"]["battery"]),
                (True, True, True))
         pruefe("an unknown route is an error, not an empty answer",
-               ev_link.handle("charges/all/everything", {}, cfg, d.dispatch)["ok"], False)
+               ev_link.handle("charges/all/everything", {}, cfg, d.dispatch, presented_token="s3cret")["ok"], False)
         # The curve the car app draws is the tab's own payload, unreshaped.
-        c0 = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch)["data"]["charges"][0]
+        c0 = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch, presented_token="s3cret")["data"]["charges"][0]
         kurve = ev_link.handle("curve", {"start": str(c0["start_ts"]),
-                                         "end": str(c0["end_ts"])}, cfg, d.dispatch)
+                                         "end": str(c0["end_ts"])}, cfg, d.dispatch, presented_token="s3cret")
         pruefe("the curve comes back", kurve["ok"], True)
         pruefe("with a load series", len(kurve["data"].get("load_w") or []) > 0, True)
         pruefe("and the three bands", all(k in kurve["data"]
                                           for k in ("solar_w", "battery_w", "grid_w")), True)
         pruefe("a nonsense window is refused",
-               ev_link.handle("curve", {"start": "0", "end": "0"}, cfg, d.dispatch)["ok"], False)
+               ev_link.handle("curve", {"start": "0", "end": "0"}, cfg, d.dispatch, presented_token="s3cret")["ok"], False)
 
 
 def test_07_the_settings_survive_a_round_trip():
@@ -242,3 +242,29 @@ def test_07_the_settings_survive_a_round_trip():
         pruefe("link_enabled", again.ev_charging.link_enabled, True)
         pruefe("link_token", again.ev_charging.link_token, "s3cret")
         pruefe("link_settle_minutes", again.ev_charging.link_settle_minutes, 45)
+
+
+def test_08_the_switch_and_the_key_close_the_door_by_themselves():
+    print("== The switch and the key close the door by themselves ==")
+    # 🔴 Found while rolling this out, not while writing it: this installation
+    #    has no web token, so the auth guard is never registered and EVERY route
+    #    is open. The link answered regardless of the switch — a switch that
+    #    changes nothing is a promise the program does not keep. So the service
+    #    asks for both itself, however the rest of the app is protected.
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg, d = _build(Path(tmp))
+        ok = ev_link.handle("info", {}, cfg, d.dispatch, presented_token="s3cret")
+        pruefe("with switch and key: answers", ok["ok"], True)
+        pruefe("without a key: refused",
+               ev_link.handle("info", {}, cfg, d.dispatch)["ok"], False)
+        pruefe("with the wrong key: refused",
+               ev_link.handle("info", {}, cfg, d.dispatch,
+                              presented_token="s3crea")["ok"], False)
+        pruefe("and charges are refused too, not just info",
+               ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch)["ok"], False)
+
+        cfg_off, d_off = _build(Path(tmp) / "off", link_enabled=False)
+        r = ev_link.handle("info", {}, cfg_off, d_off.dispatch, presented_token="s3cret")
+        pruefe("switch off, right key: still refused", r["ok"], False)
+        pruefe("and it says WHY, so nobody hunts the network",
+               "switched off" in r["error"], True)
