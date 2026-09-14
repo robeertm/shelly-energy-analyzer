@@ -1754,6 +1754,11 @@ function renderAbout() {
     <p>${T("settings.about.app_version","App-Version")}: <strong id="about-version">${T("settings.about.loading","Lade…")}</strong></p>
     <p>${T("settings.about.config_version","Config-Version")}: <span class="hint">${cfg.version||"?"}</span></p>
     <div id="about-stats" class="hint">${T("settings.about.loading_stats","Lade DB-Statistik…")}</div>
+    <div style="margin-top:14px;padding:12px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--card-bg,rgba(59,130,246,0.05))">
+      <div style="font-weight:600;margin-bottom:4px">🚗 EV Charge Tracker</div>
+      <div class="hint">${T("settings.about.companion", "Charge a car at home? The EV Charge Tracker keeps its charges, trips and costs \u2014 and can pull the measurement of every wallbox charge from here, including the split into sun, battery and grid. Free, self-hosted, by the same author.")}</div>
+      <div style="margin-top:6px"><a href="https://github.com/robeertm/ev-charge-tracker" target="_blank" rel="noopener">github.com/robeertm/ev-charge-tracker</a></div>
+    </div>
   </section>`;
 }
 
