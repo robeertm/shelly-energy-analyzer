@@ -127,6 +127,15 @@ def info(cfg, version: str = "") -> Dict[str, Any]:
         # solar=false must not show an empty PV bar and call it "0 % sun" —
         # there is simply no measurement, which is a different statement.
         "sources": {"grid": bool(grid_key), "solar": bool(pv_key), "battery": bool(batt_key)},
+        # What the shares and the curve mean here, in one word — so a reader
+        # does not have to re-derive it from the three flags above:
+        #   grid_only  no generation in this house: every kWh is grid, said
+        #              outright rather than left as three nulls a reader would
+        #              have to render as "unknown".
+        #   measured   supplies are metered, the split is a measurement.
+        #   unknown    generation exists but nothing covers the window.
+        "source_split": ("grid_only" if not (pv_key or batt_key)
+                         else ("measured" if grid_key else "unknown")),
         "settle_minutes": int(getattr(ec, "link_settle_minutes", 20) or 0),
         "max_days": MAX_DAYS,
         "server_ts": int(time.time()),
@@ -178,6 +187,10 @@ def charges(on_action: Callable[[str, Dict[str, str]], Dict[str, Any]],
         entries = data.get("sessions") or []
 
     cutoff = now - _settle_s(cfg)
+    # A house with no PV and no battery has nothing to split: the wallbox meter
+    # read grid energy, full stop. Reporting three nulls there would make the
+    # reader show "source unknown" for a fact it could state.
+    nur_netz = str(info(cfg).get("source_split") or "") == "grid_only"
     out: List[Dict[str, Any]] = []
     still_running = 0
     for e in entries:
@@ -206,11 +219,13 @@ def charges(on_action: Callable[[str, Dict[str, str]], Dict[str, Any]],
             "duration_s": max(0, end_ts - start_ts),
             "energy_kwh": energy,
             # Only where the meters really covered the window. An unmeasured
-            # charge reports zeros AND cost_model "fixed" — never a zero that
-            # could be read as "no sun today".
-            "solar_kwh": sol if model == "source" else None,
-            "battery_kwh": bat if model == "source" else None,
-            "grid_kwh": grd if model == "source" else None,
+            # charge reports null AND cost_model "fixed" — never a zero that
+            # could be read as "no sun today". The one exception is a house
+            # without generation: there "no sun" is not a missing measurement,
+            # it is the house, so the whole charge is reported as grid.
+            "solar_kwh": sol if model == "source" else (0.0 if nur_netz else None),
+            "battery_kwh": bat if model == "source" else (0.0 if nur_netz else None),
+            "grid_kwh": grd if model == "source" else (energy if nur_netz else None),
             "cost_eur": round(float(e.get("cost_eur") or 0.0), 2),
             "cost_model": model,
             "coverage": _coverage(e),

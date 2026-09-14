@@ -79,7 +79,7 @@ def _house(day0: datetime, days: int, last_charge_ends_at=None):
 
 
 def _build(tmp: Path, *, link_enabled=True, token="s3cret", settle=20,
-           running_now=False, with_sources=True):
+           running_now=False, with_sources=True, erzeugung_ohne_zaehler=False):
     st = Storage(tmp / "data")
     day0 = (datetime.now() - timedelta(days=5)).replace(hour=0, minute=0, second=0,
                                                         microsecond=0)
@@ -97,6 +97,14 @@ def _build(tmp: Path, *, link_enabled=True, token="s3cret", settle=20,
     pv_source = ({"enabled": True, "source_type": "homeassistant",
                   "pv_power_entity": "sensor.pv", "battery_power_entity": "sensor.bat"}
                  if with_sources else {"enabled": False})
+    if erzeugung_ohne_zaehler:
+        # The third kind of house, and the one the "null, never 0.0" rule is
+        # really about: it HAS a PV series, but nothing that could attribute a
+        # charge to it. Calling that "all grid" would be a guess about the
+        # weather; calling the no-generation house "all grid" is not.
+        solar = {"enabled": True, "pv_production_device_key": "pv",
+                 "battery_kwh": 10.0}
+        pv_source = {"enabled": False}
     cfg_path.write_text(json.dumps({
         "devices": [{"key": "wallbox", "name": "Wallbox Garage", "host": "1.2.3.4", "kind": "em"},
                     {"key": "grid", "name": "Grid", "host": "1.2.3.5", "kind": "em"}],
@@ -181,18 +189,32 @@ def test_03_what_the_numbers_say_and_what_they_refuse_to_say():
 
 def test_04_no_measurement_is_said_out_loud_not_passed_off_as_zero():
     print("== No measurement is said out loud, not passed off as zero ==")
+    # Two houses that both lack a split, and must NOT be answered the same way.
     with tempfile.TemporaryDirectory() as tmp:
+        # (a) No PV, no battery anywhere. "No sun" is not a missing measurement
+        #     here, it is the house — so the charge is grid, stated outright.
         cfg, d = _build(Path(tmp), with_sources=False)
         data = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch, presented_token="s3cret")["data"]
         pruefe("there are charges to report", len(data["charges"]) > 0, True)
-        # 🔴 The trap: reporting solar_kwh=0.0 here would read in the other program
-        # as "charged at night", when the truth is "nobody measured".
-        pruefe("the split is null, never 0.0",
-               all(c["solar_kwh"] is None and c["battery_kwh"] is None
-                   and c["grid_kwh"] is None for c in data["charges"]), True)
-        pruefe("and the cost model says why",
+        pruefe("the house says so in one word", data["source_split"], "grid_only")
+        pruefe("every kWh is grid",
+               all(abs(c["grid_kwh"] - c["energy_kwh"]) < 0.001
+                   and c["solar_kwh"] == 0.0 and c["battery_kwh"] == 0.0
+                   for c in data["charges"]), True)
+        pruefe("and the cost model still says the price was a fixed one",
                all(c["cost_model"] == "fixed" for c in data["charges"]), True)
         pruefe("info admits there is no sun measurement", data["sources"]["solar"], False)
+
+        # (b) Generation exists, but nothing attributes this window.
+        # 🔴 The trap: reporting solar_kwh=0.0 HERE would read in the other
+        # program as "charged at night", when the truth is "nobody measured".
+        cfg2, d2 = _build(Path(tmp) / "pv-ohne-zaehler", erzeugung_ohne_zaehler=True)
+        data2 = ev_link.handle("charges", {"days": "7"}, cfg2, d2.dispatch, presented_token="s3cret")["data"]
+        pruefe("there are charges there too", len(data2["charges"]) > 0, True)
+        pruefe("the house says THAT in a different word", data2["source_split"], "unknown")
+        pruefe("the split is null, never 0.0",
+               all(c["solar_kwh"] is None and c["battery_kwh"] is None
+                   and c["grid_kwh"] is None for c in data2["charges"]), True)
 
 
 def test_05_since_the_poll_a_car_app_actually_makes():
@@ -268,3 +290,53 @@ def test_08_the_switch_and_the_key_close_the_door_by_themselves():
         pruefe("switch off, right key: still refused", r["ok"], False)
         pruefe("and it says WHY, so nobody hunts the network",
                "switched off" in r["error"], True)
+
+
+def test_09_the_curve_no_longer_hangs_on_the_solar_equipment():
+    print("== The curve no longer hangs on the solar equipment ==")
+    # Robert, who has a wallbox and nothing else: "auch nur netzlader … dann ist
+    # die ganze kurve halt rot, aber ich habe den exakten ladeverlauf". Before,
+    # a house without a grid meter or without PV got NO curve at all — although
+    # the wallbox meter knows every charge minute by minute. Only the COLOURING
+    # needs the supply meters.
+    with tempfile.TemporaryDirectory() as tmp:
+        def _kurve(cfg, d):
+            c0 = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch,
+                                presented_token="s3cret")["data"]["charges"][0]
+            return ev_link.handle("curve", {"start": str(c0["start_ts"]),
+                                            "end": str(c0["end_ts"])},
+                                  cfg, d.dispatch, presented_token="s3cret")["data"]
+
+        # (a) A house with nothing but the wallbox: one red band, and it must
+        #     meet the measured load curve everywhere.
+        cfg, d = _build(Path(tmp), with_sources=False)
+        k = _kurve(cfg, d)
+        pruefe("there is a curve at all", k["available"], True)
+        pruefe("and it says what its bands mean", k["split"], "grid_only")
+        pruefe("the load series is there", len(k["load_w"]) > 2, True)
+        pruefe("grid IS the load curve",
+               all(abs(g - l) < 0.05 for g, l in zip(k["grid_w"], k["load_w"])), True)
+        pruefe("sun and battery stay empty",
+               (max(k["solar_w"]), max(k["battery_w"])), (0.0, 0.0))
+        pruefe("and none of it is marked unmeasured",
+               all(k["measured"]), True)
+        pruefe("the grid ran as long as the charge did",
+               abs(k["seconds"]["grid"] - k["seconds"]["total"]) <= 120, True)
+
+        # (b) Generation without attribution: the course, and no colours.
+        #     Painting this red would be a guess about the weather.
+        cfg2, d2 = _build(Path(tmp) / "pv-ohne-zaehler", erzeugung_ohne_zaehler=True)
+        k2 = _kurve(cfg2, d2)
+        pruefe("the course is handed out here too", len(k2["load_w"]) > 2, True)
+        pruefe("but it is not called grid", k2["split"], "unknown")
+        pruefe("no band claims anything",
+               (max(k2["grid_w"]), max(k2["solar_w"]), max(k2["battery_w"])),
+               (0.0, 0.0, 0.0))
+        pruefe("and every point is marked unmeasured",
+               any(k2["measured"]), False)
+
+        # (c) The full house is untouched by all of this.
+        cfg3, d3 = _build(Path(tmp) / "voll")
+        k3 = _kurve(cfg3, d3)
+        pruefe("a metered house still gets the real split", k3["split"], "measured")
+        pruefe("and its bands are not all grid", max(k3["solar_w"]) > 0.0, True)

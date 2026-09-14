@@ -17117,3 +17117,71 @@ _I18N.setdefault("ru", {}).update({
     'settings.hint.ev_charging.link_token': 'Ключ, которым представляется автомобильное приложение. Он открывает только /api/v1/ev/*, но не интерфейс, поэтому его передача не передаёт установку. Пусто = соединение закрыто.',
     'settings.hint.ev_charging.link_settle_minutes': 'Зарядка выдаётся, только когда она завершилась столько времени назад. Пока машина ещё берёт ток, запись продолжает расти, а её идентификатор смещается вместе с ней — слишком ранний забор записал бы ту же зарядку дважды. По умолчанию 20.',
 })
+
+
+# ── i18n block 7/7: the charge curve without a source split (16.86.0) ──
+# A house with no PV and no battery now gets its charge curve too — in one
+# colour. Three strings, because three different houses look at this box.
+
+_I18N.setdefault("de", {}).update({
+    'web.ev.curve_title_grid': 'Ladekurve — alles Netzstrom',
+    'web.ev.curve_grid_note': 'kein PV- oder Akku-Zähler eingerichtet',
+    'web.ev.curve_title_plain': 'Ladekurve',
+    'web.ev.curve_split_unknown': 'der Verlauf ist gemessen, die Quellen dahinter nicht',
+})
+
+_I18N.setdefault("en", {}).update({
+    'web.ev.curve_title_grid': 'Charge curve — all from the grid',
+    'web.ev.curve_grid_note': 'no PV or battery meter set up here',
+    'web.ev.curve_title_plain': 'Charge curve',
+    'web.ev.curve_split_unknown': 'the course is measured, the sources behind it are not',
+})
+
+_I18N.setdefault("es", {}).update({
+    'web.ev.curve_title_grid': 'Curva de carga — todo de la red',
+    'web.ev.curve_grid_note': 'aquí no hay medidor fotovoltaico ni de batería',
+    'web.ev.curve_title_plain': 'Curva de carga',
+    'web.ev.curve_split_unknown': 'el curso está medido, las fuentes detrás no',
+})
+
+_I18N.setdefault("fr", {}).update({
+    'web.ev.curve_title_grid': 'Courbe de charge — tout du réseau',
+    'web.ev.curve_grid_note': 'aucun compteur PV ou batterie configuré ici',
+    'web.ev.curve_title_plain': 'Courbe de charge',
+    'web.ev.curve_split_unknown': 'le déroulé est mesuré, les sources derrière ne le sont pas',
+})
+
+_I18N.setdefault("pt", {}).update({
+    'web.ev.curve_title_grid': 'Curva de carregamento — tudo da rede',
+    'web.ev.curve_grid_note': 'sem medidor fotovoltaico ou de bateria aqui',
+    'web.ev.curve_title_plain': 'Curva de carregamento',
+    'web.ev.curve_split_unknown': 'o percurso é medido, as fontes por trás não',
+})
+
+_I18N.setdefault("it", {}).update({
+    'web.ev.curve_title_grid': 'Curva di ricarica — tutto dalla rete',
+    'web.ev.curve_grid_note': 'qui non c’è un contatore fotovoltaico o della batteria',
+    'web.ev.curve_title_plain': 'Curva di ricarica',
+    'web.ev.curve_split_unknown': 'l’andamento è misurato, le sorgenti dietro no',
+})
+
+_I18N.setdefault("pl", {}).update({
+    'web.ev.curve_title_grid': 'Krzywa ładowania — wszystko z sieci',
+    'web.ev.curve_grid_note': 'brak licznika PV lub magazynu energii',
+    'web.ev.curve_title_plain': 'Krzywa ładowania',
+    'web.ev.curve_split_unknown': 'przebieg jest zmierzony, źródła za nim nie',
+})
+
+_I18N.setdefault("cs", {}).update({
+    'web.ev.curve_title_grid': 'Nabíjecí křivka — vše ze sítě',
+    'web.ev.curve_grid_note': 'není zde měřič FVE ani baterie',
+    'web.ev.curve_title_plain': 'Nabíjecí křivka',
+    'web.ev.curve_split_unknown': 'průběh je změřený, zdroje za ním ne',
+})
+
+_I18N.setdefault("ru", {}).update({
+    'web.ev.curve_title_grid': 'Кривая зарядки — всё из сети',
+    'web.ev.curve_grid_note': 'счётчик солнечных панелей или аккумулятора не настроен',
+    'web.ev.curve_title_plain': 'Кривая зарядки',
+    'web.ev.curve_split_unknown': 'ход зарядки измерен, источники за ним — нет',
+})

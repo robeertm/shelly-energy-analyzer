@@ -1030,6 +1030,62 @@ def consumer_source_split(db, cfg, windows, load_key: str = "",
     return out
 
 
+def _load_only_series(g_ts, g_w, max_points: int, alles_netz: bool) -> dict:
+    """The charge curve of a house that cannot split it — same shape, honest.
+
+    Two very different houses end up here and they must not be told apart only
+    by a footnote:
+
+    * ``alles_netz`` — no PV, no battery anywhere in the configuration. Then the
+      grid band IS the load curve. Nothing is being guessed: a house with no
+      generation has no second source to have drawn from.
+    * otherwise — generation exists, but this window has no attribution (no grid
+      meter, or no data). The bands stay at zero and ``measured`` is false, so
+      the reader draws the load line over hatching instead of a red area. An
+      unmeasured share must never appear as a share.
+    """
+    import numpy as np
+
+    n = int(max(1, min(int(max_points), g_ts.size)))
+    if g_ts.size > n:
+        edges = np.linspace(float(g_ts[0]), float(g_ts[-1]) + 1e-6, n + 1)
+        idx = np.clip(np.searchsorted(edges, g_ts, side="right") - 1, 0, n - 1)
+        cnt = np.bincount(idx, minlength=n).astype(float)
+        keep = cnt > 0
+
+        def _mean(v):
+            return (np.bincount(idx, weights=v, minlength=n) /
+                    np.where(cnt > 0, cnt, 1.0))[keep]
+
+        ts_out = _mean(g_ts.astype(float)).astype("int64")
+        load_o = _mean(g_w)
+    else:
+        ts_out, load_o = g_ts.astype("int64"), g_w
+
+    dt = np.clip(np.diff(g_ts).astype(float), 0.0, _gap_cap(g_ts))
+    lief = float(np.sum(dt[(g_w[:-1] > 1.0) | (g_w[1:] > 1.0)]))
+    return {
+        "ts": [int(x) for x in ts_out],
+        "load_w": [round(float(x), 1) for x in load_o],
+        "solar_w": [0.0] * len(ts_out),
+        "battery_w": [0.0] * len(ts_out),
+        "grid_w": ([round(float(x), 1) for x in load_o] if alles_netz
+                   else [0.0] * len(ts_out)),
+        # "measured" is about the SPLIT, not about the wallbox: the load curve
+        # is measured in both cases. Where there is no generation the split is
+        # settled by the house itself, so it counts as known.
+        "measured": [bool(alles_netz)] * len(ts_out),
+        "seconds": {
+            "solar": 0.0, "battery": 0.0,
+            "grid": round(lief, 0) if alles_netz else 0.0,
+            "total": round(float(np.sum(dt)), 0),
+        },
+        "points": int(len(ts_out)),
+        "raw_points": int(g_ts.size),
+        "split": "grid_only" if alles_netz else "unknown",
+    }
+
+
 def consumer_source_series(db, cfg, start_ts: int, end_ts: int,
                            load_key: str = "", load_ts=None, load_w=None,
                            max_points: int = 360) -> Optional[dict]:
@@ -1051,13 +1107,25 @@ def consumer_source_series(db, cfg, start_ts: int, end_ts: int,
 
     Buckets are means over equal time slices (never every n-th sample: dropping
     samples would hide exactly the short grid spikes this is meant to show).
-    Returns ``None`` when the window cannot be attributed at all.
+
+    The ``split`` key says which of three different statements the bands make:
+
+    * ``"measured"`` — supplies were metered and attributed, as described above.
+    * ``"grid_only"`` — this house has **no** PV and no battery configured, so
+      every watt the wallbox drew came off the grid. That is not an assumption
+      about the weather, it is the house: the band is red because there is
+      nothing else it could be.
+    * ``"unknown"`` — generation exists but the window cannot be attributed (no
+      grid meter, or its series does not cover the charge). The load curve is
+      still returned, the bands stay empty and ``measured`` is false everywhere,
+      because painting it red here WOULD be a guess.
+
+    Returns ``None`` only when there is no load curve at all.
     """
     import numpy as np
 
     grid_key, pv_key, batt_key = _resolve_source_keys(cfg)
-    if not grid_key or not (pv_key or batt_key):
-        return None
+    hat_erzeugung = bool(pv_key or batt_key)
     a, b = int(start_ts), int(end_ts)
     if b <= a:
         return None
@@ -1072,6 +1140,14 @@ def consumer_source_series(db, cfg, start_ts: int, end_ts: int,
     g_ts, g_w = g_ts[m], g_w[m]
     if g_ts.size < 2:
         return None
+
+    # 🔴 The charge curve must not hang on the solar equipment. Before, a house
+    # without a grid meter or without PV got no curve at all — yet the wallbox
+    # meter knows the exact course of every charge, and that is the picture the
+    # owner (and the car app) came for. Only the SPLIT needs those meters.
+    if not grid_key or not hat_erzeugung:
+        return _load_only_series(g_ts, g_w, max_points,
+                                 alles_netz=not hat_erzeugung)
 
     pad = 3600
     gr_ts, gr_w = _power_series(db, grid_key, a - pad, b)
@@ -1141,4 +1217,5 @@ def consumer_source_series(db, cfg, start_ts: int, end_ts: int,
         },
         "points": int(len(ts_out)),
         "raw_points": int(g_ts.size),
+        "split": "measured",
     }

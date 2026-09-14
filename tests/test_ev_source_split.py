@@ -429,13 +429,37 @@ def test_a_spike_survives_the_bucketing():
     print("OK  a two-minute grid burst is still visible after bucketing")
 
 
-def test_no_supply_meter_means_no_curve():
+def test_no_supply_meter_means_no_split_but_still_a_curve():
+    """Since 16.86.0 the curve no longer depends on the solar equipment.
+
+    What the meters decide is the COLOUR, not whether there is a picture: the
+    wallbox meter knows the course of every charge on its own. The two houses
+    without a split must still be told apart, though — one of them has an
+    answer, the other only has the course.
+    """
+    # No PV, no battery: every watt came off the grid. Not a fallback — there
+    # is no second source in this house to have drawn from.
     cfg = Cfg()
     cfg.solar.grid_meter_device_key = ""
+    cfg.solar.pv_production_device_key = ""
     cfg.pv_source.enabled = False
-    assert consumer_source_series(FakeDb({"wb": 6000}), cfg, BASE, BASE + HOUR,
-                                  load_key="wb") is None
-    print("OK  no meters, no curve — nothing invented")
+    c = consumer_source_series(FakeDb({"wb": 6000}), cfg, BASE, BASE + HOUR,
+                               load_key="wb")
+    assert c is not None and c["split"] == "grid_only", c
+    assert c["grid_w"] == c["load_w"], "the red band must BE the load curve"
+    assert max(c["solar_w"]) == 0.0 and max(c["battery_w"]) == 0.0
+    assert all(c["measured"]), "with no generation the split is known, not guessed"
+    print("OK  no meters, no PV: the full curve, in one colour")
+
+    # Generation, but nothing that attributes it: the course, and no claim.
+    cfg2 = Cfg()
+    cfg2.solar.grid_meter_device_key = ""
+    c2 = consumer_source_series(FakeDb({"wb": 6000}), cfg2, BASE, BASE + HOUR,
+                                load_key="wb")
+    assert c2 is not None and c2["split"] == "unknown", c2
+    assert max(c2["grid_w"]) == 0.0, "painting this red would guess the weather"
+    assert not any(c2["measured"])
+    print("OK  PV without attribution: the course alone, marked unmeasured")
 
 
 # ── the promise that this is usable in every language ───────────────────────

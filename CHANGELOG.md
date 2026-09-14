@@ -1,5 +1,29 @@
 # Changelog
 
+## 16.86.0
+### Changed
+- **The charge curve no longer depends on the solar equipment.** A house with
+  no PV and no battery got no curve at all — yet the wallbox meter had recorded
+  every minute of every charge, and that course is what the owner came for.
+  What the supply meters decide is the *colouring*, not whether there is a
+  picture. Such a house now gets the full curve in grid red, and so does the
+  car app that pulls it over the link.
+
+  The payload says which of three statements its bands make, so nobody has to
+  re-derive it:
+
+  | `split` | means |
+  |---|---|
+  | `measured` | supplies were metered and attributed — sun / battery / grid as before |
+  | `grid_only` | no PV and no battery in this house: every watt came off the grid. Not a guess about the weather — there is no second source to have drawn from |
+  | `unknown` | generation exists but nothing covers this window: the course is handed over, the bands stay empty and every point is marked unmeasured |
+
+  For the same reason a house without generation now reports its charges as
+  grid energy over the link instead of three nulls, and `info` carries the new
+  `source_split` field. A house that *has* PV still reports `null` where
+  nothing was measured — "no sun measured" and "no sun" remain different
+  statements.
+
 ## 16.85.0
 ### Added
 - **The charge log can be handed to a car app.** Two programs know half of a
