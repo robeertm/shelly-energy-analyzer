@@ -1,5 +1,53 @@
 # Changelog
 
+## Unreleased
+### Added
+- **The charge log can be handed to a car app.** Two programs know half of a
+  home charge each. A car app knows *which* car was plugged in, what its state
+  of charge did and how far it then drove; this analyzer knows how many
+  kilowatt-hours went through the wallbox and — where a grid meter and a PV or
+  battery series cover the window — how many of them came from the sun, from
+  the house battery and from the grid, and what that cost. Neither can work out
+  the other's half.
+
+  New read-only endpoints under `/api/v1/ev/`:
+
+  | route | answers |
+  |---|---|
+  | `info` | which wallbox this is, which supply meters exist, the tariff, the settle window |
+  | `charges` | finished charges — kWh, the split into sun / battery / grid, cost, coverage |
+  | `curve` | one charge as the very curve the EV-Log tab draws |
+
+  Four decisions worth naming, because each one is a way this could have gone
+  wrong quietly:
+
+  * **Pull, never push.** The reader asks; this side answers. A push would have
+    to guess whether the other end is reachable, keep a queue, retry — and write
+    into a database it cannot see. The reader owns the matching, because only
+    the reader knows which car it is.
+  * **A key of its own.** `ev_charging.link_token` opens `/api/v1/ev/*` and
+    nothing else, and never sets a browser session. Handing it to another
+    program does not hand over the installation. An empty token is never opened
+    by an empty header — both sides blank would otherwise have compared equal.
+  * **Only settled charges.** While a car is still drawing, the log keeps
+    extending the entry and its id moves with the window; a reader that fetched
+    mid-charge would file the same charge twice once it ended. A charge is
+    offered after `link_settle_minutes` of silence (default 20), and the ones
+    held back are *counted* in the answer rather than silently missing.
+  * **An unmeasured charge says so.** Where no supply meter covers the window
+    the three shares come back as `null`, not `0.0` — a zero would read in the
+    other program as "charged at night", when the truth is "nobody measured".
+
+  Everything served here is produced by the same `ev_sessions` /
+  `ev_charge_curve` code the EV-Log tab is drawn from, so the two cannot drift
+  apart. Off by default; the switch in Settings brings its own key.
+
+  Measured: `tests/test_ev_link.py`, 37 checks, each rule from both sides — the
+  door opens for the right key *and* stays shut for every other one, a finished
+  charge is offered *and* a running one is not. Proven against a real reader as
+  well: the link token opens `/api/v1/ev/*` and is refused (401) at
+  `/api/settings`, while no token and a wrong token are refused everywhere.
+
 ## 16.84.0
 ### Fixed
 - **The live poll rebuilt the entire history once a second.** Reported as "it

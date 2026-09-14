@@ -17032,3 +17032,88 @@ _I18N.setdefault('ru', {}).update({
     "demo.device.grid": 'Демо-подключение к сети (3 фазы)',
 })
 
+
+
+# ── i18n: the charge-log link a car app pulls from (block 6/6) ──
+# Appended last so it wins over every earlier definition and cannot corrupt one.
+
+_I18N.setdefault("de", {}).update({
+    'settings.field.ev_charging.link_enabled': 'Ladeprotokoll für eine Auto-App freigeben',
+    'settings.field.ev_charging.link_token': 'Verbindungs-Schlüssel',
+    'settings.field.ev_charging.link_settle_minutes': 'Ladevorgang freigeben nach (Min)',
+    'settings.hint.ev_charging.link_enabled': 'Erlaubt einer Auto-App (EV Charge Tracker), abgeschlossene Ladevorgänge ABZUHOLEN — kWh, die Aufteilung in Sonne/Akku/Netz, die Kosten und die Ladekurve. Nur lesend: die Verbindung kann hier nichts schreiben und erreicht nichts außer dem Ladeprotokoll.',
+    'settings.hint.ev_charging.link_token': 'Der Schlüssel, mit dem sich die Auto-App ausweist — er öffnet ausschließlich /api/v1/ev/*, nicht die Oberfläche. Wer ihn weitergibt, gibt also nicht die Anlage weiter. Leer = die Verbindung bleibt zu.',
+    'settings.hint.ev_charging.link_settle_minutes': 'Ein Ladevorgang wird erst herausgegeben, wenn er so lange vorbei ist. Solange das Auto noch zieht, wächst der Eintrag weiter und seine Kennung wandert mit — zu frühes Abholen würde denselben Ladevorgang zweimal eintragen. Standard 20.',
+})
+
+_I18N.setdefault("en", {}).update({
+    'settings.field.ev_charging.link_enabled': 'Charge-log link for a car app',
+    'settings.field.ev_charging.link_token': 'Link token',
+    'settings.field.ev_charging.link_settle_minutes': 'Offer a charge after (min)',
+    'settings.hint.ev_charging.link_enabled': 'Lets a car app (EV Charge Tracker) FETCH finished charges — kWh, the split into sun / battery / grid, the cost and the charge curve. Read-only: the link can neither write here nor reach anything but the charge log.',
+    'settings.hint.ev_charging.link_token': 'The key the car app authenticates with. It opens /api/v1/ev/* and nothing else, so handing it over does not hand over the installation. Leave it empty and the link stays shut.',
+    'settings.hint.ev_charging.link_settle_minutes': 'A charge is handed out only once it has been over this long. While the car is still drawing, the entry keeps growing and its id moves with it — fetching early would file the same charge twice. Default 20.',
+})
+
+_I18N.setdefault("es", {}).update({
+    'settings.field.ev_charging.link_enabled': 'Compartir el registro de carga con una app del coche',
+    'settings.field.ev_charging.link_token': 'Clave de enlace',
+    'settings.field.ev_charging.link_settle_minutes': 'Ofrecer una carga tras (min)',
+    'settings.hint.ev_charging.link_enabled': 'Permite que una app del coche (EV Charge Tracker) DESCARGUE las cargas finalizadas — kWh, el reparto en sol / batería / red, el coste y la curva de carga. Solo lectura: el enlace no puede escribir aquí ni alcanzar nada más que el registro de carga.',
+    'settings.hint.ev_charging.link_token': 'La clave con la que se identifica la app del coche. Abre únicamente /api/v1/ev/*, no la interfaz, así que cederla no cede la instalación. Vacía = el enlace permanece cerrado.',
+    'settings.hint.ev_charging.link_settle_minutes': 'Una carga solo se entrega cuando lleva este tiempo terminada. Mientras el coche sigue cargando, la entrada crece y su identificador se desplaza con ella — descargarla antes la registraría dos veces. Predeterminado 20.',
+})
+
+_I18N.setdefault("fr", {}).update({
+    'settings.field.ev_charging.link_enabled': 'Partager le journal de charge avec une app auto',
+    'settings.field.ev_charging.link_token': 'Clé de liaison',
+    'settings.field.ev_charging.link_settle_minutes': 'Proposer une charge après (min)',
+    'settings.hint.ev_charging.link_enabled': 'Permet à une app auto (EV Charge Tracker) de RÉCUPÉRER les charges terminées — kWh, répartition soleil / batterie / réseau, coût et courbe de charge. Lecture seule : la liaison ne peut rien écrire ici ni atteindre autre chose que le journal de charge.',
+    'settings.hint.ev_charging.link_token': 'La clé avec laquelle l’app auto s’identifie. Elle n’ouvre que /api/v1/ev/*, pas l’interface : la transmettre ne transmet donc pas l’installation. Vide = la liaison reste fermée.',
+    'settings.hint.ev_charging.link_settle_minutes': 'Une charge n’est livrée qu’une fois terminée depuis ce délai. Tant que la voiture tire, l’entrée continue de grandir et son identifiant se déplace avec elle — la récupérer trop tôt l’enregistrerait deux fois. Par défaut 20.',
+})
+
+_I18N.setdefault("pt", {}).update({
+    'settings.field.ev_charging.link_enabled': 'Partilhar o registo de carga com uma app do carro',
+    'settings.field.ev_charging.link_token': 'Chave de ligação',
+    'settings.field.ev_charging.link_settle_minutes': 'Disponibilizar uma carga após (min)',
+    'settings.hint.ev_charging.link_enabled': 'Permite que uma app do carro (EV Charge Tracker) OBTENHA as cargas concluídas — kWh, a divisão entre sol / bateria / rede, o custo e a curva de carga. Apenas leitura: a ligação não pode escrever aqui nem alcançar nada além do registo de carga.',
+    'settings.hint.ev_charging.link_token': 'A chave com que a app do carro se identifica. Abre apenas /api/v1/ev/*, não a interface, por isso entregá-la não entrega a instalação. Vazia = a ligação permanece fechada.',
+    'settings.hint.ev_charging.link_settle_minutes': 'Uma carga só é entregue depois de estar terminada há este tempo. Enquanto o carro ainda puxa, o registo continua a crescer e o seu identificador muda com ele — obtê-la cedo demais registá-la-ia duas vezes. Predefinição 20.',
+})
+
+_I18N.setdefault("it", {}).update({
+    'settings.field.ev_charging.link_enabled': 'Condividi il registro di ricarica con un’app auto',
+    'settings.field.ev_charging.link_token': 'Chiave di collegamento',
+    'settings.field.ev_charging.link_settle_minutes': 'Offri una ricarica dopo (min)',
+    'settings.hint.ev_charging.link_enabled': 'Consente a un’app auto (EV Charge Tracker) di SCARICARE le ricariche concluse — kWh, la ripartizione tra sole / batteria / rete, il costo e la curva di ricarica. Sola lettura: il collegamento non può scrivere qui né raggiungere altro che il registro di ricarica.',
+    'settings.hint.ev_charging.link_token': 'La chiave con cui l’app auto si identifica. Apre soltanto /api/v1/ev/*, non l’interfaccia: cederla non cede l’impianto. Vuota = il collegamento resta chiuso.',
+    'settings.hint.ev_charging.link_settle_minutes': 'Una ricarica viene consegnata solo quando è finita da questo tempo. Finché l’auto assorbe, la voce continua a crescere e il suo identificativo si sposta con essa — scaricarla troppo presto la registrerebbe due volte. Predefinito 20.',
+})
+
+_I18N.setdefault("pl", {}).update({
+    'settings.field.ev_charging.link_enabled': 'Udostępnij dziennik ładowania aplikacji samochodowej',
+    'settings.field.ev_charging.link_token': 'Klucz połączenia',
+    'settings.field.ev_charging.link_settle_minutes': 'Udostępnij ładowanie po (min)',
+    'settings.hint.ev_charging.link_enabled': 'Pozwala aplikacji samochodowej (EV Charge Tracker) POBIERAĆ zakończone ładowania — kWh, podział na słońce / akumulator / sieć, koszt i krzywą ładowania. Tylko do odczytu: połączenie nic tu nie zapisze i nie sięgnie poza dziennik ładowania.',
+    'settings.hint.ev_charging.link_token': 'Klucz, którym uwierzytelnia się aplikacja samochodowa. Otwiera wyłącznie /api/v1/ev/*, nie interfejs — przekazanie go nie przekazuje instalacji. Puste = połączenie pozostaje zamknięte.',
+    'settings.hint.ev_charging.link_settle_minutes': 'Ładowanie jest wydawane dopiero, gdy zakończyło się tak dawno. Dopóki auto pobiera prąd, wpis rośnie, a jego identyfikator przesuwa się razem z nim — zbyt wczesne pobranie zapisałoby to samo ładowanie dwa razy. Domyślnie 20.',
+})
+
+_I18N.setdefault("cs", {}).update({
+    'settings.field.ev_charging.link_enabled': 'Sdílet protokol nabíjení s aplikací vozu',
+    'settings.field.ev_charging.link_token': 'Klíč propojení',
+    'settings.field.ev_charging.link_settle_minutes': 'Nabídnout nabíjení po (min)',
+    'settings.hint.ev_charging.link_enabled': 'Umožní aplikaci vozu (EV Charge Tracker) STÁHNOUT dokončená nabíjení — kWh, rozdělení na slunce / baterii / síť, náklady a nabíjecí křivku. Jen ke čtení: propojení sem nic nezapíše a nedosáhne na nic než na protokol nabíjení.',
+    'settings.hint.ev_charging.link_token': 'Klíč, kterým se aplikace vozu prokazuje. Otevírá pouze /api/v1/ev/*, nikoli rozhraní — jeho předání tedy nepředává instalaci. Prázdné = propojení zůstává zavřené.',
+    'settings.hint.ev_charging.link_settle_minutes': 'Nabíjení se vydá teprve tehdy, když takto dlouho skončilo. Dokud vůz odebírá, záznam dál roste a jeho identifikátor se posouvá s ním — příliš brzké stažení by totéž nabíjení zapsalo dvakrát. Výchozí 20.',
+})
+
+_I18N.setdefault("ru", {}).update({
+    'settings.field.ev_charging.link_enabled': 'Открыть журнал зарядок для автомобильного приложения',
+    'settings.field.ev_charging.link_token': 'Ключ соединения',
+    'settings.field.ev_charging.link_settle_minutes': 'Выдавать зарядку через (мин)',
+    'settings.hint.ev_charging.link_enabled': 'Позволяет автомобильному приложению (EV Charge Tracker) ЗАБИРАТЬ завершённые зарядки — кВт·ч, разделение на солнце / аккумулятор / сеть, стоимость и кривую зарядки. Только чтение: соединение ничего здесь не записывает и не достаёт ничего, кроме журнала зарядок.',
+    'settings.hint.ev_charging.link_token': 'Ключ, которым представляется автомобильное приложение. Он открывает только /api/v1/ev/*, но не интерфейс, поэтому его передача не передаёт установку. Пусто = соединение закрыто.',
+    'settings.hint.ev_charging.link_settle_minutes': 'Зарядка выдаётся, только когда она завершилась столько времени назад. Пока машина ещё берёт ток, запись продолжает расти, а её идентификатор смещается вместе с ней — слишком ранний забор записал бы ту же зарядку дважды. По умолчанию 20.',
+})

@@ -5485,7 +5485,8 @@ class ActionDispatcher:
                                   "energy_kwh": s.energy_kwh, "peak_power_w": s.peak_power_w,
                                   "avg_power_w": s.avg_power_w, "cost_eur": s.cost_eur,
                                   "solar_kwh": s.solar_kwh, "battery_kwh": s.battery_kwh,
-                                  "grid_kwh": s.grid_kwh, "cost_model": s.cost_model}
+                                  "grid_kwh": s.grid_kwh, "cost_model": s.cost_model,
+                                  "coverage": s.source_coverage}
                                  for s in g.sessions],
                              }
                             for g in _charges
@@ -5553,7 +5554,8 @@ class ActionDispatcher:
                          "energy_kwh": s.energy_kwh, "peak_power_w": s.peak_power_w,
                          "avg_power_w": s.avg_power_w, "cost_eur": s.cost_eur,
                          "solar_kwh": s.solar_kwh, "battery_kwh": s.battery_kwh,
-                         "grid_kwh": s.grid_kwh, "cost_model": s.cost_model}
+                         "grid_kwh": s.grid_kwh, "cost_model": s.cost_model,
+                         "coverage": s.source_coverage}
                         for s in sessions
                     ],
                 }

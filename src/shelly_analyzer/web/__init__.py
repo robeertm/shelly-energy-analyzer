@@ -452,6 +452,17 @@ def create_app(config_path: Optional[str] = None) -> Flask:
             # Login page
             if path == "/login":
                 return None
+            # The charge-log link has a key of its own. It opens /api/v1/ev/*
+            # and nothing else, and — deliberately — no session cookie is set
+            # from it: a program that may read the charge log must not end up
+            # holding a logged-in browser session for the whole installation.
+            if path.startswith("/api/v1/ev"):
+                from shelly_analyzer.services.ev_link import token_ok
+                link = (flask_request.headers.get("X-EV-Link-Token")
+                        or flask_request.headers.get("X-API-Key")
+                        or flask_request.args.get("link_token") or "")
+                if token_ok(state.cfg, link):
+                    return None
             # Check token in query param, header, or session
             t = (flask_request.args.get("t")
                  or flask_request.headers.get("X-API-Key")

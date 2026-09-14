@@ -165,6 +165,20 @@ def put_settings():
         # Don't overwrite masked secrets with "***"
         _restore_secrets(current, state.cfg)
 
+        # Turning the charge-log link on without a key would leave it shut and
+        # say nothing about why (an empty token never matches). So the switch
+        # brings its own key, and the field shows it right after the save —
+        # there is no second place to go and generate one. Never regenerated:
+        # a new key here would silently stop a car app that is already paired.
+        try:
+            _ev = current.get("ev_charging")
+            if isinstance(_ev, dict) and _ev.get("link_enabled") and not str(_ev.get("link_token") or "").strip():
+                from shelly_analyzer.services.ev_link import new_link_token
+                _ev["link_token"] = new_link_token()
+                logger.info("EV charge-log link: token generated (link enabled without one)")
+        except Exception:
+            logger.debug("EV link token bootstrap failed", exc_info=True)
+
         # Write merged config to file
         cfg_path = getattr(state, "_cfg_path", None) or Path("config.json")
         Path(cfg_path).write_text(
