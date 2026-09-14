@@ -29,6 +29,10 @@
     nothing else, and never sets a browser session. Handing it to another
     program does not hand over the installation. An empty token is never opened
     by an empty header — both sides blank would otherwise have compared equal.
+    The switch and the key are enforced by the link itself, not only by the web
+    layer's auth guard: an installation with no web token registers no guard at
+    all, and the link would then have answered whether or not anybody had
+    switched it on. A switch that changes nothing is worse than no switch.
   * **Only settled charges.** While a car is still drawing, the log keeps
     extending the entry and its id moves with the window; a reader that fetched
     mid-charge would file the same charge twice once it ended. A charge is
@@ -42,7 +46,7 @@
   `ev_charge_curve` code the EV-Log tab is drawn from, so the two cannot drift
   apart. Off by default; the switch in Settings brings its own key.
 
-  Measured: `tests/test_ev_link.py`, 37 checks, each rule from both sides — the
+  Measured: `tests/test_ev_link.py`, 43 checks, each rule from both sides — the
   door opens for the right key *and* stays shut for every other one, a finished
   charge is offered *and* a running one is not. Proven against a real reader as
   well: the link token opens `/api/v1/ev/*` and is refused (401) at

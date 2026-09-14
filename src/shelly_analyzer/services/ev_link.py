@@ -252,8 +252,21 @@ def curve(on_action: Callable[[str, Dict[str, str]], Dict[str, Any]],
 
 def handle(route: str, params: Dict[str, str], cfg,
            on_action: Optional[Callable[[str, Dict[str, str]], Dict[str, Any]]],
-           version: str = "") -> Dict[str, Any]:
-    """Route ``/api/v1/ev/<route>``. Unknown routes are an error, not a guess."""
+           version: str = "", presented_token: str = "") -> Dict[str, Any]:
+    """Route ``/api/v1/ev/<route>``. Unknown routes are an error, not a guess.
+
+    🔴 The switch and the key are enforced HERE, not only in the web layer's
+    auth guard. An installation with no web token registers no guard at all —
+    everything is open — and the link would then answer whether or not anybody
+    had switched it on. A switch that changes nothing is worse than no switch:
+    it is a promise the program does not keep. So the link asks for its own key
+    on every installation, however the rest of the app is protected.
+    """
+    if not bool(getattr(cfg.ev_charging, "link_enabled", False)):
+        return {"ok": False, "error": "the charge-log link is switched off "
+                                      "(Settings \u203a EV charging)"}
+    if not token_ok(cfg, presented_token):
+        return {"ok": False, "error": "wrong or missing link token"}
     r = (route or "").strip("/")
     if r in ("", "info"):
         return {"ok": True, "data": info(cfg, version)}
