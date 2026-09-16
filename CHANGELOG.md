@@ -1,5 +1,16 @@
 # Changelog
 
+## 16.88.0
+### Fixed
+- **A charge that was still settling on a car app's last poll is no longer
+  lost.** The link withholds a charge until it has been over for the settle
+  window, and a poll with `since` asked for charges that *ended* after that
+  moment. Both together dropped exactly the charge the day-window overlap was
+  widened for: ended a minute before poll 1 → withheld; poll 2 asks since
+  poll 1 → ended before it → never offered again. At a 30-minute poll two
+  charges in three went that way. `since` now reaches back over the settle
+  window plus an hour; the reader files by id, so the overlap costs nothing.
+
 ## 16.87.0
 ### Added
 - **A word for the companion app.** Settings › About now carries one sentence

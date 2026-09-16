@@ -79,11 +79,12 @@ def _house(day0: datetime, days: int, last_charge_ends_at=None):
 
 
 def _build(tmp: Path, *, link_enabled=True, token="s3cret", settle=20,
-           running_now=False, with_sources=True, erzeugung_ohne_zaehler=False):
+           running_now=False, last_charge_ends_at=None, with_sources=True,
+           erzeugung_ohne_zaehler=False):
     st = Storage(tmp / "data")
     day0 = (datetime.now() - timedelta(days=5)).replace(hour=0, minute=0, second=0,
                                                         microsecond=0)
-    ends = datetime.now() if running_now else None
+    ends = datetime.now() if running_now else last_charge_ends_at
     for key, pts in _house(day0, 4, last_charge_ends_at=ends).items():
         df = pd.DataFrame({"timestamp": [p[0] for p in pts],
                            "total_power": [p[1] for p in pts],
@@ -224,10 +225,74 @@ def test_05_since_the_poll_a_car_app_actually_makes():
         alle = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch, presented_token="s3cret")["data"]["charges"]
         mitte = sorted(c["end_ts"] for c in alle)[len(alle) // 2]
         teil = ev_link.handle("charges", {"since": str(mitte)}, cfg, d.dispatch, presented_token="s3cret")["data"]["charges"]
-        pruefe("since returns the newer half", all(c["end_ts"] >= mitte for c in teil), True)
+        # The overlap is the settle window plus an hour — anything older than
+        # that was already handed out on the poll ``since`` names.
+        floor = mitte - 20 * 60 - ev_link.SINCE_GRACE_S
+        pruefe("since returns the newer half (plus the settle overlap)",
+               all(c["end_ts"] >= floor for c in teil), True)
         pruefe("and nothing that was already fetched", len(teil) < len(alle), True)
         pruefe("the ids are the same objects, not new ones",
                set(c["id"] for c in teil) <= set(c["id"] for c in alle), True)
+
+
+def test_05b_a_charge_that_was_settling_on_the_last_poll_is_not_lost():
+    """The gap that swallowed a real charge (2026-09-15, 6.2 kWh, PV surplus).
+
+    A reader polls every 30 min and asks "since my last poll". A charge that
+    ended a minute before poll 1 is withheld there (still settling). Poll 2
+    asks since=poll 1 — and the charge, now settled, ended BEFORE that. With
+    ``end_ts < since`` as the filter it was never offered again: on two out of
+    three charges the routine poll delivered nothing, only the backfill did.
+    """
+    print("== A charge that was settling on the last poll is not lost ==")
+    import types
+    with tempfile.TemporaryDirectory() as tmp:
+        ende = datetime.now().replace(microsecond=0) - timedelta(minutes=1)
+        cfg, d = _build(Path(tmp), settle=20, last_charge_ends_at=ende)
+        echte_zeit = ev_link.time
+
+        def _uhr(jetzt):
+            # Only the clock moves; everything else the module asks ``time``
+            # for stays the real thing.
+            return types.SimpleNamespace(**{**{k: getattr(echte_zeit, k)
+                                               for k in dir(echte_zeit)
+                                               if not k.startswith('_')},
+                                            'time': lambda: jetzt})
+        # The clock of the test is the log's own: the fixture writes naive
+        # local minutes and the log reads them back on its own terms, so the
+        # charge's end is taken from what ``ev_sessions`` reports, not from
+        # ``ende``. The polls then run on a stubbed clock around that end.
+        roh = d.dispatch("ev_sessions", {"days": "7"})["data"]
+        letzte = max(int(e["end_ts"]) for e in (roh.get("charges") or roh.get("sessions")))
+        try:
+            # Poll 1: the charge ended a minute ago — withheld, and said so.
+            poll1 = letzte + 60
+            ev_link.time = _uhr(poll1)
+            r1 = ev_link.handle("charges", {"days": "7"}, cfg, d.dispatch, presented_token="s3cret")["data"]
+            pruefe("poll 1 holds the fresh charge back", r1["pending_settle"], 1)
+            pruefe("and does not hand it out",
+                   any(c["end_ts"] >= letzte - 60 for c in r1["charges"]), False)
+            # Poll 2, half an hour later, asking since poll 1.
+            ev_link.time = _uhr(poll1 + 1800)
+            r2 = ev_link.handle("charges", {"since": str(poll1)}, cfg, d.dispatch, presented_token="s3cret")["data"]
+            frisch = [c for c in r2["charges"] if c["end_ts"] >= letzte - 120]
+            pruefe("poll 2 hands the settled charge out", len(frisch), 1)
+            pruefe("nothing is pending any more", r2["pending_settle"], 0)
+            pruefe("it is the 90-minute charge that was running",
+                   5000 <= frisch[0]["duration_s"] <= 5600, True)
+            # And the charges poll 1 already delivered are not all repeated:
+            # the overlap is the settle window plus an hour, not the whole log.
+            pruefe("the overlap stays narrow", len(r2["charges"]) < len(r1["charges"]), True)
+            # Hours later, a poll asking since a poll two hours after poll 2:
+            # the charge is older than the overlap now and rightly not offered
+            # a third time.
+            poll_n = poll1 + 1800 + 7200
+            ev_link.time = _uhr(poll_n + 1800)
+            r3 = ev_link.handle("charges", {"since": str(poll_n)}, cfg, d.dispatch, presented_token="s3cret")["data"]
+            pruefe("once out of the overlap it is not re-offered",
+                   any(c["id"] == frisch[0]["id"] for c in r3["charges"]), False)
+        finally:
+            ev_link.time = echte_zeit
 
 
 def test_06_info_and_the_routes_that_do_not_exist():
