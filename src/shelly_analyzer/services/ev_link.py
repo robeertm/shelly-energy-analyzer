@@ -39,6 +39,13 @@ _log = logging.getLogger(__name__)
 MAX_DAYS = 400
 DEFAULT_DAYS = 30
 
+# How far behind ``since`` a poll still reaches. A charge that was still
+# settling on the reader's last poll ended less than ``settle`` before that
+# poll — so it ended AFTER ``since - settle`` and must be offered now. The extra
+# hour is for a session the log closes late. Re-offering costs the reader
+# nothing: it files by id.
+SINCE_GRACE_S = 3600
+
 
 def new_link_token() -> str:
     """A fresh link token. 32 hex chars — long enough that guessing is not a
@@ -167,6 +174,13 @@ def charges(on_action: Callable[[str, Dict[str, str]], Dict[str, Any]],
         # last poll must come back on this one, and a re-offered charge costs
         # the reader nothing — it files by id.
         days = max(1, min(MAX_DAYS, int((now - since) / 86400) + 2))
+        # 🔴 The overlap has to reach the filter below as well. It did not:
+        # ``end_ts < since`` dropped exactly the charge the day window was
+        # widened for. A charge that ended 1 min before the poll was withheld
+        # (settling); the next poll asked "since that poll" — and the charge,
+        # now settled, ended before it. Lost for good, on two out of three
+        # charges at a 30-minute poll with a 20-minute settle.
+        since_floor = since - _settle_s(cfg) - SINCE_GRACE_S
     else:
         try:
             days = int(float(params.get("days") or DEFAULT_DAYS))
@@ -201,7 +215,7 @@ def charges(on_action: Callable[[str, Dict[str, str]], Dict[str, Any]],
         if end_ts > cutoff:
             still_running += 1
             continue
-        if since and end_ts < since:
+        if since and end_ts < since_floor:
             continue
         energy = round(float(e.get("energy_kwh") or 0.0), 3)
         sol = round(float(e.get("solar_kwh") or 0.0), 3)
