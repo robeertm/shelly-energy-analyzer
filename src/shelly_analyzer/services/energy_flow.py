@@ -34,6 +34,17 @@ def _bounds(period: str, now: datetime):
     return t0, now
 
 
+def _name(cfg, d) -> str:
+    """A demo device carries an i18n key as its name until the next config
+    load; resolve it here so the diagram never shows ``demo.device.…``."""
+    try:
+        from shelly_analyzer.i18n import resolve_name
+        lang = str(getattr(getattr(cfg, "ui", None), "language", "en") or "en")
+        return resolve_name(lang, str(getattr(d, "name", "") or getattr(d, "key", "")))
+    except Exception:
+        return str(getattr(d, "name", "") or getattr(d, "key", ""))
+
+
 def _consumers(cfg) -> List[Any]:
     """Consumer devices to draw, each meter once (a child wired behind a parent
     is a branch off it, so the parent is shown net of it)."""
@@ -115,7 +126,7 @@ def compute_energy_flow(db, cfg, period: str = "today", now: Optional[datetime] 
                     kwh = parts["kwh"]
         cons_sum += kwh
         consumers.append({
-            "key": d.key, "name": d.name, "role": device_role(cfg, d.key),
+            "key": d.key, "name": _name(cfg, d), "role": device_role(cfg, d.key),
             "kwh": round(kwh, 3), "grid": round(parts["kwh_grid"], 3),
             "pv": round(parts["kwh_pv"], 3), "battery": round(parts["kwh_bat"], 3),
             "co2_g": round(parts["g"], 1),
@@ -182,7 +193,7 @@ def compute_energy_flow_live(cfg, live_snapshot: Dict[str, Any], bat_int: float 
         for ck in kids.get(d.key, []):
             w = max(0.0, w - max(0.0, _w(ck)))
         cons_sum += w
-        consumers.append({"key": d.key, "name": d.name, "role": device_role(cfg, d.key),
+        consumers.append({"key": d.key, "name": _name(cfg, d), "role": device_role(cfg, d.key),
                           "kwh": round(w, 0), "grid": round(w * mix["grid"], 0),
                           "pv": round(w * mix["pv"], 0), "battery": round(w * mix["battery"], 0),
                           "net_of": list(kids.get(d.key, []))})

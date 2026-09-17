@@ -11754,6 +11754,20 @@ _loadLsSettings();
       _mcRaw(t('battery.efficiency','Efficiency'), effTxt) +
       '</div></div>';
 
+    // Origin of what is inside — the CO₂ chain's view of the battery.
+    const org = data.origin;
+    if (org) {{
+      html += '<div class="card"><div class="card-title">' + esc(t('battery.origin_title','Where the stored energy came from')) + ' (' + days + ' ' + esc(t('battery.days','days')) + ')</div>' +
+        '<div style="display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--chipbg);margin:6px 0 8px">' +
+        '<div style="flex:' + (org.pv_charged_kwh||0) + ';background:#fdd835"></div><div style="flex:' + (org.grid_charged_kwh||0) + ';background:#ef4444"></div></div>' +
+        '<div class="metric-grid">' +
+        metricCardHtml(t('battery.from_sun','Charged from the sun'), (org.pv_charged_kwh||0).toFixed(1) + ' kWh', (100 - (org.grid_share_pct||0)).toFixed(0) + ' %') +
+        metricCardHtml(t('battery.from_grid','Charged from the grid'), (org.grid_charged_kwh||0).toFixed(1) + ' kWh', (org.grid_share_pct||0).toFixed(0) + ' %') +
+        metricCardHtml(t('battery.kwh_carries','A kWh out carries'), (org.intensity_g_per_kwh||0).toFixed(0) + ' g CO\u2082', t('battery.incl_mfg','incl. {{v}} g manufacturing').replace('{{v}}', (org.manufacturing_g_per_kwh||0).toFixed(0))) +
+        metricCardHtml(t('battery.avoided','Avoided by the battery'), (org.avoided_kg||0).toFixed(2) + ' kg', (org.share_of_load_pct||0).toFixed(0) + ' % ' + t('web.solar.of_the_load','of the load')) +
+        '</div></div>';
+    }}
+
     el.innerHTML = html;
 
     // Draw SOC sparkline after the canvas is in the DOM.

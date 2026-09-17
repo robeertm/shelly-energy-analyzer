@@ -192,8 +192,8 @@ def test_costs_summary_excludes_submeters():
     """The summary must sum the counting set, not every row."""
     src = open(os.path.join(os.path.dirname(__file__), "..", "src", "shelly_analyzer",
                             "web", "action_dispatch.py"), encoding="utf-8").read()
-    assert "_hh_keys = household_keys(_cost_devices)" in src, \
-        "the costs summary does not consult the wiring"
+    assert "_hh_keys = set(_ck_cost(self.cfg))" in src and "household_keys(_cost_devices)" in src, \
+        "the costs summary does not consult the wiring (consumers only, each meter once)"
     blk = src[src.index("# Build summary from device totals"):]
     blk = blk[:blk.index("_costs_payload = {")]
     sums = [l for l in blk.splitlines() if "_kwh\"] = round(sum(" in l or "_eur\"] = round(sum(" in l]

@@ -17345,6 +17345,12 @@ _I18N.setdefault("de", {}).update({
     "appliance.well_pump.name": "Brunnen-/Gartenpumpe",
     "settings.field.solar.battery_manufacturing_g_per_kwh": "Speicher-Herstellung CO₂ (g/kWh)",
     "settings.field.solar.pv_embodied_g_per_kwh": "PV-Herstellung CO₂ (g/kWh)",
+    "battery.origin_title": "Woher der gespeicherte Strom kam",
+    "battery.from_sun": "Von der Sonne geladen",
+    "battery.from_grid": "Aus dem Netz geladen",
+    "battery.kwh_carries": "Eine kWh heraus trägt",
+    "battery.incl_mfg": "inkl. {v} g Herstellung",
+    "battery.avoided": "Durch den Speicher vermieden",
 })
 _I18N.setdefault("en", {}).update({
     "web.co2.export_saved": "Avoided in the grid",
@@ -17470,6 +17476,12 @@ _I18N.setdefault("en", {}).update({
     "appliance.well_pump.name": "Well / garden pump",
     "settings.field.solar.battery_manufacturing_g_per_kwh": "Battery manufacturing CO₂ (g/kWh)",
     "settings.field.solar.pv_embodied_g_per_kwh": "PV manufacturing CO₂ (g/kWh)",
+    "battery.origin_title": "Where the stored energy came from",
+    "battery.from_sun": "Charged from the sun",
+    "battery.from_grid": "Charged from the grid",
+    "battery.kwh_carries": "A kWh out carries",
+    "battery.incl_mfg": "incl. {v} g manufacturing",
+    "battery.avoided": "Avoided by the battery",
 })
 _I18N.setdefault("es", {}).update({
     "web.co2.export_saved": "Evitado en la red",
@@ -17595,6 +17607,12 @@ _I18N.setdefault("es", {}).update({
     "appliance.well_pump.name": "Bomba de pozo/jardín",
     "settings.field.solar.battery_manufacturing_g_per_kwh": "CO₂ de fabricación de la batería (g/kWh)",
     "settings.field.solar.pv_embodied_g_per_kwh": "CO₂ de fabricación FV (g/kWh)",
+    "battery.origin_title": "De dónde vino la energía almacenada",
+    "battery.from_sun": "Cargado del sol",
+    "battery.from_grid": "Cargado de la red",
+    "battery.kwh_carries": "Un kWh de salida lleva",
+    "battery.incl_mfg": "incl. {v} g de fabricación",
+    "battery.avoided": "Evitado por la batería",
 })
 _I18N.setdefault("fr", {}).update({
     "web.co2.export_saved": "Évité dans le réseau",
@@ -17720,6 +17738,12 @@ _I18N.setdefault("fr", {}).update({
     "appliance.well_pump.name": "Pompe de puits/jardin",
     "settings.field.solar.battery_manufacturing_g_per_kwh": "CO₂ de fabrication de la batterie (g/kWh)",
     "settings.field.solar.pv_embodied_g_per_kwh": "CO₂ de fabrication PV (g/kWh)",
+    "battery.origin_title": "D’où vient l’énergie stockée",
+    "battery.from_sun": "Chargé par le soleil",
+    "battery.from_grid": "Chargé par le réseau",
+    "battery.kwh_carries": "Un kWh sortant porte",
+    "battery.incl_mfg": "dont {v} g de fabrication",
+    "battery.avoided": "Évité grâce à la batterie",
 })
 _I18N.setdefault("pt", {}).update({
     "web.co2.export_saved": "Evitado na rede",
@@ -17845,6 +17869,12 @@ _I18N.setdefault("pt", {}).update({
     "appliance.well_pump.name": "Bomba de poço/jardim",
     "settings.field.solar.battery_manufacturing_g_per_kwh": "CO₂ de fabrico da bateria (g/kWh)",
     "settings.field.solar.pv_embodied_g_per_kwh": "CO₂ de fabrico FV (g/kWh)",
+    "battery.origin_title": "De onde veio a energia armazenada",
+    "battery.from_sun": "Carregado do sol",
+    "battery.from_grid": "Carregado da rede",
+    "battery.kwh_carries": "Um kWh de saída leva",
+    "battery.incl_mfg": "incl. {v} g de fabrico",
+    "battery.avoided": "Evitado pela bateria",
 })
 _I18N.setdefault("it", {}).update({
     "web.co2.export_saved": "Evitato nella rete",
@@ -17970,6 +18000,12 @@ _I18N.setdefault("it", {}).update({
     "appliance.well_pump.name": "Pompa pozzo/giardino",
     "settings.field.solar.battery_manufacturing_g_per_kwh": "CO₂ di produzione della batteria (g/kWh)",
     "settings.field.solar.pv_embodied_g_per_kwh": "CO₂ di produzione FV (g/kWh)",
+    "battery.origin_title": "Da dove viene l’energia accumulata",
+    "battery.from_sun": "Caricato dal sole",
+    "battery.from_grid": "Caricato dalla rete",
+    "battery.kwh_carries": "Un kWh in uscita porta",
+    "battery.incl_mfg": "incl. {v} g di produzione",
+    "battery.avoided": "Evitato dalla batteria",
 })
 _I18N.setdefault("pl", {}).update({
     "web.co2.export_saved": "Uniknięto w sieci",
@@ -18095,6 +18131,12 @@ _I18N.setdefault("pl", {}).update({
     "appliance.well_pump.name": "Pompa studzienna/ogrodowa",
     "settings.field.solar.battery_manufacturing_g_per_kwh": "CO₂ produkcji magazynu (g/kWh)",
     "settings.field.solar.pv_embodied_g_per_kwh": "CO₂ produkcji PV (g/kWh)",
+    "battery.origin_title": "Skąd pochodziła zmagazynowana energia",
+    "battery.from_sun": "Naładowano ze słońca",
+    "battery.from_grid": "Naładowano z sieci",
+    "battery.kwh_carries": "kWh z magazynu niesie",
+    "battery.incl_mfg": "w tym {v} g produkcji",
+    "battery.avoided": "Uniknięto dzięki magazynowi",
 })
 _I18N.setdefault("cs", {}).update({
     "web.co2.export_saved": "Ušetřeno v síti",
@@ -18220,6 +18262,12 @@ _I18N.setdefault("cs", {}).update({
     "appliance.well_pump.name": "Studniové/zahradní čerpadlo",
     "settings.field.solar.battery_manufacturing_g_per_kwh": "CO₂ výroby baterie (g/kWh)",
     "settings.field.solar.pv_embodied_g_per_kwh": "CO₂ výroby FV (g/kWh)",
+    "battery.origin_title": "Odkud pocházela uložená energie",
+    "battery.from_sun": "Nabito ze slunce",
+    "battery.from_grid": "Nabito ze sítě",
+    "battery.kwh_carries": "kWh ven nese",
+    "battery.incl_mfg": "vč. {v} g výroby",
+    "battery.avoided": "Ušetřeno baterií",
 })
 _I18N.setdefault("ru", {}).update({
     "web.co2.export_saved": "Избежано в сети",
@@ -18345,4 +18393,10 @@ _I18N.setdefault("ru", {}).update({
     "appliance.well_pump.name": "Насос колодца/сада",
     "settings.field.solar.battery_manufacturing_g_per_kwh": "CO₂ производства батареи (г/кВт·ч)",
     "settings.field.solar.pv_embodied_g_per_kwh": "CO₂ производства панелей (г/кВт·ч)",
+    "battery.origin_title": "Откуда пришла накопленная энергия",
+    "battery.from_sun": "Заряжено от солнца",
+    "battery.from_grid": "Заряжено из сети",
+    "battery.kwh_carries": "кВт·ч из батареи несёт",
+    "battery.incl_mfg": "включая {v} г производства",
+    "battery.avoided": "Избежано благодаря батарее",
 })
