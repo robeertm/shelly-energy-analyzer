@@ -3125,6 +3125,37 @@ class ActionDispatcher:
 
                     devices_out.append(dev_data)
 
+                # Net "meter behind meter": a parent shown net of a flagged
+                # child (the house net of the wallbox) is net here too, in kWh,
+                # € and CO₂ alike — otherwise the house row and the wallbox row
+                # both carried the car and the summary counted it twice.
+                try:
+                    from shelly_analyzer.services.net_display import net_display_children
+                    _nd_map = net_display_children(_cost_devices)
+                    _by_key = {str(d.get("key", "")): d for d in devices_out}
+                    for _pk_nd, _kids_nd in _nd_map.items():
+                        _pd = _by_key.get(_pk_nd)
+                        if _pd is None:
+                            continue
+                        for _ck_nd in _kids_nd:
+                            _cd = _by_key.get(_ck_nd)
+                            if _cd is None:
+                                continue
+                            for _rk in ("today", "week", "month", "year", "last_month"):
+                                for _suf in ("_kwh", "_eur", "_co2_kg"):
+                                    _k = _rk + _suf
+                                    if _k in _pd and _k in _cd:
+                                        _pd[_k] = round(max(0.0, float(_pd[_k]) - float(_cd[_k])), 3 if _suf != "_eur" else 2)
+                            for _k in ("proj_kwh", "proj_eur", "proj_co2_kg"):
+                                if _k in _pd and _k in _cd:
+                                    _pd[_k] = round(max(0.0, float(_pd[_k]) - float(_cd[_k])), 2)
+                        _pd["net_of"] = list(_kids_nd)
+                        _lm2 = float(_pd.get("last_month_kwh", 0.0) or 0.0)
+                        _cm2 = float(_pd.get("month_kwh", 0.0) or 0.0)
+                        _pd["vs_last_pct"] = round((_cm2 - _lm2) / _lm2 * 100, 1) if _lm2 > 0 else None
+                except Exception:
+                    logger.debug("costs net display failed", exc_info=True)
+
                 # Avoided CO₂ this month — the CO₂ tab's own figures, so the
                 # Costs tab never tells a different story than the CO₂ tab.
                 _solar_co2_saved_month_kg = 0.0
@@ -3320,9 +3351,17 @@ class ActionDispatcher:
                 # A sub-meter's energy is already inside its parent's reading, so
                 # adding both double-counted the house: measured 22.558 kWh where
                 # the true figure was 11.311, and the euro columns with it.
+                # And counting only CONSUMERS: the meter on the grid connection
+                # (signed, − when exporting) is a supply meter, not a load — with
+                # the house wired "behind" it, the old wiring set dropped the
+                # house and summed the grid meter instead, so a solar home read
+                # 23 kWh for the year and 100 kWh for the month.
                 try:
                     from shelly_analyzer.services.net_display import household_keys
-                    _hh_keys = household_keys(_cost_devices)
+                    from shelly_analyzer.services.energy_balance import consumer_keys as _ck_cost
+                    _hh_keys = set(_ck_cost(self.cfg)) & {str(getattr(d, "key", "")) for d in _cost_devices}
+                    if not _hh_keys:
+                        _hh_keys = household_keys(_cost_devices)
                 except Exception:
                     _hh_keys = None
                 _summable = [d for d in devices_out
@@ -5535,7 +5574,37 @@ class ActionDispatcher:
                     pass
                 _cap = float(status.capacity_kwh or 0.0)
                 _stored = round(_cap * (status.soc_pct or 0.0) / 100.0, 2) if _cap > 0 else 0.0
+                # Where the stored energy came from (the same chain the CO₂
+                # tab runs): grid-charged share over the window, what a kWh
+                # out of the battery carries in grams, what its use avoided.
+                _origin = None
+                try:
+                    from shelly_analyzer.services.energy_balance import build_supply_chain
+                    _now_b = int(datetime.now().timestamp())
+                    _bg_b = getattr(self, "_bg", None)
+                    _ci_b = float(_bg_b._current_co2_intensity()) if _bg_b is not None else 380.0
+                    _chb = build_supply_chain(self.storage.db, self.cfg, _now_b - 7 * 86400, _now_b + 3600,
+                                              default_intensity=_ci_b)
+                    if _chb.has_supply:
+                        _bch = sum(h.bch for h in _chb.hours.values())
+                        _bgr = sum(h.bch_grid for h in _chb.hours.values())
+                        _bdis = sum(h.bdis for h in _chb.hours.values())
+                        _g = sum(h.g_bat for h in _chb.hours.values())
+                        _avoid = sum(max(0.0, h.bdis * h.ci - h.g_bat) for h in _chb.hours.values())
+                        _load = sum(h.load for h in _chb.hours.values())
+                        _origin = {
+                            "grid_charged_kwh": round(_bgr, 2), "pv_charged_kwh": round(max(0.0, _bch - _bgr), 2),
+                            "grid_share_pct": round(_bgr / _bch * 100.0, 1) if _bch > 0 else 0.0,
+                            "intensity_g_per_kwh": round(_g / _bdis, 1) if _bdis > 0 else round(_chb.bat_stored_last + _chb.bat_mfg, 1),
+                            "stored_now_g_per_kwh": round(_chb.bat_stored_last + _chb.bat_mfg, 1),
+                            "co2_kg": round(_g / 1000.0, 3), "avoided_kg": round(_avoid / 1000.0, 3),
+                            "share_of_load_pct": round(_bdis / _load * 100.0, 1) if _load > 0 else 0.0,
+                            "manufacturing_g_per_kwh": round(_chb.bat_mfg, 1),
+                        }
+                except Exception:
+                    logger.debug("battery origin failed", exc_info=True)
                 return {"ok": True, "data": {
+                    "origin": _origin,
                     "soc_pct": status.soc_pct, "power_w": status.power_w,
                     "mode": status.mode, "cycle_count": status.cycle_count,
                     "equivalent_cycles": status.equivalent_cycles,

@@ -131,8 +131,13 @@ def classify_cluster(delta_w: float, duration_min: Optional[float], runs_per_day
     tot = float(sum(hist)) if hist else 0.0
     out: List[Tuple[ApplianceSignature, float]] = []
     hint = (device_hint or "").lower()
+    is_wb = bool(hint) and ("wallbox" in hint or "ladesäule" in hint or "charger" in hint or " ev " in (" " + hint + " "))
     for sig in APPLIANCES:
-        ps = _range_score(p, sig.power_min, sig.power_max, 0.2)
+        if sig.id == "ev_charger" and is_wb:
+            # Single-phase surplus charging starts at ~1.4 kW (6 A).
+            ps = _range_score(p, 1200, 11000, 0.2)
+        else:
+            ps = _range_score(p, sig.power_min, sig.power_max, 0.2)
         if ps <= 0:
             continue
         ds = _range_score(duration_min, sig.duration_min, sig.duration_max, 0.6) if duration_min is not None else 0.6
@@ -146,10 +151,8 @@ def classify_cluster(delta_w: float, duration_min: Optional[float], runs_per_day
             hs = 0.6
         score = sig.prior * ps * ds * fs * hs
         if hint:
-            is_wb = ("wallbox" in hint or "ladesäule" in hint or "charger" in hint or " ev " in (" " + hint + " "))
             if sig.id == "ev_charger" and is_wb:
-                # Single-phase surplus charging starts at ~1.4 kW (6 A).
-                score = min(1.0, max(score, _range_score(p, 1200, 11000, 0.2) * 0.9))
+                score = min(1.0, max(score, ps * 0.9))
             if sig.id != "ev_charger" and is_wb:
                 # Whatever else steps on a wallbox circuit is the car's charge
                 # electronics or a ramp — never a dishwasher.

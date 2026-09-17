@@ -1,5 +1,104 @@
 # Changelog
 
+## 17.0.0
+### Changed — one rule for every CO₂ figure
+- **Every consumed kWh is charged the mix of its hour — grid, PV or battery —
+  everywhere.** Before, the CO₂ tab's totals honoured the generation chain
+  while five other places multiplied a device's kWh by the grid mix regardless
+  of where the energy came from: the per-device 24 h bars and live rates on the
+  CO₂ tab, the Costs tab's device rows, the Plots CO₂ curves, the heatmap's
+  CO₂ mode and the MQTT `co2_g_per_h` sensors. A house running on its battery
+  at night scored 500 g/kWh there. Measured on a solar home with storage: the
+  three consumer rows summed to 119 kg for the month where the house's own
+  footprint was 28 kg. The new supply chain (`energy_balance.build_supply_chain`)
+  is the single source every path reads: within one hour the house is one bus,
+  owner and tenant circuits alike carry the same mixture, so tenant + owner =
+  house and the device rows add up to the headline.
+- **A battery kWh now carries what was put in.** Stored energy keeps its
+  origin — PV at its manufacturing factor, or the grid mix of the charging
+  hour, both net of the round-trip losses — and the storage adds its own
+  manufacturing footprint per delivered kWh (new setting
+  `battery_manufacturing_g_per_kwh`, default 20 g: ~75 kg CO₂e per kWh of
+  capacity over ~4 000 cycles). The old all-in `battery_embodied_g_per_kwh`
+  (60 g) is no longer used; a PV-charged kWh now lands at ≈62 g, a grid-charged
+  one at the grid mix.
+- **The tenant is on the same bus.** A grid-parallel tenant circuit was charged
+  the full grid mix for hours in which the house drew nothing from the grid;
+  it now sees the hour's real mixture, so a surplus hour lowers it to the PV
+  factor and a battery night to the battery's figure — never above what the
+  whole house emitted.
+- **Feed-in is charged nothing and credited separately.** "Avoided by solar"
+  counts own use (PV direct + battery) against buying it from the grid;
+  "Avoided in the grid" counts the exported surplus displacing grid power
+  elsewhere. The Solar tab used to count all production, the CO₂ tab only own
+  use — both now show both, labelled.
+- **Costs summary counts consumers only, each meter once.** With the house
+  wired behind the grid meter, the summary dropped the house and summed the
+  signed grid meter instead (a solar home read 23 kWh for the year and 100 for
+  the month); a parent shown net of a flagged child is net in kWh, € and CO₂.
+
+### Added
+- **CO₂ tab: "Origin & manufacturing"** per today / week / month / year — a
+  stacked origin bar, the kWh, factor and kg of every source, the fed-in row at
+  0 g, avoided own-use and avoided-in-grid, owner/tenant with their g/kWh, and
+  a plain-language "how this is calculated". A 24 h origin chart (grid / PV /
+  battery grams per hour), per-consumer bars stacked by origin, and the live
+  rate table on the mix of this instant with a mix bar.
+- **Solar tab rebuilt.** Where the roof's energy went and what served the
+  house (two flow bars), autarky, self-consumption rate, savings, revenue, grid
+  cost, today hour by hour (PV area, load line, battery and grid bars), the
+  last 30 days / the period's days stacked into direct use, battery and feed-in
+  with grid import below the line and the autarky curve, this year month by
+  month, a battery card (charged, discharged, from the grid, cycles, round
+  trip), the CO₂ card with the CO₂ tab's own figures, records (best day, peak
+  power, grid-free days) and economics with a season-adjusted annual estimate,
+  payback and CO₂ payback when kWp, investment and installation year are set.
+- **PV forecast without panel data.** Open-Meteo irradiance for the past two
+  weeks calibrates the roof on its own measured output (kWh per kWh/m², with an
+  hour-of-day correction); applied to the 7-day irradiance forecast and run
+  through a simulation of the house's typical day with the battery
+  (capacity, rates, efficiency) it yields expected PV, direct use, charge,
+  discharge, import, export, autarky, cost and revenue per day. Shown on the
+  Solar tab and, with a 30-day horizon and the month-end projection (weather
+  days, then the roof's recent average bent by the seasonal share of the
+  month), on the Forecast tab. `/api/solar_forecast`.
+- **Energy flow tab redesigned.** An SVG hub diagram: PV, battery and grid on
+  one side, the house with its autarky ring in the middle, every consumer on
+  the other; line width = energy, dots run with the flow (respecting
+  reduced-motion), a "Now" mode in watts refreshing every 5 s plus today /
+  yesterday / week / month / year, a KPI strip and a consumer list with each
+  circuit's origin split. Responsive: a vertical layout on phones.
+  `/api/energy_flow`.
+- **Battery tab: where the stored energy came from** — charged from the sun vs.
+  the grid over the window, what a kWh out carries, what the battery avoided.
+- **Charge curve legend shows kWh per source**, not minutes; the minutes moved
+  to the tooltip. The curve payload carries `kwh` per source, integrated on
+  the same attributed samples as the bands.
+
+### NILM
+- **A step has to hold before it counts.** The detector fired on every 50 W
+  flicker at a 1 s poll — a modulating inverter produced thousands of
+  "appliances" a day; a step is now confirmed over three readings and a spike
+  that reverses within them is dropped.
+- **Starts are paired with stops** (same circuit, same size ±25 %, within a
+  day) so every pattern has a measured run length and a starts-per-day rate.
+- **Classification on size, run length, rhythm and time of day**, not on
+  wattage alone. A 65 W step used to be a fan because 65 sat in the middle of
+  the fan's range; a fridge is now recognised by its 15–30 min runs 20–40 times
+  a day around the clock, a kettle by its three minutes at 2 kW, a light by its
+  evening hours. Fans and air conditioners carry a low prior. When no candidate
+  is convincing the pattern is named honestly ("Small load ~55 W") with the
+  candidates and their scores listed instead of a wrong name.
+- Supply meters (the grid connection, PV, battery series) no longer feed a
+  learner — their steps are the weather. A wallbox circuit treats 1.2–11 kW
+  as the car (single-phase surplus charging included). New signatures:
+  circulation pump, dehumidifier, well/garden pump. Patterns recorded before
+  this version are discarded and learned afresh.
+
+### Notes
+- Every new string exists in all nine languages.
+- `hourly_energy` data is unchanged; all views recompute from it.
+
 ## 16.88.0
 ### Fixed
 - **A charge that was still settling on a car app's last poll is no longer

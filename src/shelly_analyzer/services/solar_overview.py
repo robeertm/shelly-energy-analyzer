@@ -58,8 +58,9 @@ def _imap(db, cfg, s: int, e: int) -> tuple:
 # latitudes (PVGIS-style climatology, sums to 1). Extrapolating a summer's
 # worth of data by 365/days would promise a winter that never comes; the
 # observed days are weighted by the share of the year they represent instead.
-_MONTH_SHARE = {1: 0.030, 2: 0.050, 3: 0.080, 4: 0.110, 5: 0.125, 6: 0.125,
-                7: 0.125, 8: 0.115, 9: 0.090, 10: 0.065, 11: 0.035, 12: 0.025}
+_MONTH_SHARE = {1: 0.030, 2: 0.050, 3: 0.080, 4: 0.110, 5: 0.125, 6: 0.130,
+                7: 0.130, 8: 0.120, 9: 0.090, 10: 0.070, 11: 0.038, 12: 0.027}
+assert abs(sum(_MONTH_SHARE.values()) - 1.0) < 1e-9
 
 
 def _seasonal_scale(days: set) -> float:
