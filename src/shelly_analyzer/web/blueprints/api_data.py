@@ -132,6 +132,16 @@ def api_standby():
     return _action_endpoint("standby")
 
 
+@bp.route("/api/solar_forecast")
+def api_solar_forecast():
+    return _action_endpoint("solar_forecast")
+
+
+@bp.route("/api/energy_flow")
+def api_energy_flow():
+    return _action_endpoint("energy_flow")
+
+
 @bp.route("/api/sankey")
 def api_sankey():
     return _action_endpoint("sankey")

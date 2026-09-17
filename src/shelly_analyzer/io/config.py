@@ -580,10 +580,17 @@ class SolarConfig:
     # Solar power is not truly zero-carbon: manufacturing the panels emits CO₂
     # amortised over the energy they produce. IPCC median for rooftop PV ≈ 41 g/kWh.
     pv_embodied_g_per_kwh: float = 40.0
-    # Lifecycle (embodied) CO₂ intensity of battery-delivered energy, g/kWh.
-    # Manufacturing the storage emits CO₂ amortised over lifetime throughput.
-    # Typical Li-ion home storage ≈ 50–70 g/kWh discharged.
+    # Legacy (≤16.x): an all-in factor for a battery kWh. Since v17 a discharged
+    # kWh carries the ORIGIN of what was stored (PV at its factor, or the grid
+    # mix of the charging hour, both net of round-trip losses) plus the
+    # storage's own manufacturing footprint below. Kept so old config files
+    # still load; no longer used by the attribution.
     battery_embodied_g_per_kwh: float = 60.0
+    # Manufacturing footprint of the storage itself, per DELIVERED kWh.
+    # ~75 kg CO₂e per kWh of capacity (LFP/NMC home storage, 60–110 in the
+    # literature) over ~4 000 full cycles ≈ 20 g/kWh. The stored energy's own
+    # origin comes on top, hour by hour.
+    battery_manufacturing_g_per_kwh: float = 20.0
     # PV amortization: total investment cost in EUR
     investment_eur: float = 0.0
     # Year of PV installation (for amortization timeline)
@@ -1672,6 +1679,10 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
             solar_raw.get("battery_embodied_g_per_kwh", SolarConfig.battery_embodied_g_per_kwh),
             SolarConfig.battery_embodied_g_per_kwh,
         ),
+        battery_manufacturing_g_per_kwh=_coerce_float(
+            solar_raw.get("battery_manufacturing_g_per_kwh", SolarConfig.battery_manufacturing_g_per_kwh),
+            SolarConfig.battery_manufacturing_g_per_kwh,
+        ),
         investment_eur=_coerce_float(solar_raw.get("investment_eur", SolarConfig.investment_eur), SolarConfig.investment_eur),
         installation_year=_coerce_int(solar_raw.get("installation_year", SolarConfig.installation_year), SolarConfig.installation_year),
         degradation_pct=_coerce_float(solar_raw.get("degradation_pct", SolarConfig.degradation_pct), SolarConfig.degradation_pct),
@@ -2398,6 +2409,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "co2_production_kg_per_kwp": float(getattr(cfg.solar, "co2_production_kg_per_kwp", 1000.0)),
             "pv_embodied_g_per_kwh": float(getattr(cfg.solar, "pv_embodied_g_per_kwh", 40.0)),
             "battery_embodied_g_per_kwh": float(getattr(cfg.solar, "battery_embodied_g_per_kwh", 60.0)),
+            "battery_manufacturing_g_per_kwh": float(getattr(cfg.solar, "battery_manufacturing_g_per_kwh", 20.0)),
             "investment_eur": float(getattr(cfg.solar, "investment_eur", 0.0)),
             "installation_year": int(getattr(cfg.solar, "installation_year", 0)),
             "degradation_pct": float(getattr(cfg.solar, "degradation_pct", 0.5)),

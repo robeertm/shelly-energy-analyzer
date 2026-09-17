@@ -309,7 +309,7 @@ class BackgroundServiceManager:
                                 "energy_kwh": self._mqtt_energy_today(sample.device_key, point.kwh_today),
                                 "freq_hz": point.freq_hz,
                                 "cosphi": point.cosphi_total,
-                                "co2_g_per_h": round((point.power_total_w / 1000.0) * self._current_co2_intensity(), 1),
+                                "co2_g_per_h": round((max(0.0, point.power_total_w) / 1000.0) * self._device_intensity_now(sample.device_key), 1),
                                 "cost_eur_today": self._mqtt_daily_monotonic(
                                     sample.device_key + "::cost", round(point.cost_today, 2)),
                             },
@@ -325,6 +325,8 @@ class BackgroundServiceManager:
                             "tariff_price_eur_kwh": round(self._current_tariff_price(), 4),
                             "co2_intensity_g_per_kwh": round(
                                 self._current_co2_intensity(), 1),
+                            "co2_intensity_house_g_per_kwh": round(
+                                float(self._house_intensity_now().get("intensity") or 0.0), 1),
                         })
                     except Exception:
                         logger.debug("MQTT publish_grid_data failed", exc_info=True)
@@ -563,12 +565,28 @@ class BackgroundServiceManager:
             except Exception:
                 pass
         self._nilm_learners = {}
+        self._nilm_hints: Dict[str, str] = {}
+        try:
+            from shelly_analyzer.services.energy_balance import device_role as _nilm_role
+        except Exception:
+            _nilm_role = None
+        _wb_key = str(getattr(getattr(self.cfg, "ev_charging", None), "wallbox_device_key", "") or "")
         for d in self.cfg.devices:
             # Only track 3-phase EM devices (switches have no meaningful NILM)
             if int(getattr(d, "phases", 3) or 3) < 3:
                 continue
             if str(getattr(d, "kind", "em")) == "switch":
                 continue
+            # A supply meter (grid connection, PV, battery) steps with the
+            # weather and the inverter, not with appliances — it produced
+            # thousands of phantom "fans" a day.
+            try:
+                if _nilm_role is not None and _nilm_role(self.cfg, d.key) not in ("owner", "tenant"):
+                    continue
+            except Exception:
+                pass
+            self._nilm_hints[d.key] = (str(getattr(d, "name", "") or "") + " " + str(d.key)
+                                       + (" wallbox" if d.key == _wb_key else "")).lower()
             try:
                 persist = runtime_dir / f"{d.key}.json"
                 self._nilm_learners[d.key] = TransitionLearner(
@@ -603,7 +621,7 @@ class BackgroundServiceManager:
             total_trans = 0
             for dk, lrn in self._nilm_learners.items():
                 try:
-                    cls = lrn.cluster()
+                    cls = lrn.cluster(device_hint=getattr(self, "_nilm_hints", {}).get(dk, ""))
                     lrn.flush()
                     trans_count = int(lrn.get_transition_count())
                     total_trans += trans_count
@@ -618,6 +636,13 @@ class BackgroundServiceManager:
                             "icon": getattr(c, "icon", "") or "🔌",
                             "label": getattr(c, "label", "") or "",
                             "device_key": dk,
+                            "confidence": float(getattr(c, "confidence", 0.0) or 0.0),
+                            "candidates": list(getattr(c, "candidates", []) or []),
+                            "median_duration_min": getattr(c, "median_duration_min", None),
+                            "paired": int(getattr(c, "paired", 0) or 0),
+                            "runs_per_day": float(getattr(c, "runs_per_day", 0.0) or 0.0),
+                            "night_share": float(getattr(c, "night_share", 0.0) or 0.0),
+                            "hour_hist": list(getattr(c, "hour_hist", []) or []),
                         })
                     # Collect last 500 transitions for timeline/plots
                     with lrn._lock:
@@ -840,6 +865,61 @@ class BackgroundServiceManager:
                 val = 380.0
         self._co2_intensity_cache = (now, val)
         return val
+
+    def _house_intensity_now(self) -> Dict[str, float]:
+        """What a kWh drawn from the house bus emits RIGHT NOW (g/kWh) — the
+        one-bus mix of this instant (grid / direct PV / battery), the same
+        rule the CO₂ tab uses. Falls back to the grid mix for a home without
+        a PV/grid source. The battery's stored origin is refreshed hourly from
+        the supply chain; the instant mix every 10 s from the live store.
+        """
+        import time as _t
+        now = _t.time()
+        cached = getattr(self, "_house_mix_cache", None)
+        if cached and (now - cached[0]) < 10:
+            return cached[1]
+        ci = self._current_co2_intensity()
+        out = {"intensity": ci, "grid": 1.0, "pv": 0.0, "battery": 0.0, "load_w": 0.0}
+        try:
+            from shelly_analyzer.services.energy_balance import (
+                _resolve_source_keys, build_supply_chain, live_mix)
+            gk, pk, bk = _resolve_source_keys(self.cfg)
+            if gk or pk:
+                bat_cached = getattr(self, "_house_bat_int_cache", None)
+                if not bat_cached or (now - bat_cached[0]) > 3600:
+                    db = getattr(self.storage, "db", None)
+                    bat_int = 0.0
+                    if db is not None:
+                        ch = build_supply_chain(db, self.cfg, int(now) - 86400, int(now) + 3600,
+                                                default_intensity=ci)
+                        bat_int = ch.bat_stored_last + ch.bat_mfg
+                        pv_mfg = ch.pv_mfg
+                    else:
+                        pv_mfg = 40.0
+                    bat_cached = (now, bat_int, pv_mfg)
+                    self._house_bat_int_cache = bat_cached
+                snap = self.live_store.snapshot()
+
+                def _w(k):
+                    pts = snap.get(k) if k else None
+                    return float(pts[-1].get("power_total_w") or 0.0) if isinstance(pts, list) and pts else 0.0
+
+                out = live_mix(_w(pk), _w(gk), _w(bk), ci, bat_cached[2], bat_cached[1])
+        except Exception:
+            logger.debug("house intensity lookup failed", exc_info=True)
+        self._house_mix_cache = (now, out)
+        return out
+
+    def _device_intensity_now(self, device_key: str) -> float:
+        """g/kWh for a device's draw right now: consumers get the house mix,
+        a supply meter (grid/PV/battery series) the grid mix for its import."""
+        try:
+            from shelly_analyzer.services.energy_balance import device_role
+            if device_role(self.cfg, device_key) in ("owner", "tenant"):
+                return float(self._house_intensity_now().get("intensity") or 0.0)
+        except Exception:
+            pass
+        return self._current_co2_intensity()
 
     def _spot_prices(self):
         """(net, effective) day-ahead price EUR/kWh, configured spot zone, 60s
@@ -2076,14 +2156,33 @@ class BackgroundServiceManager:
                 if biggest_mover is None or abs(diff) > abs(biggest_mover.get("diff", 0)):
                     biggest_mover = {"name": dd["name"], "diff": diff, "from": dd["prev"], "to": dd["kwh"]}
 
-        # CO2
+        # CO2 — the month's footprint over the whole generation chain, the same
+        # figure the CO₂ tab shows for that month (grid-only homes reduce to
+        # the flat grid mix on their own).
         co2_kg = 0.0
         co2_g_per_kwh = 0.0
         try:
             co2_g_per_kwh = float(getattr(self.cfg.pricing, "co2_intensity_g_per_kwh", 380) or 380)
             co2_kg = total_kwh * co2_g_per_kwh / 1000
+            co2_cfg = getattr(self.cfg, "co2", None)
+            if co2_cfg and getattr(co2_cfg, "enabled", False):
+                from shelly_analyzer.services.energy_balance import compute_co2
+                import pandas as _pd
+                _zone = str(getattr(co2_cfg, "bidding_zone", "DE_LU") or "DE_LU")
+                _dfi = self.storage.db.query_co2_intensity(_zone, ms_ts, me_ts + 3600)
+                _imap, _avg = {}, co2_g_per_kwh
+                if _dfi is not None and not _dfi.empty:
+                    _civ = _pd.to_numeric(_dfi["intensity_g_per_kwh"], errors="coerce")
+                    _imap = {int(h): float(v) for h, v in zip(_dfi["hour_ts"], _civ) if v == v and v > 0}
+                    if _imap:
+                        _avg = sum(_imap.values()) / len(_imap)
+                _r = compute_co2(self.storage.db, self.cfg, ms_ts, me_ts,
+                                 intensity_by_hour=_imap, default_intensity=_avg)
+                if _r.load_kwh > 0:
+                    co2_kg = _r.property_kg
+                    co2_g_per_kwh = _r.effective_intensity or co2_g_per_kwh
         except Exception:
-            pass
+            logger.debug("monthly digest co2 failed", exc_info=True)
 
         year_proj = avg_daily * 365
         year_cost = year_proj * unit_price
