@@ -224,6 +224,354 @@ def _tenant_key_map(cfg) -> tuple:
     return tenant_keys, key_to_tenant
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# The supply chain, hour by hour — ONE rule for every CO₂ figure in the app
+#
+# Every tab that turns kWh into grams goes through here: the CO₂ tab, the Costs
+# tab, the Plots curves, the heatmap, the live rates, the MQTT sensors, the
+# digests, the exports and the invoices. Before, five of them multiplied a
+# device's kWh by the grid mix regardless of where the energy came from — a
+# house running on its battery at night scored 500 g/kWh.
+#
+# The rule: within one hour the house is one bus. Everything that was consumed
+# in that hour — owner circuits and tenant circuits alike — was served by the
+# same mixture of grid import, direct PV and battery discharge, so every kWh of
+# that hour carries the same intensity:
+#
+#     mix_h = (G_imp·grid_mix + PV_direct·pv_mfg + B_dis·battery_int) / load_h
+#
+# Feed-in is charged nothing (it leaves the property; it is credited elsewhere
+# as "avoided in the grid"). PV carries its manufacturing footprint per kWh; a
+# battery kWh carries what was PUT IN (PV at its manufacturing factor, or the
+# grid mix of the hour it was charged from, both divided by the round-trip
+# efficiency) plus the storage's own manufacturing footprint per delivered kWh.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_CHAIN_WARMUP_S = 14 * 86400   # battery content is a state → simulate it in
+
+
+@dataclass
+class HourMix:
+    """What served the house in one hour, and what it cost in grams."""
+
+    ci: float = 0.0          # grid intensity of the hour, g/kWh
+    gi: float = 0.0          # grid import, kWh
+    ge: float = 0.0          # grid export, kWh
+    pv: float = 0.0          # PV production, kWh
+    bch: float = 0.0         # battery charged, kWh
+    bdis: float = 0.0        # battery discharged, kWh
+    pv_direct: float = 0.0   # PV that served loads directly, kWh
+    bch_pv: float = 0.0      # battery charge that came from PV, kWh
+    bch_grid: float = 0.0    # battery charge that came from the grid, kWh
+    gi_load: float = 0.0     # grid import that served loads (import − grid charging)
+    load: float = 0.0        # pv_direct + gi_load + bdis
+    bat_stored: float = 0.0  # origin intensity of a discharged kWh (before mfg), g/kWh
+    bat_int: float = 0.0     # bat_stored + storage manufacturing, g/kWh
+    g_grid: float = 0.0      # grams of the hour's load served by the grid
+    g_pv: float = 0.0        # grams … by direct PV (manufacturing)
+    g_bat: float = 0.0       # grams … by the battery (origin + manufacturing)
+    g_bat_mfg: float = 0.0   # the manufacturing part of g_bat
+
+    @property
+    def grams(self) -> float:
+        return self.g_grid + self.g_pv + self.g_bat
+
+    @property
+    def mix(self) -> float:
+        """Intensity of every kWh consumed in this hour, g/kWh."""
+        return (self.grams / self.load) if self.load > 1e-9 else self.ci
+
+    @property
+    def grid_frac(self) -> float:
+        return (self.gi_load / self.load) if self.load > 1e-9 else 1.0
+
+    @property
+    def pv_frac(self) -> float:
+        return (self.pv_direct / self.load) if self.load > 1e-9 else 0.0
+
+    @property
+    def bat_frac(self) -> float:
+        return (self.bdis / self.load) if self.load > 1e-9 else 0.0
+
+
+@dataclass
+class SupplyChain:
+    """Per-hour mixes over a range plus the factors they were built with."""
+
+    hours: Dict[int, HourMix] = field(default_factory=dict)
+    has_supply: bool = False          # a grid/PV series exists → chain is meaningful
+    default_intensity: float = 380.0
+    intensity_by_hour: Dict[int, float] = field(default_factory=dict)
+    pv_mfg: float = 40.0
+    bat_mfg: float = 20.0
+    efficiency: float = 0.95
+    bat_stored_last: float = 0.0      # origin intensity of the battery content at the end
+    bat_kwh_last: float = 0.0
+
+    def grid_intensity(self, hour_ts: int) -> float:
+        ci = self.intensity_by_hour.get(int(hour_ts), self.default_intensity)
+        return ci if (ci and ci > 0) else self.default_intensity
+
+    def intensity(self, hour_ts: int) -> float:
+        """g/kWh for a kWh consumed in ``hour_ts`` (grid mix if the chain has no hour)."""
+        hm = self.hours.get(int(hour_ts))
+        if hm is None or not self.has_supply:
+            return self.grid_intensity(hour_ts)
+        return hm.mix
+
+    def split(self, hour_ts: int) -> tuple:
+        """(grid, pv, battery) fractions of a kWh consumed in ``hour_ts``."""
+        hm = self.hours.get(int(hour_ts))
+        if hm is None or not self.has_supply or hm.load <= 1e-9:
+            return 1.0, 0.0, 0.0
+        return hm.grid_frac, hm.pv_frac, hm.bat_frac
+
+    def device_grams(self, hour_kwh: Dict[int, float]) -> Dict[str, float]:
+        """Grams for a consumer's positive hourly kWh, by origin.
+
+        Feed-in (negative kWh) is never charged; supply meters must not be
+        passed here (their import IS the grid share of everybody else).
+        """
+        out = {"g": 0.0, "g_grid": 0.0, "g_pv": 0.0, "g_bat": 0.0,
+               "kwh": 0.0, "kwh_grid": 0.0, "kwh_pv": 0.0, "kwh_bat": 0.0}
+        for h, k in hour_kwh.items():
+            k = float(k or 0.0)
+            if k <= 0.0:
+                continue
+            hm = self.hours.get(int(h))
+            if hm is None or not self.has_supply or hm.load <= 1e-9:
+                ci = self.grid_intensity(h)
+                out["g"] += k * ci
+                out["g_grid"] += k * ci
+                out["kwh"] += k
+                out["kwh_grid"] += k
+                continue
+            fg, fp, fb = hm.grid_frac, hm.pv_frac, hm.bat_frac
+            out["g_grid"] += k * fg * hm.ci
+            out["g_pv"] += k * fp * self.pv_mfg
+            out["g_bat"] += k * fb * hm.bat_int
+            out["kwh"] += k
+            out["kwh_grid"] += k * fg
+            out["kwh_pv"] += k * fp
+            out["kwh_bat"] += k * fb
+        out["g"] = out["g_grid"] + out["g_pv"] + out["g_bat"]
+        return out
+
+    def bucket_grams(self, hour_kwh: Dict[int, float], ranges,
+                     grid_only: bool = False) -> List[Optional[float]]:
+        """Grams per ``(a, b)`` bucket for a device's hourly kWh (None = no data).
+
+        ``grid_only`` is for a supply meter: its import is grid energy at the
+        grid mix, never the house mix it helps to make.
+        """
+        return [g for g, _ in self.bucket_grams_kwh(hour_kwh, ranges, grid_only=grid_only)]
+
+    def bucket_grams_kwh(self, hour_kwh: Dict[int, float], ranges,
+                         grid_only: bool = False) -> List[tuple]:
+        """``[(grams, consumed_kwh)]`` per bucket; ``(None, None)`` = no data."""
+        out: List[tuple] = []
+        items = sorted((int(h), float(k or 0.0)) for h, k in hour_kwh.items())
+        for ab in ranges:
+            a, b = (ab[0], ab[1]) if ab else (None, None)
+            if a is None or b is None:
+                out.append((None, None))
+                continue
+            g = kw = 0.0
+            seen = False
+            for h, k in items:
+                if h < a or h >= b:
+                    continue
+                seen = True
+                if k > 0:
+                    g += k * (self.grid_intensity(h) if grid_only else self.intensity(h))
+                    kw += k
+            out.append((round(g, 1), round(kw, 4)) if seen else (None, None))
+        return out
+
+    def bucket_intensity(self, ranges) -> List[Optional[float]]:
+        """Load-weighted mix per bucket, g/kWh (the number a device kWh in that bucket pays on average)."""
+        out: List[Optional[float]] = []
+        keys = sorted(self.hours)
+        for ab in ranges:
+            a, b = (ab[0], ab[1]) if ab else (None, None)
+            if a is None or b is None:
+                out.append(None)
+                continue
+            g = l = 0.0
+            for h in keys:
+                if h < a or h >= b:
+                    continue
+                hm = self.hours[h]
+                g += hm.grams
+                l += hm.load
+            out.append(round(g / l, 1) if l > 1e-9 else None)
+        return out
+
+
+def _series_map(db, key: str, start_ts: int, end_ts: int) -> Dict[int, float]:
+    out: Dict[int, float] = {}
+    if not key:
+        return out
+    try:
+        df = db.query_hourly(key, start_ts=start_ts, end_ts=end_ts)
+    except Exception:
+        return out
+    if df is None or df.empty or "kwh" not in df.columns:
+        return out
+    import pandas as pd
+    for h, k in zip(df["hour_ts"], pd.to_numeric(df["kwh"], errors="coerce").fillna(0.0)):
+        out[int(h)] = float(k)
+    return out
+
+
+def _battery_factors(cfg) -> tuple:
+    """(pv_mfg g/kWh, battery_mfg g/kWh, round-trip efficiency 0..1)."""
+    solar = getattr(cfg, "solar", None)
+    pv_mfg = float(getattr(solar, "pv_embodied_g_per_kwh", 40.0) or 0.0) if solar else 0.0
+    bat_mfg = float(getattr(solar, "battery_manufacturing_g_per_kwh", 20.0) or 0.0) if solar else 0.0
+    bcfg = getattr(cfg, "battery", None)
+    eff = float(getattr(bcfg, "efficiency_pct", 95.0) or 95.0) / 100.0 if bcfg else 0.95
+    eff = min(1.0, max(0.5, eff))
+    return pv_mfg, bat_mfg, eff
+
+
+def build_supply_chain(db, cfg, start_ts: int, end_ts: int,
+                       intensity_by_hour: Optional[Dict[int, float]] = None,
+                       default_intensity: float = 380.0,
+                       warmup_s: int = _CHAIN_WARMUP_S) -> SupplyChain:
+    """Simulate the supply chain hour by hour over ``[start_ts, end_ts]``.
+
+    The battery's content is a state: what it delivers tonight was put in this
+    afternoon. So the simulation starts ``warmup_s`` before the range (or at the
+    first hour there is data), seeded with the recorded state of charge if the
+    battery service logged one, and assumes the seed content is PV-charged.
+    Hours before ``start_ts`` are simulated but not returned.
+    """
+    di = float(default_intensity) if default_intensity and default_intensity > 0 else 380.0
+    chain = SupplyChain(default_intensity=di, intensity_by_hour=dict(intensity_by_hour or {}))
+    pv_mfg, bat_mfg, eta = _battery_factors(cfg)
+    chain.pv_mfg, chain.bat_mfg, chain.efficiency = pv_mfg, bat_mfg, eta
+
+    grid_key, pv_key, batt_key = _resolve_source_keys(cfg)
+    if not grid_key and not pv_key:
+        return chain
+    chain.has_supply = True
+
+    sim_start = int(start_ts) - int(warmup_s) if batt_key else int(start_ts)
+    g_s = _series_map(db, grid_key, sim_start, end_ts)
+    pv_s = _series_map(db, pv_key, sim_start, end_ts)
+    b_s = _series_map(db, batt_key, sim_start, end_ts)
+    if batt_key:
+        # The range's own intensities are given; the warm-up needs the hours
+        # before it too, or a grid-charged battery would be seeded at default.
+        try:
+            zone = str(getattr(getattr(cfg, "co2", None), "bidding_zone", "DE_LU") or "DE_LU")
+            df_ci = db.query_co2_intensity(zone, sim_start, int(start_ts) + 3600)
+            if df_ci is not None and not df_ci.empty:
+                import pandas as pd
+                for h, v in zip(df_ci["hour_ts"], pd.to_numeric(df_ci["intensity_g_per_kwh"], errors="coerce")):
+                    if v == v and v > 0 and int(h) not in chain.intensity_by_hour:
+                        chain.intensity_by_hour[int(h)] = float(v)
+        except Exception:
+            pass
+
+    hours = sorted(set(g_s) | set(pv_s) | set(b_s))
+    # Battery content starts unknown; the warm-up (a home battery cycles
+    # daily) settles it long before the first hour that is returned.
+    s_kwh = 0.0
+    s_g = 0.0
+    for h in hours:
+        ci = chain.grid_intensity(h)
+        g = g_s.get(h, 0.0)
+        pv = max(0.0, pv_s.get(h, 0.0))
+        b = b_s.get(h, 0.0)
+        gi = max(0.0, g)
+        ge = max(0.0, -g)
+        bch = max(0.0, b)
+        bdis = max(0.0, -b)
+        # PV first covers what leaves (export) and what is put aside (charging);
+        # the remainder served loads directly. Charging beyond the PV that was
+        # left came from the grid.
+        pv_after_export = max(0.0, pv - ge)
+        bch_pv = min(bch, pv_after_export)
+        bch_grid = max(0.0, bch - bch_pv)
+        pv_direct = max(0.0, pv_after_export - bch_pv)
+        gi_load = max(0.0, gi - bch_grid)
+        # Battery content: charge in (net of losses), discharge out at the
+        # average origin intensity of what is inside.
+        if bch > 0:
+            s_g += bch_pv * pv_mfg + bch_grid * ci
+            s_kwh += bch * eta
+        if s_kwh > 1e-9:
+            stored = s_g / s_kwh
+        else:
+            stored = pv_mfg / eta
+        if bdis > 0:
+            take = min(bdis, s_kwh)
+            s_g = max(0.0, s_g - take * stored)
+            s_kwh = max(0.0, s_kwh - take)
+        bat_int = stored + bat_mfg
+        load = pv_direct + gi_load + bdis
+        hm = HourMix(ci=ci, gi=gi, ge=ge, pv=pv, bch=bch, bdis=bdis,
+                     pv_direct=pv_direct, bch_pv=bch_pv, bch_grid=bch_grid,
+                     gi_load=gi_load, load=load, bat_stored=stored, bat_int=bat_int,
+                     g_grid=gi_load * ci, g_pv=pv_direct * pv_mfg,
+                     g_bat=bdis * bat_int, g_bat_mfg=bdis * bat_mfg)
+        if h >= int(start_ts):
+            chain.hours[h] = hm
+    chain.bat_stored_last = (s_g / s_kwh) if s_kwh > 1e-9 else (pv_mfg / eta)
+    chain.bat_kwh_last = s_kwh
+    return chain
+
+
+def device_role(cfg, key: str) -> str:
+    """'grid' | 'pv' | 'battery' | 'tenant' | 'owner' for a device key.
+
+    Supply meters never appear as consumers in a CO₂ breakdown: the grid
+    meter's import IS the grid share of everybody else, PV and battery series
+    are sources. Everything else is a consumer — a tenant circuit if the tenant
+    module names it, the owner's otherwise.
+    """
+    k = str(key or "")
+    grid_key, pv_key, batt_key = _resolve_source_keys(cfg)
+    solar = getattr(cfg, "solar", None)
+    disp = str(getattr(solar, "grid_display_device_key", "") or "") if solar else ""
+    if k in (_GRID_EXT_KEY, grid_key, disp) and k:
+        return "grid"
+    if k in (_PV_KEY, pv_key) and k:
+        return "pv"
+    if k in (_BATTERY_KEY, batt_key) and k:
+        return "battery"
+    tenant_keys, _ = _tenant_key_map(cfg)
+    if k in tenant_keys:
+        return "tenant"
+    return "owner"
+
+
+def consumer_keys(cfg) -> List[str]:
+    """Consumer device keys, each meter once (a meter behind another meter is
+    inside that meter's reading; ``household_keys`` knows the wiring)."""
+    from shelly_analyzer.services.net_display import household_keys
+    devs = [d for d in (getattr(cfg, "devices", []) or [])
+            if str(getattr(d, "kind", "em")) == "em"
+            and device_role(cfg, getattr(d, "key", "")) in ("owner", "tenant")]
+    allowed = household_keys(devs)
+    return [str(d.key) for d in devs if str(d.key) in allowed]
+
+
+def consumer_hourly(db, cfg, key: str, start_ts: int, end_ts: int) -> Dict[int, float]:
+    """A consumer's hourly kWh as the app displays it: net of the children it
+    has given up (``subtract_from_parent_display``), never below zero."""
+    from shelly_analyzer.services.net_display import net_display_children
+    out = dict(_series_map(db, key, start_ts, end_ts))
+    kids = net_display_children(getattr(cfg, "devices", []) or []).get(str(key), [])
+    for ck in kids:
+        for h, k in _series_map(db, ck, start_ts, end_ts).items():
+            if h in out:
+                out[h] = max(0.0, out[h] - max(0.0, k))
+    return out
+
+
 @dataclass
 class Co2Breakdown:
     """A physically consistent CO₂ attribution over a time range (all kg).
@@ -253,6 +601,17 @@ class Co2Breakdown:
     solar_share_pct: float = 0.0    # share of non-battery load served by PV
     autarky_pct: float = 0.0
     has_solar: bool = False
+    # Added with the one-bus chain (v17): where the battery's energy came from,
+    # what the exported surplus displaces, and the factors used.
+    battery_origin_kg: float = 0.0     # origin of the discharged energy (PV/grid at charge time)
+    battery_charge_kwh: float = 0.0
+    battery_grid_charge_kwh: float = 0.0
+    battery_intensity_avg: float = 0.0  # g/kWh of a discharged kWh, origin + manufacturing
+    export_kwh: float = 0.0
+    export_saved_kg: float = 0.0       # avoided at the neighbours' by the exported surplus
+    pv_production_kwh: float = 0.0
+    pv_mfg_g_per_kwh: float = 40.0
+    battery_mfg_g_per_kwh: float = 20.0
 
     def as_dict(self) -> Dict[str, Any]:
         return {
@@ -274,82 +633,55 @@ class Co2Breakdown:
             "grid_intensity": round(self.grid_intensity_avg, 1),
             "solar_share_pct": round(self.solar_share_pct, 1),
             "autarky_pct": round(self.autarky_pct, 1),
+            "battery_kg": round(self.battery_origin_kg + self.battery_embodied_kg, 3),
+            "battery_origin_kg": round(self.battery_origin_kg, 3),
+            "battery_charge_kwh": round(self.battery_charge_kwh, 3),
+            "battery_grid_charge_kwh": round(self.battery_grid_charge_kwh, 3),
+            "battery_intensity": round(self.battery_intensity_avg, 1),
+            "export_kwh": round(self.export_kwh, 3),
+            "export_saved_kg": round(self.export_saved_kg, 3),
+            "pv_production_kwh": round(self.pv_production_kwh, 3),
+            "pv_mfg_g_per_kwh": round(self.pv_mfg_g_per_kwh, 1),
+            "battery_mfg_g_per_kwh": round(self.battery_mfg_g_per_kwh, 1),
+            "has_solar": bool(self.has_solar),
         }
 
 
 def compute_co2(db, cfg, start_ts: int, end_ts: int,
                 intensity_by_hour: Optional[Dict[int, float]] = None,
-                default_intensity: float = 380.0) -> Co2Breakdown:
-    """Attribute CO₂ to on-site consumption over ``[start_ts, end_ts]``, per hour.
+                default_intensity: float = 380.0,
+                chain: Optional["SupplyChain"] = None) -> Co2Breakdown:
+    """Attribute CO₂ to on-site consumption over ``[start_ts, end_ts]``.
 
-    The generation chain is honoured hour by hour (sign conventions per module
-    docstring: grid + = import / − = export, battery + = charge / − = discharge,
-    PV ≥ 0):
-
-        G_imp / G_exp   = max(0, grid) / max(0, −grid)
-        B_chg / B_dis   = max(0, batt) / max(0, −batt)
-        PV_direct       = max(0, pv − G_exp − B_chg)   # PV used directly by loads
-        pool            = PV_direct + G_imp            # the non-battery supply bus
-        solar_frac      = PV_direct / pool
-        eff             = solar_frac·pv_emb + (1−solar_frac)·grid_intensity
-
-    Every non-battery kWh is charged ``eff``; battery discharge (owner-served,
-    since the tenant is grid-parallel and never battery-fed) is charged its
-    embodied factor. **Export is charged nothing** — no negative CO₂, ever.
-
-    The tenant, being grid-parallel, sees exactly the blended non-battery
-    intensity ``eff``: when PV surplus flows the tenant's share of it lowers the
-    tenant's CO₂ below the pure grid mix; at night it is the full grid mix. The
-    owner keeps the remainder (including all battery discharge).
+    Built on :func:`build_supply_chain` — the one rule every CO₂ figure in the
+    app follows: within an hour the house is one bus, every consumed kWh
+    (owner or tenant) carries the hour's mix of grid import, direct PV and
+    battery discharge. Export is charged nothing, so nothing is ever negative,
+    and tenant + owner always equal the property.
     """
-    import pandas as pd
-
-    imap = intensity_by_hour or {}
     di = float(default_intensity) if default_intensity and default_intensity > 0 else 380.0
-    solar = getattr(cfg, "solar", None)
-    pv_emb = float(getattr(solar, "pv_embodied_g_per_kwh", 40.0) or 0.0) if solar else 0.0
-    bat_emb = float(getattr(solar, "battery_embodied_g_per_kwh", 60.0) or 0.0) if solar else 0.0
-
-    grid_key, pv_key, batt_key = _resolve_source_keys(cfg)
     res = Co2Breakdown()
-
-    def _series(key: str) -> Dict[int, float]:
-        out: Dict[int, float] = {}
-        if not key:
-            return out
-        try:
-            df = db.query_hourly(key, start_ts=start_ts, end_ts=end_ts)
-        except Exception:
-            return out
-        if df is None or df.empty or "kwh" not in df.columns:
-            return out
-        for h, k in zip(df["hour_ts"], pd.to_numeric(df["kwh"], errors="coerce").fillna(0.0)):
-            out[int(h)] = float(k)
-        return out
-
     tenant_keys, key_to_tenant = _tenant_key_map(cfg)
+    if chain is None:
+        chain = build_supply_chain(db, cfg, start_ts, end_ts, intensity_by_hour, di)
+    res.pv_mfg_g_per_kwh = chain.pv_mfg
+    res.battery_mfg_g_per_kwh = chain.bat_mfg
 
-    if not grid_key and not pv_key:
+    if not chain.has_supply:
         # ── Grid-only home: no supply-side meter/PV configured. Every
         #    consumption device's positive hourly energy is a grid draw at the
         #    grid mix; feed-in is impossible here, so nothing is ever negative.
-        #    (Restores the legacy per-device grid accounting.) ──────────────
         tenant_set = set(tenant_keys)
         int_sum = 0.0
         int_n = 0
         seen_hours: set = set()
-        for d in (getattr(cfg, "devices", []) or []):
-            if str(getattr(d, "kind", "em")) == "switch":
-                continue
-            dk = str(getattr(d, "key", ""))
+        for dk in consumer_keys(cfg):
             is_tenant = dk in tenant_set
             tname = key_to_tenant.get(dk, "")
-            for h, k in _series(dk).items():
+            for h, k in consumer_hourly(db, cfg, dk, start_ts, end_ts).items():
                 if k <= 0:
                     continue
-                ci = imap.get(int(h), di)
-                if not (ci and ci > 0):
-                    ci = di
+                ci = chain.grid_intensity(h)
                 g = k * ci
                 res.property_kg += g / 1000.0
                 res.grid_kg += g / 1000.0
@@ -370,140 +702,101 @@ def compute_co2(db, cfg, start_ts: int, end_ts: int,
         res.has_solar = False
         return res
 
-    g_s = _series(grid_key)
-    pv_s = _series(pv_key)
-    b_s = _series(batt_key)
     ten_s: Dict[int, Dict[str, float]] = {}
     for tk in tenant_keys:
-        for h, k in _series(tk).items():
-            row = ten_s.setdefault(h, {})
+        for h, k in _series_map(db, tk, start_ts, end_ts).items():
+            row = ten_s.setdefault(int(h), {})
             tname = key_to_tenant[tk]
             row[tname] = row.get(tname, 0.0) + max(0.0, k)
 
-    hours = set(g_s) | set(pv_s) | set(b_s) | set(ten_s)
-    pool_sum = 0.0
-    pvd_sum = 0.0
     int_sum = 0.0
     int_n = 0
-    for h in hours:
-        g = g_s.get(h, 0.0)
-        pv = max(0.0, pv_s.get(h, 0.0))
-        b = b_s.get(h, 0.0)
-        gi = max(0.0, g)
-        ge = max(0.0, -g)
-        bch = max(0.0, b)
-        bdis = max(0.0, -b)
-        ci = imap.get(int(h), di)
-        if not (ci and ci > 0):
-            ci = di
-        pv_direct = max(0.0, pv - ge - bch)
-        pool = pv_direct + gi                    # non-battery load bus
-        frac = (pv_direct / pool) if pool > 0 else 0.0
-        eff = frac * pv_emb + (1.0 - frac) * ci
-
-        grid_g = gi * ci
-        pvd_g = pv_direct * pv_emb
-        bat_g = bdis * bat_emb
-        res.grid_kg += grid_g / 1000.0
-        res.pv_embodied_kg += pvd_g / 1000.0
-        res.battery_embodied_kg += bat_g / 1000.0
-        res.property_kg += (grid_g + pvd_g + bat_g) / 1000.0
-        res.load_kwh += pool + bdis
-        res.pv_self_kwh += pv_direct
-        res.battery_discharge_kwh += bdis
-        res.grid_import_kwh += gi
-        # What this solar+battery energy would have cost had it come from the grid.
-        solar_energy = pv_direct + bdis
-        res.solar_saved_kg += max(0.0, (solar_energy * ci - pvd_g - bat_g)) / 1000.0
-
-        pool_sum += pool
-        pvd_sum += pv_direct
-        int_sum += ci
+    stored_sum = 0.0
+    for h, hm in chain.hours.items():
+        res.grid_kg += hm.g_grid / 1000.0
+        res.pv_embodied_kg += hm.g_pv / 1000.0
+        res.battery_embodied_kg += hm.g_bat_mfg / 1000.0
+        res.battery_origin_kg += (hm.g_bat - hm.g_bat_mfg) / 1000.0
+        res.property_kg += hm.grams / 1000.0
+        res.load_kwh += hm.load
+        res.pv_self_kwh += hm.pv_direct
+        res.battery_discharge_kwh += hm.bdis
+        res.battery_charge_kwh += hm.bch
+        res.battery_grid_charge_kwh += hm.bch_grid
+        res.grid_import_kwh += hm.gi
+        res.export_kwh += hm.ge
+        res.pv_production_kwh += hm.pv
+        # What this solar+battery energy would have cost from the grid — and
+        # what the exported surplus displaces at the neighbours'.
+        res.solar_saved_kg += max(0.0, (hm.pv_direct + hm.bdis) * hm.ci - hm.g_pv - hm.g_bat) / 1000.0
+        res.export_saved_kg += max(0.0, hm.ge * (hm.ci - chain.pv_mfg)) / 1000.0
+        stored_sum += hm.bdis * hm.bat_int
+        int_sum += hm.ci
         int_n += 1
-
         for tname, tk in ten_s.get(h, {}).items():
-            tk_c = min(tk, pool) if pool > 0 else 0.0   # tenant load is non-battery
-            tg = tk_c * eff
+            tk_c = min(tk, hm.load)          # a circuit cannot draw more than the bus carried
+            tg = tk_c * hm.mix
             res.tenant_breakdown[tname] = res.tenant_breakdown.get(tname, 0.0) + tg / 1000.0
             res.tenant_kg += tg / 1000.0
-            res.tenant_load_kwh += max(0.0, tk)
+            res.tenant_load_kwh += tk_c
+    # Tenant hours the supply series did not cover (a sub-meter synced ahead of
+    # the inverter feed) are grid hours — nothing else can have served them.
+    for h, row in ten_s.items():
+        if h in chain.hours:
+            continue
+        ci = chain.grid_intensity(h)
+        for tname, tk in row.items():
+            tg = tk * ci
+            res.tenant_breakdown[tname] = res.tenant_breakdown.get(tname, 0.0) + tg / 1000.0
+            res.tenant_kg += tg / 1000.0
+            res.tenant_load_kwh += tk
+            res.property_kg += tg / 1000.0
+            res.grid_kg += tg / 1000.0
+            res.load_kwh += tk
+            res.grid_import_kwh += tk
 
     res.owner_kg = max(0.0, res.property_kg - res.tenant_kg)
     res.grid_intensity_avg = (int_sum / int_n) if int_n else di
     res.effective_intensity = (res.property_kg * 1000.0 / res.load_kwh) if res.load_kwh > 0 else 0.0
-    res.solar_share_pct = (pvd_sum / pool_sum * 100.0) if pool_sum > 0 else 0.0
+    res.battery_intensity_avg = (stored_sum / res.battery_discharge_kwh) if res.battery_discharge_kwh > 0 else 0.0
+    nonbat = res.load_kwh - res.battery_discharge_kwh
+    res.solar_share_pct = (res.pv_self_kwh / nonbat * 100.0) if nonbat > 0 else 0.0
     res.autarky_pct = min(100.0, max(0.0, (1.0 - res.grid_import_kwh / res.load_kwh) * 100.0)) if res.load_kwh > 0 else 0.0
-    res.has_solar = (res.pv_embodied_kg > 0.0 or res.battery_embodied_kg > 0.0 or res.solar_saved_kg > 0.0)
+    res.has_solar = (res.pv_embodied_kg > 0.0 or res.battery_embodied_kg > 0.0
+                     or res.battery_origin_kg > 0.0 or res.solar_saved_kg > 0.0 or res.pv_production_kwh > 0.0)
     return res
 
 
-def compute_grid_cost_share(db, cfg, ranges) -> List[float]:
+def compute_grid_cost_share(db, cfg, ranges, chain: Optional["SupplyChain"] = None) -> List[float]:
     """Per time-bucket fraction of the **owner's** consumption drawn from the grid.
 
     This is the rate an owner circuit (Haus, Wallbox, …) should be priced at:
     only grid-sourced energy costs money; directly self-consumed PV and battery
-    discharge are free. It honours the full generation chain per hour, so every
-    combination is handled — much/little solar, much/little battery, and a total
-    load larger than solar+battery can cover (grid makes up the rest).
-
-    Sign conventions per module docstring (grid +import/−export, battery
-    +charge/−discharge, PV ≥ 0). Per hour:
-
-        G_imp = max(0, grid)                 G_exp = max(0, −grid)
-        B_chg = max(0, batt)                 B_dis = max(0, −batt)
-        PV_direct = max(0, pv − G_exp − B_chg)   # PV used directly by loads
-        pool  = PV_direct + G_imp                # the non-battery supply bus
-
-    The tenant is grid-parallel and **never** battery-fed, so it takes its share
-    of the non-battery pool first; the battery serves the owner only:
-
-        owner_nonbatt = max(0, pool − tenant_load)   # owner's slice of the pool
-        owner_grid    = owner_nonbatt · G_imp / pool  # grid part of that slice
-        owner_total   = owner_nonbatt + B_dis         # + free battery discharge
-
-    The bucket share is ``Σ owner_grid / Σ owner_total`` — 0 when the owner ran
-    entirely on PV/battery, rising toward 1 when the grid covers the shortfall.
+    discharge are free. Same physics as the CO₂ chain (one bus per hour — see
+    :func:`build_supply_chain`): the owner's kWh in an hour carry the hour's
+    grid fraction, and a battery charged FROM the grid is paid for in the hour
+    it was charged (its discharge is then free, not paid twice).
 
     ``ranges`` is a list of ``(start_ts, end_ts)`` tuples (the plots buckets).
     Returns a list aligned with ``ranges``; ``1.0`` (full tariff) for buckets
-    with no data or when no PV/grid meter is configured. With no tenant this
-    reduces to ``Σ G_imp / Σ (G_imp + PV_direct + B_dis)``.
+    with no data or when no PV/grid meter is configured.
     """
-    import pandas as pd
-
     n = len(ranges)
-    grid_key, pv_key, batt_key = _resolve_source_keys(cfg)
-    if not grid_key and not pv_key:
-        return [1.0] * n
     valid = [(a, b) for (a, b) in ranges if a is not None and b is not None]
     if not valid:
         return [1.0] * n
     lo = min(a for a, b in valid)
     hi = max(b for a, b in valid)
-
-    def _ser(key: str) -> Dict[int, float]:
-        out: Dict[int, float] = {}
-        if not key:
-            return out
-        try:
-            df = db.query_hourly(key, start_ts=lo, end_ts=hi)
-        except Exception:
-            return out
-        if df is None or df.empty or "kwh" not in df.columns:
-            return out
-        for h, k in zip(df["hour_ts"], pd.to_numeric(df["kwh"], errors="coerce").fillna(0.0)):
-            out[int(h)] = float(k)
-        return out
-
-    g_s = _ser(grid_key)
-    pv_s = _ser(pv_key)
-    b_s = _ser(batt_key)
+    if chain is None:
+        chain = build_supply_chain(db, cfg, lo, hi)
+    if not chain.has_supply:
+        return [1.0] * n
     tenant_keys, _ = _tenant_key_map(cfg)
     ten_s: Dict[int, float] = {}
     for tk in tenant_keys:
-        for h, k in _ser(tk).items():
+        for h, k in _series_map(db, tk, lo, hi).items():
             ten_s[h] = ten_s.get(h, 0.0) + max(0.0, k)
-    all_hours = sorted(set(g_s) | set(pv_s) | set(b_s) | set(ten_s))
+    keys = sorted(chain.hours)
 
     shares: List[float] = []
     for ab in ranges:
@@ -512,22 +805,14 @@ def compute_grid_cost_share(db, cfg, ranges) -> List[float]:
             shares.append(1.0)
             continue
         owner_grid = owner_total = 0.0
-        for h in all_hours:
+        for h in keys:
             if h < a or h >= b:
                 continue
-            g = g_s.get(h, 0.0)
-            pv = max(0.0, pv_s.get(h, 0.0))
-            bt = b_s.get(h, 0.0)
-            g_imp = max(0.0, g)
-            g_exp = max(0.0, -g)
-            bch = max(0.0, bt)
-            bdis = max(0.0, -bt)
-            pv_direct = max(0.0, pv - g_exp - bch)
-            pool = pv_direct + g_imp
-            tload = min(max(0.0, ten_s.get(h, 0.0)), pool)  # tenant ⊆ non-battery pool
-            own_nb = max(0.0, pool - tload)
-            owner_grid += (own_nb * g_imp / pool) if pool > 0 else 0.0
-            owner_total += own_nb + bdis
+            hm = chain.hours[h]
+            tl = min(max(0.0, ten_s.get(h, 0.0)), hm.load)
+            own = max(0.0, hm.load - tl)
+            owner_grid += own * hm.grid_frac + hm.bch_grid
+            owner_total += own + hm.bch_grid
         shares.append(min(1.0, max(0.0, owner_grid / owner_total)) if owner_total > 0 else 1.0)
     return shares
 
@@ -1064,6 +1349,7 @@ def _load_only_series(g_ts, g_w, max_points: int, alles_netz: bool) -> dict:
 
     dt = np.clip(np.diff(g_ts).astype(float), 0.0, _gap_cap(g_ts))
     lief = float(np.sum(dt[(g_w[:-1] > 1.0) | (g_w[1:] > 1.0)]))
+    _kwh_lo = float(np.sum(0.5 * (g_w[:-1] + g_w[1:]) * dt)) / 3.6e6
     return {
         "ts": [int(x) for x in ts_out],
         "load_w": [round(float(x), 1) for x in load_o],
@@ -1079,6 +1365,11 @@ def _load_only_series(g_ts, g_w, max_points: int, alles_netz: bool) -> dict:
             "solar": 0.0, "battery": 0.0,
             "grid": round(lief, 0) if alles_netz else 0.0,
             "total": round(float(np.sum(dt)), 0),
+        },
+        "kwh": {
+            "solar": 0.0, "battery": 0.0,
+            "grid": round(_kwh_lo, 3) if alles_netz else 0.0,
+            "total": round(_kwh_lo, 3),
         },
         "points": int(len(ts_out)),
         "raw_points": int(g_ts.size),
@@ -1202,6 +1493,20 @@ def consumer_source_series(db, cfg, start_ts: int, end_ts: int,
         on = (v[:-1] > floor) | (v[1:] > floor)
         return float(np.sum(dt[on]))
 
+    # And how much each source delivered — the number the reader came for.
+    # Integrated on the attributed samples (trapezoid, gaps capped), so the
+    # three add up to the measured charge the same way the price does.
+    # The same skew correction as the drawn bands, applied per sample, so the
+    # three kWh add up to the charge (the raw attribution leaves the meter
+    # skew between wallbox and supply meters as a hole).
+    _tot_r = sol + bat + grd
+    with np.errstate(divide="ignore", invalid="ignore"):
+        _k_r = np.where((_tot_r > 1e-6) & seen, load / np.maximum(_tot_r, 1e-9), 0.0)
+
+    def _kwh(v, scale=True):
+        vv = v * _k_r if scale else v
+        return float(np.sum(0.5 * (vv[:-1] + vv[1:]) * dt)) / 3.6e6
+
     return {
         "ts": [int(x) for x in ts_out],
         "load_w": [round(float(x), 1) for x in load_o],
@@ -1215,7 +1520,50 @@ def consumer_source_series(db, cfg, start_ts: int, end_ts: int,
             "grid": round(_secs(grd), 0),
             "total": round(float(np.sum(dt)), 0),
         },
+        "kwh": {
+            "solar": round(_kwh(sol), 3),
+            "battery": round(_kwh(bat), 3),
+            "grid": round(_kwh(grd), 3),
+            "total": round(_kwh(g_w, scale=False), 3),
+        },
         "points": int(len(ts_out)),
         "raw_points": int(g_ts.size),
         "split": "measured",
     }
+
+
+def live_mix(pv_w: float, grid_w: float, batt_w: float, grid_intensity: float,
+             pv_mfg: float = 40.0, battery_intensity: float = 62.0) -> Dict[str, float]:
+    """The one-bus rule on instantaneous watts — what a kWh drawn RIGHT NOW emits.
+
+    Same physics as :func:`build_supply_chain` for one instant: PV first covers
+    export and charging, the rest serves loads; grid import beyond what charges
+    the battery serves loads; battery discharge serves loads at the intensity
+    of what it holds (``battery_intensity`` = the chain's last stored origin
+    plus the storage's manufacturing footprint). Returns intensity in g/kWh
+    and the three fractions; a house drawing nothing reports the grid mix.
+    """
+    try:
+        pv = max(0.0, float(pv_w or 0.0))
+        grid = float(grid_w or 0.0)
+        batt = float(batt_w or 0.0)
+        ci = float(grid_intensity or 0.0)
+    except (TypeError, ValueError):
+        return {"intensity": float(grid_intensity or 0.0), "grid": 1.0, "pv": 0.0, "battery": 0.0, "load_w": 0.0}
+    if not all(v == v for v in (pv, grid, batt)):
+        return {"intensity": ci, "grid": 1.0, "pv": 0.0, "battery": 0.0, "load_w": 0.0}
+    gi = max(0.0, grid)
+    ge = max(0.0, -grid)
+    bch = max(0.0, batt)
+    bdis = max(0.0, -batt)
+    pv_after_export = max(0.0, pv - ge)
+    bch_pv = min(bch, pv_after_export)
+    bch_grid = max(0.0, bch - bch_pv)
+    pv_direct = max(0.0, pv_after_export - bch_pv)
+    gi_load = max(0.0, gi - bch_grid)
+    load = pv_direct + gi_load + bdis
+    if load <= 1e-9:
+        return {"intensity": ci, "grid": 1.0, "pv": 0.0, "battery": 0.0, "load_w": 0.0}
+    g = gi_load * ci + pv_direct * pv_mfg + bdis * battery_intensity
+    return {"intensity": g / load, "grid": gi_load / load, "pv": pv_direct / load,
+            "battery": bdis / load, "load_w": load}

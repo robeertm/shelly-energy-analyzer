@@ -200,9 +200,11 @@ def test_costs_summary_excludes_submeters():
     assert len(sums) == 2, sums
     for line in sums:
         assert "for d in _summable" in line, f"still sums every row: {line.strip()}"
-    # the self-consumption figure uses the same set
-    assert "_hk_c" in src, "the solar self-consumption still sums every row"
-    print("OK  the Costs summary and the solar figure count each meter once")
+    # the avoided-CO₂ figure no longer sums rows at all: since v17 it is the
+    # CO₂ tab's own supply-chain result, so the two tabs cannot disagree
+    assert "_month_co2_breakdown" in src and "solar_saved_kg" in src, \
+        "the solar figure must come from compute_co2, not from summed rows"
+    print("OK  the Costs summary counts each meter once; the solar figure comes from the chain")
 
 
 def test_sankey_follows_the_wiring_not_the_display_flag():
