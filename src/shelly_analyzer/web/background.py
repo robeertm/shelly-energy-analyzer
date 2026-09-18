@@ -905,18 +905,43 @@ class BackgroundServiceManager:
                     return float(pts[-1].get("power_total_w") or 0.0) if isinstance(pts, list) and pts else 0.0
 
                 out = live_mix(_w(pk), _w(gk), _w(bk), ci, bat_cached[2], bat_cached[1])
+                # The circuits' own buses: a grid-parallel tenant sees export
+                # and grid only, the owner the rest (see live_mix_for_role).
+                try:
+                    from shelly_analyzer.services.energy_balance import (
+                        live_mix_for_role, _tenant_key_map)
+                    tks, _ = _tenant_key_map(self.cfg)
+                    ten_w = sum(max(0.0, _w(k)) for k in tks)
+                    roles = {}
+                    for role in ("owner", "tenant"):
+                        roles[role] = float(live_mix_for_role(
+                            self.cfg, role, _w(pk), _w(gk), _w(bk), ten_w, ci,
+                            bat_cached[2], bat_cached[1]).get("intensity") or 0.0)
+                    self._role_mix_cache = (now, roles)
+                except Exception:
+                    logger.debug("role intensity lookup failed", exc_info=True)
         except Exception:
             logger.debug("house intensity lookup failed", exc_info=True)
         self._house_mix_cache = (now, out)
         return out
 
+    def _role_intensities_now(self) -> Dict[str, float]:
+        """``{'owner': g/kWh, 'tenant': g/kWh}`` of this instant (the house
+        mix for both on a one-bus home); refreshed with the house mix."""
+        self._house_intensity_now()
+        cached = getattr(self, "_role_mix_cache", None)
+        return dict(cached[1]) if cached else {}
+
     def _device_intensity_now(self, device_key: str) -> float:
-        """g/kWh for a device's draw right now: consumers get the house mix,
-        a supply meter (grid/PV/battery series) the grid mix for its import."""
+        """g/kWh for a device's draw right now: consumers get their bus's
+        mix (owner / tenant), a supply meter (grid/PV/battery series) the
+        grid mix for its import."""
         try:
             from shelly_analyzer.services.energy_balance import device_role
-            if device_role(self.cfg, device_key) in ("owner", "tenant"):
-                return float(self._house_intensity_now().get("intensity") or 0.0)
+            role = device_role(self.cfg, device_key)
+            if role in ("owner", "tenant"):
+                house = float(self._house_intensity_now().get("intensity") or 0.0)
+                return float(self._role_intensities_now().get(role) or house)
         except Exception:
             pass
         return self._current_co2_intensity()

@@ -10060,6 +10060,7 @@ function renderEnergyFlow(d, cont) {{
   html += '<span><span class="co2-dot" style="background:' + FLOW_COL.grid + '"></span>' + t('web.flow.grid_import', 'Grid import') + '</span>';
   if (d.has_grid_meter) html += '<span><span class="co2-dot" style="background:' + FLOW_COL.export + '"></span>' + t('web.dash.feed_in', 'Feed-in') + '</span>';
   html += '<span style="color:var(--muted)">' + (unit === 'W' ? t('web.flow.live_note', 'live, refreshes every 5 s') : t('web.flow.width_note', 'line width = energy · dots run with the flow')) + '</span>';
+  if (d.tenant_bus && d.has_supply) html += '<span style="color:var(--muted)">👤 ' + t('flow.tenant_rule', 'Tenant: grid-parallel — PV surplus and grid only, never the battery') + '</span>';
   html += '</div></div>';
   // ── Consumers ──
   if (cons.length) {{
@@ -10110,7 +10111,7 @@ function _efTopoSig(d, narrow) {{
   const cons = (d.consumers || []).slice(0, 8);
   const vals = [S.pv, S.battery, S.grid, K.battery, K.grid, H.load].concat(cons.map(function(c) {{ return c.kwh; }})).filter(function(v) {{ return v > 0; }});
   const vmax = Math.max.apply(null, vals.length ? vals : [1]);
-  const parts = [narrow ? 'n' : 'w', d.has_pv ? 1 : 0, d.has_battery ? 1 : 0, d.has_grid_meter ? 1 : 0, d.has_supply ? 1 : 0, H.autarky_pct != null ? 1 : 0, (K.grid || 0) > (S.grid || 0) ? 'x' : 'i'];
+  const parts = [narrow ? 'n' : 'w', d.has_pv ? 1 : 0, d.has_battery ? 1 : 0, d.has_grid_meter ? 1 : 0, d.has_supply ? 1 : 0, d.tenant_bus ? 1 : 0, H.autarky_pct != null ? 1 : 0, (K.grid || 0) > (S.grid || 0) ? 'x' : 'i'];
   const fl = _efFloor(d);
   (d.flows || []).forEach(function(f) {{ if (f.v > fl) parts.push(f.from + '>' + f.to + ':' + _efSpeedClass(f.v, vmax, f.from + '>' + f.to)); }});
   cons.forEach(function(c) {{ parts.push('c:' + c.key + ':' + c.role + ':' + _efSpeedClass(c.kwh, vmax, 'c:' + c.key)); }});

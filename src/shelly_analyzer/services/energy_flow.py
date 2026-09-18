@@ -97,7 +97,8 @@ def compute_energy_flow(db, cfg, period: str = "today", now: Optional[datetime] 
             for h, k in _series_map(db, ck, s_ts, e_ts).items():
                 if h in hk:
                     hk[h] = max(0.0, hk[h] - max(0.0, k))
-        parts = chain.device_grams(hk)
+        role = device_role(cfg, d.key)
+        parts = chain.device_grams(hk, role)
         kwh = parts["kwh"]
         if live_today and period in ("today", "week", "month", "year"):
             # Today's live accumulator, net of the children the same way.
@@ -115,7 +116,7 @@ def compute_energy_flow(db, cfg, period: str = "today", now: Optional[datetime] 
                     tk = 0.0
                     for h, k in hk.items():
                         if h >= t0 and k > 0:
-                            g_, p_, b_ = chain.split(h)
+                            g_, p_, b_ = chain.split(h, role)
                             fg += k * g_; fp += k * p_; fb += k * b_; tk += k
                     if tk > 0:
                         fg, fp, fb = fg / tk, fp / tk, fb / tk
@@ -126,7 +127,7 @@ def compute_energy_flow(db, cfg, period: str = "today", now: Optional[datetime] 
                     kwh = parts["kwh"]
         cons_sum += kwh
         consumers.append({
-            "key": d.key, "name": _name(cfg, d), "role": device_role(cfg, d.key),
+            "key": d.key, "name": _name(cfg, d), "role": role,
             "kwh": round(kwh, 3), "grid": round(parts["kwh_grid"], 3),
             "pv": round(parts["kwh_pv"], 3), "battery": round(parts["kwh_bat"], 3),
             "co2_g": round(parts["g"], 1),
@@ -135,6 +136,7 @@ def compute_energy_flow(db, cfg, period: str = "today", now: Optional[datetime] 
     consumers.sort(key=lambda c: -c["kwh"])
 
     has_supply = chain.has_supply
+    two_bus = bool(getattr(chain, "two_bus", False))
     if not has_supply:
         # Grid-only home: everything the consumers drew came off the grid —
         # and its grams are the consumers' grams (the chain has no hours of
@@ -145,6 +147,7 @@ def compute_energy_flow(db, cfg, period: str = "today", now: Optional[datetime] 
     return {
         "ok": True, "unit": "kWh", "period": period, "has_supply": has_supply,
         "has_pv": bool(pv_key), "has_battery": bool(batt_key), "has_grid_meter": bool(grid_key),
+        "tenant_bus": two_bus,
         "range": {"start": s_dt.isoformat(), "end": e_dt.isoformat()},
         "sources": {"pv": round(pv, 3), "battery": round(bdis, 3), "grid": round(gi_load + bch_grid, 3)},
         "sinks": {"house": round(load, 3), "battery": round(bch_pv + bch_grid, 3), "grid": round(ge, 3)},
@@ -171,13 +174,18 @@ def compute_energy_flow(db, cfg, period: str = "today", now: Optional[datetime] 
 def compute_energy_flow_live(cfg, live_snapshot: Dict[str, Any], bat_int: float = 62.0,
                              grid_intensity: float = 380.0, pv_mfg: float = 40.0) -> Dict[str, Any]:
     """Same picture for this instant, in watts, from the live store."""
-    from shelly_analyzer.services.energy_balance import _resolve_source_keys, live_mix, device_role
+    from shelly_analyzer.services.energy_balance import (
+        _resolve_source_keys, _tenant_key_map, live_mix, live_mix_for_role, device_role)
     grid_key, pv_key, batt_key = _resolve_source_keys(cfg)
     devs, kids = _consumers(cfg)
 
     def _w(k):
         pts = live_snapshot.get(k) if k else None
         return float(pts[-1].get("power_total_w") or 0.0) if isinstance(pts, list) and pts else 0.0
+
+    tenant_keys, _ = _tenant_key_map(cfg)
+    tenant_w = sum(max(0.0, _w(k)) for k in tenant_keys)
+    two_bus = bool(tenant_keys) and not bool(getattr(getattr(cfg, "solar", None), "battery_feeds_tenants", False))
 
     pv_w, grid_w, batt_w = _w(pv_key), _w(grid_key), _w(batt_key)
     gi = max(0.0, grid_w); ge = max(0.0, -grid_w); bch = max(0.0, batt_w); bdis = max(0.0, -batt_w)
@@ -196,9 +204,11 @@ def compute_energy_flow_live(cfg, live_snapshot: Dict[str, Any], bat_int: float 
         for ck in kids.get(d.key, []):
             w = max(0.0, w - max(0.0, _w(ck)))
         cons_sum += w
-        consumers.append({"key": d.key, "name": _name(cfg, d), "role": device_role(cfg, d.key),
-                          "kwh": round(w, 0), "grid": round(w * mix["grid"], 0),
-                          "pv": round(w * mix["pv"], 0), "battery": round(w * mix["battery"], 0),
+        role = device_role(cfg, d.key)
+        m = live_mix_for_role(cfg, role, pv_w, grid_w, batt_w, tenant_w, grid_intensity, pv_mfg, bat_int)
+        consumers.append({"key": d.key, "name": _name(cfg, d), "role": role,
+                          "kwh": round(w, 0), "grid": round(w * m["grid"], 0),
+                          "pv": round(w * m["pv"], 0), "battery": round(w * m["battery"], 0),
                           "net_of": list(kids.get(d.key, []))})
     consumers.sort(key=lambda c: -c["kwh"])
     has_supply = bool(pv_key or grid_key)
@@ -208,6 +218,7 @@ def compute_energy_flow_live(cfg, live_snapshot: Dict[str, Any], bat_int: float 
     return {
         "ok": True, "unit": "W", "period": "now", "has_supply": has_supply,
         "has_pv": bool(pv_key), "has_battery": bool(batt_key), "has_grid_meter": bool(grid_key),
+        "tenant_bus": two_bus,
         "sources": {"pv": round(pv, 0), "battery": round(bdis, 0), "grid": round(gi_load + bch_grid, 0)},
         "sinks": {"house": round(load, 0), "battery": round(bch, 0), "grid": round(ge, 0)},
         "flows": [

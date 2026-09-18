@@ -40,12 +40,14 @@ def _dev(key, name=None, parent="", sub=False, kind="em"):
                                  subtract_from_parent_display=sub, kind=kind, phases=3)
 
 
-def _cfg(battery=True, tenant=True, devices=None, pv_mfg=40.0, bat_mfg=20.0, eff=95.0):
+def _cfg(battery=True, tenant=True, devices=None, pv_mfg=40.0, bat_mfg=20.0, eff=95.0,
+         feeds_tenants=False):
     solar = types.SimpleNamespace(
         enabled=True, grid_meter_device_key="grid", pv_meter_device_key="",
         pv_production_device_key="pv", battery_device_key="battery" if battery else "",
         grid_display_device_key="", pv_embodied_g_per_kwh=pv_mfg,
-        battery_manufacturing_g_per_kwh=bat_mfg, battery_embodied_g_per_kwh=60.0)
+        battery_manufacturing_g_per_kwh=bat_mfg, battery_embodied_g_per_kwh=60.0,
+        battery_feeds_tenants=feeds_tenants)
     tenants = [types.SimpleNamespace(name="Mieter", tenant_id="m1", device_keys=["ten"])] if tenant else []
     return types.SimpleNamespace(
         solar=solar, pv_source=None,
@@ -77,12 +79,33 @@ def test_battery_night_carries_the_sun_it_stored_plus_manufacturing():
     # stored origin = 40 g / 0.95 efficiency, plus 20 g manufacturing per kWh out
     assert abs(hm1.bat_stored - 40 / 0.95) < 1e-6
     assert abs(hm1.bat_int - (40 / 0.95 + 20)) < 1e-6
-    assert abs(hm1.mix - hm1.bat_int) < 1e-6            # night on the battery: every kWh = battery
+    # night on the battery: every OWNER kWh = battery (the house mix carries
+    # the tenant's grid kWh on top, see below)
+    assert abs(hm1.mix_for("owner") - hm1.bat_int) < 1e-6
     r = compute_co2(db, _cfg(), 0, 2 * H, {0: 300.0, H: 500.0}, 400.0, chain=ch)
-    # tenant at night is battery-fed like everybody else — never the grid mix
-    assert abs(r.tenant_kg - (0.5 * 40 + 1.0 * hm1.bat_int) / 1000) < 1e-9
-    assert r.grid_kg == 0.0 and r.property_kg > 0
+    # The tenant hangs grid-parallel (default): the battery is the owner's,
+    # so the tenant's night kWh is a GRID kWh even though the utility meter
+    # imported nothing that hour (attribution, not a meter) — and the house
+    # is owner bus + tenant bus, so the identity holds.
+    assert abs(r.tenant_kg - (0.5 * 40 + 1.0 * 500.0) / 1000) < 1e-9
+    assert abs(r.grid_kg - 0.5) < 1e-9 and r.property_kg > 0
+    assert abs(r.owner_kg - (1.5 * 40 + 4.0 * hm1.bat_int) / 1000) < 1e-9
     assert abs(r.owner_kg + r.tenant_kg - r.property_kg) < 1e-9
+    # With an import that covers it, the night kWh is a grid kWh — never the battery.
+    db_g = _FakeDB({"grid": {0: 0.0, H: 1.0}, "pv": {0: 10.0, H: 0.0},
+                    "battery": {0: 8.0, H: -4.0}, "ten": {0: 0.5, H: 1.0}}, {0: 300.0, H: 500.0})
+    ch_g = build_supply_chain(db_g, _cfg(), 0, 2 * H, {0: 300.0, H: 500.0}, 400.0, warmup_s=0)
+    r_g = compute_co2(db_g, _cfg(), 0, 2 * H, {0: 300.0, H: 500.0}, 400.0, chain=ch_g)
+    assert abs(r_g.tenant_kg - (0.5 * 40 + 1.0 * 500.0) / 1000) < 1e-9
+    assert ch_g.split(H, "tenant") == (1.0, 0.0, 0.0)
+    assert abs(r_g.owner_kg + r_g.tenant_kg - r_g.property_kg) < 1e-9
+    # Behind the house bus (battery_feeds_tenants True): battery-fed like everybody else.
+    cfg1 = _cfg(feeds_tenants=True)
+    ch1 = build_supply_chain(db, cfg1, 0, 2 * H, {0: 300.0, H: 500.0}, 400.0, warmup_s=0)
+    r1 = compute_co2(db, cfg1, 0, 2 * H, {0: 300.0, H: 500.0}, 400.0, chain=ch1)
+    assert abs(ch1.hours[H].mix - hm1.bat_int) < 1e-6           # one bus: every kWh = battery
+    assert abs(r1.tenant_kg - (0.5 * 40 + 1.0 * hm1.bat_int) / 1000) < 1e-9
+    assert r1.property_kg < r.property_kg                     # physics: that kWh was battery, not grid
 
 
 def test_grid_charged_battery_carries_the_grid_mix():
@@ -96,16 +119,51 @@ def test_grid_charged_battery_carries_the_grid_mix():
 
 
 def test_mixed_hour_is_one_bus_for_owner_and_tenant():
-    # PV 3 direct, grid 1, battery 1 → load 5; tenant 2 gets the same mix as the owner's 3
+    # PV 3 direct, grid 1, battery 1 → load 5; behind the house bus the
+    # tenant's 2 kWh get the same mix as the owner's 3.
     db = _FakeDB({"grid": {0: 1.0}, "pv": {0: 3.0}, "battery": {0: -1.0}, "ten": {0: 2.0}}, {0: 400.0})
-    ch = build_supply_chain(db, _cfg(), 0, H, {0: 400.0}, 400.0, warmup_s=0)
+    cfg = _cfg(feeds_tenants=True)
+    ch = build_supply_chain(db, cfg, 0, H, {0: 400.0}, 400.0, warmup_s=0)
     hm = ch.hours[0]
-    assert abs(hm.load - 5.0) < 1e-9
-    r = compute_co2(db, _cfg(), 0, H, {0: 400.0}, 400.0, chain=ch)
+    assert abs(hm.load - 5.0) < 1e-9 and not hm.two_bus
+    r = compute_co2(db, cfg, 0, H, {0: 400.0}, 400.0, chain=ch)
     assert abs(r.tenant_kg * 1000 - 2.0 * hm.mix) < 1e-6
     assert abs(r.owner_kg * 1000 - 3.0 * hm.mix) < 1e-6
     # never negative, sums by origin equal the total
     assert abs(r.grid_kg + r.pv_embodied_kg + r.battery_origin_kg + r.battery_embodied_kg - r.property_kg) < 1e-9
+
+
+def test_grid_parallel_tenant_sees_pv_surplus_and_grid_but_never_the_battery():
+    # Default wiring, the tenant is served last: PV 3 direct, import 2,
+    # discharge 1 → load 6, tenant 2. Import and discharge both mean there was
+    # no surplus for those kWh, so of its 2 kWh max(0, 2 − 2 − 1) = 0 is PV —
+    # all grid. The owner keeps the 3 PV, the whole battery kWh and what is
+    # left of the import (0).
+    db = _FakeDB({"grid": {0: 2.0}, "pv": {0: 3.0}, "battery": {0: -1.0}, "ten": {0: 2.0}}, {0: 400.0})
+    cfg = _cfg()
+    ch = build_supply_chain(db, cfg, 0, H, {0: 400.0}, 400.0, warmup_s=0)
+    hm = ch.hours[0]
+    assert hm.two_bus and hm.ten_load == 2.0 and hm.ten_pv == 0.0 and hm.ten_grid == 2.0
+    assert ch.split(0, "tenant") == (1.0, 0.0, 0.0)
+    og, op, ob = ch.split(0, "owner")
+    assert abs(og) < 1e-9 and abs(op - 0.75) < 1e-9 and abs(ob - 0.25) < 1e-9
+    r = compute_co2(db, cfg, 0, H, {0: 400.0}, 400.0, chain=ch)
+    assert abs(r.tenant_kg * 1000 - 2.0 * 400.0) < 1e-6
+    assert abs(r.property_kg * 1000 - hm.grams) < 1e-6        # import covered the tenant: house = bus total
+    assert abs(r.owner_kg + r.tenant_kg - r.property_kg) < 1e-9
+    # device grams by role add up to the house, owner + tenant
+    dg = (ch.device_grams({0: 4.0}, "owner")["g"] + ch.device_grams({0: 2.0}, "tenant")["g"])
+    assert abs(dg - hm.grams) < 1e-6
+    # a sunny hour with surplus: PV 6, export 1, tenant 2, no battery → the
+    # tenant's 2 kWh are PV (2 − 0 − 0), the owner's 3 too.
+    db2 = _FakeDB({"grid": {0: -1.0}, "pv": {0: 6.0}, "battery": {0: 0.0}, "ten": {0: 2.0}}, {0: 400.0})
+    ch2 = build_supply_chain(db2, cfg, 0, H, {0: 400.0}, 400.0, warmup_s=0)
+    assert ch2.split(0, "tenant") == (0.0, 1.0, 0.0)
+    assert abs(ch2.intensity(0, "tenant") - 40.0) < 1e-9
+    # device_grams follows the role
+    assert abs(ch.device_grams({0: 2.0}, "tenant")["g"] - 800.0) < 1e-9
+    assert abs(ch.device_grams({0: 2.0}, "tenant")["kwh_bat"]) < 1e-9
+    assert ch.device_grams({0: 1.0}, "owner")["kwh_bat"] > 0
 
 
 def test_consumers_each_meter_once_and_net_of_a_flagged_child():
@@ -143,9 +201,12 @@ def test_grid_only_home_reduces_to_the_flat_grid_mix():
 
 
 def test_owner_cost_share_follows_the_same_bus():
-    # load 5 = pv 3 + grid 1 + battery 1; tenant 2 → owner 3 at grid fraction 1/5
-    db = _FakeDB({"grid": {0: 1.0}, "pv": {0: 3.0}, "battery": {0: -1.0}, "ten": {0: 2.0}}, {0: 400.0})
-    assert abs(compute_grid_cost_share(db, _cfg(), [(0, H)])[0] - 0.2) < 1e-9
+    # load 6 = pv 3 + grid 2 + battery 1; tenant 2 → behind the house bus the
+    # owner's 4 pay the grid fraction 1/3 …
+    db = _FakeDB({"grid": {0: 2.0}, "pv": {0: 3.0}, "battery": {0: -1.0}, "ten": {0: 2.0}}, {0: 400.0})
+    assert abs(compute_grid_cost_share(db, _cfg(feeds_tenants=True), [(0, H)])[0] - 1 / 3) < 1e-9
+    # … grid-parallel (default) the tenant took the whole import, the owner pays nothing
+    assert abs(compute_grid_cost_share(db, _cfg(), [(0, H)])[0] - 0.0) < 1e-9
     # grid-charged battery is paid in the charging hour, discharge is then free
     db2 = _FakeDB({"grid": {0: 6.0}, "pv": {0: 0.0}, "battery": {0: 5.0}, "ten": {}}, {0: 400.0})
     assert abs(compute_grid_cost_share(db2, _cfg(tenant=False), [(0, H)])[0] - 1.0) < 1e-9
@@ -227,3 +288,20 @@ def test_energy_flow_of_a_grid_only_home_carries_the_consumers_grams():
     assert abs(ef["house"]["intensity"] - want_g / 5.7) < 0.1
     r = compute_co2(db, cfg, h1, h2 + H, {h1: 400.0, h2: 300.0}, 380.0)
     assert abs(r.property_kg - ef["house"]["co2_kg"]) < 1e-6
+
+
+def test_live_mix_for_role_gives_the_tenant_export_and_grid_only():
+    from shelly_analyzer.services.energy_balance import live_mix_for_role
+    cfg = _cfg()
+    # night: battery 1000 W covers the house, grid 200 W, tenant 500 W →
+    # tenant all grid, owner all battery
+    t = live_mix_for_role(cfg, "tenant", 0, 200, -1000, 500, 400, 40, 62)
+    o = live_mix_for_role(cfg, "owner", 0, 200, -1000, 500, 400, 40, 62)
+    assert t["battery"] == 0.0 and t["grid"] == 1.0 and t["intensity"] == 400
+    assert abs(o["battery"] - 1.0) < 1e-9 and abs(o["intensity"] - 62) < 1e-9
+    # exporting 300 W with the tenant at 500 W → 60 % PV for the tenant (live tile rule)
+    t2 = live_mix_for_role(cfg, "tenant", 4000, -300, 0, 500, 400, 40, 62)
+    assert abs(t2["pv"] - 0.6) < 1e-9 and abs(t2["intensity"] - (0.6 * 40 + 0.4 * 400)) < 1e-9
+    # behind the house bus: the house mix for everybody
+    cfg1 = _cfg(feeds_tenants=True)
+    assert live_mix_for_role(cfg1, "tenant", 0, 200, -1000, 500, 400, 40, 62) == live_mix(0, 200, -1000, 400, 40, 62)

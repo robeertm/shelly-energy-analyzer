@@ -18825,3 +18825,50 @@ _I18N.setdefault("ru", {}).update({
     "battery.money_grid": "Оплачен заряд из сети",
     "battery.per_kwh_out": "за отданный кВт·ч",
 })
+
+# ── v17.2 strings ── (tenant topology) ──
+_I18N.setdefault("de", {}).update({
+    "settings.field.solar.battery_feeds_tenants": "Speicher versorgt auch Mieter",
+    "settings.hint.solar.battery_feeds_tenants": "Aus: Der Mieterzähler hängt netzparallel hinter dem Anbieterzähler und sieht nur PV-Überschuss und Netz, nie den Speicher. An: Der Mieter hängt hinter der Haus-Schiene und teilt deren Mix.",
+    "flow.tenant_rule": "Mieter: netzparallel — nur PV-Überschuss und Netz, nie Speicher",
+})
+_I18N.setdefault("en", {}).update({
+    "settings.field.solar.battery_feeds_tenants": "Battery also serves tenants",
+    "settings.hint.solar.battery_feeds_tenants": "Off: the tenant meter hangs grid-parallel behind the utility meter and only sees PV surplus and grid, never the battery. On: the tenant sits behind the house bus and shares its mix.",
+    "flow.tenant_rule": "Tenant: grid-parallel — PV surplus and grid only, never the battery",
+})
+_I18N.setdefault("es", {}).update({
+    "settings.field.solar.battery_feeds_tenants": "La batería también abastece a los inquilinos",
+    "settings.hint.solar.battery_feeds_tenants": "Desactivado: el contador del inquilino cuelga en paralelo a la red tras el contador de la compañía y solo ve excedente FV y red, nunca la batería. Activado: el inquilino está tras el bus de la casa y comparte su mezcla.",
+    "flow.tenant_rule": "Inquilino: en paralelo a la red — solo excedente FV y red, nunca la batería",
+})
+_I18N.setdefault("fr", {}).update({
+    "settings.field.solar.battery_feeds_tenants": "La batterie alimente aussi les locataires",
+    "settings.hint.solar.battery_feeds_tenants": "Désactivé : le compteur du locataire est en parallèle du réseau derrière le compteur du fournisseur et ne voit que le surplus PV et le réseau, jamais la batterie. Activé : le locataire est derrière le bus de la maison et partage son mix.",
+    "flow.tenant_rule": "Locataire : en parallèle du réseau — surplus PV et réseau seulement, jamais la batterie",
+})
+_I18N.setdefault("pt", {}).update({
+    "settings.field.solar.battery_feeds_tenants": "A bateria também abastece os inquilinos",
+    "settings.hint.solar.battery_feeds_tenants": "Desligado: o contador do inquilino está em paralelo com a rede atrás do contador do fornecedor e só vê excedente FV e rede, nunca a bateria. Ligado: o inquilino está atrás do barramento da casa e partilha a sua mistura.",
+    "flow.tenant_rule": "Inquilino: em paralelo com a rede — só excedente FV e rede, nunca a bateria",
+})
+_I18N.setdefault("it", {}).update({
+    "settings.field.solar.battery_feeds_tenants": "La batteria serve anche gli inquilini",
+    "settings.hint.solar.battery_feeds_tenants": "Off: il contatore dell'inquilino è in parallelo alla rete dietro il contatore del fornitore e vede solo surplus FV e rete, mai la batteria. On: l'inquilino è dietro il bus di casa e ne condivide il mix.",
+    "flow.tenant_rule": "Inquilino: in parallelo alla rete — solo surplus FV e rete, mai la batteria",
+})
+_I18N.setdefault("pl", {}).update({
+    "settings.field.solar.battery_feeds_tenants": "Magazyn zasila też najemców",
+    "settings.hint.solar.battery_feeds_tenants": "Wył.: licznik najemcy wisi równolegle do sieci za licznikiem dostawcy i widzi tylko nadwyżkę PV i sieć, nigdy magazyn. Wł.: najemca jest za szyną domu i dzieli jej miks.",
+    "flow.tenant_rule": "Najemca: równolegle do sieci — tylko nadwyżka PV i sieć, nigdy magazyn",
+})
+_I18N.setdefault("cs", {}).update({
+    "settings.field.solar.battery_feeds_tenants": "Baterie napájí i nájemníky",
+    "settings.hint.solar.battery_feeds_tenants": "Vyp.: elektroměr nájemníka visí paralelně se sítí za elektroměrem dodavatele a vidí jen přebytek FV a síť, nikdy baterii. Zap.: nájemník je za domovní sběrnicí a sdílí její mix.",
+    "flow.tenant_rule": "Nájemník: paralelně se sítí — jen přebytek FV a síť, nikdy baterie",
+})
+_I18N.setdefault("ru", {}).update({
+    "settings.field.solar.battery_feeds_tenants": "Батарея питает и арендаторов",
+    "settings.hint.solar.battery_feeds_tenants": "Выкл.: счётчик арендатора висит параллельно сети за счётчиком поставщика и видит только излишек ФЭС и сеть, но не батарею. Вкл.: арендатор за домовой шиной и делит её микс.",
+    "flow.tenant_rule": "Арендатор: параллельно сети — только излишек ФЭС и сеть, но не батарея",
+})
