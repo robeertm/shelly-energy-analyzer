@@ -201,3 +201,29 @@ def test_the_one_second_live_answer_prices_consumers_on_the_house_mix():
         assert r["live_mix"]["intensity"] < 100.0, r["live_mix"]
         for x in r["device_rates"]:
             assert abs(x["co2_g_h"] - x["watts"] * r["live_mix"]["intensity"] / 1000.0) < 0.2
+
+
+def test_energy_flow_of_a_grid_only_home_carries_the_consumers_grams():
+    """A home without a grid meter (has_supply False): the house figure of the
+    energy flow must be the consumers' grams, not zero — the same number the
+    CO₂ tab shows for the property."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from shelly_analyzer.services.energy_flow import compute_energy_flow
+    tz = ZoneInfo("Europe/Berlin")
+    now = datetime(2026, 9, 18, 15, 0, tzinfo=tz)
+    h1 = int(now.replace(hour=8, minute=0).timestamp())
+    h2 = int(now.replace(hour=12, minute=0).timestamp())
+    cfg = _cfg(devices=[_dev("haus"), _dev("ten")])
+    cfg.solar.grid_meter_device_key = ""
+    cfg.solar.pv_production_device_key = ""
+    cfg.solar.battery_device_key = ""
+    db = _FakeDB({"haus": {h1: 2.0, h2: 3.0}, "ten": {h1: 0.5, h2: 0.2}}, {h1: 400.0, h2: 300.0})
+    ef = compute_energy_flow(db, cfg, "today", now=now)
+    assert not ef["has_supply"]
+    want_g = 2.5 * 400 + 3.2 * 300
+    assert abs(sum(c["co2_g"] for c in ef["consumers"]) - want_g) < 1e-6
+    assert abs(ef["house"]["co2_kg"] - want_g / 1000.0) < 1e-6
+    assert abs(ef["house"]["intensity"] - want_g / 5.7) < 0.1
+    r = compute_co2(db, cfg, h1, h2 + H, {h1: 400.0, h2: 300.0}, 380.0)
+    assert abs(r.property_kg - ef["house"]["co2_kg"]) < 1e-6
