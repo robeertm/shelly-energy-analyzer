@@ -1190,6 +1190,7 @@ _HTML_TEMPLATE = """<!doctype html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Shelly Energy Analyzer</title>
+  <link rel="icon" href="/widget-icon.svg" type="image/svg+xml">
   <style>
     /* ── Theme variables ── */
     :root {{
@@ -12536,6 +12537,7 @@ _PLOTS_TEMPLATE = """<!doctype html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>@@plots_title@@</title>
+  <link rel="icon" href="/widget-icon.svg" type="image/svg+xml">
   <style>
     :root {
       --bg: #f6f7fb;
