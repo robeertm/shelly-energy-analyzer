@@ -136,9 +136,12 @@ def compute_energy_flow(db, cfg, period: str = "today", now: Optional[datetime] 
 
     has_supply = chain.has_supply
     if not has_supply:
-        # Grid-only home: everything the consumers drew came off the grid.
+        # Grid-only home: everything the consumers drew came off the grid —
+        # and its grams are the consumers' grams (the chain has no hours of
+        # its own here, so `g` would otherwise stay at zero).
         load = cons_sum
         gi_load = cons_sum
+        g = sum(float(c["co2_g"]) for c in consumers)
     return {
         "ok": True, "unit": "kWh", "period": period, "has_supply": has_supply,
         "has_pv": bool(pv_key), "has_battery": bool(batt_key), "has_grid_meter": bool(grid_key),

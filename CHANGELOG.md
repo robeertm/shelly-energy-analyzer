@@ -1,5 +1,14 @@
 # Changelog
 
+## 17.1.3
+### Fixed
+- **Energy flow showed 0.00 kg CO₂ for a home without a grid meter.** The
+  consumers on that tab carried their grams, but the house figure came from
+  the supply chain, which has no hours when neither a grid meter nor PV is
+  configured — so it stayed at zero, and so did the g/kWh next to it. The
+  house figure of a grid-only home is now the sum of its consumers, the same
+  number the CO₂ tab reports for the property. A test pins the identity.
+
 ## 17.1.2
 ### Fixed — the sixth grid-mix path
 - **The CO₂ tab's live table was overwritten every second with grid-mix
