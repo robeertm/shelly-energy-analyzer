@@ -4438,25 +4438,64 @@ class ActionDispatcher:
                     ci = float(df_now.iloc[-1].get("intensity_g_per_kwh", 0))
                     ci_hour_ts = int(df_now.iloc[-1].get("hour_ts", 0))
 
+                # The sixth grid-mix path (17.1.2): this answer refreshes the
+                # live table every second and used to price EVERY device — the
+                # grid meter included — at the grid mix, overwriting the
+                # one-bus rates /api/co2 had just rendered. Same rule here:
+                # consumers only, net of a child wired behind them, at the
+                # house mix of this instant (cached 10 s in the background).
                 device_rates = []
+                live_now = None
                 if ci > 0:
                     live_snap = {}
                     try:
                         snap = self.live_store.snapshot()
                         for dk, points in snap.items():
                             if points:
-                                live_snap[dk] = points[-1].get("power_total_w", 0.0)
+                                live_snap[dk] = float(points[-1].get("power_total_w", 0.0) or 0.0)
                     except Exception:
                         pass
+                    _bg_cl = getattr(self, "_bg", None)
+                    try:
+                        live_now = dict(_bg_cl._house_intensity_now()) if _bg_cl is not None else None
+                    except Exception:
+                        live_now = None
+                    if not live_now:
+                        # No background thread (tests, one-shot use): same rule,
+                        # computed here from the live store and a 24 h chain.
+                        try:
+                            from shelly_analyzer.services.energy_balance import (
+                                build_supply_chain as _bsc_cl, live_mix as _lm_cl, _resolve_source_keys as _rsk_cl)
+                            _gk_c, _pk_c, _bk_c = _rsk_cl(self.cfg)
+                            if _gk_c or _pk_c:
+                                _ch_c = _bsc_cl(self.storage.db, self.cfg, now_ts - 86400, now_ts + 3600, default_intensity=ci)
+                                live_now = _lm_cl(live_snap.get(_pk_c, 0.0), live_snap.get(_gk_c, 0.0), live_snap.get(_bk_c, 0.0),
+                                                  ci, _ch_c.pv_mfg, _ch_c.bat_stored_last + _ch_c.bat_mfg)
+                        except Exception:
+                            live_now = None
+                    if not live_now:
+                        live_now = {"intensity": ci, "grid": 1.0, "pv": 0.0, "battery": 0.0, "load_w": 0.0}
+                    try:
+                        from shelly_analyzer.services.energy_balance import consumer_keys as _ck_cl, device_role as _dr_cl
+                        from shelly_analyzer.services.net_display import net_display_children as _ndc_cl
+                        _cons_cl = set(_ck_cl(self.cfg))
+                        _kids_cl = _ndc_cl(self.cfg.devices)
+                    except Exception:
+                        _cons_cl, _kids_cl, _dr_cl = {d.key for d in self.cfg.devices}, {}, (lambda c, k: "owner")
                     for d in self.cfg.devices:
-                        watts = abs(live_snap.get(d.key, 0.0))
-                        co2_g_h = watts * ci / 1000.0
+                        if d.key not in _cons_cl:
+                            continue
+                        watts = max(0.0, live_snap.get(d.key, 0.0))
+                        for ck in _kids_cl.get(d.key, []):
+                            watts = max(0.0, watts - max(0.0, live_snap.get(ck, 0.0)))
                         device_rates.append({
                             "key": d.key,
                             "name": d.name,
+                            "role": _dr_cl(self.cfg, d.key),
                             "watts": round(watts, 0),
-                            "co2_g_h": round(co2_g_h, 1),
+                            "co2_g_h": round(watts * float(live_now.get("intensity") or ci) / 1000.0, 1),
                         })
+                    live_now = {k: (round(v, 4) if k != "intensity" else round(v, 1)) for k, v in live_now.items()}
 
                 forecast_points: list = []
                 forecast_ts = 0
@@ -4498,6 +4537,7 @@ class ActionDispatcher:
                     "green_threshold": green_thr,
                     "dirty_threshold": dirty_thr,
                     "device_rates": device_rates,
+                    "live_mix": live_now,
                     "forecast": forecast_points,
                     "forecast_updated_ts": forecast_ts,
                 }
@@ -5549,7 +5589,9 @@ class ActionDispatcher:
                     )
                 status = get_battery_status(self.storage.db, batt_cfg)
                 # Prefer a real state-of-charge entity over the integrated estimate.
-                _soc_source = "estimated"
+                # A curve that ends on a stored measurement is measured too (the
+                # last battery_state row is at most a minute old).
+                _soc_source = "measured" if int(getattr(status, "measured_since_ts", 0) or 0) else "estimated"
                 try:
                     from shelly_analyzer.services.pv_source import latest_readings
                     _lr = latest_readings()
