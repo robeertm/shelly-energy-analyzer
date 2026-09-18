@@ -2030,8 +2030,19 @@ _HTML_TEMPLATE = """<!doctype html>
       letter-spacing: .3px;
     }}
     .co2-dot {{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:middle; }}
+    .bat-gauge {{ position:relative; height:22px; border-radius:11px; background:var(--chipbg); overflow:hidden; margin:4px 0 10px; }}
+    .bat-gauge-fill {{ height:100%; border-radius:11px; transition: width .6s ease; }}
+    .bat-gauge-text {{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:var(--fg); text-shadow:0 0 4px var(--card); }}
+    .bat-legend {{ display:flex; flex-wrap:wrap; gap:4px 14px; font-size:11px; margin:6px 4px 0; }}
+    .bat-chips {{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }}
+    .bat-chip {{ font-size:11.5px; padding:4px 9px; border-radius:999px; background:var(--chipbg); }}
+    .bat-cycles {{ width:100%; border-collapse:collapse; font-size:12px; font-variant-numeric: tabular-nums; }}
+    .bat-cycles th {{ font-weight:600; color:var(--muted); text-align:right; padding:4px 6px; border-bottom:1px solid var(--border); white-space:nowrap; }}
+    .bat-cycles td {{ text-align:right; padding:5px 6px; border-bottom:1px solid var(--border); white-space:nowrap; }}
     @media (max-width: 520px) {{
       .solar-fc-table .col-narrow {{ display:none; }}
+      .bat-cycles .col-narrow {{ display:none; }}
+      .bat-cycles th, .bat-cycles td {{ padding:5px 3px; font-size:11.5px; }}
       .solar-fc-table {{ font-size:11px; }}
       .co2-origin-table .col-pct, .co2-origin-table .col-fac {{ display:none; }}
       .co2-origin-table {{ font-size:11px; }}
@@ -2795,6 +2806,19 @@ function _loadCachedPayload(name) {{
    signature is always updated, and a pane showing a spinner or an error is
    never skipped — that content must be replaced. */
 var _tabPayloadSig = {{}};
+/* What the signature must NOT see. A payload that carries the moment it was
+   computed ("range.end", "generated_ts") differs on every fetch although the
+   page would look identical — and a 3rd decimal of a month total that grows
+   by a watt-hour every 3 s is the same thing in disguise. Numbers are folded
+   to 4 significant digits, which is at or above what any tile or axis prints,
+   so a re-render happens exactly when a printed figure could have moved. */
+const _SIG_VOLATILE = {{range: 1, generated_ts: 1, generated_at: 1, computed_at: 1, server_ts: 1, now_ts: 1, fetched_at: 1}};
+function _sigNorm(v) {{
+  if (typeof v === 'number') return isFinite(v) ? Number(v.toPrecision(4)) : v;
+  if (Array.isArray(v)) {{ const a = new Array(v.length); for (let i = 0; i < v.length; i++) a[i] = _sigNorm(v[i]); return a; }}
+  if (v && typeof v === 'object') {{ const o = {{}}; for (const k in v) {{ if (_SIG_VOLATILE[k]) continue; o[k] = _sigNorm(v[k]); }} return o; }}
+  return v;
+}}
 function _tabSkipRender(name, el, data) {{
   var sig;
   /* The rendered output depends on more than the payload: theme, skin and
@@ -2802,7 +2826,7 @@ function _tabSkipRender(name, el, data) {{
      switch always forces a re-render, without every caller having to know. */
   try {{
     var R = document.documentElement;
-    sig = JSON.stringify(data) + '|' + (R.dataset.theme || '') + '|' +
+    sig = JSON.stringify(_sigNorm(data)) + '|' + (R.dataset.theme || '') + '|' +
           (R.getAttribute('data-skin') || '') + '|' + (R.lang || '');
   }} catch(e) {{ return false; }}
   var vis = !!(el && el.offsetParent !== null);
@@ -4912,7 +4936,7 @@ const TAB_LIVE_REFRESH = {{
   costs: 30000,
   solar: 5000,
   standby: 5000,
-  sankey: 3000,
+  sankey: 10000,
   battery: 5000,
   goals: 10000,
   nilm: 15000,
@@ -4928,7 +4952,7 @@ function _runTabRefresh(pane) {{
     if (pane === 'costs')        loadCosts();
     else if (pane === 'solar')   {{ try {{ loadSolar(typeof solarPeriod !== 'undefined' ? solarPeriod : 'month'); }} catch(e) {{}} }}
     else if (pane === 'standby') loadStandby();
-    else if (pane === 'sankey')  loadSankey();
+    else if (pane === 'sankey')  {{ if (_sankeyPeriod !== 'now') loadSankey(); }}  // "now" runs its own 5-s chain
     else if (pane === 'battery') {{ if (typeof loadBattery === 'function') loadBattery(); }}
     else if (pane === 'goals')   {{ if (typeof loadGoals === 'function') loadGoals(); }}
     else if (pane === 'nilm')    loadNilm();
@@ -5732,7 +5756,7 @@ function updateDeviceCard(card, d) {{
   if (!showNilm) {{ if (applEl) applEl.remove(); }}
   else {{
     var newHtml = (d.appliances && d.appliances.length) ? d.appliances.map(function(a) {{ return '<span class="appl-chip">' + esc(a.icon + ' ' + t('appliance.' + a.id + '.name', a.id)) + '</span>'; }}).join('') : '';
-    if (applEl) {{ applEl.innerHTML = newHtml; }}
+    if (applEl) {{ if (applEl.innerHTML !== newHtml) applEl.innerHTML = newHtml; }}
     else {{ card.insertAdjacentHTML('beforeend', '<div class="appl-list">' + newHtml + '</div>'); }}
   }}
 }}
@@ -7383,7 +7407,14 @@ async function _refreshCo2LiveRates() {{
       var _lmEl = document.getElementById('co2-live-mix');
       if (_lmEl && data.live_mix) _lmEl.textContent = _co2LiveMixText(data.live_mix);
       var _lmBar = document.getElementById('co2-live-mix-bar');
-      if (_lmBar && data.live_mix && data.live_mix.load_w > 0) _lmBar.innerHTML = _co2LiveMixBar(data.live_mix);
+      if (_lmBar && data.live_mix && data.live_mix.load_w > 0) {{
+        // Three segments are already there: set their share, never rebuild the
+        // nodes — a rebuilt bar every second is a bar that visibly twitches.
+        if (_lmBar.children.length === 3) {{
+          var _lmv = [data.live_mix.grid || 0, data.live_mix.pv || 0, data.live_mix.battery || 0];
+          for (var _li = 0; _li < 3; _li++) {{ var _fx = String(_lmv[_li]); if (_lmBar.children[_li].style.flex !== _fx) _lmBar.children[_li].style.flex = _fx; }}
+        }} else _lmBar.innerHTML = _co2LiveMixBar(data.live_mix);
+      }}
     }} catch (e) {{}}
     if (tbody && data.device_rates) {{
       // Same devices in the same order? Then only the two numbers move — rewriting
@@ -9995,19 +10026,31 @@ function _fv(v, unit) {{
 }}
 function renderEnergyFlow(d, cont) {{
   const unit = d.unit || 'kWh';
+  const wrap0 = document.getElementById('flow-wrap');
+  const narrow = (wrap0 ? wrap0.clientWidth : cont.clientWidth) < 640;
+  const topo = _efTopoSig(d, narrow);
+  // Same picture, new numbers: patch texts and line widths in place. Rebuilding
+  // the SVG restarts every running dot at zero — five seconds is exactly the
+  // rhythm that reads as "the page twitches".
+  if (cont.dataset.efTopo === topo && cont.dataset.efUnit === unit && cont.querySelector('#flow-svg')) {{
+    try {{ if (_efPatch(d, cont)) return; }} catch (e) {{ /* fall through to a full build */ }}
+  }}
+  cont.dataset.efTopo = topo; cont.dataset.efUnit = unit;
   const S = d.sources || {{}}, K = d.sinks || {{}}, H = d.house || {{}};
   const cons = d.consumers || [];
-  const total = Math.max(H.load || 0, 0.001);
   let html = '';
   // ── KPI strip ──
-  html += '<div class="card" style="margin-bottom:10px"><div class="metric-grid">';
-  html += metricCardHtml(t('web.flow.house_total', 'House total'), _fv(H.load || 0, unit), unit === 'W' ? t('web.flow.right_now', 'right now') : (t('web.flow.consumers_sum', 'meters') + ' ' + _fv(H.consumers_sum || 0, unit)));
-  if (d.has_pv) html += metricCardHtml('☀️ PV', _fv(S.pv || 0, unit), H.self_consumption_pct != null ? H.self_consumption_pct.toFixed(0) + '% ' + t('web.flow.kept', 'kept in the house') : '');
-  if (d.has_supply) html += metricCardHtml(t('web.dash.autarky', 'Autarky'), H.autarky_pct != null ? H.autarky_pct.toFixed(0) + ' %' : '–', t('web.flow.grid_share', 'grid') + ' ' + _fv(S.grid || 0, unit));
-  const _fvs = function(v) {{ return unit === 'W' ? Math.round(v) : (v >= 100 ? v.toFixed(0) : v.toFixed(1)); }};
-  if (d.has_battery) html += metricCardHtml('🔋 ' + t('web.co2.src_battery', 'Battery'), '↓' + _fvs(K.battery || 0) + ' ↑' + _fvs(S.battery || 0) + ' ' + unit, d.battery_soc_pct != null ? d.battery_soc_pct.toFixed(0) + ' % SOC' : t('web.flow.in_out', 'in · out'));
-  if (d.has_grid_meter) html += metricCardHtml('🔌 ' + t('web.co2.src_grid', 'Grid'), '↓' + _fvs(S.grid || 0) + ' ↑' + _fvs(K.grid || 0) + ' ' + unit, t('web.flow.import_export', 'import · export'));
-  if (H.intensity != null) html += metricCardHtml('CO₂', unit === 'W' ? (H.co2_g_per_h || 0).toFixed(0) + ' g/h' : (H.co2_kg || 0).toFixed(2) + ' kg', (H.intensity || 0).toFixed(0) + ' g/kWh');
+  html += '<div class="card" style="margin-bottom:10px"><div class="metric-grid" id="ef-kpi">';
+  const _m = function(id, label, value, sub) {{
+    return '<div class="metric-card"><div class="metric-label">' + esc(label) + '</div><div class="metric-value" data-ef="' + id + '.v">' + esc(value) + '</div><div class="metric-sub" data-ef="' + id + '.s">' + (sub ? esc(sub) : '&nbsp;') + '</div></div>';
+  }};
+  const k = _efKpis(d);
+  html += _m('house', t('web.flow.house_total', 'House total'), k.house.v, k.house.s);
+  if (d.has_pv) html += _m('pv', '☀️ PV', k.pv.v, k.pv.s);
+  if (d.has_supply) html += _m('aut', t('web.dash.autarky', 'Autarky'), k.aut.v, k.aut.s);
+  if (d.has_battery) html += _m('bat', '🔋 ' + t('web.co2.src_battery', 'Battery'), k.bat.v, k.bat.s);
+  if (d.has_grid_meter) html += _m('grid', '🔌 ' + t('web.co2.src_grid', 'Grid'), k.grid.v, k.grid.s);
+  if (H.intensity != null) html += _m('co2', 'CO₂', k.co2.v, k.co2.s);
   html += '</div></div>';
   // ── Diagram ──
   html += '<div class="card" style="padding:10px 6px"><div id="flow-wrap" style="width:100%"></div>';
@@ -10022,14 +10065,14 @@ function renderEnergyFlow(d, cont) {{
   if (cons.length) {{
     html += '<div class="card" style="margin-top:10px"><div class="card-title">' + t('web.flow.consumers', 'Consumers') + '</div>';
     cons.forEach(function(c) {{
-      const share = total > 0 ? c.kwh / total * 100 : 0;
-      html += '<div style="padding:7px 0;border-top:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">';
+      const r = _efConsumerTexts(c, d);
+      html += '<div style="padding:7px 0;border-top:1px solid var(--border)" data-efc="' + esc(c.key) + '"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">';
       html += '<div><b>' + esc(c.name) + '</b>' + (c.role === 'tenant' ? ' <span style="font-size:10px;color:var(--muted)">👤 ' + t('web.co2.tenant', 'Tenant') + '</span>' : '') + (c.net_of && c.net_of.length ? ' <span style="font-size:10px;color:var(--muted)">' + t('web.flow.net_of', 'net of') + ' ' + esc(c.net_of.join(', ')) + '</span>' : '') + '</div>';
-      html += '<div style="font-size:12px"><b>' + _fv(c.kwh, unit) + '</b> <span style="color:var(--muted)">' + share.toFixed(0) + '%</span></div></div>';
-      if (d.has_supply && c.kwh > 0) {{
-        html += '<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--chipbg);margin-top:5px">' +
-          '<div style="flex:' + c.pv + ';background:' + FLOW_COL.pv + '"></div><div style="flex:' + c.battery + ';background:' + FLOW_COL.battery + '"></div><div style="flex:' + c.grid + ';background:' + FLOW_COL.grid + '"></div></div>';
-        html += '<div style="font-size:10px;color:var(--muted);margin-top:3px">PV ' + Math.round(c.pv / c.kwh * 100) + '% · ' + t('web.co2.src_battery', 'Battery') + ' ' + Math.round(c.battery / c.kwh * 100) + '% · ' + t('web.co2.src_grid', 'Grid') + ' ' + Math.round(c.grid / c.kwh * 100) + '%' + (c.co2_g != null ? ' · ' + (c.co2_g / 1000).toFixed(2) + ' kg CO₂' : '') + '</div>';
+      html += '<div style="font-size:12px"><b data-ef="c.v">' + esc(r.v) + '</b> <span style="color:var(--muted)" data-ef="c.p">' + esc(r.p) + '</span></div></div>';
+      if (d.has_supply) {{
+        html += '<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--chipbg);margin-top:5px" data-ef="c.bar">' +
+          '<div style="flex:' + r.f[0] + ';background:' + FLOW_COL.pv + '"></div><div style="flex:' + r.f[1] + ';background:' + FLOW_COL.battery + '"></div><div style="flex:' + r.f[2] + ';background:' + FLOW_COL.grid + '"></div></div>';
+        html += '<div style="font-size:10px;color:var(--muted);margin-top:3px" data-ef="c.m">' + esc(r.m) + '</div>';
       }}
       html += '</div>';
     }});
@@ -10037,6 +10080,93 @@ function renderEnergyFlow(d, cont) {{
   }}
   cont.innerHTML = html;
   _drawEnergyFlowSvg(d, document.getElementById('flow-wrap'));
+}}
+function _efKpis(d) {{
+  const unit = d.unit || 'kWh';
+  const S = d.sources || {{}}, K = d.sinks || {{}}, H = d.house || {{}};
+  const _fvs = function(v) {{ return unit === 'W' ? Math.round(v) : (v >= 100 ? v.toFixed(0) : v.toFixed(1)); }};
+  return {{
+    house: {{v: _fv(H.load || 0, unit), s: unit === 'W' ? t('web.flow.right_now', 'right now') : (t('web.flow.consumers_sum', 'meters') + ' ' + _fv(H.consumers_sum || 0, unit))}},
+    pv: {{v: _fv(S.pv || 0, unit), s: H.self_consumption_pct != null ? H.self_consumption_pct.toFixed(0) + '% ' + t('web.flow.kept', 'kept in the house') : ''}},
+    aut: {{v: H.autarky_pct != null ? H.autarky_pct.toFixed(0) + ' %' : '–', s: t('web.flow.grid_share', 'grid') + ' ' + _fv(S.grid || 0, unit)}},
+    bat: {{v: '↓' + _fvs(K.battery || 0) + ' ↑' + _fvs(S.battery || 0) + ' ' + unit, s: d.battery_soc_pct != null ? d.battery_soc_pct.toFixed(0) + ' % SOC' : t('web.flow.in_out', 'in · out')}},
+    grid: {{v: '↓' + _fvs(S.grid || 0) + ' ↑' + _fvs(K.grid || 0) + ' ' + unit, s: t('web.flow.import_export', 'import · export')}},
+    co2: {{v: unit === 'W' ? (H.co2_g_per_h || 0).toFixed(0) + ' g/h' : (H.co2_kg || 0).toFixed(2) + ' kg', s: (H.intensity || 0).toFixed(0) + ' g/kWh'}}
+  }};
+}}
+function _efConsumerTexts(c, d) {{
+  const unit = d.unit || 'kWh', H = d.house || {{}};
+  const total = Math.max(H.load || 0, 0.001);
+  const share = c.kwh / total * 100;
+  const out = {{v: _fv(c.kwh, unit), p: share.toFixed(0) + '%', f: [c.pv || 0, c.battery || 0, c.grid || 0], m: ''}};
+  if (c.kwh > 0) out.m = 'PV ' + Math.round(c.pv / c.kwh * 100) + '% · ' + t('web.co2.src_battery', 'Battery') + ' ' + Math.round(c.battery / c.kwh * 100) + '% · ' + t('web.co2.src_grid', 'Grid') + ' ' + Math.round(c.grid / c.kwh * 100) + '%' + (c.co2_g != null ? ' · ' + (c.co2_g / 1000).toFixed(2) + ' kg CO₂' : '');
+  return out;
+}}
+/* Which edges exist, which speed class each runs at, which consumers hang off
+   the house, portrait or landscape — everything that decides the SHAPE of the
+   drawing. Values only move the numbers and widths. */
+function _efTopoSig(d, narrow) {{
+  const S = d.sources || {{}}, K = d.sinks || {{}}, H = d.house || {{}};
+  const cons = (d.consumers || []).slice(0, 8);
+  const vals = [S.pv, S.battery, S.grid, K.battery, K.grid, H.load].concat(cons.map(function(c) {{ return c.kwh; }})).filter(function(v) {{ return v > 0; }});
+  const vmax = Math.max.apply(null, vals.length ? vals : [1]);
+  const parts = [narrow ? 'n' : 'w', d.has_pv ? 1 : 0, d.has_battery ? 1 : 0, d.has_grid_meter ? 1 : 0, d.has_supply ? 1 : 0, H.autarky_pct != null ? 1 : 0, (K.grid || 0) > (S.grid || 0) ? 'x' : 'i'];
+  (d.flows || []).forEach(function(f) {{ if (f.v > 0) parts.push(f.from + '>' + f.to + ':' + _efSpeedClass(f.v, vmax)); }});
+  cons.forEach(function(c) {{ parts.push('c:' + c.key + ':' + c.role + ':' + _efSpeedClass(c.kwh, vmax)); }});
+  return parts.join('|');
+}}
+function _efSpeedClass(v, vmax) {{ return v > 0 ? Math.round(4 * Math.sqrt(v / vmax)) : 0; }}
+function _efSetText(root, sel, text) {{
+  const el = root.querySelector(sel); if (!el) return;
+  if (el.textContent !== text) el.textContent = text;
+}}
+function _efPatch(d, cont) {{
+  const unit = d.unit || 'kWh';
+  const S = d.sources || {{}}, K = d.sinks || {{}}, H = d.house || {{}};
+  const cons = (d.consumers || []).slice(0, 8);
+  const k = _efKpis(d);
+  for (const id in k) {{ _efSetText(cont, '[data-ef="' + id + '.v"]', k[id].v); _efSetText(cont, '[data-ef="' + id + '.s"]', k[id].s || ' '); }}
+  // consumers list
+  (d.consumers || []).forEach(function(c) {{
+    const row = cont.querySelector('[data-efc="' + CSS.escape(c.key) + '"]'); if (!row) return;
+    const r = _efConsumerTexts(c, d);
+    _efSetText(row, '[data-ef="c.v"]', r.v); _efSetText(row, '[data-ef="c.p"]', r.p); _efSetText(row, '[data-ef="c.m"]', r.m);
+    const bar = row.querySelector('[data-ef="c.bar"]');
+    if (bar && bar.children.length === 3) for (let i = 0; i < 3; i++) {{ const fx = String(r.f[i]); if (bar.children[i].style.flex !== fx) bar.children[i].style.flex = fx; }}
+  }});
+  // svg: widths, titles, node texts
+  const svg = cont.querySelector('#flow-svg'); if (!svg) return false;
+  const vals = [S.pv, S.battery, S.grid, K.battery, K.grid, H.load].concat(cons.map(function(c) {{ return c.kwh; }})).filter(function(v) {{ return v > 0; }});
+  const vmax = Math.max.apply(null, vals.length ? vals : [1]);
+  const width = function(v) {{ return v > 0 ? 2 + 18 * Math.sqrt(v / vmax) : 0; }};
+  const flows = d.flows || [];
+  svg.querySelectorAll('path[data-e]').forEach(function(p) {{
+    const key = p.getAttribute('data-e'); let v = 0;
+    if (key.charAt(0) === 'c' && key.charAt(1) === ':') {{ const c = cons.find(function(x) {{ return x.key === key.slice(2); }}); v = c ? c.kwh : 0; }}
+    else {{ const f = flows.find(function(x) {{ return x.from + '>' + x.to === key; }}); v = f ? f.v : 0; }}
+    const w = width(v).toFixed(1); if (p.getAttribute('stroke-width') !== w) p.setAttribute('stroke-width', w);
+    const tt = p.querySelector('title'); if (tt) {{ const lab = p.getAttribute('data-label') + ' ' + _fv(v, unit); if (tt.textContent !== lab) tt.textContent = lab; }}
+  }});
+  const nt = _efNodeTexts(d);
+  for (const id in nt) _efSetText(svg, '[data-n="' + id + '"]', nt[id]);
+  const aut = H.autarky_pct != null ? Math.max(0, Math.min(100, H.autarky_pct)) : null;
+  const ring = svg.querySelector('[data-n="ring"]');
+  if (ring && aut != null) {{ const circ = parseFloat(ring.getAttribute('data-circ')); const da = (circ * aut / 100).toFixed(1) + ' ' + circ.toFixed(1); if (ring.getAttribute('stroke-dasharray') !== da) ring.setAttribute('stroke-dasharray', da); }}
+  return true;
+}}
+function _efNodeTexts(d) {{
+  const unit = d.unit || 'kWh';
+  const S = d.sources || {{}}, K = d.sinks || {{}}, H = d.house || {{}};
+  const cons = (d.consumers || []).slice(0, 8);
+  const aut = H.autarky_pct != null ? Math.max(0, Math.min(100, H.autarky_pct)) : null;
+  const o = {{
+    'pv.v': _fv(S.pv || 0, unit), 'pv.s': H.self_consumption_pct != null ? H.self_consumption_pct.toFixed(0) + '% ' + t('web.flow.kept_short', 'kept') : '',
+    'bat.v': d.battery_soc_pct != null ? d.battery_soc_pct.toFixed(0) + ' %' : _fv(S.battery || 0, unit), 'bat.s': '↓ ' + _fv(K.battery || 0, unit) + '  ↑ ' + _fv(S.battery || 0, unit),
+    'grid.v': _fv(((K.grid || 0) > (S.grid || 0)) ? K.grid : (S.grid || 0), unit), 'grid.s': '↓ ' + _fv(S.grid || 0, unit) + '  ↑ ' + _fv(K.grid || 0, unit),
+    'house.v': _fv(H.load || 0, unit), 'house.s': aut != null ? aut.toFixed(0) + ' % ' + t('web.flow.autark', 'self-supplied') : t('web.flow.house', 'House')
+  }};
+  cons.forEach(function(c) {{ o['c.' + c.key + '.v'] = _fv(c.kwh, unit); o['c.' + c.key + '.s'] = (H.load || 0) > 0 ? Math.round(c.kwh / H.load * 100) + '%' : ''; }});
+  return o;
 }}
 
 function _drawEnergyFlowSvg(d, wrap) {{
@@ -10078,13 +10208,15 @@ function _drawEnergyFlowSvg(d, wrap) {{
     if (curve === 'arcr') {{ const cx = Math.max(a.x, b.x) + 80; return 'M' + a.x + ',' + a.y + ' C' + cx + ',' + a.y + ' ' + cx + ',' + b.y + ' ' + b.x + ',' + b.y; }}
     return 'M' + a.x + ',' + a.y + ' C' + ((a.x + b.x) / 2) + ',' + a.y + ' ' + ((a.x + b.x) / 2) + ',' + b.y + ' ' + b.x + ',' + b.y;
   }};
-  const edge = function(a, b, v, col, curve, label) {{
+  // Dot count and speed come from the speed CLASS (0–4), not the raw value, so
+  // the patch path can leave the animations alone until the class changes.
+  const edge = function(key, a, b, v, col, curve, label) {{
     if (!(v > 0)) return;
-    const w = width(v), id = 'fp' + (pid++);
-    paths += '<path id="' + id + '" d="' + path(a, b, curve) + '" fill="none" stroke="' + col + '" stroke-opacity="0.28" stroke-width="' + w.toFixed(1) + '" stroke-linecap="round"><title>' + esc(label) + ' ' + _fv(v, unit) + '</title></path>';
+    const w = width(v), id = 'fp' + (pid++), cls = _efSpeedClass(v, vmax);
+    paths += '<path id="' + id + '" data-e="' + esc(key) + '" data-label="' + esc(label) + '" d="' + path(a, b, curve) + '" fill="none" stroke="' + col + '" stroke-opacity="0.28" stroke-width="' + w.toFixed(1) + '" stroke-linecap="round"><title>' + esc(label) + ' ' + _fv(v, unit) + '</title></path>';
     if (!reduced) {{
-      const n = Math.max(1, Math.min(6, Math.round(1 + 5 * Math.sqrt(v / vmax))));
-      const dur = (6 - 4 * Math.sqrt(v / vmax)).toFixed(2);
+      const n = Math.max(1, Math.min(6, 1 + cls));
+      const dur = (6 - cls).toFixed(2);
       for (let k = 0; k < n; k++) {{
         dots += '<circle r="' + Math.max(2.2, w * 0.28).toFixed(1) + '" fill="' + col + '"><animateMotion dur="' + dur + 's" repeatCount="indefinite" begin="' + (-(k / n) * dur).toFixed(2) + 's"><mpath href="#' + id + '"/></animateMotion></circle>';
       }}
@@ -10093,48 +10225,48 @@ function _drawEnergyFlowSvg(d, wrap) {{
   // Edges: sources → house, pv → battery / grid, grid → battery, house → consumers
   const hL = {{x: house.x - RH + 6, y: house.y}}, hT = {{x: house.x, y: house.y - RH + 6}}, hR = {{x: house.x + RH - 6, y: house.y}}, hB = {{x: house.x, y: house.y + RH - 6}};
   if (narrow) {{
-    edge({{x: nodes.pv.x, y: nodes.pv.y + R}}, hT, fv('pv', 'house'), FLOW_COL.pv, 'v', 'PV → ' + t('web.flow.house', 'House'));
-    edge({{x: nodes.pv.x - R + 6, y: nodes.pv.y + 10}}, {{x: nodes.battery.x, y: nodes.battery.y - R}}, fv('pv', 'battery'), FLOW_COL.pv, 'v', 'PV → ' + t('web.co2.src_battery', 'Battery'));
-    edge({{x: nodes.pv.x + R - 6, y: nodes.pv.y + 10}}, {{x: nodes.grid.x, y: nodes.grid.y - R}}, fv('pv', 'grid'), FLOW_COL.export, 'v', t('web.dash.feed_in', 'Feed-in'));
-    edge({{x: nodes.battery.x + R, y: nodes.battery.y}}, hL, fv('battery', 'house'), FLOW_COL.battery, 'h', t('web.co2.src_battery', 'Battery') + ' → ' + t('web.flow.house', 'House'));
-    edge({{x: nodes.grid.x - R, y: nodes.grid.y}}, hR, fv('grid', 'house'), FLOW_COL.grid, 'h', t('web.flow.grid_import', 'Grid import'));
-    edge({{x: nodes.grid.x, y: nodes.grid.y + R}}, {{x: nodes.battery.x, y: nodes.battery.y + R}}, fv('grid', 'battery'), FLOW_COL.grid, 'v', t('web.co2.src_grid', 'Grid') + ' → ' + t('web.co2.src_battery', 'Battery'));
-    cons.forEach(function(c) {{ edge(hB, {{x: c._x, y: c._y - R}}, c.kwh, c.role === 'tenant' ? FLOW_COL.tenant : FLOW_COL.owner, 'v', c.name); }});
+    edge('pv>house', {{x: nodes.pv.x, y: nodes.pv.y + R}}, hT, fv('pv', 'house'), FLOW_COL.pv, 'v', 'PV → ' + t('web.flow.house', 'House'));
+    edge('pv>battery', {{x: nodes.pv.x - R + 6, y: nodes.pv.y + 10}}, {{x: nodes.battery.x, y: nodes.battery.y - R}}, fv('pv', 'battery'), FLOW_COL.pv, 'v', 'PV → ' + t('web.co2.src_battery', 'Battery'));
+    edge('pv>grid', {{x: nodes.pv.x + R - 6, y: nodes.pv.y + 10}}, {{x: nodes.grid.x, y: nodes.grid.y - R}}, fv('pv', 'grid'), FLOW_COL.export, 'v', t('web.dash.feed_in', 'Feed-in'));
+    edge('battery>house', {{x: nodes.battery.x + R, y: nodes.battery.y}}, hL, fv('battery', 'house'), FLOW_COL.battery, 'h', t('web.co2.src_battery', 'Battery') + ' → ' + t('web.flow.house', 'House'));
+    edge('grid>house', {{x: nodes.grid.x - R, y: nodes.grid.y}}, hR, fv('grid', 'house'), FLOW_COL.grid, 'h', t('web.flow.grid_import', 'Grid import'));
+    edge('grid>battery', {{x: nodes.grid.x, y: nodes.grid.y + R}}, {{x: nodes.battery.x, y: nodes.battery.y + R}}, fv('grid', 'battery'), FLOW_COL.grid, 'v', t('web.co2.src_grid', 'Grid') + ' → ' + t('web.co2.src_battery', 'Battery'));
+    cons.forEach(function(c) {{ edge('c:' + c.key, hB, {{x: c._x, y: c._y - R}}, c.kwh, c.role === 'tenant' ? FLOW_COL.tenant : FLOW_COL.owner, 'v', c.name); }});
   }} else {{
-    edge({{x: nodes.pv.x + R, y: nodes.pv.y}}, hL, fv('pv', 'house'), FLOW_COL.pv, 'h', 'PV → ' + t('web.flow.house', 'House'));
-    edge({{x: nodes.pv.x, y: nodes.pv.y + R}}, {{x: nodes.battery.x, y: nodes.battery.y - R}}, fv('pv', 'battery'), FLOW_COL.pv, 'arcl', 'PV → ' + t('web.co2.src_battery', 'Battery'));
-    edge({{x: nodes.pv.x - R, y: nodes.pv.y}}, {{x: nodes.grid.x - R, y: nodes.grid.y}}, fv('pv', 'grid'), FLOW_COL.export, 'arcl', t('web.dash.feed_in', 'Feed-in'));
-    edge({{x: nodes.battery.x + R, y: nodes.battery.y}}, hL, fv('battery', 'house'), FLOW_COL.battery, 'h', t('web.co2.src_battery', 'Battery') + ' → ' + t('web.flow.house', 'House'));
-    edge({{x: nodes.grid.x + R, y: nodes.grid.y}}, hL, fv('grid', 'house'), FLOW_COL.grid, 'h', t('web.flow.grid_import', 'Grid import'));
-    edge({{x: nodes.grid.x, y: nodes.grid.y - R}}, {{x: nodes.battery.x, y: nodes.battery.y + R}}, fv('grid', 'battery'), FLOW_COL.grid, 'arcl', t('web.co2.src_grid', 'Grid') + ' → ' + t('web.co2.src_battery', 'Battery'));
-    cons.forEach(function(c) {{ edge(hR, {{x: c._x - R, y: c._y}}, c.kwh, c.role === 'tenant' ? FLOW_COL.tenant : FLOW_COL.owner, 'h', c.name); }});
+    edge('pv>house', {{x: nodes.pv.x + R, y: nodes.pv.y}}, hL, fv('pv', 'house'), FLOW_COL.pv, 'h', 'PV → ' + t('web.flow.house', 'House'));
+    edge('pv>battery', {{x: nodes.pv.x, y: nodes.pv.y + R}}, {{x: nodes.battery.x, y: nodes.battery.y - R}}, fv('pv', 'battery'), FLOW_COL.pv, 'arcl', 'PV → ' + t('web.co2.src_battery', 'Battery'));
+    edge('pv>grid', {{x: nodes.pv.x - R, y: nodes.pv.y}}, {{x: nodes.grid.x - R, y: nodes.grid.y}}, fv('pv', 'grid'), FLOW_COL.export, 'arcl', t('web.dash.feed_in', 'Feed-in'));
+    edge('battery>house', {{x: nodes.battery.x + R, y: nodes.battery.y}}, hL, fv('battery', 'house'), FLOW_COL.battery, 'h', t('web.co2.src_battery', 'Battery') + ' → ' + t('web.flow.house', 'House'));
+    edge('grid>house', {{x: nodes.grid.x + R, y: nodes.grid.y}}, hL, fv('grid', 'house'), FLOW_COL.grid, 'h', t('web.flow.grid_import', 'Grid import'));
+    edge('grid>battery', {{x: nodes.grid.x, y: nodes.grid.y - R}}, {{x: nodes.battery.x, y: nodes.battery.y + R}}, fv('grid', 'battery'), FLOW_COL.grid, 'arcl', t('web.co2.src_grid', 'Grid') + ' → ' + t('web.co2.src_battery', 'Battery'));
+    cons.forEach(function(c) {{ edge('c:' + c.key, hR, {{x: c._x - R, y: c._y}}, c.kwh, c.role === 'tenant' ? FLOW_COL.tenant : FLOW_COL.owner, 'h', c.name); }});
   }}
   // Nodes
-  const node = function(p, r, col, icon, title, v1, v2, opacity) {{
+  const nt = _efNodeTexts(d);
+  const node = function(nid, p, r, col, icon, title, opacity) {{
     let h = '<g opacity="' + (opacity == null ? 1 : opacity) + '">';
     h += '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + r + '" fill="' + col + '" fill-opacity="0.16" stroke="' + col + '" stroke-width="2.5"/>';
     h += '<text x="' + p.x + '" y="' + (p.y - r * 0.18) + '" text-anchor="middle" font-size="' + (r * 0.62) + '">' + icon + '</text>';
-    h += '<text x="' + p.x + '" y="' + (p.y + r * 0.42) + '" text-anchor="middle" font-size="12" font-weight="700" fill="var(--fg)">' + esc(v1) + '</text>';
+    h += '<text x="' + p.x + '" y="' + (p.y + r * 0.42) + '" text-anchor="middle" font-size="12" font-weight="700" fill="var(--fg)" data-n="' + esc(nid) + '.v">' + esc(nt[nid + '.v']) + '</text>';
     h += '<text x="' + p.x + '" y="' + (p.y + r + 15) + '" text-anchor="middle" font-size="12" font-weight="650" fill="var(--fg)">' + esc(title) + '</text>';
-    if (v2) h += '<text x="' + p.x + '" y="' + (p.y + r + 29) + '" text-anchor="middle" font-size="10.5" fill="var(--muted)">' + esc(v2) + '</text>';
+    h += '<text x="' + p.x + '" y="' + (p.y + r + 29) + '" text-anchor="middle" font-size="10.5" fill="var(--muted)" data-n="' + esc(nid) + '.s">' + esc(nt[nid + '.s'] || '') + '</text>';
     return h + '</g>';
   }};
-  if (d.has_pv) nodesHtml += node(nodes.pv, R, FLOW_COL.pv, '☀️', 'PV', _fv(S.pv || 0, unit), H.self_consumption_pct != null ? H.self_consumption_pct.toFixed(0) + '% ' + t('web.flow.kept_short', 'kept') : '');
-  if (d.has_battery) nodesHtml += node(nodes.battery, R, FLOW_COL.battery, '🔋', t('web.co2.src_battery', 'Battery'), d.battery_soc_pct != null ? d.battery_soc_pct.toFixed(0) + ' %' : _fv(S.battery || 0, unit), '↓ ' + _fv(K.battery || 0, unit) + '  ↑ ' + _fv(S.battery || 0, unit));
-  nodesHtml += node(nodes.grid, R, (K.grid || 0) > (S.grid || 0) ? FLOW_COL.export : FLOW_COL.grid, '🔌', t('web.co2.src_grid', 'Grid'), _fv(((K.grid || 0) > (S.grid || 0)) ? K.grid : (S.grid || 0), unit), '↓ ' + _fv(S.grid || 0, unit) + '  ↑ ' + _fv(K.grid || 0, unit), d.has_grid_meter || !d.has_supply ? 1 : 0.35);
+  if (d.has_pv) nodesHtml += node('pv', nodes.pv, R, FLOW_COL.pv, '☀️', 'PV');
+  if (d.has_battery) nodesHtml += node('bat', nodes.battery, R, FLOW_COL.battery, '🔋', t('web.co2.src_battery', 'Battery'));
+  nodesHtml += node('grid', nodes.grid, R, (K.grid || 0) > (S.grid || 0) ? FLOW_COL.export : FLOW_COL.grid, '🔌', t('web.co2.src_grid', 'Grid'), d.has_grid_meter || !d.has_supply ? 1 : 0.35);
   // House with autarky ring
   const aut = H.autarky_pct != null ? Math.max(0, Math.min(100, H.autarky_pct)) : null;
   nodesHtml += '<circle cx="' + house.x + '" cy="' + house.y + '" r="' + RH + '" fill="' + FLOW_COL.house + '" fill-opacity="0.12" stroke="var(--border)" stroke-width="6"/>';
   if (aut != null) {{
     const circ = 2 * Math.PI * RH;
-    nodesHtml += '<circle cx="' + house.x + '" cy="' + house.y + '" r="' + RH + '" fill="none" stroke="' + FLOW_COL.battery + '" stroke-width="6" stroke-linecap="round" stroke-dasharray="' + (circ * aut / 100).toFixed(1) + ' ' + circ.toFixed(1) + '" transform="rotate(-90 ' + house.x + ' ' + house.y + ')"/>';
+    nodesHtml += '<circle data-n="ring" data-circ="' + circ.toFixed(3) + '" cx="' + house.x + '" cy="' + house.y + '" r="' + RH + '" fill="none" stroke="' + FLOW_COL.battery + '" stroke-width="6" stroke-linecap="round" stroke-dasharray="' + (circ * aut / 100).toFixed(1) + ' ' + circ.toFixed(1) + '" transform="rotate(-90 ' + house.x + ' ' + house.y + ')"/>';
   }}
   nodesHtml += '<text x="' + house.x + '" y="' + (house.y - 16) + '" text-anchor="middle" font-size="26">🏠</text>';
-  nodesHtml += '<text x="' + house.x + '" y="' + (house.y + 10) + '" text-anchor="middle" font-size="15" font-weight="800" fill="var(--fg)">' + esc(_fv(H.load || 0, unit)) + '</text>';
-  nodesHtml += '<text x="' + house.x + '" y="' + (house.y + 27) + '" text-anchor="middle" font-size="10.5" fill="var(--muted)">' + (aut != null ? aut.toFixed(0) + ' % ' + t('web.flow.autark', 'self-supplied') : t('web.flow.house', 'House')) + '</text>';
+  nodesHtml += '<text x="' + house.x + '" y="' + (house.y + 10) + '" text-anchor="middle" font-size="15" font-weight="800" fill="var(--fg)" data-n="house.v">' + esc(nt['house.v']) + '</text>';
+  nodesHtml += '<text x="' + house.x + '" y="' + (house.y + 27) + '" text-anchor="middle" font-size="10.5" fill="var(--muted)" data-n="house.s">' + esc(nt['house.s']) + '</text>';
   cons.forEach(function(c) {{
-    const share = (H.load || 0) > 0 ? Math.round(c.kwh / H.load * 100) + '%' : '';
-    nodesHtml += node({{x: c._x, y: c._y}}, R * 0.85, c.role === 'tenant' ? FLOW_COL.tenant : FLOW_COL.owner, c.role === 'tenant' ? '👤' : '🏡', c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name, _fv(c.kwh, unit), share);
+    nodesHtml += node('c.' + c.key, {{x: c._x, y: c._y}}, R * 0.85, c.role === 'tenant' ? FLOW_COL.tenant : FLOW_COL.owner, c.role === 'tenant' ? '👤' : '🏡', c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name);
   }});
   let svg = '<svg id="flow-svg" viewBox="0 0 ' + W + ' ' + HH + '" width="100%" style="display:block;max-height:' + (narrow ? 900 : 640) + 'px;font-family:inherit">' + defs + paths + dots + nodesHtml + '</svg>';
   wrap.innerHTML = svg;
@@ -11699,11 +11831,13 @@ _loadLsSettings();
     const cap = data.capacity_kwh || 0;
     const stored = data.stored_kwh || 0;
     const days = data.window_days || 7;
+    const ins = data.insights || {{}};
+    const st = ins.stats || {{}};
     const srcBadge = (data.soc_source === 'measured')
       ? '<span class="badge badge-green">' + esc(t('battery.src.measured','measured')) + '</span>'
       : '<span class="badge badge-yellow">' + esc(t('battery.src.estimated','estimated')) + '</span>';
     // Power tile: charge green, discharge red, idle neutral.
-    const pwCol = pw > 50 ? '#22c55e' : (pw < -50 ? '#ef4444' : '');
+    const pwCol = pw > 50 ? SRC_COL.battery : (pw < -50 ? SRC_COL.grid : '');
     // ETA to full (charging) / empty (discharging).
     let eta = '—';
     if (cap > 0) {{
@@ -11711,70 +11845,278 @@ _loadLsSettings();
       else if (pw < -50) {{ const h = stored / (Math.abs(pw)/1000.0); if (h > 0 && h < 999) eta = t('battery.eta.empty','Empty in') + ' ' + _fmtDur(h); }}
     }}
     const effTxt = (data.avg_efficiency_pct||0).toFixed(1) + '%' +
-      (data.efficiency_measured ? '' : ' <span style="font-size:10px;color:var(--muted)">(nominal)</span>');
-
-    // Metric card that does NOT escape its value (metricCardHtml always does),
-    // so we can colour the value.
-    const _mcRaw = function(label, valueHtml) {{
+      (data.efficiency_measured ? '' : ' <span style="font-size:10px;color:var(--muted)">(' + esc(t('battery.nominal','nominal')) + ')</span>');
+    const _mcRaw = function(label, valueHtml, sub) {{
       return '<div class="metric-card"><div class="metric-label">' + esc(label) +
         '</div><div class="metric-value">' + valueHtml +
-        '</div><div class="metric-sub">&nbsp;</div></div>';
+        '</div><div class="metric-sub">' + (sub ? esc(sub) : '&nbsp;') + '</div></div>';
     }};
+    const _d1 = function(v) {{ return (v == null ? 0 : v).toFixed(1); }};
+    const _d2 = function(v) {{ return (v == null ? 0 : v).toFixed(2); }};
+    const _eur = function(v) {{ return (v == null ? 0 : v).toFixed(2) + ' €'; }};
+    const socCol = soc >= 80 ? SRC_COL.battery : (soc >= 30 ? SRC_COL.solar : SRC_COL.grid);
 
+    // ── 1 · Now ──
     let html = '<div class="card" style="margin-bottom:10px">' +
       '<div class="card-title">🔋 ' + esc(t('battery.title','Battery storage')) + ' ' + srcBadge + '</div>' +
+      '<div class="bat-gauge" title="' + esc(t('battery.soc','State of charge')) + '"><div class="bat-gauge-fill" style="width:' + Math.max(0, Math.min(100, soc)).toFixed(1) + '%;background:' + socCol + '"></div>' +
+      '<div class="bat-gauge-text">' + soc.toFixed(0) + ' %' + (cap > 0 ? ' · ' + stored.toFixed(1) + ' / ' + cap.toFixed(1) + ' kWh' : '') + '</div></div>' +
       '<div class="metric-grid">' +
-      metricCardHtml(t('battery.soc','State of charge'), soc.toFixed(0) + '%') +
-      metricCardHtml(t('battery.stored','Stored'), (cap > 0 ? stored.toFixed(1) + ' / ' + cap.toFixed(1) + ' kWh' : '—')) +
-      _mcRaw(t('battery.power','Power'), '<span style="color:' + pwCol + '">' + fmt(Math.abs(pw),0) + ' W</span>') +
-      metricCardHtml(t('battery.status','Status'), ml[data.mode] || data.mode) +
+      _mcRaw(t('battery.power','Power'), '<span style="color:' + pwCol + '">' + (pw > 50 ? '↓ ' : (pw < -50 ? '↑ ' : '')) + fmt(Math.abs(pw),0) + ' W</span>', ml[data.mode] || data.mode) +
       metricCardHtml(t('battery.eta','Forecast'), eta) +
+      _mcRaw(t('battery.today_in_out','Today'), '<span style="color:' + SRC_COL.battery + '">↓ ' + _d1(data.today_charged_kwh) + '</span> · <span style="color:' + SRC_COL.grid + '">↑ ' + _d1(data.today_discharged_kwh) + '</span>', 'kWh · ' + t('battery.charged','Charged') + ' · ' + t('battery.discharged','Discharged')) +
+      _mcRaw(t('battery.efficiency','Efficiency'), effTxt, t('battery.round_trip','round trip')) +
       '</div></div>';
 
-    // SOC history chart
+    // ── 2 · Last 24 h: power + SOC ──
+    const p24 = data.power_24h || [];
     const tl = data.soc_timeline || [];
-    if (tl.length > 1) {{
-      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">' + esc(t('battery.soc_history','Charge history')) + ' (' + days + ' ' + esc(t('battery.days','days')) + ')</div>' +
-        '<canvas id="bat-soc-spark" class="bar-chart" style="height:120px"></canvas></div>';
+    if (p24.length > 10) {{
+      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">' + esc(t('battery.last_24h','Last 24 hours')) + '</div>' +
+        '<canvas id="bat-24h-canvas" class="bar-chart" style="height:170px;width:100%"></canvas>' +
+        '<div class="bat-legend"><span><span class="co2-dot" style="background:' + SRC_COL.battery + '"></span>' + esc(t('battery.charging_w','charging')) + '</span>' +
+        '<span><span class="co2-dot" style="background:' + SRC_COL.grid + '"></span>' + esc(t('battery.discharging_w','discharging')) + '</span>' +
+        '<span><span class="co2-dot" style="background:#3b82f6"></span>SOC</span></div></div>';
     }}
 
-    // Today in/out
-    html += '<div class="card" style="margin-bottom:10px"><div class="card-title">' + esc(t('battery.today','Today')) + '</div>' +
-      '<div class="metric-grid">' +
-      _mcRaw(t('battery.charged','Charged'), '<span style="color:#22c55e">↓ ' + (data.today_charged_kwh||0).toFixed(2) + ' kWh</span>') +
-      _mcRaw(t('battery.discharged','Discharged'), '<span style="color:#ef4444">↑ ' + (data.today_discharged_kwh||0).toFixed(2) + ' kWh</span>') +
-      '</div></div>';
+    // ── 3 · SOC history ──
+    if (tl.length > 1) {{
+      const ms = data.measured_since_ts || 0;
+      const note = ms > 0 && ms > tl[0][0] + 3600
+        ? t('battery.measured_since','measured since {{d}} — before that integrated from the meter').replace('{{d}}', new Date(ms * 1000).toLocaleString(_locale(), {{day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}}))
+        : (ms > 0 ? t('battery.curve_measured','measured curve') : t('battery.curve_integrated','integrated from the meter power, pinned to the measured state of charge'));
+      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">' + esc(t('battery.soc_history','Charge history')) + ' (' + days + ' ' + esc(t('battery.days','days')) + ')</div>' +
+        '<canvas id="bat-soc-canvas" class="bar-chart" style="height:150px;width:100%"></canvas>' +
+        '<div class="bat-legend"><span style="color:var(--muted)">' + esc(note) + '</span></div></div>';
+    }}
 
-    // Window totals + cycles + efficiency
-    html += '<div class="card"><div class="card-title">' + esc(t('battery.period','Period')) + ' (' + days + ' ' + esc(t('battery.days','days')) + ')</div>' +
-      '<div class="metric-grid">' +
-      metricCardHtml(t('battery.charged','Charged'), (data.total_charged_kwh||0).toFixed(2) + ' kWh') +
-      metricCardHtml(t('battery.discharged','Discharged'), (data.total_discharged_kwh||0).toFixed(2) + ' kWh') +
-      metricCardHtml(t('battery.cycles','Full cycles'), (data.equivalent_cycles!=null ? data.equivalent_cycles.toFixed(2) : data.cycle_count)) +
-      _mcRaw(t('battery.efficiency','Efficiency'), effTxt) +
-      '</div></div>';
+    // ── 4 · Daily balance, 30 days ──
+    const dl = ins.daily || [];
+    const dlHas = dl.some(function(d) {{ return d.discharge_kwh > 0 || d.charge_pv_kwh > 0 || d.charge_grid_kwh > 0; }});
+    if (dlHas) {{
+      let sumIn = 0, sumOut = 0, sumGrid = 0, best = null, nDays = 0, gridDays = 0;
+      dl.forEach(function(d) {{ const i = d.charge_pv_kwh + d.charge_grid_kwh; if (i > 0 || d.discharge_kwh > 0) nDays++; sumIn += i; sumOut += d.discharge_kwh; sumGrid += d.charge_grid_kwh; if (d.charge_grid_kwh > 0.05) gridDays++; if (!best || d.discharge_kwh > best.discharge_kwh) best = d; }});
+      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">' + esc(t('battery.daily_title','Day by day')) + ' (' + (ins.long_days || 30) + ' ' + esc(t('battery.days','days')) + ')</div>' +
+        '<canvas id="bat-days-canvas" class="bar-chart" style="height:180px;width:100%"></canvas>' +
+        '<div class="bat-legend"><span><span class="co2-dot" style="background:' + SRC_COL.solar + '"></span>' + esc(t('battery.from_sun','Charged from the sun')) + '</span>' +
+        '<span><span class="co2-dot" style="background:' + SRC_COL.grid + '"></span>' + esc(t('battery.from_grid','Charged from the grid')) + '</span>' +
+        '<span><span class="co2-dot" style="background:' + SRC_COL.battery + '"></span>' + esc(t('battery.discharged','Discharged')) + '</span>' +
+        '<span><span class="co2-dot" style="background:#3b82f6"></span>' + esc(t('battery.soc_range','SOC low · high')) + '</span></div>' +
+        '<div class="metric-grid" style="margin-top:8px">' +
+        metricCardHtml(t('battery.avg_in_day','Ø charged / day'), _d1(nDays ? sumIn / nDays : 0) + ' kWh', cap > 0 ? (nDays ? sumIn / nDays / cap * 100 : 0).toFixed(0) + ' % ' + t('battery.of_capacity','of the capacity') : '') +
+        metricCardHtml(t('battery.avg_out_day','Ø discharged / day'), _d1(nDays ? sumOut / nDays : 0) + ' kWh', nDays + ' ' + t('battery.days_with_data','days with data')) +
+        metricCardHtml(t('battery.best_day','Biggest day'), best ? _d1(best.discharge_kwh) + ' kWh' : '–', best ? new Date(best.date).toLocaleDateString(_locale(), {{day:'2-digit', month:'2-digit'}}) + ' · ' + t('battery.discharged','Discharged').toLowerCase() : '') +
+        metricCardHtml(t('battery.grid_days','Days with grid charging'), String(gridDays), _d1(sumGrid) + ' kWh ' + t('battery.from_grid_short','from the grid')) +
+        '</div></div>';
+    }}
 
-    // Origin of what is inside — the CO₂ chain's view of the battery.
+    // ── 5 · Rhythm of the day ──
+    const hp = ins.hour_profile || [];
+    if (hp.length === 24 && hp.some(function(h) {{ return h.charge_kwh > 0 || h.discharge_kwh > 0; }})) {{
+      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">' + esc(t('battery.rhythm_title','Rhythm of the day')) + ' <span style="font-weight:400;color:var(--muted);font-size:12px">Ø ' + (st.short_days || days) + ' ' + esc(t('battery.days','days')) + '</span></div>' +
+        '<canvas id="bat-hour-canvas" class="bar-chart" style="height:150px;width:100%"></canvas>' +
+        '<div class="bat-legend"><span><span class="co2-dot" style="background:' + SRC_COL.battery + '"></span>' + esc(t('battery.charged','Charged')) + '</span>' +
+        '<span><span class="co2-dot" style="background:' + SRC_COL.grid + '"></span>' + esc(t('battery.discharged','Discharged')) + '</span>' +
+        '<span><span class="co2-dot" style="background:#3b82f6"></span>Ø SOC</span></div>' +
+        '<div class="bat-chips">' +
+        (st.typical_full_at ? '<span class="bat-chip">🔋 ' + esc(t('battery.typical_full','typically full at')) + ' <b>' + st.typical_full_at + '</b> <span style="color:var(--muted)">(' + st.days_full + '/' + (st.short_days || days) + ' ' + esc(t('battery.days','days')) + ')</span></span>' : '<span class="bat-chip">🔋 ' + esc(t('battery.never_full','never full in this window')) + '</span>') +
+        (st.typical_empty_at ? '<span class="bat-chip">🪫 ' + esc(t('battery.typical_empty','typically empty at')) + ' <b>' + st.typical_empty_at + '</b> <span style="color:var(--muted)">(' + st.days_empty + '/' + (st.short_days || days) + ')</span></span>' : '<span class="bat-chip">🪫 ' + esc(t('battery.never_empty','never empty in this window')) + '</span>') +
+        '</div></div>';
+    }}
+
+    // ── 6 · Cycles & use ──
+    const cyc = ins.cycles || [];
+    html += '<div class="card" style="margin-bottom:10px"><div class="card-title">' + esc(t('battery.cycles_title','Cycles & use')) + ' (' + days + ' ' + esc(t('battery.days','days')) + ')</div>' +
+      '<div class="metric-grid">' +
+      metricCardHtml(t('battery.cycles','Full cycles'), (data.equivalent_cycles != null ? data.equivalent_cycles.toFixed(2) : String(data.cycle_count)), st.cycles_per_year_est != null ? '≈ ' + st.cycles_per_year_est.toFixed(0) + ' ' + t('battery.per_year','per year') : '') +
+      metricCardHtml(t('battery.avg_dod','Ø depth of discharge'), st.avg_dod_pct != null ? st.avg_dod_pct.toFixed(0) + ' %' : '–', cyc.length + ' ' + t('battery.cycles_found','cycles found')) +
+      metricCardHtml(t('battery.throughput','Throughput / day'), _d1(st.throughput_kwh_per_day) + ' kWh', st.capacity_turnover_pct != null ? st.capacity_turnover_pct.toFixed(0) + ' % ' + t('battery.of_capacity','of the capacity') : '') +
+      metricCardHtml(t('battery.time_full','Time full'), st.full_share_pct != null ? st.full_share_pct.toFixed(0) + ' %' : '–', t('battery.time_full_note','surplus had nowhere to go')) +
+      metricCardHtml(t('battery.time_empty','Time empty'), st.empty_share_pct != null ? st.empty_share_pct.toFixed(0) + ' %' : '–', t('battery.time_empty_note','the house ran on the grid')) +
+      metricCardHtml(t('battery.period_in_out','Charged · discharged'), _d1(data.total_charged_kwh) + ' · ' + _d1(data.total_discharged_kwh), 'kWh · ' + days + ' ' + t('battery.days','days')) +
+      '</div>';
+    if (cyc.length) {{
+      html += '<div style="overflow-x:auto;margin-top:8px"><table class="bat-cycles"><thead><tr><th style="text-align:left">' + esc(t('battery.cycle_start','Start')) + '</th><th class="col-narrow">' + esc(t('battery.cycle_duration','Duration')) + '</th><th>↓ kWh</th><th>↑ kWh</th><th>' + esc(t('battery.dod_short','DoD')) + '</th><th>η</th></tr></thead><tbody>';
+      cyc.slice().reverse().slice(0, 8).forEach(function(c) {{
+        const s = new Date(c.start_ts * 1000), e = new Date(c.end_ts * 1000);
+        const _nar = window.innerWidth < 520;
+        html += '<tr><td style="text-align:left">' + s.toLocaleDateString(_locale(), _nar ? {{day:'2-digit', month:'2-digit'}} : {{weekday:'short', day:'2-digit', month:'2-digit'}}) + ' ' + s.toLocaleTimeString(_locale(), {{hour:'2-digit', minute:'2-digit'}}) + '</td>' +
+          '<td class="col-narrow">' + _fmtDur((c.end_ts - c.start_ts) / 3600) + '</td>' +
+          '<td style="color:' + SRC_COL.battery + '">' + _d1(c.charge_kwh) + '</td><td style="color:' + SRC_COL.grid + '">' + _d1(c.discharge_kwh) + '</td>' +
+          '<td>' + c.depth_pct.toFixed(0) + ' %</td><td>' + (c.measured && c.efficiency_pct > 0 ? c.efficiency_pct.toFixed(0) + ' %' : '<span style="color:var(--muted)">–</span>') + '</td></tr>';
+      }});
+      html += '</tbody></table></div>';
+      if (!cyc.some(function(c) {{ return c.measured; }})) html += '<div style="font-size:10.5px;color:var(--muted);margin-top:4px">' + esc(t('battery.eta_needs_measured','η per cycle appears once the curve is measured (a day after this version started)')) + '</div>';
+    }}
+    html += '</div>';
+
+    // ── 7 · Money ──
+    const mo = ins.money;
+    if (mo && mo.discharged_kwh > 0) {{
+      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">💶 ' + esc(t('battery.money_title','What the battery earns')) + ' (' + (mo.days || 30) + ' ' + esc(t('battery.days','days')) + ')</div>' +
+        '<div class="metric-grid">' +
+        metricCardHtml(t('battery.money_net','Net benefit'), _eur(mo.net_eur), '≈ ' + (mo.year_est_eur || 0).toFixed(0) + ' € ' + t('battery.per_year','per year') + ' · ' + t('battery.seasonal','seasonally weighted')) +
+        metricCardHtml(t('battery.money_value','Grid power replaced'), _eur(mo.value_eur), _d1(mo.discharged_kwh) + ' kWh × ' + (ins.unit_price || 0).toFixed(2) + ' €') +
+        metricCardHtml(t('battery.money_forgone','Feed-in given up'), '− ' + _eur(mo.pv_charge_forgone_eur), t('battery.money_forgone_note','the PV charge would have been paid') + ' ' + (ins.feed_in_tariff || 0).toFixed(3) + ' €/kWh') +
+        metricCardHtml(t('battery.money_grid','Grid charging paid'), '− ' + _eur(mo.grid_charge_cost_eur), mo.per_kwh_eur != null ? _d2(mo.per_kwh_eur) + ' € ' + t('battery.per_kwh_out','per kWh delivered') : '') +
+        '</div></div>';
+    }}
+
+    // ── 8 · Origin of what is inside — the CO₂ chain's view of the battery.
     const org = data.origin;
     if (org) {{
-      html += '<div class="card"><div class="card-title">' + esc(t('battery.origin_title','Where the stored energy came from')) + ' (' + days + ' ' + esc(t('battery.days','days')) + ')</div>' +
+      html += '<div class="card" style="margin-bottom:10px"><div class="card-title">' + esc(t('battery.origin_title','Where the stored energy came from')) + ' (' + days + ' ' + esc(t('battery.days','days')) + ')</div>' +
         '<div style="display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--chipbg);margin:6px 0 8px">' +
-        '<div style="flex:' + (org.pv_charged_kwh||0) + ';background:#fdd835"></div><div style="flex:' + (org.grid_charged_kwh||0) + ';background:#ef4444"></div></div>' +
+        '<div style="flex:' + (org.pv_charged_kwh||0) + ';background:' + SRC_COL.solar + '"></div><div style="flex:' + (org.grid_charged_kwh||0) + ';background:' + SRC_COL.grid + '"></div></div>' +
         '<div class="metric-grid">' +
         metricCardHtml(t('battery.from_sun','Charged from the sun'), (org.pv_charged_kwh||0).toFixed(1) + ' kWh', (100 - (org.grid_share_pct||0)).toFixed(0) + ' %') +
         metricCardHtml(t('battery.from_grid','Charged from the grid'), (org.grid_charged_kwh||0).toFixed(1) + ' kWh', (org.grid_share_pct||0).toFixed(0) + ' %') +
-        metricCardHtml(t('battery.kwh_carries','A kWh out carries'), (org.intensity_g_per_kwh||0).toFixed(0) + ' g CO\u2082', t('battery.incl_mfg','incl. {{v}} g manufacturing').replace('{{v}}', (org.manufacturing_g_per_kwh||0).toFixed(0))) +
+        metricCardHtml(t('battery.kwh_carries','A kWh out carries'), (org.intensity_g_per_kwh||0).toFixed(0) + ' g CO₂', t('battery.incl_mfg','incl. {{v}} g manufacturing').replace('{{v}}', (org.manufacturing_g_per_kwh||0).toFixed(0))) +
         metricCardHtml(t('battery.avoided','Avoided by the battery'), (org.avoided_kg||0).toFixed(2) + ' kg', (org.share_of_load_pct||0).toFixed(0) + ' % ' + t('web.solar.of_the_load','of the load')) +
         '</div></div>';
     }}
 
     el.innerHTML = html;
+    try {{ _drawBat24h(p24, tl); }} catch (e) {{}}
+    try {{ _drawBatSoc(tl, data.measured_since_ts || 0); }} catch (e) {{}}
+    try {{ if (dlHas) _drawBatDays(dl); }} catch (e) {{}}
+    try {{ _drawBatHours(hp); }} catch (e) {{}}
+  }}
 
-    // Draw SOC sparkline after the canvas is in the DOM.
-    if (tl.length > 1) {{
-      const cv = document.getElementById('bat-soc-spark');
-      if (cv) {{ drawSparkline(cv, tl.map(function(p){{ return p[1]; }}), '#3b82f6', true, false, null); }}
+  // ── charts ──
+  function _batAxisTime(ctx, c, PL, PR, H, t0, t1, stepH) {{
+    const iw = c.W - PL - PR;
+    ctx.fillStyle = c.muted; ctx.textAlign = 'center'; ctx.font = '9px system-ui,sans-serif';
+    const first = new Date(t0 * 1000); first.setMinutes(0, 0, 0);
+    let tt = Math.floor(first.getTime() / 1000);
+    while (tt < t1) {{
+      const d = new Date(tt * 1000);
+      if (d.getHours() % stepH === 0) {{
+        const x = PL + (tt - t0) / (t1 - t0) * iw;
+        if (x >= PL && x <= c.W - PR - 12) ctx.fillText(d.getHours().toString().padStart(2, '0') + ':00', x, H - 4);
+      }}
+      tt += 3600;
     }}
+  }}
+  function _drawBat24h(p24, tl) {{
+    const c = _cvSetup('bat-24h-canvas');
+    if (!c || !p24 || p24.length < 10) return;
+    const ctx = c.ctx, W = c.W, H = c.H, PL = 40, PR = 34, PT = 8, PB = 18;
+    const iw = W - PL - PR, ih = H - PT - PB;
+    const t1 = p24[p24.length - 1][0], t0 = Math.min(p24[0][0], t1 - 86400);
+    let maxW = 100; p24.forEach(function(p) {{ maxW = Math.max(maxW, Math.abs(p[1])); }});
+    maxW = Math.ceil(maxW / 500) * 500;
+    const zeroY = PT + ih / 2;
+    const x = function(ts) {{ return PL + (ts - t0) / (t1 - t0) * iw; }};
+    const yW = function(w) {{ return zeroY - w / maxW * ih / 2; }};
+    ctx.font = '9px system-ui,sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = c.muted; ctx.strokeStyle = c.grid; ctx.lineWidth = 1;
+    [-1, -0.5, 0, 0.5, 1].forEach(function(f) {{ const yy = Math.round(yW(maxW * f)) + 0.5; ctx.beginPath(); ctx.moveTo(PL, yy); ctx.lineTo(W - PR, yy); ctx.stroke(); ctx.fillText((f === 0 ? '0' : (maxW * f / 1000).toFixed(1) + ' kW'), PL - 4, yy + 3); }});
+    // power as thin bars (charge up, green; discharge down, red)
+    const bw = Math.max(1, iw / p24.length);
+    p24.forEach(function(p) {{
+      const w = p[1]; if (Math.abs(w) < 20) return;
+      ctx.fillStyle = w > 0 ? SRC_COL.battery : SRC_COL.grid; ctx.globalAlpha = 0.75;
+      const xx = x(p[0]);
+      if (w > 0) ctx.fillRect(xx - bw / 2, yW(w), bw, zeroY - yW(w)); else ctx.fillRect(xx - bw / 2, zeroY, bw, yW(w) - zeroY);
+    }});
+    ctx.globalAlpha = 1;
+    // SOC on the right axis
+    const pts = tl.filter(function(p) {{ return p[0] >= t0 && p[0] <= t1; }});
+    if (pts.length > 1) {{
+      ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.beginPath();
+      pts.forEach(function(p, i) {{ const yy = PT + ih - p[1] / 100 * ih; i ? ctx.lineTo(x(p[0]), yy) : ctx.moveTo(x(p[0]), yy); }});
+      ctx.stroke();
+      ctx.fillStyle = '#3b82f6'; ctx.textAlign = 'left';
+      ctx.fillText('100 %', W - PR + 3, PT + 8); ctx.fillText('50 %', W - PR + 3, PT + ih / 2 + 3); ctx.fillText('0 %', W - PR + 3, PT + ih);
+      const last = pts[pts.length - 1]; ctx.beginPath(); ctx.arc(x(last[0]), PT + ih - last[1] / 100 * ih, 3, 0, Math.PI * 2); ctx.fill();
+    }}
+    _batAxisTime(ctx, c, PL, PR, H, t0, t1, 4);
+  }}
+  function _drawBatSoc(tl, measuredSince) {{
+    const c = _cvSetup('bat-soc-canvas');
+    if (!c || !tl || tl.length < 2) return;
+    const ctx = c.ctx, W = c.W, H = c.H, PL = 34, PR = 6, PT = 8, PB = 18;
+    const iw = W - PL - PR, ih = H - PT - PB;
+    const t0 = tl[0][0], t1 = tl[tl.length - 1][0];
+    const x = function(ts) {{ return PL + (ts - t0) / Math.max(1, t1 - t0) * iw; }};
+    const y = function(s) {{ return PT + ih - s / 100 * ih; }};
+    ctx.font = '9px system-ui,sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = c.muted; ctx.strokeStyle = c.grid; ctx.lineWidth = 1;
+    [0, 50, 100].forEach(function(s) {{ const yy = Math.round(y(s)) + 0.5; ctx.beginPath(); ctx.moveTo(PL, yy); ctx.lineTo(W - PR, yy); ctx.stroke(); ctx.fillText(s + '%', PL - 4, yy + 3); }});
+    // day separators + labels
+    ctx.textAlign = 'center';
+    const d0 = new Date(t0 * 1000); d0.setHours(24, 0, 0, 0);
+    for (let tt = Math.floor(d0.getTime() / 1000); tt < t1; tt += 86400) {{
+      const xx = Math.round(x(tt)) + 0.5; ctx.strokeStyle = c.grid; ctx.beginPath(); ctx.moveTo(xx, PT); ctx.lineTo(xx, PT + ih); ctx.stroke();
+      const dd = new Date(tt * 1000); ctx.fillStyle = c.muted; ctx.fillText(dd.toLocaleDateString(_locale(), {{weekday:'short'}}), x(tt + 43200), H - 4);
+    }}
+    // area + line; integrated stretch dashed
+    const seg = function(pts, dashed) {{
+      if (pts.length < 2) return;
+      ctx.beginPath(); pts.forEach(function(p, i) {{ i ? ctx.lineTo(x(p[0]), y(p[1])) : ctx.moveTo(x(p[0]), y(p[1])); }});
+      ctx.lineTo(x(pts[pts.length - 1][0]), PT + ih); ctx.lineTo(x(pts[0][0]), PT + ih); ctx.closePath();
+      ctx.fillStyle = 'rgba(59,130,246,' + (dashed ? '0.08' : '0.16') + ')'; ctx.fill();
+      ctx.beginPath(); pts.forEach(function(p, i) {{ i ? ctx.lineTo(x(p[0]), y(p[1])) : ctx.moveTo(x(p[0]), y(p[1])); }});
+      ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 1.8; ctx.setLineDash(dashed ? [4, 3] : []); ctx.stroke(); ctx.setLineDash([]);
+    }};
+    if (measuredSince > t0) {{ seg(tl.filter(function(p) {{ return p[0] <= measuredSince; }}), true); seg(tl.filter(function(p) {{ return p[0] >= measuredSince; }}), false); }}
+    else seg(tl, measuredSince === 0);
+    // min / max markers
+    let mn = tl[0], mx = tl[0]; tl.forEach(function(p) {{ if (p[1] < mn[1]) mn = p; if (p[1] > mx[1]) mx = p; }});
+    ctx.fillStyle = c.muted; ctx.textAlign = 'center'; ctx.font = '9px system-ui,sans-serif';
+    ctx.fillStyle = SRC_COL.grid; ctx.beginPath(); ctx.arc(x(mn[0]), y(mn[1]), 3, 0, Math.PI * 2); ctx.fill(); ctx.fillText(mn[1].toFixed(0) + '%', Math.min(W - 16, Math.max(PL + 12, x(mn[0]))), Math.min(PT + ih - 2, y(mn[1]) + 12));
+    ctx.fillStyle = SRC_COL.battery; ctx.beginPath(); ctx.arc(x(mx[0]), y(mx[1]), 3, 0, Math.PI * 2); ctx.fill();
+  }}
+  function _drawBatDays(dl) {{
+    const c = _cvSetup('bat-days-canvas');
+    if (!c || !dl || dl.length < 2) return;
+    const ctx = c.ctx, W = c.W, H = c.H, PL = 36, PR = 30, PT = 8, PB = 18;
+    const n = dl.length, iw = W - PL - PR, ih = H - PT - PB;
+    let maxV = 0.5; dl.forEach(function(d) {{ maxV = Math.max(maxV, d.charge_pv_kwh + d.charge_grid_kwh, d.discharge_kwh); }});
+    const half = ih / 2, zeroY = PT + half;
+    const x = function(i) {{ return PL + i * iw / n; }};
+    const bw = Math.max(2, iw / n * 0.7);
+    ctx.font = '9px system-ui,sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = c.muted; ctx.strokeStyle = c.grid; ctx.lineWidth = 1;
+    [-1, -0.5, 0.5, 1].forEach(function(f) {{ const yy = Math.round(zeroY - f * half) + 0.5; ctx.beginPath(); ctx.moveTo(PL, yy); ctx.lineTo(W - PR, yy); ctx.stroke(); ctx.fillText((maxV * Math.abs(f)).toFixed(0), PL - 4, yy + 3); }});
+    dl.forEach(function(d, i) {{
+      const x0 = x(i) + (iw / n - bw) / 2;
+      let y = zeroY;
+      [[d.charge_pv_kwh, SRC_COL.solar], [d.charge_grid_kwh, SRC_COL.grid]].forEach(function(s) {{ const hh = s[0] / maxV * half; if (hh <= 0) return; ctx.fillStyle = s[1]; ctx.globalAlpha = 0.9; ctx.fillRect(x0, y - hh, bw, hh); y -= hh; }});
+      if (d.discharge_kwh > 0) {{ const hh = d.discharge_kwh / maxV * half; ctx.fillStyle = SRC_COL.battery; ctx.globalAlpha = 0.9; ctx.fillRect(x0, zeroY + 1, bw, hh); }}
+      ctx.globalAlpha = 1;
+    }});
+    ctx.strokeStyle = c.muted; ctx.beginPath(); ctx.moveTo(PL, Math.round(zeroY) + 0.5); ctx.lineTo(W - PR, Math.round(zeroY) + 0.5); ctx.stroke();
+    // SOC low/high band on the right axis (0..100 over the whole height)
+    ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
+    ['soc_max', 'soc_min'].forEach(function(k) {{ let started = false; ctx.beginPath(); dl.forEach(function(d, i) {{ if (d[k] == null) return; const yy = PT + ih - d[k] / 100 * ih; started ? ctx.lineTo(x(i) + iw / n / 2, yy) : ctx.moveTo(x(i) + iw / n / 2, yy); started = true; }}); ctx.stroke(); }});
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#3b82f6'; ctx.textAlign = 'left'; ctx.fillText('100%', W - PR + 3, PT + 8); ctx.fillText('0%', W - PR + 3, PT + ih);
+    ctx.fillStyle = c.muted; ctx.textAlign = 'center';
+    const _st = Math.max(1, Math.round(n / Math.max(2, Math.floor(iw / 52))));
+    dl.forEach(function(d, i) {{ if (i === n - 1 || (i % _st === 0 && n - 1 - i >= _st / 2)) ctx.fillText(d.date.slice(8) + '.' + d.date.slice(5, 7) + '.', x(i) + iw / n / 2, H - 4); }});
+  }}
+  function _drawBatHours(hp) {{
+    const c = _cvSetup('bat-hour-canvas');
+    if (!c || !hp || hp.length !== 24) return;
+    const ctx = c.ctx, W = c.W, H = c.H, PL = 36, PR = 30, PT = 8, PB = 18;
+    const iw = W - PL - PR, ih = H - PT - PB, n = 24;
+    let maxV = 0.2; hp.forEach(function(h) {{ maxV = Math.max(maxV, h.charge_kwh, h.discharge_kwh); }});
+    const half = ih / 2, zeroY = PT + half;
+    const x = function(i) {{ return PL + i * iw / n; }};
+    const bw = Math.max(2, iw / n * 0.62);
+    ctx.font = '9px system-ui,sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = c.muted; ctx.strokeStyle = c.grid; ctx.lineWidth = 1;
+    [-1, 0, 1].forEach(function(f) {{ const yy = Math.round(zeroY - f * half) + 0.5; ctx.beginPath(); ctx.moveTo(PL, yy); ctx.lineTo(W - PR, yy); ctx.stroke(); ctx.fillText(f === 0 ? '0' : maxV.toFixed(1), PL - 4, yy + 3); }});
+    hp.forEach(function(h, i) {{
+      const x0 = x(i) + (iw / n - bw) / 2;
+      if (h.charge_kwh > 0) {{ const hh = h.charge_kwh / maxV * half; ctx.fillStyle = SRC_COL.battery; ctx.globalAlpha = 0.9; ctx.fillRect(x0, zeroY - hh, bw, hh); }}
+      if (h.discharge_kwh > 0) {{ const hh = h.discharge_kwh / maxV * half; ctx.fillStyle = SRC_COL.grid; ctx.globalAlpha = 0.9; ctx.fillRect(x0, zeroY + 1, bw, hh); }}
+      ctx.globalAlpha = 1;
+    }});
+    ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.beginPath(); let started = false;
+    hp.forEach(function(h, i) {{ if (h.soc_pct == null) return; const yy = PT + ih - h.soc_pct / 100 * ih; started ? ctx.lineTo(x(i) + iw / n / 2, yy) : ctx.moveTo(x(i) + iw / n / 2, yy); started = true; }});
+    ctx.stroke();
+    ctx.fillStyle = '#3b82f6'; ctx.textAlign = 'left'; ctx.fillText('100%', W - PR + 3, PT + 8); ctx.fillText('0%', W - PR + 3, PT + ih);
+    ctx.fillStyle = c.muted; ctx.textAlign = 'center';
+    hp.forEach(function(h, i) {{ if (i % 3 === 0) ctx.fillText(String(i).padStart(2, '0'), x(i) + iw / n / 2, H - 4); }});
   }}
 
   // Format a duration in hours as "Xh Ym" / "Ym".

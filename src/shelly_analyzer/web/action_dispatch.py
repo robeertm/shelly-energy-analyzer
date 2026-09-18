@@ -5603,8 +5603,17 @@ class ActionDispatcher:
                         }
                 except Exception:
                     logger.debug("battery origin failed", exc_info=True)
+                # Days, hours of the day, cycles, euros — the tab beyond "now".
+                _ins = {}
+                try:
+                    from shelly_analyzer.services.battery_insights import compute_battery_insights
+                    _ins = compute_battery_insights(self.storage.db, self.cfg, status)
+                except Exception:
+                    logger.debug("battery insights failed", exc_info=True)
                 return {"ok": True, "data": {
                     "origin": _origin,
+                    "insights": _ins,
+                    "power_24h": getattr(status, "power_24h", []),
                     "soc_pct": status.soc_pct, "power_w": status.power_w,
                     "mode": status.mode, "cycle_count": status.cycle_count,
                     "equivalent_cycles": status.equivalent_cycles,
@@ -5619,6 +5628,7 @@ class ActionDispatcher:
                     "window_days": 7,
                     "soc_timeline": status.soc_timeline,
                     "soc_source": _soc_source,
+                    "measured_since_ts": int(getattr(status, "measured_since_ts", 0) or 0),
                 }}
             except Exception as e:
                 return {"ok": False, "error": str(e)}

@@ -1278,6 +1278,31 @@ class EnergyDB:
                 )
         return len(rows)
 
+    # -- measured battery state --------------------------------------------
+    # The battery tab used to integrate the meter's power into a SOC curve and
+    # only pin its LAST point to the measured value. The table for the measured
+    # curve existed from the start and was never written; now it is, once a
+    # minute, so history, cycles and round-trip efficiency are readings.
+
+    def insert_battery_state(self, device_key: str, ts: int, soc_pct: float,
+                             power_w: float, mode: str) -> None:
+        conn = self._conn()
+        conn.execute(
+            "INSERT OR REPLACE INTO battery_state (timestamp, device_key, soc_pct, power_w, mode) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (int(ts), device_key, float(soc_pct), float(power_w), mode),
+        )
+        conn.commit()
+
+    def query_battery_state(self, device_key: str, start_ts: int, end_ts: int) -> pd.DataFrame:
+        """Measured SOC rows for a device in [start_ts, end_ts]: timestamp, soc_pct, power_w."""
+        conn = self._conn()
+        return pd.read_sql_query(
+            "SELECT timestamp, soc_pct, power_w FROM battery_state "
+            "WHERE device_key = ? AND timestamp >= ? AND timestamp <= ? ORDER BY timestamp",
+            conn, params=(device_key, int(start_ts), int(end_ts)),
+        )
+
     def query_co2_intensity(
         self,
         zone: str,
