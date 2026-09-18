@@ -1,5 +1,10 @@
 # Changelog
 
+## 17.2.2
+### Added
+- Browser tab icon on every page (dashboard, plots, login, setup, settings) —
+  the same ⚡ that already served the home-screen widget.
+
 ## 17.2.1
 ### Fixed
 - Live energy flow: when the tenant meter reads more than the supply meters

@@ -492,6 +492,7 @@ def create_app(config_path: Optional[str] = None) -> Flask:
             return f"""<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Login – Shelly Energy Analyzer</title>
+<link rel="icon" href="/widget-icon.svg" type="image/svg+xml">
 <style>body{{font-family:-apple-system,system-ui,sans-serif;background:#0b0f14;color:#e8eef6;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}}
 .card{{background:#121821;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:24px;max-width:400px;width:90%}}
 input{{width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);color:#e8eef6;font-size:16px;margin:8px 0}}
