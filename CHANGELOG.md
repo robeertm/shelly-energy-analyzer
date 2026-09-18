@@ -1,5 +1,59 @@
 # Changelog
 
+## 17.1.0
+### Fixed — tabs no longer twitch
+- **Periodic refreshes rebuilt whole tabs although nothing visible had
+  changed.** The gate that skips a re-render compared the raw payload, and
+  three payloads differ on every fetch: the Solar tab carries the second its
+  forecast was computed, the Energy flow carries the moment the range ended
+  and a month total growing by a watt-hour in its third decimal, and the Energy
+  flow's "now" mode ran two refresh timers at once — so the Solar charts were
+  redrawn every 5 s and the flow diagram, with every running dot reset to its
+  start, every 2–3 s. The gate now ignores timestamps of computation and folds
+  numbers to four significant digits, i.e. to what any tile or axis can
+  print; measured on a live installation the Solar, Energy flow and Goals
+  panes went from 3–4 full rebuilds per 12 s to none.
+- **Energy flow patches in place.** When the picture keeps its shape (same
+  edges, same speed classes, same consumers), a refresh only moves the numbers
+  and line widths; the SVG and its animations stay. A shape change still
+  rebuilds. "Now" mode refreshes through its own 5 s chain only.
+- **CO₂ tab: the live mix bar and the appliance chips on the Live cards are no
+  longer rebuilt every second** — their segments are resized and the chips
+  replaced only when they differ.
+
+### Added — Battery tab
+- **Last 24 hours**: charge and discharge power minute by minute with the
+  state of charge on the right axis.
+- **Charge history** with day separators, 0/50/100 % grid, lowest and highest
+  point; the integrated stretch is dashed, the measured one solid.
+- **Day by day (30 days)**: charged from the sun / from the grid stacked
+  against discharged, with the day's SOC range; average in/out per day as a
+  share of the capacity, biggest day, days with grid charging.
+- **Rhythm of the day**: average charge/discharge per hour of the day with the
+  mean SOC curve, plus when the battery is typically full and typically empty.
+- **Cycles & use**: full cycles with a per-year estimate, average depth of
+  discharge, throughput per day as capacity turnover, share of time full
+  ("surplus had nowhere to go") and empty ("the house ran on the grid"), and a
+  table of the last cycles.
+- **What the battery earns (30 days)**: grid power replaced, feed-in given up
+  for the PV charge, grid charging paid, net benefit, per kWh delivered and a
+  seasonally weighted yearly estimate — the same prices the Costs tab uses.
+- **The measured state of charge is now stored** (once a minute, in the
+  `battery_state` table that existed but was never written). From the first
+  row on, history, cycles and efficiency are readings; the stretch before it
+  stays integrated and is pinned to the first measurement.
+
+### Fixed — cycles
+- **Cycle detection ended a cycle at the first idle minute after the discharge
+  began**, so a battery that paused for one minute "completed" a cycle with
+  0.002 kWh discharged and 0 % efficiency, and no round trip ever counted as
+  measured. Cycles are now trough → peak → trough on the SOC curve with a
+  hysteresis equal to the minimum depth, an evening dip is not a turning point,
+  and the round-trip efficiency is corrected for what is still inside when the
+  second trough sits higher than the first. Efficiency is reported as measured
+  only on a measured curve — the integrated one is built from the same power
+  with the configured efficiency and can only echo the setting back.
+
 ## 17.0.0
 ### Changed — one rule for every CO₂ figure
 - **Every consumed kWh is charged the mix of its hour — grid, PV or battery —

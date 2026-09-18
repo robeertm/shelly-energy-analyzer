@@ -142,6 +142,7 @@ class PvSourceService:
         self._prev_sample: Dict[str, tuple] = {}
         self._day: Dict[str, Dict[str, Any]] = {}
         self._acc_lock = threading.Lock()
+        self._soc_last_bucket = -1   # minute bucket of the last battery_state row
         # Latest cumulative energy-counter readings (kWh) from the source, keyed
         # by sub-metric (pv_total / grid_import / grid_export / batt_charge /
         # batt_discharge). Populated each tick when the user mapped counter
@@ -426,6 +427,17 @@ class PvSourceService:
             self.storage.db.insert_dataframe(key, df)
         except Exception as e:
             logger.debug("PV DB insert failed for %s: %s", key, e)
+
+        # 3) Measured state of charge, once a minute — the battery tab's curve.
+        if role == "battery" and soc is not None:
+            try:
+                _bkt = int(ts) // 60
+                if _bkt != self._soc_last_bucket:
+                    self._soc_last_bucket = _bkt
+                    _mode = "charging" if power_w > 50 else ("discharging" if power_w < -50 else "idle")
+                    self.storage.db.insert_battery_state(key, int(ts), float(soc), float(power_w), _mode)
+            except Exception as e:
+                logger.debug("battery_state insert failed: %s", e)
 
     # ── Home Assistant REST ────────────────────────────────────────────
     def _ha_conn(self, cfg):
