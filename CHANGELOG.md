@@ -1,5 +1,15 @@
 # Changelog
 
+## 17.1.1
+### Fixed
+- **Energy flow "now" mode still rebuilt the diagram on two of five
+  refreshes**: the dot speed classes were scaled to the largest live flow, so
+  a house drawing 20 W more reclassed every edge, and a flow hovering at a
+  class boundary flipped back and forth. The scale is now a 1-2-5 step above
+  the largest flow, an edge keeps its class while it hovers within 5 % of a
+  boundary, and flows under 15 W (0.005 kWh) do not exist for the shape. Ten
+  live refreshes replayed: one draw, nine in-place updates.
+
 ## 17.1.0
 ### Fixed — tabs no longer twitch
 - **Periodic refreshes rebuilt whole tabs although nothing visible had

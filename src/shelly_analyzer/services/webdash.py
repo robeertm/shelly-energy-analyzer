@@ -10111,11 +10111,26 @@ function _efTopoSig(d, narrow) {{
   const vals = [S.pv, S.battery, S.grid, K.battery, K.grid, H.load].concat(cons.map(function(c) {{ return c.kwh; }})).filter(function(v) {{ return v > 0; }});
   const vmax = Math.max.apply(null, vals.length ? vals : [1]);
   const parts = [narrow ? 'n' : 'w', d.has_pv ? 1 : 0, d.has_battery ? 1 : 0, d.has_grid_meter ? 1 : 0, d.has_supply ? 1 : 0, H.autarky_pct != null ? 1 : 0, (K.grid || 0) > (S.grid || 0) ? 'x' : 'i'];
-  (d.flows || []).forEach(function(f) {{ if (f.v > 0) parts.push(f.from + '>' + f.to + ':' + _efSpeedClass(f.v, vmax)); }});
-  cons.forEach(function(c) {{ parts.push('c:' + c.key + ':' + c.role + ':' + _efSpeedClass(c.kwh, vmax)); }});
+  const fl = _efFloor(d);
+  (d.flows || []).forEach(function(f) {{ if (f.v > fl) parts.push(f.from + '>' + f.to + ':' + _efSpeedClass(f.v, vmax, f.from + '>' + f.to)); }});
+  cons.forEach(function(c) {{ parts.push('c:' + c.key + ':' + c.role + ':' + _efSpeedClass(c.kwh, vmax, 'c:' + c.key)); }});
   return parts.join('|');
 }}
-function _efSpeedClass(v, vmax) {{ return v > 0 ? Math.round(4 * Math.sqrt(v / vmax)) : 0; }}
+/* Speed class 0–4 with two kinds of calm: the scale is a 1-2-5 step above the
+   largest flow (so a house that draws 20 W more does not reclass every edge),
+   and an edge that hovers at a class boundary keeps the class it had. */
+let _efPrevCls = {{}};
+function _efNiceMax(v) {{ const p = Math.pow(10, Math.floor(Math.log10(Math.max(v, 1e-9)))); const m = v / p; return (m <= 1 ? 1 : (m <= 2 ? 2 : (m <= 5 ? 5 : 10))) * p; }}
+function _efSpeedClass(v, vmax, key) {{
+  if (!(v > 0)) return 0;
+  const r = 4 * Math.sqrt(v / _efNiceMax(vmax));
+  let c = Math.max(1, Math.round(r));
+  const prev = key != null ? _efPrevCls[key] : undefined;
+  if (prev != null && prev >= 1 && Math.abs(c - prev) === 1 && Math.abs(r - (prev + (c > prev ? 0.5 : -0.5))) < 0.2) c = prev;
+  if (key != null) _efPrevCls[key] = c;
+  return c;
+}}
+function _efFloor(d) {{ return (d.unit || 'kWh') === 'W' ? 15 : 0.005; }}
 function _efSetText(root, sel, text) {{
   const el = root.querySelector(sel); if (!el) return;
   if (el.textContent !== text) el.textContent = text;
@@ -10138,7 +10153,7 @@ function _efPatch(d, cont) {{
   const svg = cont.querySelector('#flow-svg'); if (!svg) return false;
   const vals = [S.pv, S.battery, S.grid, K.battery, K.grid, H.load].concat(cons.map(function(c) {{ return c.kwh; }})).filter(function(v) {{ return v > 0; }});
   const vmax = Math.max.apply(null, vals.length ? vals : [1]);
-  const width = function(v) {{ return v > 0 ? 2 + 18 * Math.sqrt(v / vmax) : 0; }};
+  const width = function(v) {{ return v > 0 ? 2 + 18 * Math.sqrt(v / _efNiceMax(vmax)) : 0; }};
   const flows = d.flows || [];
   svg.querySelectorAll('path[data-e]').forEach(function(p) {{
     const key = p.getAttribute('data-e'); let v = 0;
@@ -10180,7 +10195,7 @@ function _drawEnergyFlowSvg(d, wrap) {{
   const fv = function(a, b) {{ const f = flows.find(function(x) {{ return x.from === a && x.to === b; }}); return f ? f.v : 0; }};
   const vals = [S.pv, S.battery, S.grid, K.battery, K.grid, H.load].concat(cons.map(function(c) {{ return c.kwh; }})).filter(function(v) {{ return v > 0; }});
   const vmax = Math.max.apply(null, vals.length ? vals : [1]);
-  const width = function(v) {{ return v > 0 ? 2 + 18 * Math.sqrt(v / vmax) : 0; }};
+  const width = function(v) {{ return v > 0 ? 2 + 18 * Math.sqrt(v / _efNiceMax(vmax)) : 0; }};
   // Layout
   const perRow = 4, rows = Math.max(1, Math.ceil(cons.length / perRow));
   const W = narrow ? 360 : 1000, HH = narrow ? 470 + rows * 120 : Math.max(520, 140 + cons.length * 70);
@@ -10210,9 +10225,10 @@ function _drawEnergyFlowSvg(d, wrap) {{
   }};
   // Dot count and speed come from the speed CLASS (0–4), not the raw value, so
   // the patch path can leave the animations alone until the class changes.
+  const fl = _efFloor(d);
   const edge = function(key, a, b, v, col, curve, label) {{
-    if (!(v > 0)) return;
-    const w = width(v), id = 'fp' + (pid++), cls = _efSpeedClass(v, vmax);
+    if (!(v > fl)) return;
+    const w = width(v), id = 'fp' + (pid++), cls = _efSpeedClass(v, vmax, key);
     paths += '<path id="' + id + '" data-e="' + esc(key) + '" data-label="' + esc(label) + '" d="' + path(a, b, curve) + '" fill="none" stroke="' + col + '" stroke-opacity="0.28" stroke-width="' + w.toFixed(1) + '" stroke-linecap="round"><title>' + esc(label) + ' ' + _fv(v, unit) + '</title></path>';
     if (!reduced) {{
       const n = Math.max(1, Math.min(6, 1 + cls));
