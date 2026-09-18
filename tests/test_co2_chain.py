@@ -305,3 +305,7 @@ def test_live_mix_for_role_gives_the_tenant_export_and_grid_only():
     # behind the house bus: the house mix for everybody
     cfg1 = _cfg(feeds_tenants=True)
     assert live_mix_for_role(cfg1, "tenant", 0, 200, -1000, 500, 400, 40, 62) == live_mix(0, 200, -1000, 400, 40, 62)
+    # the tenant's meter reads more than the bus carries (two measuring
+    # systems): the owner's draw keeps the house mix, never falls to the grid
+    o3 = live_mix_for_role(cfg, "owner", 280, 0, 0, 462, 400, 40, 62)
+    assert abs(o3["intensity"] - 40) < 1e-9 and o3["grid"] == 0.0

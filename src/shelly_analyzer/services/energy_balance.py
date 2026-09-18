@@ -1669,7 +1669,10 @@ def live_mix_for_role(cfg, role: Optional[str], pv_w: float, grid_w: float, batt
     ob = house["battery"] * load
     tot = og + op + ob
     if tot <= 1e-9:
-        return {"intensity": ci, "grid": 1.0, "pv": 0.0, "battery": 0.0, "load_w": 0.0}
+        # The tenant took the whole bus (its meter reads more than the
+        # supply meters carry): nothing is left to split, the owner's draw
+        # is the house mix — not the grid.
+        return house
     return {"intensity": (og * ci + op * pv_mfg + ob * battery_intensity) / tot,
             "grid": og / tot, "pv": op / tot, "battery": ob / tot, "load_w": tot}
 

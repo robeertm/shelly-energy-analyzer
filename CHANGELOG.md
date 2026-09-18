@@ -1,5 +1,11 @@
 # Changelog
 
+## 17.2.1
+### Fixed
+- Live energy flow: when the tenant meter reads more than the supply meters
+  carry (two measuring systems), the owner circuits kept nothing to split
+  and fell to the grid mix — they now keep the house mix.
+
 ## 17.2.0
 ### Changed — the tenant's own bus
 - **A grid-parallel tenant never draws from the battery.** The one-bus chain
