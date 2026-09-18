@@ -1,6 +1,27 @@
 # Changelog
 
-## 17.1.3
+## 17.2.0
+### Changed — the tenant's own bus
+- **A grid-parallel tenant never draws from the battery.** The one-bus chain
+  of 17.0 gave every circuit the same hourly mix, so a tenant meter that sits
+  right behind the utility meter was credited with the owner's storage
+  ("battery 77 %"). The chain now gives such a tenant its own bus, the rule
+  the tenant plots and the live tile have used all along: per hour the tenant
+  gets the PV surplus that spilled past the whole house
+  (`max(0, tenant − import − discharge)`), the rest is a grid kWh; owner
+  circuits get the remaining PV, the remaining import and the whole
+  discharge. The house is the two buses together, so owner + tenant = house
+  stays an identity. This is an attribution rule: when the utility meter
+  imported less than the tenant drew beyond its surplus, that kWh is still
+  billed to the tenant as grid — the storage is the owner's.
+- Every figure follows: the Energy flow consumers, the CO₂ tab (tenant share,
+  24 h bars, live rates), the Costs tab, the Plots grams, the heatmap, the
+  MQTT live rate and `/api/co2_live`.
+- New setting `solar.battery_feeds_tenants` (default off, the wiring above).
+  Switch it on for a tenant that hangs behind the house bus and shares its
+  mix like an owner circuit — the 17.0 behaviour.
+- The Energy flow legend names the tenant rule when it applies.
+
 ### Fixed
 - **Energy flow showed 0.00 kg CO₂ for a home without a grid meter.** The
   consumers on that tab carried their grams, but the house figure came from

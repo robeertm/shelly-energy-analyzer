@@ -591,6 +591,13 @@ class SolarConfig:
     # literature) over ~4 000 full cycles ≈ 20 g/kWh. The stored energy's own
     # origin comes on top, hour by hour.
     battery_manufacturing_g_per_kwh: float = 20.0
+    # Where the tenant circuits hang. False (the house rule since the tenant
+    # module exists): a tenant meter sits grid-parallel right behind the
+    # utility meter, so it only ever sees PV surplus that spills past the
+    # whole house and grid — never the battery, which serves the owner's side
+    # only. True: the tenant sits behind the house bus and shares its mix
+    # (grid / PV / battery) like every owner circuit.
+    battery_feeds_tenants: bool = False
     # PV amortization: total investment cost in EUR
     investment_eur: float = 0.0
     # Year of PV installation (for amortization timeline)
@@ -1683,6 +1690,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
             solar_raw.get("battery_manufacturing_g_per_kwh", SolarConfig.battery_manufacturing_g_per_kwh),
             SolarConfig.battery_manufacturing_g_per_kwh,
         ),
+        battery_feeds_tenants=bool(solar_raw.get("battery_feeds_tenants", SolarConfig.battery_feeds_tenants)),
         investment_eur=_coerce_float(solar_raw.get("investment_eur", SolarConfig.investment_eur), SolarConfig.investment_eur),
         installation_year=_coerce_int(solar_raw.get("installation_year", SolarConfig.installation_year), SolarConfig.installation_year),
         degradation_pct=_coerce_float(solar_raw.get("degradation_pct", SolarConfig.degradation_pct), SolarConfig.degradation_pct),
@@ -2410,6 +2418,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             "pv_embodied_g_per_kwh": float(getattr(cfg.solar, "pv_embodied_g_per_kwh", 40.0)),
             "battery_embodied_g_per_kwh": float(getattr(cfg.solar, "battery_embodied_g_per_kwh", 60.0)),
             "battery_manufacturing_g_per_kwh": float(getattr(cfg.solar, "battery_manufacturing_g_per_kwh", 20.0)),
+            "battery_feeds_tenants": bool(getattr(cfg.solar, "battery_feeds_tenants", False)),
             "investment_eur": float(getattr(cfg.solar, "investment_eur", 0.0)),
             "installation_year": int(getattr(cfg.solar, "installation_year", 0)),
             "degradation_pct": float(getattr(cfg.solar, "degradation_pct", 0.5)),

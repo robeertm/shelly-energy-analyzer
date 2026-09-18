@@ -475,6 +475,7 @@ const SECTIONS = [
     {key:"solar.co2_production_kg_per_kwp", label:"CO₂ production (kg/kWp)", type:"number"},
     {key:"solar.pv_embodied_g_per_kwh", label:"PV embodied CO₂ (g/kWh)", type:"number", step:"1", hint:"Lifecycle CO₂ of self-consumed PV (IPCC median ≈ 40 g/kWh)"},
     {key:"solar.battery_manufacturing_g_per_kwh", label:"Battery manufacturing CO₂ (g/kWh)", type:"number", step:"1", hint:"Manufacturing footprint of the storage per kWh delivered (≈ 20 g/kWh). The stored energy's own origin — PV or grid at the charging hour — is added automatically."},
+    {key:"solar.battery_feeds_tenants", label:"Battery also serves tenants", type:"checkbox", hint:"Off: a tenant meter hangs grid-parallel behind the utility meter and only sees PV surplus and grid, never the battery. On: the tenant sits behind the house bus and shares its mix."},
     {key:"solar.investment_eur", label:"Investment (€)", type:"number", step:"0.01"},
     {key:"solar.installation_year", label:"Installation year", type:"number"},
     {key:"solar.degradation_pct", label:"Degradation (%/year)", type:"number", step:"0.1"},

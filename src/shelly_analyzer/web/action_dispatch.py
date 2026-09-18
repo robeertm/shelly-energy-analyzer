@@ -2932,10 +2932,11 @@ class ActionDispatcher:
                         ch = _co2_chain()
                         hk = _smap_co2(self.storage.db, dev_key, s_ts, e_ts + 3600)
                         if hk:
-                            if _drole_co2(self.cfg, dev_key) in ("grid", "pv", "battery"):
+                            _role_c = _drole_co2(self.cfg, dev_key)
+                            if _role_c in ("grid", "pv", "battery"):
                                 # Supply meter: its import is grid energy, full stop.
                                 return sum(max(0.0, k) * ch.grid_intensity(h) for h, k in hk.items()) / 1000.0
-                            return ch.device_grams(hk)["g"] / 1000.0
+                            return ch.device_grams(hk, _role_c)["g"] / 1000.0
                     except Exception:
                         logger.debug("costs co2 chain failed for %s", dev_key, exc_info=True)
                     if _co2_g > 0:
@@ -3663,9 +3664,10 @@ class ActionDispatcher:
                             build_supply_chain as _bsc_hm, device_role as _drole_hm)
                         _ch_hm = _bsc_hm(self.storage.db, self.cfg, start_ts, end_ts + 3600,
                                          co2_intensity_map, _co2_fallback_g)
-                        if _ch_hm.has_supply and _drole_hm(self.cfg, device_key) in ("owner", "tenant"):
+                        _role_hm = _drole_hm(self.cfg, device_key)
+                        if _ch_hm.has_supply and _role_hm in ("owner", "tenant"):
                             for _h_hm in list(_ch_hm.hours):
-                                co2_intensity_map[_h_hm] = _ch_hm.intensity(_h_hm)
+                                co2_intensity_map[_h_hm] = _ch_hm.intensity(_h_hm, _role_hm)
                     except Exception:
                         logger.debug("heatmap co2 chain failed", exc_info=True)
 
@@ -4482,18 +4484,25 @@ class ActionDispatcher:
                         _kids_cl = _ndc_cl(self.cfg.devices)
                     except Exception:
                         _cons_cl, _kids_cl, _dr_cl = {d.key for d in self.cfg.devices}, {}, (lambda c, k: "owner")
+                    _int_by_role_cl = {}
+                    try:
+                        _int_by_role_cl = (_bg_cl._role_intensities_now() if _bg_cl is not None else {}) or {}
+                    except Exception:
+                        _int_by_role_cl = {}
                     for d in self.cfg.devices:
                         if d.key not in _cons_cl:
                             continue
                         watts = max(0.0, live_snap.get(d.key, 0.0))
                         for ck in _kids_cl.get(d.key, []):
                             watts = max(0.0, watts - max(0.0, live_snap.get(ck, 0.0)))
+                        _role_cl = _dr_cl(self.cfg, d.key)
+                        _int_cl = float(_int_by_role_cl.get(_role_cl) or live_now.get("intensity") or ci)
                         device_rates.append({
                             "key": d.key,
                             "name": d.name,
-                            "role": _dr_cl(self.cfg, d.key),
+                            "role": _role_cl,
                             "watts": round(watts, 0),
-                            "co2_g_h": round(watts * float(live_now.get("intensity") or ci) / 1000.0, 1),
+                            "co2_g_h": round(watts * _int_cl / 1000.0, 1),
                         })
                     live_now = {k: (round(v, 4) if k != "intensity" else round(v, 1)) for k, v in live_now.items()}
 
@@ -4952,18 +4961,27 @@ class ActionDispatcher:
                                     "battery": 0.0, "load_w": 0.0}
                     _kids_l = net_display_children(self.cfg.devices)
                     _cons_l = set(consumer_keys(self.cfg))
+                    from shelly_analyzer.services.energy_balance import (
+                        live_mix_for_role as _lmr_l, tenant_watts_now as _twn_l)
+                    _ten_w_l = _twn_l(self.cfg, live_snap)
                     for d in self.cfg.devices:
                         if d.key not in _cons_l:
                             continue
                         watts = max(0.0, live_snap.get(d.key, 0.0))
                         for ck in _kids_l.get(d.key, []):
                             watts = max(0.0, watts - max(0.0, live_snap.get(ck, 0.0)))
+                        _role_l = device_role(self.cfg, d.key)
+                        _int_l = live_now["intensity"]
+                        if _chain24.has_supply:
+                            _int_l = _lmr_l(self.cfg, _role_l, live_snap.get(_pk_l, 0.0), live_snap.get(_gk_l, 0.0),
+                                            live_snap.get(_bk_l, 0.0), _ten_w_l, current_intensity,
+                                            _chain24.pv_mfg, _bat_int_now)["intensity"]
                         device_rates.append({
                             "key": d.key,
                             "name": d.name,
-                            "role": device_role(self.cfg, d.key),
+                            "role": _role_l,
                             "watts": round(watts, 0),
-                            "co2_g_h": round(watts * live_now["intensity"] / 1000.0, 1),
+                            "co2_g_h": round(watts * _int_l / 1000.0, 1),
                         })
                     live_now = {k: (round(v, 4) if k != "intensity" else round(v, 1)) for k, v in live_now.items()}
 
@@ -5012,10 +5030,11 @@ class ActionDispatcher:
                         if not _hk:
                             continue
                         bars = []
+                        _role_b = device_role(self.cfg, d.key)
                         for hts in sorted(_hk):
                             kwh_v = max(0.0, float(_hk[hts] or 0.0))
-                            fg, fp, fb = _chain24.split(hts)
-                            ci_h = _chain24.intensity(hts)
+                            fg, fp, fb = _chain24.split(hts, _role_b)
+                            ci_h = _chain24.intensity(hts, _role_b)
                             _hm = _chain24.hours.get(hts)
                             bars.append({
                                 "hour": datetime.fromtimestamp(hts, tz=_tzc).strftime("%H:%M"),
@@ -6147,7 +6166,7 @@ class ActionDispatcher:
                         _role_p = _dr_p(self.cfg, _dkey)
                         _chain_gk = _co2_chain_p.bucket_grams_kwh(
                             _co2_hourly_p[_dkey], ranges,
-                            grid_only=_role_p in ("grid", "pv", "battery"))
+                            grid_only=_role_p in ("grid", "pv", "battery"), role=_role_p)
                     g_arr: List[Optional[float]] = []
                     gi_arr: List[Optional[float]] = []
                     eur_arr: List[Optional[float]] = []

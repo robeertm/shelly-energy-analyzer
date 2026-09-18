@@ -271,10 +271,48 @@ class HourMix:
     g_pv: float = 0.0        # grams … by direct PV (manufacturing)
     g_bat: float = 0.0       # grams … by the battery (origin + manufacturing)
     g_bat_mfg: float = 0.0   # the manufacturing part of g_bat
+    # The tenant circuits when they hang grid-parallel (SolarConfig
+    # .battery_feeds_tenants False): served last, so they only see the PV that
+    # spilled past the whole house, and the grid — never the battery, which is
+    # the owner's. Owner circuits get the rest of the bus, the whole discharge
+    # included. This is an attribution rule, not a meter: when the utility
+    # meter imported less than the tenant drew beyond its PV surplus, the
+    # difference is still a GRID kWh for the tenant (g_grid then exceeds
+    # gi_load × ci — the house is owner bus + tenant bus, so the identity
+    # owner + tenant = house holds). All zero on a one-bus chain.
+    pv_mfg_ref: float = 40.0 # the chain's PV manufacturing factor, g/kWh
+    two_bus: bool = False
+    ten_load: float = 0.0    # tenant kWh in the hour (capped at the bus load)
+    ten_pv: float = 0.0      # … of which PV surplus
+    ten_grid: float = 0.0    # … of which grid (the rest)
 
     @property
     def grams(self) -> float:
         return self.g_grid + self.g_pv + self.g_bat
+
+    def split_for(self, role: Optional[str]) -> tuple:
+        """(grid, pv, battery) fractions of a kWh drawn by a ``role`` circuit
+        ('owner' | 'tenant'); the bus mix when the chain has one bus."""
+        if not self.two_bus or role not in ("owner", "tenant"):
+            return self.grid_frac, self.pv_frac, self.bat_frac
+        if role == "tenant":
+            if self.ten_load <= 1e-9:
+                return 1.0, 0.0, 0.0
+            return self.ten_grid / self.ten_load, self.ten_pv / self.ten_load, 0.0
+        og = max(0.0, self.gi_load - self.ten_grid)
+        op = max(0.0, self.pv_direct - self.ten_pv)
+        ob = self.bdis
+        tot = og + op + ob
+        if tot <= 1e-9:
+            return self.grid_frac, self.pv_frac, self.bat_frac
+        return og / tot, op / tot, ob / tot
+
+    def mix_for(self, role: Optional[str]) -> float:
+        """g/kWh for a kWh drawn by a ``role`` circuit in this hour."""
+        if not self.two_bus or role not in ("owner", "tenant"):
+            return self.mix
+        fg, fp, fb = self.split_for(role)
+        return fg * self.ci + fp * self.pv_mfg_ref + fb * self.bat_int
 
     @property
     def mix(self) -> float:
@@ -312,25 +350,28 @@ class SupplyChain:
         ci = self.intensity_by_hour.get(int(hour_ts), self.default_intensity)
         return ci if (ci and ci > 0) else self.default_intensity
 
-    def intensity(self, hour_ts: int) -> float:
-        """g/kWh for a kWh consumed in ``hour_ts`` (grid mix if the chain has no hour)."""
+    def intensity(self, hour_ts: int, role: Optional[str] = None) -> float:
+        """g/kWh for a kWh consumed in ``hour_ts`` (grid mix if the chain has
+        no hour). ``role`` ('owner' | 'tenant') picks the circuit's own bus
+        when the tenants hang grid-parallel; None = the house bus."""
         hm = self.hours.get(int(hour_ts))
         if hm is None or not self.has_supply:
             return self.grid_intensity(hour_ts)
-        return hm.mix
+        return hm.mix_for(role)
 
-    def split(self, hour_ts: int) -> tuple:
+    def split(self, hour_ts: int, role: Optional[str] = None) -> tuple:
         """(grid, pv, battery) fractions of a kWh consumed in ``hour_ts``."""
         hm = self.hours.get(int(hour_ts))
         if hm is None or not self.has_supply or hm.load <= 1e-9:
             return 1.0, 0.0, 0.0
-        return hm.grid_frac, hm.pv_frac, hm.bat_frac
+        return hm.split_for(role)
 
-    def device_grams(self, hour_kwh: Dict[int, float]) -> Dict[str, float]:
+    def device_grams(self, hour_kwh: Dict[int, float], role: Optional[str] = None) -> Dict[str, float]:
         """Grams for a consumer's positive hourly kWh, by origin.
 
         Feed-in (negative kWh) is never charged; supply meters must not be
         passed here (their import IS the grid share of everybody else).
+        ``role`` picks the tenant's own bus on a two-bus chain.
         """
         out = {"g": 0.0, "g_grid": 0.0, "g_pv": 0.0, "g_bat": 0.0,
                "kwh": 0.0, "kwh_grid": 0.0, "kwh_pv": 0.0, "kwh_bat": 0.0}
@@ -346,7 +387,7 @@ class SupplyChain:
                 out["kwh"] += k
                 out["kwh_grid"] += k
                 continue
-            fg, fp, fb = hm.grid_frac, hm.pv_frac, hm.bat_frac
+            fg, fp, fb = hm.split_for(role)
             out["g_grid"] += k * fg * hm.ci
             out["g_pv"] += k * fp * self.pv_mfg
             out["g_bat"] += k * fb * hm.bat_int
@@ -358,16 +399,17 @@ class SupplyChain:
         return out
 
     def bucket_grams(self, hour_kwh: Dict[int, float], ranges,
-                     grid_only: bool = False) -> List[Optional[float]]:
+                     grid_only: bool = False, role: Optional[str] = None) -> List[Optional[float]]:
         """Grams per ``(a, b)`` bucket for a device's hourly kWh (None = no data).
 
         ``grid_only`` is for a supply meter: its import is grid energy at the
-        grid mix, never the house mix it helps to make.
+        grid mix, never the house mix it helps to make. ``role`` picks the
+        tenant's own bus on a two-bus chain.
         """
-        return [g for g, _ in self.bucket_grams_kwh(hour_kwh, ranges, grid_only=grid_only)]
+        return [g for g, _ in self.bucket_grams_kwh(hour_kwh, ranges, grid_only=grid_only, role=role)]
 
     def bucket_grams_kwh(self, hour_kwh: Dict[int, float], ranges,
-                         grid_only: bool = False) -> List[tuple]:
+                         grid_only: bool = False, role: Optional[str] = None) -> List[tuple]:
         """``[(grams, consumed_kwh)]`` per bucket; ``(None, None)`` = no data."""
         out: List[tuple] = []
         items = sorted((int(h), float(k or 0.0)) for h, k in hour_kwh.items())
@@ -383,7 +425,7 @@ class SupplyChain:
                     continue
                 seen = True
                 if k > 0:
-                    g += k * (self.grid_intensity(h) if grid_only else self.intensity(h))
+                    g += k * (self.grid_intensity(h) if grid_only else self.intensity(h, role))
                     kw += k
             out.append((round(g, 1), round(kw, 4)) if seen else (None, None))
         return out
@@ -475,6 +517,18 @@ def build_supply_chain(db, cfg, start_ts: int, end_ts: int,
         except Exception:
             pass
 
+    # Grid-parallel tenants (the default): their series is needed per hour to
+    # give them their own bus — PV surplus and grid, never the battery.
+    two_bus = False
+    ten_s: Dict[int, float] = {}
+    if not bool(getattr(getattr(cfg, "solar", None), "battery_feeds_tenants", False)):
+        tenant_keys, _ = _tenant_key_map(cfg)
+        for tk in tenant_keys:
+            for h, k in _series_map(db, tk, sim_start, end_ts).items():
+                ten_s[h] = ten_s.get(h, 0.0) + max(0.0, k)
+        two_bus = bool(tenant_keys)
+    chain.two_bus = two_bus
+
     hours = sorted(set(g_s) | set(pv_s) | set(b_s))
     # Battery content starts unknown; the warm-up (a home battery cycles
     # daily) settles it long before the first hour that is returned.
@@ -516,7 +570,24 @@ def build_supply_chain(db, cfg, start_ts: int, end_ts: int,
                      pv_direct=pv_direct, bch_pv=bch_pv, bch_grid=bch_grid,
                      gi_load=gi_load, load=load, bat_stored=stored, bat_int=bat_int,
                      g_grid=gi_load * ci, g_pv=pv_direct * pv_mfg,
-                     g_bat=bdis * bat_int, g_bat_mfg=bdis * bat_mfg)
+                     g_bat=bdis * bat_int, g_bat_mfg=bdis * bat_mfg,
+                     pv_mfg_ref=pv_mfg)
+        if two_bus:
+            # The tenant is served last: only PV that spilled past the whole
+            # house (import and discharge both mean there was no surplus)
+            # reaches it — the same rule as tenant_solar_share_buckets and
+            # the live tile. The rest of its draw is grid; the owner keeps
+            # the remaining PV, the remaining import and all of the battery.
+            tl = min(max(0.0, ten_s.get(h, 0.0)), load)
+            t_pv = min(pv_direct, max(0.0, tl - gi - bdis))
+            t_grid = max(0.0, tl - t_pv)
+            hm.two_bus = True
+            hm.ten_load = tl
+            hm.ten_pv = t_pv
+            hm.ten_grid = t_grid
+            # The house is the two buses together: the owner's remaining
+            # import plus the tenant's grid kWh (see HourMix).
+            hm.g_grid = (max(0.0, gi_load - t_grid) + t_grid) * ci
         if h >= int(start_ts):
             chain.hours[h] = hm
     chain.bat_stored_last = (s_g / s_kwh) if s_kwh > 1e-9 else (pv_mfg / eta)
@@ -735,7 +806,7 @@ def compute_co2(db, cfg, start_ts: int, end_ts: int,
         int_n += 1
         for tname, tk in ten_s.get(h, {}).items():
             tk_c = min(tk, hm.load)          # a circuit cannot draw more than the bus carried
-            tg = tk_c * hm.mix
+            tg = tk_c * hm.mix_for("tenant")
             res.tenant_breakdown[tname] = res.tenant_breakdown.get(tname, 0.0) + tg / 1000.0
             res.tenant_kg += tg / 1000.0
             res.tenant_load_kwh += tk_c
@@ -811,7 +882,7 @@ def compute_grid_cost_share(db, cfg, ranges, chain: Optional["SupplyChain"] = No
             hm = chain.hours[h]
             tl = min(max(0.0, ten_s.get(h, 0.0)), hm.load)
             own = max(0.0, hm.load - tl)
-            owner_grid += own * hm.grid_frac + hm.bch_grid
+            owner_grid += own * hm.split_for("owner")[0] + hm.bch_grid
             owner_total += own + hm.bch_grid
         shares.append(min(1.0, max(0.0, owner_grid / owner_total)) if owner_total > 0 else 1.0)
     return shares
@@ -1567,3 +1638,43 @@ def live_mix(pv_w: float, grid_w: float, batt_w: float, grid_intensity: float,
     g = gi_load * ci + pv_direct * pv_mfg + bdis * battery_intensity
     return {"intensity": g / load, "grid": gi_load / load, "pv": pv_direct / load,
             "battery": bdis / load, "load_w": load}
+
+
+def live_mix_for_role(cfg, role: Optional[str], pv_w: float, grid_w: float, batt_w: float,
+                      tenant_w: float, grid_intensity: float, pv_mfg: float = 40.0,
+                      battery_intensity: float = 62.0) -> Dict[str, float]:
+    """:func:`live_mix` for one circuit. On a one-bus home (or for the house
+    itself, ``role`` None) it IS the house mix. With grid-parallel tenants
+    (``solar.battery_feeds_tenants`` False) a tenant circuit is green only
+    with the property's export — the live tile's rule
+    (:func:`instantaneous_solar_share`) — and never battery; the owner's
+    circuits get the rest of the bus, the whole discharge included.
+    """
+    house = live_mix(pv_w, grid_w, batt_w, grid_intensity, pv_mfg, battery_intensity)
+    feeds = bool(getattr(getattr(cfg, "solar", None), "battery_feeds_tenants", False))
+    if feeds or role not in ("owner", "tenant"):
+        return house
+    ci = float(grid_intensity or 0.0)
+    tl = max(0.0, float(tenant_w or 0.0))
+    fpv_t = instantaneous_solar_share(pv_w, grid_w, batt_w, tl) if tl > 1e-9 else 0.0
+    if role == "tenant":
+        return {"intensity": fpv_t * pv_mfg + (1.0 - fpv_t) * ci, "grid": 1.0 - fpv_t,
+                "pv": fpv_t, "battery": 0.0, "load_w": tl}
+    load = float(house.get("load_w") or 0.0)
+    if load <= 1e-9:
+        return house
+    tl = min(tl, load)
+    og = max(0.0, house["grid"] * load - (1.0 - fpv_t) * tl)
+    op = max(0.0, house["pv"] * load - fpv_t * tl)
+    ob = house["battery"] * load
+    tot = og + op + ob
+    if tot <= 1e-9:
+        return {"intensity": ci, "grid": 1.0, "pv": 0.0, "battery": 0.0, "load_w": 0.0}
+    return {"intensity": (og * ci + op * pv_mfg + ob * battery_intensity) / tot,
+            "grid": og / tot, "pv": op / tot, "battery": ob / tot, "load_w": tot}
+
+
+def tenant_watts_now(cfg, watts_by_key: Dict[str, float]) -> float:
+    """Sum of the tenant circuits' draw right now (W) from a ``key → W`` map."""
+    tenant_keys, _ = _tenant_key_map(cfg)
+    return sum(max(0.0, float(watts_by_key.get(k, 0.0) or 0.0)) for k in tenant_keys)
