@@ -1,5 +1,26 @@
 # Changelog
 
+## 17.1.2
+### Fixed — the sixth grid-mix path
+- **The CO₂ tab's live table was overwritten every second with grid-mix
+  figures.** `/api/co2_live`, which refreshes that table once a second, still
+  priced every device — the grid meter included — at the grid mix, replacing
+  the one-bus rates the tab had rendered a moment earlier. It now answers with
+  the same rule as everything else: consumers only, net of a child wired
+  behind them, at the house mix of this instant. A test now pins it.
+- The Battery tab's badge says *measured* when the curve ends on a stored
+  measurement, not only when a live SOC entity is configured.
+
+### Added
+- `scripts/simulate_dataset.py` builds a complete simulated installation (60
+  days: 9.8 kWp roof, 10 kWh battery, house, tenant flat, 11 kW wallbox,
+  signed grid meter, measured SOC, hourly grid intensity, and the house's
+  switching fed through the NILM learner) through the app's own storage layer
+  — for screenshots and manual testing without any real installation.
+- README: screenshots of the CO₂ origin table, the Solar tab, the energy flow,
+  the solar outlook and the Battery tab (desktop, light and phone), all from
+  the simulated installation.
+
 ## 17.1.1
 ### Fixed
 - **Energy flow "now" mode still rebuilt the diagram on two of five

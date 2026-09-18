@@ -157,3 +157,47 @@ def test_live_mix_matches_the_hourly_rule():
     assert abs(m["intensity"] - (1000 * 400 + 3000 * 40 + 1000 * 62) / 5000) < 1e-6
     assert live_mix(0, 0, 0, 400)["intensity"] == 400          # nothing drawn → grid mix
     assert live_mix(2000, -2000, 0, 400)["load_w"] == 0        # all exported, nothing consumed
+
+
+def test_the_one_second_live_answer_prices_consumers_on_the_house_mix():
+    """/api/co2_live refreshes the live table every second. In 17.0/17.1 it
+    still priced every device — the grid meter included — at the grid mix,
+    and overwrote the one-bus rates /api/co2 had rendered a second earlier."""
+    import json
+    import tempfile
+    import time as _time
+    from pathlib import Path
+    from shelly_analyzer.io.config import load_config
+    from shelly_analyzer.io.storage import Storage
+    from shelly_analyzer.web.action_dispatch import ActionDispatcher
+
+    class _Store:
+        def snapshot(self):
+            return {"house": [{"power_total_w": 1000.0}], "flat": [{"power_total_w": 500.0}],
+                    "grid": [{"power_total_w": -200.0}], "pv": [{"power_total_w": 1700.0}],
+                    "battery": [{"power_total_w": 0.0}]}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        st = Storage(tmp / "data")
+        now = int(_time.time())
+        st.db.upsert_co2_intensity([((now // 3600) * 3600, "DE_LU", 500.0, "test", now)])
+        p = tmp / "config.json"
+        p.write_text(json.dumps({
+            "devices": [{"key": "house", "name": "House", "host": "1.2.3.4", "kind": "em"},
+                        {"key": "flat", "name": "Flat", "host": "1.2.3.6", "kind": "em"},
+                        {"key": "grid", "name": "Grid", "host": "1.2.3.5", "kind": "em"}],
+            "co2": {"enabled": True, "bidding_zone": "DE_LU"},
+            "solar": {"enabled": True, "grid_meter_device_key": "grid", "pv_production_device_key": "pv",
+                      "battery_device_key": "battery", "pv_embodied_g_per_kwh": 40.0},
+            "tenant": {"enabled": True, "tenants": [{"tenant_id": "f", "name": "Flat", "device_keys": ["flat"]}]},
+        }))
+        d = ActionDispatcher(load_config(p), st, _Store(), out_dir=tmp, cfg_path=p, lang="en")
+        r = d.dispatch("co2_live", {})
+        assert r.get("ok"), r
+        names = [x["name"] for x in r["device_rates"]]
+        assert names == ["House", "Flat"], names          # the grid meter is not a consumer
+        # 1500 W load fed by 1700 W PV, 200 W exported: everything is PV → 40 g/kWh, not 500
+        assert r["live_mix"]["intensity"] < 100.0, r["live_mix"]
+        for x in r["device_rates"]:
+            assert abs(x["co2_g_h"] - x["watts"] * r["live_mix"]["intensity"] / 1000.0) < 0.2

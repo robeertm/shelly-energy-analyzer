@@ -78,15 +78,27 @@ def test_in_page_links_point_at_real_headings():
     print(f"OK  {len(links)} in-page links, all resolve to a heading")
 
 
-def test_the_readme_still_promises_only_what_demo_mode_can_show():
-    """The page states every image comes from the built-in demo mode. That was
-    true only because no page needing PV, a battery or a wallbox had a picture;
-    16.80 gave demo mode all three so the sentence stays true."""
-    assert "comes from the app's own demo mode" in README
+def test_the_readme_still_promises_only_simulated_data():
+    """The page states every image comes from simulated data — the built-in
+    demo mode or the reproducible simulator script (17.1.2). Both must exist
+    for the sentence to stay true."""
+    assert "comes from simulated data" in README
+    assert "scripts/simulate_dataset.py" in README
+    assert os.path.exists(os.path.join(ROOT, "scripts", "simulate_dataset.py"))
     from shelly_analyzer.services.demo import default_demo_devices
     keys = {d.key for d in default_demo_devices()}
     assert {"demo3", "demo4"} <= keys, keys
-    print("OK  the demo-mode promise on the README is still true")
+    print("OK  the simulated-data promise on the README is still true")
+
+
+def test_the_17_1_screenshots_are_on_the_readme():
+    for name in ("aurora_desktop_co2_origin.png", "aurora_desktop_solar.png", "aurora_desktop_solar_days.png",
+                 "aurora_desktop_energy_flow.png", "aurora_desktop_forecast_solar.png",
+                 "aurora_desktop_battery.png", "aurora_desktop_battery_days.png", "aurora_desktop_battery_cycles.png",
+                 "aurora_phone_battery.png", "aurora_phone_solar.png", "aurora_phone_energy_flow.png",
+                 "aurora_phone_co2_origin.png", "aurora_light_battery.png", "aurora_light_solar.png"):
+        assert os.path.exists(os.path.join(SHOTS, name)), f"{name} is not in the repo"
+        assert name in README, f"{name} is in the repo but on no page"
 
 
 if __name__ == "__main__":
