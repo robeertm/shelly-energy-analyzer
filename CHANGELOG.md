@@ -1,5 +1,10 @@
 # Changelog
 
+## 17.3.0
+
+### Added
+- **Double-click any chart to view it full screen** on the Solar, Battery, Forecast, Standby and Goals tabs (double-tap on touch screens). The chart is redrawn at full size — not scaled up — so labels and lines stay crisp; it keeps updating while open. Close with ✕, Esc or by leaving the tab.
+
 ## 17.2.2
 ### Added
 - Browser tab icon on every page (dashboard, plots, login, setup, settings) —

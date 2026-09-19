@@ -1831,6 +1831,19 @@ _HTML_TEMPLATE = """<!doctype html>
       border-radius: 0;
       resize: none;
     }}
+    /* ── Chart zoom (double-click any chart on the registered tabs) ── */
+    #pane-solar canvas[id], #pane-battery canvas[id], #pane-forecast canvas[id],
+    #pane-standby canvas[id], #pane-goals canvas[id] {{ cursor: zoom-in; }}
+    .chart-zoom-panel {{
+      background: var(--card);
+      width: 100vw; height: 100vh; height: 100dvh;
+      padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+      display: flex; flex-direction: column; gap: 6px;
+      box-sizing: border-box;
+    }}
+    .chart-zoom-panel .modal-header {{ margin-bottom: 4px; }}
+    .chart-zoom-host {{ flex: 1; min-height: 0; display: flex; }}
+    .chart-zoom-host canvas {{ width: 100% !important; height: 100% !important; margin: 0 !important; display: block; }}
     .chart-detail-legend {{
       display: flex;
       flex-wrap: wrap;
@@ -2698,6 +2711,16 @@ _HTML_TEMPLATE = """<!doctype html>
   </div>
 </div>
 
+<div id="chart-zoom-modal" class="modal-overlay">
+  <div class="chart-zoom-panel">
+    <div class="modal-header">
+      <span id="chart-zoom-title"></span>
+      <button class="icon-btn" onclick="closeChartZoom()" title="{web_chart_zoom_close}">✕</button>
+    </div>
+    <div class="chart-zoom-host" id="chart-zoom-host"></div>
+  </div>
+</div>
+
 <div id="chart-detail-modal" class="modal-overlay" onclick="closeDetailChartIfBg(event)">
   <div class="chart-detail-panel" id="chart-detail-panel">
     <div class="modal-header">
@@ -2890,6 +2913,7 @@ function switchPaneFromDrawer(name, el) {{
   switchPane(name, btn || null);
 }}
 function switchPane(name, btn) {{
+  if (typeof closeChartZoom === "function" && _zoom) closeChartZoom();
   document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.drawer-item').forEach(b => b.classList.remove('active'));
@@ -5927,6 +5951,89 @@ function drawMultiSparkline(canvas, seriesArr, colors) {{
 }}
 
 /* ──────────────────────────────────────────────
+   CHART ZOOM  (double-click / double-tap a chart → full screen)
+   Every tab keeps its own drawing code; it registers a redraw closure
+   here (_zoomReg) each time it renders. On zoom the canvas element itself
+   is moved into a full-screen overlay (it keeps its id, so the tab's
+   drawing code finds it via getElementById and paints it at the new size)
+   and the tab's redraw is run. The overlay sits first in <body>, so a tab
+   refresh while zoomed keeps painting the zoomed canvas, not the fresh
+   hidden one. Closing puts the canvas back and redraws the tab.
+────────────────────────────────────────────── */
+var _zoomPane = {{}};
+var _zoom = null;
+function _zoomReg(pane, fn) {{
+  _zoomPane[pane] = fn;
+  requestAnimationFrame(fn);
+}}
+function _zoomTitleFor(cv) {{
+  var card = cv.closest('.card') || cv.parentElement;
+  var head = card ? card.querySelector('div[style*="uppercase"]') : null;
+  var txt = head ? head.textContent.trim() : '';
+  if (!txt && card && card.firstElementChild) txt = card.firstElementChild.textContent.trim();
+  return txt.length > 90 ? txt.slice(0, 90) + '…' : txt;
+}}
+function openChartZoom(cv, pane) {{
+  if (_zoom) closeChartZoom();
+  var modal = document.getElementById('chart-zoom-modal');
+  var host = document.getElementById('chart-zoom-host');
+  if (!modal || !host || !cv) return;
+  if (document.body.firstElementChild !== modal) document.body.insertBefore(modal, document.body.firstChild);
+  var ph = document.createElement('span');
+  ph.style.display = 'none';
+  cv.parentNode.insertBefore(ph, cv);
+  _zoom = {{ cv: cv, pane: pane, placeholder: ph, style: cv.getAttribute('style') }};
+  document.getElementById('chart-zoom-title').textContent = _zoomTitleFor(cv);
+  host.appendChild(cv);
+  modal.classList.add('open');
+  requestAnimationFrame(function() {{ if (_zoomPane[pane]) _zoomPane[pane](); }});
+}}
+function closeChartZoom() {{
+  if (!_zoom) return;
+  var z = _zoom; _zoom = null;
+  var modal = document.getElementById('chart-zoom-modal');
+  modal.classList.remove('open');
+  if (z.style != null) z.cv.setAttribute('style', z.style); else z.cv.removeAttribute('style');
+  if (z.placeholder.isConnected) {{
+    z.placeholder.parentNode.replaceChild(z.cv, z.placeholder);
+  }} else {{
+    z.cv.remove();   // the tab re-rendered meanwhile and owns a fresh canvas with this id
+  }}
+  requestAnimationFrame(function() {{ if (_zoomPane[z.pane]) _zoomPane[z.pane](); }});
+}}
+document.addEventListener('dblclick', function(e) {{
+  var cv = e.target && e.target.closest ? e.target.closest('canvas[id]') : null;
+  if (!cv || _zoom) return;
+  var pane = cv.closest('.pane');
+  var key = pane ? pane.id.replace(/^pane-/, '') : '';
+  if (!key || !_zoomPane[key]) return;
+  e.preventDefault();
+  openChartZoom(cv, key);
+}});
+// Double-tap on touch screens (iOS does not always deliver dblclick on a canvas).
+var _zoomTap = {{ t: 0, el: null }};
+document.addEventListener('touchend', function(e) {{
+  var cv = e.target && e.target.closest ? e.target.closest('canvas[id]') : null;
+  if (!cv || _zoom) return;
+  var now = Date.now();
+  if (_zoomTap.el === cv && now - _zoomTap.t < 350) {{
+    _zoomTap = {{ t: 0, el: null }};
+    var pane = cv.closest('.pane');
+    var key = pane ? pane.id.replace(/^pane-/, '') : '';
+    if (key && _zoomPane[key]) {{ e.preventDefault(); openChartZoom(cv, key); }}
+  }} else {{
+    _zoomTap = {{ t: now, el: cv }};
+  }}
+}}, {{ passive: false }});
+document.addEventListener('keydown', function(e) {{ if (e.key === 'Escape' && _zoom) closeChartZoom(); }});
+window.addEventListener('resize', function() {{ if (_zoom && _zoomPane[_zoom.pane]) requestAnimationFrame(_zoomPane[_zoom.pane]); }});
+// The host settles its final size a frame after opening (scrollbar, safe areas); repaint once it does.
+try {{
+  new ResizeObserver(function() {{ if (_zoom && _zoomPane[_zoom.pane]) requestAnimationFrame(_zoomPane[_zoom.pane]); }})
+    .observe(document.getElementById('chart-zoom-host'));
+}} catch (e) {{}}
+
+/* ──────────────────────────────────────────────
    CHART DETAIL MODAL  (click mini-plot → zoom)
 ────────────────────────────────────────────── */
 const _PHASE_COLORS = ['#e05c5c','#5ca0e0','#5ce077'];
@@ -8369,7 +8476,7 @@ function renderSolar(data, el) {{
 
   html += '<div style="margin-top:8px;text-align:center"><a class="btn btn-outline btn-sm" href="/settings#sec-solar">⚙️ ' + t('web.dash.configure_in_settings', 'Configure in Settings') + '</a></div>';
   el.innerHTML = html;
-  requestAnimationFrame(function() {{
+  _zoomReg('solar', function() {{
     _drawSolarToday(ht);
     _drawSolarDays(dl);
     _drawSolarMonths(data.monthly || []);
@@ -9483,8 +9590,10 @@ function _renderSolarForecast(d, host) {{
     '<span><span class="co2-dot" style="background:#60a5fa"></span>' + t('web.dash.feed_in', 'Feed-in') + '</span></div>';
   html += '</div>';
   host.innerHTML = html;
-  requestAnimationFrame(function() {{ _drawFcSolar(d.horizon || []); }});
+  _fcSolarHz = d.horizon || [];
+  requestAnimationFrame(function() {{ _drawFcSolar(_fcSolarHz); }});
 }}
+var _fcSolarHz = null;
 function _drawFcSolar(hz) {{
   const c = _cvSetup('fc-solar-canvas');
   if (!c || !hz || hz.length < 2) return;
@@ -9578,7 +9687,8 @@ function renderForecast(d) {{
   document.getElementById('forecast-cards').innerHTML = html;
   loadSolarForecastSection();
 
-  requestAnimationFrame(function() {{
+  _zoomReg('forecast', function() {{
+    if (_fcSolarHz) _drawFcSolar(_fcSolarHz);
     // Main chart with confidence band
     _fcDrawMainChart(d);
     // Cost projection bars
@@ -9817,7 +9927,7 @@ function renderStandby(d) {{
   wrap.innerHTML = cards;
 
   /* ── Draw all canvases ── */
-  requestAnimationFrame(function() {{
+  _zoomReg('standby', function() {{
     _sbDrawCostPie(devs);
     _sbDrawCostBar(devs);
     _sbDraw24hMinis(devs);
@@ -11995,10 +12105,12 @@ _loadLsSettings();
     }}
 
     el.innerHTML = html;
-    try {{ _drawBat24h(p24, tl); }} catch (e) {{}}
-    try {{ _drawBatSoc(tl, data.measured_since_ts || 0); }} catch (e) {{}}
-    try {{ if (dlHas) _drawBatDays(dl); }} catch (e) {{}}
-    try {{ _drawBatHours(hp); }} catch (e) {{}}
+    _zoomReg('battery', function() {{
+      try {{ _drawBat24h(p24, tl); }} catch (e) {{}}
+      try {{ _drawBatSoc(tl, data.measured_since_ts || 0); }} catch (e) {{}}
+      try {{ if (dlHas) _drawBatDays(dl); }} catch (e) {{}}
+      try {{ _drawBatHours(hp); }} catch (e) {{}}
+    }});
   }}
 
   // ── charts ──
@@ -12324,12 +12436,10 @@ _loadLsSettings();
     el.innerHTML = html;
 
     // Draw charts
-    if (data.daily_history && data.daily_history.length > 0) {{
-      setTimeout(function() {{ _glDrawDailyChart(data.daily_history, data.daily_target_kwh || 0); }}, 50);
-    }}
-    if (data.weekly_history && data.weekly_history.length > 0) {{
-      setTimeout(function() {{ _glDrawWeeklyChart(data.weekly_history); }}, 60);
-    }}
+    _zoomReg('goals', function() {{
+      if (data.daily_history && data.daily_history.length > 0) _glDrawDailyChart(data.daily_history, data.daily_target_kwh || 0);
+      if (data.weekly_history && data.weekly_history.length > 0) _glDrawWeeklyChart(data.weekly_history);
+    }});
   }}
 
   function _glInitCanvas(id) {{
@@ -15814,6 +15924,7 @@ class LiveWebDashboard:
                 "web_btn_freeze_title": _t(self.lang, "web.dash.freeze_resume"),
                 "web_btn_settings_title": _t(self.lang, "web.dash.device_settings"),
                 "web_btn_theme_title": _t(self.lang, "web.btn.theme"),
+                "web_chart_zoom_close": _t(self.lang, "web.chart.zoom_close"),
                 # Loading placeholder (server-rendered initial HTML)
                 "web_loading": _t(self.lang, "web.loading"),
                 # Modal

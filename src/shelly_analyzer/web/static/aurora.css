@@ -949,6 +949,7 @@ html[data-skin="aurora"] .cmdk-overlay {
 }
 html[data-skin="aurora"] .modal-panel,
 html[data-skin="aurora"] .cmdk-panel,
+html[data-skin="aurora"] .chart-zoom-panel,
 html[data-skin="aurora"] .chart-detail-panel {
   background: var(--au-glass-hi);
   border: 1px solid var(--au-hairline);
@@ -963,6 +964,7 @@ html[data-skin="aurora"] .chart-detail-panel {
   to   { opacity: 1; transform: none; }
 }
 html[data-skin="aurora"] .modal-header { border-bottom: 1px solid var(--au-hairline); }
+html[data-skin="aurora"] .chart-zoom-panel { border-radius: 0; border-left: 0; border-right: 0; animation: none; }  /* the scale-in would paint the chart 1.5 % too narrow */
 html[data-skin="aurora"] .cmdk-input {
   background: var(--chipbg);
   border: 1px solid var(--au-hairline);
@@ -1192,6 +1194,7 @@ html[data-skin="aurora"] :focus-visible {
   html[data-skin="aurora"] .pane.active .event-card,
   html[data-skin="aurora"] .modal-panel,
   html[data-skin="aurora"] .cmdk-panel,
+  html[data-skin="aurora"] .chart-zoom-panel,
   html[data-skin="aurora"] .chart-detail-panel { animation: none; opacity: 1; transform: none; }
   html[data-skin="aurora"] .loading-msg::after { animation: none; }
   html[data-skin="aurora"] .nav-btn.active::before { animation: none; }
