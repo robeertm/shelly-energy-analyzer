@@ -2045,7 +2045,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }}
     .co2-dot {{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:middle; }}
     .bat-gauge {{ position:relative; height:22px; border-radius:11px; background:var(--chipbg); overflow:hidden; margin:4px 0 10px; }}
-    .bat-gauge-fill {{ height:100%; border-radius:11px; transition: width .6s ease; }}
+    .bat-gauge-fill {{ height:100%; border-radius:11px; }}  /* no width transition: the card is rebuilt on refresh, a transition would replay 0→SoC each time */
     .bat-gauge-text {{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:var(--fg); text-shadow:0 0 4px var(--card); }}
     .bat-legend {{ display:flex; flex-wrap:wrap; gap:4px 14px; font-size:11px; margin:6px 4px 0; }}
     .bat-chips {{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }}
@@ -3160,10 +3160,14 @@ function _startLoadTicker() {{
 function _stopLoadTicker() {{ if (_loadTicker) {{ clearInterval(_loadTicker); _loadTicker = null; }} }}
 function _navStatusText() {{
   var r = _tabRunningFg || _tabRunning;
-  if (r && r.prefetch && _prefetchTotal > 0) {{
+  // A prefetch batch stays "the batch" between two items as well (there is a
+  // 50 ms gap where nothing runs) — otherwise the strip flipped to "Loading…"
+  // and back fourteen times per batch, which read as a twitching bar.
+  if (_prefetchTotal > 0 && (!r || r.prefetch)) {{
     var doneN = Math.min(_prefetchDone + 1, _prefetchTotal);
     var s = t('web.prefetch.status', 'Updating tabs … {{n}}/{{total}}', {{ n: doneN, total: _prefetchTotal }});
-    var lbl = _tabLabel(r.name);
+    var nextItem = r || _tabQ.filter(function(it) {{ return it.prefetch; }})[0];
+    var lbl = nextItem ? _tabLabel(nextItem.name) : '';
     return lbl ? (s + ' · ' + lbl) : s;
   }}
   if (r) {{
@@ -3181,24 +3185,31 @@ function _navStatusText() {{
 }}
 function _updateNavProgressText() {{
   var txt = document.getElementById('nav-progress-text');
-  if (txt) txt.textContent = _navStatusText();
+  if (!txt) return;
+  var s = _navStatusText();
+  if (txt.textContent !== s) txt.textContent = s;
 }}
 function _updateNavProgress() {{
   var np = document.getElementById('nav-progress');
   if (!np) return;
   var bar = document.getElementById('nav-progress-bar');
   if (!_tabRunning && !_tabRunningFg && !_tabQ.length) {{
+    if (bar && !np.classList.contains('indeterminate') && bar.style.width && bar.style.width !== '100%') bar.style.width = '100%';
     np.classList.remove('show', 'indeterminate');
     return;
   }}
-  np.classList.add('show');
-  var r = _tabRunningFg || _tabRunning;
-  var determinate = r && r.prefetch && _prefetchTotal > 0;
+  if (!np.classList.contains('show')) np.classList.add('show');
+  // Determinate for the whole batch, including the gaps between items; only
+  // write styles that actually change so the width transition is not restarted.
+  var determinate = _prefetchTotal > 0;
   if (determinate) {{
     np.classList.remove('indeterminate');
-    var pct = Math.round(100 * _prefetchDone / _prefetchTotal);
-    if (bar) {{ bar.style.marginLeft = '0'; bar.style.width = pct + '%'; }}
-  }} else {{
+    var w = Math.round(100 * _prefetchDone / _prefetchTotal) + '%';
+    if (bar) {{
+      if (bar.style.marginLeft !== '0px') bar.style.marginLeft = '0';
+      if (bar.style.width !== w) bar.style.width = w;
+    }}
+  }} else if (!np.classList.contains('indeterminate')) {{
     np.classList.add('indeterminate');
   }}
   _updateNavProgressText();
@@ -3783,7 +3794,7 @@ function renderNilm(raw, el) {{
       const maxW = Math.max.apply(null, clusters.map(function(x){{ return x.centroid_w; }})) || 1;
       const barPct = Math.round(c.centroid_w / maxW * 100);
       html += '<div style="background:var(--bg);border-radius:4px;height:8px;overflow:hidden">';
-      html += '<div style="width:' + barPct + '%;height:100%;background:hsl(' + colHue + ',70%,55%);border-radius:4px;transition:width .3s"></div>';
+      html += '<div style="width:' + barPct + '%;height:100%;background:hsl(' + colHue + ',70%,55%);border-radius:4px"></div>';
       html += '</div>';
       // Mini canvas for power profile (will be drawn after DOM insertion)
       html += '<canvas class="nilm-spark" data-idx="' + idx + '" style="width:100%;height:50px;margin-top:8px"></canvas>';
@@ -3797,7 +3808,7 @@ function renderNilm(raw, el) {{
     html += '<div style="color:var(--muted);font-size:13px">' + t('web.nilm.min_transitions','At least 10 power transitions needed. Current: {{count}}', {{count: data.transition_count}}) + '</div>';
     html += '<div style="margin-top:12px;background:var(--bg);border-radius:6px;height:8px;overflow:hidden;max-width:300px;margin-left:auto;margin-right:auto">';
     const prog = Math.min(100, Math.round(data.transition_count / 10 * 100));
-    html += '<div style="width:' + prog + '%;height:100%;background:var(--accent);border-radius:6px;transition:width .5s"></div>';
+    html += '<div style="width:' + prog + '%;height:100%;background:var(--accent);border-radius:6px"></div>';
     html += '</div></div>';
   }}
 
@@ -9356,7 +9367,7 @@ function renderAnomalies(data, el) {{
       html += '<div style="margin-bottom:8px">';
       html += '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:2px"><span style="font-weight:600">' + esc(d.name) + '</span><span style="color:var(--muted)">' + d.count + ' Events</span></div>';
       html += '<div style="background:var(--bg);border-radius:4px;height:8px;overflow:hidden">';
-      html += '<div style="width:' + pct + '%;height:100%;background:var(--accent);border-radius:4px;transition:width .3s"></div>';
+      html += '<div style="width:' + pct + '%;height:100%;background:var(--accent);border-radius:4px"></div>';
       html += '</div>';
       // Type chips
       html += '<div style="display:flex;gap:3px;margin-top:3px;flex-wrap:wrap">';
@@ -12307,7 +12318,7 @@ _loadLsSettings();
     h = h || 6;
     return '<div style="height:' + h + 'px;background:var(--border);border-radius:3px;margin-top:4px">' +
       '<div style="height:100%;width:' + Math.min(pct,100) + '%;background:' +
-      (pct <= 100 ? '#4caf50' : '#e53935') + ';border-radius:3px;transition:width .4s"></div></div>';
+      (pct <= 100 ? '#4caf50' : '#e53935') + ';border-radius:3px"></div></div>';
   }}
   function _glCard(icon, label, value, sub) {{
     return '<div class="card"><div class="metric-label">' + icon + ' ' + label + '</div><div class="metric-value">' + value + '</div>' +
@@ -12328,7 +12339,7 @@ _loadLsSettings();
     var lpct = data.level_progress_pct || 0;
     var lvlTitle = lvl >= 20 ? '\U0001f451 Master' : lvl >= 15 ? '\U0001f48e Diamond' : lvl >= 10 ? '\U0001f947 Gold' : lvl >= 5 ? '\U0001f948 Silver' : '\U0001f949 Bronze';
     html += '<div class="card" style="text-align:center;margin-bottom:10px;position:relative;overflow:hidden">';
-    html += '<div style="position:absolute;top:0;left:0;height:100%;width:' + lpct + '%;background:rgba(76,175,80,0.08);transition:width .5s"></div>';
+    html += '<div style="position:absolute;top:0;left:0;height:100%;width:' + lpct + '%;background:rgba(76,175,80,0.08)"></div>';
     html += '<div style="position:relative;z-index:1">';
     html += '<div style="font-size:36px;font-weight:800;color:var(--accent)">Level ' + lvl + '</div>';
     html += '<div style="font-size:13px;color:var(--muted);margin-top:2px">' + lvlTitle + ' \u2022 ' + xp + ' XP</div>';
