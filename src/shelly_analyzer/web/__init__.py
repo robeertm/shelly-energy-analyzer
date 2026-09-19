@@ -253,6 +253,7 @@ def _render_dashboard_html(state: "AppState") -> bytes:
         "web_btn_freeze_title": _t(lang, "web.dash.freeze_resume"),
         "web_btn_settings_title": _t(lang, "web.dash.device_settings"),
         "web_btn_theme_title": _t(lang, "web.btn.theme"),
+        "web_chart_zoom_close": _t(lang, "web.chart.zoom_close"),
         "web_loading": _t(lang, "web.loading"),
         "web_update_banner_title": _t(lang, "web.update_banner.title"),
         "web_update_banner_open": _t(lang, "web.update_banner.open"),
