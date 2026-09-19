@@ -3203,7 +3203,7 @@ function _updateNavProgress() {{
   // write styles that actually change so the width transition is not restarted.
   var determinate = _prefetchTotal > 0;
   if (determinate) {{
-    np.classList.remove('indeterminate');
+    if (np.classList.contains('indeterminate')) np.classList.remove('indeterminate');
     var w = Math.round(100 * _prefetchDone / _prefetchTotal) + '%';
     if (bar) {{
       if (bar.style.marginLeft !== '0px') bar.style.marginLeft = '0';
