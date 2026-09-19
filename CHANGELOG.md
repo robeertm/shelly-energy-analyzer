@@ -1,5 +1,11 @@
 # Changelog
 
+## 17.3.2
+
+### Fixed
+- **Heatmap clipped behind a scrollbar on large screens.** The hourly table computed its width in pixels from the tab width, ignoring card padding and cell spacing (and, in the Aurora skin, a generic table-cell padding), so hour 23 sat behind a horizontal scrollbar. The table now fills its card with a fixed layout and keeps its cells square.
+- **Heatmap on phones turns portrait.** When the year would need less than 10 px per week, the calendar runs downwards (weeks as rows, weekdays across, month names in front of their first week) and the hourly pattern turns too (hours downwards, weekdays across) — no more sideways scrolling. Wide screens keep the landscape layout.
+
 ## 17.3.1
 
 ### Fixed

@@ -728,6 +728,10 @@ html[data-skin="aurora"] .hm-table {
   border-collapse: separate;
   border-spacing: 3px;
 }
+/* The generic td padding (9px 12px) must not reach the heatmap tiles — it made every
+   hour cell 24 px wider than the layout assumed and pushed hour 23 behind a scrollbar. */
+html[data-skin="aurora"] .hm-table td,
+html[data-skin="aurora"] .hm-table th { padding: 0; border-bottom: 0; }
 html[data-skin="aurora"] table th {
   font-size: 10.5px;
   font-weight: 650;
