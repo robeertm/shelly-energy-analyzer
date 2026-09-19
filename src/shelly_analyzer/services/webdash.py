@@ -1928,6 +1928,13 @@ _HTML_TEMPLATE = """<!doctype html>
     .hm-calendar {{ overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }}
     .hm-grid {{ display: flex; flex-wrap: nowrap; gap: 2px; }}
     .hm-week {{ display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }}
+    /* Portrait (narrow screens): weeks run downwards, days across; month label in front of each first week */
+    .hm-grid.portrait {{ flex-direction: column; width: max-content; margin-inline: auto; }}
+    .hm-calendar.portrait .hm-day-head {{ width: max-content; margin-inline: auto; }}
+    .hm-grid.portrait .hm-week {{ flex-direction: row; align-items: center; }}
+    .hm-wk-label {{ font-size: 9px; color: var(--muted); text-align: right; padding-right: 4px; flex-shrink: 0; white-space: nowrap; }}
+    .hm-day-head {{ display: flex; gap: 2px; font-size: 9px; color: var(--muted); margin-bottom: 3px; }}
+    .hm-day-head span {{ text-align: center; flex-shrink: 0; }}
     .hm-day {{
       border-radius: 2px;
       background: var(--chipbg);
@@ -1938,7 +1945,13 @@ _HTML_TEMPLATE = """<!doctype html>
     .hm-month-labels span {{ overflow: visible; white-space: nowrap; flex-shrink: 0; }}
     /* Hourly heatmap table */
     .hm-table-wrap {{ overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; }}
-    .hm-table {{ border-collapse: separate; border-spacing: 2px; font-size: 9px; }}
+    /* Fixed layout + 100 % width: the 24 hour columns share whatever the card offers, so the
+       table can never be wider than its card (the pixel arithmetic it used before ignored
+       card padding and cell spacing and clipped hour 23 behind a scrollbar). */
+    .hm-table {{ border-collapse: separate; border-spacing: 2px; font-size: 9px; width: 100%; table-layout: fixed; }}
+    .hm-table td, .hm-table th {{ padding: 0; box-sizing: border-box; }}
+    .hm-table.portrait {{ width: auto; max-width: 100%; margin-inline: auto; }}
+    .hm-table.portrait td.hm-cell, .hm-table.portrait th.hm-head {{ width: 28px; }}
     .hm-cell {{
       border-radius: 2px;
       padding: 0;
@@ -7161,6 +7174,15 @@ function renderHmStats(data, el, unit) {{
   el.innerHTML = html;
 }}
 
+/* Width a card's content gets inside this container (container minus the card's own padding). */
+function _hmInnerWidth(el) {{
+  const pane = el.closest('.pane') || document.body;
+  const probe = pane.querySelector('.card') || el;
+  const cs = getComputedStyle(probe);
+  const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
+  return Math.max(120, (el.clientWidth || pane.clientWidth) - pad - 2);
+}}
+
 /* ── Calendar heatmap ── */
 function renderHeatmapCalendar(data, el, unit) {{
   const calArr = data.calendar || [];
@@ -7191,14 +7213,19 @@ function renderHeatmapCalendar(data, el, unit) {{
     weeks.push(week);
   }}
 
-  const pane = el.closest('.pane') || document.body;
-  const availW = pane.clientWidth - 32;
+  const availW = _hmInnerWidth(el);
   const numWeeks = weeks.length;
   const calCellFromW = Math.floor((availW - (numWeeks - 1) * 2) / numWeeks);
-  const calCellSize = Math.max(10, Math.min(calCellFromW, 18));
+  // Landscape needs ≥ 10 px per week; below that (phones) the year runs downwards instead.
+  const portrait = calCellFromW < 10;
+  const labelW = 34;
+  const calCellSize = portrait
+    ? Math.max(12, Math.min(Math.floor((availW - labelW - 6 * 2) / 7), 22))
+    : Math.max(10, Math.min(calCellFromW, 18));
 
   const _dtfMonth = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{month: 'short'}});
   const monthNames = Array.from({{length: 12}}, function(_, i) {{ return _dtfMonth.format(new Date(2000, i, 1)); }});
+  const _dtfDay = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{weekday: 'short'}});
   let monthLabelHtml = '<div class="hm-month-labels">';
   let lastMonth = -1;
   weeks.forEach(function(week) {{
@@ -7212,9 +7239,23 @@ function renderHeatmapCalendar(data, el, unit) {{
   }});
   monthLabelHtml += '</div>';
 
-  let gridHtml = '<div class="hm-grid">';
+  if (portrait) {{
+    // Weekday header instead of month labels; months are named in front of their first week.
+    monthLabelHtml = '<div class="hm-day-head"><span style="width:' + labelW + 'px"></span>';
+    for (let i = 0; i < 7; i++) monthLabelHtml += '<span style="width:' + calCellSize + 'px">' + _dtfDay.format(new Date(2001, 0, 1 + i)).slice(0, 2) + '</span>';
+    monthLabelHtml += '</div>';
+  }}
+  let gridHtml = '<div class="hm-grid' + (portrait ? ' portrait' : '') + '">';
+  let lastLabeled = -1;
   weeks.forEach(function(week) {{
     gridHtml += '<div class="hm-week">';
+    if (portrait) {{
+      const firstIn = week.find(function(d) {{ return d.getFullYear() === year && d.getDate() <= 7; }});
+      const m = firstIn ? firstIn.getMonth() : -1;
+      const lbl = (m >= 0 && m !== lastLabeled) ? monthNames[m] : '';
+      if (lbl) lastLabeled = m;
+      gridHtml += '<span class="hm-wk-label" style="width:' + labelW + 'px">' + lbl + '</span>';
+    }}
     week.forEach(function(day) {{
       const key = day.toISOString().slice(0,10);
       const v = daily[key] || 0;
@@ -7232,7 +7273,7 @@ function renderHeatmapCalendar(data, el, unit) {{
   // Color legend (role-aware: charge/discharge, generation, import/feed-in).
   var legendHtml = hmLegendHtml(hmRole, unit, maxVal, minNeg);
 
-  el.innerHTML = '<div class="card"><div class="card-title">' + t('web.hm.year_overview', 'Year overview') + ' ' + year + '</div><div class="hm-calendar">' + monthLabelHtml + gridHtml + '</div>' + legendHtml + '</div>';
+  el.innerHTML = '<div class="card"><div class="card-title">' + t('web.hm.year_overview', 'Year overview') + ' ' + year + '</div><div class="hm-calendar' + (portrait ? ' portrait' : '') + '">' + monthLabelHtml + gridHtml + '</div>' + legendHtml + '</div>';
 
   el.querySelectorAll('.hm-day').forEach(function(cell) {{
     cell.addEventListener('mousemove', function(e) {{ showHmTooltip(e, cell.dataset.date + ': ' + cell.dataset.val); }});
@@ -7259,36 +7300,52 @@ function renderHeatmapHourly(data, el, unit) {{
   const minNeg = negVals.length ? Math.min(...negVals) : 0;
   const hmRole = data.flow_role || '';
 
-  const pane = el.closest('.pane') || document.body;
-  const availW = pane.clientWidth - 32;
-  const labelW = 22;
-  const cellFromW = Math.floor((availW - labelW - 2 * 25) / 24);
+  const labelW = 26;
+  // Landscape: 24 hour columns × 7 weekday rows. On narrow screens (a phone in the hand) the
+  // hours would shrink to ~9 px, so the table turns: hours run downwards, weekdays across.
+  const portrait = (_hmInnerWidth(el) - labelW) / 24 < 14;
   const availHHr = window.innerHeight - 290;
-  const cellFromH = Math.floor((availHHr - 20) / 7 - 2);
-  const cellSize = Math.max(8, Math.min(cellFromW, cellFromH));
+  const cellMaxH = portrait ? 28 : Math.max(10, Math.floor((availHHr - 20) / 7 - 2));
+  const cellAt = function(d, h) {{
+    const v = (hourly[d] && hourly[d][h]) ? hourly[d][h] : 0;
+    const posR = maxVal > 0 ? v / maxVal : 0;
+    const negR = minNeg < 0 ? v / minNeg : 0;
+    const bg = v !== 0 ? hmCellColor(v, posR, negR, hmRole, unit) : 'var(--chipbg)';
+    const title = days[d] + ' ' + h + 'h: ' + hmFmtVal(v, unit);
+    return '<td class="hm-cell" style="background:' + bg + '" data-tip="' + title + '"></td>';
+  }};
+  const rowLabel = function(txt) {{
+    return '<td style="width:' + labelW + 'px;font-size:9px;color:var(--muted);text-align:right;padding-right:3px;white-space:nowrap">' + txt + '</td>';
+  }};
 
   let html = '<div class="card"><div class="card-title">' + t('web.dash.hourly_pattern', 'Hourly Pattern') + '</div>';
-  html += '<div class="hm-table-wrap"><table class="hm-table" style="table-layout:fixed;width:' + (labelW + 2 + 24 * (cellSize + 2)) + 'px"><thead><tr>';
+  html += '<div class="hm-table-wrap"><table class="hm-table' + (portrait ? ' portrait' : '') + '"><thead><tr>';
   html += '<th style="width:' + labelW + 'px"></th>';
-  for (let h = 0; h < 24; h++) {{
-    const lbl = (h % 3 === 0) ? String(h) : '';
-    html += '<th class="hm-head" style="width:' + cellSize + 'px">' + lbl + '</th>';
-  }}
-  html += '</tr></thead><tbody>';
-  for (let d = 0; d < 7; d++) {{
-    html += '<tr><td style="width:' + labelW + 'px;font-size:9px;color:var(--muted);text-align:right;padding-right:3px;white-space:nowrap">' + days[d] + '</td>';
+  if (portrait) {{
+    for (let d = 0; d < 7; d++) html += '<th class="hm-head">' + days[d] + '</th>';
+    html += '</tr></thead><tbody>';
     for (let h = 0; h < 24; h++) {{
-      const v = (hourly[d] && hourly[d][h]) ? hourly[d][h] : 0;
-      const posR = maxVal > 0 ? v / maxVal : 0;
-      const negR = minNeg < 0 ? v / minNeg : 0;
-      const bg = v !== 0 ? hmCellColor(v, posR, negR, hmRole, unit) : 'var(--chipbg)';
-      const title = days[d] + ' ' + h + 'h: ' + hmFmtVal(v, unit);
-      html += '<td class="hm-cell" style="width:' + cellSize + 'px;height:' + cellSize + 'px;background:' + bg + '" data-tip="' + title + '"></td>';
+      html += '<tr>' + rowLabel(String(h));
+      for (let d = 0; d < 7; d++) html += cellAt(d, h);
+      html += '</tr>';
     }}
-    html += '</tr>';
+  }} else {{
+    for (let h = 0; h < 24; h++) html += '<th class="hm-head">' + ((h % 3 === 0) ? String(h) : '') + '</th>';
+    html += '</tr></thead><tbody>';
+    for (let d = 0; d < 7; d++) {{
+      html += '<tr>' + rowLabel(days[d]);
+      for (let h = 0; h < 24; h++) html += cellAt(d, h);
+      html += '</tr>';
+    }}
   }}
   html += '</tbody></table></div></div>';
   el.innerHTML = html;
+  // Square cells: the column width is whatever the fixed layout handed out; copy it into the row height.
+  const probe = el.querySelector('.hm-cell');
+  if (probe) {{
+    const side = Math.max(8, Math.min(Math.round(probe.getBoundingClientRect().width), cellMaxH));
+    el.querySelectorAll('.hm-cell').forEach(function(c) {{ c.style.height = side + 'px'; }});
+  }}
 
   el.querySelectorAll('.hm-cell[data-tip]').forEach(function(cell) {{
     cell.addEventListener('mousemove', function(e) {{ showHmTooltip(e, cell.dataset.tip); }});
