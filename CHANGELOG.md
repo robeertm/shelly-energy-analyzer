@@ -1,5 +1,11 @@
 # Changelog
 
+## 17.3.1
+
+### Fixed
+- **Twitching progress strip.** While the tabs were being warmed up in the background, the strip at the bottom flipped between the sliding "Loading…" animation and the percentage bar after every single tab (fourteen times per batch, ~50 ms apart). It now stays a steady percentage bar for the whole batch, only writes what actually changed, and fills to 100 % before it fades.
+- Bars that are rebuilt on refresh (battery state of charge, goals, standby detection, anomalies) no longer replay a 0 → value animation each time the tab refreshes.
+
 ## 17.3.0
 
 ### Added
