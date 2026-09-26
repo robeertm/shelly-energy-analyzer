@@ -16,7 +16,7 @@ import urllib.request
 import urllib.error
 from datetime import datetime, date, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from shelly_analyzer.io.config import AppConfig
 from shelly_analyzer.io.storage import Storage
@@ -1923,10 +1923,38 @@ class BackgroundServiceManager:
         except Exception:
             pass
 
+        # Laengere Bezuege: ein Vortag kann ein Ausreisser sein, ein
+        # Wochenschnitt nicht. Die Tageswerte der letzten sieben Tage
+        # tragen ausserdem den Verlauf im Bericht.
+        last7: List[Tuple[str, float]] = []
+        avg7_kwh = 0.0
+        avg30_kwh = 0.0
+        try:
+            messgeraete = [d for d in (self.cfg.devices or [])
+                           if str(getattr(d, "kind", "em")) != "switch"]
+            for zurueck in range(6, -1, -1):
+                tag = yesterday - timedelta(days=zurueck)
+                t0 = int(tag.replace(hour=0, minute=0, second=0,
+                                     microsecond=0).timestamp())
+                summe = sum(self._query_device_kwh(d.key, t0, t0 + 86400)
+                            for d in messgeraete)
+                last7.append((tag.strftime("%a"), round(summe, 2)))
+            if last7:
+                avg7_kwh = sum(v for _, v in last7) / len(last7)
+            t30 = int((yesterday - timedelta(days=29)).replace(
+                hour=0, minute=0, second=0, microsecond=0).timestamp())
+            avg30_kwh = sum(self._query_device_kwh(d.key, t30, y_end)
+                            for d in messgeraete) / 30.0
+        except Exception:
+            logger.exception("longer-term averages failed")
+
         return {
             "tz": tz,
             "now": now,
             "yesterday": yesterday,
+            "last7_days": last7,
+            "avg7_kwh": avg7_kwh,
+            "avg30_kwh": avg30_kwh,
             "y_start": y_start,
             "y_end": y_end,
             "date_label": yesterday.strftime("%A, %d.%m.%Y"),
@@ -2845,72 +2873,30 @@ class BackgroundServiceManager:
         plt.close(fig)
         return out
 
-    def _generate_summary_pdf(self, chart_type: str, text: str) -> Optional[Path]:
-        """Generate a PDF with summary text + chart. Returns path or None."""
-        try:
-            from reportlab.lib.pagesizes import A4
-            from reportlab.lib.units import cm
-            from reportlab.pdfgen import canvas as pdfcanvas
-            from reportlab.lib.utils import ImageReader
+    def _generate_summary_pdf(self, chart_type: str,
+                              data: Optional[Dict[str, Any]] = None,
+                              text: str = "") -> Optional[Path]:
+        """Typeset the report as a real document.
 
-            out = self.out_dir / "data" / "runtime" / f"summary_{chart_type}.pdf"
-            out.parent.mkdir(parents=True, exist_ok=True)
-            c = pdfcanvas.Canvas(str(out), pagesize=A4)
-            w, h = A4
+        Until 17.4.0 this dumped the Telegram message into a PDF canvas
+        line by line. 🔴 That destroyed the one thing the page was there
+        for: the "24h profile" mixes U+2588 and U+2591, base-14 Helvetica
+        has neither, and reportlab drew the SAME black box for both -- so
+        0.15 kWh and 1.72 kWh looked identical. The subscript in CO₂ and
+        every emoji below U+FFFF went the same way (the old filter dropped
+        only codepoints ABOVE U+FFFF).
 
-            # Title
-            c.setFont("Helvetica-Bold", 16)
-            c.drawString(2 * cm, h - 2 * cm, f"Shelly Energy Analyzer – {chart_type.title()} Report")
+        `text` is still accepted so an old caller cannot break; it is only
+        used when no data dict is available.
+        """
+        from .report_pdf import build_pdf
 
-            # Date
-            c.setFont("Helvetica", 10)
-            c.setFillColorRGB(0.5, 0.5, 0.5)
-            c.drawString(2 * cm, h - 2.8 * cm, datetime.now().strftime("%d.%m.%Y %H:%M"))
-
-            # Text
-            c.setFillColorRGB(0, 0, 0)
-            c.setFont("Helvetica", 9)
-            y = h - 4 * cm
-            for line in text.split("\n"):
-                # Strip emoji for PDF (reportlab can't render them)
-                clean = line
-                for ch in list(clean):
-                    if ord(ch) > 0xFFFF:
-                        clean = clean.replace(ch, "")
-                if y < 3 * cm:
-                    c.showPage()
-                    y = h - 2 * cm
-                    c.setFont("Helvetica", 9)
-                c.drawString(2 * cm, y, clean.strip())
-                y -= 0.4 * cm
-
-            # Chart image
-            chart_path = self.out_dir / "data" / "runtime" / f"summary_{chart_type}.png"
-            if chart_path.exists():
-                try:
-                    img = ImageReader(str(chart_path))
-                    iw, ih = img.getSize()
-                    max_w = w - 4 * cm
-                    scale = min(max_w / iw, 1.0)
-                    draw_w = iw * scale
-                    draw_h = ih * scale
-                    if y - draw_h < 2 * cm:
-                        c.showPage()
-                        y = h - 2 * cm
-                    c.drawImage(str(chart_path), 2 * cm, y - draw_h, width=draw_w, height=draw_h)
-                except Exception:
-                    pass
-
-            # Footer
-            c.setFont("Helvetica", 7)
-            c.setFillColorRGB(0.5, 0.5, 0.5)
-            c.drawString(2 * cm, 1 * cm, "\u00a9 Robert Manuwald – Shelly Energy Analyzer")
-
-            c.save()
-            return out
-        except Exception as e:
-            logger.warning("PDF generation failed: %s", e)
+        out = self.out_dir / "data" / "runtime" / f"summary_{chart_type}.pdf"
+        if not data:
+            logger.info("no report data for %s PDF -- skipped", chart_type)
             return None
+        chart = self.out_dir / "data" / "runtime" / f"summary_{chart_type}.png"
+        return build_pdf(out, chart_type, data, chart if chart.exists() else None)
 
     def _summary_loop(self) -> None:
         """Periodically check if daily/monthly summaries are due."""
@@ -2968,7 +2954,7 @@ class BackgroundServiceManager:
                                     logger.exception("daily telegram photo failed")
                         if em_daily and summary:
                             try:
-                                pdf_path = self._generate_summary_pdf("daily", summary)
+                                pdf_path = self._generate_summary_pdf("daily", daily_data)
                                 attachments = [pdf_path] if pdf_path and pdf_path.exists() else []
                                 inline = {}
                                 if chart_path and chart_path.exists():
@@ -3039,7 +3025,7 @@ class BackgroundServiceManager:
                                     logger.exception("monthly telegram photo failed")
                         if em_monthly and summary:
                             try:
-                                pdf_path = self._generate_summary_pdf("monthly", summary)
+                                pdf_path = self._generate_summary_pdf("monthly", monthly_data)
                                 attachments = [pdf_path] if pdf_path and pdf_path.exists() else []
                                 inline = {}
                                 if chart_path and chart_path.exists():
