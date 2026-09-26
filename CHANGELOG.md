@@ -1,5 +1,20 @@
 # Changelog
 
+## 17.4.0
+
+### Fixed
+- **The PDF report was unreadable, not just plain.** It was the Telegram message drawn into a PDF canvas line by line, and that destroyed the part it existed for. The "24h profile" mixes U+2588 (full block) and U+2591 (light shade); base-14 Helvetica carries neither, so reportlab drew the *same* black rectangle for both — 0.15 kWh and 1.72 kWh came out identical, and the chart carried no information at all. The subscript in CO₂ and every symbol below U+FFFF (⚡ ⏰ ➡) went the same way, because the old filter removed only codepoints *above* U+FFFF.
+- Missing spaces around the currency symbol ("2.41 €(87%)", "-1.19 €vs. fixed") and lost indentation: every line was passed through `.strip()`.
+- The footer appeared only on the page where the text happened to end, and there were no page numbers.
+
+### Added
+- **A typeset daily and monthly report.** Masthead, eight headline figures, a vector load profile with the base load marked and night hours set apart, a device table with drawn share bars, an analysis block, a seven-day trend, and an appendix with the hour-by-hour table and one profile per device. Every bar is a drawn rectangle, so it renders in any viewer — no glyph can go missing.
+- **More to read in it:** base load as a *share* of the day (147 W is 42 % of a frugal day — the watt figure alone says nothing), day/night split, peak-to-average ratio, effective price paid against the spot price for the same consumption, comparison against the 7-day and 30-day average, and per-hour cost.
+- `tests/test_report_pdf.py` — checks that every character actually drawn has a glyph in the font in use, that different values produce different bar heights, that the footer and page number appear on every page, and that degenerate data (no devices, all zeros, missing comparisons) still produces a document.
+
+### Changed
+- Telegram and the HTML mail are unchanged; the text chart is right in a chat window and was never the problem.
+
 ## 17.3.2
 
 ### Fixed
