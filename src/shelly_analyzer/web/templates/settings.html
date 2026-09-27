@@ -2389,10 +2389,8 @@ function renderToolsExports() {
       <button class="secondary" onclick="toolsRun('export_summary')">📄 ${T("settings.tools.btn_pdf","PDF Summary")}</button>
       <button class="secondary" onclick="toolsRun('export_invoices')">🧾 ${T("settings.tools.btn_per_device_inv","Per-device invoices")}</button>
       <button class="secondary" onclick="toolsRun('export_excel')">📊 ${T("settings.tools.btn_excel","Excel")}</button>
-      <button class="secondary" onclick="toolsRun('report','day')">📅 ${T("settings.tools.btn_day_report","Day report")}</button>
-      <button class="secondary" onclick="toolsRun('report','month')">📆 ${T("settings.tools.btn_month_report","Month report")}</button>
-      <button class="secondary" onclick="reportDownload('daily')">⬇️ ${T("settings.tools.btn_day_pdf","Download day report")}</button>
-      <button class="secondary" onclick="reportDownload('monthly')">⬇️ ${T("settings.tools.btn_month_pdf","Download month report")}</button>
+      <button class="secondary" onclick="reportDownload('daily')">📅 ${T("settings.tools.btn_day_report","Day report")}</button>
+      <button class="secondary" onclick="reportDownload('monthly')">📆 ${T("settings.tools.btn_month_report","Month report")}</button>
       <button class="secondary" onclick="toolsRun('bundle')">📦 ${T("settings.tools.btn_bundle","Bundle ZIP")}</button>
     </div>
 
@@ -2620,10 +2618,41 @@ async function toolsRun(action, period) {
     });
     const d = await r.json();
     if (!d.ok) throw new Error(d.error || "?");
+    // 🔴 /api/run antwortet mit einem AUFTRAGSZETTEL ({ok, job_id}), nicht
+    // mit dem Ergebnis — die Arbeit laeuft in einem Hintergrundfaden. Bis
+    // 17.5.2 zeichnete die Seite diesen Zettel und fand darin keine Dateien:
+    // JEDER Werkzeug-Knopf endete in „Fertig — keine Dateien erzeugt“,
+    // waehrend die Datei nebenan gerade geschrieben wurde.
+    if (d.job_id) { await _toolsAwaitJob(d.job_id, action); return; }
     _toolsRenderResults(d, action);
   } catch(err) {
     if (out) out.innerHTML = `<div class="hint" style="color:var(--danger)">${T("settings.toast.error","Error: {err}",{err: err.message})}</div>`;
   }
+}
+
+// Den Auftrag abholen, bis er fertig ist. Der Fortschritt kommt aus
+// /api/job, damit ein langer Export nicht wie ein haengender Knopf aussieht.
+async function _toolsAwaitJob(jobId, action) {
+  const out = document.getElementById("tools-results");
+  const ende = Date.now() + 10 * 60 * 1000;
+  while (Date.now() < ende) {
+    await new Promise(function(res){ setTimeout(res, 900); });
+    let j = null;
+    try {
+      const r = await fetch("/api/job?id=" + encodeURIComponent(jobId));
+      j = (await r.json()).job;
+    } catch(e) { continue; }
+    if (!j) continue;
+    if (j.status === "error") throw new Error(j.error || "?");
+    if (j.status === "done") { _toolsRenderResults(j.result || {}, action); return; }
+    if (out) {
+      const pct = Math.max(0, Math.min(100, parseInt(j.progress_overall || 0, 10)));
+      const msg = j.progress_message || "";
+      out.innerHTML = `<div class="hint">\u23f3 ${T("settings.tools.running","Running\u2026")} ${pct}%`
+        + (msg ? ` \u2014 ${esc(msg)}` : "") + `</div>`;
+    }
+  }
+  throw new Error(T("settings.tools.timeout", "Timed out waiting for the job."));
 }
 
 function _toolsRenderResults(d, action) {

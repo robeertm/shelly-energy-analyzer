@@ -3470,7 +3470,7 @@ class ActionDispatcher:
                     daten = (bg._build_monthly_data(_tag) if is_monthly
                              else bg._build_daily_data(_tag))
                     gebaut = bool(bg._generate_summary_pdf(
-                        report_type, daten, out=out_path_r))
+                        report_type, daten, out=out_path_r, lang=self.lang))
                 except Exception:
                     logger.exception("report action: shared builder failed, "
                                      "falling back to the per-device layout")

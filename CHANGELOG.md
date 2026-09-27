@@ -1,5 +1,23 @@
 # Changelog
 
+## 17.6.0
+
+### Fixed
+- 🔴 **Every tool button ended in "Done — no files produced."** `/api/run` answers with a job ticket (`{ok, job_id}`) and does the work in a background thread; the page rendered that ticket, found no files in it and said so — while the file was being written next door. It hit all six buttons: PDF summary, per-device invoices, Excel, day report, month report and bundle. The page now follows the job to completion and shows its progress and its download links.
+- 🔴 **The report was always in English**, whatever language the app was set to. `report_pdf.py` carried no translation at all — every label was an English literal — and `background.py` had *zero* translation calls, so the Telegram message and the HTML email were English too. All of it now follows the configured language in the nine languages the app supports.
+- 🔴 **Numbers ignored the language.** The report wrote `1 234.56` everywhere: a dot as the decimal separator is not merely foreign in German, it is ambiguous — `1.234` reads there as a thousand. Values, shares and tariffs now use the separators of the language, in the PDF, the message and the email.
+- 🔴 **`strftime("%A")` returns what the container's C locale says**, which is English. That is why a German report was headed `Friday, 25.09.2026`. Weekday and month names, the weekday axis of the monthly chart and the generated-at stamp now come from a translated table.
+- 🔴 **Text was clipped mid-word in the balance block** — `77% selbst gen…`, `+0.30 kWh netto ge…`, and in English `same consumpti…`. A clipped figure is not a figure. The block now measures before it sets and falls back to a single column when two do not fit, and the label column widens to the longest name it has to carry.
+- 🔴 **A KPI card never bounded its text.** `VS. STESSO GIORNO DELLA SETTIMANA` ran 33 pt past the page margin; reportlab does not complain, it simply keeps painting. Card text is now fitted to the card — smaller first, clipped only as a last resort.
+
+### Changed
+- The tools page had **four** report buttons: two that produced a file somewhere and two that downloaded one. The pair is now one: **Day report** and **Month report** hand you the PDF directly.
+- Units stay as SI symbols (`kWh`, `W`, `EUR`, `ct`) in every language, so a value and the note beside it never disagree.
+- The device table head of the HTML email is built once instead of being spelled out twice.
+
+### Added
+- `tests/test_digest_language.py` (57 checks) and a language section in `tests/test_report_pdf.py`: the German report must contain German and must *not* contain the words it used to, every one of the nine languages must render without a missing glyph, without running past the margin, without a clipped line, and without an unreplaced `{placeholder}` — the failure mode a wrongly named placeholder in a translation would cause.
+
 ## 17.5.1
 
 ### Fixed
