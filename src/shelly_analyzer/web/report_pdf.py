@@ -287,26 +287,65 @@ class _Doc:
             sp, ze = divmod(i, pro)
             x = MARGIN + sp * sb
             y = oben - ze * zh
+            # 🔴 Jede Zelle bleibt in ihrer Spalte. Ohne Begrenzung lief die
+            # Randnotiz der linken Spalte in die Beschriftung der rechten —
+            # zwei Angaben klebten aneinander und keine war mehr lesbar.
+            x_wert = x + sb * 0.46
             c.setFillColorRGB(*MUTED)
             c.setFont(f.regular, 8.2)
-            c.drawString(x, y, f.safe(label))
+            c.drawString(x, y, _kuerzen_breit(f.safe(label), sb * 0.46 - 6,
+                                              c, f.regular, 8.2))
             c.setFillColorRGB(*INK)
             c.setFont(f.bold, 8.6)
-            c.drawString(x + sb * 0.46, y, f.safe(wert))
+            c.drawString(x_wert, y, f.safe(wert))
             if notiz:
                 br = c.stringWidth(f.safe(wert), f.bold, 8.6)
-                c.setFillColorRGB(*MUTED)
-                c.setFont(f.regular, 7.6)
-                c.drawString(x + sb * 0.46 + br + 6, y, f.safe(notiz))
+                x_notiz = x_wert + br + 6
+                # Die LETZTE Spalte endet am Blattrand, nicht an einer
+                # Spaltenbreite — sonst kuerzt man dort Text weg, fuer den
+                # Platz da ist.
+                if sp == spalten - 1:
+                    frei = (PAGE_W - MARGIN) - x_notiz - 2
+                else:
+                    frei = (x + sb) - x_notiz - 10      # Luft zur Nachbarspalte
+                kurz = _kuerzen_breit(f.safe(notiz), frei, c, f.regular, 7.6)
+                if kurz:
+                    c.setFillColorRGB(*MUTED)
+                    c.setFont(f.regular, 7.6)
+                    c.drawString(x_notiz, y, kurz)
         self.y = oben - pro * zh - 8
 
     def hinweis(self, text: str) -> None:
-        self.platz(22)
+        """Eine Fussnote unter einem Block.
+
+        🔴 Sie MUSS umbrechen. `drawString` schneidet nicht ab, sondern zeichnet
+        ueber den Blattrand hinaus — im Quelltext unsichtbar, im gedruckten PDF
+        ein abgeschnittener Satz. Aufgefallen ist es erst am gerenderten Bild,
+        als der Bilanz-Hinweis laenger wurde als eine Zeile.
+        """
         c, f = self.c, self.f
+        roh = f.safe(str(text or "")).split()
+        if not roh:
+            return
+        zeilen: List[str] = []
+        akt = ""
+        for wort in roh:
+            probe = (akt + " " + wort).strip()
+            if c.stringWidth(probe, f.regular, 7.8) <= CONTENT_W:
+                akt = probe
+            else:
+                if akt:
+                    zeilen.append(akt)
+                akt = wort
+        if akt:
+            zeilen.append(akt)
+        self.platz(len(zeilen) * 10 + 8)
         c.setFillColorRGB(*MUTED)
         c.setFont(f.regular, 7.8)
-        c.drawString(MARGIN, self.y, f.safe(text))
-        self.y -= 13
+        for z in zeilen:
+            c.drawString(MARGIN, self.y, z)
+            self.y -= 10
+        self.y -= 3
 
     # ── Diagramme: gezeichnet, nicht gesetzt ──
     def stundenprofil(self, stunden: Sequence[float], grundlast_kwh: float = 0.0,
@@ -652,6 +691,23 @@ def _kuerzen(s: str, max_zeichen: int, c, schrift: str, groesse: float) -> str:
     return s[: max_zeichen - 1] + "."
 
 
+def _kuerzen_breit(s: str, max_breite: float, c, schrift: str, groesse: float) -> str:
+    """Auf eine BREITE kuerzen, nicht auf eine Zeichenzahl.
+
+    🔴 Eine Zeichenzahl schaetzt die Breite und liegt bei „17.80 kWh" und bei
+    „Selbstversorgungsgrad" verschieden daneben; reportlab zeichnet dann ueber
+    den Rand oder in die Nachbarspalte, ohne zu klagen.
+    """
+    if max_breite <= 0:
+        return ""
+    if c.stringWidth(s, schrift, groesse) <= max_breite:
+        return s
+    kurz = s
+    while kurz and c.stringWidth(kurz + "\u2026", schrift, groesse) > max_breite:
+        kurz = kurz[:-1]
+    return (kurz + "\u2026") if kurz else ""
+
+
 def _pfeil_farbe(pct: Optional[float], weniger_ist_besser: bool = True):
     if pct is None:
         return MUTED
@@ -676,6 +732,104 @@ def _vergleich(kwh: float, bezug: float, preis: float,
 
 
 # ═══════════════════════════ Tagesbericht ═════════════════════════════════
+
+
+def _bilanz_zeilen(data: Dict[str, Any]) -> List[Tuple[str, str, Optional[str]]]:
+    """Die Energiebilanz als Beschriftung/Wert/Zusatz-Zeilen.
+
+    Nur was wirklich gemessen ist: ohne Netzzaehler keine erfundene Netzzahl,
+    ohne Batterie keine Batteriezeile. Eine leere Liste heisst „diese Anlage hat
+    nur Verbrauchszaehler" — dann bleibt der Bericht wie vorher.
+    """
+    b = data.get("balance") or {}
+    preis = float(data.get("unit_price") or 0.0)
+    zeilen: List[Tuple[str, str, Optional[str]]] = []
+
+    last = float(b.get("total_load_kwh") or 0.0)
+    if b.get("has_grid_meter"):
+        imp = float(b.get("grid_import_kwh") or 0.0)
+        exp = float(b.get("grid_export_kwh") or 0.0)
+        zeilen.append(("Drawn from grid", "%s kWh" % _zahl(imp, 2),
+                       "%s EUR at %.1f ct" % (_zahl(float(data.get("grid_cost_eur") or 0), 2),
+                                              preis * 100)))
+        if exp > 0:
+            verg = float(data.get("feed_in_revenue_eur") or 0.0)
+            zeilen.append(("Fed into grid", "%s kWh" % _zahl(exp, 2),
+                           "%s EUR credited" % _zahl(verg, 2)))
+        zeilen.append(("Net grid position", "%s kWh" % _zahl(imp - exp, 2),
+                       "%s EUR" % _zahl(float(data.get("total_cost") or 0), 2)))
+
+    if b.get("has_pv"):
+        prod = float(b.get("pv_production_kwh") or 0.0)
+        eigen = float(b.get("self_consumption_kwh") or 0.0)
+        zeilen.append(("PV produced", "%s kWh" % _zahl(prod, 2),
+                       ("%.0f%% used on site" % (eigen / prod * 100)) if prod > 0 else None))
+        zeilen.append(("PV used on site", "%s kWh" % _zahl(eigen, 2),
+                       ("%.0f%% of load" % (eigen / last * 100)) if last > 0 else None))
+
+    if b.get("has_battery"):
+        lade = float(b.get("battery_charge_kwh") or 0.0)
+        ent = float(b.get("battery_discharge_kwh") or 0.0)
+        zeilen.append(("Battery charged", "%s kWh" % _zahl(lade, 2), None))
+        zeilen.append(("Battery discharged", "%s kWh" % _zahl(ent, 2),
+                       ("%.0f%% round trip" % (ent / lade * 100)) if lade > 0 else None))
+        soc = b.get("battery_soc_pct")
+        if soc is not None:
+            zeilen.append(("Battery state of charge", "%s%%" % _zahl(float(soc), 0), None))
+
+    if float(b.get("autarky_pct") or 0) > 0:
+        zeilen.append(("Self-sufficiency", "%.0f%%" % float(b["autarky_pct"]),
+                       "not bought"))
+
+    anteil = float(data.get("owner_share") or 1.0)
+    if anteil < 0.999:
+        zeilen.append(("Grid-served share", "%.0f%%" % (anteil * 100),
+                       "rest from PV / battery"))
+
+    mieter = float(data.get("tenant_kwh") or 0.0)
+    if mieter > 0:
+        zeilen.append(("Tenant circuits", "%s kWh" % _zahl(mieter, 2),
+                       "%s EUR full tariff"
+                       % _zahl(float(data.get("tenant_billed_eur") or 0), 2)))
+        zeilen.append(("Own consumption", "%s kWh" % _zahl(float(data.get("owner_kwh") or 0), 2),
+                       ("%.0f%% of the total" % (float(data.get("owner_kwh") or 0) / last * 100))
+                       if last > 0 else None))
+
+    return zeilen
+
+
+def _bilanz_hinweis(data: Dict[str, Any]) -> str:
+    """Woher die Kopfzahl kommt — und welche Zaehler absichtlich fehlen."""
+    basis = str(data.get("basis") or "devices")
+    kreise = float(data.get("circuits_kwh") or 0.0)
+    gesamt = float(data.get("total_kwh") or 0.0)
+    teile: List[str] = []
+    if basis == "supply":
+        teile.append("Consumption is the metered balance: grid drawn minus fed "
+                     "in, plus PV, minus battery charged, plus discharged.")
+        if kreise > 0 and gesamt > 0:
+            deckung = kreise / gesamt * 100
+            if deckung > 105.0:
+                # Kann echt sein (ein Kreis misst mehr, als die Versorgung
+                # hergibt: Kalibrierung, oder ein Zaehler ausserhalb der
+                # Bilanzgrenze). Als Befund schreiben, nicht als Deckungsgrad
+                # verkleiden — "203 %% gedeckt" liest sich wie ein Fehler.
+                teile.append("The metered circuits read %s kWh against a "
+                             "balance of %s kWh — %.0f%% more than the supply "
+                             "side carries, worth checking."
+                             % (_zahl(kreise, 1), _zahl(gesamt, 1), deckung - 100.0))
+            else:
+                teile.append("Metered circuits cover %s of %s kWh (%.0f%%)."
+                             % (_zahl(kreise, 1), _zahl(gesamt, 1), deckung))
+    else:
+        teile.append("Consumption is the sum of the metered circuits, each "
+                     "counted once.")
+    aus = data.get("excluded_meters") or {}
+    if aus:
+        rollen = {"grid": "grid meter", "pv": "PV", "battery": "battery"}
+        namen = ["%s (%s)" % (k, rollen.get(v, v)) for k, v in sorted(aus.items())]
+        teile.append("Not counted as consumption: %s." % ", ".join(namen))
+    return "  ".join(teile)
 
 def build_daily_pdf(out: Path, data: Dict[str, Any],
                     chart_png: Optional[Path] = None) -> Path:
@@ -730,6 +884,13 @@ def build_daily_pdf(out: Path, data: Dict[str, Any],
     if zweite:
         doc.kpi_reihe(zweite[:4])
 
+    # ── Energiebilanz: ohne sie ist eine Verbrauchszahl eine Behauptung ──
+    bilanz = _bilanz_zeilen(data)
+    if bilanz:
+        doc.abschnitt("Energy balance", braucht=90)
+        doc.paare(bilanz, spalten=2)
+        doc.hinweis(_bilanz_hinweis(data))
+
     # ── Lastgang ──
     stunden = list(data.get("hourly_total") or [])
     if stunden and any(v > 0 for v in stunden):
@@ -757,8 +918,8 @@ def build_daily_pdf(out: Path, data: Dict[str, Any],
                     % (mover.get("name", "?"), _zahl(float(mover["from"]), 1),
                        _zahl(float(mover["to"]), 1), d, d * preis))
 
-    # ── Auswertung ──
-    doc.abschnitt("Analysis")
+    # ── Auswertung ── (braucht: sonst steht die Ueberschrift allein am Fuss)
+    doc.abschnitt("Analysis", braucht=95)
     zeilen: List[Tuple[str, str, Optional[str]]] = []
 
     if float(data.get("max_power_w") or 0) > 0:
@@ -841,9 +1002,12 @@ def build_daily_pdf(out: Path, data: Dict[str, Any],
         doc.hinweis("All device charts share one scale, so the bars are "
                     "comparable between devices.")
 
-    doc.hinweis("Figures cover %s, 00:00 to 24:00 local time. Costs use the "
-                "configured tariff of %.1f ct/kWh. Hours 00-05 are counted as "
-                "night." % (data.get("date_label", "the period"), preis * 100))
+    schluss = ("Figures cover %s, 00:00 to 24:00 local time. Costs use the "
+               "configured tariff of %.1f ct/kWh. Hours 00-05 are counted as "
+               "night." % (data.get("date_label", "the period"), preis * 100))
+    if not bilanz:
+        schluss += "  " + _bilanz_hinweis(data)
+    doc.hinweis(schluss)
 
     doc.schliessen()
     return out
@@ -905,6 +1069,13 @@ def build_monthly_pdf(out: Path, data: Dict[str, Any],
     if zweite:
         doc.kpi_reihe(zweite[:4])
 
+    # ── Energiebilanz des Monats ──
+    bilanz = _bilanz_zeilen(data)
+    if bilanz:
+        doc.abschnitt("Energy balance", braucht=90)
+        doc.paare(bilanz, spalten=2)
+        doc.hinweis(_bilanz_hinweis(data))
+
     tage = list(data.get("daily_totals") or [])
     if tage and any(v > 0 for v in tage):
         doc.abschnitt("Day by day", braucht=130)
@@ -945,10 +1116,13 @@ def build_monthly_pdf(out: Path, data: Dict[str, Any],
         doc.verlauf([(str(a), float(b)) for a, b in zip(labels, wd)], preis)
         doc.hinweis("Average consumption per weekday across the whole month.")
 
-    doc.hinweis("Figures cover %s, %d days. Costs use the configured tariff "
-                "of %.1f ct/kWh."
-                % (data.get("month_label", "the period"),
-                   int(data.get("days_in_month") or 0), preis * 100))
+    schluss = ("Figures cover %s, %d days. Costs use the configured tariff "
+               "of %.1f ct/kWh."
+               % (data.get("month_label", "the period"),
+                  int(data.get("days_in_month") or 0), preis * 100))
+    if not bilanz:
+        schluss += "  " + _bilanz_hinweis(data)
+    doc.hinweis(schluss)
     doc.schliessen()
     return out
 

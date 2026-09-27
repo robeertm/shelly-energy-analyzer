@@ -1718,7 +1718,13 @@ class BackgroundServiceManager:
             return 0, 0
 
     def _query_device_kwh(self, device_key: str, start_ts: int, end_ts: int) -> float:
-        """Query hourly kWh for a device in a time range."""
+        """Query hourly kWh for ONE device in a time range (signed sum).
+
+        ⚠️ Never sum this over ``cfg.devices`` to get a household total. A meter
+        behind a meter is already inside it, a PV series is generation and a grid
+        meter is the supply — that sum is the bug 17.5 removed from the reports.
+        Use :func:`services.energy_balance.report_consumption` instead.
+        """
         try:
             import pandas as pd
             df = self.storage.db.query_hourly(device_key, start_ts=start_ts, end_ts=end_ts)
@@ -1739,19 +1745,26 @@ class BackgroundServiceManager:
             pass
         return None
 
-    def _build_daily_data(self) -> Dict[str, Any]:
+    def _build_daily_data(self, anchor: Optional[date] = None) -> Dict[str, Any]:
         """Collect a rich daily stat dict used by text, HTML and chart builders.
 
         One query pass over the DB → fed into every output format. Cuts
         down duplicated work and keeps the three report shapes in sync.
+
+        ``anchor`` picks the day to report on; without it, yesterday — what the
+        scheduled digest sends. A download for an older day takes the same path,
+        so a report pulled by hand cannot differ from the one that was mailed.
         """
         import calendar
         from zoneinfo import ZoneInfo
 
         tz = ZoneInfo("Europe/Berlin")
         now = datetime.now(tz)
-        yesterday = now - timedelta(days=1)
-        day_before = now - timedelta(days=2)
+        if anchor is not None:
+            yesterday = datetime(anchor.year, anchor.month, anchor.day, tzinfo=tz)
+        else:
+            yesterday = now - timedelta(days=1)
+        day_before = yesterday - timedelta(days=1)
         # Same weekday one week ago for weekday-matched comparison.
         same_wd_last_week = yesterday - timedelta(days=7)
 
@@ -1762,58 +1775,99 @@ class BackgroundServiceManager:
             pass
 
         y_start = int(yesterday.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
-        y_end = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+        y_end = y_start + 86400
         db_start = int(day_before.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
         sw_start = int(same_wd_last_week.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
         sw_end = sw_start + 86400
 
-        total_kwh = 0.0
-        total_prev = 0.0
-        total_same_wd = 0.0
-        dev_data: List[Dict[str, Any]] = []
+        # 🔴 Die Summe ueber ALLE Geraete war falsch, sobald es mehr als einen
+        # Zaehler gibt: ein Zaehler hinter einem Zaehler steckt schon in dessen
+        # Messung, eine PV-Reihe ist ERZEUGUNG und kein Verbrauch, der
+        # Netzzaehler ist die Versorgung, und ein Mieterkreis ist fremder
+        # Verbrauch. Genau diesen Doppelzaehler hat `household_keys` fuer den
+        # Kosten-Tab abgestellt (16.57) — die Berichte haben die Korrektur nie
+        # bekommen. Auf einer Anlage ohne PV und ohne Unterzaehler stimmte die
+        # naive Summe zufaellig, deshalb fiel es nie auf.
+        # Ab 17.5 fuehrt EINE Engstelle alle drei Berichtsformen:
+        from shelly_analyzer.services.energy_balance import report_consumption
+
+        feed_in = 0.0
+        try:
+            feed_in = float(getattr(getattr(self.cfg, "solar", None),
+                                    "feed_in_tariff_eur_per_kwh", 0.0) or 0.0)
+        except Exception:
+            pass
+
+        def _rc(a: int, b: int, nur_summe: bool = False):
+            return report_consumption(self.storage.db, self.cfg, a, b,
+                                      unit_price=unit_price,
+                                      feed_in_tariff=feed_in,
+                                      totals_only=nur_summe)
+
+        rc = _rc(y_start, y_end)
+        rc_prev = _rc(db_start, y_start)
+        rc_swd = _rc(sw_start, sw_end, nur_summe=True)
+
+        total_kwh = rc.total_kwh
+        total_prev = rc_prev.total_kwh
+        total_same_wd = rc_swd.total_kwh
+
+        # Das Stundenprofil kommt aus derselben Rechnung wie die Gesamtmenge —
+        # sonst widersprechen sich Kopfzahl und Diagramm.
         hourly_total = [0.0] * 24
+        for _h_ts, _v in (rc.hours_total or {}).items():
+            try:
+                hourly_total[datetime.fromtimestamp(int(_h_ts), tz=tz).hour] += float(_v)
+            except Exception:
+                pass
+
+        namen = {str(getattr(d, "key", "")): (getattr(d, "name", "")
+                                              or str(getattr(d, "key", "")))
+                 for d in (self.cfg.devices or [])}
+        dev_data: List[Dict[str, Any]] = []
         hourly_per_device: Dict[str, List[float]] = {}
         max_power_w = 0.0
         max_power_hour = -1
 
-        for d in (self.cfg.devices or []):
-            if str(getattr(d, "kind", "em")) == "switch":
-                continue
-            kwh = self._query_device_kwh(d.key, y_start, y_end)
-            prev = self._query_device_kwh(d.key, db_start, y_start)
-            same_wd = self._query_device_kwh(d.key, sw_start, sw_end)
-            total_kwh += kwh
-            total_prev += prev
-            total_same_wd += same_wd
-
+        for _key in rc.keys:
+            kwh = float(rc.kwh_by_key.get(_key, 0.0))
+            vals = [0.0] * 24
+            for _h_ts, _v in (rc.hours_by_key.get(_key) or {}).items():
+                try:
+                    vals[datetime.fromtimestamp(int(_h_ts), tz=tz).hour] += max(0.0, float(_v))
+                except Exception:
+                    pass
             peak_w = 0.0
             peak_hour = -1
-            vals = [0.0] * 24
-            hdf = self._query_device_hourly(d.key, y_start, y_end)
-            if hdf is not None and not hdf.empty:
+            hdf = self._query_device_hourly(_key, y_start, y_end)
+            if hdf is not None and not hdf.empty and "avg_power_w" in hdf.columns:
                 for _, row in hdf.iterrows():
                     try:
-                        h_ts = int(row.get("hour_ts", 0))
-                        h = datetime.fromtimestamp(h_ts, tz=tz).hour
-                        hw = float(row.get("kwh", 0) or 0)
-                        hourly_total[h] += hw
-                        vals[h] += hw
                         pw = float(row.get("avg_power_w", 0) or 0)
                         if pw > peak_w:
                             peak_w = pw
-                            peak_hour = h
-                        if pw > max_power_w:
-                            max_power_w = pw
-                            max_power_hour = h
+                            peak_hour = datetime.fromtimestamp(
+                                int(row.get("hour_ts", 0)), tz=tz).hour
                     except Exception:
                         pass
-            if kwh > 0:
-                dev_data.append({
-                    "name": d.name, "kwh": kwh, "prev": prev, "same_wd": same_wd,
-                    "cost": kwh * unit_price, "peak_w": peak_w, "peak_hour": peak_hour,
-                    "share_pct": 0.0,  # filled in below
-                })
-                hourly_per_device[d.name] = vals
+            if peak_w > max_power_w:
+                max_power_w = peak_w
+                max_power_hour = peak_hour
+            if kwh <= 0:
+                continue
+            name = namen.get(_key, _key)
+            dev_data.append({
+                "name": name, "kwh": kwh,
+                "prev": float(rc_prev.kwh_by_key.get(_key, 0.0)),
+                "same_wd": float(rc_swd.kwh_by_key.get(_key, 0.0)),
+                # Jeder Kreis wird bepreist wie seine Kachel im Kosten-Tab:
+                # Mieter voll, Eigner nur der netzbediente Anteil.
+                "cost": rc.cost_for(_key, kwh),
+                "peak_w": peak_w, "peak_hour": peak_hour,
+                "share_pct": 0.0,  # filled in below
+                "role": "tenant" if _key in rc.tenant_keys else "owner",
+            })
+            hourly_per_device[name] = vals
 
         dev_data.sort(key=lambda x: x["kwh"], reverse=True)
         for dd in dev_data:
@@ -1831,8 +1885,12 @@ class BackgroundServiceManager:
                 if biggest_mover is None or abs(diff) > abs(biggest_mover.get("diff", 0)):
                     biggest_mover = {"name": dd["name"], "diff": diff, "from": dd["prev"], "to": dd["kwh"]}
 
-        total_cost = total_kwh * unit_price
-        prev_total_cost = total_prev * unit_price
+        # Kosten kommen aus der Kette: mit Netzzaehler die Netzposition
+        # (Bezug x Tarif - Einspeisung x Verguetung), sonst Kreise x Anteil.
+        # `total_kwh * unit_price` hat auf Erzeugung und auf Doppelzaehler
+        # vollen Verbrauchstarif berechnet.
+        total_cost = rc.total_cost
+        prev_total_cost = rc_prev.total_cost
 
         # Peak hour + top-3 hours (consumption, not power)
         hours_sorted = sorted(enumerate(hourly_total), key=lambda x: -x[1])
@@ -1889,13 +1947,9 @@ class BackgroundServiceManager:
         proj_cost = 0.0
         try:
             days_in_month = calendar.monthrange(now.year, now.month)[1]
-            if now.day > 1:
+            if anchor is None and now.day > 1:
                 m_start = int(now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp())
-                m_kwh = sum(
-                    self._query_device_kwh(d.key, m_start, y_end)
-                    for d in (self.cfg.devices or [])
-                    if str(getattr(d, "kind", "em")) != "switch"
-                )
+                m_kwh = _rc(m_start, y_end, nur_summe=True).total_kwh
                 if m_kwh > 0:
                     proj_kwh = m_kwh / (now.day - 1) * days_in_month
                     proj_cost = proj_kwh * unit_price
@@ -1930,21 +1984,17 @@ class BackgroundServiceManager:
         avg7_kwh = 0.0
         avg30_kwh = 0.0
         try:
-            messgeraete = [d for d in (self.cfg.devices or [])
-                           if str(getattr(d, "kind", "em")) != "switch"]
             for zurueck in range(6, -1, -1):
                 tag = yesterday - timedelta(days=zurueck)
                 t0 = int(tag.replace(hour=0, minute=0, second=0,
                                      microsecond=0).timestamp())
-                summe = sum(self._query_device_kwh(d.key, t0, t0 + 86400)
-                            for d in messgeraete)
+                summe = _rc(t0, t0 + 86400, nur_summe=True).total_kwh
                 last7.append((tag.strftime("%a"), round(summe, 2)))
             if last7:
                 avg7_kwh = sum(v for _, v in last7) / len(last7)
             t30 = int((yesterday - timedelta(days=29)).replace(
                 hour=0, minute=0, second=0, microsecond=0).timestamp())
-            avg30_kwh = sum(self._query_device_kwh(d.key, t30, y_end)
-                            for d in messgeraete) / 30.0
+            avg30_kwh = _rc(t30, y_end, nur_summe=True).total_kwh / 30.0
         except Exception:
             logger.exception("longer-term averages failed")
 
@@ -1985,6 +2035,18 @@ class BackgroundServiceManager:
             "proj_cost": proj_cost,
             "spot_cost": spot_cost,
             "biggest_mover": biggest_mover,
+            # Die Bilanz — damit ein Bericht nicht nur eine Zahl behauptet,
+            # sondern zeigt, woher sie kommt.
+            "basis": rc.basis,
+            "balance": (rc.balance.as_dict() if rc.balance is not None else None),
+            "owner_kwh": rc.owner_kwh,
+            "tenant_kwh": rc.tenant_kwh,
+            "tenant_billed_eur": rc.tenant_billed_eur,
+            "grid_cost_eur": rc.grid_cost_eur,
+            "feed_in_revenue_eur": rc.feed_in_revenue_eur,
+            "owner_share": rc.owner_share,
+            "excluded_meters": dict(rc.excluded),
+            "circuits_kwh": sum(rc.kwh_by_key.values()),
         }
 
     def _build_daily_summary(self) -> str:
@@ -2095,15 +2157,26 @@ class BackgroundServiceManager:
 
         return "\n".join(lines)
 
-    def _build_monthly_data(self) -> Dict[str, Any]:
-        """Collect a rich monthly stat dict used by text, HTML and chart builders."""
+    def _build_monthly_data(self, anchor: Optional[date] = None) -> Dict[str, Any]:
+        """Collect a rich monthly stat dict used by text, HTML and chart builders.
+
+        ``anchor`` picks any day IN the month to report on; without it, the month
+        just gone — what the scheduled digest sends.
+        """
         import calendar
         from zoneinfo import ZoneInfo
 
         tz = ZoneInfo("Europe/Berlin")
         now = datetime.now(tz)
-        last_month_end = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        last_month_start = (last_month_end - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if anchor is not None:
+            last_month_start = datetime(anchor.year, anchor.month, 1, tzinfo=tz)
+            if anchor.month == 12:
+                last_month_end = datetime(anchor.year + 1, 1, 1, tzinfo=tz)
+            else:
+                last_month_end = datetime(anchor.year, anchor.month + 1, 1, tzinfo=tz)
+        else:
+            last_month_end = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            last_month_start = (last_month_end - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         prev_month_start = (last_month_start - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         month_label = last_month_start.strftime("%B %Y")
         days_in_month = calendar.monthrange(last_month_start.year, last_month_start.month)[1]
@@ -2128,30 +2201,51 @@ class BackgroundServiceManager:
         # hour-of-day 0..23 -> cumulative kwh across the whole month
         hour_totals = [0.0] * 24
 
-        for d in (self.cfg.devices or []):
-            if str(getattr(d, "kind", "em")) == "switch":
-                continue
-            kwh = self._query_device_kwh(d.key, ms_ts, me_ts)
-            prev = self._query_device_kwh(d.key, ps_ts, ms_ts)
-            total_kwh += kwh
-            total_prev += prev
-            if kwh > 0:
-                dev_data.append({
-                    "name": d.name, "kwh": kwh, "prev": prev,
-                    "cost": kwh * unit_price, "share_pct": 0.0, "delta_pct": None,
-                })
+        # Dieselbe Engstelle wie im Tagesbericht — siehe dort, warum die Summe
+        # ueber alle Geraete falsch war.
+        from shelly_analyzer.services.energy_balance import report_consumption
 
-            hdf = self._query_device_hourly(d.key, ms_ts, me_ts)
-            if hdf is not None and not hdf.empty:
-                for _, row in hdf.iterrows():
-                    try:
-                        h_ts = int(row.get("hour_ts", 0))
-                        dt_row = datetime.fromtimestamp(h_ts, tz=tz)
-                        kwh_row = float(row.get("kwh", 0) or 0)
-                        daily_totals[dt_row.day] = daily_totals.get(dt_row.day, 0.0) + kwh_row
-                        hour_totals[dt_row.hour] += kwh_row
-                    except Exception:
-                        pass
+        feed_in = 0.0
+        try:
+            feed_in = float(getattr(getattr(self.cfg, "solar", None),
+                                    "feed_in_tariff_eur_per_kwh", 0.0) or 0.0)
+        except Exception:
+            pass
+
+        def _rc(a: int, b: int, nur_summe: bool = False):
+            return report_consumption(self.storage.db, self.cfg, a, b,
+                                      unit_price=unit_price,
+                                      feed_in_tariff=feed_in,
+                                      totals_only=nur_summe)
+
+        rc = _rc(ms_ts, me_ts)
+        rc_prev = _rc(ps_ts, ms_ts, nur_summe=True)
+        total_kwh = rc.total_kwh
+        total_prev = rc_prev.total_kwh
+
+        namen = {str(getattr(d, "key", "")): (getattr(d, "name", "")
+                                              or str(getattr(d, "key", "")))
+                 for d in (self.cfg.devices or [])}
+        for _key in rc.keys:
+            kwh = float(rc.kwh_by_key.get(_key, 0.0))
+            if kwh <= 0:
+                continue
+            dev_data.append({
+                "name": namen.get(_key, _key), "kwh": kwh,
+                "prev": float(rc_prev.kwh_by_key.get(_key, 0.0)),
+                "cost": rc.cost_for(_key, kwh), "share_pct": 0.0, "delta_pct": None,
+                "role": "tenant" if _key in rc.tenant_keys else "owner",
+            })
+
+        # Tages- und Stundenverteilung aus derselben Rechnung wie die Summe.
+        for _h_ts, _v in (rc.hours_total or {}).items():
+            try:
+                dt_row = datetime.fromtimestamp(int(_h_ts), tz=tz)
+                kwh_row = max(0.0, float(_v))
+                daily_totals[dt_row.day] = daily_totals.get(dt_row.day, 0.0) + kwh_row
+                hour_totals[dt_row.hour] += kwh_row
+            except Exception:
+                pass
 
         # Daily sums → weekday bucket
         for day_num, day_kwh in daily_totals.items():
@@ -2167,8 +2261,8 @@ class BackgroundServiceManager:
             if dd["prev"] > 0:
                 dd["delta_pct"] = ((dd["kwh"] - dd["prev"]) / dd["prev"]) * 100
 
-        total_cost = total_kwh * unit_price
-        prev_total_cost = total_prev * unit_price
+        total_cost = rc.total_cost
+        prev_total_cost = rc_prev.total_cost
         avg_daily = total_kwh / days_in_month if days_in_month else 0.0
         avg_daily_cost = avg_daily * unit_price
 
@@ -2273,6 +2367,16 @@ class BackgroundServiceManager:
             "year_proj": year_proj,
             "year_cost": year_cost,
             "biggest_mover": biggest_mover,
+            "basis": rc.basis,
+            "balance": (rc.balance.as_dict() if rc.balance is not None else None),
+            "owner_kwh": rc.owner_kwh,
+            "tenant_kwh": rc.tenant_kwh,
+            "tenant_billed_eur": rc.tenant_billed_eur,
+            "grid_cost_eur": rc.grid_cost_eur,
+            "feed_in_revenue_eur": rc.feed_in_revenue_eur,
+            "owner_share": rc.owner_share,
+            "excluded_meters": dict(rc.excluded),
+            "circuits_kwh": sum(rc.kwh_by_key.values()),
         }
 
     def _build_monthly_summary(self) -> str:
@@ -2875,7 +2979,8 @@ class BackgroundServiceManager:
 
     def _generate_summary_pdf(self, chart_type: str,
                               data: Optional[Dict[str, Any]] = None,
-                              text: str = "") -> Optional[Path]:
+                              text: str = "",
+                              out: Optional[Path] = None) -> Optional[Path]:
         """Typeset the report as a real document.
 
         Until 17.4.0 this dumped the Telegram message into a PDF canvas
@@ -2891,7 +2996,11 @@ class BackgroundServiceManager:
         """
         from .report_pdf import build_pdf
 
-        out = self.out_dir / "data" / "runtime" / f"summary_{chart_type}.pdf"
+        # A download builds into its own file: the scheduled digest writes the
+        # fixed summary_*.pdf, and two writers on one path would hand somebody
+        # half a document.
+        if out is None:
+            out = self.out_dir / "data" / "runtime" / f"summary_{chart_type}.pdf"
         if not data:
             logger.info("no report data for %s PDF -- skipped", chart_type)
             return None

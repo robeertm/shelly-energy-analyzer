@@ -2391,6 +2391,8 @@ function renderToolsExports() {
       <button class="secondary" onclick="toolsRun('export_excel')">📊 ${T("settings.tools.btn_excel","Excel")}</button>
       <button class="secondary" onclick="toolsRun('report','day')">📅 ${T("settings.tools.btn_day_report","Day report")}</button>
       <button class="secondary" onclick="toolsRun('report','month')">📆 ${T("settings.tools.btn_month_report","Month report")}</button>
+      <button class="secondary" onclick="reportDownload('daily')">⬇️ ${T("settings.tools.btn_day_pdf","Download day report")}</button>
+      <button class="secondary" onclick="reportDownload('monthly')">⬇️ ${T("settings.tools.btn_month_pdf","Download month report")}</button>
       <button class="secondary" onclick="toolsRun('bundle')">📦 ${T("settings.tools.btn_bundle","Bundle ZIP")}</button>
     </div>
 
@@ -2552,6 +2554,44 @@ async function saveToolsExports() {
     cfg = fresh;
   } catch(e) {
     toast(T("settings.toast.error","Error: {err}",{err: e.message}), "error");
+  }
+}
+
+// Der Bericht als Datei — dieselben Zahlen, die auch per Mail/Telegram gehen.
+// Ueber fetch statt window.location, damit ein Fehler als Meldung ankommt und
+// nicht als rohes JSON im Browserfenster.
+async function reportDownload(kind) {
+  const anker = (document.getElementById("tools-anchor") || {}).value || "";
+  const art = (kind === "monthly") ? "monthly" : "daily";
+  let url = "/api/report/" + art + ".pdf";
+  if (anker) url += "?date=" + encodeURIComponent(anker);
+  const out = document.getElementById("tools-results");
+  if (out) out.innerHTML = `<div class="hint">⏳ ${T("settings.tools.running","Running…")}</div>`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) {
+      let msg = "HTTP " + r.status;
+      try { const j = await r.json(); if (j && j.error) msg = j.error; } catch(e) {}
+      throw new Error(msg);
+    }
+    const blob = await r.blob();
+    if (!blob || !blob.size) throw new Error("empty file");
+    let name = (art === "monthly" ? "energy-report-month" : "energy-report-day") + ".pdf";
+    const cd = r.headers.get("Content-Disposition") || "";
+    const m = cd.match(/filename="([^"]+)"/);
+    if (m) name = m[1];
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = href; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(href); }, 30000);
+    if (out) {
+      out.innerHTML = `<div class="card" style="margin-top:6px;padding:10px">`
+        + `<div style="font-weight:650">✅ ${esc(name)}</div>`
+        + `<div class="hint">${Math.round(blob.size/1024)} KB</div></div>`;
+    }
+  } catch(err) {
+    if (out) out.innerHTML = `<div class="hint" style="color:var(--danger)">${T("settings.toast.error","Error: {err}",{err: err.message})}</div>`;
   }
 }
 

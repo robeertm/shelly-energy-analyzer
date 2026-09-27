@@ -254,3 +254,97 @@ def test_build_pdf_meldet_fehler_statt_zu_werfen(tmp_path):
     Zustellung der anderen Kanaele nicht mitreissen."""
     assert rp.build_pdf(tmp_path / "y.pdf", "daily", tagesdaten()) is not None
     assert rp.build_pdf(tmp_path / "z.pdf", "daily", {"dev_data": "kaputt"}) is None
+
+
+# ────────── 3. Nichts wird ueber den Satzspiegel hinaus gezeichnet ──────────
+#
+# 🔴 17.5: der Bilanz-Hinweis war laenger als eine Zeile und `hinweis()` hat
+# ihn ungebrochen gezeichnet — reportlab klagt nicht, es malt einfach ueber den
+# Blattrand hinaus. Im Quelltext unsichtbar, im PDF ein abgeschnittener Satz.
+# Dieselbe Klasse traf `paare()`: die Randnotiz der linken Spalte lief in die
+# Beschriftung der rechten.
+
+def _ueberlaeufe(bauer, daten, tmp_path, rand=2.0):
+    """Gezeichnete Zeichenketten, die rechts aus dem Satzspiegel laufen."""
+    from reportlab.pdfgen import canvas as pdfcanvas
+    raus = []
+    orig = pdfcanvas.Canvas.drawString
+
+    def ersatz(self, x, y, text, *a, **kw):
+        try:
+            br = self.stringWidth(str(text), self._fontname, self._fontsize)
+            ueber = (x + br) - (rp.PAGE_W - rp.MARGIN)
+            if ueber > rand:
+                raus.append((round(ueber, 1), str(text)[:60]))
+        except Exception:
+            pass
+        return orig(self, x, y, text, *a, **kw)
+
+    pdfcanvas.Canvas.drawString = ersatz
+    try:
+        bauer(tmp_path / "p.pdf", daten)
+    finally:
+        pdfcanvas.Canvas.drawString = orig
+    return raus
+
+
+def solardaten(**zusatz):
+    """Eine Anlage mit Netzzaehler, PV, Batterie und Mieter — die langen Texte."""
+    d = tagesdaten()
+    d.update({
+        "basis": "supply", "owner_kwh": 17.8, "tenant_kwh": 2.0,
+        "tenant_billed_eur": 0.65, "grid_cost_eur": 1.95,
+        "feed_in_revenue_eur": 0.40, "owner_share": 0.31, "circuits_kwh": 17.1,
+        "excluded_meters": {"grid": "grid", "pv": "pv", "battery": "battery"},
+        "balance": {
+            "grid_import_kwh": 6.0, "grid_export_kwh": 4.88,
+            "pv_production_kwh": 21.4, "self_consumption_kwh": 16.52,
+            "battery_charge_kwh": 4.2, "battery_discharge_kwh": 3.9,
+            "battery_soc_pct": 62.0, "total_load_kwh": 19.8,
+            "tenant_load_kwh": 2.0, "owner_load_kwh": 17.8, "autarky_pct": 69.7,
+            "has_pv": True, "has_battery": True, "has_grid_meter": True,
+            "tenant_names": ["Tenant"], "tenant_breakdown": {"Tenant": 2.0}},
+    })
+    d.update(zusatz)
+    return d
+
+
+def test_die_probe_merkt_einen_ueberlauf_ueberhaupt(tmp_path):
+    """Gegenprobe: eine absichtlich zu breite Zeile MUSS auffallen."""
+    def kaputt(pfad, daten):
+        doc = rp._Doc(pfad, "T", "U", "F")
+        doc.c.setFont(doc.f.regular, 8)
+        doc.c.drawString(rp.MARGIN, doc.y, "W" * 400)
+        doc.schliessen()
+    assert _ueberlaeufe(kaputt, {}, tmp_path), "die Probe prueft nichts"
+
+
+@pytest.mark.parametrize("art,bauer_name", [("daily", "build_daily_pdf"),
+                                            ("monthly", "build_monthly_pdf")])
+def test_nichts_laeuft_ueber_den_rand(tmp_path, art, bauer_name):
+    daten = solardaten() if art == "daily" else monatsdaten(**{
+        k: v for k, v in solardaten().items()
+        if k in ("basis", "balance", "owner_kwh", "tenant_kwh",
+                 "tenant_billed_eur", "grid_cost_eur", "feed_in_revenue_eur",
+                 "owner_share", "circuits_kwh", "excluded_meters")})
+    raus = _ueberlaeufe(getattr(rp, bauer_name), daten, tmp_path)
+    assert not raus, "ragt ueber den Rand: %r" % (raus[:5],)
+
+
+def test_bilanz_steht_im_tagesbericht(tmp_path):
+    """Die Bilanzzeilen muessen wirklich aufs Blatt — nicht nur berechnet sein."""
+    texte = [t for _, t in _gezeichnete_texte(rp.build_daily_pdf,
+                                              solardaten(), tmp_path)]
+    zusammen = " ".join(texte)
+    for muss in ("ENERGY BALANCE", "Drawn from grid", "PV produced",
+                 "Self-sufficiency", "Tenant circuits"):
+        assert muss in zusammen, muss
+
+
+def test_ohne_solar_keine_bilanzzeilen(tmp_path):
+    """Eine Anlage ohne PV/Netzzaehler bekommt keine erfundene Bilanz."""
+    texte = [t for _, t in _gezeichnete_texte(rp.build_daily_pdf,
+                                              tagesdaten(), tmp_path)]
+    zusammen = " ".join(texte)
+    assert "ENERGY BALANCE" not in zusammen
+    assert "Drawn from grid" not in zusammen

@@ -3445,8 +3445,13 @@ class ActionDispatcher:
                 except Exception:
                     pass
 
-            # Skip _build_email_report_data; use fallback path
+            # 🔴 Bis 17.4 baute diese Aktion ihr EIGENES PDF aus rohen
+            # Geraete-Reihen — ein dritter Zahlenweg neben Digest-Text und
+            # Digest-PDF, und ebenso mit der Summe ueber alle Zaehler. Jetzt
+            # dieselben Erzeuger wie der geplante Bericht, damit ein von Hand
+            # geholter Bericht nicht anders rechnet als der gemailte.
             report_data = None
+            bg = getattr(self, "_bg", None)
 
             if progress:
                 try:
@@ -3458,7 +3463,21 @@ class ActionDispatcher:
             rep_dir.mkdir(parents=True, exist_ok=True)
             out_path_r = rep_dir / fname
 
-            if report_data is not None:
+            gebaut = False
+            if bg is not None:
+                try:
+                    _tag = anchor.date() if hasattr(anchor, "date") else anchor
+                    daten = (bg._build_monthly_data(_tag) if is_monthly
+                             else bg._build_daily_data(_tag))
+                    gebaut = bool(bg._generate_summary_pdf(
+                        report_type, daten, out=out_path_r))
+                except Exception:
+                    logger.exception("report action: shared builder failed, "
+                                     "falling back to the per-device layout")
+                    gebaut = False
+            if gebaut:
+                pass
+            elif report_data is not None:
                 from shelly_analyzer.services.export import export_pdf_email_daily, export_pdf_email_monthly
                 if is_monthly:
                     export_pdf_email_monthly(report_data, out_path_r, lang=self.lang)

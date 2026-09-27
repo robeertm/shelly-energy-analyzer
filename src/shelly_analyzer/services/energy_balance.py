@@ -988,21 +988,15 @@ def compute_balance(db, cfg, start_ts: int, end_ts: int,
     whether a solar-aware breakdown is meaningful.
     """
     bal = EnergyBalance()
-    solar = getattr(cfg, "solar", None)
-    pv_source = getattr(cfg, "pv_source", None)
-    solar_on = bool(getattr(solar, "enabled", False)) if solar else False
 
-    # ── Grid meter (signed): dedicated PV/net meter, else the grid meter, else
-    #    the synthetic grid_ext series from the external source. ──────────────
-    grid_key = ""
-    if solar:
-        grid_key = (str(getattr(solar, "grid_meter_device_key", "") or "")
-                    or str(getattr(solar, "pv_meter_device_key", "") or ""))
-    if not grid_key and pv_source is not None and getattr(pv_source, "enabled", False):
-        # Only if the user actually mapped a grid entity/topic.
-        if (getattr(pv_source, "grid_power_entity", "")
-                or getattr(pv_source, "mqtt_grid_power_topic", "")):
-            grid_key = _GRID_EXT_KEY
+    # ── Which series are the sources. One resolver for the whole module: the
+    #    chain, the CO₂ breakdown and device_role() all ask _resolve_source_keys,
+    #    and this function used to resolve the battery on its own — a Shelly
+    #    measuring the battery (SolarConfig.battery_device_key) was honoured
+    #    everywhere EXCEPT here, so the balance reported has_battery False and a
+    #    total_load short by (discharge − charge) while the Costs and CO₂ tabs
+    #    had it right. Resolving once removes the divergence. ─────────────────
+    grid_key, pv_key, batt_key = _resolve_source_keys(cfg)
     if grid_key:
         imp, exp = _hourly_split(db, grid_key, start_ts, end_ts)
         bal.grid_import_kwh = imp
@@ -1010,10 +1004,6 @@ def compute_balance(db, cfg, start_ts: int, end_ts: int,
         bal.has_grid_meter = True
 
     # ── PV production (measured). ────────────────────────────────────────────
-    pv_key = str(getattr(solar, "pv_production_device_key", "") or "") if solar else ""
-    if not pv_key and pv_source is not None and getattr(pv_source, "enabled", False):
-        if getattr(pv_source, "pv_power_entity", "") or getattr(pv_source, "mqtt_pv_power_topic", ""):
-            pv_key = _PV_KEY
     if pv_key:
         prod, _ = _hourly_split(db, pv_key, start_ts, end_ts)
         if prod > 0:
@@ -1021,10 +1011,7 @@ def compute_balance(db, cfg, start_ts: int, end_ts: int,
             bal.has_pv = True
 
     # ── Battery charge / discharge. ──────────────────────────────────────────
-    batt_key = _BATTERY_KEY
-    if pv_source is not None and getattr(pv_source, "enabled", False) and (
-            getattr(pv_source, "battery_power_entity", "")
-            or getattr(pv_source, "mqtt_battery_power_topic", "")):
+    if batt_key:
         charge, discharge = _hourly_split(db, batt_key, start_ts, end_ts)
         if charge > 0 or discharge > 0:
             bal.battery_charge_kwh = charge
@@ -1681,3 +1668,210 @@ def tenant_watts_now(cfg, watts_by_key: Dict[str, float]) -> float:
     """Sum of the tenant circuits' draw right now (W) from a ``key → W`` map."""
     tenant_keys, _ = _tenant_key_map(cfg)
     return sum(max(0.0, float(watts_by_key.get(k, 0.0) or 0.0)) for k in tenant_keys)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# One source of truth for the REPORTS (daily / monthly digest, manual export)
+#
+# The reports historically summed every configured device — grid meter, PV
+# series, battery and tenant circuits included. That repeats the double count
+# :func:`household_keys` was written to stop on the Costs tab (a sub-meter
+# behind a house meter counted twice), and adds two mistakes only a report
+# made: a PV series is *generation*, so adding it inflates "consumption", and a
+# grid meter is the *supply*, not a load. On a grid-only home with no
+# sub-metering the naive sum happens to be right, which is why this survived —
+# on an installation with solar, a battery, a tenant circuit and a meter behind
+# a meter, every kWh and every euro on the report was wrong while the app's own
+# tabs were right.
+#
+# Everything below therefore routes through one function, so the digest text,
+# the digest PDF and the manual export can never drift apart again.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class ReportConsumption:
+    """What a report may print for a period: consumption, split and cost.
+
+    ``basis`` says where ``total_kwh`` came from and belongs in the report, so a
+    reader can tell a metered balance from a sum of circuits:
+
+    ``"supply"``
+        The supply-side identity of :func:`compute_balance`
+        (grid import − export + PV − charge + discharge). Available as soon as a
+        grid meter or a PV series exists; immune to sub-meter double counting.
+    ``"devices"``
+        Sum of the consumer circuits, each meter once (:func:`consumer_keys`),
+        every one net of the children it has given up. The only basis available
+        on a grid-only installation, and correct there.
+    """
+
+    basis: str = "devices"
+    total_kwh: float = 0.0
+    total_cost: float = 0.0
+    owner_kwh: float = 0.0
+    tenant_kwh: float = 0.0
+    tenant_billed_eur: float = 0.0
+    grid_cost_eur: float = 0.0
+    feed_in_revenue_eur: float = 0.0
+    owner_share: float = 1.0
+    unit_price: float = 0.0
+    keys: List[str] = field(default_factory=list)
+    kwh_by_key: Dict[str, float] = field(default_factory=dict)
+    hours_by_key: Dict[str, Dict[int, float]] = field(default_factory=dict)
+    # Hourly load of the whole property, consistent with ``total_kwh``: taken
+    # from the supply chain when there is one (so the profile and the headline
+    # figure cannot disagree), else the circuits' net sum. Empty when the caller
+    # asked for ``totals_only`` — half a profile would be worse than none.
+    hours_total: Dict[int, float] = field(default_factory=dict)
+    tenant_keys: List[str] = field(default_factory=list)
+    excluded: Dict[str, str] = field(default_factory=dict)
+    balance: Optional[EnergyBalance] = None
+
+    def cost_for(self, key: str, kwh: float) -> float:
+        """Price one circuit the way the Costs tab prices its tile.
+
+        A tenant circuit pays the full tariff whatever the sun did; an owner
+        circuit pays only for the share that actually came from the grid
+        (directly self-consumed PV and battery discharge are free).
+        """
+        kwh = max(0.0, float(kwh or 0.0))
+        if str(key) in self.tenant_keys:
+            return kwh * self.unit_price
+        return kwh * self.unit_price * self.owner_share
+
+    def as_dict(self) -> Dict[str, Any]:
+        out: Dict[str, Any] = {
+            "basis": self.basis,
+            "total_kwh": round(self.total_kwh, 3),
+            "total_cost": round(self.total_cost, 2),
+            "owner_kwh": round(self.owner_kwh, 3),
+            "tenant_kwh": round(self.tenant_kwh, 3),
+            "tenant_billed_eur": round(self.tenant_billed_eur, 2),
+            "grid_cost_eur": round(self.grid_cost_eur, 2),
+            "feed_in_revenue_eur": round(self.feed_in_revenue_eur, 2),
+            "owner_share": round(self.owner_share, 4),
+            "excluded": dict(self.excluded),
+        }
+        if self.balance is not None:
+            out["balance"] = self.balance.as_dict()
+        return out
+
+
+def _excluded_meters(cfg, kept: List[str]) -> Dict[str, str]:
+    """Meters deliberately kept OUT of a report total, with the reason.
+
+    Named rather than silently dropped: a report that says "5 of 8 meters are
+    not consumption" can be checked, one that just prints a smaller number
+    cannot.
+    """
+    out: Dict[str, str] = {}
+    keptset = {str(k) for k in kept}
+    devs = [d for d in (getattr(cfg, "devices", []) or [])]
+    by_key = {str(getattr(d, "key", "")): d for d in devs}
+    for d in devs:
+        key = str(getattr(d, "key", "") or "")
+        if not key or key in keptset:
+            continue
+        if str(getattr(d, "kind", "em")) != "em":
+            continue                      # a switch is inside its circuit anyway
+        role = device_role(cfg, key)
+        if role in ("grid", "pv", "battery"):
+            out[key] = role
+            continue
+        parent = str(getattr(d, "parent", "") or "")
+        if parent and parent in by_key:
+            out[key] = "behind %s" % (getattr(by_key[parent], "name", parent) or parent)
+        else:
+            out[key] = "not a consumer"
+    return out
+
+
+def report_consumption(db, cfg, start_ts: int, end_ts: int, *,
+                       unit_price: float,
+                       feed_in_tariff: float = 0.0,
+                       live_today_kwh: Optional[Dict[str, float]] = None,
+                       today_start_ts: Optional[int] = None,
+                       totals_only: bool = False) -> ReportConsumption:
+    """Consumption, owner/tenant split and cost for a report period.
+
+    The one entry point every report shape must use. ``unit_price`` is the gross
+    consumer tariff (EUR/kWh), ``feed_in_tariff`` the export rate — both only
+    touch money, never the kWh.
+
+    ``totals_only`` skips the hourly profile and the grid-served share — both
+    build a supply chain, which a comparison figure ("same weekday last week",
+    the 30-day average) does not need. The totals are identical either way.
+    """
+    unit_price = float(unit_price or 0.0)
+    feed_in_tariff = float(feed_in_tariff or 0.0)
+
+    rc = ReportConsumption(unit_price=unit_price)
+    rc.balance = compute_balance(db, cfg, start_ts, end_ts,
+                                 live_today_kwh=live_today_kwh,
+                                 today_start_ts=today_start_ts)
+    bal = rc.balance
+
+    # Consumer circuits: each meter once, net of the children it gave up.
+    rc.keys = list(consumer_keys(cfg))
+    for k in rc.keys:
+        hours = consumer_hourly(db, cfg, k, start_ts, end_ts)
+        rc.hours_by_key[k] = hours
+        rc.kwh_by_key[k] = sum(max(0.0, v) for v in hours.values())
+    circuits_kwh = sum(rc.kwh_by_key.values())
+
+    tenant_keys, _ = _tenant_key_map(cfg)
+    rc.tenant_keys = [str(k) for k in tenant_keys]
+
+    # The tenant figure comes from the balance when it has one (it knows the
+    # intraday live accumulator), else from the circuits we just read.
+    rc.tenant_kwh = float(bal.tenant_load_kwh or 0.0)
+    if rc.tenant_kwh <= 0:
+        rc.tenant_kwh = sum(v for k, v in rc.kwh_by_key.items() if k in rc.tenant_keys)
+
+    if float(bal.total_load_kwh or 0.0) > 0:
+        rc.basis = "supply"
+        rc.total_kwh = float(bal.total_load_kwh)
+    else:
+        rc.basis = "devices"
+        rc.total_kwh = circuits_kwh
+    rc.owner_kwh = max(0.0, rc.total_kwh - rc.tenant_kwh)
+
+    # Hourly profile. With a supply chain the hour's load is the same identity
+    # the total uses; without one it is the circuits, each counted once.
+    if rc.basis == "supply" and not totals_only:
+        try:
+            _chain = build_supply_chain(db, cfg, start_ts, end_ts)
+            if _chain.has_supply:
+                rc.hours_total = {int(h): max(0.0, float(hm.load))
+                                  for h, hm in _chain.hours.items()}
+        except Exception:
+            logger.debug("report hourly chain failed", exc_info=True)
+    if not rc.hours_total and not totals_only:
+        merged: Dict[int, float] = {}
+        for hours in rc.hours_by_key.values():
+            for h, v in hours.items():
+                merged[int(h)] = merged.get(int(h), 0.0) + max(0.0, float(v))
+        rc.hours_total = merged
+
+    rc.owner_share = 1.0
+    if not totals_only:
+        try:
+            rc.owner_share = float(compute_grid_cost_share(db, cfg, [(start_ts, end_ts)])[0])
+        except Exception:
+            logger.debug("report owner share failed", exc_info=True)
+
+    rc.grid_cost_eur = float(bal.grid_import_kwh or 0.0) * unit_price
+    rc.feed_in_revenue_eur = float(bal.grid_export_kwh or 0.0) * feed_in_tariff
+    rc.tenant_billed_eur = rc.tenant_kwh * unit_price
+
+    # What the period cost. With a grid meter that is the meter's net position —
+    # the figure the utility bill is built from, and the only one a reader can
+    # check against it. Without one, price the circuits the way the tiles do.
+    if bal.has_grid_meter:
+        rc.total_cost = rc.grid_cost_eur - rc.feed_in_revenue_eur
+    else:
+        rc.total_cost = rc.owner_kwh * unit_price * rc.owner_share + rc.tenant_billed_eur
+
+    rc.excluded = _excluded_meters(cfg, rc.keys)
+    return rc

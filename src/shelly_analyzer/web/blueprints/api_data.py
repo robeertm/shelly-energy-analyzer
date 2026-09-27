@@ -1,6 +1,7 @@
 """API endpoints for data: costs, heatmap, solar, co2, compare, etc."""
 from __future__ import annotations
 
+from datetime import timedelta
 from urllib.parse import parse_qs, urlparse
 from typing import Any, Dict
 
@@ -399,3 +400,92 @@ def api_v1(subpath=""):
     except Exception as e:
         payload = {"ok": False, "error": str(e)}
     return jsonify(payload)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The energy report as a download.
+#
+# Until 17.5 a report could only arrive by e-mail, Telegram or webhook, so
+# somebody who just wanted yesterday's figures had to wait for the next digest.
+# This serves the SAME document from the SAME builders — a download that
+# produced different numbers would be a second source of truth, which is the
+# mistake this release removed from the reports in the first place.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@bp.route("/api/report/<kind>.pdf", methods=["GET"])
+def report_pdf_download(kind: str):
+    """Daily or monthly energy report as a PDF attachment.
+
+    ``/api/report/daily.pdf``   — yesterday, or ``?date=YYYY-MM-DD``
+    ``/api/report/monthly.pdf`` — the month just gone, or the month containing
+    ``?date=``.
+    """
+    import logging
+    import tempfile
+    from datetime import date as _date
+    from pathlib import Path as _Path
+
+    from flask import Response
+
+    log = logging.getLogger(__name__)
+    state = _get_state()
+    bg = getattr(state, "_bg", None)
+    if bg is None:
+        return jsonify({"ok": False, "error": "background service not running"}), 503
+
+    k = (kind or "").strip().lower()
+    monatlich = k in ("monthly", "month", "mon", "m")
+    if not monatlich and k not in ("daily", "day", "d"):
+        return jsonify({"ok": False, "error": "unknown report kind: %s" % kind}), 404
+
+    stichtag = None
+    roh = (request.args.get("date") or "").strip()
+    if roh:
+        try:
+            stichtag = _date.fromisoformat(roh)
+        except ValueError:
+            return jsonify({"ok": False, "error": "date must be YYYY-MM-DD"}), 400
+        if stichtag > _date.today():
+            return jsonify({"ok": False, "error": "date is in the future"}), 400
+
+    try:
+        if monatlich:
+            daten = bg._build_monthly_data(stichtag)
+            marke = str(daten.get("month_label") or "")
+            datei = "energy-report-%s.pdf" % (
+                (stichtag or _date.today()).strftime("%Y-%m"))
+        else:
+            daten = bg._build_daily_data(stichtag)
+            marke = str(daten.get("date_label") or "")
+            tag = stichtag or (_date.today() - timedelta(days=1))
+            datei = "energy-report-%s.pdf" % tag.strftime("%Y-%m-%d")
+    except Exception as exc:
+        log.exception("report download: building data failed")
+        return jsonify({"ok": False, "error": "report data failed: %s" % exc}), 500
+
+    with tempfile.TemporaryDirectory(prefix="sea-report-") as tmp:
+        ziel = _Path(tmp) / datei
+        try:
+            pfad = bg._generate_summary_pdf("monthly" if monatlich else "daily",
+                                            daten, out=ziel)
+        except Exception as exc:
+            log.exception("report download: building PDF failed")
+            return jsonify({"ok": False, "error": "report PDF failed: %s" % exc}), 500
+        if not pfad or not _Path(pfad).exists():
+            return jsonify({"ok": False, "error": "report could not be built"}), 500
+        # Read while the directory still exists: handing Flask a path inside a
+        # TemporaryDirectory would race the cleanup.
+        inhalt = _Path(pfad).read_bytes()
+
+    if not inhalt:
+        return jsonify({"ok": False, "error": "report came out empty"}), 500
+    log.info("report download: %s (%s), %d bytes", datei, marke or "?", len(inhalt))
+    return Response(
+        inhalt,
+        mimetype="application/pdf",
+        headers={
+            "Content-Disposition": 'attachment; filename="%s"' % datei,
+            "Content-Length": str(len(inhalt)),
+            "Cache-Control": "no-store",
+        },
+    )
