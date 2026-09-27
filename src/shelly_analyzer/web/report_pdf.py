@@ -589,7 +589,7 @@ class _Doc:
             else:
                 c.setFillColorRGB(*(GOOD if dp < 0 else BAD if dp > 0 else MUTED))
                 c.setFont(f.bold, 8.4)
-                c.drawRightString(x_dlt, y, "%+.0f%%" % dp)
+                c.drawRightString(x_dlt, y, _vorz(dp, 0, self.lang) + "%")
 
             c.setFillColorRGB(*MUTED)
             c.setFont(f.regular, 7.8)
@@ -789,7 +789,10 @@ def _zahl(v: float, stellen: Optional[int] = None,
     """
     if stellen is None:
         stellen = 0 if abs(v) >= 100 else (1 if abs(v) >= 10 else 2)
-    return format_number_local(lang, v, int(stellen))
+    # Ein echtes Minus (U+2212), nicht der Bindestrich, den Python setzt:
+    # in derselben Bilanz stand sonst "Netzsaldo -2,09" neben der Karte
+    # "−27,6 %". Die Schrift hat das Zeichen — die Karten nutzen es laengst.
+    return format_number_local(lang, v, int(stellen)).replace("-", "−")
 
 
 def _vorz(v: float, stellen: int = 2, lang: str = "en") -> str:
