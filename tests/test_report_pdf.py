@@ -545,3 +545,23 @@ def test_die_zahlenprobe_merkt_eine_englische_zahl(tmp_path):
                                               tmp_path, lang="en")]
     muster = re.compile(r"\d\.\d{1,2}\s*(?:%|kWh|EUR|W\b|ct|kg|g/kWh|x)")
     assert any(muster.search(t) for t in texte), "die Probe prueft nichts"
+
+
+@pytest.mark.parametrize("art,bauer_name", [("daily", "build_daily_pdf"),
+                                            ("monthly", "build_monthly_pdf")])
+def test_ein_minuszeichen_im_ganzen_bericht(tmp_path, art, bauer_name):
+    """🔴 Am Live-Bericht gesehen: „Netzsaldo -2,09 kWh" (Bindestrich) stand
+    in derselben Bilanz wie die Karte „−27,6 %" (echtes Minus).
+
+    Ein Dokument setzt EIN Minus. Die Schrift kann U+2212, die Kennzahl-
+    Karten benutzen es seit jeher — nur die Zahlenformatierung nicht.
+    """
+    import re
+    daten = solardaten() if art == "daily" else monatsdaten()
+    texte = [t for _, t in _gezeichnete_texte(getattr(rp, bauer_name), daten,
+                                              tmp_path, lang="de")]
+    # Ein Bindestrich direkt vor einer Ziffer ist ein Vorzeichen, kein Trenner.
+    # Ausgenommen sind Zeitspannen wie "00-05" und "12:00-13:00".
+    schlecht = [t for t in texte
+                if re.search(r"(?<![\d:])-\d", t) and not re.search(r"\d-\d", t)]
+    assert not schlecht, "Bindestrich statt Minus: %r" % schlecht

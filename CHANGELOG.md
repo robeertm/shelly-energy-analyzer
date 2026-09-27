@@ -1,5 +1,13 @@
 # Changelog
 
+## 17.6.2
+
+### Fixed
+- **Two minus signs in one document.** On the live solar report the balance read `Netzsaldo -2,09 kWh` with a hyphen while the card above it read `−27,6 %` with a real minus (U+2212). The cards had used the proper glyph all along; the number formatter and the device table's delta column had not. All of them now do.
+
+### Added
+- A check that rejects a hyphen standing directly before a digit anywhere in the drawn report — time spans like `00-05` and `12:00-13:00` excepted. It found the device table's delta column, which reading the page had not.
+
 ## 17.6.1
 
 ### Fixed
