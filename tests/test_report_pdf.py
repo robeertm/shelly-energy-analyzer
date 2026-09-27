@@ -348,3 +348,54 @@ def test_ohne_solar_keine_bilanzzeilen(tmp_path):
     zusammen = " ".join(texte)
     assert "ENERGY BALANCE" not in zusammen
     assert "Drawn from grid" not in zusammen
+
+
+# ────────── 4. Die Bilanzzeilen duerfen nichts Falsches behaupten ──────────
+#
+# 🔴 17.5.1, alle drei an echten Anlagen aufgefallen und nicht im Quelltext:
+#   * "PV used on site — 108 % of load": der Eigenverbrauch enthaelt das
+#     Batterieladen, die Last nicht.
+#   * "Battery discharged — 35 % round trip": Entladen/Geladen EINES Tages ist
+#     kein Wirkungsgrad, sondern ein Speicher, der voller endet.
+#   * "Tenant 12.51 kWh / Own 0.00 kWh": wo jeder Kreis einer Einheit gehoert,
+#     beschreibt die Aufteilung die Konfiguration, nicht den Strom.
+
+def test_kein_prozentwert_ueber_hundert(tmp_path):
+    """Die Zahl pruefen, nicht den Wortlaut: ein Anteil ueber 100 % ist immer
+    ein falscher Nenner, egal wie die Zeile gerade heisst."""
+    import re
+    d = solardaten()
+    d["balance"]["self_consumption_kwh"] = 40.47      # > total_load 19.8
+    d["balance"]["battery_charge_kwh"] = 11.87
+    texte = [t for _, t in _gezeichnete_texte(rp.build_daily_pdf, d, tmp_path)]
+    i = texte.index("ENERGY BALANCE")
+    zu_hoch = []
+    for t in texte[i:i + 30]:
+        for m in re.finditer(r"(\d+)%", str(t)):
+            if int(m.group(1)) > 100:
+                zu_hoch.append(t)
+    assert not zu_hoch, "Anteil ueber 100 %%: %r" % (zu_hoch,)
+
+
+def test_kein_wirkungsgrad_aus_einem_zeitraum(tmp_path):
+    d = solardaten()
+    d["balance"].update({"battery_charge_kwh": 11.87, "battery_discharge_kwh": 4.14})
+    texte = " ".join(t for _, t in _gezeichnete_texte(rp.build_daily_pdf, d, tmp_path))
+    assert "round trip" not in texte
+    assert "stored net" in texte
+
+
+def test_keine_aufteilung_wenn_eine_seite_null_ist(tmp_path):
+    """Jeder Kreis gehoert einer Einheit -> die Aufteilung sagt nichts."""
+    d = solardaten()
+    d["tenant_kwh"] = 12.51
+    d["owner_kwh"] = 0.0
+    texte = " ".join(t for _, t in _gezeichnete_texte(rp.build_daily_pdf, d, tmp_path))
+    assert "Tenant circuits" not in texte
+    assert "Own consumption" not in texte
+
+
+def test_aufteilung_bleibt_wenn_es_beide_seiten_gibt(tmp_path):
+    texte = " ".join(t for _, t in _gezeichnete_texte(rp.build_daily_pdf,
+                                                      solardaten(), tmp_path))
+    assert "Tenant circuits" in texte and "Own consumption" in texte
