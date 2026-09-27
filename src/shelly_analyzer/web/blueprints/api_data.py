@@ -467,7 +467,8 @@ def report_pdf_download(kind: str):
         ziel = _Path(tmp) / datei
         try:
             pfad = bg._generate_summary_pdf("monthly" if monatlich else "daily",
-                                            daten, out=ziel)
+                                            daten, out=ziel,
+                                            lang=getattr(state, "lang", None))
         except Exception as exc:
             log.exception("report download: building PDF failed")
             return jsonify({"ok": False, "error": "report PDF failed: %s" % exc}), 500

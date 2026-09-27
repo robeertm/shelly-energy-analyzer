@@ -18,16 +18,25 @@ nie zeigt:
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
 
-QUELLE = (Path(__file__).resolve().parents[1]
-          / "src" / "shelly_analyzer" / "web" / "report_pdf.py")
+WURZEL = Path(__file__).resolve().parents[1]
+QUELLE = WURZEL / "src" / "shelly_analyzer" / "web" / "report_pdf.py"
 
 
 def _modul():
-    """Direkt laden: das Modul haengt bewusst an nichts aus der Anwendung."""
+    """Direkt laden, ohne die schwere Anwendung.
+
+    Seit 17.5.2 haengt das Modul an genau EINER Stelle der Anwendung: an
+    der Uebersetzungstabelle. Das muss so sein — ein Bericht, der seine
+    eigenen Texte mitbraechte, waere eine zweite Wahrheit neben der Seite.
+    i18n selbst zieht nichts nach, deshalb reicht der Pfad.
+    """
+    if str(WURZEL / "src") not in sys.path:
+        sys.path.insert(0, str(WURZEL / "src"))
     spec = importlib.util.spec_from_file_location("report_pdf", QUELLE)
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
@@ -97,8 +106,13 @@ def monatsdaten(**zusatz):
 
 # ─────────────── 1. Jedes gezeichnete Zeichen hat eine Glyphe ──────────────
 
-def _gezeichnete_texte(bauer, daten, tmp_path):
-    """Alle Zeichenketten einsammeln, die wirklich auf das Blatt gehen."""
+def _gezeichnete_texte(bauer, daten, tmp_path, lang="en"):
+    """Alle Zeichenketten einsammeln, die wirklich auf das Blatt gehen.
+
+    *lang* ist ausdruecklich: die Proben unten pruefen INHALT, und der
+    Wortlaut soll sich nicht aendern, wenn jemand die Voreinstellung der
+    App umstellt. Die Sprache selbst pruefen die Proben ganz unten.
+    """
     from reportlab.pdfgen import canvas as pdfcanvas
     gesammelt = []
     originale = {}
@@ -116,7 +130,7 @@ def _gezeichnete_texte(bauer, daten, tmp_path):
     for name in originale:
         setattr(pdfcanvas.Canvas, name, haken(name))
     try:
-        bauer(tmp_path / "p.pdf", daten)
+        bauer(tmp_path / "p.pdf", daten, lang=lang)
     finally:
         for name, orig in originale.items():
             setattr(pdfcanvas.Canvas, name, orig)
@@ -220,7 +234,7 @@ def test_achse_erreicht_den_groessten_wert(tmp_path):
 def test_bericht_entsteht_und_hat_seitenzahlen(tmp_path, art):
     bauer = rp.build_daily_pdf if art == "daily" else rp.build_monthly_pdf
     daten = tagesdaten() if art == "daily" else monatsdaten()
-    p = bauer(tmp_path / f"{art}.pdf", daten)
+    p = bauer(tmp_path / f"{art}.pdf", daten, lang="en")
     assert p.exists() and p.stat().st_size > 5000
     roh = p.read_bytes()
     assert roh.startswith(b"%PDF")
@@ -264,7 +278,7 @@ def test_build_pdf_meldet_fehler_statt_zu_werfen(tmp_path):
 # Dieselbe Klasse traf `paare()`: die Randnotiz der linken Spalte lief in die
 # Beschriftung der rechten.
 
-def _ueberlaeufe(bauer, daten, tmp_path, rand=2.0):
+def _ueberlaeufe(bauer, daten, tmp_path, rand=2.0, lang="en"):
     """Gezeichnete Zeichenketten, die rechts aus dem Satzspiegel laufen."""
     from reportlab.pdfgen import canvas as pdfcanvas
     raus = []
@@ -282,7 +296,7 @@ def _ueberlaeufe(bauer, daten, tmp_path, rand=2.0):
 
     pdfcanvas.Canvas.drawString = ersatz
     try:
-        bauer(tmp_path / "p.pdf", daten)
+        bauer(tmp_path / "p.pdf", daten, lang=lang)
     finally:
         pdfcanvas.Canvas.drawString = orig
     return raus
@@ -311,7 +325,7 @@ def solardaten(**zusatz):
 
 def test_die_probe_merkt_einen_ueberlauf_ueberhaupt(tmp_path):
     """Gegenprobe: eine absichtlich zu breite Zeile MUSS auffallen."""
-    def kaputt(pfad, daten):
+    def kaputt(pfad, daten, lang="en"):
         doc = rp._Doc(pfad, "T", "U", "F")
         doc.c.setFont(doc.f.regular, 8)
         doc.c.drawString(rp.MARGIN, doc.y, "W" * 400)
@@ -399,3 +413,107 @@ def test_aufteilung_bleibt_wenn_es_beide_seiten_gibt(tmp_path):
     texte = " ".join(t for _, t in _gezeichnete_texte(rp.build_daily_pdf,
                                                       solardaten(), tmp_path))
     assert "Tenant circuits" in texte and "Own consumption" in texte
+
+
+# ── Die Sprache ────────────────────────────────────────────────────────────
+# 🔴 Robert, 27.09.2026: „warum werden die reports auf englisch erstellt wenn
+# man deutsch eingestellt hat in der app?" — report_pdf.py kannte bis 17.5.1
+# gar keine Übersetzung, jeder Text stand als englisches Literal im Quelltext.
+# Ein Blick in den Quelltext zeigt das nie als Fehler: die Zeilen sind ja
+# richtig. Man sieht es nur, wenn man fragt, WAS gezeichnet wurde.
+
+SPRACHEN = ["de", "en", "es", "fr", "pt", "it", "pl", "cs", "ru"]
+
+
+def test_deutscher_bericht_ist_deutsch(tmp_path):
+    texte = " ".join(t for _, t in _gezeichnete_texte(
+        rp.build_daily_pdf, solardaten(), tmp_path, lang="de"))
+    for muss in ("ENERGIEBILANZ", "Aus dem Netz bezogen", "Batterie geladen",
+                 "VERBRAUCH", "Seite 1", "Grundlast"):
+        assert muss in texte, "fehlt auf Deutsch: %r" % muss
+    # Gegenprobe: genau die Wörter, die vorher dastanden, dürfen weg sein.
+    for darf_nicht in ("ENERGY BALANCE", "Drawn from grid", "Battery charged",
+                       "CONSUMPTION", "Page 1", "Base load"):
+        assert darf_nicht not in texte, "noch englisch: %r" % darf_nicht
+
+
+def test_die_probe_wuerde_den_alten_stand_rot_machen(tmp_path):
+    """Gegenprobe zur Probe darüber: auf Englisch MUSS sie fehlschlagen.
+
+    Ohne das wüsste niemand, ob die Prüfung überhaupt etwas misst.
+    """
+    texte = " ".join(t for _, t in _gezeichnete_texte(
+        rp.build_daily_pdf, solardaten(), tmp_path, lang="en"))
+    assert "ENERGY BALANCE" in texte and "Drawn from grid" in texte
+    assert "ENERGIEBILANZ" not in texte
+
+
+def test_zahlen_folgen_der_sprache(tmp_path):
+    """8,43 auf Deutsch, 8.43 auf Englisch — sonst ist „1.234" zweideutig."""
+    de = " ".join(t for _, t in _gezeichnete_texte(
+        rp.build_daily_pdf, solardaten(), tmp_path, lang="de"))
+    en = " ".join(t for _, t in _gezeichnete_texte(
+        rp.build_daily_pdf, solardaten(), tmp_path, lang="en"))
+    assert "8,43 kWh" in de and "8.43 kWh" not in de
+    assert "8.43 kWh" in en and "8,43 kWh" not in en
+
+
+@pytest.mark.parametrize("lang", SPRACHEN)
+@pytest.mark.parametrize("art", ["daily", "monthly"])
+def test_jede_sprache_ohne_fehlende_glyphe(tmp_path, lang, art):
+    """Kyrillisch, ł, ě, ì — alles neu in 17.5.2.
+
+    Ein Zeichen ohne Glyphe wird nicht weggelassen, sondern als schwarzer
+    Klotz gemalt. Bei 9 Sprachen sieht sich das niemand von Hand an.
+    """
+    bauer = rp.build_daily_pdf if art == "daily" else rp.build_monthly_pdf
+    daten = solardaten() if art == "daily" else monatsdaten()
+    paare = _gezeichnete_texte(bauer, daten, tmp_path, lang=lang)
+    assert paare
+    fehlt = _fehlende_glyphen(paare)
+    assert not fehlt, "%s: Zeichen ohne Glyphe: %r" % (lang, fehlt[:6])
+
+
+@pytest.mark.parametrize("lang", SPRACHEN)
+@pytest.mark.parametrize("art,bauer_name", [("daily", "build_daily_pdf"),
+                                            ("monthly", "build_monthly_pdf")])
+def test_jede_sprache_bleibt_im_satzspiegel(tmp_path, lang, art, bauer_name):
+    daten = solardaten() if art == "daily" else monatsdaten()
+    raus = _ueberlaeufe(getattr(rp, bauer_name), daten, tmp_path, lang=lang)
+    assert not raus, "%s ragt ueber den Rand: %r" % (lang, raus[:4])
+
+
+@pytest.mark.parametrize("lang", SPRACHEN)
+@pytest.mark.parametrize("art,bauer_name", [("daily", "build_daily_pdf"),
+                                            ("monthly", "build_monthly_pdf")])
+def test_keine_zeile_wird_abgeschnitten(tmp_path, lang, art, bauer_name):
+    """🔴 Der zweite Fund von 17.5.2, und er traf auch Englisch.
+
+    „77% selbst gen…", „+0,30 kWh netto ge…" — und auf Englisch „same
+    consumpti…". Eine mitten im Wort abgeschnittene Angabe ist keine
+    Angabe mehr. Seitdem misst `paare()` vorher und fällt auf eine Spalte
+    zurück, statt blind zweispaltig zu setzen.
+    """
+    daten = solardaten() if art == "daily" else monatsdaten()
+    texte = [t for _, t in _gezeichnete_texte(getattr(rp, bauer_name), daten,
+                                              tmp_path, lang=lang)]
+    weg = [t for t in texte if t.endswith("…")]
+    assert not weg, "%s abgeschnitten: %r" % (lang, weg)
+
+
+def test_die_kuerzungsprobe_merkt_eine_kuerzung(tmp_path):
+    """Gegenprobe: eine absichtlich zu lange Beschriftung MUSS auffallen."""
+    zeilen = [("W" * 200, "1,00 kWh", "X" * 200)] * 2
+    pfad = tmp_path / "k.pdf"
+    doc = rp._Doc(pfad, "T", "U", "F", lang="de")
+    texte = []
+    from reportlab.pdfgen import canvas as pdfcanvas
+    orig = pdfcanvas.Canvas.drawString
+    pdfcanvas.Canvas.drawString = lambda s, x, y, t, *a, **k: (
+        texte.append(str(t)), orig(s, x, y, t, *a, **k))[1]
+    try:
+        doc.paare(zeilen, spalten=2)
+        doc.schliessen()
+    finally:
+        pdfcanvas.Canvas.drawString = orig
+    assert any(t.endswith("…") for t in texte), "die Probe prueft nichts"
