@@ -1,5 +1,13 @@
 # Changelog
 
+## 17.6.1
+
+### Fixed
+- 🔴 **One number kept its English spelling.** Read off the live report minutes after 17.6.0 went out: the comparison card said `+44.6%` right next to `12,51 kWh` — two notations in the same card. The percentage in `_vergleich` was the one value still formatted with a plain `%+.1f`.
+
+### Added
+- A check that reads the *drawn* text of a German report and rejects a dot followed by one or two digits directly before a unit. The rule is deliberately narrow: a German thousands separator always has three digits (`1.633 W`) and a date never stands before a unit. Its counter-test asserts the same report in English still trips the matcher, so the check cannot quietly measure nothing.
+
 ## 17.6.0
 
 ### Fixed

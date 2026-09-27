@@ -836,7 +836,9 @@ def _vergleich(kwh: float, bezug: float, preis: float,
     pct = (kwh - bezug) / bezug * 100.0
     return {
         "label": label,
-        "value": "%+.1f%%" % pct,
+        # 🔴 Auch dieser Prozentwert folgt der Sprache. Er stand bis 17.6.0
+        # als "+44.6%" neben "12,51 kWh" — zwei Schreibweisen in einer Karte.
+        "value": _vorz(pct, 1, lang) + "%",
         "sub": _t(lang, "report.cmp.sub",
                   kwh=_vorz(kwh - bezug, 2, lang),
                   eur=_vorz((kwh - bezug) * preis, 2, lang)),
