@@ -517,3 +517,31 @@ def test_die_kuerzungsprobe_merkt_eine_kuerzung(tmp_path):
     finally:
         pdfcanvas.Canvas.drawString = orig
     assert any(t.endswith("…") for t in texte), "die Probe prueft nichts"
+
+
+@pytest.mark.parametrize("art,bauer_name", [("daily", "build_daily_pdf"),
+                                            ("monthly", "build_monthly_pdf")])
+def test_keine_englische_zahl_im_deutschen_bericht(tmp_path, art, bauer_name):
+    """🔴 Gefunden am LIVE-Bericht nach 17.6.0: „+44.6%" stand neben
+    „12,51 kWh" — zwei Schreibweisen in derselben Karte.
+
+    Die Regel ist eng gefasst: ein Punkt mit ein oder zwei Ziffern dahinter,
+    direkt vor einer Einheit. Ein deutscher Tausenderpunkt hat immer DREI
+    Ziffern („1.633 W"), ein Datum steht nie vor einer Einheit.
+    """
+    import re
+    daten = solardaten() if art == "daily" else monatsdaten()
+    texte = [t for _, t in _gezeichnete_texte(getattr(rp, bauer_name), daten,
+                                              tmp_path, lang="de")]
+    muster = re.compile(r"\d\.\d{1,2}\s*(?:%|kWh|EUR|W\b|ct|kg|g/kWh|x)")
+    schlecht = [t for t in texte if muster.search(t)]
+    assert not schlecht, "englische Dezimalschreibweise auf Deutsch: %r" % schlecht
+
+
+def test_die_zahlenprobe_merkt_eine_englische_zahl(tmp_path):
+    """Gegenprobe: derselbe Bericht auf Englisch MUSS auffallen."""
+    import re
+    texte = [t for _, t in _gezeichnete_texte(rp.build_daily_pdf, solardaten(),
+                                              tmp_path, lang="en")]
+    muster = re.compile(r"\d\.\d{1,2}\s*(?:%|kWh|EUR|W\b|ct|kg|g/kWh|x)")
+    assert any(muster.search(t) for t in texte), "die Probe prueft nichts"

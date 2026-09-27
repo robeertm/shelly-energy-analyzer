@@ -138,3 +138,22 @@ def test_wochentag_und_monat_folgen_der_sprache(lang):
         assert month_name_local(lang, 9) == "September"
     if lang != "en":
         assert weekday_name_local(lang, tag) != "Friday"
+
+
+@pytest.mark.parametrize("bauer,daten", BAUER)
+def test_keine_englische_zahl_im_deutschen_auszug(bauer, daten):
+    """Dieselbe Regel wie im PDF: ein Punkt mit ein oder zwei Ziffern
+    dahinter, direkt vor einer Einheit. Der deutsche Tausenderpunkt hat
+    immer drei ("1.633 W"), ein Datum steht nie vor einer Einheit."""
+    txt = _sichtbar(getattr(dienst("de"), bauer)(daten))
+    muster = re.compile(r"\d\.\d{1,2}\s*(?:%|kWh|€|W\b|ct|kg|g/kWh)")
+    schlecht = muster.findall(txt)
+    assert not schlecht, "%s: englische Schreibweise %r" % (bauer, schlecht)
+
+
+@pytest.mark.parametrize("bauer,daten", BAUER)
+def test_die_zahlenprobe_merkt_eine_englische_zahl(bauer, daten):
+    """Gegenprobe: derselbe Auszug auf Englisch MUSS auffallen."""
+    txt = _sichtbar(getattr(dienst("en"), bauer)(daten))
+    muster = re.compile(r"\d\.\d{1,2}\s*(?:%|kWh|€|W\b|ct|kg|g/kWh)")
+    assert muster.search(txt), "%s: die Probe prueft nichts" % bauer
