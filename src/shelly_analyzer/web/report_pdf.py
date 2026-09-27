@@ -763,16 +763,31 @@ def _bilanz_zeilen(data: Dict[str, Any]) -> List[Tuple[str, str, Optional[str]]]
         prod = float(b.get("pv_production_kwh") or 0.0)
         eigen = float(b.get("self_consumption_kwh") or 0.0)
         zeilen.append(("PV produced", "%s kWh" % _zahl(prod, 2),
-                       ("%.0f%% used on site" % (eigen / prod * 100)) if prod > 0 else None))
-        zeilen.append(("PV used on site", "%s kWh" % _zahl(eigen, 2),
-                       ("%.0f%% of load" % (eigen / last * 100)) if last > 0 else None))
+                       ("%.0f%% used on site" % min(100.0, eigen / prod * 100))
+                       if prod > 0 else None))
+        # 🔴 NICHT gegen die Last rechnen: der Eigenverbrauch enthaelt auch,
+        # was in die Batterie ging, die Last nicht — auf einer guten Anlage
+        # kommen dabei "108 % of load" heraus (Mike, 26.09.2026).
+        # Was davon die LAST gedeckt hat, ist der Eigenverbrauch OHNE das, was
+        # in die Batterie ging — sonst kommen auf einer guten Anlage "108 % of
+        # load" heraus (an einer echten Anlage gemessen, 26.09.2026).
+        _lade = float(b.get("battery_charge_kwh") or 0.0)
+        _direkt = max(0.0, eigen - _lade)
+        # Kurz halten: neben einem breiten Wert bleiben in der Spalte nur rund
+        # 75 pt, "100 % of consumption" wird darin abgeschnitten.
+        _zusatz = ("%.0f%% of load" % min(100.0, _direkt / last * 100)
+                   if last > 0 else None)
+        zeilen.append(("PV used on site", "%s kWh" % _zahl(eigen, 2), _zusatz))
 
     if b.get("has_battery"):
         lade = float(b.get("battery_charge_kwh") or 0.0)
         ent = float(b.get("battery_discharge_kwh") or 0.0)
         zeilen.append(("Battery charged", "%s kWh" % _zahl(lade, 2), None))
+        # 🔴 Entladen/Geladen EINES Zeitraums ist KEIN Wirkungsgrad: was heute
+        # hineingeht, kommt morgen heraus. "35 % round trip" liest sich wie ein
+        # Defekt, ist aber ein Speicher, der voller endet als er anfing.
         zeilen.append(("Battery discharged", "%s kWh" % _zahl(ent, 2),
-                       ("%.0f%% round trip" % (ent / lade * 100)) if lade > 0 else None))
+                       ("%+.2f kWh stored net" % (lade - ent)) if (lade or ent) else None))
         soc = b.get("battery_soc_pct")
         if soc is not None:
             zeilen.append(("Battery state of charge", "%s%%" % _zahl(float(soc), 0), None))
@@ -786,14 +801,18 @@ def _bilanz_zeilen(data: Dict[str, Any]) -> List[Tuple[str, str, Optional[str]]]
         zeilen.append(("Grid-served share", "%.0f%%" % (anteil * 100),
                        "rest from PV / battery"))
 
+    # Die Aufteilung lohnt nur, wenn es beide Seiten gibt. Wo JEDER Kreis einer
+    # Einheit zugeordnet ist (der Eigentuemer fuehrt seine eigene Wohnung als
+    # Einheit), waere "Tenant 12.51 kWh / Own 0.00 kWh" eine Aussage ueber die
+    # Konfiguration, nicht ueber den Strom.
     mieter = float(data.get("tenant_kwh") or 0.0)
-    if mieter > 0:
+    eigner = float(data.get("owner_kwh") or 0.0)
+    if mieter > 0 and eigner > 0:
         zeilen.append(("Tenant circuits", "%s kWh" % _zahl(mieter, 2),
                        "%s EUR full tariff"
                        % _zahl(float(data.get("tenant_billed_eur") or 0), 2)))
-        zeilen.append(("Own consumption", "%s kWh" % _zahl(float(data.get("owner_kwh") or 0), 2),
-                       ("%.0f%% of the total" % (float(data.get("owner_kwh") or 0) / last * 100))
-                       if last > 0 else None))
+        zeilen.append(("Own consumption", "%s kWh" % _zahl(eigner, 2),
+                       ("%.0f%% of the total" % (eigner / last * 100)) if last > 0 else None))
 
     return zeilen
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 17.5.1
+
+### Fixed
+- 🔴 **"PV used on site — 108 % of load."** Measured on a live solar installation the moment 17.5.0 went out. Self-consumption includes what went into the battery, the load does not, so the share was computed against the wrong denominator. It now reports the PV that actually served the load (self-consumption minus battery charging) and no share can exceed 100 %.
+- 🔴 **"Battery discharged — 35 % round trip."** Discharged ÷ charged over a single period is not an efficiency: what goes in today comes out tomorrow. A battery that ends the day fuller than it started looked like a broken one. The line now states the net energy stored over the period (`+7.97 kWh stored net`).
+- 🔴 **"Tenant circuits 12.51 kWh / Own consumption 0.00 kWh"** on an installation where every circuit is assigned to a billing unit (an owner who lists their own flat as one). A split with nothing on one side describes the configuration, not the electricity — both lines are now shown only when there is something on both sides.
+- Long notes in a two-column block could be clipped mid-word where the value next to them was wide; the text is now short enough to fit the column it is given.
+
+### Added
+- `tests/test_report_pdf.py` checks the balance block for any share above 100 % by reading the *numbers actually drawn* rather than matching wording, so the same class of bug cannot return under a different label.
+
 ## 17.5.0
 
 ### Fixed
