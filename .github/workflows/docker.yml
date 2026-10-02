@@ -1,0 +1,68 @@
+# Builds the Shelly Energy Analyzer image and publishes it to the GitHub
+# Container Registry, so `docker pull ghcr.io/<owner>/<repo>:latest` works and
+# Watchtower can keep an installation current without anyone touching it.
+name: Publish container image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 🔴 Deliberately NOT on tags. A push to main already publishes both `:latest`
+# and `:<version>`. A tag would start a build from the TAGGED commit and push
+# `:latest` from it — tag an older version to fill in history and every
+# installation on `:latest` gets handed OLD code by the next pull. Tags stay
+# git markers and release archives here; the image comes from main.
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Repository name in lower case
+        id: repo
+        # GHCR refuses an upper-case path: "repository name must be lowercase".
+        run: echo "slug=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Read version
+        id: ver
+        # 🔑 The authoritative version lives in __init__.py — the same file the
+        #    running app reports. Reading it anywhere else would let the image
+        #    tag and the program disagree.
+        run: |
+          echo "version=$(python3 -c "import re;print(re.search(r'__version__ = \"([^\"]+)\"', open('src/shelly_analyzer/__init__.py').read()).group(1))")" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 🔴 amd64 only — on purpose. The image carries numpy/pandas/pillow, and
+      # an emulated arm64 build of those takes the better part of an hour on a
+      # hosted runner. The machine this runs on is an x86 NAS. Add arm64 the
+      # day something actually needs it, not before.
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ steps.repo.outputs.slug }}:latest
+            ghcr.io/${{ steps.repo.outputs.slug }}:${{ steps.ver.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false

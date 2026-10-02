@@ -1,0 +1,23 @@
+# What the image does NOT need. Without this the build context is 88 MB, of
+# which 42 MB are screenshots that never reach the running program.
+.git
+.github
+docs
+data
+exports
+*.md
+!README.md
+.gitignore
+.claude
+CLAUDE.md
+venv
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+_test.js
+_control_test.js
+live_dashboard.html
+start.bat
+start.command
+start.sh
