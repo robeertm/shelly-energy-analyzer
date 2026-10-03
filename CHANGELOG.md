@@ -1,5 +1,33 @@
 # Changelog
 
+## 17.6.4
+
+### A preset range now means the same period for every device on the chart
+
+"Last 30 days" was anchored on each device's **own** newest row. A device
+that stopped reporting months ago — a plug you unplugged, a meter you
+moved — therefore got the 30 days before *its* last row, and the chart's
+x-axis became the union of all those windows. On the install this was
+found on, a 30-day request returned 784 hourly buckets spanning nine
+months: every value correct, and the picture useless. The real 30 days sat
+squeezed into the right-hand quarter, with a lone block of bars from
+January at the far left, and it read as "my whole history is gone".
+
+The anchor is still the newest row rather than the wall clock, and that is
+deliberate: a system that has been off for a day should show its last 30
+days of data, not 30 days of emptiness. What changed is that the anchor is
+now the newest row across the **selected** devices, so one chart covers
+one period. A device with nothing to show in that period simply has no
+bars — which is the honest answer, and makes "nothing since January"
+visible instead of smearing the axis across the year.
+
+Asking for such a device on its own still shows its last recorded days,
+unchanged.
+
+`tests/test_plots_window_shared.py` pins it. Counter-tested against the
+previous code: a two-day request there came back 97 buckets wide starting
+seven months earlier.
+
 ## 17.6.3
 
 ### The live view no longer freezes silently when a device stops answering

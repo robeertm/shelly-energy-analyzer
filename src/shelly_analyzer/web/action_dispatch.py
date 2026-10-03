@@ -5837,6 +5837,36 @@ class ActionDispatcher:
                         _kwh_preset = None
                 except Exception:
                     _kwh_preset = None
+                # 🔴 ONE window for the whole chart, not one per device.
+                #
+                # The preset ("last 30 days") used to be anchored on each
+                # device's OWN newest row. A device that stopped reporting in
+                # January therefore got the 30 days before ITS last row, and
+                # the chart's axis became the union: nine months wide, with
+                # the real 30 days squeezed into the right-hand quarter and a
+                # lone block of ancient bars at the far left. Measured on a
+                # real install: 784 buckets spanning 2026-01-13 to 2026-10-03
+                # for a 30-day request, because two switches had 64 hours of
+                # data from January and nothing since.
+                #
+                # The anchor stays the newest row rather than the wall clock
+                # on purpose — a system that has been off for a day should
+                # still show its last 30 days of data, not 30 days of
+                # emptiness. It is now the newest row across the SELECTED
+                # devices, so every series on one chart covers one period.
+                # A device with nothing in that period simply has no bars,
+                # which is the honest answer and makes "unplugged since
+                # January" visible instead of smearing the axis.
+                _preset_anchor_ts: Optional[int] = None
+                if _kwh_preset is not None and _range_start_ts is None and _range_end_ts is None:
+                    for _ak in dev_keys:
+                        try:
+                            _amt = self.storage.db.max_timestamp(_ak)
+                        except Exception:
+                            _amt = None
+                        if _amt is not None and (_preset_anchor_ts is None or _amt > _preset_anchor_ts):
+                            _preset_anchor_ts = int(_amt)
+
                 labels: List[str] = []
                 traces: List[Dict[str, Any]] = []
                 diag: Dict[str, Any] = {
@@ -5850,15 +5880,10 @@ class ActionDispatcher:
                     # rows (huge speed win on slow disks / VMs).
                     _s_ts = _range_start_ts
                     _e_ts = _range_end_ts
-                    if _s_ts is None and _e_ts is None and _kwh_preset is not None:
-                        try:
-                            _max_ts = self.storage.db.max_timestamp(k)
-                            if _max_ts is not None:
-                                _delta_s = int(_kwh_preset["delta"].total_seconds())
-                                _s_ts = _max_ts - _delta_s
-                                _e_ts = _max_ts
-                        except Exception:
-                            pass
+                    if _s_ts is None and _e_ts is None and _preset_anchor_ts is not None:
+                        _delta_s = int(_kwh_preset["delta"].total_seconds())
+                        _s_ts = _preset_anchor_ts - _delta_s
+                        _e_ts = _preset_anchor_ts
                     _hres = None if _use_raw_src else self._stats_series_hourly(k, _s_ts, _e_ts, mode)
                     if _hres is not None:
                         lbls, vals = _hres
@@ -5893,14 +5918,12 @@ class ActionDispatcher:
                             return _kwh_cache[_k]
                         _cs = _range_start_ts
                         _ce = _range_end_ts
-                        if _cs is None and _ce is None and _kwh_preset is not None:
-                            try:
-                                _mt = self.storage.db.max_timestamp(_k)
-                                if _mt is not None:
-                                    _cs = _mt - int(_kwh_preset["delta"].total_seconds())
-                                    _ce = _mt
-                            except Exception:
-                                pass
+                        if _cs is None and _ce is None and _preset_anchor_ts is not None:
+                            # Same single window as the main series above —
+                            # the netting children must cover the same period
+                            # as the parent they are subtracted from.
+                            _cs = _preset_anchor_ts - int(_kwh_preset["delta"].total_seconds())
+                            _ce = _preset_anchor_ts
                         _hr = None if _use_raw_src else self._stats_series_hourly(_k, _cs, _ce, mode)
                         if _hr is not None:
                             _lb, _vv = _hr
