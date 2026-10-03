@@ -253,6 +253,44 @@ class MultiLivePoller:
         self._err_count: Dict[str, int] = {d.key: 0 for d in self.devices}
         self._next_due_ts: Dict[str, float] = {d.key: 0.0 for d in self.devices}
 
+        self._by_key: Dict[str, DeviceConfig] = {d.key: d for d in self.devices}
+
+        # 🔴 At most ONE outstanding request per device, and every request
+        # is accounted for. Without this the poller had two completely
+        # different behaviours:
+        #
+        #   * a device that refuses the connection answers fast, the
+        #     future completes inside the as_completed window, the error
+        #     is counted, logged and backed off. Healthy.
+        #   * a device whose packets simply vanish — the case when a route
+        #     is wrong, a VPN is down or a switch is unplugged — never
+        #     completes inside that window. as_completed raised
+        #     TimeoutError, the futures were abandoned unexamined, and
+        #     because nothing was counted the device was due again on the
+        #     very next tick. Measured: four submissions per second
+        #     forever, a work queue growing by ~2.4/s, *nothing* in the
+        #     log, and no backoff. After a twelve-hour outage the pool
+        #     had a six-figure backlog of stale requests, so when the
+        #     network came back the workers were still chewing through
+        #     them and no fresh sample ever arrived. The live view sat
+        #     frozen on values from the moment the network broke — which
+        #     reads as "live" to anyone looking at it.
+        #
+        # Keyed by device: [future, submitted_at, already_reported]
+        self._inflight: Dict[str, list] = {}
+
+        # When an unanswered request counts as failed: what the HTTP
+        # client itself would spend at most, plus a margin. The entry is
+        # NOT dropped at that point — it stays until the future really
+        # finishes, so a stuck worker can never be joined by a second one
+        # for the same device.
+        self._answer_deadline_s = max(
+            2.0 * float(poll_seconds),
+            float(download_cfg.timeout_seconds)
+            * max(1, int(download_cfg.retries) + 1) + 2.0,
+        )
+        self._last_report: Dict[str, float] = {}
+
         if max_workers is None:
             # Good default for network IO without overwhelming Shellys
             max_workers = min(8, max(1, len(self.devices)))
@@ -314,6 +352,56 @@ class MultiLivePoller:
             return base
         return min(30.0, float(base) * (2.0 ** min(err_count - 1, 5)))
 
+    def _report_failure(self, key: str, err: Exception, poll: float, log) -> None:
+        """Count a failed poll, back the device off, and say so out loud."""
+        d = self._by_key.get(key)
+        name = d.name if d is not None else key
+        host = getattr(d, "host", "?") if d is not None else "?"
+        ec = int(self._err_count.get(key, 0)) + 1
+        self._err_count[key] = ec
+        self._next_due_ts[key] = time.time() + self._backoff_seconds(poll, ec)
+        try:
+            self.errors.put_nowait(
+                {"device_key": key, "device_name": name, "error": str(err)}
+            )
+        except queue.Full:
+            pass
+        # 🔑 The first failure is always logged, then at most once a
+        # minute. A silent outage is precisely what let this cost twelve
+        # hours of history: the log held not one line about it.
+        now = time.time()
+        if ec == 1 or now - float(self._last_report.get(key, 0.0)) >= 60.0:
+            self._last_report[key] = now
+            try:
+                log.warning("Live poll failed for %s (%s): %s", name, host, err)
+            except Exception:
+                pass
+
+    def _harvest(self, key: str, fut: "concurrent.futures.Future", poll: float, log) -> None:
+        """Take the result of a finished request and update the bookkeeping."""
+        self._inflight.pop(key, None)
+        try:
+            s = fut.result()
+        except concurrent.futures.CancelledError:
+            return
+        except Exception as e:
+            self._report_failure(key, e, poll, log)
+            return
+        try:
+            self.samples.put_nowait(s)
+        except queue.Full:
+            pass  # drop oldest; consumer is too slow
+        if int(self._err_count.get(key, 0)) > 0:
+            d = self._by_key.get(key)
+            try:
+                log.info("Live poll recovered for %s",
+                         d.name if d is not None else key)
+            except Exception:
+                pass
+        self._err_count[key] = 0
+        self._last_report.pop(key, None)
+        self._next_due_ts[key] = time.time() + poll
+
     def _run(self) -> None:
         log = logging.getLogger(__name__)
         poll = max(0.2, float(self.poll_seconds))
@@ -322,50 +410,50 @@ class MultiLivePoller:
             started = time.time()
             ts = int(started)
 
-            # Select devices that are due (respect per-device backoff)
-            due: List[DeviceConfig] = []
-            now = started
+            # 1. Submit only devices that are due AND have nothing in
+            #    flight. The second half is the whole fix: a device whose
+            #    last request has not come back yet does not get another.
             for d in self.devices:
-                if now >= float(self._next_due_ts.get(d.key, 0.0)):
-                    due.append(d)
-
-            if due:
-                futs = {self._executor.submit(self._fetch_one, d, ts): d for d in due}
+                if d.key in self._inflight:
+                    continue
+                if started < float(self._next_due_ts.get(d.key, 0.0)):
+                    continue
                 try:
-                    iterator = concurrent.futures.as_completed(futs, timeout=max(0.1, poll))
-                    for fut in iterator:
-                        d = futs[fut]
-                        try:
-                            s = fut.result()
-                            try:
-                                self.samples.put_nowait(s)
-                            except queue.Full:
-                                pass  # drop oldest; consumer is too slow
-                            self._err_count[d.key] = 0
-                            self._next_due_ts[d.key] = time.time() + poll
-                        except Exception as e:
-                            ec = int(self._err_count.get(d.key, 0)) + 1
-                            self._err_count[d.key] = ec
-                            backoff = self._backoff_seconds(poll, ec)
-                            self._next_due_ts[d.key] = time.time() + backoff
-                            try:
-                                self.errors.put_nowait(
-                                    {
-                                        "device_key": d.key,
-                                        "device_name": d.name,
-                                        "error": str(e),
-                                    }
-                                )
-                            except queue.Full:
-                                pass
-                            try:
-                                log.warning("Live poll failed for %s (%s): %s", d.name, d.host, e)
-                            except Exception:
-                                pass
+                    fut = self._executor.submit(self._fetch_one, d, ts)
+                except RuntimeError:
+                    break  # executor is shutting down
+                self._inflight[d.key] = [fut, started, False]
+
+            # 2. Give the answers a moment — same window as before, so a
+            #    healthy device's sample still lands within this tick and
+            #    live latency is unchanged.
+            warten = {e[0]: k for k, e in self._inflight.items()}
+            if warten:
+                try:
+                    for fut in concurrent.futures.as_completed(
+                            warten, timeout=max(0.1, poll)):
+                        self._harvest(warten[fut], fut, poll, log)
                 except concurrent.futures.TimeoutError:
-                    # Some Shellys didn't respond within the poll window.
-                    # They will be retried on the next tick; we keep the loop alive.
+                    # Expected whenever a device is slow or gone. It is no
+                    # longer the end of the story: step 3 deals with it.
                     pass
+
+            # 3. Pick up whatever finished late, and report whatever is
+            #    simply not answering. The entry stays until the future
+            #    really finishes, so the pool holds at most one stuck
+            #    worker per device.
+            now = time.time()
+            for key, eintrag in list(self._inflight.items()):
+                fut, seit, gemeldet = eintrag
+                if fut.done():
+                    self._harvest(key, fut, poll, log)
+                elif not gemeldet and now - float(seit) >= self._answer_deadline_s:
+                    eintrag[2] = True
+                    self._report_failure(
+                        key,
+                        TimeoutError(
+                            f"no answer within {now - float(seit):.0f}s"),
+                        poll, log)
 
             # Wait until next tick; keep stop responsive.
             elapsed = time.time() - started

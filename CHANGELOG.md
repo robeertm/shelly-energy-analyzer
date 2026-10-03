@@ -1,5 +1,53 @@
 # Changelog
 
+## 17.6.3
+
+### The live view no longer freezes silently when a device stops answering
+
+A device can stop answering in two very different ways, and the live
+poller only handled one of them.
+
+When a device **refuses** the connection it answers fast: the request
+finishes inside the window the poller waits, the failure is counted,
+logged and backed off. That half always worked.
+
+When a device's packets simply **vanish** — a wrong route, a VPN down, a
+switch unplugged — the request never finishes inside that window.
+`as_completed` raised `TimeoutError`, the outstanding requests were
+abandoned without ever being looked at, and because nothing had been
+counted the device was due again on the very next tick. Measured on
+17.6.2 with four unreachable meters: four new requests every second
+indefinitely, a thread-pool backlog growing by about 2.4 per second, no
+backoff whatsoever — and **not one line in the log**.
+
+Two consequences, both bad, and the second is the one that costs data:
+
+- Nothing says anything is wrong. The dashboard keeps showing the values
+  from the moment the network broke, which to anyone looking at it reads
+  as a live reading.
+- The backlog makes the freeze permanent. After a long outage the worker
+  threads are still working through a six-figure queue of stale requests
+  when the network comes back, so no fresh sample arrives for hours
+  after the network is fine again.
+
+The poller now keeps **at most one outstanding request per device** and
+accounts for every one of them, whenever it finishes. A request that has
+not come back within the HTTP client's own worst case is reported and
+backed off, while its entry is kept so a stuck worker can never be
+joined by a second one for the same device. The first failure is always
+logged and then at most once a minute; a device coming back is logged
+too.
+
+Measured with four black-holed meters over 24 s: 16 requests instead of
+96, no backlog instead of one growing steadily, four log lines instead
+of none, and fresh samples within one backoff window of the network
+returning. `tests/test_live_poller_outage.py` pins all of it, and uses a
+mock that accepts the connection and then stays silent — a mock that
+refuses the connection would exercise the half that was never broken.
+
+Behaviour while everything is reachable is unchanged, including live
+latency: a healthy device's sample still lands inside the same tick.
+
 ## 17.6.2
 
 ### Fixed
