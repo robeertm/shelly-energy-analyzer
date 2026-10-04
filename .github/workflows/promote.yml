@@ -239,4 +239,19 @@ jobs:
           TAG="v${{ inputs.version }}"
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease=false --latest
           echo "::notice::$TAG ist jetzt die regulaere Fassung"
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,isLatest
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,isDraft
+
+          # 🔴 NACHGELESEN WIRD AN DER TUER, DIE DIE ANDEREN BENUTZEN.
+          # Der erste Wurf fragte `gh release view --json isLatest` — das Feld
+          # gibt es in dem `gh` auf dem Laeufer nicht, der Schritt wurde rot,
+          # nachdem er das Release schon umgestellt hatte. Und es war ohnehin
+          # die falsche Frage: was zaehlt, ist, was `releases/latest` sagt —
+          # genau der Endpunkt, den der Update-Prüfer der App und
+          # `hass-addons` abfragen.
+          zeigt="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')"
+          echo "releases/latest zeigt auf: $zeigt"
+          if [ "$zeigt" != "$TAG" ]; then
+            echo "::error::releases/latest zeigt auf $zeigt, nicht auf $TAG."
+            exit 1
+          fi
+          echo "✅ die Tuer, durch die App und Add-on sehen, zeigt auf $TAG"
