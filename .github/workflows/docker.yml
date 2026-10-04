@@ -6,13 +6,18 @@ name: Publish container image
 on:
   push:
     branches: [main]
+    # 🔴 Eine Aenderung an Text baut kein neues Abbild (04.10.2026). Sonst
+    # wuerde ein README-Satz die Versionsmarke neu belegen — und damit genau
+    # das Abbild ersetzen, das die Rauchprobe angefahren hat.
+    paths-ignore: ['**.md', 'docs/**']
   workflow_dispatch:
 
-# 🔴 Deliberately NOT on tags. A push to main already publishes both `:latest`
-# and `:<version>`. A tag would start a build from the TAGGED commit and push
-# `:latest` from it — tag an older version to fill in history and every
-# installation on `:latest` gets handed OLD code by the next pull. Tags stay
-# git markers and release archives here; the image comes from main.
+# 🔴 Deliberately NOT on tags. A push to main publishes the version mark; a tag
+# would start a build from the TAGGED commit. Tags stay git markers and release
+# archives here; the image comes from main.
+#
+# 🔴 AND THIS BUILD NO LONGER MOVES `:latest` (04.10.2026) — see the tag list
+# below and `promote.yml`.
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -50,6 +55,52 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
+      # 🔴 EINE VEROEFFENTLICHTE VERSIONSMARKE BEWEGT SICH NIE (04.10.2026).
+      #
+      # `promote.yml` haengt `:latest` an das Manifest, das die Rauchprobe
+      # angefahren hat. Wuerde ein spaeterer Push dieselbe Versionsnummer neu
+      # belegen, zeigte `:latest` ploetzlich auf ein Abbild, das niemand
+      # geprueft hat — dasselbe Loch, nur eine Ebene tiefer.
+      - name: Eine veroeffentlichte Versionsmarke wird nie ueberschrieben
+        id: marken
+        run: |
+          set -euo pipefail
+          SLUG="ghcr.io/${{ steps.repo.outputs.slug }}"
+          V="${{ steps.ver.outputs.version }}"
+
+          # 🔴 DREI FAELLE, NICHT ZWEI. Der erste Entwurf fragte
+          # `if imagetools inspect …; then`. Auf einer Maschine ohne
+          # Docker-Dienst schlug der Aufruf fehl — und der Waechter las das als
+          # „die Marke gibt es nicht" und haette sie ueberschrieben. Ein
+          # Waechter, der „konnte nicht fragen" mit „ist frei" verwechselt, ist
+          # schlechter als keiner.
+          antwort="$(docker buildx imagetools inspect "$SLUG:$V" 2>&1)" && rc=0 || rc=$?
+          if [ "$rc" = "0" ]; then
+            vorhanden=ja
+          elif printf '%s' "$antwort" | grep -qi 'not found\|manifest unknown\|MANIFEST_UNKNOWN\|denied\|was not found'; then
+            vorhanden=nein
+          else
+            echo "::error::Konnte die Registry nicht nach $SLUG:$V fragen. Es wird NICHTS veroeffentlicht, damit keine gepruefte Marke ueberschrieben wird."
+            printf '%s\n' "$antwort"
+            exit 1
+          fi
+
+          if [ "$vorhanden" = "ja" ]; then
+            MARKEN="$SLUG:edge"
+            echo "::warning::$SLUG:$V ist bereits veroeffentlicht und wird NICHT ersetzt — es wird nur :edge erneuert. Die Nummer in src/shelly_analyzer/__init__.py erhoehen, wenn das eine neue Fassung werden soll."
+          else
+            # printf, kein eingebetteter Umbruch: eine Zeile auf Spalte 0 beendet
+            # den YAML-Block hier mitten im Skript.
+            MARKEN="$(printf '%s\n%s' "$SLUG:$V" "$SLUG:edge")"
+          fi
+          echo "Marken, die dieser Bau setzt:"
+          echo "$MARKEN" | sed 's/^/  /'
+          {
+            echo "tags<<ENDE_DER_MARKEN"
+            echo "$MARKEN"
+            echo "ENDE_DER_MARKEN"
+          } >> "$GITHUB_OUTPUT"
+
       # 🔴 amd64 only — on purpose. The image carries numpy/pandas/pillow, and
       # an emulated arm64 build of those takes the better part of an hour on a
       # hosted runner. The machine this runs on is an x86 NAS. Add arm64 the
@@ -60,9 +111,21 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
-          tags: |
-            ghcr.io/${{ steps.repo.outputs.slug }}:latest
-            ghcr.io/${{ steps.repo.outputs.slug }}:${{ steps.ver.outputs.version }}
+          # 🔴 HIER STEHT KEIN `:latest` MEHR (04.10.2026). Es stand hier — und
+          # damit wanderte das Etikett, dem jede Installation ueber Watchtower
+          # folgt, in dem Moment, in dem ein Commit auf main landete. Also
+          # bevor irgendetwas das gebaute Abbild angesehen hatte.
+          #
+          # Am 04.10.2026 ging bei DocuSort auf genau diesem Weg eine Fassung
+          # hinaus, die auf bestehenden Datenbanken nicht startete. Watchtower
+          # verteilte sie binnen einer Stunde an Roberts Kunden; die
+          # Installationen standen still — und waeren NICHT von selbst
+          # zurueckgekommen, weil Watchtower abstuerzende Container
+          # ueberspringt (`scanned=0`, am Pi nachgestellt).
+          #
+          # Jetzt setzt `promote.yml` das Etikett — von Hand, und erst nachdem
+          # es das VEROEFFENTLICHTE Abbild selbst angefahren hat.
+          tags: ${{ steps.marken.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false

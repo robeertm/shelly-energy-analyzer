@@ -76,7 +76,29 @@ jobs:
           name: ${{ steps.ver.outputs.version }}
           body_path: release_notes.md
           fail_on_unmatched_files: true
-          make_latest: "true"
+          # 🔴 ALS VORABFASSUNG, NICHT ALS „latest" (04.10.2026).
+          #
+          # Hier hing die gefaehrlichste Kette des Projekts dran. `make_latest`
+          # verschiebt den Zeiger `releases/latest`, und dem folgen ZWEI Dinge
+          # ohne jedes Zutun:
+          #
+          #   1. der Update-Prüfer in der App selbst
+          #      (`services/updater.py`: `releases/latest`)
+          #   2. `robeertm/hass-addons`, der ALLE FUENF MINUTEN nachsieht und
+          #      die Add-on-Version automatisch hochzieht und pusht
+          #
+          # Ein Tag-Push war damit eine Auslieferung an alle, in Minuten,
+          # geprueft hatte niemand etwas. Am 04.10.2026 ging bei DocuSort auf
+          # genau so einem Weg eine Fassung an Roberts Kunden, die nicht
+          # startete.
+          #
+          # Jetzt: der Tag-Push legt die Fassung als VORABFASSUNG ab. GitHubs
+          # `releases/latest` laesst Vorabfassungen aus — also sieht sie weder
+          # die App noch das Add-on-Repo. `promote.yml` prueft die
+          # VEROEFFENTLICHTEN ZIPs (die, die Benutzer wirklich herunterladen)
+          # und macht sie erst dann zur regulaeren Fassung.
+          make_latest: "false"
+          prerelease: true
           files: |
             shelly_energy_analyzer_${{ steps.ver.outputs.version }}_macos.zip
             shelly_energy_analyzer_${{ steps.ver.outputs.version }}_windows.zip

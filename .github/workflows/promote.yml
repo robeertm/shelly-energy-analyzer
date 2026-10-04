@@ -1,0 +1,242 @@
+# Gibt eine Fassung frei, die bereits VEROEFFENTLICHT ist — nachdem sie
+# angefahren und nachgelesen wurde. Getrennt vom Bauen, von Hand ausgeloest.
+#
+# 🔴 WARUM ES DIESEN SCHRITT GIBT (04.10.2026)
+#
+# Der Analyzer hatte DREI Kanaele, die alle ungeprueft wanderten:
+#
+#   1. `docker.yml` setzte `ghcr.io/...:latest` bei jedem Push nach main.
+#      Watchtower verteilt das.
+#   2. `release.yml` markierte jeden Tag-Push als „latest". Dem folgt der
+#      Update-Prüfer in der App (`services/updater.py` → `releases/latest`).
+#   3. `robeertm/hass-addons` sieht ALLE FUENF MINUTEN nach `releases/latest`,
+#      zieht die Add-on-Version hoch und pusht — also auch in jede
+#      Home-Assistant-Installation, ohne dass jemand etwas tut.
+#
+# Am 04.10.2026 ging bei DocuSort auf genau diesem Muster eine Fassung an
+# Roberts Kunden, die auf bestehenden Datenbanken nicht startete. Sie standen
+# eine Stunde still und waeren nicht von selbst zurueckgekommen.
+#
+# Jetzt ist die Reihenfolge:
+#   1. Push nach main   ->  `:<version>` und `:edge`. `:latest` bewegt sich nicht.
+#      Tag-Push         ->  Release als VORABFASSUNG. `releases/latest` zeigt
+#                           weiter auf die alte — App und Add-on-Repo sehen sie nicht.
+#   2. dieser Schritt   ->  a) Rauchprobe am VEROEFFENTLICHTEN Abbild, frisch
+#                              und als Aufstieg von der vorigen Fassung
+#                           b) die VEROEFFENTLICHTEN ZIPs werden geholt,
+#                              entpackt, nachgelesen und uebersetzt
+#   3. erst dann        ->  `:latest` wandert, und das Release wird regulaer.
+#      Danach zieht hass-addons im naechsten Fuenf-Minuten-Lauf nach.
+#
+# 🔑 Das Abbild wird NICHT neu gebaut: `imagetools create` haengt das vorhandene
+# Manifest an ein zweites Etikett. Was angefahren wurde, ist Byte fuer Byte das,
+# was Installationen bekommen — und die ZIPs sind dieselben Dateien, die ein
+# Benutzer herunterlaedt.
+name: Promote to latest
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Die Version, z. B. 17.6.4 (ohne v)"
+        required: true
+        type: string
+      abbild:
+        description: "Das Container-Abbild freigeben (:latest setzen)"
+        type: boolean
+        default: true
+      release:
+        description: "Das GitHub-Release regulaer machen (App + HA-Add-on folgen)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      # Tiefe 0, weil die Vorgaengerin aus den Git-Tags kommt.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log in to GHCR
+        if: inputs.abbild
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Repository name in lower case
+        id: repo
+        run: echo "slug=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      # ── Das Container-Abbild ────────────────────────────────────────────────
+
+      - name: Das Abbild muss es wirklich geben
+        if: inputs.abbild
+        run: |
+          set -euo pipefail
+          IMG="ghcr.io/${{ steps.repo.outputs.slug }}:${{ inputs.version }}"
+          echo "pruefe $IMG"
+          docker buildx imagetools inspect "$IMG" > /dev/null
+          echo "vorhanden."
+
+      # 🔴 DIE VERSION KOMMT AUS DEM ABBILD, NICHT AUS DEM ARBEITSSTAND.
+      # Bei DocuSort nahm der erste Aufstiegs-Test als Vorgaengerin dieselbe
+      # Version wie den Pruefling. Ergebnis: 44 gruen fuer ein nachweislich
+      # kaputtes Abbild — der „Aufstieg" war ein Nichts, die Datenbank stammte
+      # vom neuen Code. Die Vorgaengerin muss STRENG AELTER sein.
+      - name: Vorgaengerin bestimmen
+        if: inputs.abbild
+        id: vor
+        run: |
+          set -euo pipefail
+          SLUG="ghcr.io/${{ steps.repo.outputs.slug }}"
+          NEU="${{ inputs.version }}"
+          kandidat=""
+          for t in $(git tag --list 'v*' | sed 's/^v//' | sort -V); do
+            [ "$t" = "$NEU" ] && continue
+            kleiner="$(printf '%s\n%s\n' "$t" "$NEU" | sort -V | head -1)"
+            [ "$kleiner" = "$t" ] || continue
+            if docker buildx imagetools inspect "$SLUG:$t" >/dev/null 2>&1; then
+              kandidat="$t"
+            fi
+          done
+          if [ -z "$kandidat" ]; then
+            echo "::warning::Keine aeltere veroeffentlichte Fassung gefunden — der Aufstieg wird uebersprungen."
+            echo "alt=" >> "$GITHUB_OUTPUT"
+          else
+            echo "Vorgaengerin: $kandidat"
+            echo "alt=$kandidat" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rauchprobe — a) Neuinstallation auf leerem /data
+        if: inputs.abbild
+        run: |
+          set -euo pipefail
+          SLUG="ghcr.io/${{ steps.repo.outputs.slug }}"
+          ./.github/rauchprobe.sh "$SLUG:${{ inputs.version }}" "$PWD/probe-neu" sea-neu 18765 "${{ inputs.version }}"
+
+      - name: Rauchprobe — b) AUFSTIEG von der vorigen Fassung
+        if: inputs.abbild && steps.vor.outputs.alt != ''
+        run: |
+          set -euo pipefail
+          SLUG="ghcr.io/${{ steps.repo.outputs.slug }}"
+          ALT="${{ steps.vor.outputs.alt }}"
+          NEU="${{ inputs.version }}"
+          mkdir -p "$PWD/probe-auf"
+          echo "── die vorige Fassung laeuft und schreibt ihr /data — benutzt: $ALT ──"
+          ./.github/rauchprobe.sh "$SLUG:$ALT" "$PWD/probe-auf" sea-alt 18766 "$ALT"
+          echo "── jetzt das neue Abbild auf GENAU DIESEM /data ──"
+          ./.github/rauchprobe.sh "$SLUG:$NEU" "$PWD/probe-auf" sea-auf 18767 "$NEU"
+
+      # ── Die ZIPs, die Benutzer wirklich herunterladen ───────────────────────
+
+      # 🔴 GEPRUEFT WIRD DIE VEROEFFENTLICHTE DATEI, NICHT DER ARBEITSSTAND.
+      # Genau hier lag schon einmal ein Fehler, den kein Blick in den Quelltext
+      # gefunden haette: die drei Archive wurden nacheinander in dasselbe
+      # Verzeichnis gebaut, also packte jedes die vorigen mit ein — das
+      # Linux-ZIP wog 73 MB statt 18 und entpackte zwei fremde Archive in das
+      # Installationsverzeichnis. Darum wird hier wirklich entpackt und
+      # nachgesehen.
+      - name: Die veroeffentlichten ZIPs holen und nachlesen
+        if: inputs.release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          V="${{ inputs.version }}"
+          TAG="v$V"
+          mkdir -p zips && cd zips
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.zip'
+          ls -l
+          fehler=0
+          for plattform in macos windows linux; do
+            archiv="shelly_energy_analyzer_${TAG}_${plattform}.zip"
+            echo "── $archiv ──"
+            if [ ! -f "$archiv" ]; then
+              echo "  🔴 fehlt"
+              fehler=1
+              continue
+            fi
+            groesse_mb=$(( $(stat -c%s "$archiv") / 1048576 ))
+            echo "  Groesse: ${groesse_mb} MB"
+            # Das verschachtelte Archiv wog 73 MB. 40 ist reichlich Luft nach oben.
+            if [ "$groesse_mb" -gt 40 ]; then
+              echo "  🔴 zu gross — steckt ein Archiv im Archiv?"
+              fehler=1
+            fi
+            if unzip -l "$archiv" | grep -q 'shelly_energy_analyzer_.*\.zip'; then
+              echo "  🔴 es liegt ein ZIP IM ZIP"
+              fehler=1
+            fi
+            rm -rf "aus-$plattform" && mkdir "aus-$plattform"
+            if ! unzip -q "$archiv" -d "aus-$plattform"; then
+              echo "  🔴 laesst sich nicht entpacken"
+              fehler=1
+              continue
+            fi
+            # Die Fassung, die drin steht, muss die sein, die draufsteht.
+            drin="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' "aus-$plattform/src/shelly_analyzer/__init__.py" | head -1)"
+            if [ "$drin" = "$V" ]; then
+              echo "  OK  es ist wirklich $V"
+            else
+              echo "  🔴 drin steht ${drin:-nichts}, drauf steht $V"
+              fehler=1
+            fi
+            # Das Startskript der Plattform muss dabei sein.
+            case "$plattform" in
+              macos)   start=start.command ;;
+              windows) start=start.bat ;;
+              linux)   start=start.sh ;;
+            esac
+            if [ -f "aus-$plattform/$start" ]; then
+              echo "  OK  $start liegt bei"
+            else
+              echo "  🔴 $start fehlt"
+              fehler=1
+            fi
+            # 🔑 Ein Syntaxfehler macht jede Installation beim ersten Start tot.
+            # Das faellt sonst erst beim Benutzer auf.
+            if python3 -m compileall -q "aus-$plattform/src" > /tmp/compile.log 2>&1; then
+              echo "  OK  alles uebersetzt sich"
+            else
+              echo "  🔴 uebersetzt sich nicht:"
+              tail -20 /tmp/compile.log
+              fehler=1
+            fi
+          done
+          if [ "$fehler" != "0" ]; then
+            echo "🔴 NICHT FREIGEBEN"
+            exit 1
+          fi
+          echo "✅ alle drei Archive sind heil"
+
+      # ── Erst jetzt wandern die Etiketten ───────────────────────────────────
+
+      - name: :latest auf diese Fassung setzen
+        if: inputs.abbild
+        run: |
+          set -euo pipefail
+          SLUG="ghcr.io/${{ steps.repo.outputs.slug }}"
+          docker buildx imagetools create -t "$SLUG:latest" "$SLUG:${{ inputs.version }}"
+          echo "::notice::latest zeigt jetzt auf ${{ inputs.version }}"
+          docker buildx imagetools inspect "$SLUG:latest" | head -6
+
+      # 🔑 Ab hier sehen die App und `hass-addons` die neue Fassung — das Add-on
+      # zieht im naechsten Fuenf-Minuten-Lauf von selbst nach.
+      - name: Das Release regulaer machen
+        if: inputs.release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="v${{ inputs.version }}"
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease=false --latest
+          echo "::notice::$TAG ist jetzt die regulaere Fassung"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isPrerelease,isLatest
