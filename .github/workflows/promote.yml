@@ -166,13 +166,24 @@ jobs:
             fi
             groesse_mb=$(( $(stat -c%s "$archiv") / 1048576 ))
             echo "  Groesse: ${groesse_mb} MB"
-            # Das verschachtelte Archiv wog 73 MB. 40 ist reichlich Luft nach oben.
-            if [ "$groesse_mb" -gt 40 ]; then
+            # 🔴 DIE SCHWELLE IST GEMESSEN, NICHT GESCHAETZT (04.10.2026).
+            # Das verschachtelte Archiv wog damals 73 MB, das heile 18. Der
+            # erste Wurf dieser Probe nahm darum 40 — und 17.6.4 wog genau 40,
+            # weil `docs/screenshots` mitfahren. 60 laesst dem Normalfall Luft
+            # und faengt das Doppelte immer noch.
+            if [ "$groesse_mb" -gt 60 ]; then
               echo "  🔴 zu gross — steckt ein Archiv im Archiv?"
               fehler=1
             fi
-            if unzip -l "$archiv" | grep -q 'shelly_energy_analyzer_.*\.zip'; then
+            # 🔴 `unzip -Z1`, NICHT `unzip -l`: dessen Kopfzeile lautet
+            # „Archive:  shelly_energy_analyzer_v17.6.4_macos.zip" — ein grep
+            # darauf findet den Namen des Archivs, das es gerade prueft, und
+            # meldet jedes gesunde Archiv als verschachtelt. Genau so ist diese
+            # Probe beim ersten Lauf rot geworden. `-Z1` listet nur die
+            # Eintraege.
+            if unzip -Z1 "$archiv" | grep -q '\.zip$'; then
               echo "  🔴 es liegt ein ZIP IM ZIP"
+              unzip -Z1 "$archiv" | grep '\.zip$'
               fehler=1
             fi
             rm -rf "aus-$plattform" && mkdir "aus-$plattform"
