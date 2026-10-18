@@ -21,6 +21,36 @@ def is_addon() -> bool:
     return bool(os.environ.get("SUPERVISOR_TOKEN") or os.environ.get("HASSIO_TOKEN"))
 
 
+def is_container() -> bool:
+    """True inside the published Docker image.
+
+    The image sets ``SEA_CONTAINER=1`` explicitly (see ``Dockerfile``) instead
+    of this function guessing from ``/.dockerenv`` or cgroups: a guess would
+    also fire for a Home-Assistant add-on or for somebody running the ZIP
+    inside a container of their own, and both of those keep their own update
+    path. In the image the code lives in ``site-packages`` and the container
+    is replaced on every update, so the in-app updater must stay off — a file
+    swap inside a container is gone with the next ``docker compose up``."""
+    return os.environ.get("SEA_CONTAINER", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def update_channel() -> str:
+    """How this installation receives new versions — exactly one of:
+
+    * ``"addon"``  — Home-Assistant add-on: the add-on is rebuilt.
+    * ``"docker"`` — the published container image: pull the new image
+      (``docker compose pull && docker compose up -d``, or Watchtower).
+    * ``"app"``    — ZIP / start script / service: the in-app updater.
+
+    The add-on wins over Docker: an add-on is a container too, and its own
+    path (rebuild) is the one that sticks there."""
+    if is_addon():
+        return "addon"
+    if is_container():
+        return "docker"
+    return "app"
+
+
 @dataclass(frozen=True)
 class TariffPeriod:
     """A future tariff period with a start date.

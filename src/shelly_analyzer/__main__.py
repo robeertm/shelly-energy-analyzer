@@ -38,6 +38,11 @@ def _autoheal_pending_update(logger: logging.Logger) -> None:
     normal startup. We'd rather boot the old (safe) code than crash here.
     """
     try:
+        from shelly_analyzer.io.config import update_channel
+        if update_channel() != "app":
+            # Add-on and Docker image never stage in-app updates; their code
+            # lives in site-packages and is replaced by a rebuild / new image.
+            return
         from shelly_analyzer import __version__ as _current_version
         tmp_root = Path(tempfile.gettempdir())
         candidates = sorted(tmp_root.glob("sea_update_*"))

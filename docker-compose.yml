@@ -1,0 +1,49 @@
+# Shelly Energy Analyzer — Docker Compose
+#
+#   docker compose up -d        then open http://<this machine>:8765
+#
+# The one-line installer (deploy/install.sh) writes exactly this file for you.
+#
+# Everything the app owns — database, config.json, exports, the optional
+# Tailscale identity — lives in ./data. The image carries code, never state.
+services:
+  shelly-energy-analyzer:
+    image: ghcr.io/robeertm/shelly-energy-analyzer:latest
+    container_name: shelly-energy-analyzer
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    # Device discovery (mDNS) cannot see through Docker's default bridge
+    # network. Adding Shellys by IP address always works. For discovery on
+    # Linux, remove `ports:` above and use the host network instead:
+    # network_mode: host
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+      # Optional: reach the dashboard over Tailscale (HTTPS, no port opened).
+      # Put TS_AUTHKEY=tskey-... into a .env file next to this one.
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
+    volumes:
+      - ./data:/data
+
+  # Keeps the analyzer up to date, nightly at 04:00. `image: …:latest` is a
+  # label, not a subscription — Docker never re-pulls a running container.
+  # Inside the container the in-app updater is switched off on purpose; this is
+  # how new versions arrive. It needs the Docker socket and watches ONLY the
+  # analyzer. Delete this service to update by hand
+  # (`docker compose pull && docker compose up -d`).
+  watchtower:
+    image: ghcr.io/nicholas-fedor/watchtower:latest
+    container_name: shelly-energy-analyzer-watchtower
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ:-Europe/Berlin}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - --cleanup
+      # Without this flag a container that keeps restarting is invisible to
+      # Watchtower — a broken version would then never be replaced by a good one.
+      - --include-restarting
+      - --schedule
+      - ${WATCHTOWER_SCHEDULE:-0 0 4 * * *}
+      - shelly-energy-analyzer

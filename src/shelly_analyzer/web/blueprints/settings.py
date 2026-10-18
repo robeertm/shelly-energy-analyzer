@@ -120,8 +120,12 @@ def get_settings():
     # Runtime flag (not persisted): true when running as a Home-Assistant add-on.
     # The Settings UI uses it to hide the in-app updater controls (updates are
     # managed via the add-on there). Prefixed with "_" so it's ignored on save.
-    from shelly_analyzer.io.config import is_addon
-    data["_addon"] = is_addon()
+    # Since 17.7.0 also `_docker`: in the published container image updates
+    # come with a new image, and the controls are hidden the same way.
+    from shelly_analyzer.io.config import update_channel
+    _channel = update_channel()
+    data["_addon"] = _channel == "addon"
+    data["_docker"] = _channel == "docker"
     resp = jsonify(data)
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return resp

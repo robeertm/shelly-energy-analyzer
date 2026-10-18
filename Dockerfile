@@ -16,7 +16,15 @@ ENV PYTHONUNBUFFERED=1 \
     TZ=Europe/Berlin \
     SEA_PORT=8765 \
     TS_STATE_DIR=/data/tailscale \
-    TS_HOSTNAME=shelly-energy-analyzer
+    TS_HOSTNAME=shelly-energy-analyzer \
+    SEA_CONTAINER=1
+
+# 🔑 SEA_CONTAINER=1 IS HOW THE APP KNOWS IT IS THIS IMAGE (since 17.7.0).
+# The code lives in site-packages and the container is replaced on every
+# update, so the in-app updater is switched off here — a file swap inside the
+# container would be gone with the next `docker compose up`. Updates come with
+# a new image (`docker compose pull && docker compose up -d`, or Watchtower).
+# A Home-Assistant add-on keeps its own path; see `io/config.update_channel()`.
 
 # Build tools for wheels that may need compiling (numpy/pandas ship wheels, but
 # pymodbus/reportlab/pillow occasionally need a compiler on slim images).

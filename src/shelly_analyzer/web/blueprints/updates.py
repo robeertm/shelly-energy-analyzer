@@ -15,7 +15,7 @@ from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request
 
 from shelly_analyzer import __version__
-from shelly_analyzer.io.config import is_addon
+from shelly_analyzer.io.config import update_channel
 from shelly_analyzer.services.updater import (
     check_latest_release,
     fetch_releases,
@@ -35,6 +35,15 @@ _ADDON_UPDATE_MSG = (
     "Updates are managed via the Home-Assistant add-on (rebuild). "
     "The in-app updater is disabled in add-on mode."
 )
+_DOCKER_UPDATE_MSG = (
+    "Updates come with the container image: docker compose pull && "
+    "docker compose up -d (or let Watchtower do it). "
+    "The in-app updater is disabled in Docker mode."
+)
+
+
+def _managed_update_msg(channel: str) -> str:
+    return _DOCKER_UPDATE_MSG if channel == "docker" else _ADDON_UPDATE_MSG
 
 # In-memory TTL cache for /api/updates/releases to avoid hitting GitHub
 # on every Settings → Updates page load (rate limit 60/h unauthenticated).
@@ -57,14 +66,17 @@ def api_updates_cached():
     UpdateChecker thread. Lightweight (no network call) — used by the Live
     tab to poll for a new-version banner without hitting GitHub on every
     page load."""
-    if is_addon():
+    channel = update_channel()
+    if channel != "app":
         return jsonify({
             "ok": True,
             "checked": True,
-            "addon": True,
+            "addon": channel == "addon",
+            "docker": channel == "docker",
+            "channel": channel,
             "current": __version__,
             "has_update": False,
-            "message": _ADDON_UPDATE_MSG,
+            "message": _managed_update_msg(channel),
         })
     state = _get_state()
     bg = getattr(state, "_bg", None)
@@ -91,15 +103,18 @@ def api_updates_status():
     explicitly passes ?force=1.
     """
     import time
-    if is_addon():
+    channel = update_channel()
+    if channel != "app":
         return jsonify({
             "ok": True,
-            "addon": True,
+            "addon": channel == "addon",
+            "docker": channel == "docker",
+            "channel": channel,
             "current": __version__,
             "reachable": False,
             "has_update": False,
-            "status": _ADDON_UPDATE_MSG,
-            "message": _ADDON_UPDATE_MSG,
+            "status": _managed_update_msg(channel),
+            "message": _managed_update_msg(channel),
         })
     state = _get_state()
     bg = getattr(state, "_bg", None)
@@ -149,13 +164,16 @@ def api_updates_releases():
     Settings → Updates page load. Pass ?force=1 to bypass the cache.
     """
     import time
-    if is_addon():
+    channel = update_channel()
+    if channel != "app":
         return jsonify({
             "ok": True,
-            "addon": True,
+            "addon": channel == "addon",
+            "docker": channel == "docker",
+            "channel": channel,
             "current": __version__,
             "releases": [],
-            "message": _ADDON_UPDATE_MSG,
+            "message": _managed_update_msg(channel),
         })
     repo = _repo()
     if not repo:
@@ -256,15 +274,19 @@ def api_updates_install():
     """Install a specific release tag. Body: {tag: 'v16.13.51'}. Spawns updater_helper
     in a detached process, then the current app exits so the helper can replace files
     and restart via start.{command,sh,bat}."""
-    if is_addon():
-        # Never self-update in add-on mode: the helper would swap files, but the
-        # next service restart reinstalls the add-on's pinned pip version →
-        # "Verifikation fehlgeschlagen". Report a clean status instead of a 500.
+    channel = update_channel()
+    if channel != "app":
+        # Never self-update in add-on or Docker mode: the helper would swap
+        # files, but the next add-on rebuild / container start brings back the
+        # version that was installed → "Verifikation fehlgeschlagen" in the
+        # add-on, a silent downgrade in Docker. Report a clean status instead.
         return jsonify({
             "ok": False,
-            "addon": True,
-            "error": _ADDON_UPDATE_MSG,
-            "message": _ADDON_UPDATE_MSG,
+            "addon": channel == "addon",
+            "docker": channel == "docker",
+            "channel": channel,
+            "error": _managed_update_msg(channel),
+            "message": _managed_update_msg(channel),
         }), 409
     body = request.get_json(silent=True) or {}
     tag = str(body.get("tag", "")).strip()
