@@ -15,7 +15,7 @@ existing `docker-compose.yml` is kept. Options as environment variables:
 `SEA_DIR`, `SEA_PORT`, `SEA_HOST_NETWORK=1` (host network, so mDNS discovery
 of Shellys works on Linux) and `TS_AUTHKEY` (join your tailnet; written to a
 `.env` that only you can read). The repository now also carries a
-`docker-compose.yml` and a `.env.example` for doing it by hand.
+`docker-compose.yml` and a `env.example` for doing it by hand.
 
 **The image now runs on arm64 as well** — a Raspberry Pi, an Apple-silicon
 Mac. It used to be published for amd64 only, because an emulated arm64 build
