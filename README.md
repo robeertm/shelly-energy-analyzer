@@ -117,7 +117,7 @@ keeps lives in `./shelly-energy-analyzer/data`.
 | `TS_AUTHKEY=tskey-auth-…` | also reach it over Tailscale (HTTPS); stored in `.env`, readable only by you |
 
 Running it again is safe — an existing `docker-compose.yml` is kept. Prefer
-doing it by hand? `docker-compose.yml` and `.env.example` are in the
+doing it by hand? `docker-compose.yml` and `env.example` are in the
 repository root: `docker compose up -d`.
 
 ### Without Docker
