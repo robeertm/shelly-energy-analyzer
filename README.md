@@ -11,7 +11,7 @@ No cloud. No subscription. No data lock-in.
 [![Release](https://img.shields.io/github/v/release/robeertm/shelly-energy-analyzer?logo=github)](https://github.com/robeertm/shelly-energy-analyzer/releases/latest)
 [![Last commit](https://img.shields.io/github/last-commit/robeertm/shelly-energy-analyzer?logo=git&logoColor=white)](https://github.com/robeertm/shelly-energy-analyzer/commits/main)
 [![i18n](https://img.shields.io/badge/i18n-9%20languages-brightgreen)](#languages)
-[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#quick-start-end-users)
+[![Platforms](https://img.shields.io/badge/platform-Docker%20%7C%20macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#quick-start-end-users)
 
 ![Hero](docs/screenshots/aurora_desktop_live.png)
 
@@ -82,7 +82,7 @@ Commercial energy dashboards lock you into subscriptions, truncate history after
 - 🌐 **Full REST API v1** + **InfluxDB line-protocol push** + **Prometheus `/metrics`** for your own stack
 - 🔒 **100 % self-hosted** — your energy data never leaves your LAN
 - 🆓 **Zero subscription** — no cloud, no accounts, no analytics
-- ⬆ **Self-updating** — background thread polls GitHub every hour for new releases; the Live tab shows a one-click banner to install or roll back to any of the last 10 versions, entirely from the browser
+- ⬆ **Self-updating** — background thread polls GitHub every hour for new releases; the Live tab shows a one-click banner to install or roll back to any of the last 10 versions, entirely from the browser. The Docker image and the Home Assistant add-on update through their own channel instead — see [Updates](#updates)
 
 ### Who it's for
 
@@ -96,6 +96,31 @@ Commercial energy dashboards lock you into subscriptions, truncate history after
 ---
 
 ## ⚡ Quickstart
+
+### 🐳 Docker — one command (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/robeertm/shelly-energy-analyzer/main/deploy/install.sh | sh
+```
+
+That writes a `docker-compose.yml` into `./shelly-energy-analyzer`, pulls the
+image (amd64 and arm64 — a NAS, a Raspberry Pi, a Mac) and starts it, together
+with a Watchtower that installs new versions every night. Open
+`http://<this machine>:8765` and follow the setup wizard. Everything the app
+keeps lives in `./shelly-energy-analyzer/data`.
+
+| Option (in front of `sh`) | Effect |
+|---|---|
+| `SEA_DIR=/volume1/docker/shelly` | install somewhere else (e.g. on a Synology) |
+| `SEA_PORT=8080` | another port for the dashboard |
+| `SEA_HOST_NETWORK=1` | host network — mDNS discovery of Shellys works (Linux). On the default bridge network, add Shellys by IP address |
+| `TS_AUTHKEY=tskey-auth-…` | also reach it over Tailscale (HTTPS); stored in `.env`, readable only by you |
+
+Running it again is safe — an existing `docker-compose.yml` is kept. Prefer
+doing it by hand? `docker-compose.yml` and `.env.example` are in the
+repository root: `docker compose up -d`.
+
+### Without Docker
 
 ```bash
 git clone https://github.com/robeertm/shelly-energy-analyzer.git
@@ -111,7 +136,7 @@ chmod +x start.sh && ./start.sh
 start.bat
 ```
 
-Open <https://localhost:8765> and follow the 12-step setup wizard — pick demo mode for a zero-hardware tour, or connect real Shellys via mDNS, set your tariff, and you're live. Every optional step is skippable.
+Open <https://localhost:8765> (Docker: `http://…:8765`) and follow the 12-step setup wizard — pick demo mode for a zero-hardware tour, or connect real Shellys via mDNS, set your tariff, and you're live. Every optional step is skippable.
 
 > **No Shellys yet?** Enable **Demo Mode** in Settings → Advanced to explore the full UI with realistic generated data. Great for seeing what the tool can do before buying hardware.
 
@@ -647,6 +672,9 @@ Browser-based 12-step wizard at `/setup` (auto-redirected on first launch when n
 
 ## Quick Start (End Users)
 
+### Docker
+See [Quickstart](#-quickstart) — one command, any machine with Docker.
+
 ### macOS
 ```
 Double-click start.command
@@ -723,7 +751,18 @@ python -m shelly_analyzer
 
 ---
 
-## Updates (GitHub Releases)
+## Updates
+
+How a new version arrives depends on how you installed it — each install keeps
+its own path:
+
+| Install | Updates |
+|---|---|
+| **Docker** (`deploy/install.sh`, `docker-compose.yml`) | a new image. The bundled Watchtower installs it every night at 04:00; by hand: `docker compose pull && docker compose up -d`. The in-app updater is switched off inside the container — a file swap there would be gone with the next restart. |
+| **Home Assistant add-on** | the add-on is rebuilt from the add-on store. The in-app updater is switched off there as well. |
+| **ZIP / start script** (macOS, Linux, Windows) | the built-in updater below. |
+
+### Built-in updater (installs without Docker)
 
 The built-in updater checks the latest release on GitHub automatically.
 

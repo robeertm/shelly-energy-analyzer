@@ -1779,6 +1779,18 @@ function renderUpdates() {
       </div>
     </section>`;
   }
+  // Docker image (since 17.7.0): the code lives in the image and the container
+  // is replaced on every update — a file swap inside it would be gone with the
+  // next `docker compose up`. Same treatment as the add-on, with the command.
+  if (cfg && cfg._docker) {
+    return `<section id="sec-updates"><h2>${T("settings.updates.title","Updates")}</h2>
+      <div class="hint" style="margin-top:8px;padding:12px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--card-bg,rgba(59,130,246,0.05))">
+        🐳 ${T("settings.updates.docker_managed","Updates kommen mit dem Container-Abbild.")}
+        <div style="margin-top:8px"><code style="user-select:all">docker compose pull &amp;&amp; docker compose up -d</code></div>
+        <div style="margin-top:6px;opacity:.8">${T("settings.updates.docker_watchtower","Oder automatisch: Watchtower holt neue Versionen von selbst.")}</div>
+      </div>
+    </section>`;
+  }
   return `<section id="sec-updates"><h2>${T("settings.updates.title","Updates")}</h2>
     <div class="grid2">
       <div class="field"><label>${T("settings.updates.repo","GitHub Repo")}</label>
@@ -3016,8 +3028,9 @@ function renderAll() {
   // Load measurement compensation values if that section is rendered
   if (document.getElementById("sec-compensation")) loadCompensation();
   // Auto-check update status if the updates section is rendered (skipped as a
-  // Home-Assistant add-on, where the in-app updater is hidden entirely).
-  if (document.getElementById("sec-updates") && !(cfg && cfg._addon)) {
+  // Home-Assistant add-on and in the Docker image, where the in-app updater is
+  // hidden entirely).
+  if (document.getElementById("sec-updates") && !(cfg && (cfg._addon || cfg._docker))) {
     checkUpdateStatus();
     loadReleaseList();
   }

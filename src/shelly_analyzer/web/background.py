@@ -1139,14 +1139,19 @@ class BackgroundServiceManager:
         """Periodically query GitHub for the latest release and cache the
         result so the Live-tab banner can surface new versions without
         hitting the network on every page load."""
-        from shelly_analyzer.io.config import is_addon
-        if is_addon():
-            # As a Home-Assistant add-on, updates come through the add-on
-            # (rebuild) — the in-app self-updater doesn't apply. Don't start
-            # the checker (no new-version banner nagging about a self-update
-            # that can't succeed here).
-            logger.info("Add-on mode: in-app update checker disabled "
-                        "(updates are managed via the Home-Assistant add-on)")
+        from shelly_analyzer.io.config import update_channel
+        channel = update_channel()
+        if channel != "app":
+            # As a Home-Assistant add-on updates come through the add-on
+            # (rebuild), in the Docker image through a new image — the in-app
+            # self-updater applies to neither. Don't start the checker (no
+            # new-version banner nagging about a self-update that can't
+            # succeed here).
+            logger.info("%s mode: in-app update checker disabled (%s)",
+                        "Add-on" if channel == "addon" else "Docker",
+                        "updates are managed via the Home-Assistant add-on"
+                        if channel == "addon" else
+                        "updates come with the container image")
             return
         upd_cfg = getattr(self.cfg, "updates", None)
         if upd_cfg is None or not getattr(upd_cfg, "check_on_start", True):
@@ -1167,11 +1172,12 @@ class BackgroundServiceManager:
           up to 1 hour so we stop hammering GitHub.
         """
         from shelly_analyzer import __version__
-        from shelly_analyzer.io.config import is_addon
+        from shelly_analyzer.io.config import update_channel
         from shelly_analyzer.services.updater import check_latest_release, is_newer
 
-        if is_addon():
-            # Safety net: never poll GitHub for self-updates in add-on mode.
+        if update_channel() != "app":
+            # Safety net: never poll GitHub for self-updates in add-on or
+            # Docker mode.
             return
 
         NORMAL_INTERVAL_S = 1800     # 30 min

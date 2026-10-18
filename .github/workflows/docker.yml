@@ -24,11 +24,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  # ── 1. Which marks this build may set — decided ONCE, before any build ──
+  prepare:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      packages: read
+    outputs:
+      slug: ${{ steps.repo.outputs.slug }}
+      version: ${{ steps.ver.outputs.version }}
+      tags: ${{ steps.marken.outputs.tags }}
     steps:
       - uses: actions/checkout@v4
 
@@ -101,31 +106,129 @@ jobs:
             echo "ENDE_DER_MARKEN"
           } >> "$GITHUB_OUTPUT"
 
-      # 🔴 amd64 only — on purpose. The image carries numpy/pandas/pillow, and
-      # an emulated arm64 build of those takes the better part of an hour on a
-      # hosted runner. The machine this runs on is an x86 NAS. Add arm64 the
-      # day something actually needs it, not before.
-      - name: Build and push
+  # ── 2. One build per architecture, each on its own NATIVE runner ────────
+  # 🔑 amd64 AND arm64 since 17.7.0 — the one-line Docker install is for
+  # everybody, and a Raspberry Pi or an Apple-silicon Mac is arm64. Until then
+  # this said "amd64 only — on purpose": an EMULATED arm64 build of
+  # numpy/pandas/pillow took the better part of an hour. GitHub's arm64
+  # runners build natively, in parallel with amd64, so that cost is gone.
+  # Each build pushes by DIGEST only — no mark yet; step 3 sets the marks on
+  # one manifest that carries both.
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64
-          push: true
-          # 🔴 HIER STEHT KEIN `:latest` MEHR (04.10.2026). Es stand hier — und
-          # damit wanderte das Etikett, dem jede Installation ueber Watchtower
-          # folgt, in dem Moment, in dem ein Commit auf main landete. Also
-          # bevor irgendetwas das gebaute Abbild angesehen hatte.
-          #
-          # Am 04.10.2026 ging bei DocuSort auf genau diesem Weg eine Fassung
-          # hinaus, die auf bestehenden Datenbanken nicht startete. Watchtower
-          # verteilte sie binnen einer Stunde an Roberts Kunden; die
-          # Installationen standen still — und waeren NICHT von selbst
-          # zurueckgekommen, weil Watchtower abstuerzende Container
-          # ueberspringt (`scanned=0`, am Pi nachgestellt).
-          #
-          # Jetzt setzt `promote.yml` das Etikett — von Hand, und erst nachdem
-          # es das VEROEFFENTLICHTE Abbild selbst angefahren hat.
-          tags: ${{ steps.marken.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=ghcr.io/${{ needs.prepare.outputs.slug }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
           provenance: false
+
+      - name: Keep the digest for the manifest
+        run: |
+          mkdir -p /tmp/digests
+          d="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${d#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # ── 3. The marks, on ONE manifest for both architectures ────────────────
+  merge:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 🔴 HIER STEHT KEIN `:latest` MEHR (04.10.2026). Es stand hier — und
+      # damit wanderte das Etikett, dem jede Installation ueber Watchtower
+      # folgt, in dem Moment, in dem ein Commit auf main landete. Also
+      # bevor irgendetwas das gebaute Abbild angesehen hatte.
+      #
+      # Am 04.10.2026 ging bei DocuSort auf genau diesem Weg eine Fassung
+      # hinaus, die auf bestehenden Datenbanken nicht startete. Watchtower
+      # verteilte sie binnen einer Stunde an alle Installationen; die
+      # Installationen standen still — und waeren NICHT von selbst
+      # zurueckgekommen, weil Watchtower abstuerzende Container
+      # ueberspringt (`scanned=0`, am Pi nachgestellt).
+      #
+      # Jetzt setzt `promote.yml` das Etikett — von Hand, und erst nachdem
+      # es das VEROEFFENTLICHTE Abbild selbst angefahren hat.
+      - name: Publish the marks on one manifest
+        working-directory: /tmp/digests
+        env:
+          SLUG: ghcr.io/${{ needs.prepare.outputs.slug }}
+          MARKEN: ${{ needs.prepare.outputs.tags }}
+        run: |
+          set -euo pipefail
+          args=()
+          while IFS= read -r m; do
+            [ -n "$m" ] && args+=(-t "$m")
+          done <<< "$MARKEN"
+          [ "${#args[@]}" -gt 0 ] || { echo "::error::no marks to set"; exit 1; }
+          quellen=()
+          for d in *; do quellen+=("$SLUG@sha256:$d"); done
+          [ "${#quellen[@]}" -eq 2 ] || { echo "::error::expected 2 digests, got ${#quellen[@]}"; exit 1; }
+          docker buildx imagetools create "${args[@]}" "${quellen[@]}"
+
+      # „Created" is not „carries both". Ask the registry what the mark holds.
+      - name: The manifest carries amd64 AND arm64
+        env:
+          SLUG: ghcr.io/${{ needs.prepare.outputs.slug }}
+        run: |
+          set -euo pipefail
+          out="$(docker buildx imagetools inspect "$SLUG:edge")"
+          printf '%s\n' "$out"
+          printf '%s' "$out" | grep -q 'linux/amd64' || { echo "::error::amd64 missing"; exit 1; }
+          printf '%s' "$out" | grep -q 'linux/arm64' || { echo "::error::arm64 missing"; exit 1; }

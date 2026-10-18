@@ -1,5 +1,50 @@
 # Changelog
 
+## 17.7.0
+
+### Install with Docker in one command — and every install updates the way it should
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/robeertm/shelly-energy-analyzer/main/deploy/install.sh | sh
+```
+
+`deploy/install.sh` writes a `docker-compose.yml`, pulls the published image
+and starts it together with a Watchtower that looks for a new version every
+night at 04:00 and watches only the analyzer. Re-running it is safe — an
+existing `docker-compose.yml` is kept. Options as environment variables:
+`SEA_DIR`, `SEA_PORT`, `SEA_HOST_NETWORK=1` (host network, so mDNS discovery
+of Shellys works on Linux) and `TS_AUTHKEY` (join your tailnet; written to a
+`.env` that only you can read). The repository now also carries a
+`docker-compose.yml` and a `.env.example` for doing it by hand.
+
+**The image now runs on arm64 as well** — a Raspberry Pi, an Apple-silicon
+Mac. It used to be published for amd64 only, because an emulated arm64 build
+of numpy/pandas took most of an hour; both architectures are now built
+natively, in parallel, and published as one manifest. The build checks that
+the published mark really carries both.
+
+**Three installs, three update paths — each one keeps its own:**
+
+| Install | How a new version arrives |
+|---|---|
+| ZIP / `start.command` / `start.sh` / `start.bat` | the in-app updater, unchanged |
+| Home Assistant add-on | the add-on is rebuilt, unchanged |
+| Docker image | a new image — Watchtower or `docker compose pull && docker compose up -d` |
+
+Until now nothing told the app it was running inside the image, so the in-app
+updater ran there too: it swapped files that the next `docker compose up`
+threw away again, and it competed with Watchtower. The image now sets
+`SEA_CONTAINER=1`; with it the update checker does not start, the update
+endpoints answer with `"channel": "docker"` and never contact GitHub, an
+install request is refused with 409, and Settings → Updates shows the command
+instead of the buttons. The add-on wins when both apply — an add-on is a
+container too. The message about add-on updates is now translated into all
+nine languages (it existed in three).
+
+`tests/test_update_channel.py` pins all three paths, including the one that
+must not change: a normal install still reaches GitHub through the old
+updater.
+
 ## 17.6.4
 
 ### A preset range now means the same period for every device on the chart
