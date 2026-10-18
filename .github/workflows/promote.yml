@@ -237,7 +237,12 @@ jobs:
           SLUG="ghcr.io/${{ steps.repo.outputs.slug }}"
           docker buildx imagetools create -t "$SLUG:latest" "$SLUG:${{ inputs.version }}"
           echo "::notice::latest zeigt jetzt auf ${{ inputs.version }}"
-          docker buildx imagetools inspect "$SLUG:latest" | head -6
+          # 🔴 `| head -6` killed this step once the image carried two
+          #    architectures (17.7.0): longer output, `head` closes the pipe,
+          #    imagetools dies of SIGPIPE, and `pipefail` turns that into exit
+          #    255 — AFTER `:latest` had moved, BEFORE the release was made
+          #    regular. `sed -n` reads to the end and never closes early.
+          docker buildx imagetools inspect "$SLUG:latest" | sed -n '1,8p'
 
       # 🔑 Ab hier sehen die App und `hass-addons` die neue Fassung — das Add-on
       # zieht im naechsten Fuenf-Minuten-Lauf von selbst nach.
