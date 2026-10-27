@@ -104,6 +104,8 @@ class TouConfig:
     urdb_rate: str = ""
     # OpenEI API key (free at openei.org/services/api/signup). Empty = DEMO_KEY.
     urdb_api_key: str = ""
+    # Address or ZIP code for the URDB rate search. Empty = weather lat/lon.
+    urdb_location: str = ""
 
     def price_at(self, dt) -> Optional[float]:
         """Price of the first rate window that matches local time `dt`, or None."""
@@ -1768,6 +1770,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         rates=tou_rates,
         urdb_rate=str(tou_raw.get("urdb_rate", "") or "").strip(),
         urdb_api_key=str(tou_raw.get("urdb_api_key", "") or "").strip(),
+        urdb_location=str(tou_raw.get("urdb_location", "") or "").strip(),
     )
 
     anomaly_raw = raw.get("anomaly", {}) if isinstance(raw.get("anomaly"), dict) else {}
@@ -2547,6 +2550,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
             ],
             "urdb_rate": str(getattr(cfg.tou, "urdb_rate", "") or ""),
             "urdb_api_key": str(getattr(cfg.tou, "urdb_api_key", "") or ""),
+            "urdb_location": str(getattr(cfg.tou, "urdb_location", "") or ""),
         },
         "billing": {
             "issuer": {

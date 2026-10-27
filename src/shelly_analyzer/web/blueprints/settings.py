@@ -356,14 +356,35 @@ def tou_urdb_import():
     api_key = str(obj.get("api_key") or "").strip()
     if api_key == "***":
         api_key = getattr(state.cfg.tou, "urdb_api_key", "")
+    location = str(obj.get("location", getattr(state.cfg.tou, "urdb_location", "")) or "").strip()
     try:
         rates, rate = load_tou_rates(rate_text, api_key)
-        apply_tou(state, replace(state.cfg.tou, enabled=True, rates=rates,
-                                 urdb_rate=rate_text, urdb_api_key=api_key))
+        apply_tou(state, replace(state.cfg.tou, enabled=True, rates=rates, urdb_rate=rate_text,
+                                 urdb_api_key=api_key, urdb_location=location))
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
     msg = f"{rate.get('utility', '')} - {rate.get('name', '')}: {len(rates)} TOU windows ({date.today():%Y-%m})"
     return jsonify({"ok": True, "message": msg})
+
+
+@bp.route("/api/settings/tou-urdb-search", methods=["POST"])
+def tou_urdb_search():
+    """List the residential URDB rates in effect now near an address or ZIP
+    code; an empty location uses the weather latitude/longitude. Saves nothing."""
+    from shelly_analyzer.services.urdb import search_rates
+    state = _get_state()
+    obj = request.get_json(silent=True) or {}
+    api_key = str(obj.get("api_key") or "").strip()
+    if api_key == "***":
+        api_key = getattr(state.cfg.tou, "urdb_api_key", "")
+    weather = getattr(state.cfg, "weather", None)
+    try:
+        rates = search_rates(str(obj.get("location") or ""), api_key,
+                             float(getattr(weather, "lat", 0.0) or 0.0),
+                             float(getattr(weather, "lon", 0.0) or 0.0))
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+    return jsonify({"ok": True, "rates": rates})
 
 
 def _deep_merge(base: dict, updates: dict) -> None:

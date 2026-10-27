@@ -130,7 +130,8 @@
       }
     ],
     "urdb_rate": "",
-    "urdb_api_key": ""
+    "urdb_api_key": "",
+    "urdb_location": ""
   },
   "billing": {
     "issuer": {

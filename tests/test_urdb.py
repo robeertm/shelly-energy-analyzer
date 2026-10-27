@@ -123,6 +123,52 @@ def test_api_error_message_is_passed_on():
             raise AssertionError("expected RuntimeError")
 
 
+def test_search_rates_keeps_current_newest_rates_sorted_by_utility():
+    now = 1_790_000_000
+    items = [
+        {"label": "a" * 24, "utility": "Pacific Gas & Electric Co", "name": "E-TOU-C", "startdate": now - 900},
+        {"label": "b" * 24, "utility": "Pacific Gas & Electric Co", "name": "E-TOU-C", "startdate": now - 100},
+        {"label": "c" * 24, "utility": "City Utility", "name": "Residential", "startdate": now - 50},
+        {"label": "d" * 24, "utility": "City Utility", "name": "Old", "startdate": 1, "enddate": now - 1},
+        {"label": "e" * 24, "utility": "City Utility", "name": "Next year", "startdate": now + 10},
+    ]
+    seen = {}
+
+    class _Resp:
+        status_code = 200
+
+        def json(self):
+            return {"items": items}
+
+    def _get(url, params=None, timeout=None):
+        seen.update(params)
+        return _Resp()
+
+    with mock.patch.object(urdb.requests, "get", side_effect=_get):
+        rates = urdb.search_rates("94110", "key", now=now)
+    assert rates == [
+        {"label": "c" * 24, "utility": "City Utility", "name": "Residential"},
+        {"label": "b" * 24, "utility": "Pacific Gas & Electric Co", "name": "E-TOU-C"},
+    ]
+    assert seen["address"] == "94110" and "lat" not in seen
+    assert seen["sector"] == "Residential" and seen["effective_on_date"] == now
+    assert seen["radius"] == urdb.SEARCH_RADIUS_MILES
+
+    seen.clear()
+    with mock.patch.object(urdb.requests, "get", side_effect=_get):
+        urdb.search_rates("", "key", lat=37.77, lon=-122.42, now=now)
+    assert seen["lat"] == 37.77 and seen["lon"] == -122.42 and "address" not in seen
+
+
+def test_search_rates_needs_a_place():
+    try:
+        urdb.search_rates("", "key")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError")
+
+
 def test_config_round_trip_keeps_urdb_fields():
     raw = {
         "version": "0",
@@ -131,6 +177,7 @@ def test_config_round_trip_keeps_urdb_fields():
             "enabled": True,
             "urdb_rate": "5cc0e8c45457a3d8137b23c6",
             "urdb_api_key": "abc",
+            "urdb_location": "94110",
             "rates": [{"name": "Period 1", "price_eur_per_kwh": 0.49, "start_hour": 16,
                        "end_hour": 21, "weekdays_only": True}],
         },
@@ -142,16 +189,18 @@ def test_config_round_trip_keeps_urdb_fields():
         cfg = load_config(f)
         assert cfg.tou.urdb_rate == "5cc0e8c45457a3d8137b23c6"
         assert cfg.tou.urdb_api_key == "abc"
+        assert cfg.tou.urdb_location == "94110"
         save_config(cfg, f)
         with open(f) as fh:
             again = json.load(fh)
         assert again["tou"]["urdb_rate"] == "5cc0e8c45457a3d8137b23c6"
         assert again["tou"]["urdb_api_key"] == "abc"
+        assert again["tou"]["urdb_location"] == "94110"
         # An old config without the fields still loads.
         with open(f, "w") as fh:
             fh.write(json.dumps({"version": "0", "devices": [], "tou": {"enabled": False}}))
         old = load_config(f)
-        assert old.tou.urdb_rate == "" and old.tou.urdb_api_key == ""
+        assert old.tou.urdb_rate == "" and old.tou.urdb_api_key == "" and old.tou.urdb_location == ""
     finally:
         try:
             os.unlink(f)
