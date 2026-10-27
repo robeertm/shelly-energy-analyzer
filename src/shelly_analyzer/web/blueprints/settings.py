@@ -117,6 +117,9 @@ def get_settings():
     sp = data.get("spot_price", {})
     if sp.get("eia_api_key"):
         sp["eia_api_key"] = "***"
+    tou = data.get("tou", {})
+    if tou.get("urdb_api_key"):
+        tou["urdb_api_key"] = "***"
     # Runtime flag (not persisted): true when running as a Home-Assistant add-on.
     # The Settings UI uses it to hide the in-app updater controls (updates are
     # managed via the add-on there). Prefixed with "_" so it's ignored on save.
@@ -340,6 +343,29 @@ def test_influxdb():
         return jsonify({"ok": False, "error": str(e)})
 
 
+@bp.route("/api/settings/tou-urdb-import", methods=["POST"])
+def tou_urdb_import():
+    """Load a URDB rate (label or rate page URL), turn this month's schedule
+    into TOU windows and save them with the rate and key. Turns TOU on."""
+    from dataclasses import replace
+    from datetime import date
+    from shelly_analyzer.services.urdb import apply_tou, load_tou_rates
+    state = _get_state()
+    obj = request.get_json(silent=True) or {}
+    rate_text = str(obj.get("rate") or "").strip()
+    api_key = str(obj.get("api_key") or "").strip()
+    if api_key == "***":
+        api_key = getattr(state.cfg.tou, "urdb_api_key", "")
+    try:
+        rates, rate = load_tou_rates(rate_text, api_key)
+        apply_tou(state, replace(state.cfg.tou, enabled=True, rates=rates,
+                                 urdb_rate=rate_text, urdb_api_key=api_key))
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+    msg = f"{rate.get('utility', '')} - {rate.get('name', '')}: {len(rates)} TOU windows ({date.today():%Y-%m})"
+    return jsonify({"ok": True, "message": msg})
+
+
 def _deep_merge(base: dict, updates: dict) -> None:
     """Recursively merge updates into base dict."""
     for k, v in updates.items():
@@ -369,6 +395,9 @@ def _restore_secrets(merged: dict, cfg: AppConfig) -> None:
     sp = merged.get("spot_price", {})
     if sp.get("eia_api_key") == "***":
         sp["eia_api_key"] = getattr(cfg.spot_price, "eia_api_key", "")
+    tou = merged.get("tou", {})
+    if tou.get("urdb_api_key") == "***":
+        tou["urdb_api_key"] = getattr(cfg.tou, "urdb_api_key", "")
 
 
 @bp.route("/api/upload-logo", methods=["POST"])
