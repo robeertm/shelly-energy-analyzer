@@ -1,9 +1,10 @@
 """Time-of-Use windows from the OpenEI Utility Rate Database (URDB).
 
-Owns: fetching one URDB rate and converting its energy schedule for one month
-into the app's TOU windows (``TouRate``), plus the daily refresh loop.
+Owns: the search for the residential rates near an address, fetching one URDB
+rate and converting its energy schedule for one month into the app's TOU
+windows (``TouRate``), plus the daily refresh loop.
 Needs: a rate label (or the rate page URL) and an OpenEI API key; an empty key
-uses ``DEMO_KEY``, which allows a few requests per day.
+uses ``DEMO_KEY``, which allows only 10 requests per day for each IP address.
 Changes: ``cfg.tou`` through :func:`apply_tou` (config file + hot reload).
 Tests: ``tests/test_urdb.py``.
 
@@ -47,10 +48,9 @@ def parse_rate_label(text: str) -> str:
     return text
 
 
-def fetch_rate(label: str, api_key: str = "", timeout: float = 20.0) -> Dict[str, Any]:
-    """Fetch one rate with full detail from the URDB API (version 8)."""
-    params = {"version": 8, "format": "json", "detail": "full",
-              "getpage": label, "api_key": api_key or DEMO_KEY}
+def _query(params: Dict[str, Any], api_key: str, timeout: float) -> Dict[str, Any]:
+    """One URDB API request (version 8, JSON). Raises RuntimeError on errors."""
+    params = dict(params, version=8, format="json", api_key=api_key or DEMO_KEY)
     try:
         resp = requests.get(API_URL, params=params, timeout=timeout)
     except requests.RequestException as e:
@@ -64,12 +64,53 @@ def fetch_rate(label: str, api_key: str = "", timeout: float = 20.0) -> Dict[str
     if err:
         msg = (err.get("message") or err.get("code")) if isinstance(err, dict) else err
         raise RuntimeError(f"URDB: {msg}")
-    if resp.status_code != 200:
+    if resp.status_code != 200 or not isinstance(data, dict):
         raise RuntimeError(f"URDB: HTTP {resp.status_code}")
-    items = data.get("items") if isinstance(data, dict) else None
+    return data
+
+
+def fetch_rate(label: str, api_key: str = "", timeout: float = 20.0) -> Dict[str, Any]:
+    """Fetch one rate with full detail from the URDB API (version 8)."""
+    items = _query({"detail": "full", "getpage": label}, api_key, timeout).get("items")
     if not items:
         raise RuntimeError(f"URDB: rate {label} not found")
     return items[0]
+
+
+# URDB maps a point to one utility. A big city can be in the area of a second
+# utility (San Francisco: the city utility and PG&E), so the search also takes
+# the utilities within this distance; the list groups the rates by utility.
+SEARCH_RADIUS_MILES = 5
+
+
+def search_rates(location: str = "", api_key: str = "", lat: float = 0.0, lon: float = 0.0,
+                 now: Optional[float] = None, timeout: float = 30.0) -> List[Dict[str, Any]]:
+    """Residential rates in effect now near an address or ZIP code, or near
+    ``lat``/``lon`` when ``location`` is empty.
+
+    Returns ``{"label", "utility", "name"}`` dicts, one for each utility and
+    rate name (the newest version), sorted by utility and name."""
+    now = int(now if now is not None else time.time())
+    params: Dict[str, Any] = {"detail": "minimal", "sector": "Residential", "approved": "true",
+                              "effective_on_date": now, "limit": 500,
+                              "radius": SEARCH_RADIUS_MILES, "co_limit": 10}
+    location = str(location or "").strip()
+    if location:
+        params["address"] = location
+    elif lat or lon:
+        params["lat"], params["lon"] = float(lat), float(lon)
+    else:
+        raise ValueError("Enter an address or ZIP code, or set latitude and longitude in Settings → Weather")
+    newest: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for it in _query(params, api_key, timeout).get("items") or []:
+        start, end = int(it.get("startdate") or 0), int(it.get("enddate") or 0)
+        if not it.get("label") or start > now or (end and end <= now):
+            continue
+        key = (str(it.get("utility") or ""), str(it.get("name") or ""))
+        if key not in newest or start > int(newest[key].get("startdate") or 0):
+            newest[key] = it
+    out = [{"label": str(it["label"]), "utility": k[0], "name": k[1]} for k, it in newest.items()]
+    return sorted(out, key=lambda r: (r["utility"].lower(), r["name"].lower()))
 
 
 def _period_price(tiers: Any) -> float:

@@ -9,13 +9,22 @@ US utilities publish their residential time-of-use rates in the OpenEI
 into Settings → TOU by hand is slow, and most US rates change between summer
 and winter, so a table typed in once is wrong for half of the year.
 
-Settings → TOU now has two optional fields, **URDB rate** (the rate label or
-the rate page URL) and **OpenEI API key** (free; empty uses `DEMO_KEY`), and an
-**⬇ Import from URDB** button. The import reads the rate's weekday and weekend
-schedule for the current month and fills the time periods: weekday windows
-(Mon–Fri) first, weekend windows after them, so "first matching rate wins"
-gives the weekend price on Saturday and Sunday. The import also turns TOU on.
-A window whose start and end hour are the same now covers the whole day.
+Settings → TOU now has optional fields for an **address or ZIP code**, the
+**URDB rate** (the rate label or the rate page URL) and an **OpenEI API key**
+(free; empty uses `DEMO_KEY`, which allows only 10 requests per day), and two
+buttons. **🔍 Find rates** lists the residential rates in effect today for the
+utilities near the address (an empty address uses the latitude/longitude from
+Settings → Weather), grouped by utility. URDB maps a point to one utility, and
+some cities are also served by a second one (San Francisco: the city utility
+and PG&E), so the search includes the utilities within 5 miles. Selecting a
+rate in the list imports it. **⬇ Import from URDB** imports a rate that was
+pasted by hand.
+
+The import reads the rate's weekday and weekend schedule for the current month
+and fills the time periods: weekday windows (Mon–Fri) first, weekend windows
+after them, so "first matching rate wins" gives the weekend price on Saturday
+and Sunday. The import also turns TOU on. A window whose start and end hour are
+the same now covers the whole day.
 
 With a URDB rate set, a background task re-applies the schedule once a day and
 within an hour after the month changes, so seasonal prices switch on their
@@ -34,7 +43,8 @@ tariff; an hourly TOU cost model for them is a possible follow-up.
 Limits: only the current month's schedule; only the first tier of each period
 (rate + adjustment); fixed, minimum and demand charges are not imported;
 holidays count as ordinary days. `tests/test_urdb.py` covers the conversion,
-the first-match order, the config round trip and the hidden API key.
+the first-match order, the rate search, the config round trip and the hidden
+API key.
 
 ## 17.7.0
 

@@ -360,8 +360,9 @@ const SECTIONS = [
   {id:"tools_exports", title:"Tools / Exports", group:"Advanced", custom:true},
   {id:"tou", title:"TOU (time-of-use)", group:"Basic", fields:[
     {key:"tou.enabled", label:"TOU tariff active", type:"checkbox"},
-    {key:"tou.urdb_rate", label:"URDB rate (US utilities)", type:"text", hint:"Optional: label or rate page URL from apps.openei.org/IURDB. ⬇ Import fills the time periods for the current month and turns TOU on; the app re-applies the schedule about once a day."},
-    {key:"tou.urdb_api_key", label:"OpenEI API key", type:"password", hint:"Free at openei.org/services/api/signup — empty = DEMO_KEY (a few requests per day)"},
+    {key:"tou.urdb_location", label:"Address or ZIP code (US)", type:"text", hint:"For 🔍 Find rates: lists the residential rates of the utilities near this place. Empty = latitude/longitude from Settings → Weather."},
+    {key:"tou.urdb_rate", label:"URDB rate (US utilities)", type:"text", hint:"Filled in when you select a rate after 🔍 Find rates. You can also paste a label or rate page URL from apps.openei.org/IURDB and click ⬇ Import. The import fills the time periods for the current month and turns TOU on; the app re-applies the schedule about once a day."},
+    {key:"tou.urdb_api_key", label:"OpenEI API key", type:"password", hint:"Free at openei.org/services/api/signup — empty = DEMO_KEY (only 10 requests per day)"},
     {key:"tou.rates", label:"Time periods", type:"list", itemLabel:"Rate", schema:[
       {key:"name", label:"Name", type:"text", placeholder:"HT / NT"},
       {key:"price_eur_per_kwh", label:"Price €/kWh", type:"number", step:"0.0001"},
@@ -864,9 +865,10 @@ function renderSection(s) {
   const fieldsHtml = (s.fields||[]).map(renderField).join("");
   const hint = s.hint ? `<div class="hint" style="margin-bottom:10px">${T("settings.sectionhint."+s.id, s.hint)}</div>` : "";
   const testBtn = s.testBtn ? `<button class="secondary" onclick="testConnection('${s.testBtn}')">${T("settings.btn.test","🔌 Test")}</button>` : "";
-  const urdbBtn = s.id === "tou" ? `<button class="secondary" onclick="importUrdb()">${T("settings.btn.urdb_import","⬇ Import from URDB")}</button>` : "";
+  const urdbBtn = s.id === "tou" ? `<button class="secondary" onclick="findUrdbRates()">${T("settings.btn.urdb_search","🔍 Find rates")}</button><button class="secondary" onclick="importUrdb()">${T("settings.btn.urdb_import","⬇ Import from URDB")}</button>` : "";
+  const urdbBox = s.id === "tou" ? `<div id="urdb-results"></div>` : "";
   return `<section id="sec-${s.id}"><h2>${tSection(s)}</h2>${hint}
-    <div class="grid2">${fieldsHtml}</div>
+    <div class="grid2">${fieldsHtml}</div>${urdbBox}
     <div class="section-actions">${testBtn}${urdbBtn}
       <button onclick="saveSection('${s.id}')">${T("settings.btn.save","💾 Speichern")}</button>
     </div></section>`;
@@ -3246,7 +3248,7 @@ async function importUrdb() {
   try {
     const r = await fetch("/api/settings/tou-urdb-import", {method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({rate:val("tou.urdb_rate"), api_key:val("tou.urdb_api_key")})});
+      body:JSON.stringify({rate:val("tou.urdb_rate"), api_key:val("tou.urdb_api_key"), location:val("tou.urdb_location")})});
     const j = await r.json();
     if (!j.ok) { toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error"); return; }
     toast("✓ " + j.message);
@@ -3256,6 +3258,36 @@ async function importUrdb() {
     const grid = secEl && secEl.querySelector(".grid2");
     if (grid && s) { grid.innerHTML = (s.fields||[]).map(renderField).join(""); wireListEvents(grid); }
   } catch(e) { toast(T("settings.toast.error","Error: {err}",{err:e.message}), "error"); }
+}
+
+// TOU: list the URDB rates near the address/ZIP code, grouped by utility.
+// Selecting a rate fills the rate field and imports it.
+async function findUrdbRates() {
+  const val = k => { const el = document.querySelector('[data-key="'+k+'"]'); return el ? el.value : ""; };
+  const box = document.getElementById("urdb-results");
+  toast(T("settings.toast.urdb_searching","Searching rates in URDB…"));
+  try {
+    const r = await fetch("/api/settings/tou-urdb-search", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({location:val("tou.urdb_location"), api_key:val("tou.urdb_api_key")})});
+    const j = await r.json();
+    if (!j.ok) { toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error"); return; }
+    if (!j.rates.length) { box.innerHTML = ""; toast(T("settings.toast.urdb_none","No residential rates found near this place"), "error"); return; }
+    const groups = {};
+    j.rates.forEach(x => { (groups[x.utility] = groups[x.utility] || []).push(x); });
+    box.innerHTML = `<div class="field" style="margin-top:12px"><label>${T("settings.urdb.pick_label","Your rate (as on your bill)")}</label>`
+      + `<select onchange="pickUrdbRate(this.value)"><option value="">${T("settings.urdb.pick","Select your rate ({n} found)",{n:j.rates.length})}</option>`
+      + Object.keys(groups).map(u => `<optgroup label="${esc(u)}">`
+          + groups[u].map(x => `<option value="${esc(x.label)}">${esc(x.name)}</option>`).join("") + `</optgroup>`).join("")
+      + `</select></div>`;
+  } catch(e) { toast(T("settings.toast.error","Error: {err}",{err:e.message}), "error"); }
+}
+
+function pickUrdbRate(label) {
+  if (!label) return;
+  const el = document.querySelector('[data-key="tou.urdb_rate"]');
+  if (el) el.value = label;
+  importUrdb();
 }
 
 async function reload() {
