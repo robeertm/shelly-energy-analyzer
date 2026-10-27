@@ -363,6 +363,8 @@ Android / any browser: open `/w` and add to home screen — no app required.
 - Automatic cost calculation using the correct rate per time window
 - Configurable per day-of-week and hour range
 - Seamless integration with cost dashboard and exports
+- **US utility rates from the OpenEI [Utility Rate Database](https://apps.openei.org/IURDB/) (URDB)** — paste a rate label or rate page URL and an [OpenEI API key](https://openei.org/services/api/signup/) (empty = `DEMO_KEY`, a few requests per day), click **⬇ Import from URDB**, and the time windows for the current month are filled in. The app re-applies the schedule about once a day, so summer and winter prices switch on their own. Uses the first tier of each period (rate + adjustment); fixed, minimum and demand charges are not imported, and holidays count as ordinary days
+- With TOU on, two prices follow the active TOU window: the current price published over MQTT (`tariff_price_eur_kwh`, which Home Assistant's Energy dashboard can use) and the live part of today's cost on the Costs tab (energy since the last synced hour). The other Costs-tab totals still use the flat tariff
 
 ### 📈 Historical Analysis & Consumption Forecast
 - Plots for W / V / A / kWh / VAR / cos phi / Hz (grid frequency) / CO2 emissions / **dynamic prices**

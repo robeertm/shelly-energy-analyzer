@@ -20409,3 +20409,30 @@ _I18N.setdefault("ru", {}).update({
     "digest.worst_day": "Худший день",
     "digest.year_proj": "Прогноз на год",
 })
+
+
+# ── TOU import from the OpenEI Utility Rate Database (URDB) ─────────────
+_I18N.setdefault("de", {}).update({
+    "settings.field.tou.urdb_rate": "URDB-Tarif (US-Versorger)",
+    "settings.hint.tou.urdb_rate": "Optional: Label oder URL der Tarifseite auf apps.openei.org/IURDB. ⬇ Import füllt die Zeitperioden für den aktuellen Monat und schaltet TOU ein; die App übernimmt den Plan etwa einmal am Tag neu.",
+    "settings.field.tou.urdb_api_key": "OpenEI-API-Key",
+    "settings.hint.tou.urdb_api_key": "Kostenlos unter openei.org/services/api/signup – leer = DEMO_KEY (wenige Abfragen pro Tag)",
+    "settings.btn.urdb_import": "⬇ Aus URDB importieren",
+    "settings.toast.urdb_importing": "Lade Tarif aus der URDB…",
+})
+_I18N.setdefault("en", {}).update({
+    "settings.field.tou.urdb_rate": "URDB rate (US utilities)",
+    "settings.hint.tou.urdb_rate": "Optional: label or rate page URL from apps.openei.org/IURDB. ⬇ Import fills the time periods for the current month and turns TOU on; the app re-applies the schedule about once a day.",
+    "settings.field.tou.urdb_api_key": "OpenEI API key",
+    "settings.hint.tou.urdb_api_key": "Free at openei.org/services/api/signup — empty = DEMO_KEY (a few requests per day)",
+    "settings.btn.urdb_import": "⬇ Import from URDB",
+    "settings.toast.urdb_importing": "Loading rate from URDB…",
+})
+_I18N.setdefault("es", {}).update({
+    "settings.field.tou.urdb_rate": "Tarifa URDB (compañías de EE. UU.)",
+    "settings.hint.tou.urdb_rate": "Opcional: etiqueta o URL de la página de la tarifa en apps.openei.org/IURDB. ⬇ Importar rellena los periodos del mes actual y activa TOU; la app vuelve a aplicar el horario aproximadamente una vez al día.",
+    "settings.field.tou.urdb_api_key": "Clave API de OpenEI",
+    "settings.hint.tou.urdb_api_key": "Gratis en openei.org/services/api/signup — vacío = DEMO_KEY (pocas consultas al día)",
+    "settings.btn.urdb_import": "⬇ Importar desde URDB",
+    "settings.toast.urdb_importing": "Cargando tarifa desde URDB…",
+})

@@ -97,6 +97,7 @@ class BackgroundServiceManager:
         self._start_co2_forecaster()
         self._start_spot_fetcher()
         self._start_pv_source()
+        self._start_urdb_refresh()
         self._start_summary_scheduler()
         self._start_update_checker()
         self._start_live_history_saver()
@@ -1001,7 +1002,9 @@ class BackgroundServiceManager:
         actually bills with — published so Home Assistant can use it as the
         Energy dashboard's ``entity_energy_price`` and always match the
         analyzer. If a dynamic tariff is active it is the spot price of the
-        current hour, otherwise the fixed/scheduled tariff for today (mirrors
+        current hour; with TOU on, the price of the active TOU window (the
+        Costs tab totals still use the flat tariff then); otherwise the
+        fixed/scheduled tariff for today (mirrors
         the Costs tab's ``_get_effective_unit_price``)."""
         try:
             sp = getattr(self.cfg, "spot_price", None)
@@ -1009,6 +1012,14 @@ class BackgroundServiceManager:
                     and str(getattr(sp, "tariff_type", "fixed")) == "dynamic"):
                 v = self._current_spot_price()
                 if v:
+                    return float(v)
+        except Exception:
+            pass
+        try:
+            tou = getattr(self.cfg, "tou", None)
+            if tou is not None and getattr(tou, "enabled", False):
+                v = tou.price_at(datetime.now())
+                if v is not None:
                     return float(v)
         except Exception:
             pass
@@ -1132,6 +1143,16 @@ class BackgroundServiceManager:
                         getattr(pv_cfg, "source_type", "?"))
         except Exception as e:
             logger.exception("PV source failed to start: %s", e)
+
+    def _start_urdb_refresh(self) -> None:
+        """Rebuild the TOU windows from the configured URDB rate about once a
+        day (services/urdb.py). The loop is idle while no URDB rate is set."""
+        state = getattr(self, "_state", None)
+        if state is None:
+            return
+        from shelly_analyzer.services.urdb import refresh_loop
+        threading.Thread(target=refresh_loop, args=(state, self._stop_event),
+                         name="UrdbTouRefresh", daemon=True).start()
 
     # ── Periodic Update Check ──────────────────────────────────────────
 
