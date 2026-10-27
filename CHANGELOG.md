@@ -2,49 +2,59 @@
 
 ## 17.7.1
 
-### Time-of-use rates from the US Utility Rate Database (URDB)
+### Electricity rate from the US Utility Rate Database (URDB)
 
-US utilities publish their residential time-of-use rates in the OpenEI
-[Utility Rate Database](https://apps.openei.org/IURDB/). Typing those windows
-into Settings → TOU by hand is slow, and most US rates change between summer
+US utilities publish their residential rates in the OpenEI
+[Utility Rate Database](https://apps.openei.org/IURDB/). Until now a US user
+had to read the price, the fixed charge and the time-of-use windows from the
+tariff sheet and type them in by hand, and most US rates change between summer
 and winter, so a table typed in once is wrong for half of the year.
 
-Settings → TOU now has optional fields for an **address or ZIP code**, the
-**URDB rate** (the rate label or the rate page URL) and an **OpenEI API key**
-(free; empty uses `DEMO_KEY`, which allows only 10 requests per day), and two
-buttons. **🔍 Find rates** lists the residential rates in effect today for the
-utilities near the address (an empty address uses the latitude/longitude from
-Settings → Weather), grouped by utility. URDB maps a point to one utility, and
-some cities are also served by a second one (San Francisco: the city utility
-and PG&E), so the search includes the utilities within 5 miles. Selecting a
-rate in the list imports it. **⬇ Import from URDB** imports a rate that was
-pasted by hand.
+Settings → Pricing & tariff now has optional fields for an **address or ZIP
+code**, the **URDB rate** (the rate label or the rate page URL) and an **OpenEI
+API key** (free; empty uses `DEMO_KEY`, which allows only 10 requests per day),
+and two buttons. **🔍 Find rates** lists the residential rates in effect today
+for the utilities near the address (an empty address uses the
+latitude/longitude from Settings → Weather), grouped by utility. URDB maps a
+point to one utility, and some cities are also served by a second one (San
+Francisco: the city utility and PG&E), so the search includes the utilities
+within 5 miles. Selecting a rate in the list imports it. **⬇ Import from URDB**
+imports a rate that was pasted by hand.
 
-The import reads the rate's weekday and weekend schedule for the current month
-and fills the time periods: weekday windows (Mon–Fri) first, weekend windows
-after them, so "first matching rate wins" gives the weekend price on Saturday
-and Sunday. The import also turns TOU on. A window whose start and end hour are
-the same now covers the whole day.
+The import sets the price model in one step:
 
-With a URDB rate set, a background task re-applies the schedule once a day and
+- **Electricity price**: the rate's price per kWh for the current month. For a
+  time-of-use rate it is the average over the hours of a week (5 weekdays and
+  2 weekend days), so the Costs totals stay close to the real bill.
+- **Base fee**: the rate's fixed charge as a yearly fee ($/month × 12,
+  $/day × 365). Both values are stored as final prices ("incl. VAT").
+- **Settings → TOU**: the weekday and weekend windows of the current month —
+  weekday windows (Mon–Fri) first, weekend windows after them, so "first
+  matching rate wins" gives the weekend price on Saturday and Sunday. TOU is
+  turned on only when the month has more than one price. A window whose start
+  and end hour are the same now covers the whole day.
+
+With a URDB rate set, a background task applies the rate again once a day and
 within an hour after the month changes, so seasonal prices switch on their
-own. On an error the current windows stay and the error is logged. The API key
-is masked in `GET /api/settings`, like the other keys, and never appears in an
-error message.
+own. On an error the current settings stay and the error is logged. To keep a
+price of your own, clear the URDB rate field. The API key is masked in
+`GET /api/settings`, like the other keys, and never appears in an error
+message.
 
 The TOU windows had no effect on any price in the web app until now (the TOU
 cost model of the old desktop UI was not ported). With TOU on, two prices now
 follow the active TOU window: the current price published over MQTT
 (`tariff_price_eur_kwh`, which Home Assistant's Energy dashboard can use) and
 the live part of today's cost on the Costs tab (energy since the last synced
-hour). The other Costs-tab totals, reports and invoices still use the flat
-tariff; an hourly TOU cost model for them is a possible follow-up.
+hour). The other Costs-tab totals, reports and invoices use the price from
+Settings → Pricing; an hourly TOU cost model for them is a possible follow-up.
 
 Limits: only the current month's schedule; only the first tier of each period
-(rate + adjustment); fixed, minimum and demand charges are not imported;
-holidays count as ordinary days. `tests/test_urdb.py` covers the conversion,
-the first-match order, the rate search, the config round trip and the hidden
-API key.
+(rate + adjustment); minimum and demand charges are not imported; holidays
+count as ordinary days; a price change in "Price changes" that already started
+still overrides the imported price. `tests/test_urdb.py` covers the conversion,
+the first-match order, the weekly average price, the base fee, the rate search,
+the config round trip and the hidden API key.
 
 ## 17.7.0
 

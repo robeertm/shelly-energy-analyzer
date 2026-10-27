@@ -345,11 +345,11 @@ def test_influxdb():
 
 @bp.route("/api/settings/tou-urdb-import", methods=["POST"])
 def tou_urdb_import():
-    """Load a URDB rate (label or rate page URL), turn this month's schedule
-    into TOU windows and save them with the rate and key. Turns TOU on."""
-    from dataclasses import replace
+    """Load a URDB rate (label or rate page URL) and set Settings -> Pricing
+    (price per kWh, base fee) and Settings -> TOU (this month's windows; TOU on
+    only for a rate with more than one price) from it."""
     from datetime import date
-    from shelly_analyzer.services.urdb import apply_tou, load_tou_rates
+    from shelly_analyzer.services.urdb import apply_config, config_from_rate, fetch_rate, parse_rate_label
     state = _get_state()
     obj = request.get_json(silent=True) or {}
     rate_text = str(obj.get("rate") or "").strip()
@@ -358,12 +358,19 @@ def tou_urdb_import():
         api_key = getattr(state.cfg.tou, "urdb_api_key", "")
     location = str(obj.get("location", getattr(state.cfg.tou, "urdb_location", "")) or "").strip()
     try:
-        rates, rate = load_tou_rates(rate_text, api_key)
-        apply_tou(state, replace(state.cfg.tou, enabled=True, rates=rates, urdb_rate=rate_text,
-                                 urdb_api_key=api_key, urdb_location=location))
+        label = parse_rate_label(rate_text)
+        if not label:
+            raise ValueError("No URDB rate given")
+        rate = fetch_rate(label, api_key)
+        new_cfg = config_from_rate(state.cfg, rate, date.today().month, urdb_rate=rate_text,
+                                   urdb_api_key=api_key, urdb_location=location)
+        apply_config(state, new_cfg)
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
-    msg = f"{rate.get('utility', '')} - {rate.get('name', '')}: {len(rates)} TOU windows ({date.today():%Y-%m})"
+    p, t = new_cfg.pricing, new_cfg.tou
+    tou_txt = f"TOU on, {len(t.rates)} windows" if t.enabled else "one price all day, TOU off"
+    msg = (f"{rate.get('utility', '')} - {rate.get('name', '')}: {p.electricity_price_eur_per_kwh:.5f}/kWh, "
+           f"base fee {p.base_fee_eur_per_year:.2f}/year, {tou_txt} ({date.today():%Y-%m})")
     return jsonify({"ok": True, "message": msg})
 
 

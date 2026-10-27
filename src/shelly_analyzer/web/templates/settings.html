@@ -343,6 +343,9 @@ const SECTIONS = [
   {id:"ssl", title:"SSL certificate", group:"Basic", custom:true},
   {id:"pricing", title:"Pricing & tariff", group:"Basic", fields:[
     {key:"spot_price.tariff_type", label:"Tariff model", type:"select", opts:[["fixed","Fixed tariff"],["dynamic","Dynamic tariff (spot)"]], hint:"Fixed = flat electricity price, Dynamic = hourly market prices"},
+    {key:"tou.urdb_location", label:"Address or ZIP code (US)", type:"text", hint:"For 🔍 Find rates: lists the residential rates of the utilities near this place. Empty = latitude/longitude from Settings → Weather."},
+    {key:"tou.urdb_rate", label:"URDB rate (US utilities)", type:"text", hint:"Filled in when you select a rate after 🔍 Find rates. You can also paste a label or rate page URL from apps.openei.org/IURDB and click ⬇ Import. The import sets the electricity price and the base fee below; for a time-of-use rate it also fills Settings → TOU. The app applies the rate again about once a day."},
+    {key:"tou.urdb_api_key", label:"OpenEI API key", type:"password", hint:"Free at openei.org/services/api/signup — empty = DEMO_KEY (only 10 requests per day)"},
     {key:"pricing.electricity_price_eur_per_kwh", label:"Electricity price €/kWh", type:"number", step:"0.0001", hint:"For fixed tariff: your contract price"},
     {key:"pricing.base_fee_eur_per_year", label:"Base fee €/year", type:"number", step:"0.01"},
     {key:"pricing.price_includes_vat", label:"Price incl. VAT", type:"checkbox"},
@@ -360,9 +363,6 @@ const SECTIONS = [
   {id:"tools_exports", title:"Tools / Exports", group:"Advanced", custom:true},
   {id:"tou", title:"TOU (time-of-use)", group:"Basic", fields:[
     {key:"tou.enabled", label:"TOU tariff active", type:"checkbox"},
-    {key:"tou.urdb_location", label:"Address or ZIP code (US)", type:"text", hint:"For 🔍 Find rates: lists the residential rates of the utilities near this place. Empty = latitude/longitude from Settings → Weather."},
-    {key:"tou.urdb_rate", label:"URDB rate (US utilities)", type:"text", hint:"Filled in when you select a rate after 🔍 Find rates. You can also paste a label or rate page URL from apps.openei.org/IURDB and click ⬇ Import. The import fills the time periods for the current month and turns TOU on; the app re-applies the schedule about once a day."},
-    {key:"tou.urdb_api_key", label:"OpenEI API key", type:"password", hint:"Free at openei.org/services/api/signup — empty = DEMO_KEY (only 10 requests per day)"},
     {key:"tou.rates", label:"Time periods", type:"list", itemLabel:"Rate", schema:[
       {key:"name", label:"Name", type:"text", placeholder:"HT / NT"},
       {key:"price_eur_per_kwh", label:"Price €/kWh", type:"number", step:"0.0001"},
@@ -865,8 +865,8 @@ function renderSection(s) {
   const fieldsHtml = (s.fields||[]).map(renderField).join("");
   const hint = s.hint ? `<div class="hint" style="margin-bottom:10px">${T("settings.sectionhint."+s.id, s.hint)}</div>` : "";
   const testBtn = s.testBtn ? `<button class="secondary" onclick="testConnection('${s.testBtn}')">${T("settings.btn.test","🔌 Test")}</button>` : "";
-  const urdbBtn = s.id === "tou" ? `<button class="secondary" onclick="findUrdbRates()">${T("settings.btn.urdb_search","🔍 Find rates")}</button><button class="secondary" onclick="importUrdb()">${T("settings.btn.urdb_import","⬇ Import from URDB")}</button>` : "";
-  const urdbBox = s.id === "tou" ? `<div id="urdb-results"></div>` : "";
+  const urdbBtn = s.id === "pricing" ? `<button class="secondary" onclick="findUrdbRates()">${T("settings.btn.urdb_search","🔍 Find rates")}</button><button class="secondary" onclick="importUrdb()">${T("settings.btn.urdb_import","⬇ Import from URDB")}</button>` : "";
+  const urdbBox = s.id === "pricing" ? `<div id="urdb-results"></div>` : "";
   return `<section id="sec-${s.id}"><h2>${tSection(s)}</h2>${hint}
     <div class="grid2">${fieldsHtml}</div>${urdbBox}
     <div class="section-actions">${testBtn}${urdbBtn}
@@ -3241,7 +3241,7 @@ async function testConnection(which) {
   else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
 }
 
-// TOU: load a rate from the OpenEI URDB, fill the time periods for this month.
+// Pricing: load a rate from the OpenEI URDB; sets the price, the base fee and the TOU windows.
 async function importUrdb() {
   const val = k => { const el = document.querySelector('[data-key="'+k+'"]'); return el ? el.value : ""; };
   toast(T("settings.toast.urdb_importing","Loading rate from URDB…"));
@@ -3253,14 +3253,16 @@ async function importUrdb() {
     if (!j.ok) { toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error"); return; }
     toast("✓ " + j.message);
     cfg = await fetch("/api/settings").then(x=>x.json());
-    const secEl = document.getElementById("sec-tou");
-    const s = SECTIONS.find(x => x.id === "tou");
-    const grid = secEl && secEl.querySelector(".grid2");
-    if (grid && s) { grid.innerHTML = (s.fields||[]).map(renderField).join(""); wireListEvents(grid); }
+    ["pricing", "tou"].forEach(id => {
+      const secEl = document.getElementById("sec-" + id);
+      const s = SECTIONS.find(x => x.id === id);
+      const grid = secEl && secEl.querySelector(".grid2");
+      if (grid && s) { grid.innerHTML = (s.fields||[]).map(renderField).join(""); wireListEvents(grid); }
+    });
   } catch(e) { toast(T("settings.toast.error","Error: {err}",{err:e.message}), "error"); }
 }
 
-// TOU: list the URDB rates near the address/ZIP code, grouped by utility.
+// Pricing: list the URDB rates near the address/ZIP code, grouped by utility.
 // Selecting a rate fills the rate field and imports it.
 async function findUrdbRates() {
   const val = k => { const el = document.querySelector('[data-key="'+k+'"]'); return el ? el.value : ""; };
