@@ -37,6 +37,18 @@ RATE = {
     "energyweekdayschedule": [WINTER] * 5 + [SUMMER_WD] * 4 + [WINTER] * 3,
     "energyweekendschedule": [WINTER] * 5 + [SUMMER_WE] * 4 + [WINTER] * 3,
 }
+# A flat rate with a monthly fixed charge, as PSE Schedule 7 is in URDB.
+FLAT = {
+    "label": "69ef9ad6ca9e815b0e0a185a",
+    "utility": "Puget Sound Energy Inc",
+    "name": "7 (Residential Service - Single Phase)",
+    "energyratestructure": [[{"rate": 0.146284, "adj": 0.046581, "max": 600, "unit": "kWh"},
+                             {"rate": 0.165701, "adj": 0.046581, "unit": "kWh"}]],
+    "energyweekdayschedule": [[0] * 24] * 12,
+    "energyweekendschedule": [[0] * 24] * 12,
+    "fixedchargefirstmeter": 7.49,
+    "fixedchargeunits": "$/month",
+}
 
 
 def test_windows_merge_the_overnight_run():
@@ -167,6 +179,42 @@ def test_search_rates_needs_a_place():
         pass
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_price_for_month_averages_the_week_and_flat_rate_keeps_its_price():
+    july = (19 * 0.38 + 5 * 0.49) * 5 + 24 * 0.38 * 2
+    assert abs(urdb.price_for_month(RATE, 7) - july / 168) < 1e-6
+    assert abs(urdb.price_for_month(RATE, 1) - (19 * 0.32 + 5 * 0.36) / 24) < 1e-6
+    assert urdb.price_for_month(FLAT, 10) == 0.192865
+
+
+def test_fixed_charge_becomes_a_yearly_base_fee():
+    assert urdb.fixed_fee_per_year(FLAT) == 89.88
+    assert urdb.fixed_fee_per_year(dict(FLAT, fixedchargeunits="$/day", fixedchargefirstmeter=0.5)) == 182.5
+    assert urdb.fixed_fee_per_year(dict(FLAT, fixedchargefirstmeter=None)) is None
+    assert urdb.fixed_fee_per_year(dict(FLAT, fixedchargeunits="$/kW")) is None
+
+
+def test_config_from_rate_sets_pricing_and_turns_tou_on_only_for_tou_rates():
+    f = tempfile.mktemp(suffix=".json")
+    try:
+        with open(f, "w") as fh:
+            fh.write(json.dumps({"version": "0", "devices": [],
+                                 "pricing": {"electricity_price_eur_per_kwh": 0.32, "base_fee_eur_per_year": 120,
+                                             "price_includes_vat": False}}))
+        cfg = load_config(f)
+    finally:
+        os.unlink(f)
+    flat = urdb.config_from_rate(cfg, FLAT, 10, urdb_rate="69ef9ad6ca9e815b0e0a185a")
+    assert flat.pricing.electricity_price_eur_per_kwh == 0.192865
+    assert flat.pricing.base_fee_eur_per_year == 89.88
+    assert flat.pricing.price_includes_vat and flat.pricing.base_fee_includes_vat
+    assert flat.tou.enabled is False and len(flat.tou.rates) == 1
+    assert flat.tou.urdb_rate == "69ef9ad6ca9e815b0e0a185a"
+    tou = urdb.config_from_rate(cfg, RATE, 7)
+    assert tou.tou.enabled is True and len(tou.tou.rates) == 3
+    # RATE has no fixed charge: the base fee stays as it was.
+    assert tou.pricing.base_fee_eur_per_year == 120
 
 
 def test_config_round_trip_keeps_urdb_fields():

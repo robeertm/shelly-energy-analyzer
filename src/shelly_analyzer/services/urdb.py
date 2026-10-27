@@ -1,17 +1,18 @@
-"""Time-of-Use windows from the OpenEI Utility Rate Database (URDB).
+"""Electricity price and Time-of-Use windows from the OpenEI Utility Rate Database (URDB).
 
 Owns: the search for the residential rates near an address, fetching one URDB
-rate and converting its energy schedule for one month into the app's TOU
-windows (``TouRate``), plus the daily refresh loop.
+rate, and turning it into Settings -> Pricing (price per kWh, base fee) and
+Settings -> TOU (the windows of one month), plus the daily refresh loop.
 Needs: a rate label (or the rate page URL) and an OpenEI API key; an empty key
 uses ``DEMO_KEY``, which allows only 10 requests per day for each IP address.
-Changes: ``cfg.tou`` through :func:`apply_tou` (config file + hot reload).
+Changes: ``cfg.pricing`` and ``cfg.tou`` through :func:`apply_config`
+(config file + hot reload).
 Tests: ``tests/test_urdb.py``.
 
-Limits, on purpose, to keep the existing TOU model unchanged:
+Limits, on purpose, to keep the existing price model unchanged:
 - only the schedule of the current month (re-applied when the month changes),
 - only the first tier of each period (``rate + adj``, $/kWh),
-- no fixed, minimum or demand charges,
+- the fixed charge becomes the base fee; minimum and demand charges are ignored,
 - holidays count as ordinary days.
 """
 from __future__ import annotations
@@ -27,7 +28,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
-from shelly_analyzer.io.config import TouConfig, TouRate
+from shelly_analyzer.io.config import TouRate
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +119,7 @@ def _period_price(tiers: Any) -> float:
     if not isinstance(tiers, list) or not tiers or not isinstance(tiers[0], dict):
         raise ValueError("URDB rate has an energy period without tiers")
     t = tiers[0]
-    return round(float(t.get("rate") or 0.0) + float(t.get("adj") or 0.0), 5)
+    return round(float(t.get("rate") or 0.0) + float(t.get("adj") or 0.0), 6)
 
 
 def _windows(row: List[int]) -> List[Tuple[int, int, int]]:
@@ -183,28 +184,72 @@ def load_tou_rates(rate_text: str, api_key: str = "",
     return tou_rates_for_month(rate, month or date.today().month), rate
 
 
-def apply_tou(state: Any, tou: TouConfig) -> None:
-    """Save ``tou`` to the config file and hot-reload it, like a settings save."""
+def price_for_month(rate: Dict[str, Any], month: int) -> float:
+    """One price per kWh for ``month``: the first-tier prices averaged over the
+    hours of a week (5 weekdays, 2 weekend days). A flat rate gives its price."""
+    structure = rate.get("energyratestructure") or []
+    weekday = rate.get("energyweekdayschedule") or []
+    weekend = rate.get("energyweekendschedule") or weekday
+    prices = [_period_price(p) for p in structure]
+    wd = [int(p) for p in weekday[int(month) - 1]]
+    we = [int(p) for p in weekend[int(month) - 1]]
+    total = sum(prices[p] for p in wd) * 5 + sum(prices[p] for p in we) * 2
+    return round(total / (24 * 7), 6)
+
+
+# URDB fixed charge units -> factor to a yearly base fee.
+_FEE_PER_YEAR = {"$/month": 12.0, "$/day": 365.0, "$/year": 1.0}
+
+
+def fixed_fee_per_year(rate: Dict[str, Any]) -> Optional[float]:
+    """The rate's fixed charge as a yearly base fee, or None if URDB has none."""
+    v = rate.get("fixedchargefirstmeter")
+    factor = _FEE_PER_YEAR.get(str(rate.get("fixedchargeunits") or "$/month"))
+    if v is None or factor is None:
+        return None
+    return round(float(v) * factor, 2)
+
+
+def config_from_rate(cfg: Any, rate: Dict[str, Any], month: int, **urdb_fields: str) -> Any:
+    """``cfg`` with Settings -> Pricing and Settings -> TOU set from a URDB rate.
+
+    Pricing gets the price per kWh for ``month`` and the base fee (both as final
+    prices, "incl. VAT"). TOU gets the windows of ``month`` and is on only when
+    the month has more than one price. ``urdb_fields`` (urdb_rate, urdb_api_key,
+    urdb_location) are stored with the TOU settings."""
+    rates = tou_rates_for_month(rate, month)
+    tou = replace(cfg.tou, rates=rates, enabled=len({r.price_eur_per_kwh for r in rates}) > 1, **urdb_fields)
+    p: Dict[str, Any] = {"electricity_price_eur_per_kwh": price_for_month(rate, month), "price_includes_vat": True}
+    fee = fixed_fee_per_year(rate)
+    if fee is not None:
+        p.update(base_fee_eur_per_year=fee, base_fee_includes_vat=True)
+    return replace(cfg, tou=tou, pricing=replace(cfg.pricing, **p))
+
+
+def apply_config(state: Any, new_cfg: Any) -> None:
+    """Save ``new_cfg`` to the config file and hot-reload it, like a settings save."""
     from shelly_analyzer.io.config import save_config
-    new_cfg = replace(state.cfg, tou=tou)
     save_config(new_cfg, getattr(state, "_cfg_path", None) or Path("config.json"))
     state.cfg = new_cfg
     state.reload_config(new_cfg)
 
 
 def refresh_once(state: Any, month: Optional[int] = None) -> bool:
-    """Rebuild the TOU windows from the configured URDB rate.
+    """Set Pricing and TOU again from the configured URDB rate.
 
-    Saves only when the windows changed; returns True in that case."""
+    Saves only when something changed; returns True in that case."""
     tou = state.cfg.tou
     if not str(getattr(tou, "urdb_rate", "") or "").strip():
         return False
-    rates, rate = load_tou_rates(tou.urdb_rate, tou.urdb_api_key, month)
-    if list(rates) == list(tou.rates):
+    label = parse_rate_label(tou.urdb_rate)
+    rate = fetch_rate(label, tou.urdb_api_key)
+    new_cfg = config_from_rate(state.cfg, rate, month or date.today().month)
+    if new_cfg.tou == state.cfg.tou and new_cfg.pricing == state.cfg.pricing:
         return False
-    apply_tou(state, replace(state.cfg.tou, rates=rates))
-    logger.info("URDB TOU windows updated: %s - %s (%d windows)",
-                rate.get("utility", "?"), rate.get("name", "?"), len(rates))
+    apply_config(state, new_cfg)
+    logger.info("URDB rate applied: %s - %s (%.5f/kWh, %d TOU windows)",
+                rate.get("utility", "?"), rate.get("name", "?"),
+                new_cfg.pricing.electricity_price_eur_per_kwh, len(new_cfg.tou.rates))
     return True
 
 
