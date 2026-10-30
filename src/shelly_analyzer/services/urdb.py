@@ -17,6 +17,7 @@ Limits, on purpose, to keep the existing price model unchanged:
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import threading
@@ -36,30 +37,54 @@ API_URL = "https://api.openei.org/utility_rates"
 DEMO_KEY = "DEMO_KEY"
 # A URDB label is a 24-digit hex id, e.g. .../IURDB/rate/view/5cc0e8c45457a3d8137b23c6
 _LABEL_RE = re.compile(r"\b([0-9a-fA-F]{24})\b")
+# Upper bound for one API answer. A full rate is a few kB, a search with
+# limit=500 in "minimal" detail well under 1 MB.
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
 
 def parse_rate_label(text: str) -> str:
-    """Return the URDB label from a label or from a rate page URL."""
+    """Return the URDB label from a label or from a rate page URL.
+
+    Only the 24-digit hex id is used; the rest of the text (for example the
+    host of a pasted URL) is never requested. Empty text gives ""."""
     text = str(text or "").strip()
+    if not text:
+        return ""
     m = _LABEL_RE.search(text)
     if m:
         return m.group(1).lower()
-    if "/" in text:
-        raise ValueError("No URDB rate label in this URL")
-    return text
+    raise ValueError("No URDB rate label (24 hex digits) in this text")
 
 
 def _query(params: Dict[str, Any], api_key: str, timeout: float) -> Dict[str, Any]:
-    """One URDB API request (version 8, JSON). Raises RuntimeError on errors."""
-    params = dict(params, version=8, format="json", api_key=api_key or DEMO_KEY)
+    """One URDB API request (version 8, JSON). Raises RuntimeError on errors.
+
+    The key goes in the ``X-Api-Key`` header, not in the URL, so it never shows
+    up in a logged request line or in the text of a network error."""
+    params = dict(params, version=8, format="json")
+    headers = {"X-Api-Key": api_key or DEMO_KEY, "Accept": "application/json"}
     try:
-        resp = requests.get(API_URL, params=params, timeout=timeout)
+        resp = requests.get(API_URL, params=params, headers=headers, timeout=timeout, stream=True)
     except requests.RequestException as e:
-        # The exception text contains the request URL, and with it the API key.
         raise RuntimeError(f"URDB request failed ({type(e).__name__})") from None
     try:
-        data = resp.json()
-    except ValueError:
+        body = b""
+        for chunk in resp.iter_content(chunk_size=65536):
+            body += chunk
+            if len(body) > MAX_RESPONSE_BYTES:
+                raise RuntimeError("URDB: answer too large")
+    except RuntimeError:
+        raise
+    except Exception as e:  # read errors (requests or urllib3)
+        raise RuntimeError(f"URDB request failed ({type(e).__name__})") from None
+    finally:
+        try:
+            resp.close()
+        except Exception:
+            pass
+    try:
+        data = json.loads(body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
         raise RuntimeError(f"URDB: HTTP {resp.status_code}") from None
     err = data.get("error") if isinstance(data, dict) else None
     if err:
@@ -73,13 +98,13 @@ def _query(params: Dict[str, Any], api_key: str, timeout: float) -> Dict[str, An
 def fetch_rate(label: str, api_key: str = "", timeout: float = 20.0) -> Dict[str, Any]:
     """Fetch one rate with full detail from the URDB API (version 8)."""
     items = _query({"detail": "full", "getpage": label}, api_key, timeout).get("items")
-    if not items:
+    if not isinstance(items, list) or not items or not isinstance(items[0], dict):
         raise RuntimeError(f"URDB: rate {label} not found")
     return items[0]
 
 
 # URDB maps a point to one utility. A big city can be in the area of a second
-# utility (San Francisco: the city utility and PG&E), so the search also takes
+# utility (a city utility plus the regional one), so the search also takes
 # the utilities within this distance; the list groups the rates by utility.
 SEARCH_RADIUS_MILES = 5
 
@@ -119,7 +144,10 @@ def _period_price(tiers: Any) -> float:
     if not isinstance(tiers, list) or not tiers or not isinstance(tiers[0], dict):
         raise ValueError("URDB rate has an energy period without tiers")
     t = tiers[0]
-    return round(float(t.get("rate") or 0.0) + float(t.get("adj") or 0.0), 6)
+    try:
+        return round(float(t.get("rate") or 0.0) + float(t.get("adj") or 0.0), 6)
+    except (TypeError, ValueError):
+        raise ValueError("URDB rate has a price that is not a number") from None
 
 
 def _windows(row: List[int]) -> List[Tuple[int, int, int]]:
@@ -142,6 +170,44 @@ def _windows(row: List[int]) -> List[Tuple[int, int, int]]:
     return sorted(out)
 
 
+def _month_schedule(rate: Dict[str, Any], month: int) -> Tuple[List[float], List[int], List[int]]:
+    """Period prices and the weekday/weekend rows (24 period indexes) of ``month``.
+
+    Raises ValueError with a readable message for every shape URDB can send
+    that this import cannot use (no energy charges, missing or short schedules,
+    unknown periods), so a caller never crashes on a TypeError/IndexError and
+    the settings stay as they were."""
+    month = int(month)
+    if not 1 <= month <= 12:
+        raise ValueError("month must be 1-12")
+    if not isinstance(rate, dict):
+        raise ValueError("URDB rate is not an object")
+    structure = rate.get("energyratestructure")
+    weekday = rate.get("energyweekdayschedule")
+    weekend = rate.get("energyweekendschedule") or weekday
+    if not isinstance(structure, list) or not structure:
+        raise ValueError("URDB rate has no energy charges (no price per kWh)")
+    if not isinstance(weekday, list) or not weekday:
+        raise ValueError("URDB rate has no energy schedule")
+    if not isinstance(weekend, list) or len(weekday) != 12 or len(weekend) != 12:
+        raise ValueError("URDB schedule does not have 12 months")
+    prices = [_period_price(p) for p in structure]
+    rows = []
+    for sched in (weekday, weekend):
+        row = sched[month - 1]
+        if not isinstance(row, list) or len(row) != 24:
+            raise ValueError("URDB schedule row does not have 24 hours")
+        try:
+            rows.append([int(p) for p in row])
+        except (TypeError, ValueError):
+            raise ValueError("URDB schedule has a period that is not a number") from None
+    wd, we = rows
+    for p in wd + we:
+        if not 0 <= p < len(prices):
+            raise ValueError(f"URDB schedule uses period {p}, but the rate has {len(prices)} periods")
+    return prices, wd, we
+
+
 def tou_rates_for_month(rate: Dict[str, Any], month: int) -> List[TouRate]:
     """TOU windows for ``month`` (1-12).
 
@@ -149,22 +215,7 @@ def tou_rates_for_month(rate: Dict[str, Any], month: int) -> List[TouRate]:
     The weekend windows follow, so with "first matching rate wins" they only
     match on Saturday and Sunday. When both rows are the same, one set of
     all-days windows is returned."""
-    structure = rate.get("energyratestructure")
-    weekday = rate.get("energyweekdayschedule")
-    weekend = rate.get("energyweekendschedule") or weekday
-    if not structure or not weekday:
-        raise ValueError("URDB rate has no energy time-of-use schedule")
-    if len(weekday) != 12 or len(weekend) != 12:
-        raise ValueError("URDB schedule does not have 12 months")
-    month = int(month)
-    if not 1 <= month <= 12:
-        raise ValueError("month must be 1-12")
-    prices = [_period_price(p) for p in structure]
-    wd = [int(p) for p in weekday[month - 1]]
-    we = [int(p) for p in weekend[month - 1]]
-    for p in wd + we:
-        if not 0 <= p < len(prices):
-            raise ValueError(f"URDB schedule uses period {p}, but the rate has {len(prices)} periods")
+    prices, wd, we = _month_schedule(rate, month)
     groups = [(wd, False)] if wd == we else [(wd, True), (we, False)]
     out: List[TouRate] = []
     for row, weekdays_only in groups:
@@ -187,12 +238,7 @@ def load_tou_rates(rate_text: str, api_key: str = "",
 def price_for_month(rate: Dict[str, Any], month: int) -> float:
     """One price per kWh for ``month``: the first-tier prices averaged over the
     hours of a week (5 weekdays, 2 weekend days). A flat rate gives its price."""
-    structure = rate.get("energyratestructure") or []
-    weekday = rate.get("energyweekdayschedule") or []
-    weekend = rate.get("energyweekendschedule") or weekday
-    prices = [_period_price(p) for p in structure]
-    wd = [int(p) for p in weekday[int(month) - 1]]
-    we = [int(p) for p in weekend[int(month) - 1]]
+    prices, wd, we = _month_schedule(rate, month)
     total = sum(prices[p] for p in wd) * 5 + sum(prices[p] for p in we) * 2
     return round(total / (24 * 7), 6)
 
@@ -207,7 +253,10 @@ def fixed_fee_per_year(rate: Dict[str, Any]) -> Optional[float]:
     factor = _FEE_PER_YEAR.get(str(rate.get("fixedchargeunits") or "$/month"))
     if v is None or factor is None:
         return None
-    return round(float(v) * factor, 2)
+    try:
+        return round(float(v) * factor, 2)
+    except (TypeError, ValueError):
+        return None
 
 
 def config_from_rate(cfg: Any, rate: Dict[str, Any], month: int, **urdb_fields: str) -> Any:
