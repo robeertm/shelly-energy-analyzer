@@ -359,10 +359,13 @@ def tou_urdb_import():
     location = str(obj.get("location", getattr(state.cfg.tou, "urdb_location", "")) or "").strip()
     try:
         label = parse_rate_label(rate_text)
-        if not label:
-            raise ValueError("No URDB rate given")
+    except ValueError as e:
+        return jsonify({"ok": False, "code": "bad_rate", "error": str(e)})
+    if not label:
+        return jsonify({"ok": False, "code": "no_rate", "error": "No URDB rate given"})
+    try:
         rate = fetch_rate(label, api_key)
-        new_cfg = config_from_rate(state.cfg, rate, date.today().month, urdb_rate=rate_text,
+        new_cfg = config_from_rate(state.cfg, rate, date.today().month, urdb_rate=label,
                                    urdb_api_key=api_key, urdb_location=location)
         apply_config(state, new_cfg)
     except Exception as e:
@@ -371,7 +374,15 @@ def tou_urdb_import():
     tou_txt = f"TOU on, {len(t.rates)} windows" if t.enabled else "one price all day, TOU off"
     msg = (f"{rate.get('utility', '')} - {rate.get('name', '')}: {p.electricity_price_eur_per_kwh:.5f}/kWh, "
            f"base fee {p.base_fee_eur_per_year:.2f}/year, {tou_txt} ({date.today():%Y-%m})")
-    return jsonify({"ok": True, "message": msg})
+    # `message` stays for API users; the settings page builds its own text in
+    # the UI language from the fields below.
+    return jsonify({"ok": True, "message": msg,
+                    "utility": str(rate.get("utility", "") or ""),
+                    "name": str(rate.get("name", "") or ""),
+                    "price": round(float(p.electricity_price_eur_per_kwh), 6),
+                    "base_fee": round(float(p.base_fee_eur_per_year), 2),
+                    "tou_enabled": bool(t.enabled), "windows": len(t.rates),
+                    "month": f"{date.today():%Y-%m}"})
 
 
 @bp.route("/api/settings/tou-urdb-search", methods=["POST"])
@@ -385,10 +396,15 @@ def tou_urdb_search():
     if api_key == "***":
         api_key = getattr(state.cfg.tou, "urdb_api_key", "")
     weather = getattr(state.cfg, "weather", None)
+    location = str(obj.get("location") or "").strip()
+    lat = float(getattr(weather, "lat", 0.0) or 0.0)
+    lon = float(getattr(weather, "lon", 0.0) or 0.0)
+    if not location and not (lat or lon):
+        # Nothing to search with: no request leaves the app.
+        return jsonify({"ok": False, "code": "no_location",
+                        "error": "Enter an address or ZIP code, or set latitude and longitude in Settings → Weather"})
     try:
-        rates = search_rates(str(obj.get("location") or ""), api_key,
-                             float(getattr(weather, "lat", 0.0) or 0.0),
-                             float(getattr(weather, "lon", 0.0) or 0.0))
+        rates = search_rates(location, api_key, lat, lon)
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
     return jsonify({"ok": True, "rates": rates})
