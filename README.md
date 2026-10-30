@@ -359,12 +359,24 @@ Android / any browser: open `/w` and add to home screen — no app required.
 - **Negative wholesale hours are visible** — the spot-price chart renders bidirectional bars (positive bars grow up from a zero line, negative ones hang below in a distinct purple), so the "you earn money" slots on a dynamic tariff are obvious at a glance. Cost math passes negative prices through 1:1, in line with how Tibber / aWATTar bill them
 
 ### 💱 Time-of-Use (TOU) Tariffs
-- Define multiple time-based electricity price zones (peak, off-peak, etc.)
-- Automatic cost calculation using the correct rate per time window
-- Configurable per day-of-week and hour range
-- Seamless integration with cost dashboard and exports
-- **US utility rates from the OpenEI [Utility Rate Database](https://apps.openei.org/IURDB/) (URDB)** — in Settings → Pricing & tariff, enter your address or ZIP code, click **🔍 Find rates**, and select the rate on your bill from the list (grouped by utility; it includes the utilities within 5 miles). The import sets the electricity price (for a time-of-use rate: the average over the week) and the base fee from the rate's fixed charge, and for a time-of-use rate it also fills the TOU windows of the current month. You can also paste a rate label or rate page URL and click **⬇ Import from URDB**. Get a free [OpenEI API key](https://openei.org/services/api/signup/); without one the app uses `DEMO_KEY`, which allows only 10 requests per day. The app applies the rate again about once a day, so summer and winter prices switch on their own. Uses the first tier of each period (rate + adjustment); minimum and demand charges are not imported, and holidays count as ordinary days
-- With TOU on, two prices follow the active TOU window: the current price published over MQTT (`tariff_price_eur_kwh`, which Home Assistant's Energy dashboard can use) and the live part of today's cost on the Costs tab (energy since the last synced hour). The other Costs-tab totals still use the flat tariff
+- Define multiple time-based price windows (peak, off-peak, etc.) by hour range, optionally for weekdays only; the first window that matches the hour wins, and a window with the same start and end hour covers the whole day
+- With TOU on, two prices follow the active window: the current price published over MQTT (`tariff_price_eur_kwh`, which Home Assistant's Energy dashboard can use) and the live part of today's cost on the Costs tab (energy since the last synced hour). The other Costs-tab totals, reports and invoices use the price from Settings → Pricing & tariff
+- TOU windows use the local time of the app. In Docker, set `TZ` to your time zone (for example `TZ=America/Chicago`)
+
+#### US utility rates (URDB)
+In Settings → Pricing & tariff, the optional block **US utility rate (URDB)** loads your rate from the OpenEI [Utility Rate Database](https://apps.openei.org/IURDB/):
+
+1. Enter your address or ZIP code (or leave it empty to use the latitude/longitude from Settings → Weather) and click **🔍 Find rates**. The list shows the residential rates in effect today, grouped by utility; it includes the utilities within 5 miles.
+2. Select the rate on your bill. The import sets the electricity price (for a time-of-use rate: the average over the week) and the base fee from the rate's fixed charge, and for a time-of-use rate it also fills the TOU windows of the current month and turns TOU on.
+3. Alternatively, paste a rate label or rate page URL and click **⬇ Import from URDB**.
+
+The app applies the rate again about once a day and right after the month changes, so summer and winter prices switch on their own. Clear the URDB rate field to keep a price of your own. Get a free [OpenEI API key](https://openei.org/services/api/signup/); without one the app uses `DEMO_KEY`, which allows only 10 requests per day.
+
+Limits: the first tier of each period (rate + adjustment) is used; minimum and demand charges are not imported, and holidays count as ordinary days.
+
+Privacy: nothing is sent to OpenEI unless a URDB rate is set or you click one of the two buttons. Your address (or the weather coordinates) is sent only when you click **🔍 Find rates**; the daily refresh sends only the rate label and the API key. The key is sent in a request header, never in a URL.
+
+![Settings: US utility rate (URDB) after importing a time-of-use rate](docs/screenshots/desktop_20_us_rate.png)
 
 ### 📈 Historical Analysis & Consumption Forecast
 - Plots for W / V / A / kWh / VAR / cos phi / Hz (grid frequency) / CO2 emissions / **dynamic prices**

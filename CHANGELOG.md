@@ -1,8 +1,11 @@
 # Changelog
 
-## 17.7.1
+## 17.8.0
 
 ### Electricity rate from the US Utility Rate Database (URDB)
+
+Contributed by @throndir2 (pull request #17), with review additions listed
+at the end.
 
 US utilities publish their residential rates in the OpenEI
 [Utility Rate Database](https://apps.openei.org/IURDB/). Until now a US user
@@ -10,16 +13,16 @@ had to read the price, the fixed charge and the time-of-use windows from the
 tariff sheet and type them in by hand, and most US rates change between summer
 and winter, so a table typed in once is wrong for half of the year.
 
-Settings → Pricing & tariff now has optional fields for an **address or ZIP
-code**, the **URDB rate** (the rate label or the rate page URL) and an **OpenEI
-API key** (free; empty uses `DEMO_KEY`, which allows only 10 requests per day),
-and two buttons. **🔍 Find rates** lists the residential rates in effect today
-for the utilities near the address (an empty address uses the
-latitude/longitude from Settings → Weather), grouped by utility. URDB maps a
-point to one utility, and some cities are also served by a second one (San
-Francisco: the city utility and PG&E), so the search includes the utilities
-within 5 miles. Selecting a rate in the list imports it. **⬇ Import from URDB**
-imports a rate that was pasted by hand.
+Settings → Pricing & tariff now ends with an optional block **US utility rate
+(URDB)**: an **address or ZIP code**, an **OpenEI API key** (free; empty uses
+`DEMO_KEY`, which allows only 10 requests per day) and the **URDB rate** (the
+rate label or the rate page URL), with two buttons. **🔍 Find rates** lists the
+residential rates in effect today for the utilities near the address (an empty
+address uses the latitude/longitude from Settings → Weather), grouped by
+utility. URDB maps a point to one utility, and some cities are also served by
+a second, regional one, so the search includes the utilities within 5 miles.
+Selecting a rate in the list imports it. **⬇ Import from URDB** imports a rate
+that was pasted by hand.
 
 The import sets the price model in one step:
 
@@ -35,11 +38,9 @@ The import sets the price model in one step:
   and end hour are the same now covers the whole day.
 
 With a URDB rate set, a background task applies the rate again once a day and
-within an hour after the month changes, so seasonal prices switch on their
-own. On an error the current settings stay and the error is logged. To keep a
-price of your own, clear the URDB rate field. The API key is masked in
-`GET /api/settings`, like the other keys, and never appears in an error
-message.
+within an hour after the month changes (local time of the app), so seasonal
+prices switch on their own. On an error the current settings stay and the
+error is logged. To keep a price of your own, clear the URDB rate field.
 
 The TOU windows had no effect on any price in the web app until now (the TOU
 cost model of the old desktop UI was not ported). With TOU on, two prices now
@@ -48,13 +49,41 @@ follow the active TOU window: the current price published over MQTT
 the live part of today's cost on the Costs tab (energy since the last synced
 hour). The other Costs-tab totals, reports and invoices use the price from
 Settings → Pricing; an hourly TOU cost model for them is a possible follow-up.
+Installs with TOU off (the default) and installs on a dynamic tariff are
+unchanged.
+
+**Privacy.** Nothing is sent to OpenEI unless a URDB rate is set or you click
+a button. The address (or the weather latitude/longitude) leaves the app only
+when you click 🔍 Find rates; the daily refresh sends only the rate label and
+the API key.
 
 Limits: only the current month's schedule; only the first tier of each period
 (rate + adjustment); minimum and demand charges are not imported; holidays
 count as ordinary days; a price change in "Price changes" that already started
-still overrides the imported price. `tests/test_urdb.py` covers the conversion,
-the first-match order, the weekly average price, the base fee, the rate search,
-the config round trip and the hidden API key.
+still overrides the imported price.
+
+**Review additions:**
+
+- The API key travels in the `X-Api-Key` header instead of the query string,
+  so it is never part of a request URL (logs, error texts, proxies). It is
+  masked in `GET /api/settings` like the other keys.
+- Only the 24-digit rate label is taken from a pasted text; anything else is
+  refused before a request is made, and the API host is fixed. Answers larger
+  than 8 MB are refused.
+- A rate without energy charges or schedules, an empty answer or an odd shape
+  gives a readable error and leaves the settings unchanged (no crash).
+- The search does not send a request when neither an address nor
+  latitude/longitude is set.
+- The fields moved into their own block at the end of Pricing & tariff, so the
+  price fields stay at the top for everyone else.
+- All texts in all nine app languages (German, English, Spanish, French,
+  Italian, Polish, Portuguese, Czech, Russian), including the import message,
+  which was English-only. The Settings → TOU labels, which most languages did
+  not have, and a short TOU section hint were added as well.
+- `tests/test_urdb.py` grew from 14 to 27 tests: fixed host, key not in the
+  URL and not in the log, oversized and malformed answers, settings unchanged
+  after a failed import, the month change, the MQTT price with TOU off and on,
+  and the translations.
 
 ## 17.7.0
 
