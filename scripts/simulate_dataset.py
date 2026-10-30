@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build a simulated installation for screenshots and manual testing.
 
-    python scripts/simulate_dataset.py <target-dir> [--days 60] [--seed 7]
+    python scripts/simulate_dataset.py <target-dir> [--days 60] [--seed 7] [--lang en] [--skin aurora]
     shelly-analyzer --config <target-dir>/config.json --port 8799 --no-ssl
 
 The house: a 9.8 kWp roof, a 10 kWh battery, a three-phase house meter, a
@@ -45,6 +45,10 @@ DEVICES = [
     {"key": "wallbox", "name": "Wallbox", "phases": 3},
     {"key": "grid", "name": "Grid", "phases": 3},
 ]
+
+
+# Plugs and relays that only the Control tab lists: no data of their own.
+SWITCHES = [("heater", "Water heater"), ("lights", "Garden lights")]
 
 
 def _clearsky(h: float, doy: int) -> float:
@@ -137,7 +141,7 @@ def car_w(h: float, d: Day, pv: float, house: float) -> float:
     return pmax
 
 
-def run(target: Path, days: int, seed: int) -> None:
+def run(target: Path, days: int, seed: int, lang: str = "en", skin: str = "aurora") -> None:
     rnd = random.Random(seed)
     target.mkdir(parents=True, exist_ok=True)
     data_dir = target / "data"
@@ -233,6 +237,27 @@ def run(target: Path, days: int, seed: int) -> None:
                              [(ts, "battery", s, p, "charging" if p > 50 else ("discharging" if p < -50 else "idle")) for ts, s, p in soc_rows])
     db.upsert_co2_intensity(co2_rows)
 
+    # Hourly weather and day-ahead spot prices, synthetic like everything else here, so the
+    # Weather, Schedule and Tariff tabs have something to show without any API key or network.
+    weather_rows, spot_rows = [], []
+    nowts = int(now.timestamp())
+    first = int(start.timestamp()) // 3600 * 3600
+    for hts in range(first, (nowts // 3600 + 48) * 3600, 3600):
+        dt = datetime.fromtimestamp(hts, TZ)
+        hh = dt.hour
+        seas = 11 + 9 * math.sin(2 * math.pi * (dt.timetuple().tm_yday - 110) / 365)
+        temp = seas + 4.5 * math.sin(2 * math.pi * (hh - 9) / 24) + rnd.gauss(0, 0.6)
+        cl = max(0.0, min(100.0, 55 + 30 * math.sin(dt.timetuple().tm_yday * 0.9) + rnd.gauss(0, 12)))
+        if hts <= nowts:
+            weather_rows.append((hts, round(temp, 1), round(max(35.0, min(98.0, 78 - 1.6 * (temp - seas) * 3 + rnd.gauss(0, 4))), 0),
+                                 round(max(0.2, 3.4 + rnd.gauss(0, 1.2)), 1), round(cl, 0), round(1014 + rnd.gauss(0, 6), 0),
+                                 "clouds" if cl > 50 else "clear sky", hts))
+        price = 85 + 55 * math.exp(-((hh - 19) / 2.2) ** 2) + 35 * math.exp(-((hh - 7.5) / 1.6) ** 2) \
+            - 70 * math.exp(-((hh - 13) / 2.8) ** 2) * (1 - 0.6 * cl / 100) + rnd.gauss(0, 7)
+        spot_rows.append((hts, "DE-LU", round(price, 2), 3600, "simulated", nowts))
+    db.upsert_weather(weather_rows)
+    db.upsert_spot_prices(spot_rows)
+
     # NILM: let the real learner see the house and persist what it learned
     from shelly_analyzer.services.appliance_detector import TransitionLearner
     nilm_dir = data_dir / "runtime" / "nilm"
@@ -246,8 +271,10 @@ def run(target: Path, days: int, seed: int) -> None:
     cfg = {
         "version": "17.1.2",
         "devices": [{"key": d["key"], "name": d["name"], "host": "demo://" + d["key"], "em_id": 0, "kind": "em", "gen": 2,
-                     "model": "SPEM-003CEBEU", "phases": d["phases"], "supports_emdata": True} for d in DEVICES],
-        "ui": {"language": "de", "theme": "auto", "live_web_enabled": True, "live_web_port": 8799, "live_web_ssl_mode": "off",
+                     "model": "SPEM-003CEBEU", "phases": d["phases"], "supports_emdata": True} for d in DEVICES]
+                   + [{"key": k, "name": n, "host": "demo://" + k, "em_id": 0, "kind": "switch", "gen": 2,
+                       "model": "SNSW-001P16EU", "phases": 1, "supports_emdata": False} for k, n in SWITCHES],
+        "ui": {"language": lang, "skin": skin, "theme": "auto", "live_web_enabled": True, "live_web_port": 8799, "live_web_ssl_mode": "off",
                "autosync_enabled": False},
         "demo": {"enabled": True, "seed": seed, "scenario": "pv-home"},
         "pricing": {"electricity_price_eur_per_kwh": 0.32, "price_includes_vat": True, "vat_enabled": True, "vat_rate_percent": 19.0,
@@ -261,7 +288,12 @@ def run(target: Path, days: int, seed: int) -> None:
                    "billing_period_months": 12},
         "ev_charging": {"enabled": True, "wallbox_device_key": "wallbox", "detection_threshold_w": 1500.0, "min_session_minutes": 5},
         "co2": {"enabled": True, "bidding_zone": "DE_LU", "green_threshold_g_per_kwh": 250.0, "dirty_threshold_g_per_kwh": 400.0},
-        "weather": {"enabled": False, "lat": 52.52, "lon": 13.405},
+        "weather": {"enabled": True, "api_key": "simulated", "city": "Sampletown", "lat": 52.52, "lon": 13.405},
+        "spot_price": {"enabled": True, "bidding_zone": "DE-LU"},
+        "anomaly": {"enabled": True, "sigma_threshold": 1.5},
+        "smart_schedule": {"enabled": True},
+        "tariff_compare": {"enabled": True},
+        "device_control": {"enabled": True},
         "forecast": {"enabled": True, "horizon_days": 30, "history_days": 90},
         "gamification": {"enabled": True},
     }
@@ -277,5 +309,7 @@ if __name__ == "__main__":
     ap.add_argument("target")
     ap.add_argument("--days", type=int, default=60)
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--lang", default="en")
+    ap.add_argument("--skin", default="aurora", choices=["aurora", "classic"])
     a = ap.parse_args()
-    run(Path(a.target), a.days, a.seed)
+    run(Path(a.target), a.days, a.seed, a.lang, a.skin)

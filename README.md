@@ -250,7 +250,7 @@ skin off the dashboard is byte-for-byte what it was — this is not a compatibil
 | ![Classic](docs/screenshots/classic_desktop_live.png) |
 
 <details>
-<summary>More classic screenshots (4K desktop, iPhone 16 Pro Max)</summary>
+<summary>More classic screenshots (desktop and phone, light and dark)</summary>
 
 | Live | Costs | Heatmap |
 |------|-------|---------|
@@ -294,9 +294,11 @@ Mobile:
 
 ### Widgets (iOS Scriptable / Android PWA)
 
-| Small | Medium | Large |
-|-------|--------|-------|
-| ![Small](docs/screenshots/widget_small.png) | ![Medium](docs/screenshots/widget_medium.png) | ![Large](docs/screenshots/widget_large.png) |
+| Web widget (`/w`) |
+|-------------------|
+| ![Web widget](docs/screenshots/widget_web.png) |
+
+The iOS Scriptable widget shows the same figures in three sizes (small, medium, large).
 
 Android / any browser: open `/w` and add to home screen — no app required.
 
