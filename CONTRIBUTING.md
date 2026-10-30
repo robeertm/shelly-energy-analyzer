@@ -90,6 +90,11 @@ git push origin v16.13.99
   opening the PR (or use `Squash and merge` on GitHub).
 - **No secrets** in commits or screenshots — double-check for API tokens,
   Telegram bot tokens, SMTP passwords, etc.
+- **Commit identity** — your commits show your name and e-mail to everyone.
+  Use the address you want public (GitHub's no-reply address works). Pushes
+  are checked by `scripts/check_commit_identity.py` (CI, and locally after
+  `git config core.hooksPath .githooks`); it only refuses the maintainer's
+  own identities and machine placeholders such as `agent@host`.
 
 ## License
 
