@@ -274,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     bg._dispatcher = dispatcher  # type: ignore[attr-defined]
     dispatcher._bg = bg  # type: ignore[attr-defined]
+    bg._state = state  # type: ignore[attr-defined]
     bg.start_all()
     # Expose for API access (status / trigger)
     state._bg = bg  # type: ignore[attr-defined]

@@ -117,6 +117,9 @@ def get_settings():
     sp = data.get("spot_price", {})
     if sp.get("eia_api_key"):
         sp["eia_api_key"] = "***"
+    tou = data.get("tou", {})
+    if tou.get("urdb_api_key"):
+        tou["urdb_api_key"] = "***"
     # Runtime flag (not persisted): true when running as a Home-Assistant add-on.
     # The Settings UI uses it to hide the in-app updater controls (updates are
     # managed via the add-on there). Prefixed with "_" so it's ignored on save.
@@ -340,6 +343,73 @@ def test_influxdb():
         return jsonify({"ok": False, "error": str(e)})
 
 
+@bp.route("/api/settings/tou-urdb-import", methods=["POST"])
+def tou_urdb_import():
+    """Load a URDB rate (label or rate page URL) and set Settings -> Pricing
+    (price per kWh, base fee) and Settings -> TOU (this month's windows; TOU on
+    only for a rate with more than one price) from it."""
+    from datetime import date
+    from shelly_analyzer.services.urdb import apply_config, config_from_rate, fetch_rate, parse_rate_label
+    state = _get_state()
+    obj = request.get_json(silent=True) or {}
+    rate_text = str(obj.get("rate") or "").strip()
+    api_key = str(obj.get("api_key") or "").strip()
+    if api_key == "***":
+        api_key = getattr(state.cfg.tou, "urdb_api_key", "")
+    location = str(obj.get("location", getattr(state.cfg.tou, "urdb_location", "")) or "").strip()
+    try:
+        label = parse_rate_label(rate_text)
+    except ValueError as e:
+        return jsonify({"ok": False, "code": "bad_rate", "error": str(e)})
+    if not label:
+        return jsonify({"ok": False, "code": "no_rate", "error": "No URDB rate given"})
+    try:
+        rate = fetch_rate(label, api_key)
+        new_cfg = config_from_rate(state.cfg, rate, date.today().month, urdb_rate=label,
+                                   urdb_api_key=api_key, urdb_location=location)
+        apply_config(state, new_cfg)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+    p, t = new_cfg.pricing, new_cfg.tou
+    tou_txt = f"TOU on, {len(t.rates)} windows" if t.enabled else "one price all day, TOU off"
+    msg = (f"{rate.get('utility', '')} - {rate.get('name', '')}: {p.electricity_price_eur_per_kwh:.5f}/kWh, "
+           f"base fee {p.base_fee_eur_per_year:.2f}/year, {tou_txt} ({date.today():%Y-%m})")
+    # `message` stays for API users; the settings page builds its own text in
+    # the UI language from the fields below.
+    return jsonify({"ok": True, "message": msg,
+                    "utility": str(rate.get("utility", "") or ""),
+                    "name": str(rate.get("name", "") or ""),
+                    "price": round(float(p.electricity_price_eur_per_kwh), 6),
+                    "base_fee": round(float(p.base_fee_eur_per_year), 2),
+                    "tou_enabled": bool(t.enabled), "windows": len(t.rates),
+                    "month": f"{date.today():%Y-%m}"})
+
+
+@bp.route("/api/settings/tou-urdb-search", methods=["POST"])
+def tou_urdb_search():
+    """List the residential URDB rates in effect now near an address or ZIP
+    code; an empty location uses the weather latitude/longitude. Saves nothing."""
+    from shelly_analyzer.services.urdb import search_rates
+    state = _get_state()
+    obj = request.get_json(silent=True) or {}
+    api_key = str(obj.get("api_key") or "").strip()
+    if api_key == "***":
+        api_key = getattr(state.cfg.tou, "urdb_api_key", "")
+    weather = getattr(state.cfg, "weather", None)
+    location = str(obj.get("location") or "").strip()
+    lat = float(getattr(weather, "lat", 0.0) or 0.0)
+    lon = float(getattr(weather, "lon", 0.0) or 0.0)
+    if not location and not (lat or lon):
+        # Nothing to search with: no request leaves the app.
+        return jsonify({"ok": False, "code": "no_location",
+                        "error": "Enter an address or ZIP code, or set latitude and longitude in Settings → Weather"})
+    try:
+        rates = search_rates(location, api_key, lat, lon)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+    return jsonify({"ok": True, "rates": rates})
+
+
 def _deep_merge(base: dict, updates: dict) -> None:
     """Recursively merge updates into base dict."""
     for k, v in updates.items():
@@ -369,6 +439,9 @@ def _restore_secrets(merged: dict, cfg: AppConfig) -> None:
     sp = merged.get("spot_price", {})
     if sp.get("eia_api_key") == "***":
         sp["eia_api_key"] = getattr(cfg.spot_price, "eia_api_key", "")
+    tou = merged.get("tou", {})
+    if tou.get("urdb_api_key") == "***":
+        tou["urdb_api_key"] = getattr(cfg.tou, "urdb_api_key", "")
 
 
 @bp.route("/api/upload-logo", methods=["POST"])

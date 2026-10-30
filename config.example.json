@@ -128,7 +128,10 @@
         "end_hour": 6,
         "weekdays_only": false
       }
-    ]
+    ],
+    "urdb_rate": "",
+    "urdb_api_key": "",
+    "urdb_location": ""
   },
   "billing": {
     "issuer": {

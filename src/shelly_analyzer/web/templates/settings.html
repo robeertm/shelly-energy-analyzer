@@ -56,6 +56,9 @@ button.small{padding:4px 8px;font-size:.78rem}
 .section-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;
 padding-top:12px;border-top:1px solid var(--border)}
 .hint{font-size:.75rem;color:var(--muted);margin-top:2px}
+.urdb-block{margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.urdb-block h3{margin:0 0 4px;font-size:.92rem;font-weight:600;color:var(--fg)}
+.urdb-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .list-field{display:flex;flex-direction:column;gap:8px;min-height:0!important}
 .list-container{display:flex;flex-direction:column;gap:8px}
 .list-item{background:var(--card-inset);border:1px solid var(--border);border-radius:8px;padding:10px 12px;transition:transform .15s,opacity .15s,border-color .15s}
@@ -314,6 +317,15 @@ async function saveSection(sectionId) {
   } catch(e) { toast(T("settings.toast.error","Error: {err}",{err:e.message}), "error"); }
 }
 
+// Optional US block at the end of Settings -> Pricing & tariff (services/urdb.py).
+// Kept out of SECTIONS.pricing.fields so the generic re-renders of the
+// section grid never duplicate these fields; gatherSection still saves them.
+const URDB_FIELDS = [
+  {key:"tou.urdb_location", label:"Address or ZIP code (US)", type:"text", hint:"For 🔍 Find rates: lists the residential rates of the utilities near this place. Empty = latitude/longitude from Settings → Weather."},
+  {key:"tou.urdb_api_key", label:"OpenEI API key", type:"password", hint:"Free at openei.org/services/api/signup — empty = DEMO_KEY (only 10 requests per day)"},
+  {key:"tou.urdb_rate", label:"URDB rate (US utilities)", type:"text", hint:"Filled in when you select a rate after 🔍 Find rates. You can also paste a label or rate page URL from apps.openei.org/IURDB and click ⬇ Import. The import sets the electricity price and the base fee above; for a time-of-use rate it also fills Settings → TOU. The app applies the rate again about once a day. Clear this field to keep a price of your own."},
+];
+
 const SECTIONS = [
   {id:"devices", title:"Devices", group:"Basic", custom:true},
   {id:"health", title:"Health Check", group:"Basic", custom:true},
@@ -358,7 +370,7 @@ const SECTIONS = [
   ]},
   {id:"base_fee_split", title:"Base fee split", group:"Basic", custom:true},
   {id:"tools_exports", title:"Tools / Exports", group:"Advanced", custom:true},
-  {id:"tou", title:"TOU (time-of-use)", group:"Basic", fields:[
+  {id:"tou", title:"TOU (time-of-use)", group:"Basic", hint:"The first window that matches the hour wins; \"Weekdays only\" windows are skipped on Saturday and Sunday. A window with the same start and end hour covers the whole day. With TOU on, the current price over MQTT and the live part of today's cost follow the active window.", fields:[
     {key:"tou.enabled", label:"TOU tariff active", type:"checkbox"},
     {key:"tou.rates", label:"Time periods", type:"list", itemLabel:"Rate", schema:[
       {key:"name", label:"Name", type:"text", placeholder:"HT / NT"},
@@ -845,6 +857,18 @@ function renderField(f) {
   return `<div class="field"><label>${label}</label>${input}${hint}</div>`;
 }
 
+function renderUrdbBlock() {
+  return `<div class="urdb-block">
+    <h3>${T("settings.urdb.title","US utility rate (URDB)")}</h3>
+    <div class="hint" style="margin-bottom:10px">${T("settings.urdb.intro","Optional, for households in the US: load the price, the base fee and the time-of-use windows of your utility rate from the OpenEI Utility Rate Database. The address is sent to OpenEI only when you click 🔍 Find rates.")}</div>
+    <div class="grid2" id="urdb-grid">${URDB_FIELDS.map(renderField).join("")}</div>
+    <div id="urdb-results"></div>
+    <div class="urdb-actions">
+      <button class="secondary" onclick="findUrdbRates()">${T("settings.btn.urdb_search","🔍 Find rates")}</button>
+      <button class="secondary" onclick="importUrdb()">${T("settings.btn.urdb_import","⬇ Import from URDB")}</button>
+    </div></div>`;
+}
+
 function renderSection(s) {
   if (s.custom) {
     if (s.id === "devices") return renderDevices();
@@ -862,8 +886,9 @@ function renderSection(s) {
   const fieldsHtml = (s.fields||[]).map(renderField).join("");
   const hint = s.hint ? `<div class="hint" style="margin-bottom:10px">${T("settings.sectionhint."+s.id, s.hint)}</div>` : "";
   const testBtn = s.testBtn ? `<button class="secondary" onclick="testConnection('${s.testBtn}')">${T("settings.btn.test","🔌 Test")}</button>` : "";
+  const urdbBlock = s.id === "pricing" ? renderUrdbBlock() : "";
   return `<section id="sec-${s.id}"><h2>${tSection(s)}</h2>${hint}
-    <div class="grid2">${fieldsHtml}</div>
+    <div class="grid2">${fieldsHtml}</div>${urdbBlock}
     <div class="section-actions">${testBtn}
       <button onclick="saveSection('${s.id}')">${T("settings.btn.save","💾 Speichern")}</button>
     </div></section>`;
@@ -3234,6 +3259,72 @@ async function testConnection(which) {
   const j = await r.json();
   if (j.ok) toast("✓ " + (j.message||"OK"));
   else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
+}
+
+// Pricing: load a rate from the OpenEI URDB; sets the price, the base fee and the TOU windows.
+async function importUrdb() {
+  const val = k => { const el = document.querySelector('[data-key="'+k+'"]'); return el ? el.value : ""; };
+  toast(T("settings.toast.urdb_importing","Loading rate from URDB…"));
+  try {
+    const r = await fetch("/api/settings/tou-urdb-import", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({rate:val("tou.urdb_rate"), api_key:val("tou.urdb_api_key"), location:val("tou.urdb_location")})});
+    const j = await r.json();
+    if (!j.ok) { toast(urdbError(j), "error"); return; }
+    const touTxt = j.tou_enabled
+      ? T("settings.urdb.tou_on","TOU on, {n} windows",{n:j.windows})
+      : T("settings.urdb.tou_off","one price all day, TOU off");
+    toast("✓ " + T("settings.toast.urdb_imported","{rate}: {price}/kWh, base fee {fee}/year, {tou} ({month})",
+      {rate:(j.utility||"") + " – " + (j.name||""), price:Number(j.price).toFixed(5),
+       fee:Number(j.base_fee).toFixed(2), tou:touTxt, month:j.month}));
+    cfg = await fetch("/api/settings").then(x=>x.json());
+    ["pricing", "tou"].forEach(id => {
+      const secEl = document.getElementById("sec-" + id);
+      const s = SECTIONS.find(x => x.id === id);
+      const grid = secEl && secEl.querySelector(".grid2");
+      if (grid && s) { grid.innerHTML = (s.fields||[]).map(renderField).join(""); wireListEvents(grid); }
+    });
+    const ug = document.getElementById("urdb-grid");
+    if (ug) { ug.innerHTML = URDB_FIELDS.map(renderField).join(""); wireListEvents(ug); }
+  } catch(e) { toast(T("settings.toast.error","Error: {err}",{err:e.message}), "error"); }
+}
+
+// Pricing: list the URDB rates near the address/ZIP code, grouped by utility.
+// Selecting a rate fills the rate field and imports it.
+async function findUrdbRates() {
+  const val = k => { const el = document.querySelector('[data-key="'+k+'"]'); return el ? el.value : ""; };
+  const box = document.getElementById("urdb-results");
+  toast(T("settings.toast.urdb_searching","Searching rates in URDB…"));
+  try {
+    const r = await fetch("/api/settings/tou-urdb-search", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({location:val("tou.urdb_location"), api_key:val("tou.urdb_api_key")})});
+    const j = await r.json();
+    if (!j.ok) { toast(urdbError(j), "error"); return; }
+    if (!j.rates.length) { box.innerHTML = ""; toast(T("settings.toast.urdb_none","No residential rates found near this place"), "error"); return; }
+    const groups = {};
+    j.rates.forEach(x => { (groups[x.utility] = groups[x.utility] || []).push(x); });
+    box.innerHTML = `<div class="field" style="margin-top:12px"><label>${T("settings.urdb.pick_label","Your rate (as on your bill)")}</label>`
+      + `<select onchange="pickUrdbRate(this.value)"><option value="">${T("settings.urdb.pick","Select your rate ({n} found)",{n:j.rates.length})}</option>`
+      + Object.keys(groups).map(u => `<optgroup label="${esc(u)}">`
+          + groups[u].map(x => `<option value="${esc(x.label)}">${esc(x.name)}</option>`).join("") + `</optgroup>`).join("")
+      + `</select></div>`;
+  } catch(e) { toast(T("settings.toast.error","Error: {err}",{err:e.message}), "error"); }
+}
+
+// Errors the page can name in the UI language; anything else comes from URDB itself.
+function urdbError(j) {
+  if (j.code === "no_location") return T("settings.toast.urdb_no_location","Enter an address or ZIP code, or set latitude and longitude in Settings → Weather");
+  if (j.code === "no_rate") return T("settings.toast.urdb_no_rate","Enter a URDB rate first, or use 🔍 Find rates");
+  if (j.code === "bad_rate") return T("settings.toast.urdb_bad_rate","No URDB rate label in this text — paste the label or the rate page URL");
+  return T("settings.toast.error","Error: {err}",{err:j.error});
+}
+
+function pickUrdbRate(label) {
+  if (!label) return;
+  const el = document.querySelector('[data-key="tou.urdb_rate"]');
+  if (el) el.value = label;
+  importUrdb();
 }
 
 async function reload() {

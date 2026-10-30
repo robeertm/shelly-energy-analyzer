@@ -83,7 +83,8 @@ class TouRate:
     price_eur_per_kwh: float = 0.35
     # Start hour (inclusive, 0-23 local time)
     start_hour: int = 6
-    # End hour (exclusive, 0-23 local time; if end_hour < start_hour the window wraps overnight)
+    # End hour (exclusive, 0-23 local time; if end_hour < start_hour the window wraps overnight;
+    # end_hour == start_hour covers the whole day)
     end_hour: int = 22
     # If True, this rate only applies Monday–Friday (weekdays 0–4)
     weekdays_only: bool = False
@@ -97,6 +98,25 @@ class TouConfig:
         TouRate(name="HT", price_eur_per_kwh=0.35, start_hour=6, end_hour=22, weekdays_only=False),
         TouRate(name="NT", price_eur_per_kwh=0.22, start_hour=22, end_hour=6, weekdays_only=False),
     ])
+    # Optional OpenEI Utility Rate Database (URDB) rate: its label or its rate
+    # page URL. When set, `rates` is rebuilt from that rate's schedule for the
+    # current month (services/urdb.py), on import and about once a day.
+    urdb_rate: str = ""
+    # OpenEI API key (free at openei.org/services/api/signup). Empty = DEMO_KEY.
+    urdb_api_key: str = ""
+    # Address or ZIP code for the URDB rate search. Empty = weather lat/lon.
+    urdb_location: str = ""
+
+    def price_at(self, dt) -> Optional[float]:
+        """Price of the first rate window that matches local time `dt`, or None."""
+        h = int(dt.hour)
+        for r in self.rates or []:
+            if r.weekdays_only and dt.weekday() >= 5:
+                continue
+            s, e = int(r.start_hour), int(r.end_hour)
+            if s == e or (s < e and s <= h < e) or (s > e and (h >= s or h < e)):
+                return float(r.price_eur_per_kwh)
+        return None
 
 
 @dataclass(frozen=True)
@@ -1748,6 +1768,9 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     tou = TouConfig(
         enabled=bool(tou_raw.get("enabled", False)),
         rates=tou_rates,
+        urdb_rate=str(tou_raw.get("urdb_rate", "") or "").strip(),
+        urdb_api_key=str(tou_raw.get("urdb_api_key", "") or "").strip(),
+        urdb_location=str(tou_raw.get("urdb_location", "") or "").strip(),
     )
 
     anomaly_raw = raw.get("anomaly", {}) if isinstance(raw.get("anomaly"), dict) else {}
@@ -2525,6 +2548,9 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
                 }
                 for r in (getattr(cfg.tou, "rates", []) or [])
             ],
+            "urdb_rate": str(getattr(cfg.tou, "urdb_rate", "") or ""),
+            "urdb_api_key": str(getattr(cfg.tou, "urdb_api_key", "") or ""),
+            "urdb_location": str(getattr(cfg.tou, "urdb_location", "") or ""),
         },
         "billing": {
             "issuer": {
