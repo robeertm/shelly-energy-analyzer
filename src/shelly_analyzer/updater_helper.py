@@ -114,10 +114,14 @@ def _restart_app(restart: Path, app_dir: Path, log) -> None:
         os.chdir(str(app_dir))
     except Exception:
         pass
-    try:
-        os.closerange(3, 256)
-    except Exception:
-        pass
+    # Not on macOS: closing blindly can hit a guarded fd owned by the system
+    # libraries (EXC_GUARD kills the process). Python fds are already
+    # non-inheritable (PEP 446), so execv drops them anyway.
+    if sys.platform != "darwin":
+        try:
+            os.closerange(3, 256)
+        except Exception:
+            pass
     log(f"[updater] POSIX: execv -> {' '.join(new_cmd)} (keeping PID {os.getpid()})")
     try:
         os.execv(str(py), new_cmd)

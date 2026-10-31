@@ -394,10 +394,14 @@ def api_updates_install():
         # Close any fds above std* to avoid leaking the listening HTTP socket
         # / sqlite file handles into the helper image. Python-created sockets
         # already carry FD_CLOEXEC on Linux, but be explicit.
-        try:
-            os.closerange(3, 256)
-        except Exception:
-            pass
+        # Not on macOS: closing blindly can hit a guarded fd owned by the system
+        # libraries (EXC_GUARD kills the process). Python fds are already
+        # non-inheritable (PEP 446), so execv drops them anyway.
+        if sys.platform != "darwin":
+            try:
+                os.closerange(3, 256)
+            except Exception:
+                pass
         try:
             os.execv(sys.executable, posix_cmd)
         except Exception:

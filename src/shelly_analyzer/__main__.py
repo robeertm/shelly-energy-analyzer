@@ -132,10 +132,14 @@ def _autoheal_pending_update(logger: logging.Logger) -> None:
                     return
 
             # POSIX — execv in place so we keep the MainPID.
-            try:
-                os.closerange(3, 256)
-            except Exception:
-                pass
+            # Not on macOS: closing blindly can hit a guarded fd owned by the system
+            # libraries (EXC_GUARD kills the process). Python fds are already
+            # non-inheritable (PEP 446), so execv drops them anyway.
+            if sys.platform != "darwin":
+                try:
+                    os.closerange(3, 256)
+                except Exception:
+                    pass
             try:
                 os.execv(sys.executable, cmd)
                 # execv does not return on success

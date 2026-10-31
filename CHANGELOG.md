@@ -1,5 +1,15 @@
 # Changelog
 
+## 17.8.2
+
+- **The in-app update no longer crashes on macOS during the hand-over.** Before
+  restarting into the updater, the app closed every file descriptor from 3 to
+  255. On macOS some of those belong to the system libraries and are guarded;
+  closing one makes the system terminate the process on the spot, so the update
+  was only applied by the self-heal at the next start. The blanket close is now
+  skipped on macOS (descriptors opened by Python are not inherited across the
+  restart anyway). Linux, Docker and Windows behave as before.
+
 ## 17.8.1
 
 Two follow-up fixes to the URDB import of 17.8.0.
