@@ -1,5 +1,21 @@
 # Changelog
 
+## 17.8.1
+
+Two follow-up fixes to the URDB import of 17.8.0.
+
+- **The OpenEI API key can no longer follow a redirect.** The key travels in
+  the `X-Api-Key` header, and the HTTP library would have sent that header on
+  to another host if the server had answered with a redirect. URDB requests now
+  never follow redirects; a redirect is reported as an error.
+- **The current price published over MQTT (`tariff_price_eur_kwh`) now treats
+  VAT in TOU mode like the normal price.** The price of the active TOU window
+  is read the way the main price is entered: as gross when Settings → Pricing
+  says it includes VAT (always the case for rates imported from URDB), as net
+  plus the VAT rate otherwise, and unchanged when VAT is switched off. The
+  live part of today's cost on the Costs tab uses the same conversion. Installs
+  with TOU off or with a dynamic tariff are unchanged.
+
 ## 17.8.0
 
 ### Electricity rate from the US Utility Rate Database (URDB)

@@ -1020,7 +1020,8 @@ class BackgroundServiceManager:
             if tou is not None and getattr(tou, "enabled", False):
                 v = tou.price_at(datetime.now())
                 if v is not None:
-                    return float(v)
+                    # TOU prices are entered like the main price (same VAT flag).
+                    return float(self.cfg.pricing.gross_from_entered(v))
         except Exception:
             pass
         try:

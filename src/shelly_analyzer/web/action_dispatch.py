@@ -3095,7 +3095,7 @@ class ActionDispatcher:
                                     if not _use_dynamic_web and _tou is not None and _tou.enabled:
                                         _tp = _tou.price_at(datetime.now())
                                         if _tp is not None:
-                                            _delta_price = _tp
+                                            _delta_price = float(self.cfg.pricing.gross_from_entered(_tp))
                                     # Delta is today's portion, so it belongs to every
                                     # range that includes today (today/week/month/year).
                                     for _rk in ("today", "week", "month", "year"):

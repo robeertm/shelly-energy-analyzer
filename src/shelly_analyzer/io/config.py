@@ -458,6 +458,15 @@ class PricingConfig:
             return p
         return p if self.price_includes_vat else p * (1.0 + r)
 
+    def gross_from_entered(self, price: float) -> float:
+        """Gross (incl. VAT) price for a unit price entered the way the main
+        price is entered: as gross if ``price_includes_vat``, else as net."""
+        p = float(price)
+        r = self.vat_rate()
+        if r <= 0:
+            return p
+        return p if self.price_includes_vat else p * (1.0 + r)
+
     def base_fee_year_net(self) -> float:
         """Return base fee per year as NET price."""
         p = float(self.base_fee_eur_per_year)

@@ -158,7 +158,7 @@ def test_search_rates_keeps_current_newest_rates_sorted_by_utility():
     ]
     seen = {}
 
-    def _get(url, params=None, headers=None, timeout=None, stream=False):
+    def _get(url, params=None, headers=None, timeout=None, stream=False, allow_redirects=True):
         seen.update(params)
         return _FakeResp({"items": items})
 
@@ -266,9 +266,9 @@ def test_config_round_trip_keeps_urdb_fields():
 # ── Added in review: no foreign URL, no key in the URL, bad answers ────────
 
 def _capture_get(payload, calls):
-    def _get(url, params=None, headers=None, timeout=None, stream=False):
+    def _get(url, params=None, headers=None, timeout=None, stream=False, allow_redirects=True):
         calls.append({"url": url, "params": dict(params or {}), "headers": dict(headers or {}),
-                      "timeout": timeout})
+                      "timeout": timeout, "allow_redirects": allow_redirects})
         return _FakeResp(payload)
     return _get
 
@@ -295,6 +295,21 @@ def test_api_key_goes_in_a_header_not_in_the_url():
     assert "SECRET123" not in json.dumps(calls[0]["params"])
     assert calls[0]["headers"]["X-Api-Key"] == "SECRET123"
     assert calls[1]["headers"]["X-Api-Key"] == urdb.DEMO_KEY
+
+
+def test_redirects_are_not_followed_so_the_key_never_leaves():
+    calls = []
+    with mock.patch.object(urdb.requests, "get", side_effect=_capture_get({"items": [RATE]}, calls)):
+        urdb.fetch_rate("0123456789abcdef01234567", "SECRET123")
+    assert calls[0]["allow_redirects"] is False
+    redirect = _FakeResp({}, status_code=302, raw=b"")
+    with mock.patch.object(urdb.requests, "get", return_value=redirect):
+        try:
+            urdb.fetch_rate("0123456789abcdef01234567", "SECRET123")
+        except RuntimeError as e:
+            assert "redirect" in str(e) and "SECRET123" not in str(e)
+        else:
+            raise AssertionError("a redirect must be an error")
 
 
 def test_api_key_is_not_logged_on_refresh_failure(caplog=None):
@@ -488,6 +503,18 @@ def test_tou_on_publishes_the_active_window_price():
     bg = BackgroundServiceManager.__new__(BackgroundServiceManager)
     bg.cfg = cfg
     assert bg._current_tariff_price() == 0.4242
+
+
+def test_tou_price_follows_the_vat_setting_of_the_main_price():
+    from dataclasses import replace
+    from shelly_analyzer.web.background import BackgroundServiceManager
+    cfg = _empty_cfg()
+    tou = TouConfig(enabled=True, rates=[TouRate("All day", 0.40, 0, 0, False)])
+    for incl, vat_on, expect in ((True, True, 0.40), (False, True, 0.40 * 1.19), (False, False, 0.40)):
+        pr = replace(cfg.pricing, price_includes_vat=incl, vat_enabled=vat_on, vat_rate_percent=19.0)
+        bg = BackgroundServiceManager.__new__(BackgroundServiceManager)
+        bg.cfg = replace(cfg, pricing=pr, tou=tou)
+        assert abs(bg._current_tariff_price() - expect) < 1e-9, (incl, vat_on)
 
 
 def test_all_app_languages_have_the_urdb_texts():

@@ -60,11 +60,13 @@ def _query(params: Dict[str, Any], api_key: str, timeout: float) -> Dict[str, An
     """One URDB API request (version 8, JSON). Raises RuntimeError on errors.
 
     The key goes in the ``X-Api-Key`` header, not in the URL, so it never shows
-    up in a logged request line or in the text of a network error."""
+    up in a logged request line or in the text of a network error. Redirects are
+    never followed: ``requests`` would carry the header to the new host."""
     params = dict(params, version=8, format="json")
     headers = {"X-Api-Key": api_key or DEMO_KEY, "Accept": "application/json"}
     try:
-        resp = requests.get(API_URL, params=params, headers=headers, timeout=timeout, stream=True)
+        resp = requests.get(API_URL, params=params, headers=headers, timeout=timeout, stream=True,
+                            allow_redirects=False)
     except requests.RequestException as e:
         raise RuntimeError(f"URDB request failed ({type(e).__name__})") from None
     try:
@@ -82,6 +84,8 @@ def _query(params: Dict[str, Any], api_key: str, timeout: float) -> Dict[str, An
             resp.close()
         except Exception:
             pass
+    if 300 <= resp.status_code < 400:
+        raise RuntimeError(f"URDB: unexpected redirect (HTTP {resp.status_code})")
     try:
         data = json.loads(body.decode("utf-8"))
     except (ValueError, UnicodeDecodeError):
