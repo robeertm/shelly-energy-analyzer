@@ -1,6 +1,7 @@
 """Settings API: GET/PUT /api/settings, test endpoints."""
 from __future__ import annotations
 
+import copy
 import json
 import logging
 from dataclasses import asdict
@@ -10,6 +11,7 @@ from typing import Any, Dict
 from flask import Blueprint, current_app, jsonify, request
 
 from shelly_analyzer.io.config import AppConfig, load_config, save_config
+from shelly_analyzer.io.secret_mask import mask_secrets, restore_masked
 
 logger = logging.getLogger(__name__)
 
@@ -98,28 +100,9 @@ def get_settings():
     """Return full config as JSON."""
     state = _get_state()
     data = _cfg_to_json(state.cfg)
-    # Remove sensitive fields from GET response
-    ui = data.get("ui", {})
-    if "telegram_bot_token" in ui and ui["telegram_bot_token"]:
-        ui["telegram_bot_token"] = "***"
-    if "email_smtp_password" in ui and ui["email_smtp_password"]:
-        ui["email_smtp_password"] = "***"
-    advisor = data.get("advisor", {})
-    if "openai_api_key" in advisor and advisor["openai_api_key"]:
-        advisor["openai_api_key"] = "***"
-    if "anthropic_api_key" in advisor and advisor["anthropic_api_key"]:
-        advisor["anthropic_api_key"] = "***"
-    co2 = data.get("co2", {})
-    if co2.get("entso_e_api_token"):
-        co2["entso_e_api_token"] = "***"
-    if co2.get("electricity_maps_api_key"):
-        co2["electricity_maps_api_key"] = "***"
-    sp = data.get("spot_price", {})
-    if sp.get("eia_api_key"):
-        sp["eia_api_key"] = "***"
-    tou = data.get("tou", {})
-    if tou.get("urdb_api_key"):
-        tou["urdb_api_key"] = "***"
+    # Every field whose name says secret goes out as "***" (io/secret_mask.py):
+    # nested and in lists too (devices[i].password), and new fields included.
+    data = mask_secrets(data)
     # Runtime flag (not persisted): true when running as a Home-Assistant add-on.
     # The Settings UI uses it to hide the in-app updater controls (updates are
     # managed via the add-on there). Prefixed with "_" so it's ignored on save.
@@ -149,6 +132,7 @@ def put_settings():
     try:
         # Get current config as dict
         current = _cfg_to_json(state.cfg)
+        stored = copy.deepcopy(current)
 
         # Deep merge updates into current — but never let a section save
         # wipe out the devices list (sections only send their own fields).
@@ -169,19 +153,22 @@ def put_settings():
         if "alerts" not in updates:
             current["alerts"] = saved_alerts
 
-        # Don't overwrite masked secrets with "***"
-        _restore_secrets(current, state.cfg)
+        # "***" never overwrites a stored secret - any masked field, nested
+        # or inside a list. An empty string still deletes on purpose.
+        restore_masked(current, stored)
 
         # Turning the charge-log link on without a key would leave it shut and
         # say nothing about why (an empty token never matches). So the switch
         # brings its own key, and the field shows it right after the save —
         # there is no second place to go and generate one. Never regenerated:
         # a new key here would silently stop a car app that is already paired.
+        generated: Dict[str, str] = {}
         try:
             _ev = current.get("ev_charging")
             if isinstance(_ev, dict) and _ev.get("link_enabled") and not str(_ev.get("link_token") or "").strip():
                 from shelly_analyzer.services.ev_link import new_link_token
                 _ev["link_token"] = new_link_token()
+                generated["ev_charging.link_token"] = _ev["link_token"]
                 logger.info("EV charge-log link: token generated (link enabled without one)")
         except Exception:
             logger.debug("EV link token bootstrap failed", exc_info=True)
@@ -238,7 +225,12 @@ def put_settings():
                 dispatcher.__self__.reload(new_cfg)
 
         logger.info("Settings updated and saved")
-        return jsonify({"ok": True})
+        resp = {"ok": True}
+        if generated:
+            # A key the app made up is shown ONCE, here, to the one who just
+            # switched the feature on - the GET masks it from then on.
+            resp["generated"] = generated
+        return jsonify(resp)
 
     except Exception as e:
         logger.error("Failed to save settings: %s", e)
@@ -417,31 +409,6 @@ def _deep_merge(base: dict, updates: dict) -> None:
             _deep_merge(base[k], v)
         else:
             base[k] = v
-
-
-def _restore_secrets(merged: dict, cfg: AppConfig) -> None:
-    """Restore masked secrets (***) from the original config."""
-    ui = merged.get("ui", {})
-    if ui.get("telegram_bot_token") == "***":
-        ui["telegram_bot_token"] = cfg.ui.telegram_bot_token
-    if ui.get("email_smtp_password") == "***":
-        ui["email_smtp_password"] = cfg.ui.email_smtp_password
-    advisor = merged.get("advisor", {})
-    if advisor.get("openai_api_key") == "***":
-        advisor["openai_api_key"] = getattr(cfg.advisor, "openai_api_key", "")
-    if advisor.get("anthropic_api_key") == "***":
-        advisor["anthropic_api_key"] = getattr(cfg.advisor, "anthropic_api_key", "")
-    co2 = merged.get("co2", {})
-    if co2.get("entso_e_api_token") == "***":
-        co2["entso_e_api_token"] = getattr(cfg.co2, "entso_e_api_token", "")
-    if co2.get("electricity_maps_api_key") == "***":
-        co2["electricity_maps_api_key"] = getattr(cfg.co2, "electricity_maps_api_key", "")
-    sp = merged.get("spot_price", {})
-    if sp.get("eia_api_key") == "***":
-        sp["eia_api_key"] = getattr(cfg.spot_price, "eia_api_key", "")
-    tou = merged.get("tou", {})
-    if tou.get("urdb_api_key") == "***":
-        tou["urdb_api_key"] = getattr(cfg.tou, "urdb_api_key", "")
 
 
 @bp.route("/api/upload-logo", methods=["POST"])

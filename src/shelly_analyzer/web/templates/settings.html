@@ -266,6 +266,13 @@ function clearUpload(settingsKey) {
   toast(T("settings.upload.cleared","Logo removed — save to apply"));
 }
 
+// A saved secret is shown as "***". Focusing it selects it, so typing replaces it;
+// leaving it alone and saving keeps the stored value (the server ignores "***").
+document.addEventListener("focusin", function(ev) {
+  const el = ev.target;
+  if (el && el.dataset && el.dataset.key && el.value === "***" && el.select) el.select();
+});
+
 async function saveSection(sectionId) {
   let data;
   try { data = gatherSection(sectionId); }
@@ -292,6 +299,9 @@ async function saveSection(sectionId) {
     const j = await r.json();
     if (j.ok) {
       toast(T("settings.toast.saved","Saved"));
+      // Secrets arrive as "***" (set) from the server. A key the app made up
+      // for you (charge-log link) is sent once with the save: show it now.
+      const shownOnce = j.generated || {};
       if (langChanging) {
         // Give the toast a beat, then hard-reload so /api/i18n returns the
         // new language and every label on the page re-renders with it.
@@ -311,6 +321,11 @@ async function saveSection(sectionId) {
           const grid = secEl.querySelector(".grid2");
           if (grid) { grid.innerHTML = fieldsHtml; wireListEvents(grid); }
         }
+        Object.keys(shownOnce).forEach(k => {
+          const inp = document.querySelector('[data-key="' + k + '"]');
+          if (inp) { inp.type = "text"; inp.value = shownOnce[k]; }
+          toast(T("settings.secret.shown_once","Copy this key now - it is shown only once."));
+        });
       } catch(e) {}
     }
     else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");

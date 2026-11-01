@@ -458,7 +458,8 @@ def test_get_settings_masks_the_key_and_put_keeps_it():
     body = client.get("/api/settings").get_data(as_text=True)
     assert "SECRET123" not in body
     merged = {"tou": {"urdb_api_key": "***"}}
-    settings_bp._restore_secrets(merged, cfg)
+    from shelly_analyzer.io.secret_mask import restore_masked
+    restore_masked(merged, settings_bp._cfg_to_json(cfg))
     assert merged["tou"]["urdb_api_key"] == "SECRET123"
 
 

@@ -1,5 +1,43 @@
 # Changelog
 
+## 17.8.3
+
+### Security: the settings API no longer returns secrets in clear text
+
+`GET /api/settings` masked a fixed list of nine fields. Every other secret in
+the configuration was returned as stored: the MQTT password, the charge-log
+link token, the InfluxDB token, the Home-Assistant token, the passwords of
+password-protected devices and the web access token itself. On an installation
+without a web token the endpoint needs no login, so these values were readable
+by anyone who could reach the port; with a web token they were readable by
+every signed-in session. **Update, and replace the secrets you used on an
+installation that was reachable by others** (web token, link token, MQTT,
+InfluxDB and Home-Assistant credentials, device passwords, webhook address).
+
+What changed:
+
+- **Masking by name instead of a list.** Any field whose name marks a secret
+  (`password`, `token`, `secret`, `api_key`, other `*_key` fields, link and web
+  tokens, credentials) is returned as `"***"` when it has a value, at any depth
+  and inside lists such as `devices[i].password`. Identifiers (`device_key`,
+  `wallbox_device_key`, `em_id`, the path of an SSL key file) are not secrets and
+  stay readable. A new setting with such a name is masked without further work.
+  The webhook address and the custom webhook headers are masked as well, since
+  they usually carry a token.
+- **Saving never overwrites a secret with `"***"`**, for every masked field,
+  nested or in a list (device entries are paired by their key, so a reordered
+  list keeps each password). An empty value still deletes a secret on purpose.
+  `"***"` without a stored value is saved as empty, never as the placeholder.
+- **Settings page**: a saved secret shows as set; clicking it selects it, so
+  typing replaces it, and saving without a change keeps the stored value. A
+  charge-log link token that the app generates when the link is switched on is
+  shown once right after saving, with a note to copy it (nine languages).
+- Checked and unchanged: `/api/config`, `/api/devices`, `/api/v1/*` and the
+  export bundle contain no secrets.
+- Tests: every secret field is checked for masking in `GET` and for
+  keeping its value on `PUT` with `"***"`; a regression test walks all
+  secret-named strings of the configuration so new fields cannot slip through.
+
 ## 17.8.2
 
 - **The in-app update no longer crashes on macOS during the hand-over.** Before

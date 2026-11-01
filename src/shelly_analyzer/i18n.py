@@ -1959,6 +1959,7 @@ _I18N: Dict[str, Dict[str, str]] = {
     "settings.updates.hint": "Hinweis: Die App startet nach einem Update automatisch neu. Rollback auf eine frühere Version ist jederzeit möglich.",
     "settings.updates.addon_managed": "Updates werden über das Home-Assistant-Add-on verwaltet.",
     "settings.updates.docker_managed": "Updates kommen mit dem Container-Abbild.",
+    "settings.secret.shown_once": "Diesen Schlüssel jetzt kopieren – er wird nur einmal angezeigt.",
     "settings.updates.docker_watchtower": "Oder automatisch: Watchtower holt neue Versionen von selbst.",
     "settings.auto_rules.title": "Auto-Schaltung Regeln",
     "settings.auto_rules.hint": "Schaltet ein Shelly-Relais automatisch während des günstigsten Stromblocks. Jede Regel kennt einen Dry-Run-Modus, und der globale Live-Schalter sitzt eine Sicherheitsstufe darüber.",
@@ -4140,6 +4141,7 @@ _I18N: Dict[str, Dict[str, str]] = {
     "settings.updates.hint": "Note: the app restarts automatically after an update. Rollback to an earlier version is possible at any time.",
     "settings.updates.addon_managed": "Updates are managed via the Home-Assistant add-on.",
     "settings.updates.docker_managed": "Updates come with the container image.",
+    "settings.secret.shown_once": "Copy this key now - it is shown only once.",
     "settings.updates.docker_watchtower": "Or automatically: Watchtower fetches new versions by itself.",
     "settings.auto_rules.title": "Auto-switch rules",
     "settings.auto_rules.hint": "Automatically switches a Shelly relay during the cheapest spot-price block. Each rule has its own dry-run toggle, and the global live switch is one safety layer above.",
@@ -5117,6 +5119,7 @@ _I18N: Dict[str, Dict[str, str]] = {
     "settings.updates.hint": "Nota: la app se reinicia automáticamente tras una actualización. Puedes revertir a una versión anterior en cualquier momento.",
     "settings.updates.addon_managed": "Las actualizaciones se gestionan mediante el complemento de Home Assistant.",
     "settings.updates.docker_managed": "Las actualizaciones llegan con la imagen del contenedor.",
+    "settings.secret.shown_once": "Copia esta clave ahora: solo se muestra una vez.",
     "settings.updates.docker_watchtower": "O automáticamente: Watchtower descarga las nuevas versiones por sí solo.",
     "updates.status.idle": "Listo.",
     "updates.status.checking": "Buscando actualizaciones…",
@@ -5243,6 +5246,7 @@ def _mk_lang(overrides: Dict[str, str]) -> Dict[str, str]:
 _I18N["fr"] = _mk_lang({
     "settings.updates.addon_managed": "Les mises à jour sont gérées par le module complémentaire Home Assistant.",
     "settings.updates.docker_managed": "Les mises à jour arrivent avec l'image du conteneur.",
+    "settings.secret.shown_once": "Copiez cette clé maintenant : elle n'est affichée qu'une seule fois.",
     "settings.updates.docker_watchtower": "Ou automatiquement : Watchtower récupère lui-même les nouvelles versions.",
     "web.loading": "Chargement…",
     "web.error": "Erreur",
@@ -5577,6 +5581,7 @@ _I18N["fr"] = _mk_lang({
 _I18N["pt"] = _mk_lang({
     "settings.updates.addon_managed": "As atualizações são geridas pelo add-on do Home Assistant.",
     "settings.updates.docker_managed": "As atualizações chegam com a imagem do contentor.",
+    "settings.secret.shown_once": "Copie esta chave agora: só é mostrada uma vez.",
     "settings.updates.docker_watchtower": "Ou automaticamente: o Watchtower obtém as novas versões sozinho.",
     "web.loading": "Carregando…",
     "web.error": "Erro",
@@ -5792,6 +5797,7 @@ _I18N["pt"] = _mk_lang({
 _I18N["it"] = _mk_lang({
     "settings.updates.addon_managed": "Gli aggiornamenti sono gestiti tramite l'add-on di Home Assistant.",
     "settings.updates.docker_managed": "Gli aggiornamenti arrivano con l'immagine del container.",
+    "settings.secret.shown_once": "Copia questa chiave adesso: viene mostrata una sola volta.",
     "settings.updates.docker_watchtower": "Oppure in automatico: Watchtower scarica da solo le nuove versioni.",
     "web.loading": "Caricamento…",
     "web.error": "Errore",
@@ -6005,6 +6011,7 @@ _I18N["it"] = _mk_lang({
 _I18N["pl"] = _mk_lang({
     "settings.updates.addon_managed": "Aktualizacje są zarządzane przez dodatek Home Assistant.",
     "settings.updates.docker_managed": "Aktualizacje przychodzą z obrazem kontenera.",
+    "settings.secret.shown_once": "Skopiuj ten klucz teraz – jest pokazywany tylko raz.",
     "settings.updates.docker_watchtower": "Albo automatycznie: Watchtower sam pobiera nowe wersje.",
     "web.loading": "Ładowanie…",
     "web.error": "Błąd",
@@ -6217,6 +6224,7 @@ _I18N["pl"] = _mk_lang({
 _I18N["cs"] = _mk_lang({
     "settings.updates.addon_managed": "Aktualizace spravuje doplněk Home Assistant.",
     "settings.updates.docker_managed": "Aktualizace přicházejí s obrazem kontejneru.",
+    "settings.secret.shown_once": "Zkopírujte tento klíč hned – zobrazí se jen jednou.",
     "settings.updates.docker_watchtower": "Nebo automaticky: Watchtower si nové verze stáhne sám.",
     "web.loading": "Načítání…",
     "web.error": "Chyba",
@@ -6429,6 +6437,7 @@ _I18N["cs"] = _mk_lang({
 _I18N["ru"] = _mk_lang({
     "settings.updates.addon_managed": "Обновления управляются через дополнение Home Assistant.",
     "settings.updates.docker_managed": "Обновления приходят вместе с образом контейнера.",
+    "settings.secret.shown_once": "Скопируйте этот ключ сейчас – он показывается только один раз.",
     "settings.updates.docker_watchtower": "Или автоматически: Watchtower сам загружает новые версии.",
     "web.loading": "Загрузка…",
     "web.error": "Ошибка",
