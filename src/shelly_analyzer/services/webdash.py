@@ -425,6 +425,62 @@ class LiveStateStore:
         return out
 
 
+def _h(s: str) -> str:
+    return html.escape(str(s), quote=True)
+
+
+def chrome_i18n_values(lang: str) -> Dict[str, str]:
+    """Texts of the dashboard frame that used to be English literals."""
+    return {
+        "web_chrome_palette_btn": _h(_t(lang, "web.palette.hint")),
+        "web_chrome_menu": _h(_t(lang, "web.chrome.menu")),
+        "web_chrome_palette": _h(_t(lang, "web.chrome.palette")),
+        "web_chrome_fullscreen": _h(_t(lang, "web.chrome.fullscreen")),
+        "web_chrome_language": _h(_t(lang, "web.chrome.language")),
+        "web_chrome_unit_kwh": _h(_t(lang, "web.unit.kwh")),
+        "web_chrome_eur": _h(_t(lang, "web.chrome.currency_eur")),
+    }
+
+
+def control_i18n_values(lang: str) -> Dict[str, str]:
+    """Texts of the /control page that the template used to hard-code.
+
+    ``opt_*`` and ``t_traffic_*`` go into HTML (escaped); ``tj_*`` go into
+    script as ready-made JSON literals, so an apostrophe in a translation can
+    never break the page."""
+    j = lambda k: json.dumps(_t(lang, k), ensure_ascii=False)
+    cats = {c: _t(lang, "traffic.cat." + c) for c in ("shelly", "spot_price", "local", "other")}
+    cats.update({"entsoe": "ENTSO-E API", "weather": "OpenWeather", "telegram": "Telegram", "github": "GitHub"})
+    return {
+        "opt_incremental": _h(_t(lang, "sync.btn.incremental")),
+        "opt_day": _h(_t(lang, "period.day")),
+        "opt_week": _h(_t(lang, "period.week")),
+        "opt_month": _h(_t(lang, "period.month")),
+        "opt_year": _h(_t(lang, "period.year")),
+        "opt_custom": _h(_t(lang, "period.custom")),
+        "opt_days": _h(_t(lang, "plots.mode.days")),
+        "opt_weeks": _h(_t(lang, "plots.mode.weeks")),
+        "opt_months": _h(_t(lang, "plots.mode.months")),
+        "opt_all": _h(_t(lang, "plots.mode.all")),
+        "t_traffic_title": _h(_t(lang, "traffic.title")),
+        "t_traffic_category": _h(_t(lang, "traffic.category")),
+        "t_traffic_requests": _h(_t(lang, "traffic.requests")),
+        "t_traffic_received": _h(_t(lang, "traffic.received")),
+        "t_traffic_sent": _h(_t(lang, "traffic.sent")),
+        "tj_theme_dark": j("web.theme.dark"),
+        "tj_theme_light": j("web.theme.light"),
+        "tj_now": j("calibration.x_now"),
+        "tj_unit_h": j("web.unit.h"),
+        "tj_unit_min": j("web.unit.min"),
+        "tj_traffic_cats": json.dumps(cats, ensure_ascii=False),
+        "tj_traffic_total_line": j("web.traffic.total_line"),
+        "tj_traffic_received": j("traffic.received"),
+        "tj_traffic_sent": j("traffic.sent"),
+        "tj_job_started_id": j("web.control.job_started_id"),
+        "tj_not_json": j("web.js.not_json"),
+    }
+
+
 def _render_template(tpl: str, values: Dict[str, str]) -> str:
     """Render our HTML templates safely.
 
@@ -2076,7 +2132,11 @@ _HTML_TEMPLATE = """<!doctype html>
       #pane-costs table.balance-table th, #pane-costs table.balance-table td {{ padding:4px 2px; font-size:11px; letter-spacing:0; text-transform:none; }}
       #pane-costs table.balance-table th {{ white-space:nowrap; }}
       #pane-costs table.balance-table td:not(:first-child) {{ white-space:nowrap; }}
-      #pane-costs table.balance-table td:first-child {{ width:34%; overflow-wrap:break-word; hyphens:manual; }}
+      /* The Aurora skin turns every pane table into a self-scrolling block; this one has to be a real table that fits. */
+      #pane-costs table.balance-table {{ display:table; table-layout:fixed; white-space:normal; overflow:visible; }}
+      #pane-costs table.balance-table th:first-child, #pane-costs table.balance-table td:first-child {{ width:29%; white-space:normal; overflow-wrap:anywhere; hyphens:manual; }}
+      #pane-costs table.balance-table th:not(:first-child) {{ font-size:10px; overflow:hidden; text-overflow:ellipsis; }}
+      #pane-costs table.balance-table td:not(:first-child) {{ overflow:hidden; text-overflow:clip; }}
       .solar-fc-table {{ font-size:11px; }}
       .co2-origin-table .col-pct, .co2-origin-table .col-fac {{ display:none; }}
       .co2-origin-table {{ font-size:11px; }}
@@ -2382,8 +2442,8 @@ _HTML_TEMPLATE = """<!doctype html>
     <span id="hdr-title" style="font-weight:700;font-size:15px">⚡ Shelly Analyzer</span>
     <div id="hdr-actions" style="display:flex;gap:8px;align-items:center">
       <span id="live-stamp" style="font-size:11px;color:var(--muted)"></span>
-      <button id="btn-cmdk" class="icon-btn" title="Search (⌘K)" onclick="openPalette()">🔍</button>
-      <button id="btn-hamburger" class="icon-btn" title="Menu" onclick="toggleNavDrawer()">☰</button>
+      <button id="btn-cmdk" class="icon-btn" title="{web_chrome_palette_btn}" onclick="openPalette()">🔍</button>
+      <button id="btn-hamburger" class="icon-btn" title="{web_chrome_menu}" onclick="toggleNavDrawer()">☰</button>
       <button id="btn-freeze" class="icon-btn" title="{web_btn_freeze_title}" style="display:none">▶</button>
       <button id="btn-raw" onclick="toggleRawView()" title="" style="display:none"></button>
       <button id="btn-live-settings" class="icon-btn" title="{web_btn_settings_title}" onclick="window.location.href='/settings#sec-devices'">⚙</button>
@@ -2424,8 +2484,8 @@ _HTML_TEMPLATE = """<!doctype html>
       <div class="controls-row">
         <select id="hm-device" onchange="loadHeatmap()"></select>
         <select id="hm-unit" onchange="loadHeatmap()">
-          <option value="kWh">kWh</option>
-          <option value="eur">EUR</option>
+          <option value="kWh">{web_chrome_unit_kwh}</option>
+          <option value="eur">{web_chrome_eur}</option>
           <option value="co2">g CO₂</option>
         </select>
         <select id="hm-year" onchange="loadHeatmap()"></select>
@@ -2677,7 +2737,7 @@ _HTML_TEMPLATE = """<!doctype html>
 
 <!-- Command palette (⌘K / Ctrl+K / "/") -->
 <div id="cmdk" class="cmdk-overlay" onclick="if(event.target===this)closePalette()">
-  <div class="cmdk-panel" role="dialog" aria-modal="true" aria-label="Command palette">
+  <div class="cmdk-panel" role="dialog" aria-modal="true" aria-label="{web_chrome_palette}">
     <input id="cmdk-input" class="cmdk-input" type="text" autocomplete="off" autocorrect="off"
            autocapitalize="off" spellcheck="false" oninput="renderPalette()" onkeydown="paletteKey(event)"/>
     <div id="cmdk-list" class="cmdk-list"></div>
@@ -2694,7 +2754,7 @@ _HTML_TEMPLATE = """<!doctype html>
     <div id="live-settings-list"></div>
 
     <div style="margin-bottom:12px">
-      <label style="font-size:12px;font-weight:600;color:var(--muted)">🌐 Language</label><br>
+      <label style="font-size:12px;font-weight:600;color:var(--muted)">🌐 {web_chrome_language}</label><br>
       <select id="lang-select" style="margin-top:4px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--fg);font-size:13px" onchange="setLanguage(this.value)">
         <option value="de">Deutsch</option>
         <option value="en">English</option>
@@ -2746,7 +2806,7 @@ _HTML_TEMPLATE = """<!doctype html>
     <div class="modal-header">
       <span id="chart-detail-title"></span>
       <div style="display:flex;gap:6px">
-        <button class="icon-btn" id="chart-detail-fs-btn" onclick="toggleDetailFullscreen()" title="Fullscreen">⛶</button>
+        <button class="icon-btn" id="chart-detail-fs-btn" onclick="toggleDetailFullscreen()" title="{web_chrome_fullscreen}">⛶</button>
         <button class="icon-btn" onclick="closeDetailChart()">✕</button>
       </div>
     </div>
@@ -3410,7 +3470,7 @@ function _ctrlDeviceCard(d, cfgMap) {{
   h += '<div class="card" id="ctrl-' + d.key + '" style="padding:14px">';
   h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
   h += '<div><div style="font-weight:600;font-size:.95rem">' + esc(d.name) + '</div>';
-  h += '<div style="font-size:.72rem;color:var(--muted)">' + esc(model || d.kind) + ' · ' + esc(cat) + '</div></div>';
+  h += '<div style="font-size:.72rem;color:var(--muted)">' + (model ? esc(model) + ' · ' : '') + esc(t('control.cat.' + cat.toLowerCase(), cat)) + '</div></div>';
   h += '<div style="font-size:.85rem;font-weight:600;color:var(--accent)">' + powerW + ' W</div>';
   h += '</div>';
   h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
@@ -3418,7 +3478,7 @@ function _ctrlDeviceCard(d, cfgMap) {{
   h += '<label class="ctrl-toggle" style="flex:0 0 auto">';
   h += '<input type="checkbox" ' + (isOn ? 'checked' : '') + ' onchange="ctrlToggle(\\'' + d.key + '\\',this.checked)">';
   h += '<span class="ctrl-slider"></span></label>';
-  h += '<span class="ctrl-state" id="ctrl-state-' + d.key + '" style="font-size:.82rem;font-weight:600;color:' + (isOn ? 'var(--ok)' : 'var(--muted)') + '">' + (isOn ? 'ON' : 'OFF') + '</span>';
+  h += '<span class="ctrl-state" id="ctrl-state-' + d.key + '" style="font-size:.82rem;font-weight:600;color:' + (isOn ? 'var(--ok)' : 'var(--muted)') + '">' + (isOn ? t('live.switch.on', 'On') : t('live.switch.off', 'Off')) + '</span>';
   h += '</div>';
   if (cat === 'Dimmer' || cat === 'RGBW') {{
     h += '<div style="margin-bottom:10px">';
@@ -3557,7 +3617,7 @@ async function ctrlToggle(key, on) {{
       body:JSON.stringify({{action:'set_switch',params:{{device_key:key,on:on}}}}) }});
     const j = await r.json();
     const st = document.getElementById('ctrl-state-' + key);
-    if (st) {{ st.textContent = j.on ? 'ON' : 'OFF'; st.style.color = j.on ? 'var(--ok)' : 'var(--muted)'; }}
+    if (st) {{ st.textContent = j.on ? t('live.switch.on', 'On') : t('live.switch.off', 'Off'); st.style.color = j.on ? 'var(--ok)' : 'var(--muted)'; }}
     if (msg) msg.textContent = j.ok ? '✓' : (j.error || '');
   }} catch(e) {{ if (msg) msg.textContent = e.message; }}
 }}
@@ -3757,7 +3817,7 @@ function _nilmDeviceSelectorHtml(raw) {{
 
 function renderNilm(raw, el) {{
   if (!raw.ok) {{
-    el.innerHTML = '<p class="error-msg">' + esc(raw.error || 'Unknown error') + '</p>';
+    el.innerHTML = '<p class="error-msg">' + esc(raw.error || t('web.js.unknown_error', 'Unknown error')) + '</p>';
     return;
   }}
   const data = _nilmFilterData(raw);
@@ -4246,7 +4306,7 @@ let _tenantsDevices = [];
 function loadTenants() {{
   const el = document.getElementById('tenants-content');
   if (!el) return;
-  _spinner(el, _quietRefresh, '<p class="loading-msg">Loading…</p>');
+  _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   Promise.all([
     fetch('/api/tenants').then(function(r) {{ return r.json(); }}),
     fetch('/api/config').then(function(r) {{ return r.json(); }})
@@ -4257,7 +4317,7 @@ function loadTenants() {{
     _tenantsDevices = (cfg.devices_meta || cfg.devices || []).map(function(d) {{ return {{key:d.key, name:d.name||d.key}}; }});
     renderTenants();
   }}).catch(function(e) {{
-    el.innerHTML = '<p style="color:var(--red)">Error: ' + (e && e.message || '?') + '</p>';
+    el.innerHTML = '<p style="color:var(--red)">' + t('web.error_label', 'Error') + ': ' + (e && e.message || '?') + '</p>';
   }});
 }}
 function renderTenants() {{
@@ -4433,18 +4493,18 @@ function tenantsPreviewAll() {{ computeBills(); }}
 function tenantsPreviewOne(tid) {{
   const q = _tenantsCurrentQuery();
   const el = document.getElementById('t-bills');
-  _spinner(el, _quietRefresh, '<p class="loading-msg">Computing…</p>');
+  _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.js.computing', 'Computing…') + '</p>');
   fetch('/api/tenants/bill?' + q.qs).then(function(r) {{ return r.json(); }}).then(function(d) {{
-    if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||'No data') + '</p>'; return; }}
+    if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||t('web.lit.no_data','No data')) + '</p>'; return; }}
     const rep = d.report;
     const bills = (rep.bills || []).filter(function(b) {{ return (b.tenant.tenant_id || '') === tid; }});
-    if (!bills.length) {{ el.innerHTML = '<p style="color:var(--muted)">No data for this tenant in the selected period.</p>'; return; }}
-    let h = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Period: ' + esc(rep.period_start) + ' to ' + esc(rep.period_end) + '</div>';
+    if (!bills.length) {{ el.innerHTML = '<p style="color:var(--muted)">' + t('web.lit.no_tenant_data','No data for this tenant in the selected period.') + '</p>'; return; }}
+    let h = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">' + t('web.tenants.period', 'Period') + ': ' + esc(rep.period_start) + ' – ' + esc(rep.period_end) + '</div>';
     bills.forEach(function(b) {{
       h += _tenantsBillCardHtml(b);
     }});
     el.innerHTML = h;
-  }}).catch(function(e) {{ el.innerHTML = '<p style="color:var(--red)">Error: ' + e + '</p>'; }});
+  }}).catch(function(e) {{ el.innerHTML = '<p style="color:var(--red)">' + t('web.error_label', 'Error') + ': ' + e + '</p>'; }});
 }}
 function _tenantsBillCardHtml(b) {{
   let h = '<div class="card" style="margin-bottom:6px">';
@@ -4480,7 +4540,7 @@ function tenantsExportAllPdf() {{
 }}
 function _tenantsPostInvoice(body) {{
   const el = document.getElementById('t-bills');
-  _spinner(el, _quietRefresh, '<p class="loading-msg">Generating PDF…</p>');
+  _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.js.generating_pdf', 'Generating PDF…') + '</p>');
   fetch('/api/tenants/invoice', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify(body)}})
     .then(function(r) {{ return r.json(); }})
     .then(function(d) {{
@@ -4503,7 +4563,7 @@ function _tenantsPostInvoice(body) {{
       }});
       h += '</div>';
       el.innerHTML = h;
-    }}).catch(function(e) {{ el.innerHTML = '<p style="color:var(--red)">Error: ' + e + '</p>'; }});
+    }}).catch(function(e) {{ el.innerHTML = '<p style="color:var(--red)">' + t('web.error_label', 'Error') + ': ' + e + '</p>'; }});
 }}
 // Tenant editor functions removed in v16.41.0 — config now lives exclusively in
 // Settings → Tenants (settings.html). Tenants tab is read-only invoice export.
@@ -4516,9 +4576,9 @@ function computeBills() {{
   if (e) q.set('period_end', e);
   if (tm) q.set('tariff_mode', tm);
   const el = document.getElementById('t-bills');
-  _spinner(el, _quietRefresh, '<p class="loading-msg">Computing…</p>');
+  _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.js.computing', 'Computing…') + '</p>');
   fetch('/api/tenants/bill?' + q.toString()).then(function(r) {{ return r.json(); }}).then(function(d) {{
-    if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||'No data') + '</p>'; return; }}
+    if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||t('web.lit.no_data','No data')) + '</p>'; return; }}
     const rep = d.report;
     const tariffLabel = rep.tariff_mode === 'dynamic' ? '⚡ ' + t('web.tenants.tariff_dynamic','Dynamic') : '💲 ' + t('web.tenants.tariff_fixed','Fixed');
     const personsLbl = t('web.tenants.persons','pers.');
@@ -4548,22 +4608,22 @@ function computeBills() {{
       h += '</div>';
     }});
     el.innerHTML = h;
-  }}).catch(function(e) {{ el.innerHTML = '<p style="color:var(--red)">Error: ' + e + '</p>'; }});
+  }}).catch(function(e) {{ el.innerHTML = '<p style="color:var(--red)">' + t('web.error_label', 'Error') + ': ' + e + '</p>'; }});
 }}
 
 function refreshSyncStatus() {{
   const el = document.getElementById('sync-status-panel');
   if (!el) return;
   fetch('/api/sync/status').then(function(r) {{ return r.json(); }}).then(function(d) {{
-    if (!d.ok) {{ el.textContent = 'Status unavailable: ' + (d.error || '?'); return; }}
+    if (!d.ok) {{ el.textContent = t('web.js.status_unavailable', 'Status unavailable') + ': ' + (d.error || '?'); return; }}
     const devs = d.devices || [];
-    if (!devs.length) {{ el.textContent = 'No devices configured'; return; }}
+    if (!devs.length) {{ el.textContent = t('web.lit.no_devices','No devices configured'); return; }}
     const parts = devs.map(function(x) {{
-      const ts = x.last_sync_ts ? new Date(x.last_sync_ts*1000).toLocaleString() : 'never';
+      const ts = x.last_sync_ts ? new Date(x.last_sync_ts*1000).toLocaleString() : t('web.js.never','never');
       return x.name + ': ' + ts;
     }});
-    el.textContent = 'Last sync: ' + parts.join('  ·  ');
-  }}).catch(function(e) {{ el.textContent = 'Status fetch failed'; }});
+    el.textContent = t('web.js.last_sync', 'Last sync') + ': ' + parts.join('  ·  ');
+  }}).catch(function(e) {{ el.textContent = t('web.js.status_failed', 'Status fetch failed'); }});
 }}
 
 /* ──────────────────────────────────────────────
@@ -6849,7 +6909,7 @@ function _drawSpotChart(hourly, fixedCt) {{
     var h = hourly[idx];
     var d = new Date(h.ts * 1000);
     var hStr = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ' ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2);
-    _spotTip.innerHTML = '<b>' + hStr + '</b><br>Spot: ' + h.raw_ct.toFixed(1) + ' ct/kWh<br>Total: ' + h.total_ct.toFixed(1) + ' ct/kWh';
+    _spotTip.innerHTML = '<b>' + hStr + '</b><br>' + t('web.js.spot', 'Spot') + ': ' + h.raw_ct.toFixed(1) + ' ct/kWh<br>' + t('web.tenants.total', 'Total') + ': ' + h.total_ct.toFixed(1) + ' ct/kWh';
     _spotTip.style.display = 'block';
     var tipX = Math.min(x, r.width - 120);
     _spotTip.style.left = tipX + 'px';
@@ -7007,7 +7067,7 @@ async function loadHeatmap() {{
     _hmRender(data, unit);
     _hmPrefetchSoon();
   }} catch(e) {{
-    if (!_hmCache[key]) calWrap.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+    if (!_hmCache[key]) calWrap.innerHTML = '<p class="error-msg">' + t('web.error_label', 'Error') + ': ' + e.message + '</p>';
   }}
 }}
 
@@ -8139,7 +8199,7 @@ function _drawCo2FuelDonut(mixKeys, mix, fuelColors) {{
   ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(Math.round(total) + ' MW', cx, cy-6);
   ctx.font = '10px sans-serif'; ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted')||'#666';
-  ctx.fillText('Total', cx, cy+8);
+  ctx.fillText(t('web.tenants.total', 'Total'), cx, cy+8);
   legHtml += '</div>';
   if (legend) legend.innerHTML = legHtml;
 }}
@@ -9631,12 +9691,12 @@ async function loadForecast() {{
   const dk = sel.value || '';
   const cont = document.getElementById('forecast-cards');
   const quiet = _quietRefresh;
-  _spinner(cont, quiet, '<p class="loading-msg">Loading\u2026</p>');
+  _spinner(cont, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
     const r = await fetch('/api/forecast?device_key=' + encodeURIComponent(dk));
     if (!r.ok) throw new Error(r.status);
     const d = await r.json();
-    if (d.no_data) {{ if (!_tabHasContent(cont)) cont.innerHTML = '<p class="info-msg">Not enough data for forecast (min. 3 days).</p>'; return; }}
+    if (d.no_data) {{ if (!_tabHasContent(cont)) cont.innerHTML = '<p class="info-msg">' + t('web.lit.forecast_min','Not enough data for forecast (min. 3 days).') + '</p>'; return; }}
     renderForecast(d);
   }} catch(e) {{
     _tabFail(cont, e, quiet);
@@ -10214,7 +10274,7 @@ async function loadSankey() {{
       _flowTimer = setTimeout(function() {{ if (currentPane === 'sankey' && _sankeyPeriod === 'now') loadSankey(); }}, 5000);
     }}
   }} catch(e) {{
-    cont.innerHTML = '<p class="error-msg">Error: ' + esc(e.message) + '</p>';
+    cont.innerHTML = '<p class="error-msg">' + t('web.error_label', 'Error') + ': ' + esc(e.message) + '</p>';
   }}
 }}
 function _fv(v, unit) {{
@@ -10509,7 +10569,7 @@ _loadLsSettings();
   window._ssDuration = 3;
   async function loadSmartSched() {{
     const el = document.getElementById('ss-content');
-    _spinner(el, _quietRefresh, '<p class="loading-msg">Loading…</p>');
+    _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
     try {{
       const r = await fetch('/api/smart_schedule?duration=' + window._ssDuration);
       if (!r.ok) throw new Error(r.status);
@@ -10517,7 +10577,7 @@ _loadLsSettings();
       if (!d.ok) throw new Error(d.error || 'unknown');
       renderSmartSched(d.data, el);
     }} catch(e) {{
-      el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+      el.innerHTML = '<p class="error-msg">' + t('web.error_label', 'Error') + ': ' + e.message + '</p>';
     }}
   }}
   function _ssFmtDateTime(ts) {{
@@ -10530,8 +10590,8 @@ _loadLsSettings();
     const dateStr = d.toLocaleDateString([], {{day:'2-digit', month:'2-digit', year:'numeric'}});
     const timeStr = d.toLocaleTimeString([], {{hour:'2-digit', minute:'2-digit'}});
     let prefix = wday + ', ' + dateStr;
-    if (dayStart.getTime() === today.getTime()) prefix = 'Today · ' + wday;
-    else if (dayStart.getTime() === tomorrow.getTime()) prefix = 'Tomorrow · ' + wday;
+    if (dayStart.getTime() === today.getTime()) prefix = t('web.sched.today','Today · {day}', {{day: wday}});
+    else if (dayStart.getTime() === tomorrow.getTime()) prefix = t('web.sched.tomorrow','Tomorrow · {day}', {{day: wday}});
     return {{ prefix: prefix, date: dateStr, time: timeStr }};
   }}
   function renderSmartSched(data, el) {{
@@ -10546,7 +10606,7 @@ _loadLsSettings();
 
     const blocks = data.blocks || [];
     if (!blocks.length) {{
-      el.innerHTML = durSel + '<div class="card" style="padding:14px"><p class="info-msg">No spot price data for the next 24h. Enable spot prices in settings or wait for data to be fetched.</p></div>';
+      el.innerHTML = durSel + '<div class="card" style="padding:14px"><p class="info-msg">' + t('web.sched.no_spot','No spot price data for the next 24h. Enable spot prices in settings or wait for data to be fetched.') + '</p></div>';
       return;
     }}
     const fixed = data.fixed_ct || 0;
@@ -10557,16 +10617,16 @@ _loadLsSettings();
     // Context card – what does this tab do?
     let html = durSel;
     html += '<div class="card" style="margin-bottom:10px;padding:12px;background:linear-gradient(135deg,rgba(255,152,0,0.08),rgba(255,152,0,0.02));border-left:3px solid #ff9800">' +
-      '<div style="font-size:13px;font-weight:650;color:#ff9800;margin-bottom:4px">⏱ Cheapest time windows in the next 24h</div>' +
-      '<div style="font-size:12px;color:var(--muted);line-height:1.5">Start your <b>energy-hungry appliances</b> (washing machine, dishwasher, dryer, EV, heat pump) during one of the windows below — that is when spot power is cheapest. Savings are compared to your fixed price.</div>' +
+      '<div style="font-size:13px;font-weight:650;color:#ff9800;margin-bottom:4px">' + t('web.sched.ctx_title','⏱ Cheapest time windows in the next 24h') + '</div>' +
+      '<div style="font-size:12px;color:var(--muted);line-height:1.5">' + t('web.sched.ctx_body','Start your <b>energy-hungry appliances</b> (washing machine, dishwasher, dryer, EV, heat pump) during one of the windows below — that is when spot power is cheapest. Savings are compared to your fixed price.') + '</div>' +
       '</div>';
 
     // 24h context tiles
     html += '<div class="metric-grid" style="margin-bottom:10px">' +
-      metricCardHtml('Ø 24h Spot', avg24.toFixed(1) + ' ct/kWh', 'Average') +
-      metricCardHtml('Fixed price', fixed.toFixed(1) + ' ct/kWh', 'Your tariff') +
-      metricCardHtml('Cheapest hour', cheap.toFixed(1) + ' ct/kWh', '') +
-      metricCardHtml('Most expensive hour', exp.toFixed(1) + ' ct/kWh', '') +
+      metricCardHtml(t('web.sched.avg24','Ø 24h spot'), avg24.toFixed(1) + ' ct/kWh', t('web.sched.average','Average')) +
+      metricCardHtml(t('plots.dynprice.fixed','Fixed price'), fixed.toFixed(1) + ' ct/kWh', t('web.sched.your_tariff','Your tariff')) +
+      metricCardHtml(t('web.sched.cheapest_hour','Cheapest hour'), cheap.toFixed(1) + ' ct/kWh', '') +
+      metricCardHtml(t('web.sched.expensive_hour','Most expensive hour'), exp.toFixed(1) + ' ct/kWh', '') +
       '</div>';
 
     // Top-3 blocks
@@ -10580,14 +10640,14 @@ _loadLsSettings();
       const borderColor = idx === 0 ? '#ff9800' : 'var(--border)';
       const borderWidth = idx === 0 ? '2px' : '1px';
       const vsFixedText = saveCtKwh > 0
-        ? 'Save <b style="color:#4caf50">' + saveCtKwh.toFixed(1) + ' ct/kWh</b> vs. fixed price'
-        : (saveCtKwh < 0 ? '<b style="color:#e53935">' + Math.abs(saveCtKwh).toFixed(1) + ' ct/kWh more</b> than fixed price' : 'Same price as fixed tariff');
+        ? t('web.sched.save_vs_fixed','Save {v} vs. fixed price', {{v: '<b style="color:#4caf50">' + saveCtKwh.toFixed(1) + ' ct/kWh</b>'}})
+        : (saveCtKwh < 0 ? t('web.sched.more_than_fixed','{v} more than fixed price', {{v: '<b style="color:#e53935">' + Math.abs(saveCtKwh).toFixed(1) + ' ct/kWh</b>'}}) : t('web.sched.same_as_fixed','Same price as fixed tariff'));
 
       html += '<div class="card" style="margin-bottom:8px;border:' + borderWidth + ' solid ' + borderColor + ';padding:12px">' +
         '<div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:10px">' +
         '<div style="flex:1;min-width:200px">' +
           '<div style="font-size:18px;font-weight:700">' + rank + ' ' + st.time + ' – ' + en.time + '</div>' +
-          '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + st.prefix + ' · ' + b.block_hours + ' h window</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + st.prefix + ' · ' + t('web.sched.window_h','{h} h window', {{h: b.block_hours}}) + '</div>' +
           '<div style="font-size:12px;margin-top:6px">' + vsFixedText + '</div>' +
         '</div>' +
         '<div style="text-align:right;min-width:120px">' +
@@ -10596,17 +10656,16 @@ _loadLsSettings();
         '</div>' +
         '</div>' +
         '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;color:var(--muted)">' +
-          '💡 At 2 kWh usage (e.g. washing machine): ' +
-          '<b style="color:' + saveColor + '">' + (saveCtKwh >= 0 ? '-' : '+') + Math.abs(saveCtKwh * 2).toFixed(0) + ' ct</b> vs. fixed price · ' +
-          '<b>' + (b.avg_price_ct * 2).toFixed(0) + ' ct</b> total' +
+          t('web.sched.example','💡 At 2 kWh usage (e.g. washing machine): {saving} vs. fixed price · {total} total', {{
+            saving: '<b style="color:' + saveColor + '">' + (saveCtKwh >= 0 ? '-' : '+') + Math.abs(saveCtKwh * 2).toFixed(0) + ' ct</b>',
+            total: '<b>' + (b.avg_price_ct * 2).toFixed(0) + ' ct</b>'}}) +
         '</div>' +
         '</div>';
     }});
 
     // Footer hint
     html += '<div style="margin-top:10px;font-size:11px;color:var(--muted);text-align:center;line-height:1.5">' +
-      'Prices incl. grid fee, electricity tax, CHP/§19/offshore surcharges, supplier margin and VAT from your spot-price settings. ' +
-      'Zone: ' + (data.zone || '?') + ' · Updated hourly.' +
+      t('web.sched.footer','Prices incl. grid fee, electricity tax, CHP/§19/offshore surcharges, supplier margin and VAT from your spot-price settings. Zone: {zone} · Updated hourly.', {{zone: (data.zone || '?')}}) +
       '</div>';
 
     el.innerHTML = html;
@@ -10666,7 +10725,7 @@ _loadLsSettings();
   }}
   async function loadEvLog() {{
     const el = document.getElementById('ev-content');
-    _spinner(el, _quietRefresh, '<p class="loading-msg">Loading…</p>');
+    _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
     try {{
       const r = await fetch('/api/ev_sessions?' + _evQuery());
       if (!r.ok) throw new Error(r.status);
@@ -10674,7 +10733,7 @@ _loadLsSettings();
       if (!d.ok) throw new Error(d.error || 'unknown');
       if (!_tabSkipRender('ev_log', el, d.data)) renderEvLog(d.data, el);
     }} catch(e) {{
-      el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+      el.innerHTML = '<p class="error-msg">' + t('web.error_label', 'Error') + ': ' + e.message + '</p>';
     }}
   }}
   window.evSetPreset = function(name, btn) {{
@@ -11325,8 +11384,8 @@ _loadLsSettings();
       const titleLeft = '📊 ' + t('web.ev.monthly_chart', 'Wallbox usage') + ' · ' +
         t('web.ev.last_n_months', 'last {{n}} months', {{n: monthlyKwh.length}});
       const titleRight = (monthlyPrice != null && monthlyPrice > 0)
-        ? '<span style="font-size:11px;color:var(--muted);font-weight:400">' +
-          monthlyPrice.toFixed(2).replace('.', ',') + ' €/kWh' +
+        ? '<span style="font-size:11px;color:var(--muted);font-weight:400;text-transform:none">' +
+          monthlyPrice.toLocaleString(_locale(), {{minimumFractionDigits: 2, maximumFractionDigits: 2}}) + ' €/kWh' +
           (monthlyThreshold ? ' · ≥' + monthlyThreshold + ' W' : '') +
           '</span>'
         : '';
@@ -11976,7 +12035,7 @@ _loadLsSettings();
   /* ── Tariff Comparison ── */
   async function loadTariff() {{
     const el = document.getElementById('tariff-content');
-    _spinner(el, _quietRefresh, '<p class="loading-msg">Loading…</p>');
+    _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
     try {{
       const r = await fetch('/api/tariff_compare');
       if (!r.ok) throw new Error(r.status);
@@ -11984,13 +12043,13 @@ _loadLsSettings();
       if (!d.ok) throw new Error(d.error || 'unknown');
       renderTariff(d.data, el);
     }} catch(e) {{
-      el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+      el.innerHTML = '<p class="error-msg">' + t('web.error_label', 'Error') + ': ' + e.message + '</p>';
     }}
   }}
   function renderTariff(data, el) {{
     const results = data.results || [];
     if (!results.length) {{
-      el.innerHTML = '<div class="card" style="padding:14px"><p class="info-msg">No consumption data available.</p></div>';
+      el.innerHTML = '<div class="card" style="padding:14px"><p class="info-msg">' + t('web.lit.no_consumption','No consumption data available.') + '</p></div>';
       return;
     }}
     // Pick currency symbol from the API response so US / GB / CHF / AU users
@@ -12028,7 +12087,7 @@ _loadLsSettings();
   /* ── Battery ── */
   async function loadBattery() {{
     const el = document.getElementById('bat-content');
-    _spinner(el, _quietRefresh, '<p class="loading-msg">Loading…</p>');
+    _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
     try {{
       const r = await fetch('/api/battery');
       if (!r.ok) throw new Error(r.status);
@@ -12036,7 +12095,7 @@ _loadLsSettings();
       if (!d.ok) throw new Error(d.error || 'unknown');
       if (!_tabSkipRender('battery', el, d.data)) renderBattery(d.data, el);
     }} catch(e) {{
-      el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+      el.innerHTML = '<p class="error-msg">' + t('web.error_label', 'Error') + ': ' + e.message + '</p>';
     }}
   }}
   function renderBattery(data, el) {{
@@ -12203,6 +12262,13 @@ _loadLsSettings();
   }}
 
   // ── charts ──
+  // A centred axis label that never leaves the canvas: the last day or hour
+  // label sits near the right edge, and a wider word (ru weekday, 390 px
+  // phone) used to be cut off there.
+  function _fillCentered(ctx, txt, x, y, W) {{
+    const half = ctx.measureText(txt).width / 2;
+    ctx.fillText(txt, Math.max(half + 1, Math.min(W - half - 1, x)), y);
+  }}
   function _batAxisTime(ctx, c, PL, PR, H, t0, t1, stepH) {{
     const iw = c.W - PL - PR;
     ctx.fillStyle = c.muted; ctx.textAlign = 'center'; ctx.font = '9px system-ui,sans-serif';
@@ -12212,7 +12278,7 @@ _loadLsSettings();
       const d = new Date(tt * 1000);
       if (d.getHours() % stepH === 0) {{
         const x = PL + (tt - t0) / (t1 - t0) * iw;
-        if (x >= PL && x <= c.W - PR - 12) ctx.fillText(d.getHours().toString().padStart(2, '0') + ':00', x, H - 4);
+        if (x >= PL && x <= c.W - PR - 12) _fillCentered(ctx, d.getHours().toString().padStart(2, '0') + ':00', x, H - 4, c.W);
       }}
       tt += 3600;
     }}
@@ -12266,7 +12332,7 @@ _loadLsSettings();
     const d0 = new Date(t0 * 1000); d0.setHours(24, 0, 0, 0);
     for (let tt = Math.floor(d0.getTime() / 1000); tt < t1; tt += 86400) {{
       const xx = Math.round(x(tt)) + 0.5; ctx.strokeStyle = c.grid; ctx.beginPath(); ctx.moveTo(xx, PT); ctx.lineTo(xx, PT + ih); ctx.stroke();
-      const dd = new Date(tt * 1000); ctx.fillStyle = c.muted; ctx.fillText(dd.toLocaleDateString(_locale(), {{weekday:'short'}}), x(tt + 43200), H - 4);
+      const dd = new Date(tt * 1000); ctx.fillStyle = c.muted; _fillCentered(ctx, dd.toLocaleDateString(_locale(), {{weekday:'short'}}), x(tt + 43200), H - 4, W);
     }}
     // area + line; integrated stretch dashed
     const seg = function(pts, dashed) {{
@@ -12311,7 +12377,7 @@ _loadLsSettings();
     ctx.fillStyle = '#3b82f6'; ctx.textAlign = 'left'; ctx.fillText('100%', W - PR + 3, PT + 8); ctx.fillText('0%', W - PR + 3, PT + ih);
     ctx.fillStyle = c.muted; ctx.textAlign = 'center';
     const _st = Math.max(1, Math.round(n / Math.max(2, Math.floor(iw / 52))));
-    dl.forEach(function(d, i) {{ if (i === n - 1 || (i % _st === 0 && n - 1 - i >= _st / 2)) ctx.fillText(d.date.slice(8) + '.' + d.date.slice(5, 7) + '.', x(i) + iw / n / 2, H - 4); }});
+    dl.forEach(function(d, i) {{ if (i === n - 1 || (i % _st === 0 && n - 1 - i >= _st / 2)) _fillCentered(ctx, d.date.slice(8) + '.' + d.date.slice(5, 7) + '.', x(i) + iw / n / 2, H - 4, W); }});
   }}
   function _drawBatHours(hp) {{
     const c = _cvSetup('bat-hour-canvas');
@@ -12335,7 +12401,7 @@ _loadLsSettings();
     ctx.stroke();
     ctx.fillStyle = '#3b82f6'; ctx.textAlign = 'left'; ctx.fillText('100%', W - PR + 3, PT + 8); ctx.fillText('0%', W - PR + 3, PT + ih);
     ctx.fillStyle = c.muted; ctx.textAlign = 'center';
-    hp.forEach(function(h, i) {{ if (i % 3 === 0) ctx.fillText(String(i).padStart(2, '0'), x(i) + iw / n / 2, H - 4); }});
+    hp.forEach(function(h, i) {{ if (i % 3 === 0) _fillCentered(ctx, String(i).padStart(2, '0'), x(i) + iw / n / 2, H - 4, W); }});
   }}
 
   // Format a duration in hours as "Xh Ym" / "Ym".
@@ -12346,7 +12412,7 @@ _loadLsSettings();
   /* ── AI Advisor ── */
   async function loadAdvisor() {{
     const el = document.getElementById('advisor-content');
-    _spinner(el, _quietRefresh, '<p class="loading-msg">Loading…</p>');
+    _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
     try {{
       const r = await fetch('/api/advisor');
       if (!r.ok) throw new Error(r.status);
@@ -12354,7 +12420,7 @@ _loadLsSettings();
       if (!d.ok) throw new Error(d.error || 'unknown');
       renderAdvisor(d.data, el);
     }} catch(e) {{
-      el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+      el.innerHTML = '<p class="error-msg">' + t('web.error_label', 'Error') + ': ' + e.message + '</p>';
     }}
   }}
   function renderAdvisor(data, el) {{
@@ -12387,7 +12453,7 @@ _loadLsSettings();
       if (!d.ok) throw new Error(d.error || 'unknown');
       if (!_tabSkipRender('goals', el, d.data)) renderGoals(d.data, el);
     }} catch(e) {{
-      el.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+      el.innerHTML = '<p class="error-msg">' + t('web.error_label', 'Error') + ': ' + e.message + '</p>';
     }}
   }}
   function _glBar(pct, h) {{
@@ -13183,9 +13249,26 @@ function plotlyBaseLayout(extra){
   return merged;
 }
 // Unified config: no mode bar / no scroll zoom / no double-click on mobile.
+// Month and weekday names for Plotly's date axes and hover text, from the
+// browser's own calendar data in the UI language.
+function _registerPlotlyLocale(){
+  try {
+    const lang = document.documentElement.lang || 'en';
+    if (!window.Plotly || !Plotly.register || window.__plotlyLocale === lang) return;
+    const f = function(o){ return new Intl.DateTimeFormat(lang, o); };
+    const mo = function(st){ return Array.from({length:12}, function(_, i){ return f({month:st}).format(new Date(2021, i, 1)); }); };
+    const wd = function(st){ return Array.from({length:7}, function(_, i){ return f({weekday:st}).format(new Date(2021, 0, 3 + i)); }); };
+    Plotly.register({ moduleType:'locale', name:lang, dictionary:{}, format:{
+      months: mo('long'), shortMonths: mo('short'), days: wd('long'), shortDays: wd('short'),
+      date: lang === 'en' ? '%m/%d/%Y' : '%d.%m.%Y' } });
+    window.__plotlyLocale = lang;
+  } catch (e) {}
+}
 function plotlyConfig(extra){
   const mobile = isMobileView();
+  _registerPlotlyLocale();
   const base = {
+    locale: document.documentElement.lang || 'en',
     responsive: true,
     displaylogo: false,
     displayModeBar: mobile ? false : 'hover',
@@ -13523,9 +13606,15 @@ async function loadData() {
     const xsLab = data.labels || [];
     const kwhTraces = data.traces || [];
     // Nicer x-axis: no fixed 45°, let Plotly auto-rotate + reserve bottom margin
+    // Date ticks in the UI language (Plotly would print "Nov 11, 2026"):
+    // the hour/day labels are ISO strings, which Plotly reads as dates.
+    const _l0 = String(xsLab[0] || '');
+    const _dfmt = (document.documentElement.lang === 'en') ? '%b %-d, %Y' : '%d.%m.%Y';
+    const _tfmt = /^\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:/.test(_l0) ? ('%H:%M\\n' + _dfmt) : (/^\\d{4}-\\d{2}-\\d{2}$/.test(_l0) ? _dfmt : undefined);
     const kwhLayout = (yTitle, extra) => plotlyBaseLayout(Object.assign({
-      margin:{l:60,r:20,t:30,b:70},
-      xaxis:{ automargin:true, tickangle:'auto', nticks: Math.min(12, xsLab.length) },
+      margin:{l:60,r:20,t:30,b:95},
+      legend:{ orientation:'h', y:-0.34, yanchor:'top', font:{ color: cssVar('--fg') || undefined } },
+      xaxis:{ automargin:true, tickangle:'auto', nticks: Math.min(12, xsLab.length), tickformat: _tfmt },
       yaxis:{title: yTitle, automargin:true}
     }, extra || {}));
 
@@ -14190,11 +14279,11 @@ _CONTROL_TEMPLATE = """<!doctype html>
         <div class="row">
           <label for="sync_mode">{web_control_mode}</label>
           <select id="sync_mode">
-            <option value="incremental">incremental</option>
-            <option value="day">day</option>
-            <option value="week">week</option>
-            <option value="month">month</option>
-            <option value="custom">custom</option>
+            <option value="incremental">{opt_incremental}</option>
+            <option value="day">{opt_day}</option>
+            <option value="week">{opt_week}</option>
+            <option value="month">{opt_month}</option>
+            <option value="custom">{opt_custom}</option>
           </select>
           <label for="sync_start">{web_control_start}</label>
           <input id="sync_start" placeholder="01.10.2025" />
@@ -14204,16 +14293,16 @@ _CONTROL_TEMPLATE = """<!doctype html>
       </div>
 
       <div class="card">
-        <h2>📊 Network Traffic</h2>
+        <h2>📊 {t_traffic_title}</h2>
         <div id="traffic-rate" style="font-size:16px;font-weight:bold;margin-bottom:8px">↓ 0 B/s  ↑ 0 B/s</div>
         <div id="traffic-total" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
         <div style="max-height:220px;overflow-y:auto;margin-bottom:8px">
         <table style="width:100%;font-size:13px;border-collapse:collapse" id="traffic-table">
           <thead><tr style="border-bottom:1px solid var(--border);text-align:left">
-            <th style="padding:4px 8px">Category</th>
-            <th style="padding:4px 8px;text-align:center">Requests</th>
-            <th style="padding:4px 8px;text-align:right">↓ Received</th>
-            <th style="padding:4px 8px;text-align:right">↑ Sent</th>
+            <th style="padding:4px 8px">{t_traffic_category}</th>
+            <th style="padding:4px 8px;text-align:center">{t_traffic_requests}</th>
+            <th style="padding:4px 8px;text-align:right">↓ {t_traffic_received}</th>
+            <th style="padding:4px 8px;text-align:right">↑ {t_traffic_sent}</th>
           </tr></thead>
           <tbody id="traffic-tbody"></tbody>
         </table>
@@ -14229,10 +14318,10 @@ _CONTROL_TEMPLATE = """<!doctype html>
         <div class="row">
           <label for="plot_mode">{web_control_mode}</label>
           <select id="plot_mode">
-            <option value="days">days</option>
-            <option value="weeks">weeks</option>
-            <option value="months">months</option>
-            <option value="all">all</option>
+            <option value="days">{opt_days}</option>
+            <option value="weeks">{opt_weeks}</option>
+            <option value="months">{opt_months}</option>
+            <option value="all">{opt_all}</option>
           </select>
           <label for="plot_start">{web_control_plots_from}</label>
           <input id="plot_start" placeholder="YYYY-MM-DD" />
@@ -14269,11 +14358,11 @@ _CONTROL_TEMPLATE = """<!doctype html>
             <div class="inline-field">
               <label for="inv_period">{web_control_invoice}</label>
               <select id="inv_period">
-                <option value="custom">custom</option>
-                <option value="day">day</option>
-                <option value="week">week</option>
-                <option value="month" selected>month</option>
-                <option value="year">year</option>
+                <option value="custom">{opt_custom}</option>
+                <option value="day">{opt_day}</option>
+                <option value="week">{opt_week}</option>
+                <option value="month" selected>{opt_month}</option>
+                <option value="year">{opt_year}</option>
               </select>
             </div>
             <div class="inline-field">
@@ -14330,7 +14419,7 @@ function updateThemeBtn(){
   if(!el) return;
   const cur = document.documentElement.dataset.theme || 'dark';
   el.textContent = (cur==='dark') ? '🌙' : '☀️';
-  el.title = (cur==='dark') ? 'Dark mode' : 'Light mode';
+  el.title = (cur==='dark') ? {tj_theme_dark} : {tj_theme_light};
 }
 (function initTheme(){
   let theme = localStorage.getItem(LS_THEME);
@@ -14377,7 +14466,7 @@ async function run(action, params) {
     return await r.json();
   } catch (e) {
     const t = await r.text();
-    throw new Error(t || "Response is not JSON");
+    throw new Error(t || {tj_not_json});
   }
 }
 
@@ -14459,7 +14548,10 @@ document.getElementById("btn_sync").addEventListener("click", async ()=>{
 
 // --- Network Traffic ---
 const _trafficCatIcons = {shelly:'🔌',entsoe:'🌿',spot_price:'⚡',weather:'🌡️',telegram:'💬',github:'🔄',local:'🏠',other:'📡'};
-const _trafficCatLabels = {shelly:'Shelly Devices',entsoe:'ENTSO-E API',spot_price:'Spot Prices',weather:'OpenWeather',telegram:'Telegram',github:'GitHub',local:'Local/Web',other:'Other'};
+const _trafficCatLabels = {tj_traffic_cats};
+const _T_NOW = {tj_now}, _T_UH = {tj_unit_h}, _T_UMIN = {tj_unit_min};
+const _T_TOTAL_LINE = {tj_traffic_total_line}, _T_DOWN = {tj_traffic_received}, _T_UP = {tj_traffic_sent};
+const _T_JOB_STARTED_ID = {tj_job_started_id};
 function _fmtBytes(n) {{
   if (n < 1024) return n + ' B';
   if (n < 1048576) return (n/1024).toFixed(1) + ' KB';
@@ -14482,8 +14574,8 @@ async function _refreshTraffic() {{
     rateEl.textContent = '\u2193 ' + _fmtRate(d.rate_recv_bps||0) + '  \u2191 ' + _fmtRate(d.rate_sent_bps||0);
     const hrs = Math.floor((d.uptime_s||0)/3600);
     const mins = Math.floor(((d.uptime_s||0)%3600)/60);
-    const uptime = hrs ? hrs+'h '+mins+'m' : mins+'m';
-    totalEl.textContent = 'Total: \u2193 ' + _fmtBytes(d.total_received||0) + '  \u2191 ' + _fmtBytes(d.total_sent||0) + '  |  ' + (d.total_requests||0) + ' Requests  |  ' + uptime;
+    const uptime = hrs ? hrs+' '+_T_UH+' '+mins+' '+_T_UMIN : mins+' '+_T_UMIN;
+    totalEl.textContent = _T_TOTAL_LINE.split('{{recv}}').join(_fmtBytes(d.total_received||0)).split('{{sent}}').join(_fmtBytes(d.total_sent||0)).split('{{n}}').join(String(d.total_requests||0)).split('{{up}}').join(uptime);
     tbody.innerHTML = '';
     const cats = Object.entries(d.categories||{{}}).sort((a,b) => (b[1].received||0)-(a[1].received||0));
     for (const [cat, data] of cats) {{
@@ -14578,7 +14670,7 @@ function _drawTrafficRateChart(hist) {{
   for (const m of steps) {{
     const t = m * 60;
     if (t >= minT && t <= maxT) {{
-      ctx.fillText(m === 0 ? 'now' : m + 'm', xOf(t), padT + cH + 4);
+      ctx.fillText(m === 0 ? _T_NOW : m + ' ' + _T_UMIN, xOf(t), padT + cH + 4);
     }}
   }}
 
@@ -14588,11 +14680,13 @@ function _drawTrafficRateChart(hist) {{
   ctx.fillStyle = '#2196F3';
   ctx.fillRect(padL + 4, padT + 2, 12, 3);
   ctx.fillStyle = fg;
-  ctx.fillText('\u2193 Down', padL + 20, padT + 1);
+  const _dn = '\u2193 ' + _T_DOWN;
+  ctx.fillText(_dn, padL + 20, padT + 1);
+  const _x2 = padL + 20 + ctx.measureText(_dn).width + 14;
   ctx.fillStyle = '#FF9800';
-  ctx.fillRect(padL + 70, padT + 2, 12, 3);
+  ctx.fillRect(_x2, padT + 2, 12, 3);
   ctx.fillStyle = fg;
-  ctx.fillText('\u2191 Up', padL + 86, padT + 1);
+  ctx.fillText('\u2191 ' + _T_UP, _x2 + 16, padT + 1);
 }}
 setInterval(_refreshTraffic, 500);
 _refreshTraffic();
@@ -14684,7 +14778,7 @@ function showJobAccepted(jobId) {
   const el = document.getElementById("ctrl_export_results");
   const ph = document.getElementById("ctrl_export_ph");
   if (ph) ph.style.display = "none";
-  el.insertAdjacentHTML("afterbegin", `<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid rgba(106,167,255,0.25);border-radius:12px;background:rgba(106,167,255,0.06);margin-bottom:6px;color:var(--accent);font-size:12px">✓ Job #${esc(String(jobId))} gestartet – siehe Jobs unten.</div>`);
+  el.insertAdjacentHTML("afterbegin", `<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid rgba(106,167,255,0.25);border-radius:12px;background:rgba(106,167,255,0.06);margin-bottom:6px;color:var(--accent);font-size:12px">${esc(_T_JOB_STARTED_ID.split('{{id}}').join(String(jobId)))}</div>`);
 }
 function showError(msg) {
   const el = document.getElementById("ctrl_export_results");
@@ -16021,6 +16115,7 @@ class LiveWebDashboard:
                 "t_error_label": _t(self.lang, "web.error_label"),
                 "t_starting": _t(self.lang, "web.starting"),
                 "t_job_started": _t(self.lang, "web.job_started"),
+                **chrome_i18n_values(self.lang),
                 "refresh_ms": str(int(max(250, self.refresh_seconds * 1000))),
                 "window_min": str(int(max(1, self.window_minutes))),
                 "window_options_json": json.dumps(self.available_windows, ensure_ascii=False),
@@ -16079,6 +16174,7 @@ class LiveWebDashboard:
                 "t_error_label": _t(self.lang, "web.error_label"),
                 "t_starting": _t(self.lang, "web.starting"),
                 "t_job_started": _t(self.lang, "web.job_started"),
+                **control_i18n_values(self.lang),
             },
         ).encode("utf-8")
         self._control_bytes_gz = gzip.compress(self._control_bytes, compresslevel=6)

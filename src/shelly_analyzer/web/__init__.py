@@ -15,6 +15,8 @@ from shelly_analyzer.i18n import get_lang_map, normalize_lang, t as _t
 from shelly_analyzer.services.webdash import (
     LiveStateStore,
     _render_template,
+    chrome_i18n_values,
+    control_i18n_values,
     _render_template_tokens,
     _plotly_min_js_bytes,
     _HTML_TEMPLATE,
@@ -111,7 +113,7 @@ _SKIN_DIR = Path(__file__).parent / "static"
 
 def skin_asset(name: str) -> bytes:
     """Read one skin asset (``aurora.css`` / ``aurora.js``) from disk."""
-    if name not in ("aurora.css", "aurora.js"):
+    if name not in ("aurora.css", "aurora.js", "units.js"):
         raise FileNotFoundError(name)
     return (_SKIN_DIR / name).read_bytes()
 
@@ -124,6 +126,22 @@ def active_skin(state: Any) -> str:
     except Exception:
         return "classic"
     return "aurora" if val == "aurora" else "classic"
+
+
+def _inject_units(html: str) -> str:
+    """Pull in the unit-localisation script (``static/units.js``).
+
+    It reads ``web.unit.*`` from the page's own ``I18N`` and does nothing when
+    the language writes its units the Latin way.  Placed last in <body>, so the
+    page's own scripts have defined ``I18N`` before it looks."""
+    from shelly_analyzer import __version__
+
+    script = '<script src="/static/units.js?v=%s"></script>' % __version__
+    if script in html:
+        return html
+    if "</body>" in html:
+        return html.replace("</body>", script + "\n</body>", 1)
+    return html + script
 
 
 def _inject_skin(html: str, skin: str) -> str:
@@ -168,6 +186,7 @@ def _render_dashboard_html(state: "AppState") -> bytes:
     lang = state.lang
     web_i18n = get_lang_map(lang)
 
+    _chrome = chrome_i18n_values(lang)
     values: Dict[str, str] = {
         "lang": lang,
         "web_live_title": _t(lang, "web.live.title"),
@@ -271,6 +290,13 @@ def _render_dashboard_html(state: "AppState") -> bytes:
         "t_error_label": _t(lang, "web.error_label"),
         "t_starting": _t(lang, "web.starting"),
         "t_job_started": _t(lang, "web.job_started"),
+        "web_chrome_palette_btn": _chrome["web_chrome_palette_btn"],
+        "web_chrome_menu": _chrome["web_chrome_menu"],
+        "web_chrome_palette": _chrome["web_chrome_palette"],
+        "web_chrome_fullscreen": _chrome["web_chrome_fullscreen"],
+        "web_chrome_language": _chrome["web_chrome_language"],
+        "web_chrome_unit_kwh": _chrome["web_chrome_unit_kwh"],
+        "web_chrome_eur": _chrome["web_chrome_eur"],
         "refresh_ms": str(int(max(250, state.refresh_seconds * 1000))),
         "window_min": str(int(max(1, state.window_minutes))),
         "window_options_json": json.dumps(state.available_windows, ensure_ascii=False),
@@ -282,7 +308,7 @@ def _render_dashboard_html(state: "AppState") -> bytes:
     # template itself) already redirects to /settings#sec-devices, so no
     # extra icon injection is needed here — there was previously a 🔧
     # button alongside ⚙ which doubled up after v16.17.0.
-    return _inject_version_badge(_inject_skin(rendered, active_skin(state))).encode("utf-8")
+    return _inject_version_badge(_inject_units(_inject_skin(rendered, active_skin(state)))).encode("utf-8")
 
 
 def _render_control_html(state: "AppState") -> bytes:
@@ -333,9 +359,10 @@ def _render_control_html(state: "AppState") -> bytes:
         "t_error_label": _t(lang, "web.error_label"),
         "t_starting": _t(lang, "web.starting"),
         "t_job_started": _t(lang, "web.job_started"),
+        **control_i18n_values(lang),
     }
     rendered = _render_template(tpl, values)
-    return _inject_version_badge(_inject_skin(rendered, active_skin(state))).encode("utf-8")
+    return _inject_version_badge(_inject_units(_inject_skin(rendered, active_skin(state)))).encode("utf-8")
 
 
 def _render_plots_html(state: "AppState") -> bytes:
@@ -388,7 +415,7 @@ def _render_plots_html(state: "AppState") -> bytes:
     rendered = _render_template_tokens(tpl, values)
     # No version badge in plots — it's embedded as an iframe in the dashboard
     # which already has its own badge, resulting in a duplicate.
-    return _inject_skin(rendered, active_skin(state)).encode("utf-8")
+    return _inject_units(_inject_skin(rendered, active_skin(state))).encode("utf-8")
 
 
 def create_app(config_path: Optional[str] = None) -> Flask:

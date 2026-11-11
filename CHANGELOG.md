@@ -1,5 +1,41 @@
 # Changelog
 
+## 17.8.5
+
+### Units, labels and the phone layout follow the language
+
+- **Units in the language's own spelling.** One table per language
+  (`web.unit.*`) and one small script (`static/units.js`) now swap the unit
+  wherever a page builds it in the browser: costs, battery, charging log, live
+  view, canvas charts, Plotly axes and tooltips. Russian shows its own unit symbols
+  (кВт·ч, Вт, В, кг, г/кВт·ч, ч, д); French shows octets (o, Ko, Mo, Go) and
+  c€; the other languages keep the usual Latin spelling. A language that writes
+  units the Latin way costs nothing: the script does not run.
+- **Plots page:** the period choice ("1h", "7d", ...) and the statistics line
+  above the charts use the language; date ticks and hover dates use the
+  language's month and weekday names instead of English; the legend of the
+  price chart no longer sits on top of the date axis.
+- **Control page:** the synchronisation, plot and invoice option lists, the
+  network traffic card (title, columns, categories, totals line, the "now" mark
+  and the legend of the rate chart), the theme button tooltip and the "job
+  started" note were English or German literals in every language; they come
+  from the translation table now. Device cards in the control tab show
+  switch state and device category in the language.
+- **Other literals moved into the table:** the dashboard frame (search, menu,
+  command palette, full screen, language label, unit options), the smart
+  schedule tab (cheapest windows, tiles, save/more-than-fixed lines, footer),
+  and about a dozen loading, error and empty-state messages.
+- **Phone width (390 px):** the last day, weekday and hour labels of the battery
+  charts are kept inside the canvas (a wide Russian weekday used to be cut off
+  at the right edge); the energy balance table keeps all columns inside the
+  card. The bottom tab bar scrolls sideways by design, fades the edge that
+  continues, and scrolls the active tab into view; every tab is reachable.
+- **Checks:** `tests/test_template_literals.py` fails when a page template gets
+  visible text that is not a placeholder, a `t('key', fallback)` call or an
+  allowed name, and when a template asks for a key that has no table entry;
+  `tests/test_units_js.py` checks the unit swap; the CI check runs both.
+  Plotly charts were rendered and looked at with the `plotly` package installed.
+
 ## 17.8.4
 
 ### Every language now has every text

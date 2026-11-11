@@ -48,6 +48,7 @@ def plotly_js():
 
 @bp.route("/static/aurora.css")
 @bp.route("/static/aurora.js")
+@bp.route("/static/units.js")
 def aurora_skin_asset():
     """Serve the Aurora skin's stylesheet and enhancement script.
 

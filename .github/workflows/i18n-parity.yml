@@ -19,5 +19,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install pytest
-      - run: python -m pytest tests/test_i18n_parity.py -q
+      - run: pip install pytest numpy
+      - run: python -m pytest tests/test_i18n_parity.py tests/test_template_literals.py tests/test_units_js.py -q

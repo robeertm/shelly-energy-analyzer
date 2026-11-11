@@ -1051,9 +1051,9 @@ def test_every_placeholder_in_the_page_has_a_value():
     i = web_init.index("def _render_dashboard_html")
     j = web_init.index("rendered = _render_template(tpl, values)", i)
     supplied = set(re.findall(r'^\s*"([A-Za-z_][A-Za-z0-9_]*)":', web_init[i:j], re.M))
-    # {country} {currency} {days} {n} are runtime i18n arguments inside
+    # {country} {currency} {days} {n} {day} {h} {saving} {total} {v} {zone} are runtime i18n arguments inside
     # translated strings, not template placeholders.
-    runtime = {"country", "currency", "days", "n"}
+    runtime = {"country", "currency", "days", "n", "day", "h", "saving", "total", "v", "zone"}
     missing = sorted(placeholders - supplied - runtime)
     assert not missing, "rendered literally to the user: %s" % missing
     print("OK  every template placeholder is filled by the live mapping")

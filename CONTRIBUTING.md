@@ -6,7 +6,7 @@ requests and translation fixes are very welcome.
 
 ## Ways to help (no coding required)
 
-- 🌍 **Translations** — all strings live in a single file: [`src/shelly_analyzer/i18n.py`](src/shelly_analyzer/i18n.py). The project ships with 9 languages and every language carries every key; `tests/test_i18n_parity.py` fails if a key is added to English without the other eight languages. If you spot an untranslated or awkward string, open a PR adding the key in the language block you care about.
+- 🌍 **Translations** — all strings live in a single file: [`src/shelly_analyzer/i18n.py`](src/shelly_analyzer/i18n.py). The project ships with 9 languages and every language carries every key; `tests/test_i18n_parity.py` fails if a key is added to English without the other eight languages, and `tests/test_template_literals.py` fails on visible text in the page templates that never went through the table. If you spot an untranslated or awkward string, open a PR adding the key in the language block you care about.
 - 📸 **Screenshots** — if you have a bigger / nicer setup (more devices, solar, battery, long-running data) open an issue; a fresh screenshot set is always appreciated.
 - 📝 **Documentation** — README improvements, typo fixes, clearer quickstart instructions are all welcome.
 - 🧪 **Bug reports** — a concrete reproduction is worth a dozen vague complaints. See the issue template.

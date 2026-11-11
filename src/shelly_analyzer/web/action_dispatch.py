@@ -6093,7 +6093,10 @@ class ActionDispatcher:
                 except Exception:
                     pass
 
-                title = f"kWh \u2022 {mode}"
+                _mode_lbl = _t(lang, "plots.mode." + str(mode))
+                if _mode_lbl == "plots.mode." + str(mode):
+                    _mode_lbl = str(mode)
+                title = f"{_t(lang, 'web.unit.kwh')} \u2022 {_mode_lbl}"
                 # Fixed tariff price (€/kWh, gross) from PricingConfig
                 fixed_ct_kwh: Optional[float] = None
                 try:
