@@ -2999,7 +2999,9 @@ async function runHealthCheck() {
 
 const GROUP_KEYS = {
   "Grundeinstellungen":"basic", "Benachrichtigungen":"notify", "Integrationen":"integrations",
-  "Energie":"energy", "Features":"features", "Erweitert":"advanced"
+  "Energie":"energy", "Features":"features", "Erweitert":"advanced",
+  "Basic":"basic", "Notifications":"notify", "Integrations":"integrations",
+  "Energy":"energy", "Advanced":"advanced"
 };
 function tSection(s) { return T("settings.section."+s.id, s.title); }
 function tGroup(g) { return T("settings.group."+(GROUP_KEYS[g]||g), g); }

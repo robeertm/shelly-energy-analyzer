@@ -21,6 +21,17 @@ and Russian 275 each, French and Portuguese 61 each, German 6.
   English and German.
 - **Settings page**: the logo upload messages and the path placeholder had no
   table entry at all and showed English in every language.
+- **Texts that were never translated.** 4,000 more texts existed in every table
+  but still carried the English wording (French, Portuguese, Italian, Polish,
+  Czech and Russian about 1,100-1,250 each, German 80, Spanish 33). They are
+  translated now; brand names, units and abbreviations stay as they are.
+- **Interface fixes found while checking the pictures:** the marker in the spot
+  price chart, the month name on the tenant page, month labels and the missing
+  label in the charging bar chart, duration units (min, h, d), "per year" and
+  "last month" captions, on/off status of switch cards in six languages, and the
+  settings sidebar group names (Basic, Notifications, Integrations, Energy,
+  Advanced) now follow the interface language. The energy balance table no longer
+  runs out of its card on a phone in languages with long column titles.
 - **New test** `tests/test_i18n_parity.py` and a CI workflow: every language
   must have exactly the English key set, identical placeholders per text, and
   no empty values; the settings page may not ask for a key that does not exist.

@@ -2070,6 +2070,13 @@ _HTML_TEMPLATE = """<!doctype html>
       .solar-fc-table .col-narrow {{ display:none; }}
       .bat-cycles .col-narrow {{ display:none; }}
       .bat-cycles th, .bat-cycles td {{ padding:5px 3px; font-size:11.5px; }}
+      /* Energy balance: five columns have to fit a phone-wide card in every
+         language (long labels such as "Сегодня"), so tighten the cells instead
+         of letting the right-hand columns run out of the card. */
+      #pane-costs table.balance-table th, #pane-costs table.balance-table td {{ padding:4px 2px; font-size:11px; letter-spacing:0; text-transform:none; }}
+      #pane-costs table.balance-table th {{ white-space:nowrap; }}
+      #pane-costs table.balance-table td:not(:first-child) {{ white-space:nowrap; }}
+      #pane-costs table.balance-table td:first-child {{ width:34%; overflow-wrap:break-word; hyphens:manual; }}
       .solar-fc-table {{ font-size:11px; }}
       .co2-origin-table .col-pct, .co2-origin-table .col-fac {{ display:none; }}
       .co2-origin-table {{ font-size:11px; }}
@@ -2769,6 +2776,20 @@ function _locale() {{
     var l = (document.documentElement.getAttribute('lang') || '').trim();
     return l || undefined;
   }} catch (e) {{ return undefined; }}
+}}
+
+// Month names and durations in the UI language (html lang / I18N), never a
+// hard-coded German or English literal.
+function _monthName(idx, style) {{
+  try {{
+    var s = new Intl.DateTimeFormat(_locale(), {{ month: style || 'long' }}).format(new Date(2021, idx, 1));
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }} catch (e) {{ return String(idx + 1); }}
+}}
+function _fmtMinutes(m) {{
+  m = Math.round(m || 0);
+  var u = t('web.unit.min', 'min');
+  return m >= 60 ? Math.floor(m / 60) + ' ' + t('web.unit.h', 'h') + ' ' + (m % 60) + ' ' + u : m + ' ' + u;
 }}
 
 /* ── State ── */
@@ -3790,7 +3811,7 @@ function renderNilm(raw, el) {{
       html += '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">' + esc(devName) + '</div>';
       html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">';
       html += '<div class="nilm-stat"><span class="nilm-stat-val">' + Math.round(c.centroid_w) + '</span><span class="nilm-stat-lbl">' + t('web.nilm.watt','Watt') + '</span></div>';
-      if (c.median_duration_min != null) html += '<div class="nilm-stat"><span class="nilm-stat-val">' + (c.median_duration_min >= 90 ? (c.median_duration_min / 60).toFixed(1) + ' h' : Math.round(c.median_duration_min) + ' min') + '</span><span class="nilm-stat-lbl">' + t('web.nilm.run_length','Run length') + '</span></div>';
+      if (c.median_duration_min != null) html += '<div class="nilm-stat"><span class="nilm-stat-val">' + (c.median_duration_min >= 90 ? (c.median_duration_min / 60).toFixed(1) + ' ' + t('web.unit.h','h') : Math.round(c.median_duration_min) + ' ' + t('web.unit.min','min')) + '</span><span class="nilm-stat-lbl">' + t('web.nilm.run_length','Run length') + '</span></div>';
       if (c.runs_per_day != null) html += '<div class="nilm-stat"><span class="nilm-stat-val">' + (c.runs_per_day >= 10 ? Math.round(c.runs_per_day) : c.runs_per_day.toFixed(1)) + '</span><span class="nilm-stat-lbl">' + t('web.nilm.per_day','per day') + '</span></div>';
       html += '<div class="nilm-stat"><span class="nilm-stat-val">' + c.count + '</span><span class="nilm-stat-lbl">' + t('web.nilm.events','Events') + '</span></div>';
       if (c.typical_hour !== undefined) html += '<div class="nilm-stat"><span class="nilm-stat-val">' + String(c.typical_hour).padStart(2,'0') + ':00</span><span class="nilm-stat-lbl">' + t('web.nilm.peak','Peak') + '</span></div>';
@@ -3911,7 +3932,7 @@ function renderNilm(raw, el) {{
       html += '<span style="font-size:18px">' + s.icon + '</span>';
       html += '<div style="flex:1;min-width:0">';
       html += '<div style="font-weight:600;font-size:12px">' + esc(t('appliance.' + s.id + '.name', s.id)) + '</div>';
-      html += '<div style="font-size:11px;color:var(--muted)">' + s.power_min + '–' + s.power_max + ' W · ' + esc(s.pattern_type) + ' · ' + s.typical_duration_min + ' min</div>';
+      html += '<div style="font-size:11px;color:var(--muted)">' + s.power_min + '–' + s.power_max + ' W · ' + esc(s.pattern_type) + ' · ' + s.typical_duration_min + ' ' + t('web.unit.min','min') + '</div>';
       html += '</div></div>';
     }});
     html += '</div></details></div>';
@@ -4313,8 +4334,7 @@ function _tenantsLastFullPeriod(name) {{
   if (name === 'last_month') {{
     const start = new Date(y, m - 1, 1);
     const end   = new Date(y, m, 0);
-    const monthNames = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-    return {{start: _tenantsIso(start), end: _tenantsIso(end), label: monthNames[start.getMonth()] + ' ' + start.getFullYear()}};
+    return {{start: _tenantsIso(start), end: _tenantsIso(end), label: _monthName(start.getMonth()) + ' ' + start.getFullYear()}};
   }}
   if (name === 'last_quarter') {{
     // Current quarter index 0..3; "last" = previous quarter.
@@ -4508,7 +4528,7 @@ function computeBills() {{
     const totalLbl = t('web.tenants.total_gross','Total gross');
     let h = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px">' + t('web.tenants.period','Period') + ': ' + esc(rep.period_start) + ' → ' + esc(rep.period_end)
       + ' · ' + tariffLabel + ' · ' + (rep.price_eur_per_kwh_net*100).toFixed(2) + ' ct/kWh'
-      + ' · ' + t('web.tenants.base_fee_year','Base fee') + ': ' + (rep.base_fee_eur_per_year_net||0).toFixed(2) + ' €/year'
+      + ' · ' + t('web.tenants.base_fee_year','Base fee') + ': ' + (rep.base_fee_eur_per_year_net||0).toFixed(2) + ' ' + t('web.unit.eur_per_year','€/year')
       + ' · VAT ' + (rep.vat_rate_percent||19).toFixed(0) + '%'
       + ' · ' + t('web.tenants.total','Total') + ': ' + rep.total_kwh.toFixed(1) + ' kWh · ' + rep.total_cost.toFixed(2) + ' €</div>';
     (rep.bills || []).forEach(function(b) {{
@@ -4750,7 +4770,8 @@ function _kwhInner(d) {{
 function initTimescaleBtns() {{
   const wrap = document.getElementById('live-timescale');
   if (!wrap || wrap.children.length) return;
-  const scales = [{{l:'1min',s:60}},{{l:'5min',s:300}},{{l:'15min',s:900}},{{l:'30min',s:1800}},{{l:'1h',s:3600}},{{l:'2h',s:7200}}];
+  const _um = t('web.unit.min','min'), _uh = t('web.unit.h','h');
+  const scales = [{{l:'1'+_um,s:60}},{{l:'5'+_um,s:300}},{{l:'15'+_um,s:900}},{{l:'30'+_um,s:1800}},{{l:'1'+_uh,s:3600}},{{l:'2'+_uh,s:7200}}];
   scales.forEach(function(sc) {{
     const btn = document.createElement('button');
     btn.className = 'btn btn-sm' + (liveWindowSec === sc.s ? ' btn-accent' : '');
@@ -5245,9 +5266,9 @@ var _INSIGHT_PROVIDERS = [
 
 function _iDur(h) {{
   if (!isFinite(h) || h <= 0) return '–';
-  if (h < 1) return Math.round(h * 60) + ' min';
+  if (h < 1) return Math.round(h * 60) + ' ' + t('web.unit.min','min');
   var hh = Math.floor(h), mm = Math.round((h - hh) * 60);
-  return hh + ':' + (mm < 10 ? '0' : '') + mm + ' h';
+  return hh + ':' + (mm < 10 ? '0' : '') + mm + ' ' + t('web.unit.h','h');
 }}
 
 function toggleInsights(force) {{
@@ -6377,7 +6398,7 @@ function renderCosts(data, el) {{
       return '<tr class="' + (cls||'') + '"><td>' + label + '</td>' + tds + '</tr>';
     }}
     var bh = '<div class="card" style="margin-bottom:10px"><div class="card-title">\u26a1 ' + t('web.costs.balance_title','Energy balance') + '</div>';
-    bh += '<div style="overflow-x:auto"><table class="data-table" style="width:100%"><thead><tr><th></th>';
+    bh += '<div style="overflow-x:auto"><table class="data-table balance-table" style="width:100%"><thead><tr><th></th>';
     bh += bhead.map(function(h){{ return '<th style="text-align:right">' + h + '</th>'; }}).join('') + '</tr></thead><tbody>';
     bh += brow(t('web.costs.pv_production','PV production') + ' (kWh)', 'pv_production_kwh', 2, '');
     bh += brow(t('web.costs.self_consumption','Self-consumption') + ' (kWh)', 'self_consumption_kwh', 2, '');
@@ -6525,9 +6546,9 @@ function renderCosts(data, el) {{
     const projDelta = lastM > 0 ? Math.round(((s.proj_kwh||0) - lastM) / lastM * 100) : 0;
     const dIcon = projDelta > 5 ? '📈' : projDelta < -5 ? '📉' : '➡️';
     const dCol = projDelta > 5 ? '#dc2626' : projDelta < -5 ? '#16a34a' : 'var(--muted)';
-    html += _nilmMetricCard(dIcon, t('web.costs.vs_last','vs. previous month'), '<span style="color:'+dCol+'">' + (projDelta>0?'+':'') + projDelta + '%</span>', fmt(lastM,0) + ' kWh last month');
+    html += _nilmMetricCard(dIcon, t('web.costs.vs_last','vs. previous month'), '<span style="color:'+dCol+'">' + (projDelta>0?'+':'') + projDelta + '%</span>', t('web.costs.kwh_last_month','{{v}} kWh last month', {{v: fmt(lastM,0)}}));
     const dailyCost = (s.month_eur||0) / Math.max(1, new Date().getDate());
-    html += _nilmMetricCard('💰', t('web.costs.daily_avg','Daily average'), fmt(dailyCost,2) + ' \u20ac', fmt(dailyCost * 365,0) + ' \u20ac/year');
+    html += _nilmMetricCard('💰', t('web.costs.daily_avg','Daily average'), fmt(dailyCost,2) + ' \u20ac', fmt(dailyCost * 365,0) + ' ' + t('web.unit.eur_per_year','€/year'));
     html += '</div></div>';
   }}
 
@@ -6788,7 +6809,7 @@ function _drawSpotChart(hourly, fixedCt) {{
     ctx.fillStyle = '#ff1744';
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('jetzt', nowX, pad.top - 2);
+    ctx.fillText(t('web.flow.now','Now').toLowerCase(), nowX, pad.top - 2);
   }}
 
   // X-axis labels: left edge = tStart, right edge = tEnd, centre = time midpoint
@@ -8308,7 +8329,7 @@ function _drawCo2Chart(hourly, green, dirty, forecast) {{
           ctx.fillStyle = '#ff1744';
           ctx.font = '10px sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText('jetzt', nowX, pad.top - 2);
+          ctx.fillText(t('web.flow.now','Now').toLowerCase(), nowX, pad.top - 2);
         }}
       }}
 
@@ -8826,9 +8847,9 @@ function renderWeather(d, el) {{
 
 function _wxAgo(ts) {{
   var secs = Math.max(0, Math.floor(Date.now() / 1000 - ts));
-  if (secs < 3600) return Math.max(1, Math.round(secs / 60)) + ' min';
-  if (secs < 86400) return Math.round(secs / 3600) + ' h';
-  return Math.round(secs / 86400) + ' d';
+  if (secs < 3600) return Math.max(1, Math.round(secs / 60)) + ' ' + t('web.unit.min','min');
+  if (secs < 86400) return Math.round(secs / 3600) + ' ' + t('web.unit.h','h');
+  return Math.round(secs / 86400) + ' ' + t('web.unit.d','d');
 }}
 function _weatherHourColor(h) {{
   var hue = (240 + h * 15) % 360;
@@ -10722,7 +10743,7 @@ _loadLsSettings();
     const innerH = H - padT - padB;
     const n = monthlyKwh.length;
     const barW = innerW / n;
-    const monthAbbr = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const monthAbbr = [0,1,2,3,4,5,6,7,8,9,10,11].map(function(i) {{ return _monthName(i, 'short').replace(/\\.$/, ''); }});
     let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" preserveAspectRatio="xMidYMid meet" style="display:block">';
     svg += '<defs><linearGradient id="evbar-grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#66bb6a"/><stop offset="100%" stop-color="#2e7d32"/></linearGradient></defs>';
     [0, 0.25, 0.5, 0.75, 1].forEach(function(f) {{
@@ -10754,7 +10775,7 @@ _loadLsSettings();
       }}
       const ym = item.month.split('-');
       const mIdx = parseInt(ym[1], 10) - 1;
-      if (i === 0 || i === n - 1 || mIdx === 0 || (n - 1 - i) % 3 === 0) {{
+      if (n <= 6 || i === 0 || i === n - 1 || mIdx === 0 || (n - 1 - i) % 3 === 0) {{
         const label = monthAbbr[mIdx];
         const yearTag = mIdx === 0 ? " '" + ym[0].substring(2) : '';
         svg += '<text x="' + (x + barW/2) + '" y="' + (H - padB + 14) + '" font-size="9" text-anchor="middle" fill="var(--muted)">' + label + yearTag + '</text>';
@@ -10917,7 +10938,7 @@ _loadLsSettings();
 
   function _evFmtMin(sec) {{
     const m = Math.round((sec || 0) / 60);
-    return m >= 60 ? Math.floor(m/60) + ' h ' + (m%60) + ' min' : m + ' min';
+    return _fmtMinutes(m);
   }}
 
   function _evDrawCurve(id) {{
@@ -11119,7 +11140,7 @@ _loadLsSettings();
     // dashboard documents ("a French user does not read a German 24h stamp").
     const sd = new Date(se.start_ts*1000);
     const dur = Math.max(1, Math.round((se.end_ts - se.start_ts) / 60));
-    const hh = dur >= 60 ? Math.floor(dur/60) + 'h ' + (dur%60) + 'm' : dur + ' min';
+    const hh = _fmtMinutes(dur);
     const peakKw = (se.peak_power_w/1000).toFixed(1);
     const avgKw  = (se.avg_power_w/1000).toFixed(1);
     const dateStr = sd.toLocaleDateString(_locale(), {{weekday:'short', day:'2-digit', month:'short'}});
@@ -11134,7 +11155,7 @@ _loadLsSettings();
         '<div>' +
           '<div style="font-weight:600;font-size:13px">' + esc(dateStr) + ' · ' + esc(timeStr) +
             _evSurplusBadge(se) + '</div>' +
-          '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + hh + ' · ⌀ ' + avgKw + ' kW · peak ' + peakKw + ' kW</div>' +
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + hh + ' · ⌀ ' + avgKw + ' kW · ' + t('web.nilm.peak','Peak').toLowerCase() + ' ' + peakKw + ' kW</div>' +
         '</div>' +
         '<div style="text-align:right">' +
           '<div style="font-size:18px;font-weight:700">' + se.energy_kwh.toFixed(1) + ' <span style="font-size:11px;color:var(--muted);font-weight:400">kWh</span></div>' +
@@ -11155,7 +11176,7 @@ _loadLsSettings();
     const sd = new Date(g.start_ts*1000);
     const ed = new Date(g.end_ts*1000);
     const spanMin = Math.max(1, Math.round((g.end_ts - g.start_ts) / 60));
-    const spanStr = spanMin >= 60 ? Math.floor(spanMin/60) + 'h ' + (spanMin%60) + 'm' : spanMin + ' min';
+    const spanStr = _fmtMinutes(spanMin);
     const avgKw = (g.avg_power_w/1000).toFixed(1);
     const peakKw = (g.peak_power_w/1000).toFixed(1);
     const dateStr = sd.toLocaleDateString(_locale(), {{weekday:'short', day:'2-digit', month:'short'}});
@@ -11169,7 +11190,7 @@ _loadLsSettings();
       const sdur = Math.max(1, Math.round((se.end_ts - se.start_ts) / 60));
       const idAttr = esc(se.session_id || '');
       return '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--border);font-size:11px;color:var(--muted)">' +
-        '<span>' + ssd.toLocaleTimeString(_locale(), {{hour:'2-digit', minute:'2-digit'}}) + ' · ' + sdur + ' min</span>' +
+        '<span>' + ssd.toLocaleTimeString(_locale(), {{hour:'2-digit', minute:'2-digit'}}) + ' · ' + sdur + ' ' + t('web.unit.min','min') + '</span>' +
         '<span>' + se.energy_kwh.toFixed(2) + ' kWh · ' + se.cost_eur.toFixed(2) + ' € ' +
           '<button onclick="deleteEvSession(&#39;' + idAttr + '&#39;)" title="' + esc(delTitle) +
             '" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:12px;padding:0 2px;line-height:1">🗑</button></span>' +
@@ -11182,7 +11203,7 @@ _loadLsSettings();
             ' <span style="font-size:10px;font-weight:600;color:#4caf50;background:rgba(76,175,80,0.14);padding:1px 6px;border-radius:10px;margin-left:4px" title="' +
               esc(t('web.ev.grouped_hint', 'Surplus charging paused and resumed — merged into one charge')) + '">⚡ ' + esc(badge) + '</span>' +
             _evSurplusBadge(g) + '</div>' +
-          '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + spanStr + ' · ⌀ ' + avgKw + ' kW · peak ' + peakKw + ' kW</div>' +
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + spanStr + ' · ⌀ ' + avgKw + ' kW · ' + t('web.nilm.peak','Peak').toLowerCase() + ' ' + peakKw + ' kW</div>' +
         '</div>' +
         '<div style="text-align:right">' +
           '<div style="font-size:18px;font-weight:700">' + g.energy_kwh.toFixed(1) + ' <span style="font-size:11px;color:var(--muted);font-weight:400">kWh</span></div>' +
@@ -11233,7 +11254,7 @@ _loadLsSettings();
       metricCardHtml(t('web.ev.total_energy', 'Total energy'), (data.total_kwh || 0).toFixed(1) + ' kWh') +
       metricCardHtml(t('web.ev.total_cost', 'Total cost'), (data.total_cost || 0).toFixed(2) + ' €') +
       metricCardHtml(t('web.ev.avg_per_session', '⌀ per session'), (data.avg_kwh_per_session || 0).toFixed(1) + ' kWh') +
-      metricCardHtml(t('web.ev.avg_duration', '⌀ duration'), (data.avg_duration_min || 0).toFixed(0) + ' min') +
+      metricCardHtml(t('web.ev.avg_duration', '⌀ duration'), (data.avg_duration_min || 0).toFixed(0) + ' ' + t('web.unit.min','min')) +
       '</div></div>';
 
     // ── Where the charged energy came from ──────────────────────────────────
@@ -12319,9 +12340,7 @@ _loadLsSettings();
 
   // Format a duration in hours as "Xh Ym" / "Ym".
   function _fmtDur(h) {{
-    const totalMin = Math.round(h * 60);
-    const hh = Math.floor(totalMin / 60), mm = totalMin % 60;
-    return hh > 0 ? (hh + 'h ' + mm + 'm') : (mm + 'm');
+    return _fmtMinutes(Math.round(h * 60));
   }}
 
   /* ── AI Advisor ── */
@@ -12342,14 +12361,14 @@ _loadLsSettings();
     let html = '<div class="card" style="margin-bottom:10px;text-align:center">' +
       '<div class="card-title">🤖 ' + t('advisor.card_title','AI Energy Advisor') + '</div>' +
       '<div style="font-size:20px;font-weight:700;color:#4caf50;padding:8px 0">💰 ' +
-      (data.total_savings_potential_eur||0).toFixed(0) + ' €/year savings potential</div></div>';
+      t('web.advisor.savings_potential_year','{{v}} €/year savings potential', {{v: (data.total_savings_potential_eur||0).toFixed(0)}}) + '</div></div>';
     if (data.llm_summary) {{
       html += '<div class="card" style="margin-bottom:10px"><div class="card-title">🤖 ' + t('web.advisor.llm_summary', 'AI summary') + '</div>' +
         '<div style="padding:4px 0">' + esc(data.llm_summary) + '</div></div>';
     }}
     (data.tips || []).forEach(function(tip) {{
       const sav = tip.potential_savings_eur > 0
-        ? '<div style="color:#4caf50;font-size:12px;margin-top:4px">💰 ' + tip.potential_savings_eur.toFixed(0) + ' €/year</div>'
+        ? '<div style="color:#4caf50;font-size:12px;margin-top:4px">💰 ' + tip.potential_savings_eur.toFixed(0) + ' ' + t('web.unit.eur_per_year','€/year') + '</div>'
         : '';
       html += '<div class="card"><div class="card-title">' + tip.icon + ' ' + esc(tip.title) + '</div>' +
         '<div style="color:var(--muted);font-size:12px">' + esc(tip.description) + '</div>' + sav + '</div>';
