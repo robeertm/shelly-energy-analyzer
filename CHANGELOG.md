@@ -1,5 +1,30 @@
 # Changelog
 
+## 17.8.4
+
+### Every language now has every text
+
+The six newest language blocks were built from a snapshot of the English table
+taken at start-up, so every English text added afterwards never reached French,
+Portuguese, Italian, Polish, Czech or Russian, and Spanish and German had been
+filled by hand with gaps of their own. The app showed an English sentence
+instead of a translation (the user interface fell back silently). Missing before
+this release, compared with English: Spanish 697 texts, Italian, Polish, Czech
+and Russian 275 each, French and Portuguese 61 each, German 6.
+
+- **All gaps filled** in all eight other languages, with the placeholders and
+  units unchanged.
+- **Invoice lines fixed.** In seven languages the "common area" and "base fee"
+  lines of the tenant invoice used a different placeholder set than the code
+  supplies (a share percentage instead of persons and days), so the printed
+  line could show a raw placeholder. They now use the same placeholders as
+  English and German.
+- **Settings page**: the logo upload messages and the path placeholder had no
+  table entry at all and showed English in every language.
+- **New test** `tests/test_i18n_parity.py` and a CI workflow: every language
+  must have exactly the English key set, identical placeholders per text, and
+  no empty values; the settings page may not ask for a key that does not exist.
+
 ## 17.8.3
 
 ### Security: the settings API no longer returns secrets in clear text
