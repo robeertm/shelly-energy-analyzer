@@ -1,5 +1,12 @@
 # Changelog
 
+## 17.8.6
+
+- **Control page:** the byte units of the network traffic card (B, KB/s, ...)
+  follow the language, and the "to" label of the plot date range was still
+  English in French, Portuguese, Italian, Polish, Czech and Russian.
+- **Solar payback:** the "years" unit is translated in every language.
+
 ## 17.8.5
 
 ### Units, labels and the phone layout follow the language

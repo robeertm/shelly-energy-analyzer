@@ -478,6 +478,8 @@ def control_i18n_values(lang: str) -> Dict[str, str]:
         "tj_traffic_sent": j("traffic.sent"),
         "tj_job_started_id": j("web.control.job_started_id"),
         "tj_not_json": j("web.js.not_json"),
+        # units.js reads web.unit.* from I18N; this page has no other table
+        "tj_unit_map": json.dumps(get_lang_map(lang, "web.unit."), ensure_ascii=False),
     }
 
 
@@ -14405,6 +14407,7 @@ _CONTROL_TEMPLATE = """<!doctype html>
     </div>
   </div>
 
+<script>const I18N = {tj_unit_map};</script>
 <script>
 // Theme (shared with Live page)
 const LS_THEME = "sea_theme";

@@ -30650,3 +30650,42 @@ _I18N.setdefault('ru', {}).update({
     'control.cat.plug': 'Розетка',
     'control.cat.switch': 'Выключатель',
 })
+
+
+# 17.8.6: two short labels that were still English in six languages.
+_I18N.setdefault('de', {}).update({
+    'web.control.plots.to': 'bis',
+    'web.solar.years': 'J',
+})
+_I18N.setdefault('en', {}).update({
+    'web.control.plots.to': 'to',
+    'web.solar.years': 'yr',
+})
+_I18N.setdefault('es', {}).update({
+    'web.control.plots.to': 'a',
+    'web.solar.years': 'años',
+})
+_I18N.setdefault('fr', {}).update({
+    'web.control.plots.to': 'à',
+    'web.solar.years': 'ans',
+})
+_I18N.setdefault('pt', {}).update({
+    'web.control.plots.to': 'até',
+    'web.solar.years': 'anos',
+})
+_I18N.setdefault('it', {}).update({
+    'web.control.plots.to': 'a',
+    'web.solar.years': 'anni',
+})
+_I18N.setdefault('pl', {}).update({
+    'web.control.plots.to': 'do',
+    'web.solar.years': 'lat',
+})
+_I18N.setdefault('cs', {}).update({
+    'web.control.plots.to': 'do',
+    'web.solar.years': 'let',
+})
+_I18N.setdefault('ru', {}).update({
+    'web.control.plots.to': 'по',
+    'web.solar.years': 'лет',
+})
