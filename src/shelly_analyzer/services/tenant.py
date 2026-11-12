@@ -135,6 +135,16 @@ def generate_tenant_bills(
     end_ts = int(end_dt.timestamp())
     period_days = max(1, (end_dt - start_dt).days)
 
+    # A switch/plug wired behind another device is already inside that device's
+    # reading; billing both would charge the same kWh twice.
+    from shelly_analyzer.services.net_display import nested_switch_keys
+    _nested = nested_switch_keys(devices)
+    if _nested:
+        import dataclasses
+        tenants = [dataclasses.replace(t, device_keys=[k for k in t.device_keys if k not in _nested])
+                   for t in tenants]
+        common_device_keys = [k for k in (common_device_keys or []) if k not in _nested]
+
     # Device name lookup
     dev_names = {d.key: d.name for d in devices}
     common_keys = set(common_device_keys or [])

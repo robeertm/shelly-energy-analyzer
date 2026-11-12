@@ -362,6 +362,10 @@ def devices_kwh():
         start_ts = end_ts - days * 86400
         out: Dict[str, float] = {}
         for d in state.cfg.devices:
+            if str(getattr(d, "kind", "em")) == "switch":
+                # hangs behind a meter: no share of its own in the base fee split
+                out[d.key] = 0.0
+                continue
             try:
                 df = state.storage.db.query_hourly(d.key, start_ts=start_ts, end_ts=end_ts)
                 if df is None or df.empty or "kwh" not in df.columns:

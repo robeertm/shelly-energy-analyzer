@@ -2448,6 +2448,12 @@ class ActionDispatcher:
                 s_ts = int(pd.Timestamp(start).timestamp()) if start is not None else None
                 e_ts = int(pd.Timestamp(end).timestamp()) if end is not None else None
                 for _d in self.cfg.devices:
+                    # A switch/plug weighs nothing in the split: it hangs behind
+                    # a meter, and its own history (since 17.9) must not shift
+                    # the other devices' share of the base fee.
+                    if str(getattr(_d, "kind", "em")) == "switch":
+                        period_kwh_by_device[_d.key] = 0.0
+                        continue
                     try:
                         df_h = self.storage.db.query_hourly(_d.key, start_ts=s_ts, end_ts=e_ts)
                         if df_h is not None and not df_h.empty and "kwh" in df_h.columns:
@@ -2706,6 +2712,9 @@ class ActionDispatcher:
                                 int(_today_start.timestamp()), int(_now.timestamp()),
                                 _sp_mk_eur, _sp_vat,
                                 resolution=str(getattr(self.cfg.spot_price, "price_resolution", "15min") or "15min"),
+                                # a switch/plug hangs behind a meter (own history since 17.9)
+                                exclude_keys=[d.key for d in (self.cfg.devices or [])
+                                              if str(getattr(d, "kind", "em")) == "switch"],
                             )
                             if _sc > 0:
                                 _spot_today_eur = round(_sc, 2)
@@ -2984,7 +2993,12 @@ class ActionDispatcher:
                         total_cost += float(grp_kwh) * day_price
                     return total_cost
 
-                _cost_devices = [d for d in (self.cfg.devices or [])
+                # Every device gets its card, switches/plugs included (they have
+                # a history of their own since 17.9). What is ADDED UP stays
+                # the meters: see _hh_keys below. A switch hangs behind a meter
+                # and its energy is already inside that meter's reading.
+                _cost_devices = list(self.cfg.devices or [])
+                _cost_meters = [d for d in _cost_devices
                                 if str(getattr(d, "kind", "em")) != "switch"]
 
                 _spot_cfg = getattr(self.cfg, "spot_price", None)
@@ -3139,7 +3153,7 @@ class ActionDispatcher:
                 # both carried the car and the summary counted it twice.
                 try:
                     from shelly_analyzer.services.net_display import net_display_children
-                    _nd_map = net_display_children(_cost_devices)
+                    _nd_map = net_display_children(_cost_meters)
                     _by_key = {str(d.get("key", "")): d for d in devices_out}
                     for _pk_nd, _kids_nd in _nd_map.items():
                         _pd = _by_key.get(_pk_nd)
@@ -3367,8 +3381,12 @@ class ActionDispatcher:
                 try:
                     from shelly_analyzer.services.net_display import household_keys
                     from shelly_analyzer.services.energy_balance import consumer_keys as _ck_cost
-                    _hh_keys = set(_ck_cost(self.cfg)) & {str(getattr(d, "key", "")) for d in _cost_devices}
+                    _hh_keys = set(_ck_cost(self.cfg)) & {str(getattr(d, "key", "")) for d in _cost_meters}
                     if not _hh_keys:
+                        _hh_keys = household_keys(_cost_meters)
+                    if not _hh_keys:
+                        # No meter at all (an installation of plugs only): the
+                        # plugs that hang behind nothing are the house.
                         _hh_keys = household_keys(_cost_devices)
                 except Exception:
                     _hh_keys = None
@@ -3494,6 +3512,10 @@ class ActionDispatcher:
                 from shelly_analyzer.services.export import export_pdf_energy_report_variant1
                 devices_payload: List[Tuple[str, str, pd.DataFrame]] = []
                 for d in self.cfg.devices:
+                    # this report adds every device up: a switch/plug hangs
+                    # behind a meter and would be counted twice
+                    if str(getattr(d, "kind", "em")) == "switch":
+                        continue
                     cd = load_device(self.storage, d)
                     df_use = filter_by_time(cd.df, start=pd.Timestamp(start_d), end=pd.Timestamp(end_d))
                     devices_payload.append((d.key, d.name, df_use))
@@ -4381,6 +4403,10 @@ class ActionDispatcher:
                         # the whole dashboard behind it.
                         _snapshot = self.computed
                         for d in self.cfg.devices:
+                            # A plug switching on and off is not an anomaly of the
+                            # house; keep the detector on the meters as before.
+                            if str(getattr(d, "kind", "em")) == "switch":
+                                continue
                             try:
                                 cd = _snapshot.get(d.key)
                                 if cd is None or cd.df is None or cd.df.empty:
@@ -4636,7 +4662,11 @@ class ActionDispatcher:
                         _v = str(getattr(_sc, _a, "") or "")
                         if _v:
                             _excl.add(_v)
-                _standby_devs = [d for d in self.cfg.devices if d.key not in _excl]
+                # A switch/plug is not a meter of the house (it hangs behind one;
+                # since 17.9 it has history of its own), so its standby would be
+                # counted inside the meter it hangs behind as well.
+                _standby_devs = [d for d in self.cfg.devices
+                                 if d.key not in _excl and str(getattr(d, "kind", "em")) != "switch"]
                 report = generate_standby_report(self.storage.db, _standby_devs, price)
 
                 # Fallback: if DB-based analysis found nothing, use computed

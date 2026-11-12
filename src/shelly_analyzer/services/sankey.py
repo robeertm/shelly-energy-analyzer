@@ -89,6 +89,11 @@ def compute_sankey(
     pv_grid_import_kwh = 0.0
 
     for dev in devices:
+        # A switch/plug has history of its own since 17.9 but is never a meter
+        # of the house: it hangs behind one, so its energy is already inside
+        # that meter's reading (and the gross view would carry it twice).
+        if str(getattr(dev, "kind", "em") or "em") == "switch":
+            continue
         hourly = db.query_hourly(dev.key, start_ts=start_ts, end_ts=end_ts)
         if hourly.empty:
             continue

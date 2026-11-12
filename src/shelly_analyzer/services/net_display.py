@@ -100,6 +100,30 @@ def household_keys(devices: Iterable[Any]) -> set:
     return out
 
 
+def nested_switch_keys(devices: Iterable[Any]) -> set:
+    """Keys of switches/plugs wired BEHIND another device.
+
+    A ``kind == "switch"`` device whose ``parent`` is another configured device
+    (a water heater or a string of lights behind the house meter) draws its load
+    through that device, so its energy is already inside the parent's reading.
+    Since 17.9 such a device has a history of its own (rows in the samples
+    table); it is for its own views, never for a figure that adds meters up.
+    A ``parent`` that is a main-meter id, or none, is not nested.
+    """
+    dev_list = list(devices or [])
+    keys = {str(getattr(d, "key", "") or "") for d in dev_list}
+    keys.discard("")
+    out = set()
+    for d in dev_list:
+        if str(getattr(d, "kind", "em") or "em") != "switch":
+            continue
+        child = str(getattr(d, "key", "") or "").strip()
+        parent = str(getattr(d, "parent", "") or "").strip()
+        if child and parent and parent != child and parent in keys:
+            out.add(child)
+    return out
+
+
 def apply_live_subtraction(tiles: List[Dict[str, Any]],
                            submap: Dict[str, List[str]]) -> None:
     """Mutate live ``tiles`` in place so each parent shows net of its children.

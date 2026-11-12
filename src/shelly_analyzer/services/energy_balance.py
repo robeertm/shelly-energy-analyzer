@@ -214,11 +214,14 @@ def _tenant_key_map(cfg) -> tuple:
     key_to_tenant: Dict[str, str] = {}
     tenant_cfg = getattr(cfg, "tenant", None)
     if tenant_cfg is not None and getattr(tenant_cfg, "enabled", False):
+        from shelly_analyzer.services.net_display import nested_switch_keys
+        _nested = nested_switch_keys(getattr(cfg, "devices", []) or [])
         for tdef in (getattr(tenant_cfg, "tenants", []) or []):
             tname = getattr(tdef, "name", "") or getattr(tdef, "tenant_id", "") or "Tenant"
             for k in (getattr(tdef, "device_keys", []) or []):
                 k = str(k)
-                if k and k not in tenant_keys:
+                # a plug behind another meter is inside that meter's reading
+                if k and k not in tenant_keys and k not in _nested:
                     tenant_keys.append(k)
                     key_to_tenant[k] = tname
     return tenant_keys, key_to_tenant
@@ -1039,16 +1042,7 @@ def compute_balance(db, cfg, start_ts: int, end_ts: int,
 
     # ── Tenant circuits: billed at the full tariff regardless of solar. ──────
     tenant_cfg = getattr(cfg, "tenant", None)
-    tenant_keys: List[str] = []
-    key_to_tenant: Dict[str, str] = {}
-    if tenant_cfg is not None and getattr(tenant_cfg, "enabled", False):
-        for tdef in (getattr(tenant_cfg, "tenants", []) or []):
-            tname = getattr(tdef, "name", "") or getattr(tdef, "tenant_id", "") or "Tenant"
-            for k in (getattr(tdef, "device_keys", []) or []):
-                k = str(k)
-                if k and k not in tenant_keys:
-                    tenant_keys.append(k)
-                    key_to_tenant[k] = tname
+    tenant_keys, key_to_tenant = _tenant_key_map(cfg)
     _use_live = (live_today_kwh is not None and today_start_ts is not None
                  and end_ts > int(today_start_ts))
     for k in tenant_keys:

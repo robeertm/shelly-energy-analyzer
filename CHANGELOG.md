@@ -1,5 +1,40 @@
 # Changelog
 
+## 17.9.0
+
+### Plugs and switches get a history of their own
+
+Shelly Plug S/M Gen3 and other switches have no EMData component, so nothing
+was ever imported for them: About said "Samples: 0", Costs, Heatmap, CO2,
+Energy Flow and Compare stayed empty and every sync logged a 404 for
+`EMData.GetData`.
+
+- **One row per minute from the live readings.** A switch or plug now writes
+  its own history into the same table the EMData import fills: power, voltage,
+  current and the energy of the minute, taken from the device's energy counter
+  when it is plausible and from the power samples otherwise (a counter reset or
+  an impossible jump falls back to the power; a gap longer than five minutes
+  adds nothing). The calibration is applied when the history is read, as for
+  every other device. Demo devices are left alone. The open minute is written
+  on shutdown and continued after a settings reload.
+- **No more 404 per sync.** A switch is never asked for EMData, whatever the
+  stored "supports EMData" tick says.
+- **A plug behind a meter is never counted twice.** Its rows belong to its own
+  views (plots, heatmap, comparison, the device's cost card, export). Every
+  whole-house figure still adds up the meters only: costs summary, energy flow,
+  CO2, energy balance, daily and monthly report, tenant bills (a plug set
+  behind a meter is dropped from a tenant's device list), standby report,
+  the spot cost of the house widget, base fee split and anomaly detection.
+- **"kWh today" of a plug keeps its day across a restart.** It is seeded from the
+  plug's own rows and then follows the live readings, so it neither jumps nor
+  counts a minute twice, and an update no longer sets it back to zero.
+- **Plots page:** an empty kWh chart shows "No data" instead of handing an
+  empty chart to the chart library, and the axis gets no tick count of 0. This is
+  a safeguard for the report "t.charAt is not a function"; that error could not
+  be reproduced, so it may need a second look.
+- History starts with this version. A plug does not store its past, so
+  nothing can be filled in backwards.
+
 ## 17.8.6
 
 - **Control page:** the byte units of the network traffic card (B, KB/s, ...)

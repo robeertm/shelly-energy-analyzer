@@ -71,6 +71,11 @@ class BackgroundServiceManager:
         self._today_state: Dict[str, Dict[str, Any]] = {}
         self._today_kwh_lock = threading.Lock()
 
+        # Minute history for switches/plugs (no EMData): written from the live
+        # feed. Created on first use and kept across hot reloads.
+        self._live_history_rec: Optional[Any] = None
+        self._live_history_rec_lock = threading.Lock()
+
         # NILM (non-intrusive load monitoring) transition learners per device
         self._nilm_learners: Dict[str, Any] = {}
         self._nilm_last_cluster_ts: float = 0.0
@@ -158,6 +163,8 @@ class BackgroundServiceManager:
                 lrn.flush()
             except Exception:
                 pass
+        # Switches/plugs: write the minute that is still open.
+        self._flush_switch_history()
         # Final live-history snapshot so an in-app update or clean shutdown
         # captures everything the periodic saver may have missed.
         try:
@@ -291,6 +298,14 @@ class BackgroundServiceManager:
                 )
                 self.live_store.update(sample.device_key, point)
 
+                # Switches/plugs have no EMData history: write theirs from the
+                # live feed (raw power, not the compensated one). A database
+                # problem must never disturb MQTT or the alarms below.
+                try:
+                    self._record_switch_history(sample)
+                except Exception:
+                    logger.debug("Switch history record failed", exc_info=True)
+
                 # Wire the MqttPublisher into the live feed: publish each sample
                 # so Home Assistant MQTT auto-discovery actually receives data.
                 if self._mqtt_publisher is not None:
@@ -360,6 +375,66 @@ class BackgroundServiceManager:
         except Exception:
             pass
         return 1.0
+
+    # ── Switch/plug history (no EMData) ─────────────────────────────────
+
+    def _device_cfg(self, device_key: str) -> Any:
+        """The configured device for a key (looked up each time: hot reload)."""
+        for d in (getattr(self.cfg, "devices", None) or []):
+            if (d.get("key") if isinstance(d, dict) else getattr(d, "key", None)) == device_key:
+                return d
+        return None
+
+    def _records_switch_history(self, device_key: str) -> bool:
+        from shelly_analyzer.services.live_history import records_history
+        return records_history(self._device_cfg(device_key))
+
+    def _switch_history_recorder(self) -> Optional[Any]:
+        rec = self._live_history_rec
+        if rec is not None:
+            return rec
+        db = getattr(getattr(self, "storage", None), "db", None)
+        if db is None:
+            return None
+        with self._live_history_rec_lock:
+            if self._live_history_rec is None:
+                from shelly_analyzer.services.live_history import LiveHistoryRecorder
+                self._live_history_rec = LiveHistoryRecorder(db)
+            return self._live_history_rec
+
+    def _record_switch_history(self, sample: Any) -> None:
+        """Feed one live sample of a switch/plug into its minute history.
+
+        Only real ``kind == "switch"`` devices (never meters, never demo hosts).
+        The raw power goes in, not the compensated value: the calibration is
+        applied when the history is read.
+        """
+        if not self._records_switch_history(sample.device_key):
+            return
+        rec = self._switch_history_recorder()
+        if rec is None:
+            return
+        from shelly_analyzer.services.live_history import counter_wh_from_status
+        p = sample.power_w or {}
+        v = sample.voltage_v or {}
+        c = sample.current_a or {}
+        rec.observe(
+            sample.device_key,
+            int(sample.ts or time.time()),
+            float(p.get("total", 0) or 0),
+            float(v.get("a", 0) or 0),
+            float(c.get("a", 0) or 0),
+            counter_wh_from_status(sample.raw),
+        )
+
+    def _flush_switch_history(self) -> None:
+        rec = self._live_history_rec
+        if rec is None:
+            return
+        try:
+            rec.flush()
+        except Exception as e:
+            logger.debug("Final switch-history flush failed: %s", e)
 
     def _mqtt_daily_monotonic(self, key: str, raw: float) -> float:
         """Clamp a daily-resetting cumulative value (energy or cost) so it is
@@ -470,6 +545,32 @@ class BackgroundServiceManager:
             logger.debug("Baseline lookup failed for %s: %s", device_key, e)
             return 0.0, int(day_start_ts)
 
+    def _load_today_baseline_recorded(self, device_key: str, day_start_ts: int) -> tuple:
+        """Today's kWh a switch/plug already has in its history from an EARLIER
+        run (its own minute rows), and where those rows end.
+
+        Read straight from the samples at minute precision, never from the
+        hourly roll-up: that one ends on the hour, which would switch the live
+        accumulation off until the next hour. ``baseline_last_ts`` is the start
+        of the last row; a row never holds energy after its own last sample, and
+        a run that restarts inside that minute continues the row (the recorder
+        keeps what was written), so nothing is counted twice.
+        """
+        import pandas as pd
+
+        try:
+            db = self.storage.db
+            df = db.query_samples(device_key, start_ts=int(day_start_ts), columns=["energy_kwh"])
+            if df is None or df.empty or "energy_kwh" not in df.columns:
+                return 0.0, int(day_start_ts)
+            kwh = float(pd.to_numeric(df["energy_kwh"], errors="coerce").fillna(0.0).sum())
+            # query_samples hands out UTC-naive timestamps; pandas reads those as UTC.
+            last_ts = int(pd.Timestamp(df["timestamp"].max()).timestamp())
+            return kwh, max(last_ts, int(day_start_ts))
+        except Exception as e:
+            logger.debug("Switch baseline lookup failed for %s: %s", device_key, e)
+            return 0.0, int(day_start_ts)
+
     def _accumulate_today_kwh(self, device_key: str, ts: int, power_w: float) -> float:
         """Trapezoid-integrate power (W) samples into kWh for the current local day,
         starting from the DB baseline (already-synced hours of today).
@@ -481,6 +582,12 @@ class BackgroundServiceManager:
         ts_dt = datetime.fromtimestamp(int(ts))
         day = ts_dt.date()
         day_start = int(datetime(day.year, day.month, day.day).timestamp())
+
+        # A switch/plug writes its own history from this very feed, so the live
+        # sum already holds everything the history gets after start-up. Reading
+        # the history back on the 10-minute refresh would drop part of it (the
+        # rows lag behind the samples) or count it twice.
+        recorded = self._records_switch_history(device_key)
 
         with self._today_kwh_lock:
             st = self._today_state.get(device_key)
@@ -499,6 +606,8 @@ class BackgroundServiceManager:
                 )
                 if live_rollover:
                     base_kwh, base_last_ts = 0.0, day_start
+                elif recorded:
+                    base_kwh, base_last_ts = self._load_today_baseline_recorded(device_key, day_start)
                 else:
                     base_kwh, base_last_ts = self._load_today_baseline(device_key, day_start)
                 st = {
@@ -514,7 +623,7 @@ class BackgroundServiceManager:
 
             # Periodically refresh baseline from DB (after each auto-sync the DB has
             # grown; we must pick that up and reset live accumulator to avoid double counting).
-            if int(time.time()) - int(st.get("baseline_refreshed_at", 0)) > 600:
+            if not recorded and int(time.time()) - int(st.get("baseline_refreshed_at", 0)) > 600:
                 base_kwh, base_last_ts = self._load_today_baseline(device_key, day_start)
                 old_last = int(st.get("base_last_ts", 0))
                 if int(base_last_ts) > old_last:

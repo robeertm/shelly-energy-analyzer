@@ -13616,7 +13616,9 @@ async function loadData() {
     const kwhLayout = (yTitle, extra) => plotlyBaseLayout(Object.assign({
       margin:{l:60,r:20,t:30,b:95},
       legend:{ orientation:'h', y:-0.34, yanchor:'top', font:{ color: cssVar('--fg') || undefined } },
-      xaxis:{ automargin:true, tickangle:'auto', nticks: Math.min(12, xsLab.length), tickformat: _tfmt },
+      // nticks only with something to tick: 0 on an empty axis is not a number Plotly can place
+      xaxis:Object.assign({ automargin:true, tickangle:'auto', tickformat: _tfmt },
+                          xsLab.length ? { nticks: Math.min(12, xsLab.length) } : {}),
       yaxis:{title: yTitle, automargin:true}
     }, extra || {}));
 
@@ -13796,8 +13798,11 @@ async function loadData() {
     const kwhContainer = document.getElementById('plotCards');
     kwhContainer.innerHTML = '';
     if (!kwhTraces.length) {
+      // Nothing to draw: say so. An empty trace list is no chart to hand Plotly
+      // (its axis code works on the data and can throw "t.charAt is not a function").
       const emptyEl = buildPlotCard(kwhContainer, 'plot_kwh_empty', false);
-      Plotly.newPlot(emptyEl.id, [], kwhLayout('kWh'), plotlyConfig());
+      emptyEl.textContent = t('web.plots.no_data');
+      emptyEl.style.cssText = 'height:auto;padding:28px 8px;text-align:center;color:var(--muted);';
     }
     for (let di = 0; di < kwhTraces.length; di++) {
       const uid = String(di);

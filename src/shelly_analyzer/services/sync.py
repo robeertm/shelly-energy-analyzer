@@ -78,6 +78,12 @@ def sync_one_device(
     # but was mis-detected as no-CSV, we do a quick runtime probe against the CSV
     # endpoint and proceed if it works.
     supports_emdata = bool(getattr(device, "supports_emdata", True))
+    if str(getattr(device, "kind", "")) == "switch":
+        # A switch/plug has no EMData component at all (every call is a 404),
+        # whatever the stored flag says: the "supports EMData" tick defaults to
+        # on when the device could not be identified. Its history is written
+        # from the live feed instead (services/live_history.py).
+        supports_emdata = False
     if not supports_emdata and str(getattr(device, "kind", "")) == "em":
         try:
             http_probe = ShellyHttp(HttpConfig(timeout_seconds=min(cfg.download.timeout_seconds, 3.0), retries=1, backoff_base_seconds=0.1))

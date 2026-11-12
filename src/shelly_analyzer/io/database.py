@@ -1609,6 +1609,7 @@ class EnergyDB:
         markup_eur_per_kwh: float,
         vat_rate: float,
         resolution: str = "hour",
+        exclude_keys: Sequence[str] = (),
     ) -> Tuple[float, float, float]:
         """Calculate energy cost using spot market prices.
 
@@ -1617,12 +1618,20 @@ class EnergyDB:
 
         Returns (total_cost_eur, total_kwh, avg_price_ct_per_kwh).
         avg_price_ct_per_kwh is the volume-weighted average spot price (net, excl. markup/VAT).
+
+        ``exclude_keys`` only matters for ``device_key == ""`` (every device in
+        the 15-minute table): devices that hang behind another meter must not be
+        added to a whole-house figure, their energy is already inside it.
         """
         conn = self._conn()
         try:
             if str(resolution).lower() in ("15min", "15m", "quarter", "q"):
                 _dev = "AND device_key = ?" if device_key else ""
                 _ep = [start_ts, end_ts] + ([device_key] if device_key else [])
+                _skip = [str(k) for k in (exclude_keys or ()) if str(k)]
+                if not device_key and _skip:
+                    _dev = "AND device_key NOT IN (%s)" % ",".join("?" * len(_skip))
+                    _ep = _ep + _skip
                 df_e = pd.read_sql_query(
                     "SELECT (timestamp / 900) * 900 AS slot_ts, "
                     "       COALESCE(SUM(energy_kwh), 0) AS kwh "

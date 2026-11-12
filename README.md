@@ -505,7 +505,7 @@ Privacy: nothing is sent to OpenEI unless a URDB rate is set or you click one of
 ### 🎛 Device Control
 - **Control tab** for directly operating Shelly devices from the dashboard (enable in Settings → Features)
 - **Room assignment** — organize devices into rooms (living room, kitchen, basement, …) with 58 selectable emoji icons; devices grouped by room in the Control tab, unassigned devices shown separately
-- **Switches & plugs** — on/off toggle with live power readout
+- **Switches & plugs** — on/off toggle with live power readout. They have no EMData history to download, so the app writes one row per minute from their live readings (power, voltage, current and the energy counter where the device has one). Plots, heatmap, comparison and the per-device cost card then work for a plug like for a meter. A plug that hangs behind a meter (set its *parent*) is shown on its own but never added to a house total, because its energy is already inside that meter's reading. History starts when the app first runs with this version; a plug cannot give back the past.
 - **Dimmers** — brightness slider (0–100%) via `Light.Set` RPC (Gen 2+) with Gen 1 REST fallback
 - **RGBW lights** — colour picker (RGB), colour temperature slider (2700–6500 K), brightness
 - **Roller shutters / covers** — Open / Stop / Close buttons + position slider (0–100%) via `Cover.GoToPosition` RPC
