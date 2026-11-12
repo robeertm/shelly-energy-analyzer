@@ -61,10 +61,19 @@ class EnergyBalance:
     has_pv: bool = False
     has_battery: bool = False
     has_grid_meter: bool = False
+    # An installation of plugs only: the load is the sum of its top-level plugs
+    # and nothing else is known — no grid import, no feed-in (see plug_only_keys).
+    plugs_only: bool = False
     tenant_names: List[str] = field(default_factory=list)
     tenant_breakdown: Dict[str, float] = field(default_factory=dict)  # name → kWh
 
     def as_dict(self) -> Dict[str, Any]:
+        out = self._as_dict()
+        if self.plugs_only:
+            out["plugs_only"] = True       # absent otherwise: nothing changes for a meter
+        return out
+
+    def _as_dict(self) -> Dict[str, Any]:
         return {
             "grid_import_kwh": round(self.grid_import_kwh, 3),
             "grid_export_kwh": round(self.grid_export_kwh, 3),
@@ -622,13 +631,40 @@ def device_role(cfg, key: str) -> str:
     return "owner"
 
 
+def plug_only_keys(cfg) -> List[str]:
+    """Top-level plugs when the installation has no meter and no supply series.
+
+    ``[]`` for every installation with a meter, a grid/PV meter or an external
+    grid/PV source: for those nothing in this module changes.
+    """
+    from shelly_analyzer.services.net_display import plug_only_keys as _plug_only
+    keys = _plug_only(getattr(cfg, "devices", []) or [])
+    if not keys:
+        return []
+    grid_key, pv_key, _batt_key = _resolve_source_keys(cfg)
+    if grid_key or pv_key:
+        return []
+    return keys
+
+
+def consumer_devices(cfg) -> List[Any]:
+    """The devices that count as consumers: the energy meters, or — only in an
+    installation without any meter — its top-level plugs."""
+    devices = getattr(cfg, "devices", []) or []
+    plugs = plug_only_keys(cfg)
+    if plugs:
+        pool = [d for d in devices if str(getattr(d, "key", "")) in plugs]
+    else:
+        pool = [d for d in devices if str(getattr(d, "kind", "em")) == "em"]
+    return [d for d in pool
+            if device_role(cfg, getattr(d, "key", "")) in ("owner", "tenant")]
+
+
 def consumer_keys(cfg) -> List[str]:
     """Consumer device keys, each meter once (a meter behind another meter is
     inside that meter's reading; ``household_keys`` knows the wiring)."""
     from shelly_analyzer.services.net_display import household_keys
-    devs = [d for d in (getattr(cfg, "devices", []) or [])
-            if str(getattr(d, "kind", "em")) == "em"
-            and device_role(cfg, getattr(d, "key", "")) in ("owner", "tenant")]
+    devs = consumer_devices(cfg)
     allowed = household_keys(devs)
     return [str(d.key) for d in devs if str(d.key) in allowed]
 
@@ -1062,6 +1098,25 @@ def compute_balance(db, cfg, start_ts: int, end_ts: int,
         bal.tenant_breakdown[tname] = bal.tenant_breakdown.get(tname, 0.0) + kwh
         bal.tenant_load_kwh += kwh
     bal.tenant_names = list(bal.tenant_breakdown.keys())
+
+    # ── An installation of plugs only: there is no grid/PV series to read the
+    #    load off, so the load is the sum of the top-level plugs. Nothing else
+    #    is claimed — no grid import, no feed-in, no PV (has_* stay False).
+    #    A meter anywhere makes plug_only_keys() empty: this block then does not run.
+    if not (bal.has_grid_meter or bal.has_pv) and plug_only_keys(cfg):
+        total = 0.0
+        for k in consumer_keys(cfg):
+            # The live accumulator stands in for today's hours only where the
+            # live store has one for this plug; otherwise the rollup is all there is.
+            if _use_live and k in (live_today_kwh or {}):
+                cap = max(int(today_start_ts), int(start_ts))
+                kwh = max(0.0, _hourly_sum(db, k, start_ts, cap - 1))
+                kwh += max(0.0, float((live_today_kwh or {}).get(k, 0.0) or 0.0))
+            else:
+                kwh = max(0.0, _hourly_sum(db, k, start_ts, end_ts))
+            total += kwh
+        bal.total_load_kwh = total
+        bal.plugs_only = True
 
     # Owner load = total − tenant (never negative). When we have no supply-side
     # load (grid-only, no meter), leave owner_load at 0 — the caller uses the
@@ -1823,10 +1878,12 @@ def report_consumption(db, cfg, start_ts: int, end_ts: int, *,
     if rc.tenant_kwh <= 0:
         rc.tenant_kwh = sum(v for k, v in rc.kwh_by_key.items() if k in rc.tenant_keys)
 
-    if float(bal.total_load_kwh or 0.0) > 0:
+    if float(bal.total_load_kwh or 0.0) > 0 and not bal.plugs_only:
         rc.basis = "supply"
         rc.total_kwh = float(bal.total_load_kwh)
     else:
+        # An installation of plugs only has no supply-side balance: the plugs
+        # are the circuits, and the note says so ("sum of the metered circuits").
         rc.basis = "devices"
         rc.total_kwh = circuits_kwh
     rc.owner_kwh = max(0.0, rc.total_kwh - rc.tenant_kwh)

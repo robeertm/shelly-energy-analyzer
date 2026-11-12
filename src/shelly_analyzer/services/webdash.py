@@ -6489,6 +6489,24 @@ function renderCosts(data, el) {{
     bh += '</div>';
     html += bh;
   }}
+  // ── Plugs only (no meter): what the plugs drew, cost and CO₂, nothing about grid or feed-in ──
+  if (data.plugs_only && data.plugs_balance) {{
+    var pcols = ['today','week','month','year'];
+    var phead = [t('web.costs.today','Today'), t('web.costs.week','Week'), t('web.costs.month','Month'), t('web.costs.year','Year')];
+    var PB = data.plugs_balance;
+    function prow(label, field, dec, unit, cls) {{
+      var tds = pcols.map(function(k){{ var r = PB[k]; return '<td style="text-align:right">' + (r && r[field] != null ? fmt(r[field], dec, unit) : '–') + '</td>'; }}).join('');
+      return '<tr class="' + (cls||'') + '"><td>' + label + '</td>' + tds + '</tr>';
+    }}
+    var ph = '<div class="card" style="margin-bottom:10px"><div class="card-title">⚡ ' + t('web.costs.balance_title','Energy balance') + '</div>';
+    ph += '<div style="overflow-x:auto"><table class="data-table balance-table" style="width:100%"><thead><tr><th></th>';
+    ph += phead.map(function(h){{ return '<th style="text-align:right">' + h + '</th>'; }}).join('') + '</tr></thead><tbody>';
+    ph += prow(t('web.plugs_only.consumption','Consumption (plugs)') + ' (kWh)', 'total_load_kwh', 2, '');
+    ph += prow(t('web.costs.net_cost','Net electricity cost') + ' (€)', 'net_cost_eur', 2, '€', 'balance-net');
+    ph += prow('CO₂ (kg)', 'co2_kg', 2, '');
+    ph += '</tbody></table></div>' + _plugsNoteHtml() + '</div>';
+    html += ph;
+  }}
   function spotSub(key, d) {{
     var v = d[key + '_spot_eur'];
     var f = d[key + '_eur'];
@@ -7930,6 +7948,7 @@ function renderCo2(data, el) {{
   html += metricCardHtml(t('web.co2.trees', 'Trees (eq.)'), (data.tree_days||0).toFixed(0) + ' ' + t('web.dash.tree_days', 'tree-days'), '🌳');
   html += metricCardHtml(t('web.co2.car', 'Car km avoided'), (data.car_km||0).toFixed(0) + ' km', '🚗');
   html += '</div></div>';
+  if (data.plugs_only) html += _plugsNoteHtml();
 
   // ── Origin & manufacturing — the one-bus chain, per period ──────────
   // Every consumed kWh is charged the mix of its hour: grid import at the
@@ -10279,6 +10298,11 @@ async function loadSankey() {{
     cont.innerHTML = '<p class="error-msg">' + t('web.error_label', 'Error') + ': ' + esc(e.message) + '</p>';
   }}
 }}
+function _plugsNoteHtml() {{
+  // Shown only for an installation of plugs only (no meter): where the numbers come from.
+  return '<div class="plugs-note" style="margin:8px 2px 0;font-size:12px;line-height:1.45;color:var(--muted)">\u2139\ufe0f ' +
+    esc(t('web.plugs_only.note', 'No meter is set up, so these figures are the sum of the plugs. Grid import and feed-in are not measured and not shown; CO\u2082 is the consumption times the grid mix.')) + '</div>';
+}}
 function _fv(v, unit) {{
   // kWh with a sensible number of decimals; W as integers.
   if (unit === 'W') return Math.round(v) + ' W';
@@ -10319,11 +10343,12 @@ function renderEnergyFlow(d, cont) {{
   html += '<div style="display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11px;margin:4px 8px 0">';
   if (d.has_pv) html += '<span><span class="co2-dot" style="background:' + FLOW_COL.pv + '"></span>PV</span>';
   if (d.has_battery) html += '<span><span class="co2-dot" style="background:' + FLOW_COL.battery + '"></span>' + t('web.co2.src_battery', 'Battery') + '</span>';
-  html += '<span><span class="co2-dot" style="background:' + FLOW_COL.grid + '"></span>' + t('web.flow.grid_import', 'Grid import') + '</span>';
+  if (!d.plugs_only) html += '<span><span class="co2-dot" style="background:' + FLOW_COL.grid + '"></span>' + t('web.flow.grid_import', 'Grid import') + '</span>';
   if (d.has_grid_meter) html += '<span><span class="co2-dot" style="background:' + FLOW_COL.export + '"></span>' + t('web.dash.feed_in', 'Feed-in') + '</span>';
   html += '<span style="color:var(--muted)">' + (unit === 'W' ? t('web.flow.live_note', 'live, refreshes every 5 s') : t('web.flow.width_note', 'line width = energy · dots run with the flow')) + '</span>';
   if (d.tenant_bus && d.has_supply) html += '<span style="color:var(--muted)">👤 ' + t('flow.tenant_rule', 'Tenant: grid-parallel — PV surplus and grid only, never the battery') + '</span>';
   html += '</div></div>';
+  if (d.plugs_only) html += _plugsNoteHtml();
   // ── Consumers ──
   if (cons.length) {{
     html += '<div class="card" style="margin-top:10px"><div class="card-title">' + t('web.flow.consumers', 'Consumers') + '</div>';
@@ -10349,7 +10374,7 @@ function _efKpis(d) {{
   const S = d.sources || {{}}, K = d.sinks || {{}}, H = d.house || {{}};
   const _fvs = function(v) {{ return unit === 'W' ? Math.round(v) : (v >= 100 ? v.toFixed(0) : v.toFixed(1)); }};
   return {{
-    house: {{v: _fv(H.load || 0, unit), s: unit === 'W' ? t('web.flow.right_now', 'right now') : (t('web.flow.consumers_sum', 'meters') + ' ' + _fv(H.consumers_sum || 0, unit))}},
+    house: {{v: _fv(H.load || 0, unit), s: unit === 'W' ? t('web.flow.right_now', 'right now') : (d.plugs_only ? '' : (t('web.flow.consumers_sum', 'meters') + ' ' + _fv(H.consumers_sum || 0, unit)))}},
     pv: {{v: _fv(S.pv || 0, unit), s: H.self_consumption_pct != null ? H.self_consumption_pct.toFixed(0) + '% ' + t('web.flow.kept', 'kept in the house') : ''}},
     aut: {{v: H.autarky_pct != null ? H.autarky_pct.toFixed(0) + ' %' : '–', s: t('web.flow.grid_share', 'grid') + ' ' + _fv(S.grid || 0, unit)}},
     bat: {{v: '↓' + _fvs(K.battery || 0) + ' ↑' + _fvs(S.battery || 0) + ' ' + unit, s: d.battery_soc_pct != null ? d.battery_soc_pct.toFixed(0) + ' % SOC' : t('web.flow.in_out', 'in · out')}},
@@ -10436,7 +10461,7 @@ function _efNodeTexts(d) {{
   const unit = d.unit || 'kWh';
   const S = d.sources || {{}}, K = d.sinks || {{}}, H = d.house || {{}};
   const cons = (d.consumers || []).slice(0, 8);
-  const aut = H.autarky_pct != null ? Math.max(0, Math.min(100, H.autarky_pct)) : null;
+  const aut = H.autarky_pct != null ? Math.max(0, Math.min(100, H.autarky_pct)) : null;   // null without a meter
   const o = {{
     'pv.v': _fv(S.pv || 0, unit), 'pv.s': H.self_consumption_pct != null ? H.self_consumption_pct.toFixed(0) + '% ' + t('web.flow.kept_short', 'kept') : '',
     'bat.v': d.battery_soc_pct != null ? d.battery_soc_pct.toFixed(0) + ' %' : _fv(S.battery || 0, unit), 'bat.s': '↓ ' + _fv(K.battery || 0, unit) + '  ↑ ' + _fv(S.battery || 0, unit),
@@ -10459,10 +10484,16 @@ function _drawEnergyFlowSvg(d, wrap) {{
   const vals = [S.pv, S.battery, S.grid, K.battery, K.grid, H.load].concat(cons.map(function(c) {{ return c.kwh; }})).filter(function(v) {{ return v > 0; }});
   const vmax = Math.max.apply(null, vals.length ? vals : [1]);
   const width = function(v) {{ return v > 0 ? 2 + 18 * Math.sqrt(v / _efNiceMax(vmax)) : 0; }};
-  // Layout
-  const perRow = 4, rows = Math.max(1, Math.ceil(cons.length / perRow));
-  const W = narrow ? 360 : 1000, HH = narrow ? 470 + rows * 120 : Math.max(520, 140 + cons.length * 70);
-  const house = narrow ? {{x: 180, y: 330}} : {{x: 500, y: HH / 2}};
+  // Layout. Up to five consumers the picture is the one it always was. With more,
+  // the wide drawing staggers them over two columns and the narrow one lays
+  // three to a row, so that no circle covers the name of the one above it.
+  // A house without a meter has no source column: no grid node is drawn, and
+  // the house moves up/left into the space that would have been theirs.
+  const many = cons.length > 5, bare = !!d.plugs_only;
+  const perRow = (narrow && many) ? 3 : 4, rows = Math.max(1, Math.ceil(cons.length / perRow));
+  const dy = (narrow && bare) ? 220 : 0;
+  const W = narrow ? 360 : 1000, HH = narrow ? 470 + rows * 120 - dy : Math.max(520, many ? 160 + 52 * (cons.length - 1) : 140 + cons.length * 70);
+  const house = narrow ? {{x: 180, y: 330 - dy}} : {{x: bare ? 300 : 500, y: HH / 2}};
   const nodes = {{}};
   if (narrow) {{
     nodes.pv = {{x: 180, y: 66}}; nodes.battery = {{x: 62, y: 225}}; nodes.grid = {{x: 298, y: 225}};
@@ -10472,8 +10503,9 @@ function _drawEnergyFlowSvg(d, wrap) {{
   cons.forEach(function(c, i) {{
     if (narrow) {{
       const row = Math.floor(i / perRow), inRow = Math.min(perRow, cons.length - row * perRow), col = i % perRow;
-      c._x = W * (col + 1) / (inRow + 1); c._y = 490 + row * 120;
+      c._x = W * (col + 1) / (inRow + 1); c._y = 490 + row * 120 - dy;
     }}
+    else if (many) {{ const n = cons.length; c._x = (i % 2 === 0) ? 770 : 910; c._y = 80 + i * (HH - 160) / (n - 1); }}
     else {{ const n = cons.length; c._x = 880; c._y = n === 1 ? HH / 2 : 80 + i * (HH - 160) / (n - 1); }}
   }});
   const R = narrow ? 32 : 40, RH = narrow ? 50 : 64;
@@ -10522,18 +10554,18 @@ function _drawEnergyFlowSvg(d, wrap) {{
   }}
   // Nodes
   const nt = _efNodeTexts(d);
-  const node = function(nid, p, r, col, icon, title, opacity) {{
+  const node = function(nid, p, r, col, icon, title, opacity, vfs) {{
     let h = '<g opacity="' + (opacity == null ? 1 : opacity) + '">';
     h += '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + r + '" fill="' + col + '" fill-opacity="0.16" stroke="' + col + '" stroke-width="2.5"/>';
     h += '<text x="' + p.x + '" y="' + (p.y - r * 0.18) + '" text-anchor="middle" font-size="' + (r * 0.62) + '">' + icon + '</text>';
-    h += '<text x="' + p.x + '" y="' + (p.y + r * 0.42) + '" text-anchor="middle" font-size="12" font-weight="700" fill="var(--fg)" data-n="' + esc(nid) + '.v">' + esc(nt[nid + '.v']) + '</text>';
+    h += '<text x="' + p.x + '" y="' + (p.y + r * 0.42) + '" text-anchor="middle" font-size="' + (vfs || 12) + '" font-weight="700" fill="var(--fg)" data-n="' + esc(nid) + '.v">' + esc(nt[nid + '.v']) + '</text>';
     h += '<text x="' + p.x + '" y="' + (p.y + r + 15) + '" text-anchor="middle" font-size="12" font-weight="650" fill="var(--fg)">' + esc(title) + '</text>';
     h += '<text x="' + p.x + '" y="' + (p.y + r + 29) + '" text-anchor="middle" font-size="10.5" fill="var(--muted)" data-n="' + esc(nid) + '.s">' + esc(nt[nid + '.s'] || '') + '</text>';
     return h + '</g>';
   }};
   if (d.has_pv) nodesHtml += node('pv', nodes.pv, R, FLOW_COL.pv, '☀️', 'PV');
   if (d.has_battery) nodesHtml += node('bat', nodes.battery, R, FLOW_COL.battery, '🔋', t('web.co2.src_battery', 'Battery'));
-  nodesHtml += node('grid', nodes.grid, R, (K.grid || 0) > (S.grid || 0) ? FLOW_COL.export : FLOW_COL.grid, '🔌', t('web.co2.src_grid', 'Grid'), d.has_grid_meter || !d.has_supply ? 1 : 0.35);
+  if (!bare) nodesHtml += node('grid', nodes.grid, R, (K.grid || 0) > (S.grid || 0) ? FLOW_COL.export : FLOW_COL.grid, '🔌', t('web.co2.src_grid', 'Grid'), d.has_grid_meter || !d.has_supply ? 1 : 0.35);
   // House with autarky ring
   const aut = H.autarky_pct != null ? Math.max(0, Math.min(100, H.autarky_pct)) : null;
   nodesHtml += '<circle cx="' + house.x + '" cy="' + house.y + '" r="' + RH + '" fill="' + FLOW_COL.house + '" fill-opacity="0.12" stroke="var(--border)" stroke-width="6"/>';
@@ -10545,7 +10577,8 @@ function _drawEnergyFlowSvg(d, wrap) {{
   nodesHtml += '<text x="' + house.x + '" y="' + (house.y + 10) + '" text-anchor="middle" font-size="15" font-weight="800" fill="var(--fg)" data-n="house.v">' + esc(nt['house.v']) + '</text>';
   nodesHtml += '<text x="' + house.x + '" y="' + (house.y + 27) + '" text-anchor="middle" font-size="10.5" fill="var(--muted)" data-n="house.s">' + esc(nt['house.s']) + '</text>';
   cons.forEach(function(c) {{
-    nodesHtml += node('c.' + c.key, {{x: c._x, y: c._y}}, R * 0.85, c.role === 'tenant' ? FLOW_COL.tenant : FLOW_COL.owner, c.role === 'tenant' ? '👤' : '🏡', c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name);
+    const _lim = (narrow && many) ? 11 : 14;
+    nodesHtml += node('c.' + c.key, {{x: c._x, y: c._y}}, R * 0.85, c.role === 'tenant' ? FLOW_COL.tenant : FLOW_COL.owner, c.role === 'tenant' ? '👤' : '🏡', c.name.length > _lim ? c.name.slice(0, _lim - 1) + '…' : c.name, 1, (narrow && many) ? 10 : 12);
   }});
   let svg = '<svg id="flow-svg" viewBox="0 0 ' + W + ' ' + HH + '" width="100%" style="display:block;max-height:' + (narrow ? 900 : 640) + 'px;font-family:inherit">' + defs + paths + dots + nodesHtml + '</svg>';
   wrap.innerHTML = svg;

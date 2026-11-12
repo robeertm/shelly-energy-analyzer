@@ -1,5 +1,45 @@
 # Changelog
 
+## 17.9.2
+
+### An installation of plugs only is no longer empty
+
+An installation that has plugs but no energy meter at all (eight plugs and
+nothing else, for example) saw empty Energy Flow, CO2 and balance views, because
+every whole-house figure is read off meters.
+
+- **Without any meter, the sum of the top-level plugs is the house.** Energy
+  Flow (period and live), CO2, the Costs summary and its new balance card, the
+  energy balance, the daily and monthly report and the flow diagram API all use
+  it. A plug hung behind another plug is inside that plug's reading and is not
+  added again.
+- **Nothing is made up about the grid connection.** With no meter there is no
+  measured import, no feed-in and no self-sufficiency: the diagram has no grid
+  node, no grid legend entry and no autarky ring, and the balance carries no
+  grid figures. CO2 is the consumption times the grid mix of the hours it was
+  drawn in. A short note says so in all nine languages.
+- **Anything with a meter is untouched.** The rule applies only when no device
+  at all is a meter (a device of an unknown kind counts as one) and no grid or
+  PV series is configured. Plugs of an installation with a meter stay
+  sub-meters: they are never added to a whole-house figure, and every payload
+  was compared with the previous version on such an installation and is
+  identical.
+- **Flow diagram with many consumers.** Beyond five consumers the wide drawing
+  uses two staggered columns and the narrow one three per row, so a circle no
+  longer covers the name of the one above it. Up to five it is unchanged.
+
+### A plug never takes over another device's rows
+
+- **The import from older installations skips switches.** When a device has no
+  rows yet, every Plots request looks in older installations next to the
+  current one and imports what it finds, matching by host, then by name (either
+  contains the other), then by key. A plug has no EMData history to find, so
+  the match could only ever hand it another device's data, which then sat in
+  the plug's own history. A switch or plug now never takes part in that import.
+  Rows already stored are not touched.
+- The sync has not asked a switch for EMData since 17.9.0, so no other path
+  writes foreign rows into a plug's history.
+
 ## 17.9.1
 
 ### Plugs and switches get a history of their own

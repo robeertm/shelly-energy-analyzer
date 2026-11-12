@@ -3202,6 +3202,7 @@ class ActionDispatcher:
                 #    table stands alone. Universal — no site-specific keys. ─────
                 _balance_ranges: Dict[str, Any] = {}
                 _balance_present = False
+                _plugs_balance: Dict[str, Any] = {}
                 _solar_bc = getattr(self.cfg, "solar", None)
                 _feed_in_tariff = (
                     float(_solar_bc.effective_feed_in_for_date(date.today()))
@@ -3407,6 +3408,34 @@ class ActionDispatcher:
                     _s["proj_kwh"] = 0
                     _s["proj_eur"] = 0
 
+                # No meter at all (an installation of plugs only): the balance is
+                # what the plugs drew, what it cost and what it emitted — the
+                # Summary card's own kWh and euros (so the page never says two
+                # things about one quantity) plus the CO₂ of the grid mix of the
+                # hours they drew it in. No grid import, no feed-in is claimed.
+                try:
+                    from shelly_analyzer.services.energy_balance import plug_only_keys as _pok_costs
+                    _plug_keys_costs = _pok_costs(self.cfg)
+                    if _plug_keys_costs:
+                        for _rk in ("today", "week", "month", "year"):
+                            _rs, _re = _ranges[_rk]
+                            _g_sum = _kwh_sum = 0.0
+                            for _pk_id in _plug_keys_costs:
+                                _hk_p = _smap_co2(self.storage.db, str(_pk_id), int(_rs.timestamp()),
+                                                  int(_re.timestamp()) + 3600)
+                                _gp = _co2_chain().device_grams(_hk_p, _drole_co2(self.cfg, str(_pk_id)))
+                                _g_sum += _gp["g"]
+                                _kwh_sum += _gp["kwh"]
+                            _g_per_kwh = (_g_sum / _kwh_sum) if _kwh_sum > 0 else (_co2_g if _co2_g > 0 else 380.0)
+                            _plugs_balance[_rk] = {
+                                "total_load_kwh": _s[_rk + "_kwh"],
+                                "net_cost_eur": _s[_rk + "_eur"],
+                                "co2_kg": round(_s[_rk + "_kwh"] * _g_per_kwh / 1000.0, 3),
+                            }
+                except Exception:
+                    _plugs_balance = {}
+                    logger.debug("costs plugs balance failed", exc_info=True)
+
                 _costs_payload = {
                     "ok": True, "devices": devices_out, "unit_eur": _unit,
                     "summary": _s,
@@ -3423,6 +3452,9 @@ class ActionDispatcher:
                     "fixed_ct_per_kwh": round(_unit * 100, 2),
                     "current_spot_ct": _current_spot_ct,
                 }
+                if _plugs_balance:
+                    _costs_payload["plugs_only"] = True       # only then: a meter's payload is unchanged
+                    _costs_payload["plugs_balance"] = _plugs_balance
                 with self._costs_resp_lock:
                     self._costs_resp_cache = (time.time(), _costs_payload)
                 return _costs_payload
@@ -4796,7 +4828,7 @@ class ActionDispatcher:
                 data = compute_sankey(self.storage.db, self.cfg.devices, self.cfg.solar,
                                       period_sk, net_children=_submap_sk)
                 plotly_data = sankey_to_plotly_dict(data)
-                return {
+                _sk_out = {
                     "ok": True,
                     "grid_import_kwh": data.grid_import_kwh,
                     "pv_production_kwh": data.pv_production_kwh,
@@ -4806,6 +4838,9 @@ class ActionDispatcher:
                     "sankey": plotly_data,
                     "net_of_children": sorted({c for ks in _submap_sk.values() for c in ks}),
                 }
+                if data.plugs_only:
+                    _sk_out["plugs_only"] = True       # only then: a meter's payload is unchanged
+                return _sk_out
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 
@@ -5119,7 +5154,7 @@ class ActionDispatcher:
                 tree_days = co2_month / 22.0 * 365 if co2_month > 0 else 0
                 car_km = co2_month / 0.170 if co2_month > 0 else 0
 
-                return {
+                _co2_out = {
                     "ok": True,
                     "enabled": True,
                     "zone": zone,
@@ -5157,6 +5192,13 @@ class ActionDispatcher:
                     "forecast": _forecast_points,
                     "forecast_updated_ts": _forecast_run_ts,
                 }
+                try:
+                    from shelly_analyzer.services.energy_balance import plug_only_keys as _pok_co2
+                    if _pok_co2(self.cfg):
+                        _co2_out["plugs_only"] = True   # only then: a meter's payload is unchanged
+                except Exception:
+                    pass
+                return _co2_out
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 
@@ -5811,7 +5853,8 @@ class ActionDispatcher:
 
             try:
                 self.storage.ensure_data_for_devices(
-                    [{"key": d.key, "host": getattr(d, "host", ""), "name": getattr(d, "name", d.key)} for d in self.cfg.devices]
+                    [{"key": d.key, "host": getattr(d, "host", ""), "name": getattr(d, "name", d.key),
+                      "kind": str(getattr(d, "kind", "em") or "em")} for d in self.cfg.devices]
                 )
             except Exception:
                 pass

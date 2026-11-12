@@ -200,3 +200,24 @@ def apply_history_subtraction(hist: Dict[str, List[Dict[str, Any]]],
             for cm in cmaps:
                 sub += _nearest_w(cm, tsp)
             p["w"] = float(p.get("w") or 0.0) - sub
+
+
+def plug_only_keys(devices: Iterable[Any]) -> List[str]:
+    """Keys of the top-level switches/plugs of an installation WITHOUT a meter.
+
+    An installation of plugs only (no energy meter at all) has nothing a
+    whole-house figure could be read off, so the sum of its top-level plugs is
+    the house: a plug wired behind another plug is inside that plug's reading
+    (``household_keys`` knows the wiring) and is not added again.
+
+    Returns ``[]`` as soon as ANY configured device is not a switch. Whoever has
+    a meter gets exactly what they got before: the plugs of such an
+    installation are sub-meters of it and stay out of every whole-house sum.
+    """
+    dev_list = list(devices or [])
+    if not dev_list:
+        return []
+    if any(str(getattr(d, "kind", "em") or "em") != "switch" for d in dev_list):
+        return []
+    top = household_keys(dev_list)
+    return [str(getattr(d, "key", "")) for d in dev_list if str(getattr(d, "key", "")) in top]

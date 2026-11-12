@@ -48,12 +48,32 @@ def _name(cfg, d) -> str:
 def _consumers(cfg) -> List[Any]:
     """Consumer devices to draw, each meter once (a child wired behind a parent
     is a branch off it, so the parent is shown net of it)."""
-    from shelly_analyzer.services.energy_balance import device_role
+    from shelly_analyzer.services.energy_balance import consumer_devices
     from shelly_analyzer.services.net_display import flow_children
-    devs = [d for d in (getattr(cfg, "devices", []) or [])
-            if str(getattr(d, "kind", "em")) == "em"
-            and device_role(cfg, getattr(d, "key", "")) in ("owner", "tenant")]
+    devs = consumer_devices(cfg)
     return devs, flow_children(devs)
+
+
+def _mark_plugs_only(out: Dict[str, Any], cfg) -> Dict[str, Any]:
+    """Say so when the house is the sum of the plugs (no meter at all).
+
+    The key is added only then: the payload of an installation with a meter
+    stays exactly what it was.
+    """
+    try:
+        from shelly_analyzer.services.energy_balance import plug_only_keys
+        if plug_only_keys(cfg):
+            out["plugs_only"] = True
+            # Without a meter nothing was measured at the grid connection: no
+            # import, no feed-in, no self-sufficiency. What the plugs drew is
+            # the house; its CO₂ is that consumption times the grid mix.
+            out["sources"]["grid"] = 0
+            out["flows"] = [dict(f, v=0) if (f["from"], f["to"]) == ("grid", "house") else f
+                            for f in out["flows"]]
+            out["house"]["autarky_pct"] = None
+    except Exception:
+        pass
+    return out
 
 
 def compute_energy_flow(db, cfg, period: str = "today", now: Optional[datetime] = None,
@@ -144,7 +164,7 @@ def compute_energy_flow(db, cfg, period: str = "today", now: Optional[datetime] 
         load = cons_sum
         gi_load = cons_sum
         g = sum(float(c["co2_g"]) for c in consumers)
-    return {
+    out = {
         "ok": True, "unit": "kWh", "period": period, "has_supply": has_supply,
         "has_pv": bool(pv_key), "has_battery": bool(batt_key), "has_grid_meter": bool(grid_key),
         "tenant_bus": two_bus,
@@ -169,6 +189,7 @@ def compute_energy_flow(db, cfg, period: str = "today", now: Optional[datetime] 
         },
         "consumers": consumers,
     }
+    return _mark_plugs_only(out, cfg)
 
 
 def compute_energy_flow_live(cfg, live_snapshot: Dict[str, Any], bat_int: float = 62.0,
@@ -215,7 +236,7 @@ def compute_energy_flow_live(cfg, live_snapshot: Dict[str, Any], bat_int: float 
     if not has_supply:
         load = cons_sum
         gi_load = cons_sum
-    return {
+    out = {
         "ok": True, "unit": "W", "period": "now", "has_supply": has_supply,
         "has_pv": bool(pv_key), "has_battery": bool(batt_key), "has_grid_meter": bool(grid_key),
         "tenant_bus": two_bus,
@@ -237,3 +258,4 @@ def compute_energy_flow_live(cfg, live_snapshot: Dict[str, Any], bat_int: float 
         "consumers": consumers,
         "battery_soc_pct": None,
     }
+    return _mark_plugs_only(out, cfg)

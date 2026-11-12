@@ -30689,3 +30689,42 @@ _I18N.setdefault('ru', {}).update({
     'web.control.plots.to': 'по',
     'web.solar.years': 'лет',
 })
+
+
+# 17.9.2: an installation of plugs only (no meter) says where its figures come from.
+_I18N.setdefault('de', {}).update({
+    'web.plugs_only.note': 'Es ist kein Zähler eingerichtet: Die Werte sind die Summe der Steckdosen. Netzbezug und Einspeisung werden nicht gemessen und nicht angezeigt; CO₂ ist der Verbrauch mal Netzmix.',
+    'web.plugs_only.consumption': 'Verbrauch der Steckdosen',
+})
+_I18N.setdefault('en', {}).update({
+    'web.plugs_only.note': 'No meter is set up, so these figures are the sum of the plugs. Grid import and feed-in are not measured and not shown; CO₂ is the consumption times the grid mix.',
+    'web.plugs_only.consumption': 'Consumption of the plugs',
+})
+_I18N.setdefault('es', {}).update({
+    'web.plugs_only.note': 'No hay ningún contador configurado: los valores son la suma de los enchufes. La importación de red y la inyección no se miden ni se muestran; el CO₂ es el consumo por el mix de la red.',
+    'web.plugs_only.consumption': 'Consumo de los enchufes',
+})
+_I18N.setdefault('fr', {}).update({
+    'web.plugs_only.note': "Aucun compteur n'est configuré : les valeurs sont la somme des prises. Le soutirage et l'injection ne sont ni mesurés ni affichés ; le CO₂ est la consommation multipliée par le mix du réseau.",
+    'web.plugs_only.consumption': 'Consommation des prises',
+})
+_I18N.setdefault('pt', {}).update({
+    'web.plugs_only.note': 'Não há nenhum contador configurado: os valores são a soma das tomadas. A importação da rede e a injeção não são medidas nem mostradas; o CO₂ é o consumo multiplicado pelo mix da rede.',
+    'web.plugs_only.consumption': 'Consumo das tomadas',
+})
+_I18N.setdefault('it', {}).update({
+    'web.plugs_only.note': 'Nessun contatore configurato: i valori sono la somma delle prese. Prelievo dalla rete e immissione non sono misurati né mostrati; la CO₂ è il consumo per il mix della rete.',
+    'web.plugs_only.consumption': 'Consumo delle prese',
+})
+_I18N.setdefault('pl', {}).update({
+    'web.plugs_only.note': 'Nie skonfigurowano licznika: wartości są sumą gniazdek. Pobór z sieci i oddawanie do sieci nie są mierzone ani pokazywane; CO₂ to zużycie razy miks energetyczny sieci.',
+    'web.plugs_only.consumption': 'Zużycie gniazdek',
+})
+_I18N.setdefault('cs', {}).update({
+    'web.plugs_only.note': 'Není nastaven žádný elektroměr: hodnoty jsou součtem zásuvek. Odběr ze sítě a dodávka do sítě se neměří ani nezobrazují; CO₂ je spotřeba krát energetický mix sítě.',
+    'web.plugs_only.consumption': 'Spotřeba zásuvek',
+})
+_I18N.setdefault('ru', {}).update({
+    'web.plugs_only.note': 'Счётчик не настроен: значения — это сумма по розеткам. Потребление из сети и отдача в сеть не измеряются и не показываются; CO₂ — это потребление, умноженное на энергетический микс сети.',
+    'web.plugs_only.consumption': 'Потребление розеток',
+})

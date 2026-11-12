@@ -37,6 +37,8 @@ class SankeyData:
     # Per-device breakdown
     device_kwh: Dict[str, float] = field(default_factory=dict)
     device_names: Dict[str, str] = field(default_factory=dict)
+    # An installation of plugs only: the house is the sum of its top-level plugs.
+    plugs_only: bool = False
 
 
 def compute_sankey(
@@ -88,11 +90,16 @@ def compute_sankey(
     pv_feed_in_kwh = 0.0
     pv_grid_import_kwh = 0.0
 
+    # No meter at all (an installation of plugs only): its top-level plugs ARE
+    # the house. With any meter this set is empty and nothing below changes.
+    from shelly_analyzer.services.net_display import plug_only_keys
+    plug_keys = set() if pv_key else set(plug_only_keys(devices))
+
     for dev in devices:
         # A switch/plug has history of its own since 17.9 but is never a meter
         # of the house: it hangs behind one, so its energy is already inside
         # that meter's reading (and the gross view would carry it twice).
-        if str(getattr(dev, "kind", "em") or "em") == "switch":
+        if str(getattr(dev, "kind", "em") or "em") == "switch" and dev.key not in plug_keys:
             continue
         hourly = db.query_hourly(dev.key, start_ts=start_ts, end_ts=end_ts)
         if hourly.empty:
@@ -279,6 +286,7 @@ def compute_sankey(
         total_consumption_kwh=round(total_consumption, 3),
         device_kwh={k: round(v, 3) for k, v in device_kwh.items()},
         device_names=device_names,
+        plugs_only=bool(plug_keys),
     )
 
 

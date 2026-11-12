@@ -21,6 +21,11 @@ class MetaState:
     updated_at: Optional[int] = None
 
 
+def _is_switch(dev: Dict[str, str]) -> bool:
+    """True for a device dict that describes a switch or plug (``kind == "switch"``)."""
+    return str((dev or {}).get("kind") or "").strip().lower() == "switch"
+
+
 class Storage:
     def __init__(self, base_dir: Optional[Path] = None) -> None:
         self.base_dir = Path(base_dir) if base_dir else Path.cwd() / "data"
@@ -473,8 +478,16 @@ class Storage:
 
     # -- auto-import from previous installs (unchanged) ----------------------
 
-    def auto_import_from_previous_installs(self, device_keys: List[str], search_root: Optional[Path] = None) -> Dict[str, int]:
+    def auto_import_from_previous_installs(
+        self,
+        device_keys: List[str],
+        search_root: Optional[Path] = None,
+        exclude_keys: Optional[List[str]] = None,
+    ) -> Dict[str, int]:
         """Try to auto-import CSV data from previous installations.
+
+        ``exclude_keys`` names devices that must never receive imported data
+        (switches and plugs, see ``ensure_data_for_devices``).
 
         Many users keep multiple version folders side-by-side, e.g.:
             ~/shelly_energy_analyzer_refactored_v5.5.2/
@@ -485,6 +498,8 @@ class Storage:
 
         Returns a dict mapping device_key -> number of rows imported.
         """
+        skip = {str(k) for k in (exclude_keys or [])}
+        device_keys = [k for k in device_keys if str(k) not in skip]
         imported: Dict[str, int] = {k: 0 for k in device_keys}
 
         missing = [k for k in device_keys if not self.has_usable_data(k)]
@@ -577,6 +592,10 @@ class Storage:
 
         devices: list of dicts with at least {"key":..., "host":..., "name":...}
         """
+        # A switch or plug has no EMData history of its own to find in an old
+        # installation: whatever it would be matched to by host or by name is
+        # another device's data. It records its own history from the live feed
+        # (services/live_history.py) and never takes part in this import.
         cur = [
             {
                 "key": str(d.get("key") or "").strip(),
@@ -584,7 +603,7 @@ class Storage:
                 "name": str(d.get("name") or "").strip(),
             }
             for d in (devices or [])
-            if str(d.get("key") or "").strip()
+            if str(d.get("key") or "").strip() and not _is_switch(d)
         ]
 
         imported: Dict[str, int] = {d["key"]: 0 for d in cur}
@@ -719,7 +738,14 @@ class Storage:
             "imported": {},
             "files": {},
         }
-        keys = [str(d.get("key") or "").strip() for d in (devices or []) if str(d.get("key") or "").strip()]
+        # Switches and plugs are left out of everything below. They have no
+        # EMData history, so "no usable data" is their normal state until the
+        # live recorder has written a minute, and this runs on every Plots
+        # request. Looking in an old installation for them can only hand them
+        # another device's rows (the match is by host, by name or by key), and
+        # those rows would then sit in the plug's own history for good.
+        devices = [d for d in (devices or []) if not _is_switch(d)]
+        keys = [str(d.get("key") or "").strip() for d in devices if str(d.get("key") or "").strip()]
         try:
             diag["files"] = {k: [p.name for p in self.list_csv_files(k)] for k in keys}
         except Exception:
