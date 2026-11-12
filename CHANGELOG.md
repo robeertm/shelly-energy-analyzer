@@ -1,6 +1,6 @@
 # Changelog
 
-## 17.9.0
+## 17.9.1
 
 ### Plugs and switches get a history of their own
 
@@ -26,8 +26,10 @@ Energy Flow and Compare stayed empty and every sync logged a 404 for
   behind a meter is dropped from a tenant's device list), standby report,
   the spot cost of the house widget, base fee split and anomaly detection.
 - **"kWh today" of a plug keeps its day across a restart.** It is seeded from the
-  plug's own rows and then follows the live readings, so it neither jumps nor
-  counts a minute twice, and an update no longer sets it back to zero.
+  plug's own rows and from the value the previous run last showed (restored
+  with the live window), whichever is larger, and then follows the live
+  readings. It neither jumps nor counts a minute twice, and neither a restart
+  nor the update that brings this history sets it back to zero.
 - **Plots page:** an empty kWh chart shows "No data" instead of handing an
   empty chart to the chart library, and the axis gets no tick count of 0. This is
   a safeguard for the report "t.charAt is not a function"; that error could not

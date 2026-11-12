@@ -339,6 +339,15 @@ def _trapezoid_kwh(samples):
     return e / 1000.0
 
 
+def _restore_point(store, key, ts, kwh_today):
+    """What load_from_path puts back after a restart: the last point of the
+    previous run, with the day's kWh it showed. (Bypasses the recording hook.)"""
+    from shelly_analyzer.services.webdash import LivePoint
+    LiveStateStore.update(store, key, LivePoint(
+        ts=int(ts), power_total_w=0.0, va=230.0, vb=0.0, vc=0.0, ia=0.0, ib=0.0, ic=0.0,
+        kwh_today=float(kwh_today), freq_hz=50.0, raw={}))
+
+
 def _manager(tmp, st, store):
     from shelly_analyzer.web.background import BackgroundServiceManager
     p = Path(tmp) / "config.json"
@@ -434,6 +443,72 @@ def test_kwh_today_survives_a_restart_instead_of_starting_from_zero(fake_clock):
         assert abs(store2.shown[-1][1] - want) < 1e-6, (store2.shown[-1][1], want)
         _, db_wh = _rows_wh(st, "heater")
         assert abs(db_wh / 1000.0 - want) < 1e-3
+
+
+def test_a_restart_with_the_restored_live_window_counts_nothing_twice(fake_clock):
+    """The normal case: the persisted live window comes back with the last point
+    of the previous run. It and the plug's rows describe the same energy; the
+    value must continue from it, not add the two."""
+    with tempfile.TemporaryDirectory() as tmp:
+        st = _storage(tmp)
+        t0 = _t0(hour=10)
+        _Clock.t = float(t0)
+        store1 = _RecordingStore()
+        mgr1 = _manager(tmp, st, store1)
+        part1 = _samples_for("heater", t0, t0 + 2 * 3600, 5)
+        _drive(mgr1, part1)
+        mgr1.stop_all()
+        last_ts, before = store1.shown[-1]
+
+        _Clock.t = float(t0 + 2 * 3600 + 90)
+        store2 = _RecordingStore()
+        _restore_point(store2, "heater", last_ts, before)
+        mgr2 = _manager(tmp, st, store2)
+        part2 = _samples_for("heater", t0 + 2 * 3600 + 90, t0 + 3 * 3600, 5, counter0=99999.0)
+        _drive(mgr2, part2)
+        mgr2._flush_switch_history()
+
+        assert abs(store2.shown[0][1] - before) < 1e-3, (store2.shown[0][1], before)
+        want = _trapezoid_kwh(part1) + _trapezoid_kwh(part2)
+        assert abs(store2.shown[-1][1] - want) < 1e-6, (store2.shown[-1][1], want)
+
+
+def test_the_first_start_with_a_history_keeps_what_the_plug_showed_before(fake_clock):
+    """Before this version a plug's day lived in memory only. The update that
+    brings the history restarts the app; the 2.25 kWh on screen must not drop to
+    zero because the rows do not exist yet."""
+    with tempfile.TemporaryDirectory() as tmp:
+        st = _storage(tmp)
+        t0 = _t0(hour=14)
+        _Clock.t = float(t0)
+        store = _RecordingStore()
+        _restore_point(store, "heater", t0 - 10, 2.253)
+        mgr = _manager(tmp, st, store)
+        samples = _samples_for("heater", t0, t0 + 3600, 5)
+        _drive(mgr, samples)
+        mgr._flush_switch_history()
+
+        assert abs(store.shown[0][1] - 2.253) < 1e-3, store.shown[0]
+        shown = [v for _, v in store.shown]
+        for a, b in zip(shown, shown[1:]):
+            assert b >= a - 1e-12 and b - a <= 2000.0 * 5 / 3600.0 / 1000.0 + 1e-9
+        want = 2.253 + _trapezoid_kwh(samples)
+        assert abs(shown[-1] - want) < 1e-6, (shown[-1], want)
+        _, db_wh = _rows_wh(st, "heater")                  # the rows hold only what they saw
+        assert abs(db_wh / 1000.0 - _trapezoid_kwh(samples)) < 1e-6
+
+
+def test_a_point_from_yesterday_is_not_carried_into_today(fake_clock):
+    with tempfile.TemporaryDirectory() as tmp:
+        st = _storage(tmp)
+        t0 = _t0(hour=9)
+        _Clock.t = float(t0)
+        store = _RecordingStore()
+        _restore_point(store, "heater", t0 - 86400, 7.0)            # yesterday's last value
+        mgr = _manager(tmp, st, store)
+        samples = _samples_for("heater", t0, t0 + 1800, 5)
+        _drive(mgr, samples)
+        assert abs(store.shown[-1][1] - _trapezoid_kwh(samples)) < 1e-6, store.shown[-1]
 
 
 def test_kwh_today_starts_the_new_day_at_midnight_without_yesterdays_rows(fake_clock):

@@ -558,18 +558,44 @@ class BackgroundServiceManager:
         """
         import pandas as pd
 
+        kwh, last_ts = 0.0, int(day_start_ts)
         try:
             db = self.storage.db
             df = db.query_samples(device_key, start_ts=int(day_start_ts), columns=["energy_kwh"])
-            if df is None or df.empty or "energy_kwh" not in df.columns:
-                return 0.0, int(day_start_ts)
-            kwh = float(pd.to_numeric(df["energy_kwh"], errors="coerce").fillna(0.0).sum())
-            # query_samples hands out UTC-naive timestamps; pandas reads those as UTC.
-            last_ts = int(pd.Timestamp(df["timestamp"].max()).timestamp())
-            return kwh, max(last_ts, int(day_start_ts))
+            if df is not None and not df.empty and "energy_kwh" in df.columns:
+                kwh = float(pd.to_numeric(df["energy_kwh"], errors="coerce").fillna(0.0).sum())
+                # query_samples hands out UTC-naive timestamps; pandas reads those as UTC.
+                last_ts = max(int(pd.Timestamp(df["timestamp"].max()).timestamp()), int(day_start_ts))
         except Exception as e:
             logger.debug("Switch baseline lookup failed for %s: %s", device_key, e)
-            return 0.0, int(day_start_ts)
+
+        # What the previous run showed for today, restored with the persisted
+        # live window. On the first start with a history it is the only record
+        # of the day so far (the plug had no rows before), and it keeps the
+        # value from dropping to zero when the app restarts for an update. It
+        # already contains everything up to its own timestamp, so it replaces
+        # the rows when it is the larger of the two and live accumulation
+        # resumes after the later of the two timestamps: nothing is counted
+        # twice either way.
+        r_kwh, r_ts = self._restored_today_kwh(device_key, int(day_start_ts))
+        if r_kwh > kwh:
+            return r_kwh, max(r_ts, last_ts)
+        return kwh, last_ts
+
+    def _restored_today_kwh(self, device_key: str, day_start_ts: int) -> tuple:
+        """(kWh today, timestamp) of the newest live point of a device if that
+        point is from today — i.e. what the previous run last showed."""
+        try:
+            pts = self.live_store.latest_snapshot().get(device_key) or []
+            if not pts:
+                return 0.0, 0
+            ts = int(pts[-1].get("ts") or 0)
+            if ts < int(day_start_ts):
+                return 0.0, 0
+            return max(0.0, float(pts[-1].get("kwh_today") or 0.0)), ts
+        except Exception as e:
+            logger.debug("Restored kWh lookup failed for %s: %s", device_key, e)
+            return 0.0, 0
 
     def _accumulate_today_kwh(self, device_key: str, ts: int, power_w: float) -> float:
         """Trapezoid-integrate power (W) samples into kWh for the current local day,
