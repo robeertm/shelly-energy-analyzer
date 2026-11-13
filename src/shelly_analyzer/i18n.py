@@ -30728,3 +30728,42 @@ _I18N.setdefault('ru', {}).update({
     'web.plugs_only.note': 'Счётчик не настроен: значения — это сумма по розеткам. Потребление из сети и отдача в сеть не измеряются и не показываются; CO₂ — это потребление, умноженное на энергетический микс сети.',
     'web.plugs_only.consumption': 'Потребление розеток',
 })
+
+
+# 17.9.3: without a live CO₂ source the CO₂ tab shows the value from the settings and says so.
+_I18N.setdefault('de', {}).update({
+    'web.co2.src_configured': 'eingestellter Wert, keine Live-Daten',
+    'web.co2.no_live_source': 'Keine Live-CO₂-Daten: Alle Werte nutzen die CO₂-Intensität aus Einstellungen → Preise. Für Live-Werte und die 6-h-Prognose einen ENTSO-E- oder Electricity-Maps-API-Schlüssel in den Einstellungen eintragen.',
+})
+_I18N.setdefault('en', {}).update({
+    'web.co2.src_configured': 'set value, no live data',
+    'web.co2.no_live_source': 'No live CO₂ data: all figures use the CO₂ intensity from Settings → Prices. For live values and the 6 h forecast, enter an ENTSO-E or Electricity Maps API key in Settings.',
+})
+_I18N.setdefault('es', {}).update({
+    'web.co2.src_configured': 'valor configurado, sin datos en vivo',
+    'web.co2.no_live_source': 'Sin datos de CO₂ en vivo: todas las cifras usan la intensidad de CO₂ de Ajustes → Precios. Para valores en vivo y el pronóstico de 6 h, introduce una clave API de ENTSO-E o Electricity Maps en los Ajustes.',
+})
+_I18N.setdefault('fr', {}).update({
+    'web.co2.src_configured': 'valeur réglée, pas de données en direct',
+    'web.co2.no_live_source': "Pas de données CO₂ en direct : tous les chiffres utilisent l'intensité CO₂ de Paramètres → Prix. Pour les valeurs en direct et la prévision 6 h, saisissez une clé API ENTSO-E ou Electricity Maps dans les Paramètres.",
+})
+_I18N.setdefault('pt', {}).update({
+    'web.co2.src_configured': 'valor definido, sem dados em tempo real',
+    'web.co2.no_live_source': 'Sem dados de CO₂ em tempo real: todos os valores usam a intensidade de CO₂ de Definições → Preços. Para valores em tempo real e a previsão de 6 h, introduza uma chave API ENTSO-E ou Electricity Maps nas Definições.',
+})
+_I18N.setdefault('it', {}).update({
+    'web.co2.src_configured': 'valore impostato, nessun dato in tempo reale',
+    'web.co2.no_live_source': "Nessun dato CO₂ in tempo reale: tutti i valori usano l'intensità di CO₂ di Impostazioni → Prezzi. Per i valori in tempo reale e la previsione a 6 h, inserisci una chiave API ENTSO-E o Electricity Maps nelle Impostazioni.",
+})
+_I18N.setdefault('pl', {}).update({
+    'web.co2.src_configured': 'wartość ustawiona, brak danych na żywo',
+    'web.co2.no_live_source': 'Brak danych CO₂ na żywo: wszystkie wartości używają intensywności CO₂ z Ustawienia → Ceny. Aby zobaczyć wartości na żywo i prognozę 6 h, wpisz klucz API ENTSO-E lub Electricity Maps w Ustawieniach.',
+})
+_I18N.setdefault('cs', {}).update({
+    'web.co2.src_configured': 'nastavená hodnota, žádná živá data',
+    'web.co2.no_live_source': 'Žádná živá data CO₂: všechny hodnoty používají intenzitu CO₂ z Nastavení → Ceny. Pro živé hodnoty a předpověď na 6 h zadejte v Nastavení API klíč ENTSO-E nebo Electricity Maps.',
+})
+_I18N.setdefault('ru', {}).update({
+    'web.co2.src_configured': 'заданное значение, нет данных в реальном времени',
+    'web.co2.no_live_source': 'Нет данных CO₂ в реальном времени: все значения используют интенсивность CO₂ из Настройки → Цены. Для живых значений и прогноза на 6 ч укажите API-ключ ENTSO-E или Electricity Maps в настройках.',
+})

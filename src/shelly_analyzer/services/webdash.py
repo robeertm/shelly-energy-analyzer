@@ -6626,7 +6626,12 @@ function renderCosts(data, el) {{
     const projDelta = lastM > 0 ? Math.round(((s.proj_kwh||0) - lastM) / lastM * 100) : 0;
     const dIcon = projDelta > 5 ? '📈' : projDelta < -5 ? '📉' : '➡️';
     const dCol = projDelta > 5 ? '#dc2626' : projDelta < -5 ? '#16a34a' : 'var(--muted)';
-    html += _nilmMetricCard(dIcon, t('web.costs.vs_last','vs. previous month'), '<span style="color:'+dCol+'">' + (projDelta>0?'+':'') + projDelta + '%</span>', t('web.costs.kwh_last_month','{{v}} kWh last month', {{v: fmt(lastM,0)}}));
+    // No previous month measured (a new installation): a dash, not "0 %".
+    if (lastM > 0) {{
+      html += _nilmMetricCard(dIcon, t('web.costs.vs_last','vs. previous month'), '<span style="color:'+dCol+'">' + (projDelta>0?'+':'') + projDelta + '%</span>', t('web.costs.kwh_last_month','{{v}} kWh last month', {{v: fmt(lastM,0)}}));
+    }} else {{
+      html += _nilmMetricCard('➡️', t('web.costs.vs_last','vs. previous month'), '—', t('web.costs.kwh_last_month','{{v}} kWh last month', {{v: '—'}}));
+    }}
     const dailyCost = (s.month_eur||0) / Math.max(1, new Date().getDate());
     html += _nilmMetricCard('💰', t('web.costs.daily_avg','Daily average'), fmt(dailyCost,2) + ' \u20ac', fmt(dailyCost * 365,0) + ' ' + t('web.unit.eur_per_year','€/year'));
     html += '</div></div>';
@@ -7243,6 +7248,13 @@ function hmFmtVal(v, unit) {{
   if (unit === 'eur') return fmt(v, 2, '\u20ac');
   return fmt(v, 3, 'kWh');
 }}
+function _hmAxisPad(ctx, maxV, unit, minPad) {{
+  var w = 0;
+  for (var i = 0; i <= 4; i++) {{
+    try {{ w = Math.max(w, ctx.measureText(hmFmtVal(maxV * i / 4, unit)).width || 0); }} catch (e) {{}}
+  }}
+  return Math.max(minPad, Math.ceil(w) + 8);
+}}
 function hmUnitLabel(unit) {{
   if (unit === 'co2') return 'g CO\u2082';
   if (unit === 'eur') return '\u20ac';
@@ -7510,15 +7522,18 @@ function _drawHmMonthlyChart(monthly, unit) {{
   var _colorFn = hmColorFn(unit);
   var _dtfMonth = new Intl.DateTimeFormat(document.documentElement.lang || 'de', {{month: 'short'}});
 
-  // Grid
+  // Grid — the left margin grows with the widest axis label, so "0.172 kWh"
+  // is never cut to ".172 kWh" at the canvas edge.
   ctx.strokeStyle = border; ctx.lineWidth = 0.5;
   ctx.fillStyle = muted; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+  pad.left = _hmAxisPad(ctx, maxV, unit, pad.left); cW = W - pad.left - pad.right;
   for (var i = 0; i <= 4; i++) {{
     var gy = pad.top + cH - (cH * i / 4);
     ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cW, gy); ctx.stroke();
     ctx.fillText(hmFmtVal(maxV * i / 4, unit), pad.left - 4, gy + 3);
   }}
 
+  barW = Math.max(6, (cW / 12) * 0.7);
   // Bars
   months.forEach(function(mo, idx) {{
     var x = pad.left + (cW * (idx + 0.5) / 12) - barW / 2;
@@ -7530,7 +7545,7 @@ function _drawHmMonthlyChart(monthly, unit) {{
     // Value on top (short label)
     if (mo.val > 0) {{
       ctx.fillStyle = muted; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
-      var lbl = unit === 'co2' ? Math.round(mo.val) + '' : unit === 'eur' ? mo.val.toFixed(0) : mo.val >= 10 ? mo.val.toFixed(0) : mo.val.toFixed(1);
+      var lbl = unit === 'co2' ? Math.round(mo.val) + '' : (mo.val >= 10 ? mo.val.toFixed(0) : mo.val >= 1 ? mo.val.toFixed(1) : String(+mo.val.toPrecision(2)));
       ctx.fillText(lbl, x + barW / 2, pad.top + cH - bh - 4);
     }}
   }});
@@ -7560,15 +7575,18 @@ function _drawHmWeekdayChart(weekdayAvgs, unit) {{
   var maxV = Math.max.apply(null, days.map(function(x){{ return x.val; }})) * 1.15 || 1;
   var barW = Math.max(10, (cW / 7) * 0.6);
 
-  // Grid
+  // Grid — the left margin grows with the widest axis label, so "0.172 kWh"
+  // is never cut to ".172 kWh" at the canvas edge.
   ctx.strokeStyle = border; ctx.lineWidth = 0.5;
   ctx.fillStyle = muted; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+  pad.left = _hmAxisPad(ctx, maxV, unit, pad.left); cW = W - pad.left - pad.right;
   for (var i = 0; i <= 4; i++) {{
     var gy = pad.top + cH - (cH * i / 4);
     ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cW, gy); ctx.stroke();
     ctx.fillText(hmFmtVal(maxV * i / 4, unit), pad.left - 4, gy + 3);
   }}
 
+  barW = Math.max(10, (cW / 7) * 0.6);
   // Bars (weekday=blue, weekend=orange)
   days.forEach(function(dy, idx) {{
     var x = pad.left + (cW * (idx + 0.5) / 7) - barW / 2;
@@ -7730,6 +7748,13 @@ function _co2FcSignature(data) {{
 
 function _renderCo2Forecast(data, green, dirty) {{
   const fc = (data && data.forecast) || [];
+  if (!fc.length && data && data.current_source === 'configured') {{
+    // No provider key: there is no live mix to forecast from — say what the
+    // figures use instead of "being computed" forever.
+    return '<div class="card co2fc-card"><div class="co2fc-wait">' +
+      t('web.co2.no_live_source', 'No live CO₂ data: all figures use the CO₂ intensity from Settings → Prices. For live values and the 6 h forecast, enter an ENTSO-E or Electricity Maps API key in Settings.') +
+      '</div></div>';
+  }}
   if (!fc.length) {{
     return '<div class="card co2fc-card"><div class="co2fc-wait">' +
       t('web.co2.forecast_waiting', '6h forecast being computed (trend + Open-Meteo weather) \u2026') +
@@ -7918,7 +7943,8 @@ function renderCo2(data, el) {{
   const dirty = data.dirty_threshold || 400;
   const ci = data.current_intensity || 0;
   const ciColor = _co2Color(ci, green, dirty);
-  const srcLabel = data.current_source === 'entsoe_cbf' ? 'ENTSO-E + Cross-Border' : (data.current_source === 'entsoe' ? 'ENTSO-E' : data.current_source);
+  const srcLabel = data.current_source === 'entsoe_cbf' ? 'ENTSO-E + Cross-Border' : (data.current_source === 'entsoe' ? 'ENTSO-E' :
+    (data.current_source === 'configured' ? t('web.co2.src_configured', 'set value, no live data') : data.current_source));
 
   // ── Live intensity hero card ──
   let html = '<div class="card" style="text-align:center;padding:16px">';
@@ -10017,7 +10043,9 @@ function renderStandby(d) {{
     t('web.standby.high_med_low','High / Medium / Low'));
   html += '</div>';
 
-  document.getElementById('standby-cards').innerHTML = html;
+  // No device with enough data: no summary row of zeros, only the hint below
+  // ("nothing measured yet" is not "0 € standby").
+  document.getElementById('standby-cards').innerHTML = nDev ? html : '';
 
   if (!nDev) {{
     wrap.innerHTML = '<div class="card" style="text-align:center;padding:30px">' +
@@ -13238,7 +13266,10 @@ async function fetchJsonWithTimeout(url, timeoutMs=60000){
     if (!res.ok) throw new Error('HTTP ' + res.status);
     return await res.json();
   } catch(e) {
-    if (e && e.name === 'AbortError') {
+    // abort(reason) rejects with the REASON itself in Chromium (a plain
+    // string, no .name) and with an AbortError in WebKit — so ask the signal,
+    // not the error. A newer selection is not an error to show.
+    if ((ctrl.signal && ctrl.signal.aborted) || (e && e.name === 'AbortError')) {
       // Distinguish user-triggered supersede from real timeout
       const reason = (ctrl.signal && ctrl.signal.reason) || '';
       if (reason === 'superseded') { const err = new Error('__superseded__'); err.superseded = true; throw err; }
@@ -13286,24 +13317,46 @@ function plotlyBaseLayout(extra){
 // Unified config: no mode bar / no scroll zoom / no double-click on mobile.
 // Month and weekday names for Plotly's date axes and hover text, from the
 // browser's own calendar data in the UI language.
+// The locale is registered under a private name ('sea-<lang>') and carries the
+// COMPLETE d3 format set: registering it as plain 'en' replaced Plotly's
+// built-in English locale, which is the fallback for every format key a locale
+// leaves out (periods, dateTime, decimal, ...) — every date axis then died with
+// "t.charAt is not a function" in the English UI.
+function _plotlyLocaleFormat(lang){
+  const base = String(lang || 'en').split('-')[0];
+  const f = function(o){ return new Intl.DateTimeFormat(lang, o); };
+  const mo = function(st){ return Array.from({length:12}, function(_, i){ return f({month:st}).format(new Date(2021, i, 1)); }); };
+  const wd = function(st){ return Array.from({length:7}, function(_, i){ return f({weekday:st}).format(new Date(2021, 0, 3 + i)); }); };
+  const en = base === 'en';
+  const dotted = base === 'de' || base === 'cs';
+  return {
+    months: mo('long'), shortMonths: mo('short'), days: wd('long'), shortDays: wd('short'),
+    periods: ['AM', 'PM'],
+    dateTime: '%a %b %e %X %Y',
+    date: en ? '%m/%d/%Y' : ((dotted || base === 'pl' || base === 'ru') ? '%d.%m.%Y' : '%d/%m/%Y'),
+    time: '%H:%M:%S',
+    decimal: '.', thousands: ',', grouping: [3], currency: ['', ''],
+    year: '%Y', month: '%b %Y',
+    dayMonth: en ? '%b %-d' : (dotted ? '%-d. %b' : '%-d %b'),
+    dayMonthYear: en ? '%b %-d, %Y' : (dotted ? '%-d. %b %Y' : '%-d %b %Y'),
+  };
+}
 function _registerPlotlyLocale(){
   try {
     const lang = document.documentElement.lang || 'en';
-    if (!window.Plotly || !Plotly.register || window.__plotlyLocale === lang) return;
-    const f = function(o){ return new Intl.DateTimeFormat(lang, o); };
-    const mo = function(st){ return Array.from({length:12}, function(_, i){ return f({month:st}).format(new Date(2021, i, 1)); }); };
-    const wd = function(st){ return Array.from({length:7}, function(_, i){ return f({weekday:st}).format(new Date(2021, 0, 3 + i)); }); };
-    Plotly.register({ moduleType:'locale', name:lang, dictionary:{}, format:{
-      months: mo('long'), shortMonths: mo('short'), days: wd('long'), shortDays: wd('short'),
-      date: lang === 'en' ? '%m/%d/%Y' : '%d.%m.%Y' } });
-    window.__plotlyLocale = lang;
-  } catch (e) {}
+    const name = 'sea-' + lang;
+    if (!window.Plotly || !Plotly.register) return null;
+    if (window.__plotlyLocale === name) return name;
+    Plotly.register({ moduleType:'locale', name:name, dictionary:{}, format:_plotlyLocaleFormat(lang) });
+    window.__plotlyLocale = name;
+    return name;
+  } catch (e) { return null; }
 }
 function plotlyConfig(extra){
   const mobile = isMobileView();
-  _registerPlotlyLocale();
+  const loc = _registerPlotlyLocale();
   const base = {
-    locale: document.documentElement.lang || 'en',
+    locale: loc || 'en-US',
     responsive: true,
     displaylogo: false,
     displayModeBar: mobile ? false : 'hover',
@@ -14129,6 +14182,7 @@ async function init() {
 }
 
 init().catch(e=>{
+  if (e && e.superseded) return;
   document.getElementById('meta').innerHTML = t('web.error') + ': ' + esc(e && e.message ? e.message : String(e));
 });
 </script>

@@ -2022,6 +2022,20 @@ class ActionDispatcher:
     # MAIN DISPATCH
     # ==================================================================
 
+    def _configured_co2_g(self) -> float:
+        """The CO₂ intensity set under Settings → Prices (g/kWh).
+
+        The one fallback for every place that has no live grid mix (no
+        ENTSO-E/Electricity Maps data and no forecast yet): the CO₂ tab, its
+        device cards, the energy flow and the balance all use this value, so
+        they never disagree and nothing reads "0 g/kWh" for "unknown".
+        """
+        try:
+            v = float(getattr(getattr(self.cfg, "pricing", None), "co2_intensity_g_per_kwh", 380.0) or 0.0)
+        except Exception:
+            v = 0.0
+        return v if v > 0 else 380.0
+
     def dispatch(
         self,
         action: str,
@@ -4524,6 +4538,43 @@ class ActionDispatcher:
                     ci = float(df_now.iloc[-1].get("intensity_g_per_kwh", 0))
                     ci_hour_ts = int(df_now.iloc[-1].get("hour_ts", 0))
 
+                forecast_points: list = []
+                forecast_ts = 0
+                bg = getattr(self, "_bg", None)
+                forecaster = getattr(bg, "_co2_forecaster", None) if bg is not None else None
+                if forecaster is not None:
+                    try:
+                        from shelly_analyzer.services.co2_forecast import point_to_dict
+                        for p in forecaster.get_forecast(zone):
+                            forecast_points.append(point_to_dict(p))
+                        forecast_ts = int(forecaster.last_run_ts() or 0)
+                    except Exception:
+                        pass
+
+                # Fall back to the forecast for the current hour if real
+                # data is missing or stale (>1h old). Real data overwrites
+                # this on the next fetch.
+                ci_source = "live" if ci > 0 else "forecast"
+                _now_hour_ts = (now_ts // 3600) * 3600
+                if (ci <= 0 or ci_hour_ts < _now_hour_ts) and forecast_points:
+                    for fp in forecast_points:
+                        if fp.get("hour_ts") == _now_hour_ts:
+                            ci = float(fp.get("intensity_g_per_kwh", 0) or 0)
+                            ci_hour_ts = _now_hour_ts
+                            ci_source = "forecast"
+                            break
+                    else:
+                        if forecast_points:
+                            fp0 = forecast_points[0]
+                            ci = float(fp0.get("intensity_g_per_kwh", 0) or 0)
+                            ci_hour_ts = int(fp0.get("hour_ts", _now_hour_ts) or _now_hour_ts)
+                            ci_source = "forecast"
+
+                if ci <= 0:
+                    ci = self._configured_co2_g()
+                    ci_hour_ts = 0
+                    ci_source = "configured"
+
                 # The sixth grid-mix path (17.1.2): this answer refreshes the
                 # live table every second and used to price EVERY device — the
                 # grid meter included — at the grid mix, overwriting the
@@ -4589,38 +4640,6 @@ class ActionDispatcher:
                             "co2_g_h": round(watts * _int_cl / 1000.0, 1),
                         })
                     live_now = {k: (round(v, 4) if k != "intensity" else round(v, 1)) for k, v in live_now.items()}
-
-                forecast_points: list = []
-                forecast_ts = 0
-                bg = getattr(self, "_bg", None)
-                forecaster = getattr(bg, "_co2_forecaster", None) if bg is not None else None
-                if forecaster is not None:
-                    try:
-                        from shelly_analyzer.services.co2_forecast import point_to_dict
-                        for p in forecaster.get_forecast(zone):
-                            forecast_points.append(point_to_dict(p))
-                        forecast_ts = int(forecaster.last_run_ts() or 0)
-                    except Exception:
-                        pass
-
-                # Fall back to the forecast for the current hour if real
-                # data is missing or stale (>1h old). Real data overwrites
-                # this on the next fetch.
-                ci_source = "live" if ci > 0 else "forecast"
-                _now_hour_ts = (now_ts // 3600) * 3600
-                if (ci <= 0 or ci_hour_ts < _now_hour_ts) and forecast_points:
-                    for fp in forecast_points:
-                        if fp.get("hour_ts") == _now_hour_ts:
-                            ci = float(fp.get("intensity_g_per_kwh", 0) or 0)
-                            ci_hour_ts = _now_hour_ts
-                            ci_source = "forecast"
-                            break
-                    else:
-                        if forecast_points:
-                            fp0 = forecast_points[0]
-                            ci = float(fp0.get("intensity_g_per_kwh", 0) or 0)
-                            ci_hour_ts = int(fp0.get("hour_ts", _now_hour_ts) or _now_hour_ts)
-                            ci_source = "forecast"
 
                 return {
                     "ok": True,
@@ -4699,6 +4718,17 @@ class ActionDispatcher:
                 # counted inside the meter it hangs behind as well.
                 _standby_devs = [d for d in self.cfg.devices
                                  if d.key not in _excl and str(getattr(d, "kind", "em")) != "switch"]
+                # An installation of plugs only has no meter to count them in:
+                # there its top-level plugs ARE the consumers (the same rule as
+                # the energy flow, CO₂ and the balance since 17.9.2), and their
+                # minute history (17.9.1) is what the analysis reads.
+                try:
+                    from shelly_analyzer.services.energy_balance import plug_only_keys as _pok_sb
+                    _plug_keys_sb = set(_pok_sb(self.cfg))
+                except Exception:
+                    _plug_keys_sb = set()
+                if _plug_keys_sb:
+                    _standby_devs = [d for d in self.cfg.devices if d.key in _plug_keys_sb]
                 report = generate_standby_report(self.storage.db, _standby_devs, price)
 
                 # Fallback: if DB-based analysis found nothing, use computed
@@ -4777,7 +4807,7 @@ class ActionDispatcher:
                 if period_ef == "now":
                     from shelly_analyzer.services.energy_balance import build_supply_chain
                     _bg_ef = getattr(self, "_bg", None)
-                    _ci_ef = float(_bg_ef._current_co2_intensity()) if _bg_ef is not None else 380.0
+                    _ci_ef = float(_bg_ef._current_co2_intensity()) if _bg_ef is not None else self._configured_co2_g()
                     _now_ef = int(datetime.now().timestamp())
                     _ch_ef = build_supply_chain(self.storage.db, self.cfg, _now_ef - 86400, _now_ef + 3600,
                                                 default_intensity=_ci_ef)
@@ -4936,6 +4966,12 @@ class ActionDispatcher:
                         current_intensity = float(_fp0.get("intensity_g_per_kwh", 0) or 0)
                         current_hour_ts = int(_fp0.get("hour_ts", _now_hour_ts_co2) or _now_hour_ts_co2)
                         current_source = "forecast"
+                # Neither live data nor a forecast (no provider key): the value
+                # set in the settings, said so — never "0 g/kWh".
+                if current_intensity <= 0:
+                    current_intensity = self._configured_co2_g()
+                    current_source = "configured"
+                    current_hour_ts = 0
 
                 _solar_cfg = getattr(self.cfg, "solar", None)
                 _pv_key = getattr(_solar_cfg, "pv_meter_device_key", "") if _solar_cfg else ""
@@ -5741,7 +5777,7 @@ class ActionDispatcher:
                     from shelly_analyzer.services.energy_balance import build_supply_chain
                     _now_b = int(datetime.now().timestamp())
                     _bg_b = getattr(self, "_bg", None)
-                    _ci_b = float(_bg_b._current_co2_intensity()) if _bg_b is not None else 380.0
+                    _ci_b = float(_bg_b._current_co2_intensity()) if _bg_b is not None else self._configured_co2_g()
                     _chb = build_supply_chain(self.storage.db, self.cfg, _now_b - 7 * 86400, _now_b + 3600,
                                               default_intensity=_ci_b)
                     if _chb.has_supply:

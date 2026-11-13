@@ -1,5 +1,59 @@
 # Changelog
 
+## 17.9.3
+
+### Plots draw again in the English interface
+
+- **"t.charAt is not a function" on every chart of the Plots tab.** Since
+  17.8.5 the Plots tab teaches the chart library the interface language's month
+  and weekday names. It registered that locale under the plain language code,
+  which for English is the name of the library's own built-in locale. The
+  built-in English locale is also where the library fills in every format
+  detail a locale leaves out (decimal mark, AM/PM, date and time patterns), so
+  replacing it with the partial copy left those details undefined and every
+  date axis failed. Only the English interface was affected. The locale now
+  has a private name and carries the complete set of format details in all
+  nine languages; the built-in English locale is never touched.
+- **"Error: superseded" after changing a selection quickly.** Picking a new
+  range, metric or device while a chart was still loading cancels the old
+  request. In Chromium-based browsers that cancellation was shown as an error
+  instead of being ignored.
+- **Heatmap axis labels are no longer cut off.** The left margin of the
+  monthly and weekday charts grows with the widest label, so "0.172 kWh" no
+  longer reads ".172 kWh". Monthly bar labels below 1 show two significant
+  digits instead of rounding 0.085 to "0.1".
+
+### CO2 without a live data source
+
+- **No more "0 g/kWh".** Without an ENTSO-E or Electricity Maps key there is
+  no live grid mix. The CO2 tab showed 0 g/kWh, its device cards used a fixed
+  380 g/kWh and Energy Flow the value from the settings. Every place now uses
+  the CO2 intensity from Settings, Prices, and the CO2 tab labels it "set
+  value, no live data". The 6-hour forecast panel explains that a provider key
+  is needed instead of saying "being computed" forever. Live data and the
+  forecast still take precedence whenever they exist.
+
+### Standby analysis for an installation of plugs only
+
+- **Plugs are analysed when there is no meter.** The standby analysis skipped
+  every switch, so an installation of plugs only always said "No standby data"
+  despite days of minute history. With no meter, the top-level plugs are the
+  consumers here as well (the same rule Energy Flow, CO2 and the balance use
+  since 17.9.2). With a meter, plugs stay out as before.
+- **An empty analysis shows no row of zeros.** Without any device to analyse,
+  the summary cards (0 €, 0 kWh, 0 W, 0/0/0) are hidden and only the hint is
+  shown.
+- **Month projection without a previous month** shows a dash instead of
+  "0 % vs. previous month, 0 kWh last month".
+
+### Tests
+
+- The Plotly locale is checked in all nine languages: the format lookup of the
+  chart library is replayed in node (runs without a browser), and the real
+  chart library draws a date axis in Chromium when one is available.
+- CO2 fallback, standby for plugs and the cancelled-request case have tests
+  that fail on 17.9.2.
+
 ## 17.9.2
 
 ### An installation of plugs only is no longer empty
