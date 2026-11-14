@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Setup – Shelly Energy Analyzer</title>
-<link rel="icon" href="/widget-icon.svg" type="image/svg+xml">
+<link rel="icon" data-sea-href="/widget-icon.svg" type="image/svg+xml">
 <style>
 :root{--bg:#0b0f14;--card:#121821;--fg:#e8eef6;--muted:#9fb0c3;--accent:#6aa7ff;
 --border:rgba(255,255,255,0.08);--danger:#ef4444;--ok:#22c55e;
@@ -233,11 +233,11 @@ function pickMode(d){ demoMode=d; render(); }
 async function confirmMode(){
   if(demoMode){
     try{
-      const r = await fetch('/api/setup/enable-demo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario:'household'})});
+      const r = await fetch(seaUrl('/api/setup/enable-demo'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario:'household'})});
       const j = await r.json();
       if(!j.ok){ toast(T('setup.toast.error','Error: {err}',{err:j.error||'unknown'}),'error'); return; }
       toast('&#9989; '+T('setup.mode.demo_ready','Demo mode enabled'),'success');
-      const devR = await fetch('/api/devices').then(x=>x.json()).catch(_=>({devices:[]}));
+      const devR = await fetch(seaUrl('/api/devices')).then(x=>x.json()).catch(_=>({devices:[]}));
       addedDevices = (devR.devices||[]).map(d=>({key:d.key,name:d.name,host:d.host,kind:d.kind,model:d.model}));
       stepIdx = STEPS.findIndex(s=>s.id==='pricing');
       render();
@@ -309,7 +309,7 @@ async function saveMainMeterAndNext(){
   const children=Array.prototype.slice.call(document.querySelectorAll('.mm-child:checked')).map(function(c){return c.value;});
   if(!name){toast(T('setup.mainmeter.err_name','Please enter a meter name.'),'error');return;}
   try{
-    const r=await fetch('/api/meters',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,serial:serial})});
+    const r=await fetch(seaUrl('/api/meters'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,serial:serial})});
     const j=await r.json();
     if(!j.ok){toast(T('setup.toast.error','Error: {err}',{err:j.error||'meters'}),'error');return;}
     const mid=j.id;
@@ -318,12 +318,12 @@ async function saveMainMeterAndNext(){
       const v=Number(kwhRaw);
       if(!isNaN(v)){
         kwh=v;
-        await fetch('/api/meters/'+encodeURIComponent(mid)+'/reading',{method:'POST',headers:{'Content-Type':'application/json'},
+        await fetch(seaUrl('/api/meters/')+encodeURIComponent(mid)+'/reading',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({ts:Math.floor(Date.now()/1000),kwh:v})});
       }
     }
     for(let i=0;i<children.length;i++){
-      await fetch('/api/devices/'+encodeURIComponent(children[i]),{method:'PUT',headers:{'Content-Type':'application/json'},
+      await fetch(seaUrl('/api/devices/')+encodeURIComponent(children[i]),{method:'PUT',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({parent:mid})});
     }
     mainMeter={saved:true,name:name,serial:serial,kwh:kwh,children:children.length};
@@ -462,11 +462,11 @@ function renderWidget(stage){
   stage.innerHTML = '<div class="card">'
     +'<h2>&#128241; '+T('setup.widget.title','Home screen widget (optional)')+'</h2>'
     +'<p>'+T('setup.widget.intro','Add a live energy widget to your phone or tablet. Configure and customize in Settings later.')+'</p>'
-    +'<div class="opt-card" onclick="window.open(\'/w\',\'_blank\')">'
+    +'<div class="opt-card" onclick="window.open(seaUrl(\'/w\'),\'_blank\')">'
     +'<h3>&#127760; '+T('setup.widget.web','Android / Web widget')+'</h3>'
-    +'<p class="opt-desc">'+T('setup.widget.web_desc','Open the widget page in any browser, then "Add to home screen" for a native app experience.')+' <code style="background:var(--input-bg);padding:2px 6px;border-radius:4px;font-size:.8rem">'+esc(host)+'/w</code></p>'
+    +'<p class="opt-desc">'+T('setup.widget.web_desc','Open the widget page in any browser, then "Add to home screen" for a native app experience.')+' <code style="background:var(--input-bg);padding:2px 6px;border-radius:4px;font-size:.8rem">'+esc(host)+seaUrl('/w</code></p>')
     +'</div>'
-    +'<div class="opt-card" onclick="window.open(\'/widget.js\',\'_blank\')">'
+    +'<div class="opt-card" onclick="window.open(seaUrl(\'/widget.js\'),\'_blank\')">'
     +'<h3>&#127957; '+T('setup.widget.ios','iOS (Scriptable)')+'</h3>'
     +'<p class="opt-desc">'+T('setup.widget.ios_desc','Install Scriptable from the App Store, paste the script, then add the widget to your home screen. Full setup instructions in Settings.')+'</p>'
     +'</div>'
@@ -492,7 +492,7 @@ function renderDone(stage){
     +'<p>'+T('setup.done.intro','Here is a summary of what was configured. You can tweak everything in Settings later.')+'</p>'
     +'<div class="summary">'+items.join('')+'</div>'
     +'<div class="actions"><span></span>'
-    +'<button onclick="window.location.href=\'/\'">&#128640; '+T('setup.done.cta','Go to dashboard')+'</button>'
+    +'<button onclick="window.location.href=seaUrl(\'/\')">&#128640; '+T('setup.done.cta','Go to dashboard')+'</button>'
     +'</div></div>';
 }
 
@@ -529,7 +529,7 @@ async function scanMdns(){
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span> '+T('setup.devices.scanning','Scanning...');
   results.innerHTML='';
   try{
-    const r=await fetch('/api/devices/discover?timeout=5',{method:'POST'});
+    const r=await fetch(seaUrl('/api/devices/discover?timeout=5'),{method:'POST'});
     const j=await r.json();
     btn.disabled=false;btn.textContent='\u{1F50D} '+T('setup.devices.scan_btn','Scan network');
     if(!j.ok){toast(T('setup.toast.scan_error','Scan error: {err}',{err:j.error}),'error');return;}
@@ -544,7 +544,7 @@ async function scanMdns(){
 }
 
 async function _postDevice(payload){
-  return fetch('/api/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  return fetch(seaUrl('/api/devices'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
 }
 async function _addWithAuthRetry(basePayload, label){
   try{
@@ -576,7 +576,7 @@ async function addDiscovered(d){
 }
 async function removeDevice(key){
   try{
-    const r=await fetch('/api/devices/'+encodeURIComponent(key),{method:'DELETE'});
+    const r=await fetch(seaUrl('/api/devices/')+encodeURIComponent(key),{method:'DELETE'});
     const j=await r.json();
     if(j.ok){addedDevices=addedDevices.filter(function(d){return d.key!==key;});render();}
   }catch(e){}
@@ -586,11 +586,11 @@ async function saveLangAndNext(){
   chosenLanguage = document.getElementById('lang-sel').value;
   chosenTheme = document.getElementById('theme-sel').value;
   try{
-    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+    await fetch(seaUrl('/api/settings'),{method:'PUT',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ui:{language:chosenLanguage, theme:chosenTheme}})});
     try{ localStorage.setItem('sea_theme', chosenTheme==='auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light') : chosenTheme); }catch(e){}
     document.documentElement.dataset.theme = chosenTheme==='auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light') : chosenTheme;
-    const i18nR = await fetch('/api/i18n?prefix=setup.').then(x=>x.json()).catch(_=>({map:{}}));
+    const i18nR = await fetch(seaUrl('/api/i18n?prefix=setup.')).then(x=>x.json()).catch(_=>({map:{}}));
     I18N = (i18nR && i18nR.map) || {};
     next();
   }catch(e){toast(T('setup.toast.error','Error: {err}',{err:e.message}),'error');}
@@ -601,7 +601,7 @@ async function savePricingAndNext(){
   pricing.base=Number(document.getElementById('p-base').value)||120;
   pricing.vat=document.getElementById('p-vat').checked;
   try{
-    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+    await fetch(seaUrl('/api/settings'),{method:'PUT',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({pricing:{electricity_price_eur_per_kwh:pricing.price,base_fee_eur_per_year:pricing.base,price_includes_vat:pricing.vat,base_fee_includes_vat:pricing.vat}})});
     completed.pricing = true;
     next();
@@ -612,7 +612,7 @@ async function saveSpotAndNext(){
   spot.enabled=document.getElementById('s-enabled').checked;
   spot.zone=document.getElementById('s-zone').value;
   try{
-    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+    await fetch(seaUrl('/api/settings'),{method:'PUT',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({spot_price:{enabled:spot.enabled,bidding_zone:spot.zone}})});
     completed.spot = true;
     next();
@@ -624,7 +624,7 @@ async function saveCo2AndNext(){
   co2.zone=document.getElementById('c-zone').value;
   co2.token=document.getElementById('c-token').value.trim();
   try{
-    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+    await fetch(seaUrl('/api/settings'),{method:'PUT',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({co2:{enabled:co2.enabled,bidding_zone:co2.zone,entso_e_api_token:co2.token}})});
     completed.co2 = true;
     next();
@@ -637,7 +637,7 @@ async function saveSolarAndNext(){
   solar.feed_in=Number(document.getElementById('sol-feed').value)||0.082;
   solar.battery=Number(document.getElementById('sol-bat').value)||0;
   try{
-    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+    await fetch(seaUrl('/api/settings'),{method:'PUT',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({solar:{enabled:solar.enabled,kw_peak:solar.kw_peak,feed_in_tariff_eur_per_kwh:solar.feed_in,battery_kwh:solar.battery}})});
     completed.solar = true;
     next();
@@ -649,7 +649,7 @@ async function saveNotifyAndNext(){
   notify.tg_token=document.getElementById('tg-token').value.trim();
   notify.tg_chat=document.getElementById('tg-chat').value.trim();
   try{
-    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+    await fetch(seaUrl('/api/settings'),{method:'PUT',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ui:{telegram_enabled:notify.tg_enabled,telegram_bot_token:notify.tg_token,telegram_chat_id:notify.tg_chat}})});
     completed.notify = true;
     next();
@@ -668,7 +668,7 @@ async function saveIntegrateAndNext(){
   integrate.influx_token=document.getElementById('in-token').value;
   integrate.prom_enabled=document.getElementById('pr-en').checked;
   try{
-    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},
+    await fetch(seaUrl('/api/settings'),{method:'PUT',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         mqtt:{enabled:integrate.mqtt_enabled,broker:integrate.mqtt_broker,port:integrate.mqtt_port,username:integrate.mqtt_user,password:integrate.mqtt_pass},
         influxdb:{enabled:integrate.influx_enabled,url:integrate.influx_url,bucket:integrate.influx_bucket,token:integrate.influx_token},
@@ -684,8 +684,8 @@ async function testTelegram(){
   msg.textContent = T('setup.test.running','Testing...'); msg.className='test-msg';
   const body = {ui:{telegram_enabled:true,telegram_bot_token:document.getElementById('tg-token').value.trim(),telegram_chat_id:document.getElementById('tg-chat').value.trim()}};
   try{
-    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    const r = await fetch('/api/settings/test-telegram',{method:'POST'});
+    await fetch(seaUrl('/api/settings'),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const r = await fetch(seaUrl('/api/settings/test-telegram'),{method:'POST'});
     const j = await r.json();
     if(j.ok){ msg.textContent='\u2713 '+T('setup.test.ok','Connection OK'); msg.className='test-msg ok'; }
     else{ msg.textContent='\u2717 '+(j.error||'error'); msg.className='test-msg err'; }
@@ -697,8 +697,8 @@ async function testMqtt(){
   msg.textContent = T('setup.test.running','Testing...'); msg.className='test-msg';
   const body = {mqtt:{enabled:true,broker:document.getElementById('mq-broker').value.trim(),port:Number(document.getElementById('mq-port').value)||1883,username:document.getElementById('mq-user').value,password:document.getElementById('mq-pass').value}};
   try{
-    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    const r = await fetch('/api/settings/test-mqtt',{method:'POST'});
+    await fetch(seaUrl('/api/settings'),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const r = await fetch(seaUrl('/api/settings/test-mqtt'),{method:'POST'});
     const j = await r.json();
     if(j.ok){ msg.textContent='\u2713 '+T('setup.test.ok','Connection OK'); msg.className='test-msg ok'; }
     else{ msg.textContent='\u2717 '+(j.error||'error'); msg.className='test-msg err'; }
@@ -710,8 +710,8 @@ async function testInflux(){
   msg.textContent = T('setup.test.running','Testing...'); msg.className='test-msg';
   const body = {influxdb:{enabled:true,url:document.getElementById('in-url').value.trim(),bucket:document.getElementById('in-bucket').value.trim(),token:document.getElementById('in-token').value}};
   try{
-    await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    const r = await fetch('/api/settings/test-influxdb',{method:'POST'});
+    await fetch(seaUrl('/api/settings'),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const r = await fetch(seaUrl('/api/settings/test-influxdb'),{method:'POST'});
     const j = await r.json();
     if(j.ok){ msg.textContent='\u2713 '+T('setup.test.ok','Connection OK'); msg.className='test-msg ok'; }
     else{ msg.textContent='\u2717 '+(j.error||'error'); msg.className='test-msg err'; }
@@ -721,9 +721,9 @@ async function testInflux(){
 async function init(){
   try{
     const [devR, i18nR, cfgR] = await Promise.all([
-      fetch('/api/devices').then(x=>x.json()).catch(_=>({devices:[]})),
-      fetch('/api/i18n?prefix=setup.').then(x=>x.json()).catch(_=>({map:{},lang:'en'})),
-      fetch('/api/settings').then(x=>x.json()).catch(_=>({})),
+      fetch(seaUrl('/api/devices')).then(x=>x.json()).catch(_=>({devices:[]})),
+      fetch(seaUrl('/api/i18n?prefix=setup.')).then(x=>x.json()).catch(_=>({map:{},lang:'en'})),
+      fetch(seaUrl('/api/settings')).then(x=>x.json()).catch(_=>({})),
     ]);
     addedDevices=(devR.devices||[]).map(function(d){return{key:d.key,name:d.name,host:d.host,kind:d.kind,model:d.model};});
     I18N = (i18nR && i18nR.map) || {};

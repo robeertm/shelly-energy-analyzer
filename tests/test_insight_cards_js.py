@@ -20,6 +20,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from shelly_analyzer.services.webdash import _HTML_TEMPLATE, _render_template
 from tests.test_ev_log_js import HARNESS, _script
 
+def _run_node(src: str, timeout: int = 120):
+    """Run *src* in node from a file: the page script is too long for one
+    command-line argument (Linux caps a single argument at 128 KB)."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "probe.js")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(src)
+        return subprocess.run(["node", path], capture_output=True, text=True, timeout=timeout)
+
+
 # One installation, one moment: the roof makes 1216 W, 637 W come from the
 # grid, the battery gives 306 W. Half the house is on solar; the tenant gets
 # nothing, because nothing is being exported.
@@ -60,7 +71,7 @@ process.stdout.write('<<<JSON>>>' + JSON.stringify(out));
 def _cards(ctx=None) -> dict:
     src = (HARNESS + "\nconst CTX = " + json.dumps(ctx or CTX) + ";\n"
            + _script() + "\n" + TAIL)
-    p = subprocess.run(["node", "-e", src], capture_output=True, text=True, timeout=180)
+    p = _run_node(src, 180)
     assert p.returncode == 0, f"node failed:\n{p.stderr[-3000:]}"
     assert "<<<JSON>>>" in p.stdout, p.stdout[-2000:]
     return json.loads(p.stdout.split("<<<JSON>>>", 1)[1])

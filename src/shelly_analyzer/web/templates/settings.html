@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Einstellungen – Shelly Energy Analyzer</title>
-<link rel="icon" href="/widget-icon.svg" type="image/svg+xml">
+<link rel="icon" data-sea-href="/widget-icon.svg" type="image/svg+xml">
 <style>
 :root{--bg:#0b0f14;--card:#121821;--fg:#e8eef6;--muted:#9fb0c3;--accent:#6aa7ff;
 --border:rgba(255,255,255,0.08);--danger:#ef4444;--ok:#22c55e;
@@ -113,7 +113,7 @@ section{padding:14px}
 </script>
 <header>
   <h1 id="page-title">⚙ Einstellungen</h1>
-  <a href="/" id="nav-back">← Dashboard</a>
+  <a data-sea-href="/" id="nav-back">← Dashboard</a>
 </header>
 <div class="layout">
 <nav class="sidebar" id="nav"></nav>
@@ -248,7 +248,7 @@ async function uploadLogo(fileInput, settingsKey) {
   const fd = new FormData();
   fd.append("file", file);
   try {
-    const r = await fetch("/api/upload-logo", {method:"POST", body:fd});
+    const r = await fetch(seaUrl("/api/upload-logo"), {method:"POST", body:fd});
     const j = await r.json();
     if (j.ok && j.path) {
       const inp = document.querySelector('[data-key="' + settingsKey + '"]');
@@ -294,7 +294,7 @@ async function saveSection(sectionId) {
     && data.ui.language !== cfg.ui.language
   );
   try {
-    const r = await fetch("/api/settings",{method:"PUT",
+    const r = await fetch(seaUrl("/api/settings"),{method:"PUT",
       headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
     const j = await r.json();
     if (j.ok) {
@@ -312,7 +312,7 @@ async function saveSection(sectionId) {
       // what the server actually persisted (verifies the write round-trip
       // visually; if a value "jumps back", you know the server rejected it).
       try {
-        const fresh = await fetch("/api/settings").then(x=>x.json());
+        const fresh = await fetch(seaUrl("/api/settings")).then(x=>x.json());
         cfg = fresh;
         const secEl = document.getElementById("sec-" + sectionId);
         const s = SECTIONS.find(x => x.id === sectionId);
@@ -609,9 +609,9 @@ const SECTIONS = [
   {id:"smart_schedule", title:"Smart Schedule", group:"Features", fields:[
     {key:"smart_schedule.enabled", label:"Smart schedule active", type:"checkbox"},
     {key:"smart_schedule.default_duration_hours", label:"Default duration (h)", type:"number", step:"0.5"},
-    {key:"smart_schedule.auto_schedule_enabled", label:"Auto-Schaltung global aktiv (sonst Dry-Run)", type:"checkbox", hint:"Globaler Live-Schalter. Erst wenn dies AN ist UND eine Regel selbst auf 'Live' steht, schaltet die App wirklich. Solange aus = nur Logging."},
+    {key:"smart_schedule.auto_schedule_enabled", label:"Global auto-switching active (otherwise dry run)", type:"checkbox", hint:"Global live switch. The app only really switches when this is ON AND a rule itself is set to 'Live'. While off = logging only."},
   ]},
-  {id:"auto_rules", title:"Auto-Schaltung Regeln", group:"Features", custom:true},
+  {id:"auto_rules", title:"Auto-switching rules", group:"Features", custom:true},
   {id:"ev_charging", title:"EV Charging", group:"Features", fields:[
     {key:"ev_charging.enabled", label:"EV detection active", type:"checkbox"},
     {key:"ev_charging.wallbox_device_key", label:"Wallbox device", type:"select-device"},
@@ -726,20 +726,20 @@ function renderListField(f, val) {
   function renderSubInput(sf, itemVal) {
     const v = itemVal == null ? "" : itemVal;
     if (sf.type === "checkbox") {
-      return `<label class="field row" style="min-height:38px;padding:6px 10px"><span>${esc(sf.label)}</span><input type="checkbox" data-k="${sf.key}" ${v?"checked":""}></label>`;
+      return `<label class="field row" style="min-height:38px;padding:6px 10px"><span>${esc(tSubField(f.key, sf))}</span><input type="checkbox" data-k="${sf.key}" ${v?"checked":""}></label>`;
     }
     if (sf.type === "select") {
-      const options = (sf.opts||[]).map(([k,lbl])=>`<option value="${esc(k)}" ${String(k)===String(v)?"selected":""}>${esc(lbl)}</option>`).join("");
-      return `<div class="field"><label>${esc(sf.label)}</label><select data-k="${sf.key}">${options}</select></div>`;
+      const options = (sf.opts||[]).map(([k,lbl])=>`<option value="${esc(k)}" ${String(k)===String(v)?"selected":""}>${esc(tSubOpt(f.key, sf.key, k, lbl))}</option>`).join("");
+      return `<div class="field"><label>${esc(tSubField(f.key, sf))}</label><select data-k="${sf.key}">${options}</select></div>`;
     }
     if (sf.type === "select-device") {
-      const opts = [["","(keine)"]].concat(devices.map(d=>[d.key, d.name+" ("+d.key+")"]));
+      const opts = [["",T("settings.opts.device.none","(none)")]].concat(devices.map(d=>[d.key, d.name+" ("+d.key+")"]));
       const options = opts.map(([k,lbl])=>`<option value="${esc(k)}" ${String(k)===String(v)?"selected":""}>${esc(lbl)}</option>`).join("");
-      return `<div class="field"><label>${esc(sf.label)}</label><select data-k="${sf.key}">${options}</select></div>`;
+      return `<div class="field"><label>${esc(tSubField(f.key, sf))}</label><select data-k="${sf.key}">${options}</select></div>`;
     }
     if (sf.type === "csv-list") {
       const s = Array.isArray(v) ? v.join(", ") : String(v||"");
-      return `<div class="field"><label>${esc(sf.label)}</label><input type="text" data-k="${sf.key}" data-csv="1" value="${esc(s)}"></div>`;
+      return `<div class="field"><label>${esc(tSubField(f.key, sf))}</label><input type="text" data-k="${sf.key}" data-csv="1" value="${esc(s)}"></div>`;
     }
     if (sf.type === "icon-picker") {
       const icons = [
@@ -756,7 +756,7 @@ function renderListField(f, val) {
         var _brd = _ic === cur ? "var(--accent)" : "transparent";
         btns += '<button type="button" class="icon-pick-btn' + _act + '" onclick="this.parentNode.querySelectorAll(\'.icon-pick-btn\').forEach(function(b){b.classList.remove(\'active\');b.style.borderColor=\'transparent\'});this.classList.add(\'active\');this.style.borderColor=\'var(--accent)\';this.parentNode.dataset.val=this.textContent.trim()" style="font-size:1.3rem;padding:4px 6px;border:2px solid ' + _brd + ';border-radius:6px;background:var(--input-bg);cursor:pointer;min-width:36px;text-align:center">' + _ic + '</button>';
       }
-      return '<div class="field" style="grid-column:1/-1"><label>' + esc(sf.label) + '</label>' +
+      return '<div class="field" style="grid-column:1/-1"><label>' + esc(tSubField(f.key, sf)) + '</label>' +
         '<div data-k="' + sf.key + '" data-icon-picker="1" data-val="' + esc(cur) + '" style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto;padding:6px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg)">' + btns + '</div></div>';
     }
     if (sf.type === "device-checkboxes") {
@@ -766,20 +766,19 @@ function renderListField(f, val) {
         return `<label style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:.82rem;min-height:32px">
           <input type="checkbox" data-devkey="${esc(d.key)}" ${ck} style="margin:0"> ${esc(d.name)} <span style="color:var(--muted);font-size:.72rem">(${esc(d.key)})</span></label>`;
       }).join("");
-      return `<div class="field" style="grid-column:1/-1"><label>${esc(sf.label)}</label>
-        <div data-k="${sf.key}" data-device-checks="1" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px">${cbs || '<span class="hint">No devices</span>'}</div>
-        ${sf.hint ? '<div class="hint">' + esc(sf.hint) + '</div>' : ''}</div>`;
+      return `<div class="field" style="grid-column:1/-1"><label>${esc(tSubField(f.key, sf))}</label>
+        <div data-k="${sf.key}" data-device-checks="1" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px">${cbs || '<span class="hint">' + esc(T("settings.list.no_devices","No devices")) + '</span>'}</div>
+        ${sf.hint ? '<div class="hint">' + esc(tSubHint(f.key, sf)) + '</div>' : ''}</div>`;
     }
     const step = sf.step ? `step="${sf.step}"` : "";
     const minA = sf.min!=null ? `min="${sf.min}"` : "";
     const maxA = sf.max!=null ? `max="${sf.max}"` : "";
     const ph = sf.placeholder ? `placeholder="${esc(sf.placeholder)}"` : "";
     const tp = sf.type === "number" ? "number" : "text";
-    return `<div class="field"><label>${esc(tSubField(f.key, sf))}</label><input type="${tp}" ${step} ${minA} ${maxA} ${ph} data-k="${sf.key}" value="${esc(v)}"></div>`;
+    return `<div class="field"><label>${esc(tSubField(f.key, sf))}</label><input type="${tp}" ${step} ${minA} ${maxA} ${ph} data-k="${sf.key}" value="${esc(v)}">${sf.hint ? `<div class="hint">${esc(tSubHint(f.key, sf))}</div>` : ""}</div>`;
   }
   function renderItem(item, idx) {
-    const titleFallback = (f.itemLabel||"Eintrag") + " " + (idx+1);
-    const title = (item && (item.name || item.tenant_id || item.tenant_id)) || T("settings.list.item_n", titleFallback, {n: idx+1});
+    const title = (item && (item.name || item.tenant_id)) || (tItem(f) + " " + (idx+1));
     const rows = f.schema.map(sf => renderSubInput(sf, item ? item[sf.key] : undefined)).join("");
     return `<div class="list-item" data-idx="${idx}">
       <div class="list-item-hdr">
@@ -795,7 +794,7 @@ function renderListField(f, val) {
     <div id="${listId}" class="list-container">${itemsHtml}</div>
     <div><button type="button" class="secondary small list-add">➕ ${T("settings.btn.add","Add")}</button></div>
     ${f.hint ? `<div class="hint">${esc(tHint(f))}</div>`:""}
-    <template class="list-schema">${encodeURIComponent(JSON.stringify({schema:f.schema, defaults:f.defaults||{}, itemLabel:f.itemLabel||"Eintrag"}))}</template>
+    <template class="list-schema">${encodeURIComponent(JSON.stringify({schema:f.schema, defaults:f.defaults||{}, itemLabel:f.itemLabel||"Eintrag", key:f.key}))}</template>
   </div>`;
 }
 function tField(f) { return T("settings.field."+f.key, f.label); }
@@ -803,6 +802,12 @@ function tField(f) { return T("settings.field."+f.key, f.label); }
 function tSubField(parentKey, sf) { return T("settings.field."+parentKey+"."+sf.key, sf.label); }
 // Hint text (shown below a field). Looked up as settings.hint.<field.key>.
 function tHint(f) { return T("settings.hint."+f.key, f.hint || ""); }
+// Sub-field hint inside a list schema: settings.hint.<parent>.<sub>.
+function tSubHint(parentKey, sf) { return T("settings.hint."+parentKey+"."+sf.key, sf.hint || ""); }
+// Option label of a select inside a list schema: settings.opts.<parent>.<sub>.<value>.
+function tSubOpt(parentKey, subKey, optKey, optLabel) { return T("settings.opts."+parentKey+"."+subKey+"."+optKey, optLabel); }
+// Title of one list entry ("Tariff period 2"): settings.item.<field.key>.
+function tItem(f) { return T("settings.item."+f.key, f.itemLabel || "Entry"); }
 // Option label inside a select field. Looked up as settings.opts.<field.key>.<value>.
 function tOpt(fieldKey, optKey, optLabel) { return T("settings.opts."+fieldKey+"."+optKey, optLabel); }
 function renderField(f) {
@@ -816,7 +821,7 @@ function renderField(f) {
   if (f.type === "select" || f.type === "select-device" || f.type === "select-dyn") {
     let opts = f.opts || [];
     if (f.type === "select-device") {
-      opts = [["",T("settings.opts.device.none","(keine)")]].concat(devices.map(d=>[d.key, d.name+" ("+d.key+")"]));
+      opts = [["",T("settings.opts.device.none","(none)")]].concat(devices.map(d=>[d.key, d.name+" ("+d.key+")"]));
     } else if (f.type === "select-dyn") {
       opts = _dynOpts(f) || [];
     }
@@ -857,7 +862,7 @@ function renderField(f) {
   } else if (f.type === "file-upload") {
     const accept = f.accept || "image/*";
     const hasFile = val && String(val).trim();
-    const preview = hasFile ? '<img src="/files/' + esc(String(val)) + '?' + Date.now() + '" style="max-height:48px;max-width:160px;border-radius:4px;margin-top:4px;object-fit:contain" onerror="this.style.display=\'none\'">' : '';
+    const preview = hasFile ? '<img src="' + seaUrl('/files/' + esc(String(val))) + '?' + Date.now() + '" style="max-height:48px;max-width:160px;border-radius:4px;margin-top:4px;object-fit:contain" onerror="this.style.display=\'none\'">' : '';
     input = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
       '<input type="file" accept="' + esc(accept) + '" style="font-size:.82rem" onchange="uploadLogo(this,\'' + esc(f.key) + '\')">' +
       '<input type="text" data-key="' + f.key + '" value="' + (val===null||val===undefined?"":esc(String(val))) + '" placeholder="' + T("settings.upload.path_ph","auto-filled after upload") + '" style="flex:1;min-width:140px" readonly>' +
@@ -899,7 +904,7 @@ function renderSection(s) {
     if (s.id === "supported_devices") return renderSupportedDevices();
   }
   const fieldsHtml = (s.fields||[]).map(renderField).join("");
-  const hint = s.hint ? `<div class="hint" style="margin-bottom:10px">${T("settings.sectionhint."+s.id, s.hint)}</div>` : "";
+  const hint = s.hint ? `<div class="hint" style="margin-bottom:10px">${esc(T("settings.sectionhint."+s.id, s.hint))}</div>` : "";
   const testBtn = s.testBtn ? `<button class="secondary" onclick="testConnection('${s.testBtn}')">${T("settings.btn.test","🔌 Test")}</button>` : "";
   const urdbBlock = s.id === "pricing" ? renderUrdbBlock() : "";
   return `<section id="sec-${s.id}"><h2>${tSection(s)}</h2>${hint}
@@ -1112,7 +1117,7 @@ function renderDevices() {
         <input id="probe-ip" type="text" placeholder="${T("settings.devices.ip_placeholder","IP address")}" style="width:160px">
         <button class="secondary" onclick="addByIp()">➕ ${T("settings.devices.add","Add")}</button>
         <button class="secondary" onclick="probeAllDevices()">🔌 ${T("settings.devices.probe_all","Probe all")}</button>
-        <a href="/setup" style="display:inline-flex;align-items:center;gap:4px;padding:8px 14px;border:1px solid var(--border);background:var(--btn-sec-bg);color:var(--fg);border-radius:6px;font-size:.88rem;text-decoration:none">🪄 ${T("settings.devices.wizard","Setup wizard")}</a>
+        <a href="${seaUrl('/setup')}" style="display:inline-flex;align-items:center;gap:4px;padding:8px 14px;border:1px solid var(--border);background:var(--btn-sec-bg);color:var(--fg);border-radius:6px;font-size:.88rem;text-decoration:none">🪄 ${T("settings.devices.wizard","Setup wizard")}</a>
       </div>
     </div>
     <div id="discover-results"></div>
@@ -1146,7 +1151,7 @@ async function saveDevice(key) {
     else body[k] = inp.value;
   });
   try {
-    const r = await fetch("/api/devices/"+encodeURIComponent(key),{method:"PUT",
+    const r = await fetch(seaUrl("/api/devices/")+encodeURIComponent(key),{method:"PUT",
       headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const j = await r.json();
     if (j.ok) { toast("✓ Device updated"); reload(); }
@@ -1164,7 +1169,7 @@ async function probeDevice(key) {
   if (password === "***") password = "";
   if (!host) { toast("Host/IP missing", "error"); return; }
   try {
-    const r = await fetch("/api/devices/probe",{method:"POST",
+    const r = await fetch(seaUrl("/api/devices/probe"),{method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({host, username, password})});
     const j = await r.json();
@@ -1172,7 +1177,7 @@ async function probeDevice(key) {
     if (j.error === "auth_required") {
       const pw = prompt("Device " + host + " is password-protected.\nEnter the admin password:");
       if (!pw) return;
-      const r2 = await fetch("/api/devices/probe",{method:"POST",
+      const r2 = await fetch(seaUrl("/api/devices/probe"),{method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({host, username, password: pw})});
       const j2 = await r2.json();
@@ -1200,7 +1205,7 @@ async function probeAllDevices() {
       // when given fresh creds, so for the all-probe we just rely on the
       // device responding without auth (since the live poller already uses
       // its own cached credentials path).
-      const r = await fetch("/api/devices/probe",{method:"POST",
+      const r = await fetch(seaUrl("/api/devices/probe"),{method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({host:d.host, username:d.username||"admin", password:""})});
       const j = await r.json();
@@ -1265,7 +1270,7 @@ function renderIosWidget() {
         +'</div>'
         +'<div style="margin-top:6px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">'
         +'<span style="font-size:.78rem;color:var(--muted)">'+T("settings.widget.param_hint","Parameter")+': <code style="user-select:all;background:var(--input-bg);padding:2px 6px;border-radius:4px">'+esc(host)+(pid?("#"+pid):"")+'</code></span>'
-        +'<a href="/w?profile='+encodeURIComponent(pid)+'" target="_blank" style="font-size:.78rem;color:var(--accent);text-decoration:none">'+T("settings.widget.open_web_widget","Open web widget")+" &#8599;</a>"
+        +'<a href="'+seaUrl('/w?profile='+encodeURIComponent(pid))+'" target="_blank" style="font-size:.78rem;color:var(--accent);text-decoration:none">'+T("settings.widget.open_web_widget","Open web widget")+" &#8599;</a>"
         +'</div>'
         +'</div>';
     }).join("");
@@ -1283,14 +1288,14 @@ function renderIosWidget() {
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'
     +'<button class="primary" onclick="widgetCopyDefault()">'+T("settings.ios_widget.btn_copy","Copy default script")+'</button>'
     +'<button class="secondary" onclick="widgetPreview(-1)">'+T("settings.widget.preview","Preview")+'</button>'
-    +'<button class="secondary" onclick="window.open(\'/widget.js\',\'_blank\')">'+T("settings.ios_widget.btn_download","Download .js")+'</button>'
+    +'<button class="secondary" onclick="window.open(seaUrl(\'/widget.js\'),\'_blank\')">'+T("settings.ios_widget.btn_download","Download .js")+'</button>'
     +'<span id="iw-copy-msg" style="font-size:.78rem;color:var(--ok);display:none">'+T("settings.ios_widget.copied","Copied to clipboard")+'</span>'
     +'</div>'
     +'<h3 style="margin:18px 0 8px;font-size:1rem">'+T("settings.widget.android_title","Android / Web Widget")+'</h3>'
     +'<p class="hint" style="margin-top:0">'+T("settings.widget.android_hint","Open the widget page in any browser and add it to your home screen. Works on Android, tablets, and desktops.")+'</p>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'
-    +'<a href="/w" target="_blank" class="primary" style="display:inline-block;padding:6px 14px;border-radius:8px;font-size:.85rem;text-decoration:none;color:#fff;background:var(--accent)">'+T("settings.widget.open_web_widget","Open widget page")+'</a>'
-    +(profiles.length>0 ? profiles.map(function(p){ return '<a href="/w?profile='+encodeURIComponent(p.profile_id)+'" target="_blank" class="secondary" style="display:inline-block;padding:5px 12px;border-radius:8px;font-size:.8rem;text-decoration:none;color:var(--fg);border:1px solid var(--border)">'+esc(p.name)+'</a>'; }).join("") : "")
+    +'<a href="' + seaUrl('/w') + '" target="_blank" class="primary" style="display:inline-block;padding:6px 14px;border-radius:8px;font-size:.85rem;text-decoration:none;color:#fff;background:var(--accent)">'+T("settings.widget.open_web_widget","Open widget page")+'</a>'
+    +(profiles.length>0 ? profiles.map(function(p){ return '<a href="'+seaUrl('/w?profile='+encodeURIComponent(p.profile_id))+'" target="_blank" class="secondary" style="display:inline-block;padding:5px 12px;border-radius:8px;font-size:.8rem;text-decoration:none;color:var(--fg);border:1px solid var(--border)">'+esc(p.name)+'</a>'; }).join("") : "")
     +'</div>'
     +'<h3 style="margin:18px 0 8px;font-size:1rem">'+T("settings.widget.profiles_title","Widget profiles")+'</h3>'
     +'<p class="hint" style="margin-top:0">'+T("settings.widget.profiles_hint","Create multiple widget profiles with different data. Each profile generates its own Scriptable script.")+'</p>'
@@ -1301,12 +1306,12 @@ function renderIosWidget() {
 
 async function widgetCopyDefault() {
   try {
-    const r = await fetch("/widget.js");
+    const r = await fetch(seaUrl("/widget.js"));
     const txt = await r.text();
     await navigator.clipboard.writeText(txt);
     const msg = document.getElementById("iw-copy-msg");
     if (msg) { msg.style.display="inline"; setTimeout(()=>msg.style.display="none",2500); }
-  } catch(e) { window.open("/widget.js","_blank"); }
+  } catch(e) { window.open(seaUrl("/widget.js"),"_blank"); }
 }
 
 async function widgetCopyProfile(idx) {
@@ -1314,18 +1319,18 @@ async function widgetCopyProfile(idx) {
   const p = profiles[idx];
   if (!p) return;
   try {
-    const r = await fetch("/widget.js?profile="+encodeURIComponent(p.profile_id));
+    const r = await fetch(seaUrl("/widget.js?profile=")+encodeURIComponent(p.profile_id));
     const txt = await r.text();
     await navigator.clipboard.writeText(txt);
     toast(T("settings.ios_widget.copied","Copied to clipboard"),"success");
-  } catch(e) { window.open("/widget.js?profile="+encodeURIComponent(p.profile_id),"_blank"); }
+  } catch(e) { window.open(seaUrl("/widget.js?profile=")+encodeURIComponent(p.profile_id),"_blank"); }
 }
 
 function widgetDownloadProfile(idx) {
   const profiles = ((cfg.ui||{}).widget_profiles)||[];
   const p = profiles[idx];
   if (!p) return;
-  window.open("/widget.js?profile="+encodeURIComponent(p.profile_id),"_blank");
+  window.open(seaUrl("/widget.js?profile=")+encodeURIComponent(p.profile_id),"_blank");
 }
 
 function widgetAddProfile() {
@@ -1371,7 +1376,7 @@ function widgetGatherProfiles() {
 async function widgetSaveProfiles() {
   widgetGatherProfiles();
   try {
-    const r = await fetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ui:{widget_profiles:cfg.ui.widget_profiles}})});
+    const r = await fetch(seaUrl("/api/settings"),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ui:{widget_profiles:cfg.ui.widget_profiles}})});
     const d = await r.json();
     if (d.ok) { toast(T("settings.saved","Saved"),"success"); reload(); }
     else toast(d.error||"Error","error");
@@ -1384,7 +1389,7 @@ async function widgetPreview(idx) {
   widgetGatherProfiles();
   if (idx >= 0) {
     try {
-      const sr = await fetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ui:{widget_profiles:cfg.ui.widget_profiles}})});
+      const sr = await fetch(seaUrl("/api/settings"),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ui:{widget_profiles:cfg.ui.widget_profiles}})});
       const sd = await sr.json();
       if (!sd.ok) { toast(sd.error||"Save error","error"); return; }
     } catch(e) { toast(String(e),"error"); return; }
@@ -1394,7 +1399,7 @@ async function widgetPreview(idx) {
   const qp = pid ? "?profile="+encodeURIComponent(pid) : "";
   let d;
   try {
-    const r = await fetch("/api/widget"+qp);
+    const r = await fetch(seaUrl("/api/widget")+qp);
     d = await r.json();
     if (!d || !d.ok) { toast(d.error||"Error","error"); return; }
   } catch(e) { toast(String(e),"error"); return; }
@@ -1700,7 +1705,7 @@ function renderSupportedDevices() {
     if (!container) return;
     try {
       if (!_supportedDevicesCache) {
-        const r = await fetch("/api/supported-devices");
+        const r = await fetch(seaUrl("/api/supported-devices"));
         _supportedDevicesCache = await r.json();
       }
       const data = _supportedDevicesCache;
@@ -1856,7 +1861,7 @@ async function checkUpdateStatus(force) {
   if (!el) return;
   el.textContent = T("settings.updates.status_loading","Status wird geladen…");
   try {
-    const url = force ? "/api/updates/status?force=1" : "/api/updates/status";
+    const url = force ? seaUrl("/api/updates/status?force=1") : seaUrl("/api/updates/status");
     const r = await fetch(url);
     const j = await r.json();
     if (!j.ok && !j.current) {
@@ -1884,7 +1889,7 @@ async function loadReleaseList(force) {
   if (!el) return;
   el.innerHTML = `<p class="hint">${T("settings.updates.loading_releases","Lade Versionen…")}</p>`;
   try {
-    const url = force ? "/api/updates/releases?limit=10&force=1" : "/api/updates/releases?limit=10";
+    const url = force ? seaUrl("/api/updates/releases?limit=10&force=1") : seaUrl("/api/updates/releases?limit=10");
     const r = await fetch(url);
     const j = await r.json();
     if (!j.ok) {
@@ -1970,7 +1975,7 @@ async function installVersion(tag, assetUrl) {
   setDetail(T("settings.updates.detail_request","Sende Install-Anfrage an Server …"));
   let resp;
   try {
-    const r = await fetch("/api/updates/install", {method:"POST",
+    const r = await fetch(seaUrl("/api/updates/install"), {method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({tag:tag, asset_url:assetUrl||""})});
     resp = await r.json();
@@ -1999,7 +2004,7 @@ async function installVersion(tag, assetUrl) {
     await new Promise(r => setTimeout(r, 2000));
     let s;
     try {
-      const r = await fetch("/api/updates/status", {cache:"no-store"});
+      const r = await fetch(seaUrl("/api/updates/status"), {cache:"no-store"});
       s = await r.json();
     } catch(e) {
       // Server probably mid-restart — keep polling
@@ -2159,14 +2164,14 @@ async function saveAutoRules() {
   }
   cfg.smart_schedule.auto_rules = collected;
   try {
-    const r = await fetch("/api/settings",{method:"PUT",
+    const r = await fetch(seaUrl("/api/settings"),{method:"PUT",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({smart_schedule: cfg.smart_schedule})});
     const j = await r.json();
     if (j.ok) {
       toast("✓ " + T("settings.toast.saved","Saved"));
       // Re-fetch + re-render to confirm round-trip
-      const fresh = await fetch("/api/settings").then(x=>x.json());
+      const fresh = await fetch(seaUrl("/api/settings")).then(x=>x.json());
       cfg = fresh;
       document.getElementById("sec-auto_rules").outerHTML = renderAutoRules();
       refreshAutoRulesStatus();
@@ -2180,7 +2185,7 @@ async function saveAutoRules() {
 
 async function refreshAutoRulesStatus() {
   try {
-    const r = await fetch("/api/auto_schedule/status");
+    const r = await fetch(seaUrl("/api/auto_schedule/status"));
     const j = await r.json();
     const byId = {};
     (j.decisions || []).forEach(d => { byId[d.rule_id] = d; });
@@ -2361,7 +2366,7 @@ function _bfsEvenSplit() {
 
 async function _bfsByLast30d() {
   try {
-    const r = await fetch("/api/devices_kwh?days=30");
+    const r = await fetch(seaUrl("/api/devices_kwh?days=30"));
     const d = await r.json();
     if (!d || !d.ok || !d.kwh_by_device) {
       toast(T("settings.base_fee_split.by_30d_failed","Could not load 30-day kWh"), "error");
@@ -2398,7 +2403,7 @@ async function saveBaseFeeSplit() {
   }
   const body = { pricing: { base_fee_split: { mode: mode, manual_shares: shares } } };
   try {
-    const r = await fetch("/api/settings", {
+    const r = await fetch(seaUrl("/api/settings"), {
       method: "PUT",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify(body),
@@ -2406,7 +2411,7 @@ async function saveBaseFeeSplit() {
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || "save failed");
     toast(T("settings.toast.saved","Saved."), "ok");
-    const fresh = await fetch("/api/settings").then(x => x.json());
+    const fresh = await fetch(seaUrl("/api/settings")).then(x => x.json());
     cfg = fresh;
     renderAll();
   } catch(e) {
@@ -2501,7 +2506,7 @@ async function toolsRefreshBrowser() {
   if (!listEl) return;
   listEl.innerHTML = `<div style="padding:14px;text-align:center;color:var(--muted)">${T("settings.tools.browser_loading","Loading…")}</div>`;
   try {
-    const r = await fetch("/api/exports/list");
+    const r = await fetch(seaUrl("/api/exports/list"));
     const d = await r.json();
     if (!d.ok) throw new Error(d.error || "?");
     _toolsFiles = d.files || [];
@@ -2542,7 +2547,7 @@ function _toolsRenderBrowser() {
       <td style="padding:6px 8px;text-align:right;color:var(--muted)">${_toolsFmtSize(f.size)}</td>
       <td style="padding:6px 8px;text-align:right;color:var(--muted)">${_toolsFmtMtime(f.mtime)}</td>
       <td style="padding:6px 8px;text-align:right">
-        <a class="btn small" href="/files/${encodeURI(f.rel_path)}" download title="${T("settings.tools.download","Download")}">⬇</a>
+        <a class="btn small" href="${seaUrl(`/files/${encodeURI(f.rel_path)}`)}" download title="${T("settings.tools.download","Download")}">⬇</a>
         <button class="small danger" onclick="toolsDeleteOne('${esc(f.rel_path).replace(/'/g,"\\'")}')">🗑</button>
       </td>
     </tr>`;
@@ -2572,7 +2577,7 @@ async function toolsBulkDelete() {
 }
 async function _toolsDelete(rels) {
   try {
-    const r = await fetch("/api/exports/delete", {
+    const r = await fetch(seaUrl("/api/exports/delete"), {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({rel_paths: rels}),
@@ -2592,7 +2597,7 @@ async function _toolsDelete(rels) {
 async function saveToolsExports() {
   const dir = (document.getElementById("tools-export-dir") || {}).value || "";
   try {
-    const r = await fetch("/api/settings", {
+    const r = await fetch(seaUrl("/api/settings"), {
       method: "PUT",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({ ui: { export_directory: dir.trim() } }),
@@ -2600,7 +2605,7 @@ async function saveToolsExports() {
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || "save failed");
     toast(T("settings.toast.saved","Saved."), "ok");
-    const fresh = await fetch("/api/settings").then(x => x.json());
+    const fresh = await fetch(seaUrl("/api/settings")).then(x => x.json());
     cfg = fresh;
   } catch(e) {
     toast(T("settings.toast.error","Error: {err}",{err: e.message}), "error");
@@ -2613,7 +2618,7 @@ async function saveToolsExports() {
 async function reportDownload(kind) {
   const anker = (document.getElementById("tools-anchor") || {}).value || "";
   const art = (kind === "monthly") ? "monthly" : "daily";
-  let url = "/api/report/" + art + ".pdf";
+  let url = seaUrl("/api/report/") + art + ".pdf";
   if (anker) url += "?date=" + encodeURIComponent(anker);
   const out = document.getElementById("tools-results");
   if (out) out.innerHTML = `<div class="hint">⏳ ${T("settings.tools.running","Running…")}</div>`;
@@ -2663,7 +2668,7 @@ async function toolsRun(action, period) {
   const out = document.getElementById("tools-results");
   if (out) out.innerHTML = `<div class="hint">⏳ ${T("settings.tools.running","Running…")}</div>`;
   try {
-    const r = await fetch("/api/run", {
+    const r = await fetch(seaUrl("/api/run"), {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({ action: action, params: params }),
@@ -2691,7 +2696,7 @@ async function _toolsAwaitJob(jobId, action) {
     await new Promise(function(res){ setTimeout(res, 900); });
     let j = null;
     try {
-      const r = await fetch("/api/job?id=" + encodeURIComponent(jobId));
+      const r = await fetch(seaUrl("/api/job?id=") + encodeURIComponent(jobId));
       j = (await r.json()).job;
     } catch(e) { continue; }
     if (!j) continue;
@@ -2740,7 +2745,7 @@ async function loadSSLStatus() {
   if (!el) return;
   el.textContent = T("settings.ssl.loading","Zertifikats-Status wird geladen…");
   try {
-    const r = await fetch("/api/ssl/status");
+    const r = await fetch(seaUrl("/api/ssl/status"));
     const j = await r.json();
     if (!j.ok) {
       el.innerHTML = `<span style="color:var(--danger)">${esc(j.error||T("settings.err","Error"))}</span>`;
@@ -2787,7 +2792,7 @@ async function regenerateSSL() {
   if (!confirm(T("settings.ssl.confirm_regenerate","Really regenerate the certificate? The browser will show a warning on first visit."))) return;
   toast("⏳ " + T("settings.ssl.regenerating","Erzeuge neues Zertifikat…"));
   try {
-    const r = await fetch("/api/ssl/regenerate",{method:"POST"});
+    const r = await fetch(seaUrl("/api/ssl/regenerate"),{method:"POST"});
     const j = await r.json();
     if (j.ok) {
       toast("✓ " + (j.message||T("settings.ssl.regenerated","Zertifikat neu erzeugt – bitte App neu starten")));
@@ -2854,7 +2859,7 @@ function renderAlerts() {
 
 async function loadAlerts() {
   try {
-    const r = await fetch("/api/alerts");
+    const r = await fetch(seaUrl("/api/alerts"));
     const j = await r.json();
     alertRules = j.alerts || [];
     renderAlertList();
@@ -2911,7 +2916,7 @@ function gatherAlertRow(row) {
 
 async function saveAlertRow(row, rowId) {
   const data = gatherAlertRow(row);
-  const r = await fetch("/api/alerts/" + encodeURIComponent(rowId),
+  const r = await fetch(seaUrl("/api/alerts/") + encodeURIComponent(rowId),
     {method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
   const j = await r.json();
   if (j.ok) { toast("✓ "+T("settings.toast.saved","Saved")); loadAlerts(); }
@@ -2919,7 +2924,7 @@ async function saveAlertRow(row, rowId) {
 }
 
 async function addAlertRule() {
-  const r = await fetch("/api/alerts",{method:"POST",
+  const r = await fetch(seaUrl("/api/alerts"),{method:"POST",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({enabled:true,device_key:"*",metric:"W",op:">",threshold:1000,duration_seconds:10,message:T("settings.alerts.default_msg","Hohe Last")})});
   const j = await r.json();
@@ -2929,7 +2934,7 @@ async function addAlertRule() {
 
 async function deleteAlertRow(ruleId) {
   if (!confirm(T("settings.alerts.confirm_delete","Delete rule \"{id}\"?",{id:ruleId}))) return;
-  const r = await fetch("/api/alerts/" + encodeURIComponent(ruleId), {method:"DELETE"});
+  const r = await fetch(seaUrl("/api/alerts/") + encodeURIComponent(ruleId), {method:"DELETE"});
   const j = await r.json();
   if (j.ok) { toast(T("settings.toast.rule_deleted","✓ Deleted")); loadAlerts(); }
   else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
@@ -2939,7 +2944,7 @@ async function triggerFirmwareUpdate(key, name) {
   if (!confirm(T("settings.health.confirm_firmware","Start firmware update for \"{name}\"?\\n\\nThe device will restart automatically.",{name:name}))) return;
   toast("⏳ "+T("settings.health.starting_update","Starting update for {name}…",{name:name}));
   try {
-    const r = await fetch("/api/health/" + encodeURIComponent(key) + "/update", {method:"POST"});
+    const r = await fetch(seaUrl("/api/health/") + encodeURIComponent(key) + "/update", {method:"POST"});
     const j = await r.json();
     if (j.ok) {
       toast("✓ "+T("settings.health.update_started","Update started for {device}",{device:name}));
@@ -2952,7 +2957,7 @@ async function triggerFirmwareUpdate(key, name) {
 
 async function updateAllWithPendingFirmware() {
   const el = $("#health-results");
-  const r = await fetch("/api/health");
+  const r = await fetch(seaUrl("/api/health"));
   const j = await r.json();
   if (!j.ok) return;
   const pending = j.devices.filter(d => d.online && d.firmware_update_available);
@@ -2960,7 +2965,7 @@ async function updateAllWithPendingFirmware() {
   if (!confirm(T("settings.health.confirm_update_all","{n} device(s) have updates. Update all now?",{n:pending.length}))) return;
   for (const d of pending) {
     toast("⏳ "+T("settings.health.updating_one","Update {name}…",{name:d.name}));
-    await fetch("/api/health/" + encodeURIComponent(d.key) + "/update", {method:"POST"});
+    await fetch(seaUrl("/api/health/") + encodeURIComponent(d.key) + "/update", {method:"POST"});
     await new Promise(r => setTimeout(r, 2000));
   }
   toast("✓ "+T("settings.health.updates_started_n","{n} Update(s) gestartet",{n:pending.length}));
@@ -2971,7 +2976,7 @@ async function runHealthCheck() {
   const el = $("#health-results");
   el.innerHTML = '<p class="hint">'+T("settings.health.pinging","⏳ Pinging devices…")+'</p>';
   try {
-    const r = await fetch("/api/health");
+    const r = await fetch(seaUrl("/api/health"));
     const j = await r.json();
     if (!j.ok) { el.innerHTML = `<p class="hint">${T("settings.health.error","Fehler")}</p>`; return; }
     const rows = j.devices.map(d => {
@@ -3022,7 +3027,7 @@ function wireListEvents(root) {
     if (fld.dataset.wired) return;
     fld.dataset.wired = "1";
     const schemaTpl = fld.querySelector('.list-schema');
-    let meta = {schema:[], defaults:{}, itemLabel:"Eintrag"};
+    let meta = {schema:[], defaults:{}, itemLabel:"Eintrag", key:"_tmp"};
     try { meta = JSON.parse(decodeURIComponent(schemaTpl.innerHTML)); } catch(e){}
     fld.addEventListener('click', ev => {
       const del = ev.target.closest('.list-item-del');
@@ -3040,7 +3045,7 @@ function wireListEvents(root) {
         // Render a new item by calling renderListField with a single-item array, then extract
         const fakeVal = [Object.assign({}, meta.defaults)];
         const tmp = document.createElement('div');
-        tmp.innerHTML = renderListField({key:"_tmp",label:"",itemLabel:meta.itemLabel,schema:meta.schema,defaults:meta.defaults}, fakeVal);
+        tmp.innerHTML = renderListField({key:meta.key||"_tmp",label:"",itemLabel:meta.itemLabel,schema:meta.schema,defaults:meta.defaults}, fakeVal);
         const newItem = tmp.querySelector('.list-item');
         if (newItem) {
           newItem.dataset.idx = idx;
@@ -3055,12 +3060,12 @@ function renderAll() {
   renderNav();
   wireListEvents($("#main"));
   // Fetch real app version
-  fetch("/api/version").then(r=>r.json()).then(v=>{
+  fetch(seaUrl("/api/version")).then(r=>r.json()).then(v=>{
     const el = $("#about-version");
     if (el) el.textContent = v.version || "?";
   }).catch(()=>{});
   // Load DB stats
-  fetch("/api/data/stats").then(r=>r.json()).then(s=>{
+  fetch(seaUrl("/api/data/stats")).then(r=>r.json()).then(s=>{
     if (!s.ok) return;
     const el = $("#about-stats");
     if (el) el.innerHTML = `Datenbank: ${s.db_size_mb} MB · Samples: ${(s.samples_rows||0).toLocaleString()} · Stunden: ${(s.hourly_energy_rows||0).toLocaleString()}`;
@@ -3208,7 +3213,7 @@ async function discoverDevices() {
   const results = $("#discover-results");
   results.innerHTML = '<p class="hint">🔍 Scanne lokales Netzwerk…</p>';
   try {
-    const r = await fetch("/api/devices/discover?timeout=5",{method:"POST"});
+    const r = await fetch(seaUrl("/api/devices/discover?timeout=5"),{method:"POST"});
     const j = await r.json();
     if (!j.ok) { results.innerHTML = `<p class="hint">Fehler: ${j.error}</p>`; return; }
     if (!j.devices.length) { results.innerHTML = `<p class="hint">${T("settings.devices.none","No devices found")}</p>`; return; }
@@ -3221,7 +3226,7 @@ async function discoverDevices() {
 }
 
 async function addDiscovered(dev) {
-  const r = await fetch("/api/devices",{method:"POST",
+  const r = await fetch(seaUrl("/api/devices"),{method:"POST",
     headers:{"Content-Type":"application/json"},body:JSON.stringify(dev)});
   const j = await r.json();
   if (j.ok) { toast(T("settings.toast.device_added","✓ Device added")); reload(); }
@@ -3233,14 +3238,14 @@ async function addByIp() {
   if (!ip) return;
   let username = "admin";
   let password = "";
-  const r = await fetch("/api/devices",{method:"POST",
+  const r = await fetch(seaUrl("/api/devices"),{method:"POST",
     headers:{"Content-Type":"application/json"},body:JSON.stringify({host:ip, username, password})});
   const j = await r.json();
   if (j.ok) { toast(T("settings.toast.device_added","✓ Device added")); $("#probe-ip").value=""; reload(); return; }
   if (j.error === "auth_required") {
     const pw = prompt("Device " + ip + " is password-protected.\nEnter the admin password:");
     if (!pw) return;
-    const r2 = await fetch("/api/devices",{method:"POST",
+    const r2 = await fetch(seaUrl("/api/devices"),{method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({host:ip, username, password: pw})});
     const j2 = await r2.json();
@@ -3253,7 +3258,7 @@ async function addByIp() {
 
 async function deleteDevice(key) {
   if (!confirm(T("settings.devices.confirm_remove","Really remove device {key}?",{key:key}))) return;
-  const r = await fetch("/api/devices/"+encodeURIComponent(key),{method:"DELETE"});
+  const r = await fetch(seaUrl("/api/devices/")+encodeURIComponent(key),{method:"DELETE"});
   const j = await r.json();
   if (j.ok) { toast(T("settings.toast.device_removed","✓ Device removed")); reload(); }
   else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
@@ -3272,7 +3277,7 @@ async function testConnection(which) {
     opts.headers = {"Content-Type":"application/json"};
     opts.body = JSON.stringify({params: params});
   }
-  const r = await fetch("/api/settings/test-"+which, opts);
+  const r = await fetch(seaUrl("/api/settings/test-")+which, opts);
   const j = await r.json();
   if (j.ok) toast("✓ " + (j.message||"OK"));
   else toast(T("settings.toast.error","Error: {err}",{err:j.error}), "error");
@@ -3283,7 +3288,7 @@ async function importUrdb() {
   const val = k => { const el = document.querySelector('[data-key="'+k+'"]'); return el ? el.value : ""; };
   toast(T("settings.toast.urdb_importing","Loading rate from URDB…"));
   try {
-    const r = await fetch("/api/settings/tou-urdb-import", {method:"POST",
+    const r = await fetch(seaUrl("/api/settings/tou-urdb-import"), {method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({rate:val("tou.urdb_rate"), api_key:val("tou.urdb_api_key"), location:val("tou.urdb_location")})});
     const j = await r.json();
@@ -3294,7 +3299,7 @@ async function importUrdb() {
     toast("✓ " + T("settings.toast.urdb_imported","{rate}: {price}/kWh, base fee {fee}/year, {tou} ({month})",
       {rate:(j.utility||"") + " – " + (j.name||""), price:Number(j.price).toFixed(5),
        fee:Number(j.base_fee).toFixed(2), tou:touTxt, month:j.month}));
-    cfg = await fetch("/api/settings").then(x=>x.json());
+    cfg = await fetch(seaUrl("/api/settings")).then(x=>x.json());
     ["pricing", "tou"].forEach(id => {
       const secEl = document.getElementById("sec-" + id);
       const s = SECTIONS.find(x => x.id === id);
@@ -3313,7 +3318,7 @@ async function findUrdbRates() {
   const box = document.getElementById("urdb-results");
   toast(T("settings.toast.urdb_searching","Searching rates in URDB…"));
   try {
-    const r = await fetch("/api/settings/tou-urdb-search", {method:"POST",
+    const r = await fetch(seaUrl("/api/settings/tou-urdb-search"), {method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({location:val("tou.urdb_location"), api_key:val("tou.urdb_api_key")})});
     const j = await r.json();
@@ -3347,11 +3352,11 @@ function pickUrdbRate(label) {
 async function reload() {
   try {
     const [cfgR, devR, i18nR, zonesR, presetsR] = await Promise.all([
-      fetch("/api/settings").then(r=>r.json()),
-      fetch("/api/devices").then(r=>r.json()),
-      fetch("/api/i18n?prefix=settings.").then(r=>r.json()).catch(_=>({map:{}})),
-      fetch("/api/zones").then(r=>r.json()).catch(_=>({spot_energy_charts:[], spot_awattar:[], co2:[]})),
-      fetch("/api/pv_presets").then(r=>r.json()).catch(_=>({presets:[]})),
+      fetch(seaUrl("/api/settings")).then(r=>r.json()),
+      fetch(seaUrl("/api/devices")).then(r=>r.json()),
+      fetch(seaUrl("/api/i18n?prefix=settings.")).then(r=>r.json()).catch(_=>({map:{}})),
+      fetch(seaUrl("/api/zones")).then(r=>r.json()).catch(_=>({spot_energy_charts:[], spot_awattar:[], co2:[]})),
+      fetch(seaUrl("/api/pv_presets")).then(r=>r.json()).catch(_=>({presets:[]})),
     ]);
     cfg = cfgR;
     PV_PRESETS = (presetsR && presetsR.presets) || [];

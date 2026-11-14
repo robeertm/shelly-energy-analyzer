@@ -1,0 +1,48 @@
+# Full customer walkthrough (about 25 minutes): every pane, every Plots select
+# combination, control, settings and setup, in all languages, desktop and phone,
+# light and dark, plus the ingress pass and the full API tour.
+#
+# Runs before every promotion (promote.yml calls it and only moves `:latest`
+# when it is green), once a week, and by hand. The quick version runs on every
+# push in e2e.yml.
+name: e2e-full
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to test (tag or commit)"
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to test (tag or commit, empty = default branch)"
+        type: string
+        default: ""
+  schedule:
+    - cron: "17 3 * * 1"
+
+jobs:
+  walkthrough-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ".[charts]" pytest playwright
+      - run: playwright install --with-deps chromium webkit
+      - name: API tour (full)
+        run: python tests/e2e/api_tour.py --report e2e-full-api.json
+      - name: Browser walkthrough (full)
+        run: python tests/e2e/walkthrough.py --report e2e-full-walkthrough.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-full-report
+          path: e2e-full-*.json
+          if-no-files-found: ignore

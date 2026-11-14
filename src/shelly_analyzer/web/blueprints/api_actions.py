@@ -26,31 +26,19 @@ def api_run():
     try:
         if action == "set_language":
             lang = str(params.get("language", "de") or "de")
-            # Persist language to config.json so it survives page reloads
+            # Persist the language to the config file this server was started
+            # with (not cwd/config.json) and switch the session language, so
+            # the next page load renders in the new language without a restart.
             try:
                 import dataclasses
+                from shelly_analyzer.i18n import normalize_lang
                 from shelly_analyzer.io.config import save_config
+                lang = normalize_lang(lang)
                 new_ui = dataclasses.replace(state.cfg.ui, language=lang)
                 new_cfg = dataclasses.replace(state.cfg, ui=new_ui)
-                save_config(new_cfg)
-                # Full reload so cached HTML templates get re-rendered with new lang
-                state.cfg = new_cfg
+                save_config(new_cfg, getattr(state, "_cfg_path", None))
                 state.reload_config(new_cfg)
-                # Also propagate to action dispatcher if it supports it
-                try:
-                    dispatcher = state.on_action
-                    if hasattr(dispatcher, "reload"):
-                        try:
-                            dispatcher.reload(new_cfg, lang=state.lang)
-                        except TypeError:
-                            dispatcher.reload(new_cfg)
-                    elif hasattr(dispatcher, "__self__") and hasattr(dispatcher.__self__, "reload"):
-                        try:
-                            dispatcher.__self__.reload(new_cfg, lang=state.lang)
-                        except TypeError:
-                            dispatcher.__self__.reload(new_cfg)
-                except Exception:
-                    pass
+                state.set_language(lang)
             except Exception as e:
                 return jsonify({"ok": False, "error": f"Failed to persist language: {e}"}), 500
             return jsonify({"ok": True, "language": lang})

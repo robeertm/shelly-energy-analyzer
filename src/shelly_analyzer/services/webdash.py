@@ -483,6 +483,15 @@ def control_i18n_values(lang: str) -> Dict[str, str]:
     }
 
 
+def _with_base_path(html: str, route: str) -> str:
+    """Add the base-path script (``seaUrl``) to a rendered page.
+
+    Imported lazily: ``shelly_analyzer.web`` imports this module."""
+    from shelly_analyzer.web.base_path import inject_base_path
+
+    return inject_base_path(html, route)
+
+
 def _render_template(tpl: str, values: Dict[str, str]) -> str:
     """Render our HTML templates safely.
 
@@ -1248,7 +1257,7 @@ _HTML_TEMPLATE = """<!doctype html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Shelly Energy Analyzer</title>
-  <link rel="icon" href="/widget-icon.svg" type="image/svg+xml">
+  <link rel="icon" data-sea-href="/widget-icon.svg" type="image/svg+xml">
   <style>
     /* ── Theme variables ── */
     :root {{
@@ -2448,7 +2457,7 @@ _HTML_TEMPLATE = """<!doctype html>
       <button id="btn-hamburger" class="icon-btn" title="{web_chrome_menu}" onclick="toggleNavDrawer()">☰</button>
       <button id="btn-freeze" class="icon-btn" title="{web_btn_freeze_title}" style="display:none">▶</button>
       <button id="btn-raw" onclick="toggleRawView()" title="" style="display:none"></button>
-      <button id="btn-live-settings" class="icon-btn" title="{web_btn_settings_title}" onclick="window.location.href='/settings#sec-devices'">⚙</button>
+      <button id="btn-live-settings" class="icon-btn" title="{web_btn_settings_title}" onclick="window.location.href=seaUrl('/settings#sec-devices')">⚙</button>
       <button id="btn-theme" class="icon-btn" title="{web_btn_theme_title}">☀</button>
     </div>
   </header>
@@ -2782,7 +2791,7 @@ _HTML_TEMPLATE = """<!doctype html>
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-accent" onclick="copyWidgetScript()" style="font-size:11px;padding:6px 12px">📋 {web_widget_btn_copy}</button>
-        <button class="btn" onclick="window.open('/widget.js','_blank')" style="font-size:11px;padding:6px 12px;background:var(--card-bg);color:var(--fg);border:1px solid var(--border)">⬇ {web_widget_btn_download}</button>
+        <button class="btn" onclick="window.open(seaUrl('/widget.js'),'_blank')" style="font-size:11px;padding:6px 12px;background:var(--card-bg);color:var(--fg);border:1px solid var(--border)">⬇ {web_widget_btn_download}</button>
       </div>
       <div id="widget-copy-msg" style="font-size:10px;color:#4caf50;margin-top:4px;display:none">{web_widget_copied}</div>
     </div>
@@ -3039,7 +3048,7 @@ function onPaneActivated(name) {{
       const fr = document.getElementById('plots-frame');
       if (fr && (!fr.src || fr.src === 'about:blank' || fr.src.endsWith('about:blank'))) {{
         // Load once already in the header pill's net/gross mode (no second reload).
-        fr.src = '/plots?raw=' + (_rawView ? '1' : '0');
+        fr.src = seaUrl('/plots?raw=') + (_rawView ? '1' : '0');
       }} else if (fr) {{
         // Returning to the tab → sync net/gross to the pill (single refetch).
         try {{
@@ -3354,7 +3363,7 @@ function _buildPaletteItems() {{
                 run: function() {{ const tb = document.getElementById('btn-theme'); if (tb) tb.click(); }} }});
   items.push({{ icon: '⚙', label: t('web.palette.act.settings', 'Open settings'),
                 kind: t('web.palette.kind.action', 'Action'),
-                run: function() {{ window.location.href = '/settings'; }} }});
+                run: function() {{ window.location.href = seaUrl('/settings'); }} }});
   items.push({{ icon: '🔄', label: t('web.palette.act.sync', 'Sync now'),
                 kind: t('web.palette.kind.action', 'Action'),
                 run: function() {{ switchPane('sync', _navBtnByName('sync')); }} }});
@@ -3526,7 +3535,7 @@ async function loadControl() {{
 
   try {{
     const [stateResp, cfgResp, settingsResp] = await Promise.all([
-      fetch('/api/state'), fetch('/api/config'), fetch('/api/settings')
+      fetch(seaUrl('/api/state')), fetch(seaUrl('/api/config')), fetch(seaUrl('/api/settings'))
     ]);
     const data = await stateResp.json();
     const devs = data.devices || [];
@@ -3615,7 +3624,7 @@ async function ctrlToggle(key, on) {{
   const msg = document.getElementById('ctrl-msg-' + key);
   if (msg) msg.textContent = '…';
   try {{
-    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+    const r = await fetch(seaUrl('/api/run'), {{method:'POST',headers:{{'Content-Type':'application/json'}},
       body:JSON.stringify({{action:'set_switch',params:{{device_key:key,on:on}}}}) }});
     const j = await r.json();
     const st = document.getElementById('ctrl-state-' + key);
@@ -3628,7 +3637,7 @@ async function ctrlSetBrightness(key, val) {{
   const msg = document.getElementById('ctrl-msg-' + key);
   if (msg) msg.textContent = '…';
   try {{
-    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+    const r = await fetch(seaUrl('/api/run'), {{method:'POST',headers:{{'Content-Type':'application/json'}},
       body:JSON.stringify({{action:'set_light',params:{{device_key:key,on:true,brightness:parseInt(val)}}}}) }});
     const j = await r.json();
     if (msg) msg.textContent = j.ok ? '✓ ' + val + '%' : (j.error || '');
@@ -3640,7 +3649,7 @@ async function ctrlSetRgb(key, hex) {{
   const msg = document.getElementById('ctrl-msg-' + key);
   if (msg) msg.textContent = '…';
   try {{
-    const resp = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+    const resp = await fetch(seaUrl('/api/run'), {{method:'POST',headers:{{'Content-Type':'application/json'}},
       body:JSON.stringify({{action:'set_light',params:{{device_key:key,on:true,rgb:[r,g,b]}}}}) }});
     const j = await resp.json();
     if (msg) msg.textContent = j.ok ? '✓' : (j.error || '');
@@ -3651,7 +3660,7 @@ async function ctrlSetTemp(key, val) {{
   const msg = document.getElementById('ctrl-msg-' + key);
   if (msg) msg.textContent = '…';
   try {{
-    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+    const r = await fetch(seaUrl('/api/run'), {{method:'POST',headers:{{'Content-Type':'application/json'}},
       body:JSON.stringify({{action:'set_light',params:{{device_key:key,on:true,temp:parseInt(val)}}}}) }});
     const j = await r.json();
     if (msg) msg.textContent = j.ok ? '✓ ' + val + 'K' : (j.error || '');
@@ -3662,7 +3671,7 @@ async function ctrlCover(key, cmd) {{
   const msg = document.getElementById('ctrl-msg-' + key);
   if (msg) msg.textContent = '…';
   try {{
-    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+    const r = await fetch(seaUrl('/api/run'), {{method:'POST',headers:{{'Content-Type':'application/json'}},
       body:JSON.stringify({{action:'cover_' + cmd,params:{{device_key:key}}}}) }});
     const j = await r.json();
     if (msg) msg.textContent = j.ok ? '✓' : (j.error || '');
@@ -3674,7 +3683,7 @@ async function ctrlSetCoverPos(key, val) {{
   const msg = document.getElementById('ctrl-msg-' + key);
   if (msg) msg.textContent = '…';
   try {{
-    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+    const r = await fetch(seaUrl('/api/run'), {{method:'POST',headers:{{'Content-Type':'application/json'}},
       body:JSON.stringify({{action:'cover_position',params:{{device_key:key,position:parseInt(val)}}}}) }});
     const j = await r.json();
     if (msg) msg.textContent = j.ok ? '✓ ' + val + '%' : (j.error || '');
@@ -3684,7 +3693,7 @@ async function ctrlSetCoverPos(key, val) {{
 
 async function _ctrlFetchLight(key) {{
   try {{
-    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+    const r = await fetch(seaUrl('/api/run'), {{method:'POST',headers:{{'Content-Type':'application/json'}},
       body:JSON.stringify({{action:'get_light',params:{{device_key:key}}}}) }});
     const j = await r.json();
     if (j.ok && j.status) {{
@@ -3702,7 +3711,7 @@ async function _ctrlFetchLight(key) {{
 
 async function _ctrlFetchCover(key) {{
   try {{
-    const r = await fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},
+    const r = await fetch(seaUrl('/api/run'), {{method:'POST',headers:{{'Content-Type':'application/json'}},
       body:JSON.stringify({{action:'get_cover',params:{{device_key:key}}}}) }});
     const j = await r.json();
     if (j.ok && j.status) _ctrlApplyCover(key, j.status);
@@ -3731,7 +3740,7 @@ async function loadNilm() {{
   const quiet = _quietRefresh;
   _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
-    const r = await fetch('/api/nilm_detail');
+    const r = await fetch(seaUrl('/api/nilm_detail'));
     if (!r.ok) throw new Error(r.status);
     _nilmData = await r.json();
     // Auto-select the first NILM-eligible device on first load, or the
@@ -4266,10 +4275,10 @@ function stopSyncPolling() {{
   if (_syncStatusTimer) {{ clearInterval(_syncStatusTimer); _syncStatusTimer = null; }}
 }}
 function toggleLogHttp(v) {{
-  fetch('/api/logs/config', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{include_http: !!v}})}}).catch(function() {{}});
+  fetch(seaUrl('/api/logs/config'), {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{include_http: !!v}})}}).catch(function() {{}});
 }}
 function pollSyncLogs() {{
-  fetch('/api/logs?since=' + _syncLogSince + '&limit=200').then(function(r) {{ return r.json(); }}).then(function(d) {{
+  fetch(seaUrl('/api/logs?since=') + _syncLogSince + '&limit=200').then(function(r) {{ return r.json(); }}).then(function(d) {{
     // Sync checkbox with server state on first poll
     var httpCb = document.getElementById('log-include-http');
     if (httpCb && typeof d.include_http === 'boolean' && httpCb.checked !== d.include_http) httpCb.checked = d.include_http;
@@ -4290,7 +4299,7 @@ function pollSyncLogs() {{
 function syncAll(mode) {{
   const el = document.getElementById('sync-status-panel');
   if (el) el.textContent = t('web.sync.status.starting', {{mode: mode}});
-  fetch('/api/sync', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{mode:mode}})}})
+  fetch(seaUrl('/api/sync'), {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{mode:mode}})}})
     .then(function(r) {{ return r.json(); }})
     .then(function(d) {{
       if (el) el.textContent = d.ok
@@ -4310,8 +4319,8 @@ function loadTenants() {{
   if (!el) return;
   _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   Promise.all([
-    fetch('/api/tenants').then(function(r) {{ return r.json(); }}),
-    fetch('/api/config').then(function(r) {{ return r.json(); }})
+    fetch(seaUrl('/api/tenants')).then(function(r) {{ return r.json(); }}),
+    fetch(seaUrl('/api/config')).then(function(r) {{ return r.json(); }})
   ]).then(function(results) {{
     const td = results[0] || {{}};
     const cfg = results[1] || {{}};
@@ -4336,7 +4345,7 @@ function renderTenants() {{
        (td.enabled ? '' : ' · <span style="color:var(--warn,#eab308)">' + t('web.tenants.billing_inactive','billing inactive') + '</span>') +
        (commonCount ? ' · ' + commonCount + ' ' + t('web.tenants.common_area', commonCount === 1 ? 'common-area device' : 'common-area devices') : '');
   h += '</div>';
-  h += '<a class="btn small" href="/settings#sec-tenant">⚙ ' + t('web.tenants.configure_in_settings','Configure in Settings') + '</a>';
+  h += '<a class="btn small" href="' + seaUrl('/settings#sec-tenant') + '">⚙ ' + t('web.tenants.configure_in_settings','Configure in Settings') + '</a>';
   h += '</div>';
   // Invoice export — period pills + per-tenant preview/PDF cards
   const preset = _tenantsPresetForBoot();
@@ -4496,7 +4505,7 @@ function tenantsPreviewOne(tid) {{
   const q = _tenantsCurrentQuery();
   const el = document.getElementById('t-bills');
   _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.js.computing', 'Computing…') + '</p>');
-  fetch('/api/tenants/bill?' + q.qs).then(function(r) {{ return r.json(); }}).then(function(d) {{
+  fetch(seaUrl('/api/tenants/bill?') + q.qs).then(function(r) {{ return r.json(); }}).then(function(d) {{
     if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||t('web.lit.no_data','No data')) + '</p>'; return; }}
     const rep = d.report;
     const bills = (rep.bills || []).filter(function(b) {{ return (b.tenant.tenant_id || '') === tid; }});
@@ -4543,7 +4552,7 @@ function tenantsExportAllPdf() {{
 function _tenantsPostInvoice(body) {{
   const el = document.getElementById('t-bills');
   _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.js.generating_pdf', 'Generating PDF…') + '</p>');
-  fetch('/api/tenants/invoice', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify(body)}})
+  fetch(seaUrl('/api/tenants/invoice'), {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify(body)}})
     .then(function(r) {{ return r.json(); }})
     .then(function(d) {{
       if (!d.ok) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||'?') + '</p>'; return; }}
@@ -4560,7 +4569,7 @@ function _tenantsPostInvoice(body) {{
         h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--border)">';
         h += '<div><div style="font-weight:600;font-size:12px">' + head + meta + '</div>';
         h += '<div style="font-size:10px;color:var(--muted)">' + esc(f.name) + '</div></div>';
-        h += '<a class="btn small btn-accent" href="' + esc(f.url) + '" download>⬇ ' + dlLbl + '</a>';
+        h += '<a class="btn small btn-accent" href="' + esc(seaUrl(f.url)) + '" download>⬇ ' + dlLbl + '</a>';
         h += '</div>';
       }});
       h += '</div>';
@@ -4579,7 +4588,7 @@ function computeBills() {{
   if (tm) q.set('tariff_mode', tm);
   const el = document.getElementById('t-bills');
   _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.js.computing', 'Computing…') + '</p>');
-  fetch('/api/tenants/bill?' + q.toString()).then(function(r) {{ return r.json(); }}).then(function(d) {{
+  fetch(seaUrl('/api/tenants/bill?') + q.toString()).then(function(r) {{ return r.json(); }}).then(function(d) {{
     if (!d.ok || !d.report) {{ el.innerHTML = '<p style="color:var(--red)">' + esc(d.error||t('web.lit.no_data','No data')) + '</p>'; return; }}
     const rep = d.report;
     const tariffLabel = rep.tariff_mode === 'dynamic' ? '⚡ ' + t('web.tenants.tariff_dynamic','Dynamic') : '💲 ' + t('web.tenants.tariff_fixed','Fixed');
@@ -4616,7 +4625,7 @@ function computeBills() {{
 function refreshSyncStatus() {{
   const el = document.getElementById('sync-status-panel');
   if (!el) return;
-  fetch('/api/sync/status').then(function(r) {{ return r.json(); }}).then(function(d) {{
+  fetch(seaUrl('/api/sync/status')).then(function(r) {{ return r.json(); }}).then(function(d) {{
     if (!d.ok) {{ el.textContent = t('web.js.status_unavailable', 'Status unavailable') + ': ' + (d.error || '?'); return; }}
     const devs = d.devices || [];
     if (!devs.length) {{ el.textContent = t('web.lit.no_devices','No devices configured'); return; }}
@@ -4714,14 +4723,14 @@ function closeLiveSettings() {{
 }})();
 async function copyWidgetScript() {{
   try {{
-    const r = await fetch('/widget.js');
+    const r = await fetch(seaUrl('/widget.js'));
     const txt = await r.text();
     await navigator.clipboard.writeText(txt);
     var msg = document.getElementById('widget-copy-msg');
     if (msg) {{ msg.style.display = 'block'; setTimeout(function(){{ msg.style.display='none'; }}, 2000); }}
   }} catch(e) {{
     // Fallback: open in new tab
-    window.open('/widget.js', '_blank');
+    window.open(seaUrl('/widget.js'), '_blank');
   }}
 }}
 
@@ -4861,7 +4870,7 @@ async function loadHistory() {{
   if (_historyLoaded || _historyLoading) return;
   _historyLoading = true;
   try {{
-    const r = await fetch('/api/history' + (_rawView ? '?raw=1' : ''));
+    const r = await fetch(seaUrl('/api/history') + (_rawView ? '?raw=1' : ''));
     if (!r.ok) return;
     const data = await r.json();
     const hist = data.history || {{}};
@@ -4999,7 +5008,7 @@ function toggleRawView() {{
 }}
 async function tick(first) {{
   try {{
-    const r = await fetch('/api/state' + (_rawView ? '?raw=1' : ''));
+    const r = await fetch(seaUrl('/api/state') + (_rawView ? '?raw=1' : ''));
     if (!r.ok) return;
     const data = await r.json();
     _liveLatest = data;
@@ -5026,11 +5035,11 @@ async function tick(first) {{
    detected, shows a banner at the top of the Live pane. Clicking it
    jumps directly to the Updates section on the settings page. */
 function goToUpdates() {{
-  window.location.href = '/settings#sec-updates';
+  window.location.href = seaUrl('/settings#sec-updates');
 }}
 async function checkForUpdateBanner() {{
   try {{
-    const r = await fetch('/api/updates/cached', {{ cache: 'no-store' }});
+    const r = await fetch(seaUrl('/api/updates/cached'), {{ cache: 'no-store' }});
     if (!r.ok) return;
     const j = await r.json();
     const banner = document.getElementById('update-banner');
@@ -5364,7 +5373,7 @@ async function loadInsights() {{
     if (_insightsFeatBusy) return;
     _insightsFeatBusy = true;
     try {{
-      var rc = await fetch('/api/config');
+      var rc = await fetch(seaUrl('/api/config'));
       _insightsFeat = (await rc.json()).features || {{}};
     }} catch(e) {{ _insightsFeat = {{}}; }}
     finally {{ _insightsFeatBusy = false; }}
@@ -5411,7 +5420,7 @@ async function loadInsights() {{
     var name = queue[next++];
     _insightInFlight[name] = true;
     var t0 = Date.now();
-    _insightFetch('/api/' + name).then(function(data) {{
+    _insightFetch(seaUrl('/api/') + name).then(function(data) {{
       _insightInFlight[name] = false;
       _insightCost[name] = Date.now() - t0;
       done++;
@@ -5572,7 +5581,7 @@ function buildDeviceCard(d) {{
       e.stopPropagation();
       var dk = swBtn.dataset.devkey;
       swBtn.disabled = true;
-      fetch('/api/run', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{action:'toggle_switch',params:{{device_key:dk}}}}) }})
+      fetch(seaUrl('/api/run'), {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{action:'toggle_switch',params:{{device_key:dk}}}}) }})
         .then(function(r) {{ return r.json(); }})
         .then(function(d) {{
           if (d.ok) {{
@@ -6421,7 +6430,7 @@ async function loadCosts() {{
     else _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   }}
   try {{
-    const r = await fetch('/api/costs');
+    const r = await fetch(seaUrl('/api/costs'));
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     if (!_tabSkipRender('costs', el, data)) renderCosts(data, el);
@@ -6632,8 +6641,14 @@ function renderCosts(data, el) {{
     }} else {{
       html += _nilmMetricCard('➡️', t('web.costs.vs_last','vs. previous month'), '—', t('web.costs.kwh_last_month','{{v}} kWh last month', {{v: '—'}}));
     }}
-    const dailyCost = (s.month_eur||0) / Math.max(1, new Date().getDate());
-    html += _nilmMetricCard('💰', t('web.costs.daily_avg','Daily average'), fmt(dailyCost,2) + ' \u20ac', fmt(dailyCost * 365,0) + ' ' + t('web.unit.eur_per_year','€/year'));
+    // Divide by the days that hold measurements (server: data_days), not by the
+    // calendar day — a fresh installation would otherwise look far too cheap.
+    const dataDays = (s.data_days && s.data_days > 0) ? s.data_days : Math.max(1, new Date().getDate());
+    const dailyCost = (s.month_eur||0) / Math.max(1, dataDays);
+    const dailySub = s.short_history
+      ? t('web.costs.short_history','Based on {{n}} days of data', {{n: fmt(dataDays, Math.abs(dataDays - Math.round(dataDays)) < 0.05 ? 0 : 1)}})
+      : fmt(dailyCost * 365,0) + ' ' + t('web.unit.eur_per_year','€/year');
+    html += _nilmMetricCard('💰', t('web.costs.daily_avg','Daily average'), fmt(dailyCost,2) + ' \u20ac', dailySub);
     html += '</div></div>';
   }}
 
@@ -7024,7 +7039,7 @@ function _hmCurrentKey() {{
 function _hmFetch(device, year, unit, raw) {{
   var key = _hmKey(device, year, unit, raw);
   if (_hmInflight[key]) return _hmInflight[key];
-  var url = '/api/heatmap?device=' + encodeURIComponent(device) + '&year=' + year + '&unit=' + unit + (raw ? '&raw=1' : '');
+  var url = seaUrl('/api/heatmap?device=') + encodeURIComponent(device) + '&year=' + year + '&unit=' + unit + (raw ? '&raw=1' : '');
   var p = fetch(url).then(function(r) {{
     if (!r.ok) throw new Error(r.status);
     return r.json();
@@ -7644,7 +7659,7 @@ async function loadCo2(range) {{
   const quiet = _quietRefresh;
   _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
-    const r = await fetch('/api/co2?range=' + _co2Range);
+    const r = await fetch(seaUrl('/api/co2?range=') + _co2Range);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     data._range = _co2Range;
@@ -7666,7 +7681,7 @@ function _stopCo2LiveRates() {{
 async function _refreshCo2LiveRates() {{
   if (currentPane !== 'co2') {{ _stopCo2LiveRates(); return; }}
   try {{
-    const r = await fetch('/api/co2_live');
+    const r = await fetch(seaUrl('/api/co2_live'));
     if (!r.ok) return;
     const data = await r.json();
     if (!data || !data.ok) return;
@@ -8501,7 +8516,7 @@ async function loadSolar(period) {{
   const quiet = _quietRefresh;
   _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
-    const r = await fetch('/api/solar?period=' + period);
+    const r = await fetch(seaUrl('/api/solar?period=') + period);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     if (!_tabSkipRender('solar', el, data)) renderSolar(data, el);
@@ -8516,7 +8531,7 @@ async function loadSolar(period) {{
 function renderSolar(data, el) {{
   if (data.configured === false || data.enabled === false) {{
     el.innerHTML = '<p class="info-msg">' + t('web.dash.solar_not_configured', 'Solar monitoring is not configured.') + '</p>' +
-      '<div style="margin-top:8px;text-align:center"><a class="btn btn-outline btn-sm" href="/settings#sec-solar">⚙️ ' + t('web.dash.configure_in_settings', 'Configure in Settings') + '</a></div>';
+      '<div style="margin-top:8px;text-align:center"><a class="btn btn-outline btn-sm" href="' + seaUrl('/settings#sec-solar') + '">⚙️ ' + t('web.dash.configure_in_settings', 'Configure in Settings') + '</a></div>';
     return;
   }}
   window._solarData = data;
@@ -8670,7 +8685,7 @@ function renderSolar(data, el) {{
   if (am.investment_eur == null || !(data.kw_peak > 0)) html += '<div style="font-size:11px;color:var(--muted);margin-top:6px">' + t('web.solar.more_with_settings', 'Enter kWp, investment and installation year under Settings › Solar for yield per kWp, payback and CO₂ payback.') + '</div>';
   html += '</div></div>';
 
-  html += '<div style="margin-top:8px;text-align:center"><a class="btn btn-outline btn-sm" href="/settings#sec-solar">⚙️ ' + t('web.dash.configure_in_settings', 'Configure in Settings') + '</a></div>';
+  html += '<div style="margin-top:8px;text-align:center"><a class="btn btn-outline btn-sm" href="' + seaUrl('/settings#sec-solar') + '">⚙️ ' + t('web.dash.configure_in_settings', 'Configure in Settings') + '</a></div>';
   el.innerHTML = html;
   _zoomReg('solar', function() {{
     _drawSolarToday(ht);
@@ -8790,7 +8805,7 @@ async function loadWeather() {{
   const quiet = _quietRefresh;
   _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
-    const r = await fetch('/api/weather_correlation');
+    const r = await fetch(seaUrl('/api/weather_correlation'));
     if (!r.ok) throw new Error(r.status);
     const d = await r.json();
     renderWeather(d, el);
@@ -9195,7 +9210,7 @@ async function loadComparePreset(preset) {{
       : ((document.getElementById('cmp-gran')||{{}}).value||'total');
     const spotChk = document.getElementById('cmp-spot');
     const spotMode = spotChk && spotChk.checked ? '&mode=spot' : '';
-    const url = '/api/compare?preset=' + preset +
+    const url = seaUrl('/api/compare?preset=') + preset +
       '&device_a=' + encodeURIComponent((document.getElementById('cmp-da')||{{}}).value||'') +
       '&device_b=' + encodeURIComponent((document.getElementById('cmp-db')||{{}}).value||'') +
       '&unit=' + ((document.getElementById('cmp-unit')||{{}}).value||'kWh') +
@@ -9224,7 +9239,7 @@ async function loadCompare() {{
     const gran = document.getElementById('cmp-gran').value;
     const spotChk2 = document.getElementById('cmp-spot');
     const spotMode2 = spotChk2 && spotChk2.checked ? '&mode=spot' : '';
-    const url = '/api/compare?device_a=' + encodeURIComponent(da) +
+    const url = seaUrl('/api/compare?device_a=') + encodeURIComponent(da) +
       '&from_a=' + fa + '&to_a=' + ta +
       '&device_b=' + encodeURIComponent(db) +
       '&from_b=' + fb + '&to_b=' + tb +
@@ -9486,7 +9501,7 @@ async function loadAnomalies() {{
   const quiet = _quietRefresh;
   _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
-    const r = await fetch('/api/anomalies');
+    const r = await fetch(seaUrl('/api/anomalies'));
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     if (!_tabSkipRender('anomalies', el, data)) renderAnomalies(data, el);
@@ -9740,7 +9755,7 @@ async function loadForecast() {{
   const quiet = _quietRefresh;
   _spinner(cont, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
-    const r = await fetch('/api/forecast?device_key=' + encodeURIComponent(dk));
+    const r = await fetch(seaUrl('/api/forecast?device_key=') + encodeURIComponent(dk));
     if (!r.ok) throw new Error(r.status);
     const d = await r.json();
     if (d.no_data) {{ if (!_tabHasContent(cont)) cont.innerHTML = '<p class="info-msg">' + t('web.lit.forecast_min','Not enough data for forecast (min. 3 days).') + '</p>'; return; }}
@@ -9753,7 +9768,7 @@ async function loadSolarForecastSection() {{
   const host = document.getElementById('fc-solar');
   if (!host) return;
   try {{
-    const r = await fetch('/api/solar_forecast');
+    const r = await fetch(seaUrl('/api/solar_forecast'));
     if (!r.ok) throw new Error(r.status);
     const d = await r.json();
     if (!d.ok || d.available === false) {{ host.innerHTML = ''; return; }}
@@ -10015,7 +10030,7 @@ async function loadStandby() {{
   const quiet = _quietRefresh;
   _spinner(cont, quiet, '<p class="loading-msg">' + t('web.loading','Loading…') + '</p>');
   try {{
-    const r = await fetch('/api/standby');
+    const r = await fetch(seaUrl('/api/standby'));
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     if (!_tabSkipRender('standby', cont, data)) renderStandby(data);
@@ -10314,7 +10329,7 @@ async function loadSankey() {{
   const quiet = _quietRefresh || !!document.getElementById('flow-svg');
   _spinner(cont, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
-    const r = await fetch('/api/energy_flow?period=' + _sankeyPeriod);
+    const r = await fetch(seaUrl('/api/energy_flow?period=') + _sankeyPeriod);
     if (!r.ok) throw new Error(r.status);
     const data = await r.json();
     if (!data.ok) throw new Error(data.error || 'error');
@@ -10634,7 +10649,7 @@ _loadLsSettings();
     const el = document.getElementById('ss-content');
     _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
     try {{
-      const r = await fetch('/api/smart_schedule?duration=' + window._ssDuration);
+      const r = await fetch(seaUrl('/api/smart_schedule?duration=') + window._ssDuration);
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
@@ -10790,7 +10805,7 @@ _loadLsSettings();
     const el = document.getElementById('ev-content');
     _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
     try {{
-      const r = await fetch('/api/ev_sessions?' + _evQuery());
+      const r = await fetch(seaUrl('/api/ev_sessions?') + _evQuery());
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
@@ -11047,7 +11062,7 @@ _loadLsSettings();
     box.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">' +
       esc(t('web.ev.curve_loading', 'Loading charge curve…')) + '</div>';
     try {{
-      const r = await fetch('/api/ev_charge_curve?start=' + start + '&end=' + end);
+      const r = await fetch(seaUrl('/api/ev_charge_curve?start=') + start + '&end=' + end);
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
       _evCurves[id] = d.data;
@@ -11518,7 +11533,7 @@ _loadLsSettings();
     if (!id) return;
     if (!confirm(t('web.ev.confirm_delete', 'Really delete this charging entry?'))) return;
     try {{
-      const r = await fetch('/api/ev_session_delete?id=' + encodeURIComponent(id));
+      const r = await fetch(seaUrl('/api/ev_session_delete?id=') + encodeURIComponent(id));
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
       loadEvLog();
@@ -11624,7 +11639,7 @@ _loadLsSettings();
   let _calMeters = {{ main_meters: [], devices: [] }};
   async function _calLoadMeters() {{
     try {{
-      const r = await fetch('/api/meters');
+      const r = await fetch(seaUrl('/api/meters'));
       const d = await r.json();
       if (d && d.ok) _calMeters = d;
     }} catch(e) {{ /* keep last */ }}
@@ -11829,32 +11844,32 @@ _loadLsSettings();
     const serial = (document.getElementById('cal-mm-serial').value || '').trim();
     if (!name) {{ alert(t('cal.err_name', 'Bitte einen Namen eingeben.')); return; }}
     try {{
-      await fetch('/api/meters', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{name:name, serial:serial}})}});
+      await fetch(seaUrl('/api/meters'), {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{name:name, serial:serial}})}});
       await loadCalibration();
     }} catch(e) {{ alert(e.message); }}
   }}
   async function deleteMainMeter(id) {{
     if (!confirm(t('cal.confirm_del_meter', 'Diesen Hauptzähler löschen? Zugeordnete Geräte werden nur gelöst, nicht gelöscht.'))) return;
     try {{
-      await fetch('/api/meters/' + encodeURIComponent(id), {{method:'DELETE'}});
+      await fetch(seaUrl('/api/meters/') + encodeURIComponent(id), {{method:'DELETE'}});
       await loadCalibration();
     }} catch(e) {{ alert(e.message); }}
   }}
   async function setDeviceParent(key, parent) {{
     try {{
-      await fetch('/api/devices/' + encodeURIComponent(key), {{method:'PUT', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{parent: parent}})}});
+      await fetch(seaUrl('/api/devices/') + encodeURIComponent(key), {{method:'PUT', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{parent: parent}})}});
       await loadCalibration();
     }} catch(e) {{ alert(e.message); }}
   }}
   async function setDeviceDeduct(key, checked) {{
     try {{
-      await fetch('/api/devices/' + encodeURIComponent(key), {{method:'PUT', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{deduct_from_parent: !!checked}})}});
+      await fetch(seaUrl('/api/devices/') + encodeURIComponent(key), {{method:'PUT', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{deduct_from_parent: !!checked}})}});
       await loadCalibration();
     }} catch(e) {{ alert(e.message); }}
   }}
   async function setDeviceNetDisplay(key, checked) {{
     try {{
-      await fetch('/api/devices/' + encodeURIComponent(key), {{method:'PUT', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{subtract_from_parent_display: !!checked}})}});
+      await fetch(seaUrl('/api/devices/') + encodeURIComponent(key), {{method:'PUT', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{subtract_from_parent_display: !!checked}})}});
       await loadCalibration();
     }} catch(e) {{ alert(e.message); }}
   }}
@@ -11871,7 +11886,7 @@ _loadLsSettings();
     const payload = {{ts: t0, kwh: parseFloat(v)}};
     if (exp !== '') payload.export_kwh = parseFloat(exp);
     try {{
-      const r = await fetch('/api/meters/' + encodeURIComponent(meterId) + '/reading', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify(payload)}});
+      const r = await fetch(seaUrl('/api/meters/') + encodeURIComponent(meterId) + '/reading', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify(payload)}});
       const d = await r.json();
       if (!d.ok) {{ if (res) res.innerHTML = '<span style="color:var(--danger)">' + (d.error || 'Fehler') + '</span>'; return; }}
       await loadCalibration();
@@ -11880,7 +11895,7 @@ _loadLsSettings();
   async function deleteMeterReading(meterId, ts) {{
     if (!confirm(t('cal.confirm_del_reading', 'Diese Ablesung löschen? Die betroffenen Zeiträume werden neu berechnet.'))) return;
     try {{
-      await fetch('/api/meters/' + encodeURIComponent(meterId) + '/reading/' + encodeURIComponent(ts), {{method:'DELETE'}});
+      await fetch(seaUrl('/api/meters/') + encodeURIComponent(meterId) + '/reading/' + encodeURIComponent(ts), {{method:'DELETE'}});
       await loadCalibration();
     }} catch(e) {{ alert(e.message); }}
   }}
@@ -11895,7 +11910,7 @@ _loadLsSettings();
       return;
     }}
     try {{
-      const r = await fetch('/api/compensation/calibrate_meter', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{
+      const r = await fetch(seaUrl('/api/compensation/calibrate_meter'), {{method:'POST', headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{
         meter_id: meterId, meter_start: parseFloat(ms), meter_end: parseFloat(me), start: ps, end: pe, effective_from: ps
       }})}});
       const d = await r.json();
@@ -12017,7 +12032,7 @@ _loadLsSettings();
     if (!el) return;
     _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
     try {{
-      const r = await fetch('/api/compensation/history');
+      const r = await fetch(seaUrl('/api/compensation/history'));
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
       const devs = d.devices || [];
@@ -12073,7 +12088,7 @@ _loadLsSettings();
       payload.percent = parseFloat(document.getElementById(formId + '-pct').value || '0');
     }}
     try {{
-      const r = await fetch('/api/compensation/history', {{
+      const r = await fetch(seaUrl('/api/compensation/history'), {{
         method: 'POST', headers: {{'Content-Type': 'application/json'}},
         body: JSON.stringify(payload)
       }});
@@ -12085,7 +12100,7 @@ _loadLsSettings();
   async function deleteCalibrationEntry(deviceKey, ts) {{
     if (!confirm(t('calibration.confirm_delete', 'Delete this calibration entry?'))) return;
     try {{
-      const r = await fetch('/api/compensation/history', {{
+      const r = await fetch(seaUrl('/api/compensation/history'), {{
         method: 'DELETE', headers: {{'Content-Type': 'application/json'}},
         body: JSON.stringify({{ device: deviceKey, effective_from_ts: ts }})
       }});
@@ -12100,7 +12115,7 @@ _loadLsSettings();
     const el = document.getElementById('tariff-content');
     _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
     try {{
-      const r = await fetch('/api/tariff_compare');
+      const r = await fetch(seaUrl('/api/tariff_compare'));
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
@@ -12152,7 +12167,7 @@ _loadLsSettings();
     const el = document.getElementById('bat-content');
     _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
     try {{
-      const r = await fetch('/api/battery');
+      const r = await fetch(seaUrl('/api/battery'));
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
@@ -12477,7 +12492,7 @@ _loadLsSettings();
     const el = document.getElementById('advisor-content');
     _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
     try {{
-      const r = await fetch('/api/advisor');
+      const r = await fetch(seaUrl('/api/advisor'));
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
@@ -12510,7 +12525,7 @@ _loadLsSettings();
     const el = document.getElementById('goals-content');
     _spinner(el, _quietRefresh, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
     try {{
-      const r = await fetch('/api/goals');
+      const r = await fetch(seaUrl('/api/goals'));
       if (!r.ok) throw new Error(r.status);
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'unknown');
@@ -12542,11 +12557,11 @@ _loadLsSettings();
     var xpNext = data.xp_for_next || 100;
     var xpIn = data.xp_in_level || 0;
     var lpct = data.level_progress_pct || 0;
-    var lvlTitle = lvl >= 20 ? '\U0001f451 Master' : lvl >= 15 ? '\U0001f48e Diamond' : lvl >= 10 ? '\U0001f947 Gold' : lvl >= 5 ? '\U0001f948 Silver' : '\U0001f949 Bronze';
+    var lvlTitle = lvl >= 20 ? '\U0001f451 ' + t('web.goals.rank.master', 'Master') : lvl >= 15 ? '\U0001f48e ' + t('web.goals.rank.diamond', 'Diamond') : lvl >= 10 ? '\U0001f947 ' + t('web.goals.rank.gold', 'Gold') : lvl >= 5 ? '\U0001f948 ' + t('web.goals.rank.silver', 'Silver') : '\U0001f949 ' + t('web.goals.rank.bronze', 'Bronze');
     html += '<div class="card" style="text-align:center;margin-bottom:10px;position:relative;overflow:hidden">';
     html += '<div style="position:absolute;top:0;left:0;height:100%;width:' + lpct + '%;background:rgba(76,175,80,0.08)"></div>';
     html += '<div style="position:relative;z-index:1">';
-    html += '<div style="font-size:36px;font-weight:800;color:var(--accent)">Level ' + lvl + '</div>';
+    html += '<div style="font-size:36px;font-weight:800;color:var(--accent)">' + esc(t('web.goals.level', 'Level')) + ' ' + lvl + '</div>';
     html += '<div style="font-size:13px;color:var(--muted);margin-top:2px">' + lvlTitle + ' \u2022 ' + xp + ' XP</div>';
     html += _glBar(lpct, 8);
     html += '<div style="font-size:10px;color:var(--muted);margin-top:2px">' + xpIn + ' / ' + xpNext + ' XP ' + t('web.goals.to_next', 'to next level') + '</div>';
@@ -12573,6 +12588,7 @@ _loadLsSettings();
     html += _glBar(wg.progress_pct||0, 10);
     html += '<div style="font-size:11px;color:var(--muted);margin-top:4px">';
     if (wg.achieved) html += '\u2705 ' + t('web.goals.achieved', 'Goal reached!') + ' \u2013 ' + (wg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.saved', 'saved');
+    else if ((wg.actual_kwh||0) > (wg.target_kwh||0) && (wg.target_kwh||0) > 0) html += '\u26a0\ufe0f ' + t('web.goals.exceeded', 'Over the goal by {{v}} kWh', {{v: ((wg.actual_kwh||0) - (wg.target_kwh||0)).toFixed(1)}});
     else html += '\u23f3 ' + t('web.goals.remaining', 'Noch') + ' ' + (wg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.to_go', 'to go');
     html += '</div></div>';
     // Monthly
@@ -12584,6 +12600,7 @@ _loadLsSettings();
     html += _glBar(mg.progress_pct||0, 10);
     html += '<div style="font-size:11px;color:var(--muted);margin-top:4px">';
     if (mg.achieved) html += '\u2705 ' + t('web.goals.achieved', 'Goal reached!') + ' \u2013 ' + (mg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.saved', 'saved');
+    else if ((mg.actual_kwh||0) > (mg.target_kwh||0) && (mg.target_kwh||0) > 0) html += '\u26a0\ufe0f ' + t('web.goals.exceeded', 'Over the goal by {{v}} kWh', {{v: ((mg.actual_kwh||0) - (mg.target_kwh||0)).toFixed(1)}});
     else html += '\u23f3 ' + t('web.goals.remaining', 'Noch') + ' ' + (mg.remaining_kwh||0).toFixed(1) + ' kWh ' + t('web.goals.to_go', 'to go');
     html += '</div></div>';
     html += '</div>';
@@ -12592,9 +12609,11 @@ _loadLsSettings();
     var sav = data.savings_eur || {{}};
     html += '<div class="nilm-metrics" style="margin-top:10px">';
     html += _glCard('\U0001f4ca', t('web.goals.avg_daily', 'Daily Ø'), (data.avg_daily_kwh||0).toFixed(1) + ' kWh', '');
-    html += _glCard('\U0001f3af', t('web.goals.target', 'Daily target'), (data.daily_target_kwh||0).toFixed(1) + ' kWh', '90% of Ø');
+    html += _glCard('\U0001f3af', t('web.goals.target', 'Daily target'), (data.daily_target_kwh||0).toFixed(1) + ' kWh', t('web.goals.of_avg', '90% of average'));
     html += _glCard('\u2705', t('web.goals.days_under', 'Days under target'), (data.days_under_target||0) + ' / ' + (data.days_total||0), '');
-    html += _glCard('\U0001f4b0', t('web.goals.saved_eur', 'Saved'), (sav.weekly||0).toFixed(2) + ' \u20ac/W \u2022 ' + (sav.monthly||0).toFixed(2) + ' \u20ac/M', sav.price_kwh ? sav.price_kwh.toFixed(2) + ' \u20ac/kWh' : '');
+    // Month as the figure, week and price below: "€/W • €/M" was cryptic and wrapped.
+    html += _glCard('\U0001f4b0', t('web.goals.saved_month', 'Saved this month'), (sav.monthly||0).toFixed(2) + ' \u20ac',
+      t('web.goals.saved_week', '{{v}} € this week', {{v: (sav.weekly||0).toFixed(2)}}) + (sav.price_kwh ? ' \u00b7 ' + sav.price_kwh.toFixed(2) + ' \u20ac/kWh' : ''));
     html += '</div>';
 
     // ── Daily chart (30 days) ────────────────────────────────
@@ -12641,8 +12660,8 @@ _loadLsSettings();
       var unlocked = b.unlocked;
       html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center;opacity:' + (unlocked ? '1' : '0.5') + '">';
       html += '<div style="font-size:26px">' + b.icon + '</div>';
-      html += '<div style="font-size:11px;font-weight:600;margin-top:3px">' + (unlocked ? '' : '\U0001f512 ') + esc(b.name) + '</div>';
-      html += '<div style="font-size:9px;color:var(--muted);margin-top:1px">' + esc(b.description) + '</div>';
+      html += '<div style="font-size:11px;font-weight:600;margin-top:3px">' + (unlocked ? '' : '\U0001f512 ') + esc(t('web.goals.badge.' + b.badge_id + '.name', b.name)) + '</div>';
+      html += '<div style="font-size:9px;color:var(--muted);margin-top:1px">' + esc(t('web.goals.badge.' + b.badge_id + '.desc', b.description)) + '</div>';
       html += _glBar(b.progress_pct || 0, 4);
       html += '<div style="font-size:9px;color:var(--muted);margin-top:2px">' + Math.round(b.progress_pct || 0) + '%</div>';
       html += '</div>';
@@ -12768,13 +12787,13 @@ _loadLsSettings();
     if (sel) sel.value = '{lang}';
   }})();
   function setLanguage(lang) {{
-    fetch('/api/run', {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{action:'set_language',params:{{language:lang}}}})}}
+    fetch(seaUrl('/api/run'), {{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{action:'set_language',params:{{language:lang}}}})}}
     ).then(()=>window.location.reload()).catch(()=>{{}});
   }}
 
   // Hide tabs for disabled features
   (function() {{
-    fetch('/api/config').then(function(r){{ return r.json(); }}).then(function(cfg) {{
+    fetch(seaUrl('/api/config')).then(function(r){{ return r.json(); }}).then(function(cfg) {{
       var ft = cfg.features || {{}};
       // Feature-to-pane mapping (feature key → pane id)
       var map = {{
@@ -12863,7 +12882,7 @@ _PLOTS_TEMPLATE = """<!doctype html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>@@plots_title@@</title>
-  <link rel="icon" href="/widget-icon.svg" type="image/svg+xml">
+  <link rel="icon" data-sea-href="/widget-icon.svg" type="image/svg+xml">
   <style>
     :root {
       --bg: #f6f7fb;
@@ -12956,7 +12975,7 @@ _PLOTS_TEMPLATE = """<!doctype html>
     .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
   </style>
   <!-- Plotly is served locally to avoid CDN/Firewall/Offline issues -->
-  <script defer src="/static/plotly.min.js" onerror="window.__plotly_load_error='plotly.min.js load failed' ;"></script>
+  <script>document.write('<script defer src="'+seaUrl("/static/plotly.min.js")+'" onerror="window.__plotly_load_error=&quot;plotly.min.js load failed&quot;"></'+'script>');</script>
 </head>
 <body>
 <script>
@@ -12976,7 +12995,7 @@ _PLOTS_TEMPLATE = """<!doctype html>
     <div class="topbar" id="topbar_std" style="display:none">
       <div class="title">@@plots_title@@</div>
       <div class="nav">
-        <a id="nav_live" href="/"><span class="ico">🏠</span> <span class="lab">@@web_nav_live@@</span></a>
+        <a id="nav_live" data-sea-href="/"><span class="ico">🏠</span> <span class="lab">@@web_nav_live@@</span></a>
         <button id="btn_theme" type="button" title="@@web_btn_theme@@">@@web_btn_theme@@</button>
       </div>
     </div>
@@ -13682,7 +13701,7 @@ async function loadData() {
   const params = qp();
   const view = params.view || 'timeseries';
   const qs = new URLSearchParams(params);
-  const data = await fetchJsonWithTimeout('/api/plots_data?' + qs.toString());
+  const data = await fetchJsonWithTimeout(seaUrl('/api/plots_data?') + qs.toString());
   if (!data || !data.ok) {
     document.getElementById('meta').innerHTML = t('web.error') + ': ' + esc(data && data.error ? data.error : t('web.unknown'));
     return;
@@ -14136,8 +14155,8 @@ async function init() {
       const suf = qs ? ('?' + qs) : '';
       const nl = document.getElementById('nav_live');
       const nc = document.getElementById('nav_control');
-      if (nl) nl.setAttribute('href', '/' + suf);
-      if (nc) nc.setAttribute('href', '/control' + suf);
+      if (nl) nl.setAttribute('href', seaUrl('/') + suf);
+      if (nc) nc.setAttribute('href', seaUrl('/control') + suf);
     } catch (e) {}
     await loadData();
 
@@ -14361,9 +14380,9 @@ _CONTROL_TEMPLATE = """<!doctype html>
         <div class="meta">{web_control_meta}</div>
       </div>
       <div class="navrow">
-        <a class="navlink active" id="nav_control" href="/control">{web_nav_control}</a>
+        <a class="navlink active" id="nav_control" data-sea-href="/control">{web_nav_control}</a>
         <a class="navlink" id="btn_theme" href="#">🌓</a>
-        <a class="navlink" id="nav_live" href="/">{web_nav_live}</a>
+        <a class="navlink" id="nav_live" data-sea-href="/">{web_nav_live}</a>
       </div>
     </div>
 
@@ -14407,7 +14426,7 @@ _CONTROL_TEMPLATE = """<!doctype html>
       <div class="card">
         <h2>{web_control_plots}</h2>
         <div class="row" style="margin-bottom:8px">
-          <a class="navlink" id="open_plotly" href="/plots">{web_control_open_plotly}</a>
+          <a class="navlink" id="open_plotly" data-sea-href="/plots">{web_control_open_plotly}</a>
         </div>
         <div class="row">
           <label for="plot_mode">{web_control_mode}</label>
@@ -14531,10 +14550,10 @@ function updateThemeBtn(){
 try {
   const qs = window.location.search || "";
   if (qs) {
-    document.getElementById("nav_live").setAttribute("href", "/" + qs);
-    document.getElementById("nav_control").setAttribute("href", "/control" + qs);
+    document.getElementById("nav_live").setAttribute("href", seaUrl("/") + qs);
+    document.getElementById("nav_control").setAttribute("href", seaUrl("/control") + qs);
     const op = document.getElementById("open_plotly");
-    if (op) op.setAttribute("href", "/plots" + qs);
+    if (op) op.setAttribute("href", seaUrl("/plots") + qs);
   }
 } catch (e) {}
 
@@ -14552,7 +14571,7 @@ async function api(path, opts) {
 }
 
 async function run(action, params) {
-  const r = await api("/api/run", {
+  const r = await api(seaUrl("/api/run"), {
     method: "POST",
     headers: {"Content-Type":"application/json"},
     body: JSON.stringify({action, params: params || {} })
@@ -14592,7 +14611,7 @@ function renderJob(j) {
   const r = j.result || {};
   if (r && r.files && Array.isArray(r.files)) {
     files = `<div class="jobfiles">` + r.files.map(f => {
-      const url = (f.url||"") + qs();
+      const url = seaUrl(f.url||"") + qs();
       const name = esc(f.name||"file");
       return `<a href="${url}" target="_blank">${name}</a>`;
     }).join("") + `</div>`;
@@ -14616,7 +14635,7 @@ function renderJob(j) {
 
 async function refreshJobs() {
   try {
-    const r = await api("/api/jobs", {cache:"no-store"});
+    const r = await api(seaUrl("/api/jobs"), {cache:"no-store"});
     const j = await r.json();
     const arr = (j && j.jobs) ? j.jobs : [];
     const el = document.getElementById("jobs");
@@ -14660,7 +14679,7 @@ function _fmtRate(bps) {{
 }}
 async function _refreshTraffic() {{
   try {{
-    const r = await fetch('/api/traffic');
+    const r = await fetch(seaUrl('/api/traffic'));
     const d = await r.json();
     const rateEl = document.getElementById('traffic-rate');
     const totalEl = document.getElementById('traffic-total');
@@ -14798,7 +14817,7 @@ document.getElementById("btn_plots").addEventListener("click", async ()=>{
       res.files.forEach(f => {
         const img = document.createElement("img");
         img.className = "thumb";
-        img.src = f.url + qs();
+        img.src = seaUrl(f.url) + qs();
         img.alt = f.name;
         thumbs.appendChild(img);
       });
@@ -14850,7 +14869,7 @@ function _ctrlFileIcon(name) {
 }
 function _ctrlFileCard(f) {
   const icon = _ctrlFileIcon(f.name);
-  const url = (f.url||"") + qs();
+  const url = seaUrl(f.url||"") + qs();
   const name = esc(f.name || "file");
   const ext = (f.name||"").split(".").pop().toUpperCase();
   return `<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:12px;background:var(--card);margin-bottom:6px">
@@ -14974,7 +14993,7 @@ class _Handler(BaseHTTPRequestHandler):
     function go(){
       const t = (document.getElementById('tok').value||'').trim();
       if(!t) return;
-      location.href = '/?t=' + encodeURIComponent(t);
+      location.href = seaUrl('/') + '?t=' + encodeURIComponent(t);
     }
   </script>
 </body>
@@ -14988,7 +15007,7 @@ class _Handler(BaseHTTPRequestHandler):
                 .replace("__PLACEHOLDER__", str(placeholder))
                 .replace("__BTN_OPEN__", str(btn_open))
                 .replace("__TIP__", str(tip)))
-        b = body.encode('utf-8')
+        b = _with_base_path(body, "/").encode('utf-8')
         self.send_response(403)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.send_header('Cache-Control', 'no-store')
@@ -16221,10 +16240,10 @@ class LiveWebDashboard:
                 "i18n_json": json.dumps(web_i18n, ensure_ascii=False),
             },
         )
-        self._html_bytes = _rendered_html.encode("utf-8")
+        self._html_bytes = _with_base_path(_rendered_html, "/").encode("utf-8")
         self._html_bytes_gz = gzip.compress(self._html_bytes, compresslevel=6)
 
-        self._control_bytes = _render_template(
+        self._control_bytes = _with_base_path(_render_template(
             _CONTROL_TEMPLATE,
             {
                 "lang": self.lang,
@@ -16271,7 +16290,7 @@ class LiveWebDashboard:
                 "t_job_started": _t(self.lang, "web.job_started"),
                 **control_i18n_values(self.lang),
             },
-        ).encode("utf-8")
+        ), "/control").encode("utf-8")
         self._control_bytes_gz = gzip.compress(self._control_bytes, compresslevel=6)
 
         # Plotly plots page (used by desktop Plots tab)
@@ -16298,7 +16317,7 @@ class LiveWebDashboard:
 
 
         # Plotly page uses @@tokens@@ to avoid brace-unescape issues.
-        self._plots_bytes = _render_template_tokens(
+        self._plots_bytes = _with_base_path(_render_template_tokens(
             _PLOTS_TEMPLATE,
             {
                 "lang": self.lang,
@@ -16327,7 +16346,7 @@ class LiveWebDashboard:
                     ensure_ascii=False,
                 ),
             },
-        ).encode("utf-8")
+        ), "/plots").encode("utf-8")
         self._plots_bytes_gz = gzip.compress(self._plots_bytes, compresslevel=6)
 
     @property

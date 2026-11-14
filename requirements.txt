@@ -1,3 +1,8 @@
+# Keep this a superset of [project].dependencies in pyproject.toml: the in-app
+# updater of a local installation installs this file, not the package.
+flask>=3.0
+waitress>=3.0
+paho-mqtt>=1.6
 requests>=2.31
 pandas>=2.0
 numpy>=1.23

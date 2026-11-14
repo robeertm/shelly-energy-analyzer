@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from flask import Blueprint, Response, current_app, request
 
+from shelly_analyzer.web.base_path import inject_base_path, prefixed
+
 bp = Blueprint("dashboard", __name__)
 
 
@@ -48,7 +50,7 @@ def index():
                 pass
             if not devs:
                 from flask import redirect
-                return redirect("/setup")
+                return redirect(prefixed("/setup"))
     except Exception:
         pass
     return _gzip_response(state._dashboard_html, state._dashboard_html_gz)
@@ -60,8 +62,8 @@ def setup_page():
     from shelly_analyzer.web import _inject_version_badge, _inject_skin, active_skin
     tpl = Path(__file__).parent.parent / "templates" / "setup.html"
     if tpl.exists():
-        html = _inject_version_badge(
-            _inject_skin(tpl.read_text(encoding="utf-8"), active_skin(_get_state())))
+        html = inject_base_path(_inject_version_badge(
+            _inject_skin(tpl.read_text(encoding="utf-8"), active_skin(_get_state()))), '/setup')
         resp = Response(html.encode("utf-8"), content_type="text/html; charset=utf-8")
         resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         return resp
@@ -88,8 +90,8 @@ def settings_page():
     from shelly_analyzer.web import _inject_version_badge, _inject_skin, active_skin
     tpl = Path(__file__).parent.parent / "templates" / "settings.html"
     if tpl.exists():
-        html = _inject_version_badge(
-            _inject_skin(tpl.read_text(encoding="utf-8"), active_skin(_get_state())))
+        html = inject_base_path(_inject_version_badge(
+            _inject_skin(tpl.read_text(encoding="utf-8"), active_skin(_get_state()))), '/settings')
         resp = Response(html.encode("utf-8"), content_type="text/html; charset=utf-8")
         resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         return resp
@@ -157,7 +159,7 @@ def widget_page():
     from pathlib import Path
     tpl = Path(__file__).parent.parent / "templates" / "widget_page.html"
     if tpl.exists():
-        html = tpl.read_text(encoding="utf-8")
+        html = inject_base_path(tpl.read_text(encoding="utf-8"), "/w")
         resp = Response(html.encode("utf-8"), content_type="text/html; charset=utf-8")
         resp.headers["Cache-Control"] = "no-store"
         return resp
@@ -172,7 +174,7 @@ def widget_manifest():
     name = "Energy Widget"
     if profile:
         name += f" ({profile})"
-    start_url = f"/w?profile={profile}" if profile else "/w"
+    start_url = prefixed(f"/w?profile={profile}" if profile else "/w")
     manifest = {
         "name": name,
         "short_name": "Energy",
@@ -182,7 +184,7 @@ def widget_manifest():
         "background_color": "#1a1a1a",
         "theme_color": "#ff9800",
         "icons": [
-            {"src": "/widget-icon.svg", "sizes": "any", "type": "image/svg+xml"},
+            {"src": prefixed("/widget-icon.svg"), "sizes": "any", "type": "image/svg+xml"},
         ],
     }
     resp = Response(

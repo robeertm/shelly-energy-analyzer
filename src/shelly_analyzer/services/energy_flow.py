@@ -111,6 +111,7 @@ def compute_energy_flow(db, cfg, period: str = "today", now: Optional[datetime] 
 
     consumers = []
     cons_sum = 0.0
+    cons_g = 0.0  # unrounded grams: summing the rounded per-device grams skews a small day
     for d in devs:
         hk = dict(_series_map(db, d.key, s_ts, e_ts))
         for ck in kids.get(d.key, []):
@@ -146,6 +147,7 @@ def compute_energy_flow(db, cfg, period: str = "today", now: Optional[datetime] 
                     parts["kwh_pv"] += extra * fp; parts["kwh_bat"] += extra * fb
                     kwh = parts["kwh"]
         cons_sum += kwh
+        cons_g += float(parts["g"])
         consumers.append({
             "key": d.key, "name": _name(cfg, d), "role": role,
             "kwh": round(kwh, 3), "grid": round(parts["kwh_grid"], 3),
@@ -163,7 +165,7 @@ def compute_energy_flow(db, cfg, period: str = "today", now: Optional[datetime] 
         # its own here, so `g` would otherwise stay at zero).
         load = cons_sum
         gi_load = cons_sum
-        g = sum(float(c["co2_g"]) for c in consumers)
+        g = cons_g
     out = {
         "ok": True, "unit": "kWh", "period": period, "has_supply": has_supply,
         "has_pv": bool(pv_key), "has_battery": bool(batt_key), "has_grid_meter": bool(grid_key),

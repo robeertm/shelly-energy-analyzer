@@ -86,7 +86,13 @@ def test_the_grid_meter_actually_exports():
     feed-in, and the source split would read as pure grid all day."""
     st = DemoState(seed=1234)
     grid_dev = [d for d in default_demo_devices() if d.key == DEMO_GRID_KEY][0]
-    base = int(time.time()) // 86400 * 86400
+    # The demo draws its cloud cover per calendar day; a grey day legitimately
+    # never exports. Test on the next sunny day instead of "today", so the
+    # result does not depend on the date the test runs.
+    from shelly_analyzer.services.demo import _day_plan
+    today = int(time.time()) // 86400
+    day = next(d for d in range(today, today + 60) if _day_plan(1234, d)[0] >= 0.95)
+    base = day * 86400
     vals = []
     for minute in range(0, 24 * 60, 15):
         f = gen_sample(grid_dev, float(base + minute * 60), st)["power_w"]

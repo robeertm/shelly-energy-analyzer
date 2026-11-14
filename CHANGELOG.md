@@ -1,5 +1,68 @@
 # Changelog
 
+## 17.10.0
+
+A customer walkthrough now opens every page of the dashboard in all nine
+languages, on desktop and phone size, light and dark, for eight kinds of
+installation, and calls every API route with odd parameters. It runs on every
+push in a quick version and in full before every release. This release fixes
+everything it found.
+
+### Fixes
+
+- **The language dropdown on the dashboard works again.** Picking a language
+  wrote the setting into a `config.json` in the working directory instead of
+  the configuration the server was started with, and did not switch the
+  running session, so the page stayed in the old language until a restart.
+- **Works behind the Home Assistant ingress path.** Every page asked the
+  server for data with absolute paths (`/api/...`, `/static/...`), which behind
+  the ingress prefix went to Home Assistant instead of the add-on: tabs showed
+  "404" banners and the Plots tab could not load its chart library. All pages
+  now resolve their URLs against the path they were opened from, and server
+  redirects (first-run setup, login) keep the prefix. A test rejects new
+  absolute paths in the page code.
+- **A fresh installation without data no longer logs errors.** Until the first
+  samples arrive, every comparison request wrote a "No data found for device"
+  traceback into the log. An empty installation is a normal state now.
+- **Daily average and month projection of a new installation.** Both divided
+  the energy of the month by the calendar days that had passed, also the days
+  before the installation existed, so a system measured for two days looked far
+  too cheap. They now divide by the days that hold measurements; with a short
+  history the Costs tab says how many days the average is based on.
+- **Settings and Goals in every language.** Many hints, list labels and
+  options in Settings and the badge names and descriptions in Goals were only
+  in English. They are translated in all nine languages now, and a test checks
+  that every settings field has a translation.
+
+- **CO2 intensity of the house right after midnight.** Energy Flow summed the
+  rounded grams of every device, which on a day with very little energy so far
+  showed for example 303.7 instead of 300 g/kWh. It sums the exact values now.
+
+- **Goals say by how much a goal is exceeded.** A weekly or monthly goal that
+  was already over its target showed "0.0 kWh to go". It now says "Over the
+  goal by … kWh". The savings card shows the month as its figure and the week
+  below it instead of the cryptic "€/W • €/M".
+- **No internet, no traceback.** Without internet access the update check
+  wrote a full traceback into the log on the Sync tab. It writes one line now.
+
+- **Local installations get every dependency on update.** The in-app updater
+  installs `requirements.txt`, which lacked three runtime dependencies listed
+  only in the package metadata. A test keeps both lists in step.
+
+### Checked, no change needed
+
+- Changing the Plots selection on a large installation took more than ten
+  seconds during the walkthrough. Measured on its own, the server answers every
+  Plots request in under five seconds even on a heavily loaded small computer;
+  the delay came from the browser of the test machine under load.
+
+### Tests
+
+- Quick walkthrough and API tour on every push (`e2e.yml`), the API tour also
+  in the normal test run. The full walkthrough (`e2e-full.yml`) runs weekly, by
+  hand, and before every promotion: `:latest` only moves when it is green.
+- Every finding above has a test that fails without its fix.
+
 ## 17.9.3
 
 ### Plots draw again in the English interface

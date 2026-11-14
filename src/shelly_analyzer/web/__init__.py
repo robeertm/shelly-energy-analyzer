@@ -10,6 +10,9 @@ from typing import Any, Dict, Optional
 from flask import Flask
 
 from shelly_analyzer.io.config import AppConfig, load_config
+from shelly_analyzer.web.base_path import (
+    IngressPathMiddleware, inject_base_path, prefixed, script_tag, stylesheet_tag,
+)
 from shelly_analyzer.io.storage import Storage
 from shelly_analyzer.i18n import get_lang_map, normalize_lang, t as _t
 from shelly_analyzer.services.webdash import (
@@ -136,7 +139,7 @@ def _inject_units(html: str) -> str:
     page's own scripts have defined ``I18N`` before it looks."""
     from shelly_analyzer import __version__
 
-    script = '<script src="/static/units.js?v=%s"></script>' % __version__
+    script = script_tag("/static/units.js?v=%s" % __version__)
     if script in html:
         return html
     if "</body>" in html:
@@ -162,8 +165,8 @@ def _inject_skin(html: str, skin: str) -> str:
                 html = html[:end] + ' data-skin="aurora"' + html[end:]
 
     v = str(__version__)
-    link = '<link rel="stylesheet" href="/static/aurora.css?v=%s">' % v
-    script = '<script defer src="/static/aurora.js?v=%s"></script>' % v
+    link = stylesheet_tag("/static/aurora.css?v=%s" % v)
+    script = script_tag("/static/aurora.js?v=%s" % v)
 
     if link not in html:
         if "</head>" in html:
@@ -308,7 +311,9 @@ def _render_dashboard_html(state: "AppState") -> bytes:
     # template itself) already redirects to /settings#sec-devices, so no
     # extra icon injection is needed here — there was previously a 🔧
     # button alongside ⚙ which doubled up after v16.17.0.
-    return _inject_version_badge(_inject_units(_inject_skin(rendered, active_skin(state)))).encode("utf-8")
+    return inject_base_path(
+        _inject_version_badge(_inject_units(_inject_skin(rendered, active_skin(state)))), "/"
+    ).encode("utf-8")
 
 
 def _render_control_html(state: "AppState") -> bytes:
@@ -362,7 +367,9 @@ def _render_control_html(state: "AppState") -> bytes:
         **control_i18n_values(lang),
     }
     rendered = _render_template(tpl, values)
-    return _inject_version_badge(_inject_units(_inject_skin(rendered, active_skin(state)))).encode("utf-8")
+    return inject_base_path(
+        _inject_version_badge(_inject_units(_inject_skin(rendered, active_skin(state)))), "/control"
+    ).encode("utf-8")
 
 
 def _render_plots_html(state: "AppState") -> bytes:
@@ -415,7 +422,9 @@ def _render_plots_html(state: "AppState") -> bytes:
     rendered = _render_template_tokens(tpl, values)
     # No version badge in plots — it's embedded as an iframe in the dashboard
     # which already has its own badge, resulting in a duplicate.
-    return _inject_units(_inject_skin(rendered, active_skin(state))).encode("utf-8")
+    return inject_base_path(
+        _inject_units(_inject_skin(rendered, active_skin(state))), "/plots"
+    ).encode("utf-8")
 
 
 def create_app(config_path: Optional[str] = None) -> Flask:
@@ -459,6 +468,9 @@ def create_app(config_path: Optional[str] = None) -> Flask:
         static_folder=str(Path(__file__).parent / "static"),
     )
     app.config["SECRET_KEY"] = "shelly-energy-analyzer"
+    # Behind Home Assistant ingress (or any prefixing proxy): X-Ingress-Path
+    # becomes SCRIPT_NAME so Flask's own redirects carry the prefix.
+    app.wsgi_app = IngressPathMiddleware(app.wsgi_app)  # type: ignore[method-assign]
 
     # Store state in app extensions
     app.extensions["state"] = state
@@ -467,6 +479,7 @@ def create_app(config_path: Optional[str] = None) -> Flask:
     token = str(getattr(cfg.ui, "live_web_token", "") or "").strip()
     if token:
         from functools import wraps
+        from urllib.parse import quote
         from flask import request as flask_request, abort, session, redirect, url_for
 
         @app.before_request
@@ -501,7 +514,7 @@ def create_app(config_path: Optional[str] = None) -> Flask:
             # Not authenticated — show login for pages, 401 for API
             if path.startswith("/api/"):
                 abort(401)
-            return redirect(f"/login?next={path}")
+            return redirect(prefixed(f"/login?next={quote(path, safe='/')}"))
 
         @app.route("/login", methods=["GET", "POST"])
         def login():
@@ -511,23 +524,27 @@ def create_app(config_path: Optional[str] = None) -> Flask:
                 if t == token:
                     session["auth_token"] = token
                     next_url = req.args.get("next", "/")
-                    return redirect(next_url)
+                    # ``next`` is an app path (prefix already stripped): put the
+                    # prefix back; anything that is not a plain path goes home.
+                    if not next_url.startswith("/") or next_url.startswith("//"):
+                        next_url = "/"
+                    return redirect(prefixed(next_url))
                 return _login_html(error="Invalid token"), 403
             return _login_html()
 
         def _login_html(error: str = "") -> str:
             err_div = f'<div style="color:#ff6b6b;margin:8px 0">{error}</div>' if error else ""
-            return f"""<!doctype html>
+            return inject_base_path(f"""<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Login – Shelly Energy Analyzer</title>
-<link rel="icon" href="/widget-icon.svg" type="image/svg+xml">
+<link rel="icon" data-sea-href="/widget-icon.svg" type="image/svg+xml">
 <style>body{{font-family:-apple-system,system-ui,sans-serif;background:#0b0f14;color:#e8eef6;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}}
 .card{{background:#121821;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:24px;max-width:400px;width:90%}}
 input{{width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);color:#e8eef6;font-size:16px;margin:8px 0}}
 button{{width:100%;padding:10px;border-radius:12px;border:none;background:#6aa7ff;color:#fff;font-size:16px;cursor:pointer;margin-top:8px}}</style></head>
 <body><div class="card"><h2 style="margin:0 0 12px">Shelly Energy Analyzer</h2>
 {err_div}<form method="post"><input name="token" type="password" placeholder="Token" autofocus>
-<button type="submit">Login</button></form></div></body></html>"""
+<button type="submit">Login</button></form></div></body></html>""", "/login")
 
         logger.info("Authentication enabled (token required)")
     else:

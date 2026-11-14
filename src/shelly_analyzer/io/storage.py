@@ -15,6 +15,10 @@ from shelly_analyzer.core.csv_read import read_csv_files
 logger = logging.getLogger(__name__)
 
 
+class NoDataError(ValueError):
+    """A device has no stored samples yet (fresh installation) — a normal state, not a fault."""
+
+
 @dataclass
 class MetaState:
     last_end_ts: Optional[int] = None
@@ -157,7 +161,7 @@ class Storage:
         # Fallback: CSV files (pre-migration or empty DB).
         files = self.list_csv_files(device_key)
         if not files:
-            raise ValueError(f"No data found for device '{device_key}'.")
+            raise NoDataError(f"No data found for device '{device_key}'.")
 
         df = read_csv_files(files)
 

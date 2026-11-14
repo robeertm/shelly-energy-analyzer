@@ -60,6 +60,16 @@ def _repo() -> str:
     return str(getattr(getattr(state.cfg, "updates", None), "repo", "") or "").strip()
 
 
+
+def _log_update_failure(what: str, e: Exception) -> None:
+    """No internet (or GitHub unreachable) is a normal state: one line, no traceback."""
+    import socket
+    import urllib.error
+    if isinstance(e, (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError)):
+        logger.warning("%s: %s", what, getattr(e, "reason", None) or e)
+    else:
+        logger.exception(what)
+
 @bp.route("/api/updates/cached", methods=["GET"])
 def api_updates_cached():
     """Return the cached update-check result written by the background
@@ -152,7 +162,7 @@ def api_updates_status():
                                       "rate_limited": False}
         return jsonify(result)
     except Exception as e:
-        logger.exception("updates status failed")
+        _log_update_failure("updates status failed", e)
         return jsonify({"ok": False, "error": str(e), "current": __version__})
 
 
@@ -214,7 +224,7 @@ def api_updates_releases():
         return jsonify({"ok": True, "current": __version__, "repo": repo,
                         "releases": out, "cache_age_seconds": 0})
     except Exception as e:
-        logger.exception("updates releases failed")
+        _log_update_failure("updates releases failed", e)
         # Serve stale cache on failure rather than empty list
         if cached is not None:
             return jsonify({"ok": True, "current": __version__, "repo": repo,

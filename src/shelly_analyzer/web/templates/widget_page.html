@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#1a1a1a" media="(prefers-color-scheme:dark)">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme:light)">
 <link rel="manifest" id="pwa-manifest">
-<link rel="icon" href="/widget-icon.svg" type="image/svg+xml">
+<link rel="icon" data-sea-href="/widget-icon.svg" type="image/svg+xml">
 <title>Energy Widget</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -49,13 +49,13 @@ const params = new URLSearchParams(location.search);
 const PROFILE = params.get("profile") || "";
 const qp = PROFILE ? "?profile=" + encodeURIComponent(PROFILE) : "";
 
-document.getElementById("pwa-manifest").href = "/widget-manifest.json" + qp;
+document.getElementById("pwa-manifest").href = seaUrl("/widget-manifest.json") + qp;
 
 let refreshMs = 60000;
 
 async function load() {
   try {
-    const r = await fetch("/api/widget" + qp);
+    const r = await fetch(seaUrl("/api/widget") + qp);
     const d = await r.json();
     if (!d || !d.ok) throw new Error(d.error || "unavailable");
     refreshMs = (d.refresh_minutes || 1) * 60000;
@@ -137,7 +137,7 @@ function render(d) {
     h += '</div>';
   }
 
-  h += '<div style="text-align:center;margin-top:8px"><a href="/" style="font-size:11px;color:var(--accent);text-decoration:none">Open Dashboard</a></div>';
+  h += '<div style="text-align:center;margin-top:8px"><a href="'+seaUrl('/')+'" style="font-size:11px;color:var(--accent);text-decoration:none">Open Dashboard</a></div>';
 
   document.getElementById("content").innerHTML = h;
 }

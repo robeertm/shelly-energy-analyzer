@@ -20,4 +20,4 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install pytest numpy
-      - run: python -m pytest tests/test_i18n_parity.py tests/test_template_literals.py tests/test_units_js.py -q
+      - run: python -m pytest tests/test_i18n_parity.py tests/test_template_literals.py tests/test_units_js.py tests/test_plotly_locale.py -q

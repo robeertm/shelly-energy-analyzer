@@ -16,6 +16,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from shelly_analyzer.services.webdash import _HTML_TEMPLATE, _render_template
 
+def _run_node(src: str, timeout: int = 120):
+    """Run *src* in node from a file: the page script is too long for one
+    command-line argument (Linux caps a single argument at 128 KB)."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "probe.js")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(src)
+        return subprocess.run(["node", path], capture_output=True, text=True, timeout=timeout)
+
+
 NUMBERS = {"refresh_ms": 5000, "window_min": 60, "days": 30}
 JSON_VALS = {"window_options_json": "[60,180]", "devices_json": "[]",
              "i18n_json": "{}"}
@@ -97,6 +108,8 @@ globalThis.URL = globalThis.URL || function(){ return {} };
 globalThis.localStorage = { _d:{}, getItem(k){return this._d[k]??null}, setItem(k,v){this._d[k]=String(v)}, removeItem(k){delete this._d[k]} };
 globalThis.sessionStorage = globalThis.localStorage;
 globalThis.navigator = { language: 'de-DE', userAgent: 'node', onLine: true };
+// the base-path script (web/base_path.py) defines this on every real page
+globalThis.seaUrl = function (p) { return p; };
 globalThis.location = { href: 'http://x/', protocol: 'http:', host: 'x', search: '', hash: '' };
 globalThis.fetch = () => Promise.resolve({ ok:true, json: () => Promise.resolve({ok:true,data:{}}) });
 globalThis.setInterval = () => 0; globalThis.setTimeout = (f) => 0;
@@ -121,7 +134,7 @@ def _run(payload: dict, _lang: str = "en") -> str:
                                 + json.dumps(get_lang_map(_lang), ensure_ascii=False) + ";")
     src = (HARNESS + "\nconst PAYLOAD = " + json.dumps(payload) + ";\n"
            + script + "\n" + TAIL)
-    p = subprocess.run(["node", "-e", src], capture_output=True, text=True, timeout=120)
+    p = _run_node(src)
     assert p.returncode == 0, f"node failed:\n{p.stderr[-3000:]}"
     assert "<<<HTML>>>" in p.stdout, p.stdout[-2000:]
     return p.stdout.split("<<<HTML>>>", 1)[1]
@@ -259,7 +272,7 @@ def _run_curve(payload, curve):
            + "const PAYLOAD = " + json.dumps(payload) + ";\n"
            + "const CURVE = " + json.dumps(curve) + ";\n"
            + _script() + "\n" + CURVE_TAIL)
-    p = subprocess.run(["node", "-e", src], capture_output=True, text=True, timeout=120)
+    p = _run_node(src)
     assert p.returncode == 0, f"node failed:\n{p.stderr[-3000:]}"
     body, paint = p.stdout.split("<<<HTML>>>", 1)[1].split("\n<<<PAINT>>>", 1)
     return body, json.loads(paint)
@@ -331,7 +344,7 @@ evToggleCurve('a', CURVE.start_ts, CURVE.end_ts).then(() => {
   process.stdout.write('<<<TIP>>>' + (globalThis.__boxes['evct-a']||{}).innerHTML);
 });
 """)
-    p = subprocess.run(["node", "-e", src], capture_output=True, text=True, timeout=120)
+    p = _run_node(src)
     assert p.returncode == 0, p.stderr[-2000:]
     tip = p.stdout.split("<<<TIP>>>", 1)[1]
     for colour in ("#fdd835", "#22c55e", "#ef4444"):
@@ -489,7 +502,7 @@ def _run_curve_gemessen(curve, breite=360.0):
            + "const PAYLOAD = " + json.dumps(_payload([_charge(group_id="a", cost_model="fixed")])) + ";\n"
            + "const CURVE = " + json.dumps(curve) + ";\n"
            + _script() + "\n" + CURVE_TAIL)
-    p = subprocess.run(["node", "-e", src], capture_output=True, text=True, timeout=120)
+    p = _run_node(src)
     assert p.returncode == 0, f"node failed:\n{p.stderr[-3000:]}"
     paint = json.loads(p.stdout.split("\n<<<PAINT>>>", 1)[1])
     return paint

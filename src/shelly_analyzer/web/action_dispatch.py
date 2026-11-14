@@ -26,7 +26,7 @@ import numpy as np
 
 from shelly_analyzer import __version__
 from shelly_analyzer.io.config import AppConfig, save_config
-from shelly_analyzer.io.storage import Storage
+from shelly_analyzer.io.storage import NoDataError, Storage
 from shelly_analyzer.io.http import (
     ShellyHttp, HttpConfig, get_shelly_status, get_switch_status, set_switch_state,
     get_light_status, set_light_state, get_cover_status,
@@ -149,6 +149,31 @@ def _extract_switch_on(raw: Dict[str, Any]) -> Optional[bool]:
         pass
 
     return None
+
+
+def month_days_with_data(now: datetime, month_start: datetime, oldest_ts: Optional[int]) -> float:
+    """Days of this month that can hold measurements (divisor of a month projection).
+
+    A fresh installation measured since the 20th must not divide its month by 20
+    calendar days it never saw; it divides by the days since its first sample.
+    Never below one day so a first-hour projection does not explode.
+    """
+    start = month_start
+    try:
+        if oldest_ts is not None:
+            first = datetime.fromtimestamp(int(oldest_ts), tz=month_start.tzinfo) if month_start.tzinfo else datetime.fromtimestamp(int(oldest_ts))
+            if first > start:
+                start = first
+    except Exception:
+        pass
+    return max(1.0, (now - start).total_seconds() / 86400.0)
+
+
+def _oldest_ts_safe(storage: Any) -> Optional[int]:
+    try:
+        return storage.db.oldest_measurement_ts()
+    except Exception:
+        return None
 
 
 class ActionDispatcher:
@@ -873,6 +898,9 @@ class ActionDispatcher:
 
             return _aggregate(df[ts_col], df["energy_kwh"])
 
+        except NoDataError:
+            # Fresh installation without samples: an empty compare is the answer.
+            return {}
         except Exception as e:
             logger.warning("_cmp_load_daily error for '%s': %s", device_key, e, exc_info=True)
             return {}
@@ -2676,7 +2704,7 @@ class ActionDispatcher:
                 _month_eur = round(_month_kwh * _unit, 2)
 
                 _dim = calendar.monthrange(_now.year, _now.month)[1]
-                _elapsed = max(1, (_now - _month_start).total_seconds() / 86400.0)
+                _elapsed = month_days_with_data(_now, _month_start, _oldest_ts_safe(self.storage))
                 _proj_kwh = round(_month_kwh / _elapsed * _dim, 1)
                 _proj_eur = round(_proj_kwh * _unit, 2)
 
@@ -2896,6 +2924,7 @@ class ActionDispatcher:
                 _today_start = _now.replace(hour=0, minute=0, second=0, microsecond=0)
                 _week_start = _today_start - timedelta(days=_now.weekday())
                 _month_start = _today_start.replace(day=1)
+                _oldest_ts = _oldest_ts_safe(self.storage)
                 _year_start = _today_start.replace(month=1, day=1)
                 _last_month_start = (_month_start - timedelta(days=1)).replace(day=1)
 
@@ -3138,7 +3167,7 @@ class ActionDispatcher:
 
                     try:
                         _dim = calendar.monthrange(_now.year, _now.month)[1]
-                        _elapsed = max(1, (_now - _month_start).total_seconds() / 86400.0)
+                        _elapsed = month_days_with_data(_now, _month_start, _oldest_ts)
                         _mk = dev_data.get("month_kwh", 0.0)
                         dev_data["proj_kwh"] = round(_mk / _elapsed * _dim, 1)
                         dev_data["proj_eur"] = round(dev_data["proj_kwh"] * _unit, 2)
@@ -3415,9 +3444,13 @@ class ActionDispatcher:
                     str(d.get("key", "")) for d in devices_out if d not in _summable)
                 try:
                     _dim_s = calendar.monthrange(_now.year, _now.month)[1]
-                    _el_s = max(1, (_now - _month_start).total_seconds() / 86400.0)
+                    _el_s = month_days_with_data(_now, _month_start, _oldest_ts)
                     _s["proj_kwh"] = round(_s["month_kwh"] / _el_s * _dim_s, 1)
                     _s["proj_eur"] = round(_s["month_eur"] / _el_s * _dim_s, 2)
+                    # Days the month average divides by, and whether that history
+                    # is short (fresh installation) so the page can say so.
+                    _s["data_days"] = round(_el_s, 1)
+                    _s["short_history"] = bool(_el_s < 7 and _el_s < (_now - _month_start).total_seconds() / 86400.0 - 0.5)
                 except Exception:
                     _s["proj_kwh"] = 0
                     _s["proj_eur"] = 0

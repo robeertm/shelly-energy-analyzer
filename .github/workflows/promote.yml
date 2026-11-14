@@ -55,7 +55,15 @@ permissions:
   packages: write
 
 jobs:
+  # The full customer walkthrough on exactly the tagged code. `:latest` and the
+  # regular release only move when it is green.
+  walkthrough:
+    uses: ./.github/workflows/e2e-full.yml
+    with:
+      ref: v${{ inputs.version }}
+
   promote:
+    needs: walkthrough
     runs-on: ubuntu-latest
     steps:
       # Tiefe 0, weil die Vorgaengerin aus den Git-Tags kommt.
