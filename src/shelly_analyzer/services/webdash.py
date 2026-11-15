@@ -5573,7 +5573,12 @@ function buildDeviceCard(d) {{
   div.innerHTML = devCardHTML(d);
   div.querySelector('.dev-header').addEventListener('click', function() {{
     const exp = div.querySelector('.dev-expand');
-    if (exp) exp.classList.toggle('open');  // PV/battery have no expand
+    if (exp) {{
+      exp.classList.toggle('open');  // PV/battery have no expand
+      // The detail canvases are skipped while the panel is hidden (width 0);
+      // draw them now at their real width so they never show up stretched.
+      if (exp.classList.contains('open')) _drawCardSparks(d);
+    }}
   }});
   var swBtn = div.querySelector('.switch-btn');
   if (swBtn) {{
@@ -5780,6 +5785,30 @@ function wndPhaseSeries(buf, field) {{
   }}
   return series;
 }}
+// Draws every sparkline of one device card (main + the detail-panel ones).
+function _drawCardSparks(d) {{
+  const buf = sparkData[d.key];
+  const bt = buf ? wndTimes(buf) : null;
+  // Main power sparkline (flow-role coloured: PV green, battery/grid signed)
+  const sp = document.getElementById('sp-' + d.key);
+  if (sp && buf) {{ const sa = _sparkArgs(d.key, buf); drawSparkline(sp, sa.vals, sa.color, false, sa.sign, bt, sa.share); }}
+  // Voltage sparkline (relative scale so variation is visible)
+  const spv = document.getElementById('sp-v-' + d.key);
+  if (spv && buf) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true, false, bt);
+  // Current sparkline
+  const spa = document.getElementById('sp-a-' + d.key);
+  if (spa && buf) drawSparkline(spa, wndVals(buf, 'a'), '#10b981', true, false, bt);
+  // Reactive power sparkline
+  const spq = document.getElementById('sp-q-' + d.key);
+  if (spq && buf) drawSparkline(spq, wndVals(buf, 'q'), '#ef4444', true, false, bt);
+  // Neutral current sparkline
+  const spin = document.getElementById('sp-in-' + d.key);
+  if (spin && buf) drawSparkline(spin, wndVals(buf, 'i_n'), '#a855f7', true, false, bt);
+  // Frequency (Hz) sparkline – relative scale (grid freq varies narrowly)
+  const sphz = document.getElementById('sp-hz-' + d.key);
+  if (sphz && buf) drawSparkline(sphz, wndVals(buf, 'hz'), '#06b6d4', true, false, bt);
+}}
+
 function updateDeviceCard(card, d) {{
   const pc = pwrClass(d.power_w || 0);
   flowRole[d.key] = d.flow_role || '';
@@ -5801,26 +5830,7 @@ function updateDeviceCard(card, d) {{
       socEl.textContent = '🔋 ' + fmt(d.soc_pct, 0) + '%';
     }} else if (socEl) {{ socEl.remove(); }}
   }}
-  const buf = sparkData[d.key];
-  const bt = buf ? wndTimes(buf) : null;
-  // Main power sparkline (flow-role coloured: PV green, battery/grid signed)
-  const sp = document.getElementById('sp-' + d.key);
-  if (sp && buf) {{ const sa = _sparkArgs(d.key, buf); drawSparkline(sp, sa.vals, sa.color, false, sa.sign, bt, sa.share); }}
-  // Voltage sparkline (relative scale so variation is visible)
-  const spv = document.getElementById('sp-v-' + d.key);
-  if (spv && buf) drawSparkline(spv, wndVals(buf, 'v'), '#f59e0b', true, false, bt);
-  // Current sparkline
-  const spa = document.getElementById('sp-a-' + d.key);
-  if (spa && buf) drawSparkline(spa, wndVals(buf, 'a'), '#10b981', true, false, bt);
-  // Reactive power sparkline
-  const spq = document.getElementById('sp-q-' + d.key);
-  if (spq && buf) drawSparkline(spq, wndVals(buf, 'q'), '#ef4444', true, false, bt);
-  // Neutral current sparkline
-  const spin = document.getElementById('sp-in-' + d.key);
-  if (spin && buf) drawSparkline(spin, wndVals(buf, 'i_n'), '#a855f7', true, false, bt);
-  // Frequency (Hz) sparkline – relative scale (grid freq varies narrowly)
-  const sphz = document.getElementById('sp-hz-' + d.key);
-  if (sphz && buf) drawSparkline(sphz, wndVals(buf, 'hz'), '#06b6d4', true, false, bt);
+  _drawCardSparks(d);
   // Update the detail panel. Every value is addressed by its own data-* hook
   // inside THIS card, so a changed layout can never shift values onto the wrong
   // label the way positional dd[0..3] lookups could.
@@ -5907,7 +5917,8 @@ function updateDeviceCard(card, d) {{
 ────────────────────────────────────────────── */
 function drawSparkline(canvas, values, color, relMin, signColor, times, shareArr) {{
   const dpr = window.devicePixelRatio || 1;
-  const W = canvas.offsetWidth || 200;
+  const W = canvas.offsetWidth;
+  if (!W) return;  // hidden (display:none): drawn when it becomes visible
   const H = canvas.offsetHeight || 56;
   canvas.width = W * dpr;
   canvas.height = H * dpr;

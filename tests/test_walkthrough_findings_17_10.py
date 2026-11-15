@@ -166,3 +166,25 @@ def test_goals_pane_says_by_how_much_a_goal_is_exceeded():
     for lang in ("de", "en", "es", "fr", "pt", "it", "pl", "cs", "ru"):
         for key in ("web.goals.exceeded", "web.goals.saved_week"):
             assert "{v}" in _I18N[lang][key], (lang, key)
+
+
+# ── 7: detail graphs of a device card (issue 19 follow-up) ────────────────────
+
+def _webdash_js() -> str:
+    return (Path(__file__).resolve().parents[1] / "src" / "shelly_analyzer" / "services" / "webdash.py").read_text()
+
+
+def test_sparkline_skips_hidden_canvases_instead_of_drawing_at_200px():
+    src = _webdash_js()
+    start = src.index("function drawSparkline(")
+    body = src[start:src.index("canvas.width =", start)]
+    assert "canvas.offsetWidth || 200" not in body
+    assert "if (!W) return" in body
+
+
+def test_opening_a_device_panel_redraws_its_graphs():
+    src = _webdash_js()
+    handler = src[src.index("querySelector('.dev-header').addEventListener('click'"):]
+    handler = handler[:handler.index("var swBtn")]
+    assert "_drawCardSparks(d)" in handler
+    assert "function _drawCardSparks(d)" in src

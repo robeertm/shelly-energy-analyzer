@@ -1,5 +1,17 @@
 # Changelog
 
+## 17.10.2
+
+The extra graphs of a device on the Live tab (voltage, current, reactive power,
+frequency) are sharp the moment the panel opens.
+
+### Fixes
+- **No more blurred detail graphs for a second after opening a device.** While
+  the panel was closed its graphs were drawn at a 200 px fallback size and the
+  stylesheet stretched them to the full card width on opening, until the next
+  live update redrew them. A hidden graph is now skipped, and opening the panel
+  draws all graphs of that card at once at their real width.
+
 ## 17.10.1
 
 The Aurora background no longer works a fast screen to death. On a 144 or
