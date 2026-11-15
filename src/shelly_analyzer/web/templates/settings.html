@@ -1845,6 +1845,9 @@ function renderUpdates() {
       <label class="field row"><span>${T("settings.updates.auto_install","Auto-Install")}</span>
         <input type="checkbox" data-key="updates.auto_install" ${autoInstall?"checked":""}></label>
     </div>
+    ${(cfg && cfg._git) ? `<div class="hint" style="margin-top:8px;padding:12px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--card-bg,rgba(59,130,246,0.05))">
+      ${T("settings.updates.git_managed","Git checkout detected: updates switch this clone to the release tag with git. Local changes to tracked files are saved as a patch in data/update-backups first, nothing is discarded.")}
+    </div>` : ""}
     <div class="section-actions">
       <button onclick="saveSection('updates')">${T("settings.btn.save","💾 Speichern")}</button>
       <button class="secondary" onclick="checkUpdateStatus(true); loadReleaseList(true);">🔄 ${T("settings.updates.check_now","Check now")}</button>
@@ -1989,7 +1992,11 @@ async function installVersion(tag, assetUrl) {
   }
   setStep("step-download", true);
   setStep("step-extract", true);
-  setDetail(T("settings.updates.detail_staged","Dateien entpackt nach {p}. App startet neu …",{p:resp.staging||"…"}));
+  if (resp.install_kind === "git") {
+    setDetail(T("settings.updates.detail_git","Git checkout: switching to {v}, the previous state is saved in data/update-backups. The app restarts …",{v:tag}));
+  } else {
+    setDetail(T("settings.updates.detail_staged","Dateien entpackt nach {p}. App startet neu …",{p:resp.staging||"…"}));
+  }
 
   // 2. Poll for the service to come back with the new version
   // Timeline: server returns immediately after staging+execv-handoff. The

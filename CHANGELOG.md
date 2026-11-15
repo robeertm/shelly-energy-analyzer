@@ -1,5 +1,35 @@
 # Changelog
 
+## 17.10.3
+
+An install made with `git clone` is updated through git. The in-app updater
+used to unpack the release over such a clone and leave git behind on the old
+commit, with dozens of files shown as modified.
+
+### Fixes
+- **The updater recognises a git clone and moves it to the release tag.** It
+  copied the release ZIP over the install and skipped `.git` on purpose, so the
+  app ran the new version while git still pointed at the old one, and a later
+  `git pull` ran into conflicts. When the install folder is a clone whose
+  remote is the configured repository, the updater now fetches the tags, checks
+  that the tag carries the version, saves the old state, switches with
+  `git checkout --force --detach <tag>`, imports the new code as a probe and
+  goes back to the previous commit if the probe fails.
+- **Nothing changed by hand is lost.** Before the switch every change to
+  tracked files goes into `data/update-backups/<time>-<version>/` as a patch
+  (`git diff --binary HEAD`), untracked files into a tarball; on a rollback the
+  patch is applied again. The last five backups are kept. `config.json`,
+  `data/`, `logs/` and `.venv` are gitignored and stay where they are; there is
+  no `git clean`.
+- **A clone that had already drifted heals itself on the next update.** When
+  git and the running version differ, the backup also holds a patch against the
+  tag of the running version, which contains only the edits made by hand, and
+  the updater log notes the drift. There is no message.
+- ZIP installs, the container image and the Home Assistant add-on keep their
+  update paths unchanged. The settings page says when the git path is in use,
+  in every language, and the README explains how to update a git installation
+  by hand.
+
 ## 17.10.2
 
 The extra graphs of a device on the Live tab (voltage, current, reactive power,

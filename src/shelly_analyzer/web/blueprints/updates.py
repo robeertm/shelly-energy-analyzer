@@ -22,6 +22,7 @@ from shelly_analyzer.services.updater import (
     is_newer,
     parse_version,
 )
+from shelly_analyzer.updater_helper import git_checkout_remote, prepare_git_update
 
 logger = logging.getLogger(__name__)
 
@@ -308,6 +309,45 @@ def api_updates_install():
     if not repo:
         return jsonify({"ok": False, "error": "updates.repo not configured"}), 400
 
+    app_dir = _app_dir()
+    restart = _restart_script(app_dir)
+    # Use the helper that lives alongside the running package to avoid depending
+    # on the staged copy which would be overwritten mid-operation.
+    helper = Path(__file__).resolve().parents[2] / "updater_helper.py"
+    if not helper.exists():
+        return jsonify({"ok": False, "error": f"updater_helper.py not found at {helper}"}), 500
+
+    # A git clone of the repository is updated through git (17.10.3): copying
+    # the ZIP over it left git on the old commit with dozens of "modified"
+    # files. Fetch + check happen here, so a failure is reported to the UI
+    # before anything on disk changes; the helper then saves the old state
+    # and switches to the tag.
+    git_remote = git_checkout_remote(app_dir, repo)
+    if git_remote:
+        try:
+            git_commit = prepare_git_update(app_dir, git_remote, tag)
+        except Exception as e:
+            logger.warning("[updates] git update of %s not possible: %s", tag, e)
+            return jsonify({"ok": False, "install_kind": "git",
+                            "error": f"git update failed: {e}"}), 502
+        logger.info("[updates] git checkout: %s -> %s (%s)", __version__, tag, git_commit[:12])
+        _start_handoff(helper, app_dir, [
+            "--app-dir", str(app_dir),
+            "--restart", str(restart),
+            "--update-deps", "1",
+            "--git-commit", git_commit,
+            "--git-tag", tag,
+            "--running-version", __version__,
+        ])
+        return jsonify({
+            "ok": True,
+            "tag": tag,
+            "install_kind": "git",
+            "message": f"Installing {tag} via git… the app will restart automatically.",
+            "staging": "",
+            "app_dir": str(app_dir),
+        })
+
     # Resolve asset_url from /releases if caller didn't supply one
     if not asset_url:
         try:
@@ -329,14 +369,6 @@ def api_updates_install():
         logger.exception("download/extract failed")
         return jsonify({"ok": False, "error": f"download/extract failed: {e}"}), 502
 
-    app_dir = _app_dir()
-    restart = _restart_script(app_dir)
-    # Use the helper that lives alongside the running package to avoid depending
-    # on the staged copy which would be overwritten mid-operation.
-    helper = Path(__file__).resolve().parents[2] / "updater_helper.py"
-    if not helper.exists():
-        return jsonify({"ok": False, "error": f"updater_helper.py not found at {helper}"}), 500
-
     # Common helper arguments (the --wait-pid value differs per platform below).
     helper_args = [
         "--app-dir", str(app_dir),
@@ -346,93 +378,7 @@ def api_updates_install():
     ]
     logger.info("[updates] preparing updater handoff (app_dir=%s, staging=%s)", app_dir, staging)
 
-    def _handoff_to_updater():
-        """Hand control to updater_helper.
-
-        POSIX (Linux/macOS): ``os.execv`` replaces the current process image
-        in-place with the helper, **keeping the same PID**. Under systemd this
-        means the service-MainPID never exits, so ``KillMode=mixed`` doesn't
-        tear down the cgroup and the helper survives to finish the job. Under
-        launchd the same logic applies (job stays ``alive``). Under Docker
-        (PID 1) the container keeps running throughout.
-
-        Windows: keep the historical detached-spawn + exit path — Windows has
-        no cgroup-style cleanup on SCM/NSSM service exit that would reach the
-        child, and ``os.execv`` on Windows doesn't replace in-place (it spawns
-        + terminates the current process), so detached spawn is strictly
-        safer there.
-        """
-        import time as _time
-        # Give Flask/werkzeug a beat to finish flushing the HTTP response
-        # before we yank the process away.
-        _time.sleep(1.2)
-
-        # Snapshot the live-history buffer to disk so the Live tab comes
-        # back fully populated after the helper execvs the new app image.
-        # execv doesn't run atexit / stop_all, so without this the user
-        # would see an empty chart for ~2 h after every update.
-        try:
-            state = _get_state()
-            bg = getattr(state, "_bg", None)
-            if bg is not None:
-                bg._save_live_history()
-        except Exception:
-            logger.debug("Pre-update live-history save failed", exc_info=True)
-
-        if os.name == "nt":
-            win_cmd = [sys.executable, str(helper), "--wait-pid", str(os.getpid())] + helper_args
-            try:
-                subprocess.Popen(
-                    win_cmd,
-                    cwd=str(app_dir),
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-                    close_fds=False,
-                )
-            except Exception:
-                logger.exception("[updates] failed to spawn Windows updater")
-                return
-            logger.info("[updates] (Windows) exiting so detached helper can take over")
-            os._exit(0)
-
-        # POSIX: execv in-place. --wait-pid=0 because we ARE the process the
-        # helper would otherwise be waiting for — we're about to become it.
-        posix_cmd = [sys.executable, str(helper), "--wait-pid", "0"] + helper_args
-        logger.info("[updates] execv into updater_helper (in-place, same PID %d)", os.getpid())
-        # Close any fds above std* to avoid leaking the listening HTTP socket
-        # / sqlite file handles into the helper image. Python-created sockets
-        # already carry FD_CLOEXEC on Linux, but be explicit.
-        # Not on macOS: closing blindly can hit a guarded fd owned by the system
-        # libraries (EXC_GUARD kills the process). Python fds are already
-        # non-inheritable (PEP 446), so execv drops them anyway.
-        if sys.platform != "darwin":
-            try:
-                os.closerange(3, 256)
-            except Exception:
-                pass
-        try:
-            os.execv(sys.executable, posix_cmd)
-        except Exception:
-            logger.exception("[updates] execv failed; falling back to detached spawn")
-            # Last-resort fallback: detached spawn + exit. On systemd this may
-            # still die with the cgroup, but it's better than hanging the UI.
-            try:
-                subprocess.Popen(
-                    [sys.executable, str(helper), "--wait-pid", str(os.getpid())] + helper_args,
-                    cwd=str(app_dir),
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True,
-                    close_fds=True,
-                )
-            except Exception:
-                logger.exception("[updates] fallback spawn also failed")
-            os._exit(1)
-
-    threading.Thread(target=_handoff_to_updater, daemon=True).start()
+    _start_handoff(helper, app_dir, helper_args)
     return jsonify({
         "ok": True,
         "tag": tag,
@@ -440,3 +386,99 @@ def api_updates_install():
         "staging": str(staging),
         "app_dir": str(app_dir),
     })
+
+
+def _handoff_to_updater(helper: Path, app_dir: Path, helper_args: list, state=None) -> None:
+    """Hand control to updater_helper.
+
+    POSIX (Linux/macOS): ``os.execv`` replaces the current process image
+    in-place with the helper, **keeping the same PID**. Under systemd this
+    means the service-MainPID never exits, so ``KillMode=mixed`` doesn't
+    tear down the cgroup and the helper survives to finish the job. Under
+    launchd the same logic applies (job stays ``alive``). Under Docker
+    (PID 1) the container keeps running throughout.
+
+    Windows: keep the historical detached-spawn + exit path — Windows has
+    no cgroup-style cleanup on SCM/NSSM service exit that would reach the
+    child, and ``os.execv`` on Windows doesn't replace in-place (it spawns
+    + terminates the current process), so detached spawn is strictly
+    safer there.
+    """
+    import time as _time
+    # Give Flask/werkzeug a beat to finish flushing the HTTP response
+    # before we yank the process away.
+    _time.sleep(1.2)
+
+    # Snapshot the live-history buffer to disk so the Live tab comes
+    # back fully populated after the helper execvs the new app image.
+    # execv doesn't run atexit / stop_all, so without this the user
+    # would see an empty chart for ~2 h after every update.
+    try:
+        bg = getattr(state, "_bg", None)
+        if bg is not None:
+            bg._save_live_history()
+    except Exception:
+        logger.debug("Pre-update live-history save failed", exc_info=True)
+
+    if os.name == "nt":
+        win_cmd = [sys.executable, str(helper), "--wait-pid", str(os.getpid())] + helper_args
+        try:
+            subprocess.Popen(
+                win_cmd,
+                cwd=str(app_dir),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                close_fds=False,
+            )
+        except Exception:
+            logger.exception("[updates] failed to spawn Windows updater")
+            return
+        logger.info("[updates] (Windows) exiting so detached helper can take over")
+        os._exit(0)
+
+    # POSIX: execv in-place. --wait-pid=0 because we ARE the process the
+    # helper would otherwise be waiting for — we're about to become it.
+    posix_cmd = [sys.executable, str(helper), "--wait-pid", "0"] + helper_args
+    logger.info("[updates] execv into updater_helper (in-place, same PID %d)", os.getpid())
+    # Close any fds above std* to avoid leaking the listening HTTP socket
+    # / sqlite file handles into the helper image. Python-created sockets
+    # already carry FD_CLOEXEC on Linux, but be explicit.
+    # Not on macOS: closing blindly can hit a guarded fd owned by the system
+    # libraries (EXC_GUARD kills the process). Python fds are already
+    # non-inheritable (PEP 446), so execv drops them anyway.
+    if sys.platform != "darwin":
+        try:
+            os.closerange(3, 256)
+        except Exception:
+            pass
+    try:
+        os.execv(sys.executable, posix_cmd)
+    except Exception:
+        logger.exception("[updates] execv failed; falling back to detached spawn")
+        # Last-resort fallback: detached spawn + exit. On systemd this may
+        # still die with the cgroup, but it's better than hanging the UI.
+        try:
+            subprocess.Popen(
+                [sys.executable, str(helper), "--wait-pid", str(os.getpid())] + helper_args,
+                cwd=str(app_dir),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+                close_fds=True,
+            )
+        except Exception:
+            logger.exception("[updates] fallback spawn also failed")
+        os._exit(1)
+
+
+def _start_handoff(helper: Path, app_dir: Path, helper_args: list) -> None:
+    # The state is read here, inside the request: the thread has no app context.
+    try:
+        state = _get_state()
+    except Exception:
+        state = None
+    threading.Thread(target=_handoff_to_updater, args=(helper, app_dir, helper_args, state),
+                     daemon=True).start()

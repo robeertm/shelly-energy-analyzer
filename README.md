@@ -777,6 +777,7 @@ its own path:
 |---|---|
 | **Docker** (`deploy/install.sh`, `docker-compose.yml`) | a new image. The bundled Watchtower installs it every night at 04:00; by hand: `docker compose pull && docker compose up -d`. The in-app updater is switched off inside the container — a file swap there would be gone with the next restart. |
 | **Home Assistant add-on** | the add-on is rebuilt from the add-on store. The in-app updater is switched off there as well. |
+| **Git clone** (`git clone` + service) | the built-in updater, through git — see below. |
 | **ZIP / start script** (macOS, Linux, Windows) | the built-in updater below. |
 
 ### Built-in updater (installs without Docker)
@@ -786,6 +787,19 @@ The built-in updater checks the latest release on GitHub automatically.
 - If you are offline or GitHub is blocked by DNS/VPN/firewall, the app will show an "offline/timeout" message.
 - **Download & install** is only enabled when a newer version than the current one is available.
 - **Version history** — the updater shows the last 10 releases; you can install any of them, including older versions (downgrade).
+
+### Updating a git installation
+
+If the install directory is a git clone (a `.git` folder with a remote pointing at this repository), the built-in updater updates it through git instead of unpacking a ZIP:
+
+1. It fetches the tags and checks that the release tag carries the new version.
+2. It saves your local state under `data/update-backups/<time>-<version>/` (the last 5 are kept): `git diff --binary HEAD` as a patch, a second patch against the tag of the running version if git and the app had drifted apart, and any untracked files.
+3. It switches with `git checkout --force --detach <tag>`.
+4. It verifies the result by importing the new version; on failure it jumps back to the previous commit and re-applies the patch.
+
+`config.json`, `data/`, `logs/` and `.venv` are gitignored and stay untouched; there is no `git clean`. A clone that older versions had let drift apart is healed by the next update (a single entry in `logs/updater.log`).
+
+The same works by hand: save local changes with `git diff > my.patch`, then run `git fetch --tags && git checkout --force v<version>` (or `git reset --hard v<version>`). To re-apply an old backup: `git apply data/update-backups/<dir>/local-changes.patch`.
 
 To publish an update:
 ```bash

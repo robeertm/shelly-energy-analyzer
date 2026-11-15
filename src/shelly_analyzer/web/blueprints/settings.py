@@ -112,6 +112,17 @@ def get_settings():
     _channel = update_channel()
     data["_addon"] = _channel == "addon"
     data["_docker"] = _channel == "docker"
+    # Since 17.10.3 also `_git`: a clone of the repository is updated through
+    # git (tag checkout, local changes saved as a patch) — the page says so.
+    data["_git"] = False
+    if _channel == "app":
+        try:
+            from shelly_analyzer.updater_helper import git_checkout_remote
+            from shelly_analyzer.web.blueprints.updates import _app_dir
+            _repo = str(getattr(getattr(state.cfg, "updates", None), "repo", "") or "")
+            data["_git"] = bool(git_checkout_remote(_app_dir(), _repo))
+        except Exception:
+            data["_git"] = False
     resp = jsonify(data)
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return resp
