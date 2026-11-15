@@ -799,6 +799,8 @@ If the install directory is a git clone (a `.git` folder with a remote pointing 
 
 `config.json`, `data/`, `logs/` and `.venv` are gitignored and stay untouched; there is no `git clean`. A clone that older versions had let drift apart is healed by the next update (a single entry in `logs/updater.log`).
 
+This path arrived in 17.10.3. The step *to* 17.10.3 is still carried out by the updater of the version you run, which copies the ZIP; the update after that brings the clone back onto its tag. To skip that intermediate state, switch by hand once (see below).
+
 The same works by hand: save local changes with `git diff > my.patch`, then run `git fetch --tags && git checkout --force v<version>` (or `git reset --hard v<version>`). To re-apply an old backup: `git apply data/update-backups/<dir>/local-changes.patch`.
 
 To publish an update:
