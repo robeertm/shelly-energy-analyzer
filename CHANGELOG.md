@@ -1,5 +1,30 @@
 # Changelog
 
+## 17.10.1
+
+The Aurora background no longer works a fast screen to death. On a 144 or
+166 Hz display the live tab redrew its background that many times a second and,
+in Firefox, re-blurred every glass panel on top of it each time, which kept a
+modern graphics card busy at 80-90 % while the dashboard sat idle.
+
+### Fixes
+- **The background is capped at about 30 draws a second again.** The cap was in
+  the first Aurora release and was lost in the rewrite that made the animation
+  survive a covered window; the README and the 16.71.0 notes kept promising it.
+  The motion is time-based, so only the smoothness changes, never the speed.
+  A resize, a theme change and the first frame still draw immediately, a paused
+  animation still stays paused, and coming back to the tab draws at once.
+  Measured with a simulated 144 Hz display: 144 draws a second before, 29 now;
+  at 60 Hz 60 before, 30 now.
+- **Firefox no longer blurs the glass.** About twenty panels used
+  `backdrop-filter` over the moving background; Firefox recomputes all of them
+  on every frame. In Firefox the panels now use a firmer glass colour and keep
+  their edge and shadow instead. Chrome, Safari and other engines are untouched
+  and keep the blur (the rule matches on a property only Firefox understands).
+- New tests: the cap and the Firefox block are guarded in
+  `tests/test_aurora_skin.py`, and a browser test drives the real page with a
+  simulated 60 / 144 / 240 Hz display and counts the draws.
+
 ## 17.10.0
 
 A customer walkthrough now opens every page of the dashboard in all nine

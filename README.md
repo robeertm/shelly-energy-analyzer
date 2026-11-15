@@ -322,8 +322,9 @@ Android / any browser: open `/w` and add to home screen — no app required.
   byte-for-byte what it was.
 - Both designs have a **light and a dark variant** (Catppuccin Mocha and Latte), and the existing
   Theme setting keeps working across both.
-- Kind to the machine it runs on: 30 fps, capped pixel ratio, paused in a background tab, and no
-  motion at all when the system asks for `prefers-reduced-motion`.
+- Kind to the machine it runs on: at most about 30 draws a second whatever the refresh rate of the
+  display, capped pixel ratio, paused in a background tab, no backdrop blur in Firefox (firmer glass
+  instead), and no motion at all when the system asks for `prefers-reduced-motion`.
 
 ### 📊 Live Monitoring
 - Real-time power, voltage, current and **grid frequency (Hz)**

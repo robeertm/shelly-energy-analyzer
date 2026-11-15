@@ -1216,6 +1216,37 @@ html[data-skin="aurora"] :focus-visible {
   html[data-skin="aurora"] #bottom-nav { background: var(--au-glass); }
 }
 
+/* Firefox: no backdrop blur, firmer glass instead.
+   Measured on an idle Live tab (issue 19): with the canvas behind them moving,
+   Firefox re-blurs every glass surface on every frame — ~20 of them — and a
+   166 Hz screen sat at 80-92 % GPU.  The canvas is now capped at 30 draws a
+   second, but a blur that has to be recomputed 30 times a second behind two
+   dozen panels is still the dominant cost there, so this engine gets the same
+   look without it: the panels are made mostly opaque (as the light theme
+   already is) and keep their hairline and top edge.  Chrome and Safari keep
+   the blur; they composite it on the GPU.  `-moz-appearance` is only
+   understood by Firefox, so no other engine matches this block, and if the
+   test ever stops matching the blur is simply back. */
+@supports (-moz-appearance: none) {
+  html[data-skin="aurora"]:not([data-theme="light"]) {
+    --au-glass:    rgba(40, 41, 58, .90);
+    --au-glass-hi: rgba(58, 60, 79, .94);
+  }
+  html[data-skin="aurora"] #hdr,
+  html[data-skin="aurora"] header {
+    background: linear-gradient(180deg,
+        color-mix(in srgb, var(--au-ground-1) 96%, transparent),
+        color-mix(in srgb, var(--au-ground-1) 90%, transparent));
+  }
+  html[data-skin="aurora"],
+  html[data-skin="aurora"] *,
+  html[data-skin="aurora"] *::before,
+  html[data-skin="aurora"] *::after {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
 /* ── 16 · The other pages ───────────────────────────────────────────────── */
 /* Settings, Setup, Plots and Control are separate documents with their own
    variable sets.  They get the same palette so the product reads as one. */

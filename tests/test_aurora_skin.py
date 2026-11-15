@@ -642,6 +642,56 @@ def test_the_animation_cannot_die():
     print("OK  a throwing frame reschedules, and a watchdog revives a stalled loop")
 
 
+def test_the_background_is_capped_to_about_30_draws_a_second():
+    """Issue 19: the cap went missing and a 166 Hz screen drew 166 times a second.
+
+    The first version had it (`if (ts - last < 33)` in schedule()); the freeze
+    fix of 16.72 rewrote schedule() as `requestAnimationFrame(frame)` and the
+    limit went with it, while README and CHANGELOG kept promising 30 fps.  The
+    loop is dt-based, so the cap changes smoothness, never speed.
+    """
+    js = open(JS_PATH, encoding="utf-8").read()
+    code = _strip_js_comments(js)
+    fn = code[code.index("    function frame(ts) {"):]
+    fn = fn[:fn.index("\n    }\n")]
+    m = re.search(r"MIN_GAP\s*=\s*(\d+)", code)
+    assert m and 25 <= int(m.group(1)) <= 33, "the minimum gap between two draws is missing or not ~30 fps"
+    assert "ts - lastDraw < MIN_GAP" in fn, "frame() does not check the gap"
+    gate = fn[fn.index("lastDraw &&") - 40:fn.index("lastDraw &&") + 80]
+    assert "!paused" in gate and "!REDUCED" in gate, \
+        "the cap must not swallow the single redraw a resize or theme change asks for"
+    assert fn.index("ts - lastDraw < MIN_GAP") < fn.index("draw(ts)"), "the gap is checked after drawing"
+    assert "schedule();" in fn[fn.index("ts - lastDraw < MIN_GAP"):fn.index("draw(ts)")], \
+        "a skipped frame must schedule the next one or the loop dies"
+    assert "window.__auLastDraw" not in code and "window.lastDraw" not in code, \
+        "the limiter state must stay private to the closure"
+    assert "lastDraw = 0" in code[code.index('addEventListener("visibilitychange"'):][:400], \
+        "coming back to the tab must draw at once"
+    print("OK  frame() draws at most every %s ms while running, always when asked once" % m.group(1))
+
+
+def test_firefox_gets_firm_glass_instead_of_backdrop_blur():
+    """Issue 19: ~20 blurred panels over a moving canvas cost Firefox the GPU.
+
+    Only Firefox understands `-moz-appearance`, so the block is Firefox's alone;
+    every other engine keeps all of the blur rules.
+    """
+    css = _strip_css_comments(open(CSS_PATH, encoding="utf-8").read())
+    i = css.index("@supports (-moz-appearance: none)")
+    block = css[i:css.index("\n}\n", i)]
+    assert "backdrop-filter: none !important" in block
+    assert "-webkit-backdrop-filter: none !important" in block
+    assert "*::before" in block and "*::after" in block, "pseudo-element panels keep their blur"
+    assert "--au-glass:" in block and "--au-glass-hi:" in block, "no firmer glass to make up for it"
+    m = re.search(r"--au-glass:\s*rgba\([^)]*?,\s*\.(\d+)\)", block)
+    assert m and float("0." + m.group(1)) >= 0.8, \
+        "the Firefox glass is still see-through: text would sit on the moving traces"
+    outside = css.replace(block, "")
+    assert len(re.findall(r"(?<!-)backdrop-filter:\s*blur", outside)) >= 15, \
+        "the blur rules of the other engines must stay"
+    print("OK  the Firefox block drops the blur and firms the glass; the rest keeps the blur")
+
+
 def test_the_expensive_dom_background_is_gone():
     """Bisected against the live dashboard: the blurred DOM ribbons cost three
     quarters of the frame budget (14 fps with, 52 fps without), while removing

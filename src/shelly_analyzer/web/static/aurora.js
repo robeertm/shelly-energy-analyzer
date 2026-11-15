@@ -322,6 +322,14 @@
 
     var W = 0, H = 0, DPR = 1, board = { lanes: [], pads: [], vias: [], path: null };
     var t0 = 0, raf = 0, prev = 0, lastFrameAt = 0, faults = 0, alive = true;
+    /* The frame limit.  Everything here moves slowly and dt-based, so 30 draws a
+       second look the same as 166 and cost a fifth of it.  A little under the
+       33.3 ms period so that a display whose frame time does not divide it
+       (144 Hz: 6.9 ms, five frames = 34.7 ms) still lands on ~30, and jitter at
+       60 Hz (16.7 / 33.3 ms) never drops a draw to 20.  `lastDraw`/`draws` are
+       private on purpose: a window-level global would be shared with a second
+       copy of the script. */
+    var MIN_GAP = 29, lastDraw = 0, draws = 0;
     /* Paused BY THE USER, which is not the same as stopped: the watchdog exists
        to revive a loop that died, so it must be told the difference or it would
        restart the animation 1.3 s after every pause. */
@@ -514,6 +522,15 @@
       lastFrameAt = now();
       frames++;
       if (document.hidden) return;              // the watchdog brings it back
+      /* Only while the loop is running on its own.  A single redraw asked for
+         by a resize or a theme change (paused / reduced motion) must always
+         draw, and so must the very first frame. */
+      if (!paused && !REDUCED && lastDraw && ts - lastDraw < MIN_GAP) {
+        schedule();
+        return;
+      }
+      lastDraw = ts || now();
+      draws++;
       try {
         draw(ts);
       } catch (e) {
@@ -549,7 +566,7 @@
       }, 200);
     });
     document.addEventListener("visibilitychange", function () {
-      if (!document.hidden && !paused) { lastFrameAt = now(); prev = 0; t0 = 0; schedule(); }
+      if (!document.hidden && !paused) { lastFrameAt = now(); lastDraw = 0; prev = 0; t0 = 0; schedule(); }
     });
     try {
       new MutationObserver(function () {
@@ -598,6 +615,7 @@
     // Exposed so a test can assert the loop is actually running.
     window.__auCircuit = {
       frames: function () { return frames; },
+      draws: function () { return draws; },
       lanes: function () { return board.lanes.length; },
       pads: function () { return board.pads.length; },
       alive: function () { return alive; },
