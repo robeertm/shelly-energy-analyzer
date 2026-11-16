@@ -91,9 +91,10 @@ jobs:
         if: inputs.abbild
         run: |
           set -euo pipefail
+          source .github/retry-registry.sh
           IMG="ghcr.io/${{ steps.repo.outputs.slug }}:${{ inputs.version }}"
           echo "pruefe $IMG"
-          docker buildx imagetools inspect "$IMG" > /dev/null
+          retry_registry docker buildx imagetools inspect "$IMG" > /dev/null
           echo "vorhanden."
 
       # 🔴 DIE VERSION KOMMT AUS DEM ABBILD, NICHT AUS DEM ARBEITSSTAND.
@@ -106,6 +107,7 @@ jobs:
         id: vor
         run: |
           set -euo pipefail
+          source .github/retry-registry.sh
           SLUG="ghcr.io/${{ steps.repo.outputs.slug }}"
           NEU="${{ inputs.version }}"
           kandidat=""
@@ -113,7 +115,7 @@ jobs:
             [ "$t" = "$NEU" ] && continue
             kleiner="$(printf '%s\n%s\n' "$t" "$NEU" | sort -V | head -1)"
             [ "$kleiner" = "$t" ] || continue
-            if docker buildx imagetools inspect "$SLUG:$t" >/dev/null 2>&1; then
+            if retry_registry docker buildx imagetools inspect "$SLUG:$t" >/dev/null 2>&1; then
               kandidat="$t"
             fi
           done
@@ -123,6 +125,19 @@ jobs:
           else
             echo "Vorgaengerin: $kandidat"
             echo "alt=$kandidat" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Pull first, with retries on registry/network errors: `docker run` inside the
+      # smoke probe would otherwise pull on its own and fail on a one-off registry hiccup.
+      - name: Pull the images to probe
+        if: inputs.abbild
+        run: |
+          set -euo pipefail
+          source .github/retry-registry.sh
+          SLUG="ghcr.io/${{ steps.repo.outputs.slug }}"
+          retry_registry docker pull "$SLUG:${{ inputs.version }}"
+          if [ -n "${{ steps.vor.outputs.alt }}" ]; then
+            retry_registry docker pull "$SLUG:${{ steps.vor.outputs.alt }}"
           fi
 
       - name: Rauchprobe — a) Neuinstallation auf leerem /data
@@ -244,15 +259,16 @@ jobs:
         if: inputs.abbild
         run: |
           set -euo pipefail
+          source .github/retry-registry.sh
           SLUG="ghcr.io/${{ steps.repo.outputs.slug }}"
-          docker buildx imagetools create -t "$SLUG:latest" "$SLUG:${{ inputs.version }}"
+          retry_registry docker buildx imagetools create -t "$SLUG:latest" "$SLUG:${{ inputs.version }}"
           echo "::notice::latest zeigt jetzt auf ${{ inputs.version }}"
           # 🔴 `| head -6` killed this step once the image carried two
           #    architectures (17.7.0): longer output, `head` closes the pipe,
           #    imagetools dies of SIGPIPE, and `pipefail` turns that into exit
           #    255 — AFTER `:latest` had moved, BEFORE the release was made
           #    regular. `sed -n` reads to the end and never closes early.
-          docker buildx imagetools inspect "$SLUG:latest" | sed -n '1,8p'
+          retry_registry docker buildx imagetools inspect "$SLUG:latest" | sed -n '1,8p'
 
       # 🔑 Ab hier sehen die App und `hass-addons` die neue Fassung — das Add-on
       # zieht im naechsten Fuenf-Minuten-Lauf von selbst nach.
