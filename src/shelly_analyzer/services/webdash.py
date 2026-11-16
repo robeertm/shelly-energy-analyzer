@@ -7894,7 +7894,7 @@ function _co2OriginHtml(FP, period, data) {{
       .replace('{{origin}}', (F.battery_origin_kg||0).toFixed(2)).replace('{{mfg}}', (F.battery_embodied_kg||0).toFixed(2)).replace('{{factor}}', (F.battery_mfg_g_per_kwh||data.battery_mfg_g_per_kwh||0).toFixed(0));
     h += row(SRC_COL.battery, t('web.co2.src_battery_dis', 'Battery discharge'), F.battery_discharge_kwh, (F.battery_intensity||0).toFixed(0), bK, bnote);
   }}
-  h += '<tr style="border-top:1px solid var(--border)"><td style="padding:6px 4px;font-weight:700">' + t('web.co2.net_footprint','Net footprint') + '</td><td style="text-align:right;padding:6px 4px">' + (F.load_kwh||0).toFixed(1) + ' kWh</td><td class="col-fac" style="text-align:right;padding:6px 4px;color:var(--muted)">' + (F.effective_intensity||0).toFixed(0) + '</td><td style="text-align:right;padding:6px 4px;font-weight:700">' + net.toFixed(2) + ' kg</td><td class="col-pct" style="text-align:right;padding:6px 4px;color:var(--muted)">100%</td></tr>';
+  h += '<tr style="border-top:1px solid var(--border)"><td style="padding:6px 4px;font-weight:700">' + t('web.co2.net_footprint','Net footprint') + '</td><td style="text-align:right;padding:6px 4px">' + (F.load_kwh||0).toFixed(1) + ' kWh</td><td class="col-fac" style="text-align:right;padding:6px 4px;color:var(--muted)">' + (F.effective_intensity==null ? '–' : F.effective_intensity.toFixed(0)) + '</td><td style="text-align:right;padding:6px 4px;font-weight:700">' + net.toFixed(2) + ' kg</td><td class="col-pct" style="text-align:right;padding:6px 4px;color:var(--muted)">100%</td></tr>';
   if ((F.export_kwh||0) > 0) {{
     h += '<tr style="color:var(--muted)"><td style="padding:5px 4px">↗ ' + t('web.co2.src_export_row', 'Fed into the grid') + '<div style="font-size:10px">' + t('web.co2.src_export_note', 'leaves the house — charged nothing here') + '</div></td><td style="text-align:right;padding:5px 4px">' + F.export_kwh.toFixed(1) + ' kWh</td><td class="col-fac"></td><td style="text-align:right;padding:5px 4px">0 kg</td><td class="col-pct"></td></tr>';
   }}
@@ -7903,7 +7903,7 @@ function _co2OriginHtml(FP, period, data) {{
   h += '<div class="metric-grid" style="margin-top:10px">';
   h += metricCardHtml('🌱 ' + t('web.co2.solar_saved','Avoided by solar'), fmt(F.solar_saved_kg,2,'kg'), t('web.co2.saved_self_note', 'own use vs. buying it from the grid'));
   if ((F.export_saved_kg||0) > 0) h += metricCardHtml('↗ ' + t('web.co2.export_saved','Avoided in the grid'), fmt(F.export_saved_kg,2,'kg'), t('web.co2.export_saved_note', 'your surplus displaced grid power elsewhere'));
-  h += metricCardHtml(t('web.costs.autarky','Self-sufficiency'), (F.autarky_pct||0).toFixed(0) + ' %', t('web.co2.solar_share_note', '{{pct}}% of the non-battery load was PV').replace('{{pct}}', (F.solar_share_pct||0).toFixed(0)));
+  h += metricCardHtml(t('web.costs.autarky','Self-sufficiency'), (F.autarky_pct==null ? '–' : F.autarky_pct.toFixed(0) + ' %'), (F.solar_share_pct==null ? t('web.flow.co2_pending', 'No data yet') : t('web.co2.solar_share_note', '{{pct}}% of the non-battery load was PV').replace('{{pct}}', F.solar_share_pct.toFixed(0))));
   h += '</div>';
   if ((F.tenant_kg||0) > 0 || (F.tenant_load_kwh||0) > 0) {{
     const tl = F.tenant_load_kwh || 0, ti = tl > 0 ? (F.tenant_kg * 1000 / tl) : 0;
@@ -8673,7 +8673,7 @@ function renderSolar(data, el) {{
   // ── 7. CO₂ (the CO₂ tab's own numbers) + records + economics ───────────
   const c = data.co2 || {{}};
   html += '<div class="nilm-two-col" style="margin-top:8px">';
-  html += '<div class="card">' + cardHead('🌱 CO₂', (c.effective_intensity || 0).toFixed(0) + ' g/kWh ' + t('web.solar.effective', 'effective') + ' · ' + t('web.dash.co2_intensity', 'Grid intensity') + ' ' + (c.grid_intensity || 0).toFixed(0));
+  html += '<div class="card">' + cardHead('🌱 CO₂', (c.effective_intensity == null ? '–' : c.effective_intensity.toFixed(0) + ' g/kWh ' + t('web.solar.effective', 'effective')) + ' · ' + t('web.dash.co2_intensity', 'Grid intensity') + ' ' + (c.grid_intensity || 0).toFixed(0));
   html += '<div class="metric-grid" style="margin-top:8px">';
   html += metricCardHtml(t('web.co2.solar_saved', 'Avoided by solar'), fmt(data.co2_saved_self_kg, 2, 'kg'), t('web.co2.saved_self_note', 'own use vs. buying it from the grid'));
   html += metricCardHtml(t('web.co2.export_saved', 'Avoided in the grid'), fmt(data.co2_saved_export_kg, 2, 'kg'), t('web.co2.export_saved_note', 'your surplus displaced grid power elsewhere'));
@@ -10390,7 +10390,7 @@ function renderEnergyFlow(d, cont) {{
   if (d.has_supply) html += _m('aut', t('web.dash.autarky', 'Autarky'), k.aut.v, k.aut.s);
   if (d.has_battery) html += _m('bat', '🔋 ' + t('web.co2.src_battery', 'Battery'), k.bat.v, k.bat.s);
   if (d.has_grid_meter) html += _m('grid', '🔌 ' + t('web.co2.src_grid', 'Grid'), k.grid.v, k.grid.s);
-  if (H.intensity != null) html += _m('co2', 'CO₂', k.co2.v, k.co2.s);
+  html += _m('co2', 'CO₂', k.co2.v, k.co2.s);   // always there: no hours yet reads "no data yet", never 0 g/kWh
   html += '</div></div>';
   // ── Diagram ──
   html += '<div class="card" style="padding:10px 6px"><div id="flow-wrap" style="width:100%"></div>';
@@ -10433,7 +10433,10 @@ function _efKpis(d) {{
     aut: {{v: H.autarky_pct != null ? H.autarky_pct.toFixed(0) + ' %' : '–', s: t('web.flow.grid_share', 'grid') + ' ' + _fv(S.grid || 0, unit)}},
     bat: {{v: '↓' + _fvs(K.battery || 0) + ' ↑' + _fvs(S.battery || 0) + ' ' + unit, s: d.battery_soc_pct != null ? d.battery_soc_pct.toFixed(0) + ' % SOC' : t('web.flow.in_out', 'in · out')}},
     grid: {{v: '↓' + _fvs(S.grid || 0) + ' ↑' + _fvs(K.grid || 0) + ' ' + unit, s: t('web.flow.import_export', 'import · export')}},
-    co2: {{v: unit === 'W' ? (H.co2_g_per_h || 0).toFixed(0) + ' g/h' : (H.co2_kg || 0).toFixed(2) + ' kg', s: (H.intensity || 0).toFixed(0) + ' g/kWh'}}
+    // No consumption measured yet (just after midnight, nothing synced): the intensity is unknown, not 0.
+    co2: (H.intensity == null)
+      ? {{v: '–', s: t('web.flow.co2_pending', 'No data yet')}}
+      : {{v: unit === 'W' ? (H.co2_g_per_h || 0).toFixed(0) + ' g/h' : (H.co2_kg || 0).toFixed(2) + ' kg', s: H.intensity.toFixed(0) + ' g/kWh'}}
   }};
 }}
 function _efConsumerTexts(c, d) {{

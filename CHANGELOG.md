@@ -1,5 +1,25 @@
 # Changelog
 
+## 17.10.4
+
+Right after midnight the Energy flow tab no longer claims that the grid emits
+0 g of CO2 per kWh.
+
+### Fixes
+- **No consumption yet means "no data yet", not zero.** When "today" had no
+  measured hour (a page left open over midnight, or the first look before the
+  day's first sync) the CO2 tile of the Energy flow was patched in place with
+  `0.00 kg` and `0 g/kWh`. The tile now reads "No data yet" (in all nine
+  languages) and returns to the real figures as soon as an hour is measured.
+- **The same edge case in the CO2 and Solar tabs.** Effective intensity,
+  self-sufficiency and PV share are reported as unknown instead of 0 while the
+  period has no load, and the cards show a dash.
+
+### Tests
+- Fixed-clock tests (00:05, 00:59, 01:05, 12:00) for the flow payload, the
+  footprint and the page source, plus a browser test that drives the renderer
+  from a normal day to an empty one.
+
 ## 17.10.3
 
 An install made with `git clone` is updated through git. The in-app updater
