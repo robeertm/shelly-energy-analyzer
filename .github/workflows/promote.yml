@@ -64,7 +64,9 @@ jobs:
 
   promote:
     needs: walkthrough
-    runs-on: ubuntu-latest
+    # Pinned: on ubuntu-latest (now 26.04) `docker run` was denied for an image
+    # that `imagetools inspect` could read right after the login.
+    runs-on: ubuntu-24.04
     steps:
       # Tiefe 0, weil die Vorgaengerin aus den Git-Tags kommt.
       - uses: actions/checkout@v4
