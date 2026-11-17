@@ -28,6 +28,20 @@ from shelly_analyzer.services.webdash import LivePoint, LiveStateStore
 
 logger = logging.getLogger(__name__)
 
+# How often the Live-tab buffer is snapshotted to data/runtime/live_history.json.gz.
+# Stops and updates write a final snapshot of their own, so this only bounds
+# what a hard kill can lose from the restart cache (never database history).
+LIVE_HISTORY_SAVE_SECONDS = 300.0
+
+
+def live_history_path(out_dir: "Path") -> "Path":
+    return Path(out_dir) / "data" / "runtime" / "live_history.json.gz"
+
+
+def legacy_live_history_path(out_dir: "Path") -> "Path":
+    """Uncompressed format-1 file written up to 17.10.4; still read once."""
+    return Path(out_dir) / "data" / "runtime" / "live_history.json"
+
 
 class BackgroundServiceManager:
     """Manages all background services that run alongside Flask."""
@@ -1410,7 +1424,7 @@ class BackgroundServiceManager:
     # ── Live history persistence ──────────────────────────────────────
 
     def _live_history_path(self) -> "Path":
-        return self.out_dir / "data" / "runtime" / "live_history.json"
+        return live_history_path(self.out_dir)
 
     def _save_live_history(self) -> None:
         """Snapshot the rolling Live-tab buffer to disk.
@@ -1421,17 +1435,26 @@ class BackgroundServiceManager:
         if self.live_store is None:
             return
         try:
-            self.live_store.dump_to_path(self._live_history_path())
+            if self.live_store.dump_to_path(self._live_history_path()):
+                # The uncompressed file of releases before 17.10.5 is
+                # superseded once the new one exists.
+                legacy = legacy_live_history_path(self.out_dir)
+                if legacy.exists():
+                    legacy.unlink()
         except Exception as e:
             logger.debug("Live history save failed: %s", e)
 
     def _start_live_history_saver(self) -> None:
-        """Persist the live buffer every 30 s.
+        """Persist the live buffer every ``LIVE_HISTORY_SAVE_SECONDS``.
 
-        Cheap: ~150 KB JSON per device for the default 2 h retention.
         Survival benefit: after an in-app update the Live tab comes back
         with the full window pre-populated instead of an empty chart that
-        has to refill from scratch."""
+        has to refill from scratch. A clean stop, the in-app update and
+        SIGTERM write a final snapshot anyway, so the periodic save only
+        covers a hard kill; that is why it runs every few minutes and not
+        every 30 s. (At a 1 s poll and the 2 h window the buffer of eight
+        devices holds ~58,000 samples; written every 30 s in the old format
+        that was 30–60 GB of disk writes a day — issue #20.)"""
         def _loop():
             # First save 5 s after start so we don't immediately write an
             # empty file on a fresh boot (lets the load-on-startup path
@@ -1440,7 +1463,7 @@ class BackgroundServiceManager:
                 return
             while not self._stop_event.is_set():
                 self._save_live_history()
-                if self._stop_event.wait(30.0):
+                if self._stop_event.wait(LIVE_HISTORY_SAVE_SECONDS):
                     return
         t = threading.Thread(target=_loop, name="LiveHistorySaver", daemon=True)
         t.start()

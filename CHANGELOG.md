@@ -1,5 +1,42 @@
 # Changelog
 
+## 17.10.5
+
+The analyzer no longer writes tens of gigabytes a day to disk. With eight
+plugs at the default 1 s poll the process wrote about 44 GB a day; it now
+writes about 0.2 GB.
+
+### Fixes
+- **The Live-tab restart cache is small and written rarely.** To bring the
+  Live tab back with its full window after a restart or update, the whole
+  live buffer was saved to `data/runtime/live_history.json` every 30 seconds,
+  one JSON object with 23 named fields per sample. At a 1 s poll and the 2 h
+  window that is about 58,000 samples for eight devices, 10–20 MB per save,
+  30–60 GB a day, while the database itself stayed a few MB. The buffer now
+  goes to `data/runtime/live_history.json.gz`: one column per field,
+  timestamps as differences, values rounded to what a reading can resolve,
+  fields that never leave their default left out, gzip on top (about 2–4 bytes
+  per sample instead of 180–350). It is saved every 5 minutes and only when a
+  new sample arrived. A clean stop, SIGTERM and the in-app update still write a
+  final snapshot, so the longer interval only matters after a hard kill.
+- **The update keeps the Live tab.** The old `live_history.json` is read once
+  at the first start, then replaced by the new file.
+- **The appliance learner (NILM) saves once per ten detected switchings, also
+  when its list is full.** Once it held its maximum of 5000 switchings the
+  check `count % 10 == 0` was true on every new one, and the whole learner
+  file was rewritten each time. This affected installations with energy
+  meters, not plug-only setups.
+- The database was not the cause: plug history is written as one row per
+  device and minute, in WAL mode with `synchronous=NORMAL`. Nothing changed
+  there.
+
+### Tests
+- Size of a full snapshot of eight plugs, bytes per day at the save
+  interval, no write while nothing changed, round trip of every field
+  (including gaps and non-finite readings), reading the previous format,
+  damaged files, the save interval, retiring the old file, and the NILM save
+  rate at its cap.
+
 ## 17.10.4
 
 Right after midnight the Energy flow tab no longer claims that the grid emits

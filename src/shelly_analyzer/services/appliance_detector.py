@@ -272,6 +272,11 @@ class TransitionLearner:
         self._transitions: List[PowerTransition] = []
         self._clusters: List[LearnedCluster] = []
         self._max_transitions = 5000
+        # Transitions confirmed since the last save. Counting them (instead of
+        # testing len(self._transitions) % 10) keeps the file to one write per
+        # ten transitions also after the list has reached its cap — at the cap
+        # the length stays 5000 and the old test was true on every transition.
+        self._unsaved = 0
 
         # Load persisted clusters
         if persist_path and persist_path.exists():
@@ -281,6 +286,8 @@ class TransitionLearner:
     #: poll the old detector fired on every flicker — a modulating inverter
     #: or a heat-pump ramp produced thousands of "appliances" a day.
     _CONFIRM_READINGS = 3
+    #: Confirmed transitions between two saves of the learner file.
+    SAVE_EVERY_TRANSITIONS = 10
 
     def observe(self, device_key: str, timestamp: float, power_w: float) -> Optional[PowerTransition]:
         """Feed a new power reading. Returns a PowerTransition once a step is
@@ -314,7 +321,8 @@ class TransitionLearner:
                     self._transitions.append(transition)
                     if len(self._transitions) > self._max_transitions:
                         self._transitions = self._transitions[-self._max_transitions:]
-                    if self.persist_path and len(self._transitions) % 10 == 0:
+                    self._unsaved = getattr(self, "_unsaved", 0) + 1
+                    if self.persist_path and self._unsaved >= self.SAVE_EVERY_TRANSITIONS:
                         self._save(self.persist_path)
                     hist.clear()
                     hist.append((timestamp, level))
@@ -536,6 +544,7 @@ class TransitionLearner:
             }
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            self._unsaved = 0
         except Exception:
             logger.debug("Failed to save NILM clusters", exc_info=True)
 

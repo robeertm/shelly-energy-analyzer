@@ -58,9 +58,15 @@ class AppState:
         # so the user sees the 2 h chart immediately instead of an empty graph
         # that has to refill from scratch after every update / restart.
         try:
-            hist_path = self.out_dir / "data" / "runtime" / "live_history.json"
-            loaded = self.live_store.load_from_path(hist_path,
-                                                   max_age_seconds=retention_m * 60)
+            from shelly_analyzer.web.background import (
+                legacy_live_history_path, live_history_path)
+            loaded = 0
+            for hist_path in (live_history_path(self.out_dir),
+                              legacy_live_history_path(self.out_dir)):
+                loaded = self.live_store.load_from_path(
+                    hist_path, max_age_seconds=retention_m * 60)
+                if loaded:
+                    break
             if loaded:
                 import logging
                 logging.getLogger(__name__).info(

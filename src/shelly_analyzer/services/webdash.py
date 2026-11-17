@@ -127,6 +127,99 @@ def _safe_f(v: float) -> float:
     return v if math.isfinite(v) else 0.0
 
 
+# ── Live-history file (restart cache of the Live tab) ─────────────────
+
+LIVE_HISTORY_FORMAT = 2
+
+# (field, default, decimals). The decimals are what a reading can resolve:
+# 0.1 W / V / var, 1 mA, 0.001 for a power factor, 1 mWh for the day counter.
+_PERSIST_FIELDS: Tuple[Tuple[str, float, int], ...] = (
+    ("power_total_w", 0.0, 1),
+    ("va", 0.0, 1), ("vb", 0.0, 1), ("vc", 0.0, 1),
+    ("ia", 0.0, 3), ("ib", 0.0, 3), ("ic", 0.0, 3),
+    ("pa", 0.0, 1), ("pb", 0.0, 1), ("pc", 0.0, 1),
+    ("q_total_var", 0.0, 1),
+    ("qa", 0.0, 1), ("qb", 0.0, 1), ("qc", 0.0, 1),
+    ("cosphi_total", 0.0, 3),
+    ("pfa", 0.0, 3), ("pfb", 0.0, 3), ("pfc", 0.0, 3),
+    ("kwh_today", 0.0, 6),
+    ("cost_today", 0.0, 4),
+    ("freq_hz", 50.0, 2),
+    ("i_n", 0.0, 3),
+    ("soc_pct", 0.0, 1),
+)
+
+
+def _round_value(v: float, decimals: int) -> Any:
+    """Finite, rounded, and an int when it has no fraction (``0`` instead of
+    ``0.0`` — a column of an idle plug is mostly zeros)."""
+    v = _safe_f(float(v))
+    r = round(v, decimals)
+    i = int(r)
+    return i if r == i else r
+
+
+def _encode_points(points: List["LivePoint"]) -> Dict[str, Any]:
+    """One device's samples as columns (format 2). Timestamps are stored as the
+    first value plus differences; a field that equals its default in every
+    sample is left out."""
+    ts = [int(p.ts) for p in points]
+    cols: Dict[str, List[Any]] = {}
+    for name, default, decimals in _PERSIST_FIELDS:
+        col = [_round_value(getattr(p, name), decimals) for p in points]
+        if any(v != default for v in col):
+            cols[name] = col
+    dts = [b - a for a, b in zip(ts, ts[1:])]
+    return {"ts0": ts[0] if ts else 0, "dts": dts, "cols": cols}
+
+
+def _decode_points_v2(enc: Any) -> List["LivePoint"]:
+    if not isinstance(enc, dict):
+        return []
+    ts = int(enc.get("ts0") or 0)
+    dts = enc.get("dts") or []
+    cols = enc.get("cols") or {}
+    if not isinstance(dts, list) or not isinstance(cols, dict):
+        return []
+    times = [ts]
+    for d in dts:
+        ts += int(d)
+        times.append(ts)
+    n = len(times)
+    fields: Dict[str, List[float]] = {}
+    for name, default, _dec in _PERSIST_FIELDS:
+        col = cols.get(name)
+        if col is None:
+            fields[name] = [default] * n
+        elif isinstance(col, list) and len(col) == n:
+            fields[name] = [float(v) for v in col]
+        else:
+            return []          # damaged: better an empty chart than a skewed one
+    return [
+        LivePoint(ts=times[i], **{name: fields[name][i] for name, _d, _x in _PERSIST_FIELDS})
+        for i in range(n)
+    ]
+
+
+def _decode_points_v1(arr: Any) -> List["LivePoint"]:
+    """Format 1 (until 17.10.4): one object with named fields per sample."""
+    out: List[LivePoint] = []
+    if not isinstance(arr, list):
+        return out
+    for entry in arr:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            ts = int(entry.get("ts", 0))
+            vals = {}
+            for name, default, _dec in _PERSIST_FIELDS:
+                vals[name] = float(entry.get(name, default) or default)
+            out.append(LivePoint(ts=ts, **vals))
+        except Exception:
+            continue
+    return out
+
+
 class LiveStateStore:
     """Thread-safe in-memory store for the web dashboard."""
 
@@ -135,6 +228,10 @@ class LiveStateStore:
         self._lock = threading.Lock()
         # deque with maxlen: O(1) append + automatic truncation, no manual slice needed.
         self._by_device: Dict[str, Deque[LivePoint]] = {}
+        # Bumped by every new sample; dump_to_path skips the write when the
+        # revision it saved last is still current.
+        self._revision = 0
+        self._saved_revision = -1
 
     def set_max_points(self, max_points: int) -> None:
         """Adjust the in-memory retention size.
@@ -153,60 +250,58 @@ class LiveStateStore:
             if device_key not in self._by_device:
                 self._by_device[device_key] = deque(maxlen=self.max_points)
             self._by_device[device_key].append(point)
+            self._revision += 1
 
     # ── Persistence (across restarts / in-app updates) ────────────────
+    #
+    # The file is a restart cache for the Live tab, nothing else: the history
+    # in the database is written by its own paths. It used to be one JSON
+    # object with 23 named fields per sample, rewritten every 30 s — at a 1 s
+    # poll and a 2 h window that is ~58,000 samples for eight devices, 10–20 MB
+    # per save, 30–60 GB a day (issue #20). Format 2 stores one array per field
+    # (timestamps as differences), rounds every value to what a reading can
+    # resolve, leaves out fields that never leave their default, is gzipped,
+    # and is only written when a sample arrived since the last save.
 
-    def dump_to_path(self, path: "Any") -> None:
-        """Write all per-device deques to a JSON file atomically.
+    def dump_to_path(self, path: "Any", *, skip_unchanged: bool = True) -> bool:
+        """Write all per-device deques to ``path`` atomically (format 2,
+        gzip-compressed when the name ends in ``.gz``).
 
-        Used by the background service to persist the rolling 2 h live
-        window across restarts and in-app updates — otherwise the Live tab
-        starts empty after every update and the user has to wait for the
-        window to refill.
+        Used by the background service to persist the rolling live window
+        across restarts and in-app updates — otherwise the Live tab starts
+        empty after every update and the user has to wait for the window to
+        refill. Returns True when the file was written, False when nothing
+        changed since the last write (``skip_unchanged``).
         """
-        import json
         import os
         import tempfile
         from pathlib import Path as _P
 
         path = _P(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
+            revision = self._revision
+            if skip_unchanged and revision == self._saved_revision and path.exists():
+                return False
             snap = {k: list(dq) for k, dq in self._by_device.items()}
+        path.parent.mkdir(parents=True, exist_ok=True)
         # Serialize outside the lock to keep the live path fast.
         data = {
-            "version": 1,
+            "version": LIVE_HISTORY_FORMAT,
             "max_points": self.max_points,
             "saved_at": int(time.time()),
-            "devices": {
-                k: [
-                    {
-                        "ts": p.ts,
-                        "power_total_w": _safe_f(p.power_total_w),
-                        "va": _safe_f(p.va), "vb": _safe_f(p.vb), "vc": _safe_f(p.vc),
-                        "ia": _safe_f(p.ia), "ib": _safe_f(p.ib), "ic": _safe_f(p.ic),
-                        "pa": _safe_f(p.pa), "pb": _safe_f(p.pb), "pc": _safe_f(p.pc),
-                        "q_total_var": _safe_f(p.q_total_var),
-                        "qa": _safe_f(p.qa), "qb": _safe_f(p.qb), "qc": _safe_f(p.qc),
-                        "cosphi_total": _safe_f(p.cosphi_total),
-                        "pfa": _safe_f(p.pfa), "pfb": _safe_f(p.pfb), "pfc": _safe_f(p.pfc),
-                        "kwh_today": _safe_f(p.kwh_today),
-                        "cost_today": _safe_f(p.cost_today),
-                        "freq_hz": _safe_f(p.freq_hz),
-                        "i_n": _safe_f(p.i_n),
-                    }
-                    for p in arr
-                ]
-                for k, arr in snap.items()
-            },
+            "devices": {k: _encode_points(arr) for k, arr in snap.items() if arr},
         }
+        payload = json.dumps(data, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        if path.suffix == ".gz":
+            # Columns of readings compress ~8x; mtime=0 keeps equal data byte-equal.
+            payload = gzip.compress(payload, compresslevel=6, mtime=0)
         # Atomic write so a crash mid-save can never corrupt the file.
         tmp_fd, tmp_path = tempfile.mkstemp(
-            prefix=".live_history.", suffix=".json.tmp", dir=str(path.parent)
+            prefix=".live_history.", suffix=".tmp", dir=str(path.parent)
         )
         try:
-            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-                json.dump(data, f, separators=(",", ":"))
+            with os.fdopen(tmp_fd, "wb") as f:
+                f.write(payload)
             os.replace(tmp_path, str(path))
         except Exception:
             try:
@@ -214,26 +309,40 @@ class LiveStateStore:
             except Exception:
                 pass
             raise
+        with self._lock:
+            self._saved_revision = revision
+        return True
 
     def load_from_path(self, path: "Any", max_age_seconds: int = 7200) -> int:
-        """Restore deques from a JSON dump produced by `dump_to_path`.
+        """Restore deques from a file written by `dump_to_path`.
 
-        Points older than `max_age_seconds` (default 2 h) are dropped so a
-        long-stopped service doesn't surface stale graphs as if they were
-        current. Returns the total number of points loaded across all
-        devices (0 if the file is missing or invalid).
+        Reads format 2 and the format 1 of releases before 17.10.5, so the
+        window survives the update that changes the format. Points older than
+        `max_age_seconds` (default 2 h) are dropped so a long-stopped service
+        doesn't surface stale graphs as if they were current. Returns the total
+        number of points loaded across all devices (0 if the file is missing or
+        invalid).
         """
-        import json
         from pathlib import Path as _P
 
         path = _P(path)
         if not path.exists():
             return 0
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            raw = path.read_bytes()
+            if raw[:2] == b"\x1f\x8b":
+                raw = gzip.decompress(raw)
+            data = json.loads(raw.decode("utf-8"))
         except Exception:
             return 0
-        if not isinstance(data, dict) or data.get("version") != 1:
+        if not isinstance(data, dict):
+            return 0
+        version = data.get("version")
+        if version == 1:
+            decode = _decode_points_v1
+        elif version == LIVE_HISTORY_FORMAT:
+            decode = _decode_points_v2
+        else:
             return 0
         devices = data.get("devices") or {}
         if not isinstance(devices, dict):
@@ -241,47 +350,16 @@ class LiveStateStore:
         cutoff_ts = int(time.time()) - int(max_age_seconds)
         loaded = 0
         with self._lock:
-            for k, arr in devices.items():
-                if not isinstance(arr, list):
-                    continue
+            for k, enc in devices.items():
                 dq = deque(maxlen=self.max_points)
-                for entry in arr:
-                    if not isinstance(entry, dict):
+                try:
+                    points = decode(enc)
+                except Exception:
+                    continue
+                for p in points:
+                    if p.ts <= 0 or p.ts < cutoff_ts:
                         continue
-                    try:
-                        ts = int(entry.get("ts", 0))
-                    except Exception:
-                        continue
-                    if ts <= 0 or ts < cutoff_ts:
-                        continue
-                    try:
-                        dq.append(LivePoint(
-                            ts=ts,
-                            power_total_w=float(entry.get("power_total_w", 0.0) or 0.0),
-                            va=float(entry.get("va", 0.0) or 0.0),
-                            vb=float(entry.get("vb", 0.0) or 0.0),
-                            vc=float(entry.get("vc", 0.0) or 0.0),
-                            ia=float(entry.get("ia", 0.0) or 0.0),
-                            ib=float(entry.get("ib", 0.0) or 0.0),
-                            ic=float(entry.get("ic", 0.0) or 0.0),
-                            pa=float(entry.get("pa", 0.0) or 0.0),
-                            pb=float(entry.get("pb", 0.0) or 0.0),
-                            pc=float(entry.get("pc", 0.0) or 0.0),
-                            q_total_var=float(entry.get("q_total_var", 0.0) or 0.0),
-                            qa=float(entry.get("qa", 0.0) or 0.0),
-                            qb=float(entry.get("qb", 0.0) or 0.0),
-                            qc=float(entry.get("qc", 0.0) or 0.0),
-                            cosphi_total=float(entry.get("cosphi_total", 0.0) or 0.0),
-                            pfa=float(entry.get("pfa", 0.0) or 0.0),
-                            pfb=float(entry.get("pfb", 0.0) or 0.0),
-                            pfc=float(entry.get("pfc", 0.0) or 0.0),
-                            kwh_today=float(entry.get("kwh_today", 0.0) or 0.0),
-                            cost_today=float(entry.get("cost_today", 0.0) or 0.0),
-                            freq_hz=float(entry.get("freq_hz", 50.0) or 50.0),
-                            i_n=float(entry.get("i_n", 0.0) or 0.0),
-                        ))
-                    except Exception:
-                        continue
+                    dq.append(p)
                 if dq:
                     self._by_device[k] = dq
                     loaded += len(dq)
