@@ -215,6 +215,7 @@
   },
   "weather": {
     "enabled": false,
+    "source": "open_meteo",
     "api_key": "",
     "city": "",
     "lat": 0.0,

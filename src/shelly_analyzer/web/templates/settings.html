@@ -594,11 +594,12 @@ const SECTIONS = [
   ]},
   {id:"weather", title:"Weather", group:"Energy", fields:[
     {key:"weather.enabled", label:"Weather active", type:"checkbox"},
-    {key:"weather.api_key", label:"OpenWeatherMap API Key", type:"password"},
+    {key:"weather.source", label:"Weather source", type:"select", opts:[["open_meteo","Open-Meteo (no key)"],["met_no","MET Norway (no key)"],["openweathermap","OpenWeatherMap (API key)"]], hint:"Open-Meteo and MET Norway need no account \u2014 they only use the latitude and longitude below. Open-Meteo also fills in the last 30 days, so the correlation works from the first day."},
+    {key:"weather.api_key", label:"OpenWeatherMap API Key", type:"password", hint:"Only needed for OpenWeatherMap."},
     {key:"weather.city", label:"City", type:"text"},
     {key:"weather.lat", label:"Latitude", type:"number", step:"0.0001"},
     {key:"weather.lon", label:"Longitude", type:"number", step:"0.0001"},
-    {key:"weather.fetch_interval_minutes", label:"Interval (min)", type:"number"},
+    {key:"weather.fetch_interval_minutes", label:"Interval (min)", type:"number", hint:"Shortest time between two live requests. MET Norway: at least 30 minutes."},
   ]},
   {id:"forecast", title:"Forecast", group:"Energy", fields:[
     {key:"forecast.enabled", label:"Forecast active", type:"checkbox"},

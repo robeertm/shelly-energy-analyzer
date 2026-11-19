@@ -428,7 +428,10 @@ Privacy: nothing is sent to OpenEI unless a URDB rate is set or you click one of
 - Cost comparison bar chart sorted by savings potential
 
 ### 🌡️ Weather Correlation
-- Integration with **OpenWeatherMap API** — current weather display (temperature, humidity, wind, clouds)
+- Three weather sources, picked in Settings → Weather: **Open-Meteo** (default) and **MET Norway** need no account and no key — they only use the latitude/longitude; **OpenWeatherMap** needs an API key
+- Current weather display (temperature, humidity, wind, clouds, pressure, feels-like), with the source named under the tiles (Open-Meteo and MET Norway data are CC BY 4.0)
+- With Open-Meteo the last 30 days are filled in hour by hour, so the correlation has data from the first day instead of after weeks of collecting
+- **Interval (min)** is the shortest time between two live requests; MET Norway is never asked more often than every 30 minutes, and every request carries an identifying User-Agent as their terms ask
 - **Temperature vs. consumption correlation** — Pearson correlation coefficient (r), scatter plot with trend line
 - Heating Degree Days (HDD) and Cooling Degree Days (CDD) analysis
 - kWh per HDD/CDD for heating/cooling efficiency assessment

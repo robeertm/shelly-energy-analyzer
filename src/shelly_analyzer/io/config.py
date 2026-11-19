@@ -890,10 +890,20 @@ class ForecastConfig:
     history_days: int = 90
 
 
+WEATHER_SOURCES = ("open_meteo", "met_no", "openweathermap")
+
+
 @dataclass(frozen=True)
 class WeatherConfig:
-    """OpenWeatherMap integration for weather–energy correlation."""
+    """Weather source for the weather tab and the weather–energy correlation.
+
+    ``source`` picks the provider: ``open_meteo`` (default, no account),
+    ``met_no`` (MET Norway, no account) or ``openweathermap`` (needs ``api_key``).
+    All of them use ``lat``/``lon``. ``fetch_interval_minutes`` is the shortest
+    time between two live requests (MET Norway: never below 30).
+    """
     enabled: bool = False
+    source: str = "open_meteo"
     api_key: str = ""
     city: str = ""
     lat: float = 0.0
@@ -1887,9 +1897,20 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     )
 
     weather_raw = raw.get("weather", {}) if isinstance(raw.get("weather"), dict) else {}
+    _w_key = str(weather_raw.get("api_key", WeatherConfig.api_key) or "")
+    _w_src_raw = weather_raw.get("source")
+    if _w_src_raw is None:
+        # Configs from before 17.11.0 had no source: whoever set a key was on
+        # OpenWeatherMap and stays there; everyone else gets the keyless default.
+        _w_src = "openweathermap" if _w_key.strip() else "open_meteo"
+    else:
+        _w_src = str(_w_src_raw or "").strip().lower()
+        if _w_src not in WEATHER_SOURCES:
+            _w_src = "open_meteo"
     weather = WeatherConfig(
         enabled=bool(weather_raw.get("enabled", WeatherConfig.enabled)),
-        api_key=str(weather_raw.get("api_key", WeatherConfig.api_key) or ""),
+        source=_w_src,
+        api_key=_w_key,
         city=str(weather_raw.get("city", WeatherConfig.city) or ""),
         lat=_coerce_float(weather_raw.get("lat", WeatherConfig.lat), WeatherConfig.lat),
         lon=_coerce_float(weather_raw.get("lon", WeatherConfig.lon), WeatherConfig.lon),
@@ -2658,6 +2679,7 @@ def save_config(cfg: AppConfig, path: Optional[Path] = None) -> Path:
         },
         "weather": {
             "enabled": bool(getattr(cfg.weather, "enabled", False)),
+            "source": str(getattr(cfg.weather, "source", "open_meteo") or "open_meteo"),
             "api_key": str(getattr(cfg.weather, "api_key", "") or ""),
             "city": str(getattr(cfg.weather, "city", "") or ""),
             "lat": float(getattr(cfg.weather, "lat", 0.0)),

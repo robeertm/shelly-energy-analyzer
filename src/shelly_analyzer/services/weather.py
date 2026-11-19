@@ -1,9 +1,23 @@
-"""Weather data integration via OpenWeatherMap API for consumption correlation."""
+"""Weather data for the weather tab and the consumption correlation.
+
+Three sources, picked in Settings → Weather (``weather.source``):
+
+* ``open_meteo`` — Open-Meteo, no account and no key (default). Also fills the
+  last 30 days hour by hour, so the correlation has data from the first day.
+* ``met_no`` — MET Norway Locationforecast 2.0, no account and no key. Their
+  terms ask for an identifying User-Agent with a contact and for caching;
+  both are done here (the contact is the public project page).
+* ``openweathermap`` — OpenWeatherMap, needs an API key.
+
+Every source returns the same :class:`WeatherSnapshot`, so storage, the stale
+fallback and the correlation do not care where the numbers came from.
+"""
 from __future__ import annotations
 
 import datetime
 import json
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
@@ -15,6 +29,57 @@ logger = logging.getLogger(__name__)
 # OpenWeatherMap free tier: 1000 calls/day, 60 calls/min
 _OWM_BASE = "https://api.openweathermap.org/data/2.5"
 _OWM_ONECALL = "https://api.openweathermap.org/data/3.0/onecall"
+_OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
+_MET_NO = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
+_PROJECT_URL = "https://github.com/robeertm/shelly-energy-analyzer"
+
+SOURCES = ("open_meteo", "met_no", "openweathermap")
+# Shown under the weather tab. Open-Meteo and MET Norway publish under
+# CC BY 4.0, which asks for the source to be named.
+SOURCE_CREDITS = {
+    "open_meteo": "Open-Meteo (CC BY 4.0)",
+    "met_no": "MET Norway (CC BY 4.0)",
+    "openweathermap": "OpenWeatherMap",
+}
+# MET Norway asks clients not to ask more often than every 30 minutes.
+MET_NO_MIN_INTERVAL_S = 1800
+
+# One condition vocabulary for both keyless sources. The English text is what
+# lands in the database (``description``); the key is used for translation.
+CONDITION_TEXT: Dict[str, str] = {
+    "clear": "clear sky",
+    "mainly_clear": "mainly clear",
+    "partly_cloudy": "partly cloudy",
+    "overcast": "overcast",
+    "fog": "fog",
+    "drizzle": "drizzle",
+    "rain": "rain",
+    "freezing_rain": "freezing rain",
+    "sleet": "sleet",
+    "snow": "snow",
+    "showers": "rain showers",
+    "snow_showers": "snow showers",
+    "thunderstorm": "thunderstorm",
+}
+_TEXT_TO_CONDITION = {v: k for k, v in CONDITION_TEXT.items()}
+
+# WMO weather interpretation codes (Open-Meteo ``weather_code``).
+_WMO: Dict[int, str] = {
+    0: "clear", 1: "mainly_clear", 2: "partly_cloudy", 3: "overcast",
+    45: "fog", 48: "fog",
+    51: "drizzle", 53: "drizzle", 55: "drizzle",
+    56: "freezing_rain", 57: "freezing_rain",
+    61: "rain", 63: "rain", 65: "rain",
+    66: "freezing_rain", 67: "freezing_rain",
+    71: "snow", 73: "snow", 75: "snow", 77: "snow",
+    80: "showers", 81: "showers", 82: "showers",
+    85: "snow_showers", 86: "snow_showers",
+    95: "thunderstorm", 96: "thunderstorm", 99: "thunderstorm",
+}
+
+_CACHE_LOCK = threading.Lock()
+_CURRENT_CACHE: Dict[Tuple[str, float, float], Tuple[float, "WeatherSnapshot"]] = {}
+_HISTORY_DONE: Dict[Tuple[float, float], float] = {}
 
 
 @dataclass
@@ -83,6 +148,257 @@ def fetch_current_weather(api_key: str, lat: float, lon: float) -> Optional[Weat
     except Exception:
         logger.debug("Failed to fetch weather", exc_info=True)
         return None
+
+
+def condition_key(description: str) -> str:
+    """Condition key for a stored English description, ``""`` if unknown."""
+    return _TEXT_TO_CONDITION.get(str(description or "").strip().lower(), "")
+
+
+def _wmo_text(code: Any) -> str:
+    try:
+        key = _WMO.get(int(code), "")
+    except (TypeError, ValueError):
+        key = ""
+    return CONDITION_TEXT.get(key, "")
+
+
+def _metno_text(symbol_code: str) -> str:
+    """MET Norway ``symbol_code`` (e.g. ``lightrainshowers_day``) → description."""
+    sym = str(symbol_code or "").split("_")[0].lower()
+    if not sym:
+        return ""
+    if "thunder" in sym:
+        key = "thunderstorm"
+    elif "sleet" in sym:
+        key = "sleet"
+    elif "snow" in sym:
+        key = "snow_showers" if "showers" in sym else "snow"
+    elif "rain" in sym:
+        key = "showers" if "showers" in sym else "rain"
+    elif sym == "fog":
+        key = "fog"
+    elif sym == "clearsky":
+        key = "clear"
+    elif sym == "fair":
+        key = "mainly_clear"
+    elif sym == "partlycloudy":
+        key = "partly_cloudy"
+    elif sym == "cloudy":
+        key = "overcast"
+    else:
+        return sym
+    return CONDITION_TEXT[key]
+
+
+def _iso_to_ts(value: Any) -> Optional[int]:
+    try:
+        dt = datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return int(dt.timestamp())
+
+
+def _num(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
+def user_agent() -> str:
+    """Identifying User-Agent with a contact, as MET Norway requires."""
+    try:
+        from shelly_analyzer import __version__ as ver
+    except Exception:
+        ver = "0"
+    return f"shelly-energy-analyzer/{ver} (+{_PROJECT_URL})"
+
+
+def fetch_current_openmeteo(lat: float, lon: float) -> Optional[WeatherSnapshot]:
+    """Current conditions from Open-Meteo (no key)."""
+    try:
+        resp = requests.get(
+            _OPEN_METEO,
+            params={
+                "latitude": round(float(lat), 4),
+                "longitude": round(float(lon), 4),
+                "current": "temperature_2m,relative_humidity_2m,apparent_temperature,"
+                           "pressure_msl,cloud_cover,wind_speed_10m,weather_code",
+                "wind_speed_unit": "ms",
+                "timezone": "UTC",
+            },
+            headers={"User-Agent": user_agent()},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        cur = resp.json().get("current") or {}
+        if cur.get("temperature_2m") is None:
+            return None
+        temp = _num(cur.get("temperature_2m"))
+        return WeatherSnapshot(
+            timestamp=_iso_to_ts(cur.get("time")) or int(time.time()),
+            temp_c=temp,
+            humidity_pct=_num(cur.get("relative_humidity_2m")),
+            wind_speed_ms=_num(cur.get("wind_speed_10m")),
+            clouds_pct=_num(cur.get("cloud_cover")),
+            description=_wmo_text(cur.get("weather_code")),
+            pressure_hpa=_num(cur.get("pressure_msl")),
+            feels_like_c=_num(cur.get("apparent_temperature"), temp),
+        )
+    except Exception:
+        logger.debug("Open-Meteo current weather failed", exc_info=True)
+        return None
+
+
+def fetch_history_openmeteo(lat: float, lon: float, past_days: int = 30) -> List[WeatherSnapshot]:
+    """Hourly observations of the last ``past_days`` days from Open-Meteo.
+
+    Only hours that have already happened are returned, so a forecast never
+    ends up in the correlation.
+    """
+    out: List[WeatherSnapshot] = []
+    try:
+        resp = requests.get(
+            _OPEN_METEO,
+            params={
+                "latitude": round(float(lat), 4),
+                "longitude": round(float(lon), 4),
+                "hourly": "temperature_2m,relative_humidity_2m,pressure_msl,"
+                          "cloud_cover,wind_speed_10m,weather_code",
+                "past_days": max(1, min(int(past_days), 92)),
+                "forecast_days": 1,
+                "wind_speed_unit": "ms",
+                "timezone": "UTC",
+            },
+            headers={"User-Agent": user_agent()},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        h = resp.json().get("hourly") or {}
+        now = time.time()
+
+        def col(name: str, i: int) -> Any:
+            vals = h.get(name) or []
+            return vals[i] if i < len(vals) else None
+
+        for i, t in enumerate(h.get("time") or []):
+            ts = _iso_to_ts(t)
+            temp = col("temperature_2m", i)
+            if ts is None or ts > now or temp is None:
+                continue
+            out.append(WeatherSnapshot(
+                timestamp=(ts // 3600) * 3600,
+                temp_c=_num(temp),
+                humidity_pct=_num(col("relative_humidity_2m", i)),
+                wind_speed_ms=_num(col("wind_speed_10m", i)),
+                clouds_pct=_num(col("cloud_cover", i)),
+                description=_wmo_text(col("weather_code", i)),
+                pressure_hpa=_num(col("pressure_msl", i)),
+                feels_like_c=_num(temp),
+            ))
+    except Exception:
+        logger.debug("Open-Meteo weather history failed", exc_info=True)
+        return []
+    return out
+
+
+def history_backfill_due(lat: float, lon: float, every_s: int = 6 * 3600) -> bool:
+    """True at most once per ``every_s`` per location (and marks it as done)."""
+    key = (round(float(lat), 4), round(float(lon), 4))
+    now = time.time()
+    with _CACHE_LOCK:
+        last = _HISTORY_DONE.get(key, 0.0)
+        if now - last < every_s:
+            return False
+        _HISTORY_DONE[key] = now
+        return True
+
+
+def fetch_current_metno(lat: float, lon: float) -> Optional[WeatherSnapshot]:
+    """Current conditions from MET Norway Locationforecast 2.0 (no key).
+
+    MET Norway blocks clients without an identifying User-Agent and asks for
+    coordinates with at most four decimals.
+    """
+    try:
+        resp = requests.get(
+            _MET_NO,
+            params={"lat": round(float(lat), 4), "lon": round(float(lon), 4)},
+            headers={"User-Agent": user_agent()},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        series = ((resp.json().get("properties") or {}).get("timeseries")) or []
+        if not series:
+            return None
+        now = time.time()
+        # The first entry is normally the current hour; skip anything that is
+        # already more than an hour old.
+        entry = series[0]
+        for e in series:
+            ts_e = _iso_to_ts(e.get("time"))
+            if ts_e is not None and ts_e + 3600 > now:
+                entry = e
+                break
+        data = entry.get("data") or {}
+        det = ((data.get("instant") or {}).get("details")) or {}
+        if det.get("air_temperature") is None:
+            return None
+        temp = _num(det.get("air_temperature"))
+        sym = ""
+        for nxt in ("next_1_hours", "next_6_hours", "next_12_hours"):
+            sym = (((data.get(nxt) or {}).get("summary")) or {}).get("symbol_code") or ""
+            if sym:
+                break
+        return WeatherSnapshot(
+            timestamp=_iso_to_ts(entry.get("time")) or int(now),
+            temp_c=temp,
+            humidity_pct=_num(det.get("relative_humidity")),
+            wind_speed_ms=_num(det.get("wind_speed")),
+            clouds_pct=_num(det.get("cloud_area_fraction")),
+            description=_metno_text(sym),
+            pressure_hpa=_num(det.get("air_pressure_at_sea_level")),
+            feels_like_c=_num(det.get("apparent_air_temperature"), temp),
+        )
+    except Exception:
+        logger.debug("MET Norway current weather failed", exc_info=True)
+        return None
+
+
+def fetch_current(
+    source: str, api_key: str, lat: float, lon: float, min_interval_s: int = 0,
+) -> Optional[WeatherSnapshot]:
+    """Current conditions from the configured source.
+
+    A successful answer is reused for ``min_interval_s`` seconds (MET Norway:
+    never less than 30 minutes). OpenWeatherMap without a key sends nothing.
+    """
+    src = source if source in SOURCES else "open_meteo"
+    if src == "openweathermap" and not str(api_key or "").strip():
+        return None
+    ttl = max(0, int(min_interval_s or 0))
+    if src == "met_no":
+        ttl = max(ttl, MET_NO_MIN_INTERVAL_S)
+    key = (src, round(float(lat), 4), round(float(lon), 4))
+    now = time.time()
+    if ttl:
+        with _CACHE_LOCK:
+            hit = _CURRENT_CACHE.get(key)
+        if hit and now - hit[0] < ttl:
+            return hit[1]
+    if src == "met_no":
+        snap = fetch_current_metno(lat, lon)
+    elif src == "openweathermap":
+        snap = fetch_current_weather(api_key, lat, lon)
+    else:
+        snap = fetch_current_openmeteo(lat, lon)
+    if snap is not None:
+        with _CACHE_LOCK:
+            _CURRENT_CACHE[key] = (now, snap)
+    return snap
 
 
 def fetch_weather_history(

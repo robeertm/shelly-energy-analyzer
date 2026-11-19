@@ -1,5 +1,50 @@
 # Changelog
 
+## 17.11.0
+
+The Weather tab works without an account. It used to know only
+OpenWeatherMap and asked nothing at all while the key field was empty.
+
+### New
+- **Weather source in Settings → Weather.** Three choices:
+  - **Open-Meteo** (new default): no account, no key, only the latitude and
+    longitude that are already in Settings → Weather.
+  - **MET Norway** (`api.met.no`, Locationforecast 2.0): no account, no key.
+    Every request carries an identifying User-Agent with the project page as
+    contact, coordinates are sent with at most four decimals and the service
+    is never asked more often than every 30 minutes, as its terms ask.
+  - **OpenWeatherMap**: as before, needs the API key.
+- **Existing installations keep their source.** A configuration from before
+  this release that has an OpenWeatherMap key stays on OpenWeatherMap; one
+  without a key moves to Open-Meteo.
+- **The correlation has data from the first day with Open-Meteo.** The last
+  30 days are filled in hour by hour (at most every 6 hours, past hours only,
+  never a forecast), instead of one reading each time the tab was opened.
+- **The source is named under the weather tiles** ("Weather data: Open-Meteo
+  (CC BY 4.0)"); Open-Meteo and MET Norway publish under CC BY 4.0.
+- **Weather conditions of the keyless sources are translated** into all nine
+  languages of the app (clear sky, overcast, rain showers, …).
+- **"Interval (min)" does something now.** It is the shortest time between
+  two live requests (before, the field was saved but never read).
+- Without coordinates the tab says so ("No location set — enter latitude and
+  longitude under Settings → Weather") instead of asking for an API key.
+- The traffic view counts requests to Open-Meteo and MET Norway as weather
+  traffic (the solar and CO₂ forecasts used Open-Meteo already and were listed
+  under "other"); the category is called "Weather" in the UI language.
+
+### Tests
+- The weather tab with no key and coordinates set returns current weather
+  (this failed before), the 30-day fill and its 6-hour limit, the message
+  without a location, no request for OpenWeatherMap without a key, parsing of
+  both keyless sources, the MET Norway User-Agent, coordinate rounding and
+  30-minute limit, errors and 403 as "no reading" instead of an exception,
+  the migration of existing configurations, saving and loading the source, and
+  the new texts in all nine languages.
+- The README weather screenshots are re-shot from the simulated installation,
+  which now uses the keyless source.
+- The ingress check of the walkthrough ignores the request for `/favicon.ico`
+  that the browser sends on its own; it is not in the page code.
+
 ## 17.10.5
 
 The analyzer no longer writes tens of gigabytes a day to disk. With eight

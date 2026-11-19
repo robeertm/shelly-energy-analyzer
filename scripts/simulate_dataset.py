@@ -288,7 +288,7 @@ def run(target: Path, days: int, seed: int, lang: str = "en", skin: str = "auror
                    "billing_period_months": 12},
         "ev_charging": {"enabled": True, "wallbox_device_key": "wallbox", "detection_threshold_w": 1500.0, "min_session_minutes": 5},
         "co2": {"enabled": True, "bidding_zone": "DE_LU", "green_threshold_g_per_kwh": 250.0, "dirty_threshold_g_per_kwh": 400.0},
-        "weather": {"enabled": True, "api_key": "simulated", "city": "Sampletown", "lat": 52.52, "lon": 13.405},
+        "weather": {"enabled": True, "source": "open_meteo", "city": "Sampletown", "lat": 52.52, "lon": 13.405},
         "spot_price": {"enabled": True, "bidding_zone": "DE-LU"},
         "anomaly": {"enabled": True, "sigma_threshold": 1.5},
         "smart_schedule": {"enabled": True},

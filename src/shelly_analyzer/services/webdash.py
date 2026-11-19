@@ -528,7 +528,7 @@ def control_i18n_values(lang: str) -> Dict[str, str]:
     never break the page."""
     j = lambda k: json.dumps(_t(lang, k), ensure_ascii=False)
     cats = {c: _t(lang, "traffic.cat." + c) for c in ("shelly", "spot_price", "local", "other")}
-    cats.update({"entsoe": "ENTSO-E API", "weather": "OpenWeather", "telegram": "Telegram", "github": "GitHub"})
+    cats.update({"entsoe": "ENTSO-E API", "weather": _t(lang, "web.tab.weather"), "telegram": "Telegram", "github": "GitHub"})
     return {
         "opt_incremental": _h(_t(lang, "sync.btn.incremental")),
         "opt_day": _h(_t(lang, "period.day")),
@@ -8910,9 +8910,16 @@ function _wxSectionTitle(text) {{
   return '<div style="font-size:12px;font-weight:650;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">' + text + '</div>';
 }}
 
+function _wxCredit(d) {{
+  // Open-Meteo and MET Norway publish under CC BY 4.0: name the source.
+  if (!d || !d.credit) return '';
+  return '<div class="wx-credit" style="margin-top:8px;font-size:11px;color:var(--muted);text-align:right">'
+    + esc(t('web.weather.credit', 'Weather data: {{src}}').replace('{{src}}', d.credit)) + '</div>';
+}}
+
 function renderWeather(d, el) {{
   if (!d.ok) {{
-    el.innerHTML = '<p class="info-msg">' + (d.error || t('web.weather.no_data', 'No weather data.')) + '</p>';
+    el.innerHTML = '<p class="info-msg">' + esc(d.error || t('web.weather.no_data', 'No weather data.')) + '</p>';
     return;
   }}
   var html = '';
@@ -8943,6 +8950,7 @@ function renderWeather(d, el) {{
     html += _wxCard('\U0001f9ed', t('web.weather.pressure', 'Pressure'), cur.pressure_hpa ? Math.round(cur.pressure_hpa) + ' hPa' : '\u2013');
     html += _wxCard('\U0001f321\ufe0f', t('web.weather.feels_like', 'Feels like'), cur.feels_like_c != null ? cur.feels_like_c.toFixed(1) + ' \u00b0C' : '\u2013');
     html += '</div>';
+    html += _wxCredit(d);
   }}
 
   // Correlation statistics

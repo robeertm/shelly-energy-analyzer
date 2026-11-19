@@ -595,7 +595,9 @@ def run_ingress(col: Collector, quick: bool, log=print):
                     v.close()
             finally:
                 b.close()
-            paths = sorted({p.split("?")[0] for p in proxy.misses})
+            # /favicon.ico is asked for by the browser itself when a page names no
+            # icon; it is not in the page code and a miss there costs nothing.
+            paths = sorted({p.split("?")[0] for p in proxy.misses} - {"/favicon.ico"})
             if paths:
                 col.add({"installation": "a+ingress", "lang": "en", "browser": "chromium", "viewport": "desktop",
                          "theme": "light"}, "ingress", "ingress-absolute-path", "medium",

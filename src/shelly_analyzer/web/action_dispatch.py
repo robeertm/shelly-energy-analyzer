@@ -4051,20 +4051,55 @@ class ActionDispatcher:
         # --- Weather correlation ---
         if action == "weather_correlation":
             try:
+                from shelly_analyzer.services import weather as _wx
                 weather_cfg = getattr(self.cfg, "weather", None)
-                api_key = getattr(weather_cfg, "api_key", "") if weather_cfg else ""
-                lat = getattr(weather_cfg, "lat", 0.0) if weather_cfg else 0.0
-                lon = getattr(weather_cfg, "lon", 0.0) if weather_cfg else 0.0
+                api_key = str(getattr(weather_cfg, "api_key", "") or "") if weather_cfg else ""
+                lat = float(getattr(weather_cfg, "lat", 0.0) or 0.0) if weather_cfg else 0.0
+                lon = float(getattr(weather_cfg, "lon", 0.0) or 0.0) if weather_cfg else 0.0
+                source = str(getattr(weather_cfg, "source", "open_meteo") or "open_meteo") if weather_cfg else "open_meteo"
+                if source not in _wx.SOURCES:
+                    source = "open_meteo"
+                try:
+                    interval_s = max(0, int(getattr(weather_cfg, "fetch_interval_minutes", 30) or 0)) * 60
+                except (TypeError, ValueError):
+                    interval_s = 1800
+                credit = _wx.SOURCE_CREDITS.get(source, "")
 
-                if not api_key or (lat == 0 and lon == 0):
-                    return {"ok": False, "error": _t(self.lang, "web.weather.no_data")}
+                if lat == 0 and lon == 0:
+                    return {"ok": False, "error": _t(self.lang, "web.weather.no_location"),
+                            "source": source, "credit": credit}
+                if source == "openweathermap" and not api_key.strip():
+                    return {"ok": False, "error": _t(self.lang, "web.weather.no_data"),
+                            "source": source, "credit": credit}
+
+                def _wx_desc(text):
+                    # Keyless sources speak one small English vocabulary;
+                    # show it in the UI language. Anything else (e.g. an
+                    # OpenWeatherMap text) is shown as it came.
+                    k = _wx.condition_key(text)
+                    return _t(self.lang, "web.weather.wx." + k) if k else str(text or "")
+
+                # Open-Meteo also hands out the past days hour by hour: fill
+                # them in so the correlation works from the first day instead
+                # of after weeks of opening this tab (at most every 6 h).
+                if source == "open_meteo" and _wx.history_backfill_due(lat, lon):
+                    try:
+                        _hist = _wx.fetch_history_openmeteo(lat, lon, past_days=30)
+                        if _hist:
+                            _now_i = int(time.time())
+                            self.storage.db.upsert_weather([
+                                (s.timestamp, s.temp_c, s.humidity_pct, s.wind_speed_ms,
+                                 s.clouds_pct, s.pressure_hpa, s.description, _now_i)
+                                for s in _hist
+                            ])
+                    except Exception:
+                        logger.debug("weather history backfill failed", exc_info=True)
 
                 current_data = None
                 current_stale = False
                 current_as_of = None
                 try:
-                    from shelly_analyzer.services.weather import fetch_current_weather
-                    snap_w = fetch_current_weather(api_key, lat, lon)
+                    snap_w = _wx.fetch_current(source, api_key, lat, lon, min_interval_s=interval_s)
                     if snap_w:
                         current_data = {
                             "temp_c": snap_w.temp_c,
@@ -4073,7 +4108,7 @@ class ActionDispatcher:
                             "wind_speed_ms": snap_w.wind_speed_ms,
                             "clouds_pct": snap_w.clouds_pct,
                             "pressure_hpa": getattr(snap_w, "pressure_hpa", 0),
-                            "description": getattr(snap_w, "description", ""),
+                            "description": _wx_desc(getattr(snap_w, "description", "")),
                         }
                         current_as_of = int(snap_w.timestamp)
                         hour_ts = (int(snap_w.timestamp) // 3600) * 3600
@@ -4099,6 +4134,7 @@ class ActionDispatcher:
                         _fallback = stale_current_from_weather_df(_rec)
                         if _fallback is not None:
                             current_data, current_as_of = _fallback
+                            current_data["description"] = _wx_desc(current_data.get("description", ""))
                             current_stale = True
                     except Exception:
                         pass
@@ -4110,7 +4146,8 @@ class ActionDispatcher:
                 if dev is None and self.cfg.devices:
                     dev = self.cfg.devices[0]
                 if dev is None:
-                    return {"ok": True, "current": current_data, "current_stale": current_stale,
+                    return {"ok": True, "source": source, "credit": credit,
+                            "current": current_data, "current_stale": current_stale,
                             "current_as_of": current_as_of, "correlation": None, "paired": [],
                             "daily": [], "humidity_corr": None, "comfort_zones": []}
 
@@ -4122,7 +4159,8 @@ class ActionDispatcher:
                 hourly_wc = self.storage.db.query_hourly(dev.key, start_ts=start_ts_wc, end_ts=end_ts_wc)
 
                 if weather_df.empty or hourly_wc.empty:
-                    return {"ok": True, "current": current_data, "current_stale": current_stale,
+                    return {"ok": True, "source": source, "credit": credit,
+                            "current": current_data, "current_stale": current_stale,
                             "current_as_of": current_as_of, "correlation": None, "paired": [],
                             "daily": [], "humidity_corr": None, "comfort_zones": []}
 
@@ -4246,7 +4284,8 @@ class ActionDispatcher:
                         })
 
                 return {
-                    "ok": True, "current": current_data, "current_stale": current_stale,
+                    "ok": True, "source": source, "credit": credit,
+                    "current": current_data, "current_stale": current_stale,
                     "current_as_of": current_as_of, "correlation": correlation,
                     "paired": paired, "daily": daily,
                     "humidity_corr": humidity_corr, "comfort_zones": comfort_zones,
