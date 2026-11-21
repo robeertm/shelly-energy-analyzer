@@ -1,5 +1,81 @@
 # Changelog
 
+## 17.11.1
+
+Every place that writes to disk was measured and the outliers are gone. With
+eight plugs at the default 1 s poll and an open Live tab the whole process
+writes about 0.2 GB a day to its files (0.3 GB as the kernel counts it), against
+about 44 GB on 17.10.4. 17.11.0 was already under 0.5 GB; this release removes
+what was left over: a restart or update no longer rewrites the plug history,
+the console log no longer gets a line per request, and the appliance learner of
+energy meters no longer writes up to half a gigabyte a day.
+
+### Fixes
+- **A restart no longer rewrites the history of every plug.** At each start a
+  maintenance pass computes the neutral current of every row that has phase
+  currents but no neutral current. The plug minute history never stored one,
+  so every restart and every update wrote all plug rows since the previous
+  start a second time (and again when the database folded them in): with two
+  days of history, about 3 MB of WAL plus 3 MB of database per start. Rows are
+  now written complete, with the same value the pass would compute; the same
+  for energy-meter downloads that have no neutral column.
+- **One database commit a minute for all plugs.** The minute history wrote
+  one transaction per plug and minute, eight commits a minute for eight
+  plugs, each touching its own pages of the write-ahead log, its index and the
+  hourly table. The rows of one minute now go in together once every plug has
+  moved on to the next minute (or 15 s later when one is late). A failed write
+  is retried the next minute instead of on every sample.
+- **The appliance learner (NILM) file is written when it changed, at most
+  every 30 minutes.** It was written twice every five minutes (re-cluster and
+  flush) and after every ten detected switchings; with its list full that is
+  0.5–0.9 MB per write, up to about 0.5 GB a day per three-phase meter. It is now
+  written only when it would differ, at most every 30 minutes, without
+  indentation; a clean stop, an update and a config reload still write the
+  rest. This affects installations with energy meters, not plug-only setups.
+- **Successful requests are no longer logged to the console.** Every request
+  was logged at INFO; the Live tab asks once a second, so one open tab alone
+  was about 86,000 lines (~9 MB) a day in the system journal or the container
+  log. Failed requests (status 400 and up) are still logged, and everything is
+  again while debug logging or the HTTP switch of the log tab is on.
+- **Half-written Live snapshots left by a crash are removed.** A kill between
+  writing `data/runtime/.live_history.*.tmp` and renaming it left the file
+  behind for good; files older than an hour are deleted at start.
+
+### Measured
+- `tests/e2e/write_load.py` runs the real server against eight simulated
+  plugs answering on localhost, with two days of history, a full 2 h Live
+  window and an open Live tab, and counts every write to a file (strace) and
+  `write_bytes` of `/proc/<pid>/io`. One hour, per day:
+
+  | per day | 17.11.0 | 17.11.1 |
+  |---|---|---|
+  | file writes, all files | 0.224 GB | 0.203 GB |
+  | – minute history (WAL + database) | 0.141 GB | 0.120 GB |
+  | – Live-tab restart cache | 0.083 GB | 0.083 GB |
+  | `write_bytes` of the process | 0.329 GB | 0.297 GB |
+  | console log (journal / container log) | 9.1 MB | 0.04 MB |
+  | each restart, two days of plug history | ~6 MB | ~0 |
+
+  What is left is the minute history itself and the Live-tab restart cache
+  every 5 minutes. `write_bytes` counts whole memory pages, so it is higher
+  than the bytes written, most of all on kernels with 16 KB pages (the bench
+  machine).
+- Run it yourself from a checkout:
+  `python -m tests.e2e.write_load --minutes 60` (per file with `strace`
+  installed, otherwise `/proc` only).
+
+### Tests
+- `tests/e2e/test_write_load_budget.py`: the process stays under 0.5 GB a day
+  in a 6-minute window that includes a Live snapshot, and logs no line per
+  request; runs on every push (e2e). The full workflow before every promotion
+  runs the bench for 10 minutes and fails above the budget.
+- `tests/test_write_load_paths.py`: one transaction a minute for eight plugs
+  and the same rows and hourly totals as before, a late plug does not hold the
+  minute back, a failing database is retried once a minute, no rewrite by the
+  start-up pass (plugs and meter downloads, same values), the learner file
+  once per due interval and not at all when unchanged, the access-log filter,
+  and the temp-file cleanup. They fail on 17.11.0.
+
 ## 17.11.0
 
 The Weather tab works without an account. It used to know only

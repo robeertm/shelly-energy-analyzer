@@ -9,6 +9,7 @@ import csv
 import datetime
 import io
 import logging
+import math
 import sqlite3
 import threading
 import time
@@ -286,6 +287,23 @@ def _compute_energy_row(
 # ---------------------------------------------------------------------------
 
 
+def _neutral_current(n_given: Optional[float], a: Optional[float], b: Optional[float],
+                     c: Optional[float]) -> Optional[float]:
+    """Neutral current of a row: the measured value if there is one, else the
+    120° formula ``_backfill_n_current`` applies (the same numbers).
+
+    Rows inserted without it were all rewritten by that backfill at the next
+    start: the plug minute history and EMData imports without an N column — on
+    every restart and update every row since the previous start once more
+    (issue #20 follow-up). Computing it on insert leaves the backfill nothing."""
+    if n_given is not None:
+        return n_given
+    if a is None and b is None and c is None:
+        return None
+    a, b, c = float(a or 0.0), float(b or 0.0), float(c or 0.0)
+    return math.sqrt(max(a * a + b * b + c * c - a * b - a * c - b * c, 0.0))
+
+
 class EnergyDB:
     """Thread-safe SQLite wrapper for energy sample data."""
 
@@ -536,7 +554,9 @@ class EnergyDB:
                 _get("a_max_current"), _get("a_min_current"), _get("a_avg_current"),
                 _get("b_max_current"), _get("b_min_current"), _get("b_avg_current"),
                 _get("c_max_current"), _get("c_min_current"), _get("c_avg_current"),
-                _get("n_max_current"), _get("n_min_current"), _get("n_avg_current"),
+                _get("n_max_current"), _get("n_min_current"),
+                _neutral_current(_get("n_avg_current"),
+                                 *(_get_fallback(f"{p}_avg_current", f"{p}_current") for p in "abc")),
                 _fhz,
             ))
             prev_ts = ts_int
@@ -567,8 +587,43 @@ class EnergyDB:
         Expects the DataFrame to already have 'timestamp' (datetime) and
         optionally 'total_power', 'energy_kwh' columns.
         """
-        if df is None or df.empty:
+        return self.insert_dataframes({device_key: df})
+
+    def insert_dataframes(self, frames: Dict[str, pd.DataFrame]) -> int:
+        """Insert the rows of several devices in ONE transaction.
+
+        The minute history of plugs (``LiveHistoryRecorder``) writes one row per
+        device every minute. As one transaction per device that is eight WAL
+        commits a minute for eight plugs, each dirtying its own pages of the
+        WAL, the ``-shm`` index and the hourly table; together they share them
+        (issue #20 follow-up). Returns the number of rows written."""
+        prepared = []
+        for device_key, df in (frames or {}).items():
+            rows = self._dataframe_rows(device_key, df)
+            if rows:
+                prepared.append((device_key, rows))
+        if not prepared:
             return 0
+
+        placeholders = ",".join(["?"] * len(SAMPLE_COLUMNS))
+        sql = f"INSERT OR REPLACE INTO samples ({','.join(SAMPLE_COLUMNS)}) VALUES ({placeholders})"
+
+        with self._write_lock:
+            conn = self._conn()
+            with conn:
+                for device_key, rows in prepared:
+                    conn.executemany(sql, rows)
+                    # Compute actual min/max timestamps (data may not be sorted)
+                    # and update the hourly aggregation inside the same transaction.
+                    all_ts = [r[1] for r in rows]
+                    self._update_hourly_inner(conn, device_key, min(all_ts), max(all_ts))
+
+        return sum(len(rows) for _, rows in prepared)
+
+    def _dataframe_rows(self, device_key: str, df: Optional[pd.DataFrame]) -> list:
+        """The ``samples`` tuples of one device's DataFrame (no database access)."""
+        if df is None or df.empty:
+            return []
 
         rows: list = []
         for _, r in df.iterrows():
@@ -594,6 +649,10 @@ class EnergyDB:
                 """Return first non-None column value (0.0 is valid)."""
                 v = _col(name1)
                 return v if v is not None else _col(name2)
+
+            def _n_avg() -> Optional[float]:
+                return _neutral_current(_col("n_avg_current"),
+                                        *(_col_fallback(f"{p}_avg_current", f"{p}_current") for p in "abc"))
 
             rows.append((
                 device_key, ts_int,
@@ -625,29 +684,10 @@ class EnergyDB:
                 _col("a_max_current"), _col("a_min_current"), _col("a_avg_current"),
                 _col("b_max_current"), _col("b_min_current"), _col("b_avg_current"),
                 _col("c_max_current"), _col("c_min_current"), _col("c_avg_current"),
-                _col("n_max_current"), _col("n_min_current"), _col("n_avg_current"),
+                _col("n_max_current"), _col("n_min_current"), _n_avg(),
                 _col("freq_hz"),
             ))
-
-        if not rows:
-            return 0
-
-        placeholders = ",".join(["?"] * len(SAMPLE_COLUMNS))
-        sql = f"INSERT OR REPLACE INTO samples ({','.join(SAMPLE_COLUMNS)}) VALUES ({placeholders})"
-
-        # Compute actual min/max timestamps (data may not be sorted).
-        all_ts = [r[1] for r in rows]
-        ts_min = min(all_ts)
-        ts_max = max(all_ts)
-
-        with self._write_lock:
-            conn = self._conn()
-            with conn:
-                conn.executemany(sql, rows)
-                # Update hourly aggregation inside the same transaction.
-                self._update_hourly_inner(conn, device_key, ts_min, ts_max)
-
-        return len(rows)
+        return rows
 
     # -- measurement compensation -------------------------------------------
 

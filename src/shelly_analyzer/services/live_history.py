@@ -41,6 +41,12 @@ MAX_PLAUSIBLE_W = 25_000.0
 # Rows kept per device when the database cannot be written (retried next time).
 PENDING_CAP = 240
 _WARN_EVERY_S = 60.0
+# The rows of one minute are written together, in one transaction, once every
+# device has moved on to the next minute — or this many seconds after that
+# minute ended when a device is late or silent. One commit a minute instead of
+# one per device: each commit dirties its own pages of the WAL, the -shm index
+# and the hourly table, so eight plugs cost eight times the disk writes.
+BATCH_GRACE_S = 15
 
 
 def records_history(device: Any) -> bool:
@@ -93,6 +99,8 @@ class LiveHistoryRecorder:
         self._state: Dict[str, Dict[str, Any]] = {}
         self._pending: Dict[str, List[Dict[str, Any]]] = {}
         self._last_warn = 0.0
+        # After a failed write the next attempt waits for the next minute.
+        self._retry_after = 0
 
     # -- public ------------------------------------------------------------
 
@@ -153,6 +161,7 @@ class LiveHistoryRecorder:
             bk["v"] += v
             bk["i"] += i
             bk["wh"] += inc_wh
+            self._maybe_write_locked(ts_i)
 
     def flush(self) -> None:
         """Write every open (possibly partial) minute. Safe to call repeatedly;
@@ -163,8 +172,7 @@ class LiveHistoryRecorder:
                 if bk is not None:
                     self._emit_locked(key, st, bk)
                     st["bucket"] = None
-            for key in list(self._pending):
-                self._write_locked(key)
+            self._write_all_locked(None)
 
     # -- internals (lock held) ---------------------------------------------
 
@@ -215,22 +223,60 @@ class LiveHistoryRecorder:
             rows[-1] = row
         else:
             rows.append(row)
-        self._write_locked(key)
 
-    def _write_locked(self, key: str) -> None:
-        rows = self._pending.get(key)
-        if not rows:
+    def _maybe_write_locked(self, now_ts: int) -> None:
+        """Write the queued rows once nobody is still inside their minute."""
+        oldest: Optional[int] = None
+        for rows in self._pending.values():
+            if rows:
+                first = int(rows[0]["timestamp"])
+                oldest = first if oldest is None else min(oldest, first)
+        if self._retry_after and now_ts < self._retry_after - 2 * self._bucket_s:
+            self._retry_after = 0  # the clock stepped back: do not wait for it
+        if oldest is None or now_ts < self._retry_after:
             return
-        try:
-            import pandas as pd
+        waiting = any(
+            st.get("bucket") is not None and int(st["bucket"]["start"]) <= oldest
+            for st in self._state.values()
+        )
+        if waiting and now_ts < oldest + self._bucket_s + BATCH_GRACE_S:
+            return
+        self._write_all_locked(now_ts)
 
-            self._db.insert_dataframe(key, pd.DataFrame(rows))
-            rows.clear()
-        except Exception as e:  # never let the history take the feed down
+    def _write_all_locked(self, now_ts: Optional[int]) -> None:
+        keys = [k for k, rows in self._pending.items() if rows]
+        if not keys:
+            return
+        import pandas as pd
+
+        failed: Optional[Exception] = None
+        many = getattr(self._db, "insert_dataframes", None)
+        if callable(many):
+            try:
+                many({k: pd.DataFrame(self._pending[k]) for k in keys})
+                for k in keys:
+                    self._pending[k].clear()
+            except Exception as e:  # never let the history take the feed down
+                failed = e
+        else:
+            for k in keys:
+                try:
+                    self._db.insert_dataframe(k, pd.DataFrame(self._pending[k]))
+                    self._pending[k].clear()
+                except Exception as e:
+                    failed = e
+        if failed is None:
+            return
+        queued = 0
+        for k in keys:
+            rows = self._pending[k]
             if len(rows) > PENDING_CAP:
                 del rows[: len(rows) - PENDING_CAP]
-            now = time.time()
-            if now - self._last_warn >= _WARN_EVERY_S:
-                self._last_warn = now
-                logger.warning("Live history for %s could not be written (%d row(s) queued): %s",
-                               key, len(rows), e)
+            queued += len(rows)
+        if now_ts is not None:
+            self._retry_after = int(now_ts) + self._bucket_s
+        now = time.time()
+        if now - self._last_warn >= _WARN_EVERY_S:
+            self._last_warn = now
+            logger.warning("Live history for %s could not be written (%d row(s) queued): %s",
+                           ", ".join(keys), queued, failed)

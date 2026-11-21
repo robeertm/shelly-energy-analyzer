@@ -9,6 +9,7 @@ Additionally provides a learning engine that clusters power transitions
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import threading
@@ -272,11 +273,15 @@ class TransitionLearner:
         self._transitions: List[PowerTransition] = []
         self._clusters: List[LearnedCluster] = []
         self._max_transitions = 5000
-        # Transitions confirmed since the last save. Counting them (instead of
-        # testing len(self._transitions) % 10) keeps the file to one write per
-        # ten transitions also after the list has reached its cap — at the cap
-        # the length stays 5000 and the old test was true on every transition.
+        # Transitions confirmed since the last save. Counted (instead of testing
+        # len(self._transitions) % 10): at the 5000 cap the length stays the
+        # same and the old test was true on every transition.
         self._unsaved = 0
+        # Wall-clock time of the last write and the bytes written then: the
+        # file is only written again when it would differ, and at most every
+        # SAVE_MIN_INTERVAL_S (a clean stop writes regardless).
+        self._last_save = time.time()
+        self._last_payload_hash: Optional[str] = None
 
         # Load persisted clusters
         if persist_path and persist_path.exists():
@@ -286,8 +291,15 @@ class TransitionLearner:
     #: poll the old detector fired on every flicker — a modulating inverter
     #: or a heat-pump ramp produced thousands of "appliances" a day.
     _CONFIRM_READINGS = 3
-    #: Confirmed transitions between two saves of the learner file.
+    #: Confirmed transitions before the learner file is worth a write at all.
     SAVE_EVERY_TRANSITIONS = 10
+    #: Shortest gap between two periodic writes of the learner file. With the
+    #: transition list full the file is ~0.5–0.9 MB; it used to be written
+    #: twice every five minutes (re-cluster + flush) and after every ten
+    #: transitions — ~0.5 GB a day per three-phase meter (issue #20 follow-up).
+    #: It is a learning cache: a hard kill loses at most this much learning,
+    #: a clean stop or an update writes the rest.
+    SAVE_MIN_INTERVAL_S = 1800.0
 
     def observe(self, device_key: str, timestamp: float, power_w: float) -> Optional[PowerTransition]:
         """Feed a new power reading. Returns a PowerTransition once a step is
@@ -322,8 +334,7 @@ class TransitionLearner:
                     if len(self._transitions) > self._max_transitions:
                         self._transitions = self._transitions[-self._max_transitions:]
                     self._unsaved = getattr(self, "_unsaved", 0) + 1
-                    if self.persist_path and self._unsaved >= self.SAVE_EVERY_TRANSITIONS:
-                        self._save(self.persist_path)
+                    self._save_if_due_locked()
                     hist.clear()
                     hist.append((timestamp, level))
                     return transition
@@ -457,8 +468,7 @@ class TransitionLearner:
                     cluster.confidence = cands[0][1] if cands else 0.0
                 self._clusters.append(cluster)
             self._clusters.sort(key=lambda c: c.count, reverse=True)
-            if self.persist_path:
-                self._save(self.persist_path)
+            self._save_if_due_locked()
             return self._clusters
 
     @staticmethod
@@ -499,10 +509,26 @@ class TransitionLearner:
             return len(self._transitions)
 
     def flush(self) -> None:
-        """Persist current state (clusters + transitions) to disk immediately."""
+        """Persist current state (clusters + transitions) to disk now — for a
+        stop, an update or a config reload. Skipped when nothing changed."""
         if self.persist_path:
             with self._lock:
                 self._save(self.persist_path)
+
+    def save_if_due(self) -> None:
+        """The periodic save: only when enough was learned since the last
+        write and ``SAVE_MIN_INTERVAL_S`` has passed."""
+        with self._lock:
+            self._save_if_due_locked()
+
+    def _save_if_due_locked(self) -> None:
+        if not self.persist_path:
+            return
+        if getattr(self, "_unsaved", 0) < self.SAVE_EVERY_TRANSITIONS:
+            return
+        if time.time() - getattr(self, "_last_save", 0.0) < self.SAVE_MIN_INTERVAL_S:
+            return
+        self._save(self.persist_path)
 
     def _save(self, path: Path) -> None:
         try:
@@ -542,9 +568,15 @@ class TransitionLearner:
                     for t in self._transitions
                 ],
             }
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            payload = json.dumps(data, separators=(",", ":"))
+            digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()
             self._unsaved = 0
+            self._last_save = time.time()
+            if digest == getattr(self, "_last_payload_hash", None) and path.exists():
+                return
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(payload, encoding="utf-8")
+            self._last_payload_hash = digest
         except Exception:
             logger.debug("Failed to save NILM clusters", exc_info=True)
 

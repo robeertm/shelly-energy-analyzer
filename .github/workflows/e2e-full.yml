@@ -1,6 +1,7 @@
-# Full customer walkthrough (about 25 minutes): every pane, every Plots select
+# Full customer walkthrough (about 25 minutes + 11 for the write budget): every pane, every Plots select
 # combination, control, settings and setup, in all languages, desktop and phone,
-# light and dark, plus the ingress pass and the full API tour.
+# light and dark, plus the ingress pass, the full API tour and the disk-write
+# budget (tests/e2e/write_load.py, 10 minutes).
 #
 # Runs before every promotion (promote.yml calls it and only moves `:latest`
 # when it is green), once a week, and by hand. The quick version runs on every
@@ -40,6 +41,9 @@ jobs:
         run: python tests/e2e/api_tour.py --report e2e-full-api.json
       - name: Browser walkthrough (full)
         run: python tests/e2e/walkthrough.py --report e2e-full-walkthrough.json
+      - run: sudo apt-get install -y --no-install-recommends strace
+      - name: Disk-write budget (8 plugs at 1 s, 10 min, per file)
+        run: python -m tests.e2e.write_load --minutes 10 --json e2e-full-writeload.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

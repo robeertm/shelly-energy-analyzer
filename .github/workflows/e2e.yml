@@ -17,7 +17,8 @@ jobs:
           python-version: "3.12"
       - run: pip install ".[charts]" pytest playwright
       - run: playwright install --with-deps chromium
-      - name: Run walkthrough and API tour (quick)
+      - run: sudo apt-get install -y --no-install-recommends strace
+      - name: Run walkthrough, API tour and write-load budget (quick)
         env:
           SEA_E2E: "1"
           SEA_E2E_REPORT: ${{ github.workspace }}/e2e-report.json

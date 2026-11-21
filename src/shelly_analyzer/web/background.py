@@ -43,6 +43,32 @@ def legacy_live_history_path(out_dir: "Path") -> "Path":
     return Path(out_dir) / "data" / "runtime" / "live_history.json"
 
 
+def remove_orphaned_live_history_tmp(out_dir: "Path", older_than_s: float = 3600.0) -> int:
+    """Delete half-written snapshots a crash left behind.
+
+    ``dump_to_path`` writes to ``.live_history.<random>.tmp`` and renames it;
+    a kill in between leaves the temporary file, and nothing ever removed it
+    (a 6 MB one from months before was found on a running installation). A
+    save takes seconds, so a file older than an hour belongs to no save in
+    progress. Returns the number of files removed."""
+    runtime = Path(out_dir) / "data" / "runtime"
+    removed = 0
+    try:
+        now = time.time()
+        for p in runtime.glob(".live_history.*.tmp"):
+            try:
+                if p.is_file() and now - p.stat().st_mtime > older_than_s:
+                    p.unlink()
+                    removed += 1
+            except OSError:
+                pass
+    except OSError:
+        pass
+    if removed:
+        logger.info("Removed %d orphaned live-history temp file(s)", removed)
+    return removed
+
+
 class BackgroundServiceManager:
     """Manages all background services that run alongside Flask."""
 
@@ -776,7 +802,9 @@ class BackgroundServiceManager:
             for dk, lrn in self._nilm_learners.items():
                 try:
                     cls = lrn.cluster(device_hint=getattr(self, "_nilm_hints", {}).get(dk, ""))
-                    lrn.flush()
+                    # cluster() already saves when a save is due; the stop path
+                    # flushes the rest (it used to write the file twice here,
+                    # every five minutes).
                     trans_count = int(lrn.get_transition_count())
                     total_trans += trans_count
                     for c in cls:
@@ -1461,6 +1489,7 @@ class BackgroundServiceManager:
             # survive if the previous shutdown didn't get a chance to save).
             if self._stop_event.wait(5.0):
                 return
+            remove_orphaned_live_history_tmp(self.out_dir)
             while not self._stop_event.is_set():
                 self._save_live_history()
                 if self._stop_event.wait(LIVE_HISTORY_SAVE_SECONDS):

@@ -4,6 +4,7 @@ from __future__ import annotations
 import gzip
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -89,6 +90,35 @@ def _install_web_log_handler() -> None:
     h.setFormatter(logging.Formatter("%(message)s"))
     h.setLevel(logging.INFO)
     root.addHandler(h)
+
+
+class _QuietAccessLog(logging.Filter):
+    """Keep successful requests out of the console log.
+
+    Werkzeug logs every request at INFO. The Live tab asks ``/api/state`` once a
+    second, so one open tab alone is ~86,000 lines (~10 MB) a day in the
+    journal or the container log — disk writes that say nothing. Requests that
+    failed (status 400 and up) are still logged, and so is everything while
+    debug logging or the "HTTP" switch of the log tab is on."""
+
+    _STATUS = re.compile(r'"\s+(?:\x1b\[[0-9;]*m)?(\d{3})\b')
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if _LOG_INCLUDE_HTTP or record.levelno != logging.INFO:
+            return True
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            return True
+        try:
+            m = self._STATUS.search(record.getMessage())
+        except Exception:
+            return True
+        return not (m and int(m.group(1)) < 400)
+
+
+def _install_quiet_access_log() -> None:
+    wz = logging.getLogger("werkzeug")
+    if not any(isinstance(f, _QuietAccessLog) for f in wz.filters):
+        wz.addFilter(_QuietAccessLog())
 
 
 def _inject_version_badge(html: str) -> str:
@@ -433,6 +463,7 @@ def create_app(config_path: Optional[str] = None) -> Flask:
 
     # Capture logs into ring buffer so the web Sync/Log tab can display them
     _install_web_log_handler()
+    _install_quiet_access_log()
 
     # Determine config path
     if config_path is None:

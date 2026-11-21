@@ -688,6 +688,19 @@ Browser-based 12-step wizard at `/setup` (auto-redirected on first launch when n
 - macOS / Windows / Linux
 - One-click start scripts — opens dashboard at `https://localhost:8765` in your default browser
 
+### 💾 Light on the disk
+- Safe for SD cards and small SSDs: with eight plugs polled every second and an open Live tab
+  the whole process writes about 0.2 GB a day — mostly the minute history itself. Every push
+  measures it against the real server (`tests/e2e/write_load.py`) and fails above 0.5 GB a day.
+- A restart or update writes the Live tab's 2-hour window once (a compressed snapshot, also every
+  5 minutes while running) and rewrites nothing in the history.
+- Check your own installation: read `write_bytes` twice, ten minutes apart, and multiply the
+  difference by 144 for a day:
+  ```bash
+  grep write_bytes /proc/$(pgrep -f "shelly_analyzer" | head -1)/io      # git / local install
+  grep write_bytes /proc/$(docker inspect -f '{{.State.Pid}}' shelly-energy-analyzer)/io   # Docker
+  ```
+
 ---
 
 ## Quick Start (End Users)

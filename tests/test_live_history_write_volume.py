@@ -201,21 +201,33 @@ def test_saving_writes_the_new_file_and_retires_the_old_one(tmp_path):
 def test_the_nilm_file_is_not_rewritten_on_every_transition_once_full(tmp_path):
     """At the 5000-transition cap len() stays 5000, so ``len % 10 == 0`` was
     true for every new transition and the whole file (indent=2) was written
-    each time. Now: one save per ten transitions, full or not."""
+    each time. 17.10.5 made it one save per ten transitions; 17.11.1 bounds it
+    in time as well: ten or more new transitions AND ``SAVE_MIN_INTERVAL_S``
+    since the last write, so a busy meter writes it at most every 30 min."""
     from shelly_analyzer.services.appliance_detector import PowerTransition, TransitionLearner
     lrn = TransitionLearner(persist_path=tmp_path / "nilm.json")
     lrn._transitions = [PowerTransition(timestamp=float(i), device_key="m", delta_w=100.0,
                                         power_before=0.0, power_after=100.0)
                         for i in range(lrn._max_transitions)]
     saves = []
-    lrn._save = lambda path: (saves.append(path), setattr(lrn, "_unsaved", 0))
-    ts, found = 1_000_000.0, 0
-    for _ in range(25):            # 50 steps: 25 on, 25 off
-        for w in (0.0, 0.0, 0.0, 0.0, 800.0, 800.0, 800.0, 800.0,
-                  800.0, 800.0, 800.0, 0.0, 0.0, 0.0, 0.0):
-            if lrn.observe("m", ts, w) is not None:
-                found += 1
-            ts += 1.0
+    lrn._save = lambda path: (saves.append(path), setattr(lrn, "_unsaved", 0),
+                              setattr(lrn, "_last_save", time.time()))
+
+    def fifty_steps(ts):
+        found = 0
+        for _ in range(25):            # 50 steps: 25 on, 25 off
+            for w in (0.0, 0.0, 0.0, 0.0, 800.0, 800.0, 800.0, 800.0,
+                      800.0, 800.0, 800.0, 0.0, 0.0, 0.0, 0.0):
+                if lrn.observe("m", ts, w) is not None:
+                    found += 1
+                ts += 1.0
+        return found, ts
+
+    found, ts = fifty_steps(1_000_000.0)
     assert found >= 40
     assert len(lrn._transitions) == lrn._max_transitions
-    assert len(saves) == found // TransitionLearner.SAVE_EVERY_TRANSITIONS
+    assert saves == []                       # learned a lot, but saved < 30 min ago
+    lrn._last_save -= TransitionLearner.SAVE_MIN_INTERVAL_S + 1
+    found2, ts = fifty_steps(ts)
+    assert found2 >= 40
+    assert len(saves) == 1                   # due: exactly one write, not one per ten
