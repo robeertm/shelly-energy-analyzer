@@ -1,5 +1,27 @@
 # Changelog
 
+## 17.11.3
+
+The weather correlation looks at the whole home. Without a choice it used the
+first device in the list, so a home of eight plugs saw the 4 W of one plug in
+every temperature zone while the Live tab showed about 300 W.
+
+### Fixes
+
+- **Whole home by default.** The weather tab sums every consumer, each counted
+  once — the same rule as costs, CO₂ and energy flow: a device that hangs behind
+  another one is already inside that one's reading, and in a home with an
+  energy meter the meter is the home. A note under the correlation title names
+  the devices in the sum.
+- **Pick one device on purpose.** A list above the tab switches between the
+  whole home and any single device.
+- **kWh axes stay readable for small values.** The axes of "Temperature vs.
+  consumption", the hourly timeline and the daily temperature range choose
+  their decimals from the tick step instead of fixed decimals that turned every
+  tick into 0.00; tiles, zone bars and best/worst days do the same, and
+  "Total kWh" no longer rounds a small total to 0.0.
+- New texts in all nine languages.
+
 ## 17.11.2
 
 The language check is stricter: besides identical keys, identical placeholders

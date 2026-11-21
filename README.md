@@ -433,6 +433,8 @@ Privacy: nothing is sent to OpenEI unless a URDB rate is set or you click one of
 - With Open-Meteo the last 30 days are filled in hour by hour, so the correlation has data from the first day instead of after weeks of collecting
 - **Interval (min)** is the shortest time between two live requests; MET Norway is never asked more often than every 30 minutes, and every request carries an identifying User-Agent as their terms ask
 - **Temperature vs. consumption correlation** — Pearson correlation coefficient (r), scatter plot with trend line
+- Correlates the **whole home** by default (every consumer counted once, a device behind another one is not added twice); a list above the tab picks a single device instead
+- kWh axes choose their decimals from the size of the values, so small loads stay readable
 - Heating Degree Days (HDD) and Cooling Degree Days (CDD) analysis
 - kWh per HDD/CDD for heating/cooling efficiency assessment
 - Automatic interpretation (heating correlation / cooling correlation / no dependency)

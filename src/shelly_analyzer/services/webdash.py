@@ -2593,6 +2593,9 @@ _HTML_TEMPLATE = """<!doctype html>
 
     <!-- Weather -->
     <div id="pane-weather" class="pane">
+      <div class="controls-row" id="weather-controls">
+        <select id="weather-device" onchange="loadWeather()" style="padding:8px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--fg);font-size:13px;min-height:36px;max-width:100%"></select>
+      </div>
       <div id="weather-content"><p class="loading-msg">{web_loading}</p></div>
     </div>
 
@@ -8889,12 +8892,31 @@ let weatherLoaded = false;
 function initWeather() {{
   loadWeather();
 }}
+// Whose consumption the correlation uses: the whole home (default, every
+// consumer counted once) or one device picked in the list.
+function _wxFillDevices() {{
+  const sel = document.getElementById('weather-device');
+  if (!sel || sel.options.length) return sel;
+  const all = document.createElement('option');
+  all.value = ''; all.textContent = t('web.weather.scope_all', 'Whole home (all devices)');
+  sel.appendChild(all);
+  const devs = typeof DEVICES !== 'undefined' ? DEVICES : [];
+  devs.forEach(function(d) {{
+    const o = document.createElement('option');
+    o.value = d.key || d[0] || ''; o.textContent = d.name || d[1] || o.value;
+    if (o.value) sel.appendChild(o);
+  }});
+  sel.selectedIndex = 0;
+  return sel;
+}}
 async function loadWeather() {{
   const el = document.getElementById('weather-content');
   const quiet = _quietRefresh;
+  const sel = _wxFillDevices();
+  const dk = sel ? (sel.value || '') : '';
   _spinner(el, quiet, '<p class="loading-msg">' + t('web.loading', 'Loading…') + '</p>');
   try {{
-    const r = await fetch(seaUrl('/api/weather_correlation'));
+    const r = await fetch(seaUrl('/api/weather_correlation') + (dk ? '?device_key=' + encodeURIComponent(dk) : ''));
     if (!r.ok) throw new Error(r.status);
     const d = await r.json();
     renderWeather(d, el);
@@ -8915,6 +8937,36 @@ function _wxCredit(d) {{
   if (!d || !d.credit) return '';
   return '<div class="wx-credit" style="margin-top:8px;font-size:11px;color:var(--muted);text-align:right">'
     + esc(t('web.weather.credit', 'Weather data: {{src}}').replace('{{src}}', d.credit)) + '</div>';
+}}
+
+// kWh with as many decimals as the size needs: a 4 W plug (0.004 kWh/h) and a
+// whole home (0.3 kWh/h) both stay readable.
+function _wxKwh(v) {{
+  if (v == null || !isFinite(v)) return '\u2013';
+  var a = Math.abs(v);
+  if (a === 0) return '0';
+  if (a >= 100) return v.toFixed(0);
+  if (a >= 10) return v.toFixed(1);
+  if (a >= 1) return v.toFixed(2);
+  return v.toPrecision(2);
+}}
+// Axis tick text: decimals follow the tick step, so ticks never all read 0.00.
+function _wxKwhTick(v, step) {{
+  if (Math.abs(v) < 1e-12) return '0';
+  var s = Math.abs(step || 0);
+  var dec = s >= 10 ? 0 : (s >= 1 ? 1 : (s > 0 ? Math.min(6, Math.ceil(-Math.log10(s)) + 1) : 2));
+  return v.toFixed(dec);
+}}
+// Whole degrees without a "-0".
+function _wxDeg(v) {{
+  return String(Math.round(v) || 0);
+}}
+function _wxScopeHint(d) {{
+  if (!d || d.scope !== 'home' || !d.device_count) return '';
+  var names = (d.home_names || []).join(', ');
+  return '<div class="wx-scope" style="margin:-2px 0 8px;font-size:11px;color:var(--muted)">'
+    + esc(t('web.weather.scope_hint', 'Whole home: sum of {{n}} devices, each counted once.').replace('{{n}}', d.device_count))
+    + (names ? ' <span style="opacity:.85">(' + esc(names) + ')</span>' : '') + '</div>';
 }}
 
 function renderWeather(d, el) {{
@@ -8957,6 +9009,7 @@ function renderWeather(d, el) {{
   if (d.correlation) {{
     var c = d.correlation;
     html += '<div style="margin-top:14px">' + _wxSectionTitle(t('web.weather.correlation', 'Weather-Energy Correlation')) + '</div>';
+    html += _wxScopeHint(d);
     var interpIcon = '\u2753', interpText = '', interpColor = 'var(--muted)';
     if (c.r_value != null) {{
       if (c.r_value < -0.4) {{ interpIcon = '\u2744\ufe0f'; interpText = t('web.weather.heating', 'Strong heating correlation'); interpColor = '#3498db'; }}
@@ -8974,7 +9027,7 @@ function renderWeather(d, el) {{
     html += _wxCard('\U0001f4ca', 'Pearson r', c.r_value != null ? c.r_value.toFixed(3) : '\u2013');
     html += _wxCard('\u2744\ufe0f', 'HDD', c.hdd != null ? c.hdd.toFixed(1) : '\u2013');
     html += _wxCard('\u2600\ufe0f', 'CDD', c.cdd != null ? c.cdd.toFixed(1) : '\u2013');
-    html += _wxCard('\u26a1', t('web.weather.total_kwh', 'Total kWh'), c.total_kwh != null ? c.total_kwh.toFixed(1) : '\u2013');
+    html += _wxCard('\u26a1', t('web.weather.total_kwh', 'Total kWh'), c.total_kwh != null ? _wxKwh(c.total_kwh) : '\u2013');
     html += _wxCard('\u2744\ufe0f', 'kWh/HDD', c.kwh_per_hdd != null ? c.kwh_per_hdd.toFixed(2) : '\u2013');
     html += _wxCard('\u2600\ufe0f', 'kWh/CDD', c.kwh_per_cdd != null ? c.kwh_per_cdd.toFixed(2) : '\u2013');
     html += '</div>';
@@ -8983,9 +9036,9 @@ function renderWeather(d, el) {{
     if (c.avg_kwh_cold != null || c.avg_kwh_mild != null || c.avg_kwh_warm != null) {{
       html += '<div class="card" style="margin-top:10px">' + _wxSectionTitle(t('web.weather.temp_zones', 'Consumption by Temperature Zone')) + '</div>';
       html += '<div class="nilm-metrics" style="margin-top:0">';
-      html += _wxCard('\u2744\ufe0f', '< 10\u00b0C (' + t('web.weather.cold', 'Cold') + ')', c.avg_kwh_cold != null ? c.avg_kwh_cold.toFixed(3) + ' kWh/h' : '\u2013');
-      html += _wxCard('\U0001f33f', '10\u201320\u00b0C (' + t('web.weather.mild', 'Mild') + ')', c.avg_kwh_mild != null ? c.avg_kwh_mild.toFixed(3) + ' kWh/h' : '\u2013');
-      html += _wxCard('\U0001f525', '> 20\u00b0C (' + t('web.weather.warm', 'Warm') + ')', c.avg_kwh_warm != null ? c.avg_kwh_warm.toFixed(3) + ' kWh/h' : '\u2013');
+      html += _wxCard('\u2744\ufe0f', '< 10\u00b0C (' + t('web.weather.cold', 'Cold') + ')', c.avg_kwh_cold != null ? _wxKwh(c.avg_kwh_cold) + ' kWh/h' : '\u2013');
+      html += _wxCard('\U0001f33f', '10\u201320\u00b0C (' + t('web.weather.mild', 'Mild') + ')', c.avg_kwh_mild != null ? _wxKwh(c.avg_kwh_mild) + ' kWh/h' : '\u2013');
+      html += _wxCard('\U0001f525', '> 20\u00b0C (' + t('web.weather.warm', 'Warm') + ')', c.avg_kwh_warm != null ? _wxKwh(c.avg_kwh_warm) + ' kWh/h' : '\u2013');
       html += '</div>';
     }}
 
@@ -9033,7 +9086,7 @@ function renderWeather(d, el) {{
       var medal = ['\U0001f947','\U0001f948','\U0001f949'][i] || '';
       html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px">';
       html += '<span>' + medal + ' ' + dy.date + '</span>';
-      html += '<span style="display:flex;gap:12px"><span style="color:#3498db;font-weight:600">' + dy.kwh.toFixed(2) + ' kWh</span>';
+      html += '<span style="display:flex;gap:12px"><span style="color:#3498db;font-weight:600">' + _wxKwh(dy.kwh) + ' kWh</span>';
       html += '<span style="color:#e74c3c">' + dy.temp_min.toFixed(0) + '\u2013' + dy.temp_max.toFixed(0) + '\u00b0C</span></span></div>';
     }});
     html += '</div>';
@@ -9041,7 +9094,7 @@ function renderWeather(d, el) {{
     worst3.forEach(function(dy) {{
       html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px">';
       html += '<span>' + dy.date + '</span>';
-      html += '<span style="display:flex;gap:12px"><span style="color:#e74c3c;font-weight:600">' + dy.kwh.toFixed(2) + ' kWh</span>';
+      html += '<span style="display:flex;gap:12px"><span style="color:#e74c3c;font-weight:600">' + _wxKwh(dy.kwh) + ' kWh</span>';
       html += '<span style="color:#e74c3c">' + dy.temp_min.toFixed(0) + '\u2013' + dy.temp_max.toFixed(0) + '\u00b0C</span></span></div>';
     }});
     html += '</div></div>';
@@ -9113,7 +9166,7 @@ function _drawWxComfortChart(zones) {{
     ctx.fillStyle = muted; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
     ctx.fillText(z.range + '\u00b0C', pad.left - 4, y + barH / 2 + 3);
     ctx.fillStyle = colors[i % colors.length]; ctx.textAlign = 'left'; ctx.font = '10px sans-serif';
-    ctx.fillText(z.avg_kwh.toFixed(3) + ' kWh/h (' + z.count + ')', pad.left + bw + 4, y + barH / 2 + 3);
+    ctx.fillText(_wxKwh(z.avg_kwh) + ' kWh/h (' + z.count + ')', pad.left + bw + 4, y + barH / 2 + 3);
   }});
 }}
 
@@ -9134,9 +9187,9 @@ function _drawWxDailyChart(daily) {{
   ctx.strokeStyle = border; ctx.lineWidth = 0.5;
   for (var i = 0; i <= 4; i++) {{ var gy = pad.top + cH - (cH * i / 4); ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cW, gy); ctx.stroke(); }}
   ctx.fillStyle = '#3498db'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
-  for (var i = 0; i <= 4; i++) {{ var gy = pad.top + cH - (cH * i / 4); ctx.fillText((maxK * i / 4).toFixed(1), pad.left - 4, gy + 3); }}
+  for (var i = 0; i <= 4; i++) {{ var gy = pad.top + cH - (cH * i / 4); ctx.fillText(_wxKwhTick(maxK * i / 4, maxK / 4), pad.left - 4, gy + 3); }}
   ctx.fillStyle = '#e74c3c'; ctx.textAlign = 'left';
-  for (var i = 0; i <= 4; i++) {{ var gy = pad.top + cH - (cH * i / 4); ctx.fillText((minT + (maxT - minT) * i / 4).toFixed(0) + '\u00b0', pad.left + cW + 4, gy + 3); }}
+  for (var i = 0; i <= 4; i++) {{ var gy = pad.top + cH - (cH * i / 4); ctx.fillText(_wxDeg(minT + (maxT - minT) * i / 4) + '\u00b0', pad.left + cW + 4, gy + 3); }}
 
   ctx.fillStyle = 'rgba(52,152,219,0.5)';
   daily.forEach(function(d, i) {{ var x = pad.left + (cW * i / n) + 1; var bh = cH * (d.kwh / maxK); ctx.fillRect(x, pad.top + cH - bh, barW, bh); }});
@@ -9178,9 +9231,9 @@ function _drawWeatherCharts(d) {{
 
     ctx.strokeStyle = border; ctx.lineWidth = 0.5;
     ctx.fillStyle = muted; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
-    for (var i = 0; i <= 4; i++) {{ var gy = pad.top + cH - (cH * i / 4); ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cW, gy); ctx.stroke(); ctx.fillText((minK + (maxK - minK) * i / 4).toFixed(2), pad.left - 4, gy + 3); }}
+    for (var i = 0; i <= 4; i++) {{ var gy = pad.top + cH - (cH * i / 4); ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cW, gy); ctx.stroke(); ctx.fillText(_wxKwhTick(minK + (maxK - minK) * i / 4, (maxK - minK) / 4), pad.left - 4, gy + 3); }}
     ctx.textAlign = 'center';
-    for (var j = 0; j <= 4; j++) {{ var gx = pad.left + (cW * j / 4); ctx.fillText((minT + (maxT - minT) * j / 4).toFixed(0) + '\u00b0', gx, pad.top + cH + 16); }}
+    for (var j = 0; j <= 4; j++) {{ var gx = pad.left + (cW * j / 4); ctx.fillText(_wxDeg(minT + (maxT - minT) * j / 4) + '\u00b0', gx, pad.top + cH + 16); }}
     ctx.fillStyle = muted; ctx.font = '10px sans-serif';
     ctx.save(); ctx.translate(12, pad.top + cH / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText('kWh', 0, 0); ctx.restore();
     ctx.textAlign = 'center'; ctx.fillText('\u00b0C', pad.left + cW / 2, H - 2);
@@ -9219,9 +9272,9 @@ function _drawWeatherCharts(d) {{
 
     ctx2.strokeStyle = border; ctx2.lineWidth = 0.5;
     ctx2.fillStyle = '#3498db'; ctx2.font = '10px sans-serif'; ctx2.textAlign = 'right';
-    for (var gi = 0; gi <= 4; gi++) {{ var gy2 = pad2.top + cH2 - (cH2 * gi / 4); ctx2.beginPath(); ctx2.moveTo(pad2.left, gy2); ctx2.lineTo(pad2.left + cW2, gy2); ctx2.stroke(); ctx2.fillText((maxK2 * gi / 4).toFixed(2), pad2.left - 4, gy2 + 3); }}
+    for (var gi = 0; gi <= 4; gi++) {{ var gy2 = pad2.top + cH2 - (cH2 * gi / 4); ctx2.beginPath(); ctx2.moveTo(pad2.left, gy2); ctx2.lineTo(pad2.left + cW2, gy2); ctx2.stroke(); ctx2.fillText(_wxKwhTick(maxK2 * gi / 4, maxK2 / 4), pad2.left - 4, gy2 + 3); }}
     ctx2.fillStyle = '#e74c3c'; ctx2.textAlign = 'left';
-    for (var gj = 0; gj <= 4; gj++) {{ var gy3 = pad2.top + cH2 - (cH2 * gj / 4); ctx2.fillText((minT2 + (maxT2 - minT2) * gj / 4).toFixed(0) + '\u00b0', pad2.left + cW2 + 4, gy3 + 3); }}
+    for (var gj = 0; gj <= 4; gj++) {{ var gy3 = pad2.top + cH2 - (cH2 * gj / 4); ctx2.fillText(_wxDeg(minT2 + (maxT2 - minT2) * gj / 4) + '\u00b0', pad2.left + cW2 + 4, gy3 + 3); }}
     ctx2.fillStyle = 'rgba(52,152,219,0.6)';
     sorted.forEach(function(p, i) {{ var x = pad2.left + (cW2 * i / n) + 1; var bh = cH2 * (p.kwh / maxK2); ctx2.fillRect(x, pad2.top + cH2 - bh, barW, bh); }});
     ctx2.strokeStyle = '#e74c3c'; ctx2.lineWidth = 2; ctx2.globalAlpha = 0.85;

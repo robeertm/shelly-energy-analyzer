@@ -32047,3 +32047,18 @@ for _l, _d in {
     "es": {"settings.alerts.col_enabled": "Activado"},
 }.items():
     _I18N[_l].update(_d)
+
+
+# 17.11.3 Weather correlation: whole home by default, or one picked device.
+for _l, (_all, _hint) in {
+    "en": ("🏠 Whole home (all devices)", "Whole home: sum of {n} devices, each counted once."),
+    "de": ("🏠 Ganzes Zuhause (alle Geräte)", "Ganzes Zuhause: Summe aus {n} Geräten, jedes nur einmal gezählt."),
+    "es": ("🏠 Toda la casa (todos los dispositivos)", "Toda la casa: suma de {n} dispositivos, cada uno contado una sola vez."),
+    "fr": ("🏠 Tout le logement (tous les appareils)", "Tout le logement : somme de {n} appareils, chacun compté une seule fois."),
+    "pt": ("🏠 Casa inteira (todos os dispositivos)", "Casa inteira: soma de {n} dispositivos, cada um contado uma só vez."),
+    "it": ("🏠 Tutta la casa (tutti i dispositivi)", "Tutta la casa: somma di {n} dispositivi, ciascuno contato una sola volta."),
+    "pl": ("🏠 Cały dom (wszystkie urządzenia)", "Cały dom: suma wszystkich urządzeń ({n}), każde liczone tylko raz."),
+    "cs": ("🏠 Celá domácnost (všechna zařízení)", "Celá domácnost: součet všech zařízení ({n}), každé započteno jen jednou."),
+    "ru": ("🏠 Весь дом (все устройства)", "Весь дом: сумма всех устройств ({n}), каждое учтено только один раз."),
+}.items():
+    _I18N.setdefault(_l, {}).update({"web.weather.scope_all": _all, "web.weather.scope_hint": _hint})

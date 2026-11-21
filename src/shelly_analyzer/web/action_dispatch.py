@@ -4139,30 +4139,74 @@ class ActionDispatcher:
                     except Exception:
                         pass
 
-                dev_key = str(params.get("device_key", "")).strip()
+                # Whose consumption is correlated with the weather. Without a
+                # device_key: the whole home — every consumer counted once,
+                # the same rule as costs/CO2/energy flow (a plug behind another
+                # plug is inside that one's reading). Before 17.11.3 the tab
+                # silently took cfg.devices[0], so a home of 8 plugs showed the
+                # 4 W of the first plug instead of ~300 W.
+                from shelly_analyzer.services import energy_balance as _eb
+                from shelly_analyzer.services.net_display import household_keys as _hh_wc
+                _all_devs_wc = list(self.cfg.devices or [])
+                _devs_out_wc = [{"key": str(d.key), "name": str(getattr(d, "name", "") or d.key)}
+                                for d in _all_devs_wc]
+                dev_key = str(params.get("device_key", "") or "").strip()
                 dev = None
-                if dev_key:
-                    dev = next((d for d in self.cfg.devices if d.key == dev_key), None)
-                if dev is None and self.cfg.devices:
-                    dev = self.cfg.devices[0]
+                if dev_key and dev_key not in ("all", "home"):
+                    dev = next((d for d in _all_devs_wc if str(d.key) == dev_key), None)
+                home_keys: List[str] = []
                 if dev is None:
+                    try:
+                        home_keys = list(_eb.consumer_keys(self.cfg))
+                    except Exception:
+                        home_keys = []
+                    if not home_keys:
+                        try:
+                            home_keys = [k for k in _hh_wc(_all_devs_wc)
+                                         if _eb.device_role(self.cfg, k) in ("owner", "tenant")]
+                        except Exception:
+                            home_keys = []
+                    if not home_keys and _all_devs_wc:
+                        dev = _all_devs_wc[0]
+                _name_wc = {x["key"]: x["name"] for x in _devs_out_wc}
+                scope_wc = {
+                    "scope": "device" if dev is not None else "home",
+                    "device_key": str(dev.key) if dev is not None else "",
+                    "device_name": _name_wc.get(str(dev.key), str(dev.key)) if dev is not None else "",
+                    "home_keys": home_keys,
+                    "home_names": [_name_wc.get(k, k) for k in home_keys],
+                    "device_count": len(home_keys) if dev is None else 1,
+                    "devices": _devs_out_wc,
+                }
+                if dev is None and not home_keys:
                     return {"ok": True, "source": source, "credit": credit,
                             "current": current_data, "current_stale": current_stale,
                             "current_as_of": current_as_of, "correlation": None, "paired": [],
-                            "daily": [], "humidity_corr": None, "comfort_zones": []}
+                            "daily": [], "humidity_corr": None, "comfort_zones": [], **scope_wc}
 
                 now_wc = datetime.now(ZoneInfo("UTC"))
                 start_ts_wc = int((now_wc - timedelta(days=30)).timestamp())
                 end_ts_wc = int(now_wc.timestamp())
 
                 weather_df = self.storage.db.query_weather(start_ts_wc, end_ts_wc)
-                hourly_wc = self.storage.db.query_hourly(dev.key, start_ts=start_ts_wc, end_ts=end_ts_wc)
+                if dev is not None:
+                    hourly_wc = self.storage.db.query_hourly(dev.key, start_ts=start_ts_wc, end_ts=end_ts_wc)
+                else:
+                    # Hours are the union over the consumers; an hour in which
+                    # only some devices have data yet counts what was measured.
+                    _sum_wc: Dict[int, float] = {}
+                    for _k in home_keys:
+                        for _h, _v in _eb.consumer_hourly(self.storage.db, self.cfg, _k,
+                                                          start_ts_wc, end_ts_wc).items():
+                            _sum_wc[int(_h)] = _sum_wc.get(int(_h), 0.0) + float(_v)
+                    hourly_wc = pd.DataFrame(
+                        {"hour_ts": sorted(_sum_wc), "kwh": [_sum_wc[h] for h in sorted(_sum_wc)]})
 
                 if weather_df.empty or hourly_wc.empty:
                     return {"ok": True, "source": source, "credit": credit,
                             "current": current_data, "current_stale": current_stale,
                             "current_as_of": current_as_of, "correlation": None, "paired": [],
-                            "daily": [], "humidity_corr": None, "comfort_zones": []}
+                            "daily": [], "humidity_corr": None, "comfort_zones": [], **scope_wc}
 
                 # Build full weather lookup (temp + humidity + wind + pressure)
                 w_full = {}
@@ -4255,7 +4299,7 @@ class ActionDispatcher:
                         "kwh_per_cdd": round(total_kwh / cdd, 2) if cdd > 1 else None,
                         "slope": slope,
                         "intercept": intercept,
-                        "total_kwh": round(total_kwh, 1),
+                        "total_kwh": round(total_kwh, 3),
                         "avg_kwh_cold": round(sum(cold_kwh) / len(cold_kwh), 4) if cold_kwh else None,
                         "avg_kwh_mild": round(sum(mild_kwh) / len(mild_kwh), 4) if mild_kwh else None,
                         "avg_kwh_warm": round(sum(warm_kwh) / len(warm_kwh), 4) if warm_kwh else None,
@@ -4289,6 +4333,7 @@ class ActionDispatcher:
                     "current_as_of": current_as_of, "correlation": correlation,
                     "paired": paired, "daily": daily,
                     "humidity_corr": humidity_corr, "comfort_zones": comfort_zones,
+                    **scope_wc,
                 }
             except Exception as e:
                 return {"ok": False, "error": str(e)}
