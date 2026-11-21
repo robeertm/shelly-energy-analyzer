@@ -32032,3 +32032,18 @@ for _l, _d in {
     _wx_txt = _d.pop("_wx")
     _d.update({"web.weather.wx." + _k: _v for _k, _v in zip(_WX_KEYS, _wx_txt)})
     _I18N.setdefault(_l, {}).update(_d)
+
+
+# On/off wording that the later languages had left in English.
+for _l, _d in {
+    "fr": {"setup.done.on": "activé", "settings.alerts.col_enabled": "Activé", "web.switch.on": "Allumé"},
+    "pt": {"setup.done.on": "ligado", "settings.alerts.col_enabled": "Ligado", "web.switch.on": "Ligado"},
+    "it": {"setup.done.on": "acceso", "settings.alerts.col_enabled": "Attivo", "web.switch.on": "Acceso",
+           "weather.kwh_per_hdd": "kWh per HDD", "weather.kwh_per_cdd": "kWh per CDD"},
+    "pl": {"setup.done.on": "włączone", "settings.alerts.col_enabled": "Włączone", "web.switch.on": "Włączony",
+           "web.hm.weekend": "Weekend"},
+    "cs": {"setup.done.on": "zapnuto", "settings.alerts.col_enabled": "Zapnuto", "web.switch.on": "Zapnuto"},
+    "ru": {"setup.done.on": "вкл.", "settings.alerts.col_enabled": "Вкл.", "web.switch.on": "Включено"},
+    "es": {"settings.alerts.col_enabled": "Activado"},
+}.items():
+    _I18N[_l].update(_d)

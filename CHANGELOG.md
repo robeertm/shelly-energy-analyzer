@@ -1,5 +1,19 @@
 # Changelog
 
+## 17.11.2
+
+The language check is stricter: besides identical keys, identical placeholders
+and no empty values in all nine languages, a test now also fails when a
+sentence is still left in English in one of the other languages.
+
+### Fixes
+
+- **"On" is translated everywhere.** The on/enabled labels in the alerts
+  table, the switch state and the setup summary were still English in French,
+  Portuguese, Italian, Polish, Czech and Russian (and one in Spanish).
+- Polish "Weekend" in the heatmap is kept deliberately; the check now lists
+  the few real loan words explicitly instead of letting gaps pass silently.
+
 ## 17.11.1
 
 Every place that writes to disk was measured and the outliers are gone. With

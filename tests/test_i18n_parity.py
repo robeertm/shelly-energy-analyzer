@@ -70,3 +70,24 @@ def test_settings_page_keys_exist():
     exempt = {"settings.list.item_n"}
     missing = sorted(k for k in used if k not in en and k not in exempt and not k.endswith("_"))
     assert not missing, f"settings.html asks for keys without a table entry: {missing}"
+
+
+# Values that legitimately read the same as English (loan words, product names,
+# units). Everything else that still has English function words is a gap.
+_ENGLISH_WORDS = re.compile(
+    r"\b(the|of|to|and|your|is|are|no|not|with|for|you|in|on|or|this|from|per|yet|please|failed|select|enter|click)\b",
+    re.I,
+)
+_SAME_AS_ENGLISH_OK = {"kWh per HDD", "kWh per CDD", "Error", "Error:", "Error: {err}"}
+
+
+@pytest.mark.parametrize("lang", [l for l in OTHER])
+def test_no_untranslated_english_sentences(lang):
+    en, other = _table("en"), _table(lang)
+    left = [
+        k for k in en
+        if other.get(k) == en[k]
+        and en[k] not in _SAME_AS_ENGLISH_OK
+        and _ENGLISH_WORDS.search(PLACEHOLDER.sub("", en[k]))
+    ]
+    assert not left, f"{lang}: still English: {left[:8]}"
