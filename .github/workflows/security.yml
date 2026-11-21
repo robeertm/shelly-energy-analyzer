@@ -1,0 +1,40 @@
+# Security gate for the dependency set and the git history. Runs only when the
+# dependency files or the scanners change (plus on demand), so it does not add
+# a run to every push.
+name: Security
+
+on:
+  push:
+    paths:
+      - 'requirements*.txt'
+      - 'pyproject.toml'
+      - 'security-exceptions.json'
+      - 'scripts/check_secrets.py'
+      - '.github/workflows/security.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependency audit (resolved snapshot)
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements-audit.txt --no-deps --disable-pip
+      - name: Snapshot matches requirements.txt
+        run: |
+          python scripts/refresh_audit_lock.py
+          git diff --stat requirements-audit.txt
+          # a drift only means newer releases exist: audit what a fresh install gets today
+          pip-audit -r requirements-audit.txt --no-deps --disable-pip
+      - name: Secret scan (whole history)
+        run: python scripts/check_secrets.py

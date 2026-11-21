@@ -1,5 +1,23 @@
 # Changelog
 
+## 17.11.4
+
+The dependency audit now checks real versions, and the git history is scanned
+for credentials. Nothing changes in the app itself.
+
+### Security tooling
+
+- **`requirements-audit.txt`**: the fully resolved versions a fresh install of
+  `requirements.txt` gets (39 packages). The loose ranges in `requirements.txt`
+  are unchanged, so the in-app updater behaves as before; the snapshot is only
+  read by the audit. `scripts/refresh_audit_lock.py` regenerates it.
+- **`scripts/check_secrets.py`**: scans every added line of every commit for
+  tokens, keys and secret files; output is masked, known false positives go into
+  `security-exceptions.json`.
+- **Security workflow**: dependency audit of the snapshot plus the history scan,
+  run only when dependency files or the scanners change, or on demand.
+- Result today: 0 known vulnerabilities in 39 packages, 0 findings in 862 commits.
+
 ## 17.11.3
 
 The weather correlation looks at the whole home. Without a choice it used the
