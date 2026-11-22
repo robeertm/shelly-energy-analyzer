@@ -1,5 +1,19 @@
 # Changelog
 
+## 17.11.7
+
+### Fixed
+
+- **No "Offline" right after a restart or update**: the live view is restored from the cache
+  written before the restart, so every reading is a few minutes old until the first poll answers.
+  17.11.6 briefly marked every device "Offline" in that window. A device is now flagged only
+  once the app has been running for longer than the offline limit (two minutes).
+
+### Tests
+
+- `tests/test_offline_plug_gap.py`: no offline flag in the first two minutes after the start,
+  the reading's age is still reported.
+
 ## 17.11.6
 
 An unreachable plug is now a gap in the history instead of a plug drawing 0 W.

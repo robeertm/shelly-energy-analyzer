@@ -298,6 +298,12 @@ def _state_app(poll_seconds=1.0, ages=None):
     return app
 
 
+@pytest.fixture(autouse=True)
+def _process_up_for_a_while(monkeypatch):
+    from shelly_analyzer.web.blueprints import api_state as mod
+    monkeypatch.setattr(mod, "_PROCESS_START_S", time.time() - 3600)
+
+
 def _devices(app):
     with app.test_client() as c:
         j = c.get("/api/state").get_json()
@@ -410,3 +416,16 @@ def test_offline_texts_exist_in_every_language():
         title = t(lang, "live.cards.offline_title")
         assert "{min}" in title and title != "live.cards.offline_title", lang
     assert len({t(lang, "live.cards.offline_title") for lang in langs}) == len(langs)
+
+
+def test_no_offline_right_after_a_restart(monkeypatch):
+    """After a restart the live view comes from the cache written before it:
+    every reading is minutes old until the first poll. That is no outage."""
+    from shelly_analyzer.web.blueprints import api_state as mod
+
+    monkeypatch.setattr(mod, "_PROCESS_START_S", time.time() - 5)
+    devs = _devices(_state_app())
+    assert devs["gone"]["offline"] is False
+    assert devs["gone"]["sample_age_s"] >= 590      # the age is still reported
+    monkeypatch.setattr(mod, "_PROCESS_START_S", time.time() - 121)
+    assert _devices(_state_app())["gone"]["offline"] is True

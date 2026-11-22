@@ -24,6 +24,12 @@ _SYNTH_KEYS = ("pv", "battery", "grid_ext")
 # poll interval stretches the limit.
 LIVE_STALE_AFTER_S = 120.0
 
+# When this process started. Right after a restart or an update the live view
+# is restored from the cache written before the restart, so every reading is
+# "old" until the poller has answered once -- that is not an outage. Nothing
+# is flagged offline before the process has been up for the stale limit.
+_PROCESS_START_S = _time.time()
+
 
 def live_stale_after_s(poll_seconds: Any = None) -> float:
     try:
@@ -268,6 +274,7 @@ def api_state():
         _age = max(0.0, _now_s - _ts) if _ts > 0 else None
         _offline = bool(
             _age is not None and _age > _stale_after
+            and _now_s - _PROCESS_START_S > _stale_after
             and dkey not in _SYNTH_KEYS and bool(meta)
         )
 
