@@ -457,6 +457,24 @@ def get_shelly_status(client: ShellyHttp, host: str) -> Dict[str, Any]:
     return rpc_call(client, host, "Shelly.GetStatus", {})
 
 
+_SWITCH_STATE_KEYS = ("output", "ison", "on", "state")
+_SWITCH_MEASURE_KEYS = ("apower", "power", "voltage", "current", "aenergy")
+
+
+def _is_usable_switch_status(data: Any) -> bool:
+    """True when the payload really is a reading of a switch.
+
+    A dict with an ``error`` block, or one carrying neither a state nor a
+    measurement, is a FAILED call -- not a plug drawing 0 W. Returning one
+    made an unreachable plug look exactly like a plug at 0 W: a history row
+    with ``total_power = 0.0`` and ``a_voltage = NULL`` for every minute of
+    an outage, and "Live poll recovered" while the device was still gone.
+    """
+    if not isinstance(data, dict) or not data or "error" in data:
+        return False
+    return any(k in data for k in _SWITCH_STATE_KEYS + _SWITCH_MEASURE_KEYS)
+
+
 def get_switch_status(client: ShellyHttp, host: str, switch_id: int) -> Dict[str, Any]:
     """Return switch status with robust fallbacks.
 
@@ -468,10 +486,19 @@ def get_switch_status(client: ShellyHttp, host: str, switch_id: int) -> Dict[str
     sid = int(switch_id)
 
     # --- Primary: Gen2 component status
+    # The first real exception is kept: when nothing answers, it is raised so
+    # the log names the true cause ("connection refused", a timeout, ...).
+    first_err: Optional[BaseException] = None
     try:
         data = rpc_call(client, host, "Switch.GetStatus", {"id": sid})
-    except Exception:
-        data = {"error": {"message": "Switch.GetStatus failed"}}
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        # The host itself is unreachable. The fallbacks below ask the SAME
+        # host and would only triple the time until the outage is reported
+        # (about 40 s with the default retries instead of one round).
+        raise
+    except Exception as e:
+        first_err = e
+        data = {}
 
     # Happy path: already contains a recognizable state.
     if isinstance(data, dict) and "error" not in data:
@@ -534,7 +561,15 @@ def get_switch_status(client: ShellyHttp, host: str, switch_id: int) -> Dict[str
     except Exception:
         pass
 
-    return data
+    # A payload we cannot read is NOT a measurement. Raising here makes the
+    # live poller count a failure, back off, write no sample and no history
+    # minute -- a gap instead of a fake 0 W -- and only log "recovered" after
+    # a real answer.
+    if _is_usable_switch_status(data):
+        return data
+    if first_err is not None:
+        raise first_err
+    raise RuntimeError(f"no readable switch status from {host} (id={sid})")
 
 
 def schedule_list(client: ShellyHttp, host: str) -> Dict[str, Any]:

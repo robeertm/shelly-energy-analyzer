@@ -1,5 +1,43 @@
 # Changelog
 
+## 17.11.6
+
+An unreachable plug is now a gap in the history instead of a plug drawing 0 W.
+
+### Fixed
+
+- **Offline plugs stored as 0 W**: when a plug (`kind: switch`) did not answer, the status call
+  returned an error payload instead of failing. The live poller read it as 0 W / 0 V, so every
+  minute of an outage got a history row with `total_power = 0` and an empty voltage, and averages,
+  standby figures and costs were pulled down. A failed poll now fails: no sample, no minute row,
+  a gap in the charts, nothing counted. Meters were never affected.
+- **Flapping minutes**: failed polls are no longer averaged in as 0 V (a minute with two good
+  readings and one failed poll used to show ~160 V).
+- **"Live poll recovered" during an outage**: the error payload counted as a success, so the log
+  said "recovered" every ~40 s while the plug was still gone. It is now logged only after a real
+  answer, the log names the real cause (e.g. "connection refused") and the usual backoff applies.
+- **Faster outage detection**: an unreachable plug is no longer asked three different ways
+  (component status, device status, legacy status) on the same dead host; the failure is reported
+  after one round instead of about 40 s.
+- Turning a plug on/off from the dashboard while it is unreachable now reports an error instead
+  of silently showing it as "off".
+
+### Added
+
+- **"Offline" on the live card**: once a device's last reading is older than two minutes (or four
+  poll intervals, if that is longer), its card shows an "Offline" badge with the age of the last
+  reading and no power figure, and the Aurora "now" total leaves it out. The badge disappears with
+  the first real answer. `/api/state` reports `offline` and `sample_age_s` per device. Texts in all
+  nine languages.
+
+### Tests
+
+- `tests/test_offline_plug_gap.py`: dead plug raises with the real cause and is not retried through
+  the fallbacks, every readable answer (Gen2, Gen1 fallback, odd firmware) still passes, the poller
+  gives no sample and no "recovered" for a dead plug and exactly one after a real answer, the minute
+  history leaves a gap, `/api/state` offline flag (stale, fresh, just added, external PV source,
+  slow poll interval), live card and Aurora sum in node. 11 of 14 fail on 17.11.5.
+
 ## 17.11.5
 
 Phone layout pass: the dashboard and the settings page were walked at 390 px and 1512 px

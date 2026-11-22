@@ -881,11 +881,13 @@
     for (var i = 0; i < draw.length; i++) {
       var d = draw[i];
       if (!counts(d)) continue;
-      var w = Number(d.power_w) || 0;
+      // An offline device (issue #23) has no current power: its last reading
+      // is stale and must not keep adding to "now".
+      var w = d.offline ? 0 : (Number(d.power_w) || 0);
       out.totalW += w;
       out.kwh    += Number(d.today_kwh)  || 0;
       out.cost   += Number(d.cost_today) || 0;
-      if (!out.top || w > (Number(out.top.power_w) || 0)) out.top = d;
+      if (!d.offline && (!out.top || w > (Number(out.top.power_w) || 0))) out.top = d;
     }
     return out;
   }
@@ -970,7 +972,7 @@
       var el = document.getElementById("dc-" + d.key);
       if (!el) continue;
       var hue = DEV_HUES[tintIdx(d.key)];
-      var lift = Math.min(1, (Number(d.power_w) || 0) / 3000);
+      var lift = d.offline ? 0 : Math.min(1, (Number(d.power_w) || 0) / 3000);
       if (el.__auHue !== hue) {
         el.style.setProperty("--dev-hue", String(hue));
         el.style.setProperty("--dev-tint", "hsl(" + hue + " 62% 60% / .12)");

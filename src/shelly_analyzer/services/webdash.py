@@ -1735,6 +1735,7 @@ _HTML_TEMPLATE = """<!doctype html>
     /* ── Power colour ── */
     .pwr-low {{ color: var(--pwr-low); }}
     .pwr-med {{ color: var(--pwr-med); }}
+    .pwr-off {{ color: var(--muted); }}
     .pwr-high {{ color: var(--pwr-high); }}
     /* ── Controls row ── */
     .controls-row {{
@@ -1791,6 +1792,9 @@ _HTML_TEMPLATE = """<!doctype html>
     .dev-power {{ font-size: 26px; font-weight: 700; }}
     .dev-meta {{ font-size: 12px; color: var(--muted); margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }}
     .soc-badge {{ color: #4caf50; font-weight: 600; }}
+    /* Issue #23: a device that stopped answering is marked, not shown as 0 W. */
+    .off-badge {{ color: #b45309; background: rgba(245,158,11,.14); border: 1px solid rgba(245,158,11,.38); border-radius: 999px; padding: 0 8px; font-weight: 700; white-space: nowrap; }}
+    .dev-card.dev-offline .dev-power {{ opacity: .45; }}
     .dev-expand {{ display: none; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }}
     .dev-expand.open {{ display: block; }}
     /* ── Live card detail ──────────────────────────────────────────────
@@ -4908,6 +4912,9 @@ function _pwrVal(d) {{
 // Formatted power string incl. unit. Battery gets an explicit leading + on
 // charge so charge (+) / discharge (−) reads unmistakably on the tile.
 function _pwrText(d) {{
+  // A device that stopped answering has no current power — its last reading
+  // is old, and a made-up 0 W would look like a device that is simply off.
+  if (d && d.offline) return '\u2014';
   // Battery: discharge shows a leading '−' (negative value); charge shows the
   // plain number (no '+') — direction is already conveyed by the tile colour.
   const v = _pwrVal(d);
@@ -5661,7 +5668,7 @@ function _applyCardTint(div, key) {{
 
 function buildDeviceCard(d) {{
   const div = document.createElement('div');
-  div.className = 'dev-card';
+  div.className = 'dev-card' + (d.offline ? ' dev-offline' : '');
   div.id = 'dc-' + d.key;
   _applyCardTint(div, d.key);
   div.innerHTML = devCardHTML(d);
@@ -5774,8 +5781,19 @@ function _phaseSpread(phases) {{
   return Math.round(Math.max.apply(null, pcts) - Math.min.apply(null, pcts));
 }}
 
+// "Offline" badge of a live card (issue #23). The tooltip says how old the
+// last reading is.
+function _offBadgeTitle(d) {{
+  const age = Number(d && d.sample_age_s);
+  const min = (isFinite(age) && age > 0) ? Math.max(1, Math.round(age / 60)) : 0;
+  return t('live.cards.offline_title', 'No answer from the device. Last reading {{min}} min ago.', {{min: min}});
+}}
+function _offBadgeHTML(d) {{
+  if (!d || !d.offline) return '';
+  return '<span class="off-badge" title="' + esc(_offBadgeTitle(d)) + '">\u26a0 ' + esc(t('live.cards.offline', 'Offline')) + '</span>';
+}}
 function devCardHTML(d) {{
-  const pc = pwrClass(d.power_w || 0);
+  const pc = d.offline ? 'pwr-off' : pwrClass(d.power_w || 0);
   const phases = (d.phases && d.phases.length > 0) ? d.phases : null;
   // Three phases used to be three run-on strings ("229.3 V · 0.52 A · 112 W").
   // They are a table: one aligned row each, over a bar that shows the split.
@@ -5824,9 +5842,10 @@ function devCardHTML(d) {{
           '<span class="m-kwh">' + _kwhInner(d) + '</span>' +
           (d.cost_today !== undefined ? '<span class="m-cost">' + fmt(d.cost_today, 2) + ' €</span>' : '') +
           (d.soc_pct && d.soc_pct > 0 ? '<span class="soc-badge">🔋 ' + fmt(d.soc_pct, 0) + '%</span>' : '') +
+          _offBadgeHTML(d) +
         '</div>' +
       '</div>' +
-      (function(){{ var c=_flowCol(d.flow_role,d.power_w); return '<div class="dev-power ' + pc + '"' + (c?' style="color:'+c+'"':'') + '>' + _pwrText(d) + '</div>'; }})() +
+      (function(){{ var c=d.offline ? '' : _flowCol(d.flow_role,d.power_w); return '<div class="dev-power ' + pc + '"' + (c?' style="color:'+c+'"':'') + '>' + _pwrText(d) + '</div>'; }})() +
     '</div>' +
     (d.kind === 'switch' ? '<div class="switch-row" id="sw-' + d.key + '"><span class="switch-label">' + t('live.cards.switch', 'Switch') + ':</span> <span class="switch-state ' + (d.switch_on ? 'on' : 'off') + '">' + (d.switch_on ? t('live.switch.on', 'On') : t('live.switch.off', 'Off')) + '</span> <button class="switch-btn" data-devkey="' + d.key + '">' + t('live.switch.toggle', 'Toggle') + '</button></div>' : '') +
     '<div class="sparkline-wrap" data-metric="w" data-devkey="' + d.key + '"><canvas class="sparkline" id="sp-' + d.key + '"></canvas></div>' +
@@ -5904,9 +5923,9 @@ function _drawCardSparks(d) {{
 }}
 
 function updateDeviceCard(card, d) {{
-  const pc = pwrClass(d.power_w || 0);
+  const pc = d.offline ? 'pwr-off' : pwrClass(d.power_w || 0);
   flowRole[d.key] = d.flow_role || '';
-  const pwCol = _flowCol(d.flow_role, d.power_w);
+  const pwCol = d.offline ? '' : _flowCol(d.flow_role, d.power_w);
   const pw = card.querySelector('.dev-power');
   if (pw) {{ pw.textContent = _pwrText(d); pw.className = 'dev-power ' + pc; pw.style.color = pwCol || ''; }}
   const meta = card.querySelector('.dev-meta');
@@ -5923,7 +5942,16 @@ function updateDeviceCard(card, d) {{
       if (!socEl) {{ socEl = document.createElement('span'); socEl.className = 'soc-badge'; meta.appendChild(socEl); }}
       socEl.textContent = '🔋 ' + fmt(d.soc_pct, 0) + '%';
     }} else if (socEl) {{ socEl.remove(); }}
+    // Offline badge (issue #23): added while the last reading is stale,
+    // removed again with the first real answer.
+    let offEl = meta.querySelector('.off-badge');
+    if (d.offline) {{
+      if (!offEl) {{ offEl = document.createElement('span'); offEl.className = 'off-badge'; meta.appendChild(offEl); }}
+      offEl.textContent = '\u26a0 ' + t('live.cards.offline', 'Offline');
+      offEl.title = _offBadgeTitle(d);
+    }} else if (offEl) {{ offEl.remove(); }}
   }}
+  card.classList.toggle('dev-offline', !!d.offline);
   _drawCardSparks(d);
   // Update the detail panel. Every value is addressed by its own data-* hook
   // inside THIS card, so a changed layout can never shift values onto the wrong

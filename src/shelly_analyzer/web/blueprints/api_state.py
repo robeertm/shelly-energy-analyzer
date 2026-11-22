@@ -18,6 +18,23 @@ bp = Blueprint("api_state", __name__)
 _SYNTH_KEYS = ("pv", "battery", "grid_ext")
 
 
+# A reading older than this is no longer "live". The poller's answer deadline
+# is timeout*(retries+1)+2 (34 s with the defaults) and its backoff caps at
+# 30 s, so a device that is merely slow can trail by about a minute; a slow
+# poll interval stretches the limit.
+LIVE_STALE_AFTER_S = 120.0
+
+
+def live_stale_after_s(poll_seconds: Any = None) -> float:
+    try:
+        poll = float(poll_seconds or 0.0)
+    except (TypeError, ValueError):
+        poll = 0.0
+    if not math.isfinite(poll) or poll < 0.0:
+        poll = 0.0
+    return max(LIVE_STALE_AFTER_S, 4.0 * poll)
+
+
 def _device_name(meta: Dict[str, Any], dkey: str, lang: str) -> str:
     if not meta.get("name") and dkey in _SYNTH_KEYS:
         return _t(lang, "live.synth." + dkey)
@@ -182,6 +199,10 @@ def api_state():
         if isinstance(d, dict) and d.get("key")
     }
 
+    _stale_after = live_stale_after_s(
+        getattr(getattr(getattr(state, "cfg", None), "ui", None), "live_poll_seconds", None))
+    _now_s = _time.time()
+
     devices_list: List[Dict[str, Any]] = []
     for dkey, points in raw_snap.items():
         if dkey.startswith("_") or not isinstance(points, list) or not points:
@@ -237,6 +258,19 @@ def api_state():
         dev_kind = str(meta.get("kind") or "em")
         switch_on = switch_states_map.get(dkey) if dev_kind == "switch" else None
 
+        # Issue #23: a device that stopped answering keeps its last reading in
+        # the buffer. Say how old it is, and flag a configured Shelly as
+        # offline once that reading is stale, instead of passing it off as live.
+        try:
+            _ts = float(latest.get("ts") or 0.0)
+        except (TypeError, ValueError):
+            _ts = 0.0
+        _age = max(0.0, _now_s - _ts) if _ts > 0 else None
+        _offline = bool(
+            _age is not None and _age > _stale_after
+            and dkey not in _SYNTH_KEYS and bool(meta)
+        )
+
         devices_list.append({
             "key": dkey,
             "name": name,
@@ -251,10 +285,13 @@ def api_state():
             "freq_hz": float(latest.get("freq_hz") or 50),
             "phases": phases,
             "q_phases": q_phases,
-            "appliances": appl_objs,
+            # No appliance guess from a reading that is no longer current.
+            "appliances": ([] if _offline else appl_objs),
             "i_n": _compute_i_n(float(latest.get("i_n") or 0), ia, ib, ic, va, vb, vc),
             "q_total_var": float(latest.get("q_total_var") or 0),
             "switch_on": switch_on,
+            "sample_age_s": (round(_age, 1) if _age is not None else None),
+            "offline": _offline,
             "flow_role": _flow_role(dkey),
             "today_in_kwh": float((_daily.get(dkey) or {}).get("charge", 0.0)),
             "today_out_kwh": float((_daily.get(dkey) or {}).get("discharge", 0.0)),
@@ -288,6 +325,9 @@ def api_state():
             "i_n": 0.0,
             "q_total_var": 0.0,
             "switch_on": None,
+            # A device that was just added is not "offline" yet.
+            "sample_age_s": None,
+            "offline": False,
             "flow_role": _flow_role(k),
             "today_in_kwh": 0.0,
             "today_out_kwh": 0.0,

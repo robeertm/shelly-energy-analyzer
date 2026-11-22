@@ -662,6 +662,12 @@ html[data-skin="aurora"] .badge-yellow {
 }
 html[data-skin="aurora"][data-theme="light"] .badge-yellow { color: var(--ctp-peach); }
 html[data-skin="aurora"] .soc-badge { color: var(--ctp-green); }
+html[data-skin="aurora"] .off-badge {
+  background: color-mix(in srgb, var(--ctp-peach) 16%, transparent);
+  color: var(--ctp-peach);
+  border-color: color-mix(in srgb, var(--ctp-peach) 38%, transparent);
+}
+html[data-skin="aurora"][data-theme="light"] .off-badge { color: #b45309; }
 
 html[data-skin="aurora"] .error-msg {
   color: var(--ctp-red);

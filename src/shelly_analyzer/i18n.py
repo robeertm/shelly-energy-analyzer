@@ -32062,3 +32062,19 @@ for _l, (_all, _hint) in {
     "ru": ("🏠 Весь дом (все устройства)", "Весь дом: сумма всех устройств ({n}), каждое учтено только один раз."),
 }.items():
     _I18N.setdefault(_l, {}).update({"web.weather.scope_all": _all, "web.weather.scope_hint": _hint})
+
+
+# 17.11.6 Live card: a device that stopped answering is marked "Offline"
+# instead of showing a stale or made-up 0 W (issue #23).
+for _l, (_off, _off_title) in {
+    "en": ("Offline", "No answer from the device. Last reading {min} min ago."),
+    "de": ("Offline", "Das Gerät antwortet nicht. Letzter Messwert vor {min} min."),
+    "es": ("Sin conexión", "El dispositivo no responde. Última lectura hace {min} min."),
+    "fr": ("Hors ligne", "L'appareil ne répond pas. Dernière mesure il y a {min} min."),
+    "pt": ("Offline", "O dispositivo não responde. Última leitura há {min} min."),
+    "it": ("Offline", "Il dispositivo non risponde. Ultima lettura {min} min fa."),
+    "pl": ("Offline", "Urządzenie nie odpowiada. Ostatni odczyt: {min} min temu."),
+    "cs": ("Offline", "Zařízení neodpovídá. Poslední měření před {min} min."),
+    "ru": ("Не в сети", "Устройство не отвечает. Последнее измерение: {min} мин назад."),
+}.items():
+    _I18N.setdefault(_l, {}).update({"live.cards.offline": _off, "live.cards.offline_title": _off_title})
