@@ -24,6 +24,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+import _dbcache
 from shelly_analyzer.io.config import load_config, save_config
 from shelly_analyzer.io.storage import Storage
 from shelly_analyzer.services import ev_link
@@ -85,11 +86,17 @@ def _build(tmp: Path, *, link_enabled=True, token="s3cret", settle=20,
     day0 = (datetime.now() - timedelta(days=5)).replace(hour=0, minute=0, second=0,
                                                         microsecond=0)
     ends = datetime.now() if running_now else last_charge_ends_at
-    for key, pts in _house(day0, 4, last_charge_ends_at=ends).items():
-        df = pd.DataFrame({"timestamp": [p[0] for p in pts],
-                           "total_power": [p[1] for p in pts],
-                           "energy_kwh": [abs(p[1]) * STEP / 3600.0 / 1000.0 for p in pts]})
-        st.db.insert_dataframe(key, df)
+
+    def _fill(store):
+        for key, pts in _house(day0, 4, last_charge_ends_at=ends).items():
+            df = pd.DataFrame({"timestamp": [p[0] for p in pts],
+                               "total_power": [p[1] for p in pts],
+                               "energy_kwh": [abs(p[1]) * STEP / 3600.0 / 1000.0 for p in pts]})
+            store.db.insert_dataframe(key, df)
+
+    # running_now moves with the clock, so it is keyed by the minute.
+    _dbcache.seed(st, ("link", day0, ends.replace(second=0, microsecond=0) if ends else None),
+                  _fill)
 
     cfg_path = tmp / "config.json"
     solar = ({"enabled": True, "grid_meter_device_key": "grid",

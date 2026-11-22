@@ -18,6 +18,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+import _dbcache
 from shelly_analyzer.io.config import load_config, save_config
 from shelly_analyzer.io.storage import Storage
 from shelly_analyzer.web.action_dispatch import ActionDispatcher
@@ -60,11 +61,15 @@ def _build(tmp: Path, mode="auto", solar_model="free"):
     st = Storage(tmp / "data")
     day0 = (datetime.now() - timedelta(days=4)).replace(hour=0, minute=0, second=0,
                                                         microsecond=0)
-    for key, pts in _house(day0, 4).items():
-        df = pd.DataFrame({"timestamp": [p[0] for p in pts],
-                           "total_power": [p[1] for p in pts],
-                           "energy_kwh": [abs(p[1]) * STEP / 3600.0 / 1000.0 for p in pts]})
-        st.db.insert_dataframe(key, df)
+
+    def _fill(store):
+        for key, pts in _house(day0, 4).items():
+            df = pd.DataFrame({"timestamp": [p[0] for p in pts],
+                               "total_power": [p[1] for p in pts],
+                               "energy_kwh": [abs(p[1]) * STEP / 3600.0 / 1000.0 for p in pts]})
+            store.db.insert_dataframe(key, df)
+
+    _dbcache.seed(st, ("source", day0), _fill)
 
     cfg_path = tmp / "config.json"
     cfg_path.write_text(json.dumps({
