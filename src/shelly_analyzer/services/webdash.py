@@ -2516,6 +2516,19 @@ _HTML_TEMPLATE = """<!doctype html>
       border-top: 1px solid var(--border);
       font-size: 11px; color: var(--muted);
     }}
+    /* Narrow screens (phone): touch targets >= 44 px, inputs >= 16 px so iOS does not zoom (H1) */
+    @media (max-width: 640px) {{
+      button, .btn, .btn-sm, .icon-btn, .filter-btn, .switch-btn, .au-anim-btn, summary,
+      select, input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]):not([type=color]) {{
+        min-height: 44px !important;
+      }}
+      button, .btn, .btn-sm, .icon-btn, .filter-btn, .switch-btn, .au-anim-btn {{ min-width: 44px; }}
+      select, textarea, input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]):not([type=color]) {{
+        font-size: 16px !important;
+      }}
+      input[type=checkbox], input[type=radio] {{ width: 22px; height: 22px; }}
+      label:has(> input[type=checkbox]), label:has(> input[type=radio]) {{ min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }}
+    }}
   </style>
 </head>
 <body>
@@ -11847,7 +11860,7 @@ _loadLsSettings();
     html += '<button class="btn btn-sm" onclick="addMainMeter()">➕ ' + t('cal.add_meter', 'Hauptzähler hinzufügen') + '</button>';
     html += '</div>';
     if (devs.length) {{
-      html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+      html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table style="width:100%;border-collapse:collapse;font-size:13px">';
       html += '<tr style="color:var(--muted);font-size:11px;text-transform:uppercase">' +
         '<th style="text-align:left;padding:4px 6px">' + t('cal.device', 'Gerät') + '</th>' +
         '<th style="text-align:left;padding:4px 6px">' + t('cal.type', 'Typ') + '</th>' +
@@ -11870,7 +11883,7 @@ _loadLsSettings();
           : '') + '</td>';
         html += '</tr>';
       }});
-      html += '</table>';
+      html += '</table></div>';
     }}
     meters.forEach(m => {{
       const allKids = devs.filter(x => x.parent === m.id && x.kind === 'em');
@@ -14523,6 +14536,19 @@ _CONTROL_TEMPLATE = """<!doctype html>
     .inline-field {{ display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }}
     .inline-field label {{ min-width: 30px; }}
     .inline-field input, .inline-field select {{ flex: 1; min-width: 0; }}
+    /* Narrow screens (phone): touch targets >= 44 px, inputs >= 16 px so iOS does not zoom (H1) */
+    @media (max-width: 640px) {{
+      button, .btn, .btn-sm, .icon-btn, .filter-btn, .switch-btn, .au-anim-btn, summary,
+      select, input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]):not([type=color]) {{
+        min-height: 44px !important;
+      }}
+      button, .btn, .btn-sm, .icon-btn, .filter-btn, .switch-btn, .au-anim-btn {{ min-width: 44px; }}
+      select, textarea, input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]):not([type=color]) {{
+        font-size: 16px !important;
+      }}
+      input[type=checkbox], input[type=radio] {{ width: 22px; height: 22px; }}
+      label:has(> input[type=checkbox]), label:has(> input[type=radio]) {{ min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }}
+    }}
   </style>
 </head>
 <body>

@@ -1,5 +1,28 @@
 # Changelog
 
+## 17.11.5
+
+Phone layout pass: the dashboard and the settings page were walked at 390 px and 1512 px
+(simulated installation, English, German, French, Russian, both skins).
+
+### Fixed
+
+- **Touch targets**: buttons, links, selects and checkbox rows are at least 44 px high on narrow
+  screens (icon buttons, the live range buttons, the EV filter chips, the settings side links and
+  the "Test / Save / delete" buttons).
+- **Inputs**: text inputs and selects use 16 px on narrow screens, so iOS no longer zooms into the
+  page when a field is tapped.
+- **Settings, devices**: with long labels (German, French, Russian) the button row of a device card
+  pushed the page sideways; it now wraps.
+- **Calibration**: the device table no longer sticks out of the screen; it scrolls inside its card.
+- No sideways scrolling and no clipped content remain on any pane at 390 px.
+
+### Tests
+
+- `tests/e2e/test_layout_390.py` walks every pane and the settings page at 390 px (English and
+  German) and fails on sideways scrolling, clipped content, targets under 44 px or inputs under 16 px.
+  Shared checks live in `tests/e2e/layout_audit.py`.
+
 ## 17.11.4
 
 The dependency audit now checks real versions, and the git history is scanned

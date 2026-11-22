@@ -99,6 +99,18 @@ white-space:nowrap;font-size:.82rem;flex-shrink:0;border-radius:4px}
 main{padding:12px}
 section{padding:14px}
 }
+/* Narrow screens (phone): touch targets >= 44 px, inputs >= 16 px so iOS does not zoom (H1) */
+@media(max-width:640px){
+.list-item-hdr{flex-wrap:wrap}
+.list-item-hdr>div{flex-wrap:wrap !important}
+button,.btn,summary,select,header a,.sidebar a,nav a,input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]):not([type=color]){min-height:44px !important}
+header a,.sidebar a,nav a,button{display:inline-flex;align-items:center;min-width:44px}
+select,textarea,input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]):not([type=color]){font-size:16px !important}
+input[type=checkbox],input[type=radio]{width:22px;height:22px}
+label:has(>input[type=checkbox]),label:has(>input[type=radio]),label.field.row{min-height:44px !important}
+main a[style*=padding],a.primary{min-height:44px !important;display:inline-flex !important;align-items:center}
+label:has(>input[type=checkbox]):not(.field),label:has(>input[type=radio]):not(.field){display:inline-flex;align-items:center;gap:8px}
+}
 </style>
 </head>
 <body>
