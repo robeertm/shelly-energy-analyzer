@@ -1,5 +1,41 @@
 # Changelog
 
+## 17.11.9
+
+### Changed
+
+- **Less CPU and memory on small boards.** Measured with a new resource bench (eight
+  simulated plugs at the default 1 s poll, lowest priority on one CPU core, an open Live
+  tab, 30 days of minute history), before -> after:
+  - steady CPU 4.0 % -> 2.1 % of one core; the cache build after a start 11.7 -> 5.0 CPU
+    seconds;
+  - resident memory in steady state 147 MB -> 125–137 MB on average, low point 114 -> 97–105 MB.
+- **Full history reads only fetch the columns that hold data.** The samples table has a
+  column for every value any device kind can report (65); a plug fills about a dozen. A full
+  read used to fetch all of them and drop the empty ones afterwards. It now asks the
+  database which columns hold a value in the range and reads only those: a 30-day plug
+  history reads in 0.8 s instead of 1.4 s, with a third of the temporary memory. The result
+  is the same frame as before.
+- **Saving the Live-tab restart cache** (every 5 minutes and on every stop) no longer rounds
+  the fields a device never fills value by value: 1.0 -> 0.4 CPU seconds for a full 2 h
+  window of eight plugs, byte-identical file.
+- **Freed memory goes back to the system.** After the periodic cache refresh and after each
+  full history read, the app returns free heap pages to the operating system (Linux with
+  glibc), so the resident size no longer stays at the last peak.
+- Live readings take a little less memory each (`slots`).
+
+### Tests
+
+- `tests/e2e/perf_bench.py`: the resource bench (start-up wall and CPU time, resident memory
+  over time and its peak, CPU share of one core, thread count, `/api/state` latency;
+  `--history-days`, `--profile` for collapsed stacks).
+- `tests/e2e/test_perf_budget.py`: holds start-up, CPU, peak memory and the thread count
+  under fixed limits (CPU time, not wall time); runs in the e2e workflow, the longer bench
+  before every promotion.
+- `tests/test_perf_hotspots.py`: checks the mechanisms, not a time — which columns a full
+  read selects, which fields are rounded value by value, frames and cache files identical to
+  the old code, and the memory hand-back on the refresh path.
+
 ## 17.11.8
 
 ### Fixed

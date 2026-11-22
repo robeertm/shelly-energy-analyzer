@@ -14,6 +14,7 @@ import threading
 import sys
 from collections import deque
 from dataclasses import dataclass, field
+from operator import attrgetter
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
@@ -93,7 +94,7 @@ def _local_ip_guess() -> str:
         return "127.0.0.1"
 
 
-@dataclass
+@dataclass(slots=True)
 class LivePoint:
     ts: int
     power_total_w: float
@@ -159,15 +160,35 @@ def _round_value(v: float, decimals: int) -> Any:
     return i if r == i else r
 
 
+def _round_column(values: List[Any], decimals: int) -> List[Any]:
+    """``_round_value`` over a whole column, without a function call per value.
+    A value that is not finite (or not a number) sends the column through the
+    per-value path, which maps it to 0 exactly as before."""
+    try:
+        rounded = [round(v, decimals) for v in values]
+        return [int(r) if r == int(r) else r for r in rounded]
+    except (ValueError, OverflowError, TypeError):
+        return [_round_value(v, decimals) for v in values]
+
+
 def _encode_points(points: List["LivePoint"]) -> Dict[str, Any]:
     """One device's samples as columns (format 2). Timestamps are stored as the
     first value plus differences; a field that equals its default in every
-    sample is left out."""
+    sample is left out.
+
+    A plug fills 7 of the 23 fields; the other 16 sit at their default in every
+    sample. They are recognised with one ``list.count`` and never rounded value
+    by value — the save of a full 2 h window of eight plugs took ~1 s of CPU,
+    most of it rounding zeros (a value equal to its default rounds to it)."""
     ts = [int(p.ts) for p in points]
+    n = len(points)
     cols: Dict[str, List[Any]] = {}
     for name, default, decimals in _PERSIST_FIELDS:
-        col = [_round_value(getattr(p, name), decimals) for p in points]
-        if any(v != default for v in col):
+        raw = list(map(attrgetter(name), points))
+        if raw.count(default) == n:
+            continue
+        col = _round_column(raw, decimals)
+        if col.count(default) != n:
             cols[name] = col
     dts = [b - a for a, b in zip(ts, ts[1:])]
     return {"ts0": ts[0] if ts else 0, "dts": dts, "cols": cols}

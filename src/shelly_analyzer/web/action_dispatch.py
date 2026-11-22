@@ -25,6 +25,7 @@ import pandas as pd
 import numpy as np
 
 from shelly_analyzer import __version__
+from shelly_analyzer.core.memory import release_free_memory
 from shelly_analyzer.io.config import AppConfig, save_config
 from shelly_analyzer.io.storage import NoDataError, Storage
 from shelly_analyzer.io.http import (
@@ -654,6 +655,9 @@ class ActionDispatcher:
                 except Exception:
                     logger.debug("payload warm failed", exc_info=True)
             cycle += 1
+            # The rebuilds above free large temporary frames; give the pages
+            # back so the resident size does not stay at the build's peak.
+            release_free_memory()
             if self._warm_stop.wait(self._warm_interval):
                 return
 
@@ -774,6 +778,10 @@ class ActionDispatcher:
         except Exception:
             meta = None
         logger.info("full history rebuild for '%s' took %.1fs", d.key, time.time() - t0)
+        # A full read builds the whole history once more than it keeps; without
+        # this the next device's read stacks on top of the freed pages and the
+        # start-up peak grows with every device.
+        release_free_memory()
         return cd, meta
 
     def reload(self, cfg: AppConfig, lang: Optional[str] = None) -> None:
