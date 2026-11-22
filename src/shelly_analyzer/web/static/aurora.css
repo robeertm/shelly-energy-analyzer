@@ -546,6 +546,10 @@ html[data-skin="aurora"] .switch-state.off {
   color: var(--ctp-red);
   background: color-mix(in srgb, var(--ctp-red) 16%, transparent);
 }
+html[data-skin="aurora"] .switch-state.unknown {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+}
 html[data-skin="aurora"] .appl-chip {
   background: var(--chipbg);
   border: 1px solid var(--au-hairline);

@@ -1,5 +1,36 @@
 # Changelog
 
+## 17.11.8
+
+### Fixed
+
+- **"Online" in Settings for a device that no longer answers**: the device card in
+  Settings -> Devices called a device online as long as any reading of it was still in the
+  live buffer, which holds up to two hours and is restored after a restart. It now uses the
+  same rule as the Live tab: a reading older than the offline limit (two minutes, or four poll
+  intervals) is not "online". `/api/devices` also reports `sample_age_s`, and the status on the
+  page refreshes by itself every few seconds instead of only when the page is loaded.
+- **Changing a device's Host/IP**: the last readings still came from the old address, so the
+  device kept looking online. After an address change, Settings shows "Waiting for the first
+  reading" until the new address answers; if it does not answer within a few seconds, the
+  device is shown as offline in Settings and on the Live tab. The live poller already switched
+  to the new address on save; the log line now names the change (`host old -> new`), and if the
+  background services cannot be restarted the log says that the change needs a restart.
+- **"Switch: Off" right after a restart**: the restart cache holds measurements, not the switch
+  state, so the state is unknown until the plug answers. The Live card and the Control tab now
+  show a dash with a tooltip ("Switch state not known yet") instead of "Off"; the first answer
+  fills in On/Off as before.
+- **Background threads piling up**: saving a device restarts the background services, and the
+  live-feed thread of the previous start could miss the stop signal and keep running next to
+  the new one. Every start now gets its own stop signal, so a save leaves exactly one feed thread.
+
+### Tests
+
+- `tests/test_issue23_host_change.py`: age rule in `/api/devices` (restart grace, slow poll
+  interval, same answer as `/api/state`), address change (waiting, offline after the grace, online
+  with the first new reading, a rename is no address change), three-way switch state in node,
+  texts in all nine languages, one feed thread after three device saves.
+
 ## 17.11.7
 
 ### Fixed

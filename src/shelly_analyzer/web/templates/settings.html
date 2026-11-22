@@ -1069,7 +1069,37 @@ function _onTouchEnd(e) {
   toast(T("settings.devices.order_saved","Device order saved (live tab)"), "success");
 }
 
+// Issue #23: the status follows the age of the last reading (same rule as the
+// Live tab) and is refreshed in place, so a plug that stops answering -- or
+// whose address was just changed -- does not keep showing "Online".
+function _devStatusHTML(d) {
+  if (d.online) return '<span style="color:var(--ok)">● '+T("settings.devcard.online","Online")+'</span>';
+  if (d.waiting) return '<span style="color:var(--muted)">◌ '+T("settings.devcard.waiting","Waiting for the first reading")+'</span>';
+  return '<span style="color:var(--muted)">○ '+T("settings.devcard.offline","Offline / no data")+'</span>';
+}
+let _devStatusTimer = null;
+async function refreshDeviceStatus() {
+  if (document.hidden || !document.getElementById("devices-list")) return;
+  try {
+    const j = await fetch(seaUrl("/api/devices")).then(r=>r.json());
+    (j.devices || []).forEach(function(d) {
+      const k = (window.CSS && CSS.escape) ? CSS.escape(d.key) : d.key;
+      const dot = document.querySelector('[data-devdot="' + k + '"]');
+      if (dot) dot.classList.toggle("online", !!d.online);
+      const st = document.querySelector('[data-devstatus="' + k + '"]');
+      if (st) { const h = _devStatusHTML(d); if (st.innerHTML !== h) st.innerHTML = h; }
+      const cur = devices.find(function(x){ return x.key === d.key; });
+      if (cur) { cur.online = d.online; cur.waiting = d.waiting; cur.sample_age_s = d.sample_age_s; }
+    });
+  } catch(e) {}
+}
+function _startDeviceStatusRefresh() {
+  if (_devStatusTimer) return;
+  _devStatusTimer = setInterval(refreshDeviceStatus, 5000);
+}
+
 function renderDevices() {
+  _startDeviceStatusRefresh();
   const hidden = _loadHiddenDevs();
   const ordered = _orderedDevices(devices);
   const rows = ordered.map(d=>{
@@ -1079,7 +1109,7 @@ function renderDevices() {
     <div class="list-item" data-devkey="${esckey}" draggable="false">
       <div class="list-item-hdr">
         <span class="drag-handle" draggable="true" title="${T("settings.devices.drag_hint","Drag to reorder")}" style="cursor:grab;font-size:18px;color:var(--muted);user-select:none;padding:2px 6px">⋮⋮</span>
-        <span class="list-item-title"><span class="dot ${d.online?"online":""}"></span>${esc(d.name||d.key)}</span>
+        <span class="list-item-title"><span class="dot ${d.online?"online":""}" data-devdot="${esckey}"></span>${esc(d.name||d.key)}</span>
         <div style="display:flex;gap:6px;align-items:center">
           <label title="${T("settings.devices.show_on_live","Show on Live tab")}" style="display:inline-flex;align-items:center;gap:4px;font-size:.78rem;color:var(--muted);cursor:pointer">
             <input type="checkbox" ${isHidden?"":"checked"} onchange="toggleDevHidden('${esckey}')" style="margin:0">
@@ -1117,7 +1147,7 @@ function renderDevices() {
         <div class="field"><label>${T("settings.devcard.http_pw","HTTP password")}</label><input type="password" data-df="password" value="${d.has_password?"***":""}" placeholder="${d.has_password?T("settings.devcard.pw_saved","(saved – type to change)"):T("settings.devcard.pw_empty","leave empty for unprotected device")}" autocomplete="off"></div>
         <label class="field row" style="grid-column:1/-1"><span>${T("settings.devcard.emdata","EMData / historical data supported")}</span><input type="checkbox" data-df="supports_emdata" ${d.supports_emdata!==false?"checked":""}></label>
       </div>
-      <div class="hint" style="margin-top:6px;font-size:.72rem">${T("settings.devcard.status_lbl","Status")}: ${d.online?'<span style="color:var(--ok)">● '+T("settings.devcard.online","Online")+'</span>':'<span style="color:var(--muted)">○ '+T("settings.devcard.offline","Offline / no data")+'</span>'}${d.has_password?' &nbsp;·&nbsp; <span style="color:var(--accent)">🔒 '+T("settings.devcard.pw_set","password set")+'</span>':''}</div>
+      <div class="hint" style="margin-top:6px;font-size:.72rem">${T("settings.devcard.status_lbl","Status")}: <span data-devstatus="${esckey}">${_devStatusHTML(d)}</span>${d.has_password?' &nbsp;·&nbsp; <span style="color:var(--accent)">🔒 '+T("settings.devcard.pw_set","password set")+'</span>':''}</div>
     </div>`;
   }).join("");
   setTimeout(_wireDeviceDragHandlers, 0);

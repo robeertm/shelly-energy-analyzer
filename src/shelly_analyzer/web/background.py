@@ -130,7 +130,12 @@ class BackgroundServiceManager:
 
     def start_all(self) -> None:
         """Start all enabled background services."""
-        self._stop_event.clear()
+        # A fresh stop signal per start. Clearing the old one let a thread
+        # that was busy (the live feed waits in queue.get, not on the event)
+        # miss the stop of a reload, so every device save left one more
+        # thread running (issue #23 follow-up). Threads capture the event
+        # they were started with.
+        self._stop_event = threading.Event()
         self._init_nilm_learners()
         self._start_live_poller()
         self._start_scheduler()
@@ -251,16 +256,24 @@ class BackgroundServiceManager:
                 )
             self._live_poller.start()
 
-            # Start feed thread: reads from poller queue and feeds LiveStateStore
-            self._feed_thread = threading.Thread(target=self._feed_loop, daemon=True)
+            # Start feed thread: reads from poller queue and feeds LiveStateStore.
+            # It gets its own poller and stop signal: after a reload the old
+            # thread must end, not start draining the new poller as well.
+            self._feed_thread = threading.Thread(
+                target=self._feed_loop, args=(self._live_poller, self._stop_event),
+                name="LiveFeed", daemon=True)
             self._feed_thread.start()
             logger.info("Live poller started for %d devices", len(self.cfg.devices))
         except Exception as e:
             logger.error("Failed to start live poller: %s", e)
 
-    def _feed_loop(self) -> None:
+    def _feed_loop(self, poller: Any = None, stop: Optional[threading.Event] = None) -> None:
         """Drain live samples from poller queue into LiveStateStore."""
         import queue
+        if poller is None:
+            poller = self._live_poller
+        if stop is None:
+            stop = self._stop_event
         from datetime import datetime, date as _date
 
         # Cache the effective price per date so we both honor the tariff schedule
@@ -283,9 +296,9 @@ class BackgroundServiceManager:
                         _price_cache.pop(old, None)
             return p
 
-        while not self._stop_event.is_set():
+        while not stop.is_set():
             try:
-                sample = self._live_poller.samples.get(timeout=1.0)
+                sample = poller.samples.get(timeout=1.0)
             except queue.Empty:
                 continue
             except Exception:
@@ -990,18 +1003,18 @@ class BackgroundServiceManager:
             except Exception as e:
                 logger.warning("%s failed: %s", label, e)
 
+        stop = self._stop_event
+
         def _sync_loop():
             # Immediate initial sync after a short warm-up (3 s) so the web
             # server is already accepting requests while sync runs.
-            self._stop_event.wait(3.0)
-            if self._stop_event.is_set():
+            if stop.wait(3.0):
                 return
             _run_sync("Initial sync on startup")
             if not periodic_enabled:
                 return
-            while not self._stop_event.is_set():
-                self._stop_event.wait(interval_s)
-                if self._stop_event.is_set():
+            while not stop.is_set():
+                if stop.wait(interval_s):
                     break
                 _run_sync("Auto-sync")
 
@@ -1357,12 +1370,13 @@ class BackgroundServiceManager:
             logger.debug("Update checker disabled via config")
             return
         self._update_check_thread = threading.Thread(
-            target=self._update_check_loop, name="UpdateChecker", daemon=True,
+            target=self._update_check_loop, args=(self._stop_event,),
+            name="UpdateChecker", daemon=True,
         )
         self._update_check_thread.start()
         logger.info("Update checker started")
 
-    def _update_check_loop(self) -> None:
+    def _update_check_loop(self, stop: Optional[threading.Event] = None) -> None:
         """Periodically query GitHub for the latest release.
 
         - Default interval: 30 minutes (= 2 requests/hour, well under GitHub's
@@ -1370,6 +1384,8 @@ class BackgroundServiceManager:
         - On HTTP 403 (rate limit) or repeated failure, back off exponentially
           up to 1 hour so we stop hammering GitHub.
         """
+        if stop is None:
+            stop = self._stop_event
         from shelly_analyzer import __version__
         from shelly_analyzer.io.config import update_channel
         from shelly_analyzer.services.updater import check_latest_release, is_newer
@@ -1385,10 +1401,10 @@ class BackgroundServiceManager:
         consecutive_failures = 0
 
         # Short delay so the app is up before we hit the network.
-        if self._stop_event.wait(5.0):
+        if stop.wait(5.0):
             return
 
-        while not self._stop_event.is_set():
+        while not stop.is_set():
             rate_limited = False
             try:
                 repo = str(getattr(getattr(self.cfg, "updates", None), "repo", "") or "").strip()
@@ -1446,7 +1462,7 @@ class BackgroundServiceManager:
                 if rate_limited:
                     logger.info("GitHub rate limited; backing off %ds", wait_s)
 
-            if self._stop_event.wait(wait_s):
+            if stop.wait(wait_s):
                 return
 
     # ── Live history persistence ──────────────────────────────────────
@@ -1483,16 +1499,18 @@ class BackgroundServiceManager:
         every 30 s. (At a 1 s poll and the 2 h window the buffer of eight
         devices holds ~58,000 samples; written every 30 s in the old format
         that was 30–60 GB of disk writes a day — issue #20.)"""
+        stop = self._stop_event
+
         def _loop():
             # First save 5 s after start so we don't immediately write an
             # empty file on a fresh boot (lets the load-on-startup path
             # survive if the previous shutdown didn't get a chance to save).
-            if self._stop_event.wait(5.0):
+            if stop.wait(5.0):
                 return
             remove_orphaned_live_history_tmp(self.out_dir)
-            while not self._stop_event.is_set():
+            while not stop.is_set():
                 self._save_live_history()
-                if self._stop_event.wait(LIVE_HISTORY_SAVE_SECONDS):
+                if stop.wait(LIVE_HISTORY_SAVE_SECONDS):
                     return
         t = threading.Thread(target=_loop, name="LiveHistorySaver", daemon=True)
         t.start()
@@ -1921,7 +1939,8 @@ class BackgroundServiceManager:
                 self._summary_last_monthly = saved_m
         except Exception:
             pass
-        self._summary_thread = threading.Thread(target=self._summary_loop, daemon=True)
+        self._summary_thread = threading.Thread(target=self._summary_loop,
+                                                args=(self._stop_event,), daemon=True)
         self._summary_thread.start()
         logger.info("Summary scheduler started (last_daily=%s, last_monthly=%s)",
                      self._summary_last_daily, self._summary_last_monthly)
@@ -3326,15 +3345,17 @@ class BackgroundServiceManager:
         return build_pdf(out, chart_type, data,
                          chart if chart.exists() else None, lang)
 
-    def _summary_loop(self) -> None:
+    def _summary_loop(self, stop: Optional[threading.Event] = None) -> None:
         """Periodically check if daily/monthly summaries are due."""
+        if stop is None:
+            stop = self._stop_event
         from zoneinfo import ZoneInfo
         tz = ZoneInfo("Europe/Berlin")
 
         # Wait for services to be ready
-        self._stop_event.wait(10.0)
+        stop.wait(10.0)
 
-        while not self._stop_event.is_set():
+        while not stop.is_set():
             try:
                 now = datetime.now(tz)
                 ui = self.cfg.ui
@@ -3488,7 +3509,7 @@ class BackgroundServiceManager:
                 logger.exception("Summary loop outer error")
 
             # Check every 60 seconds
-            self._stop_event.wait(60.0)
+            stop.wait(60.0)
 
     def _persist_summary_dates(self) -> None:
         """Write last-sent dates to config so they survive restarts."""

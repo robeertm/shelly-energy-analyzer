@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Dict, List
@@ -19,6 +20,11 @@ from shelly_analyzer.io.config import (
     save_config,
 )
 from shelly_analyzer.i18n import t as _t
+from shelly_analyzer.web.blueprints.api_state import (
+    host_change_grace_s,
+    host_changed_at,
+    reading_is_stale,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +40,30 @@ def list_devices():
     """List all configured devices with optional live status."""
     state = _get_state()
     devices = []
-    snap = state.live_store.snapshot() if state.live_store else {}
+    # Only the newest point per device is needed; snapshot() would convert
+    # the whole two-hour buffer of every device just to test "not empty".
+    snap = state.live_store.latest_snapshot() if state.live_store else {}
+    poll_s = getattr(getattr(state.cfg, "ui", None), "live_poll_seconds", None)
+    now_s = time.time()
+
+    def _live_status(key: str) -> Dict[str, Any]:
+        """Issue #23: a reading still sitting in the live buffer is not proof
+        that the device answers. Same rule as the Live tab (/api/state): too
+        old, or taken before the address was changed, means not online."""
+        pts = snap.get(key) or []
+        try:
+            ts = float((pts[-1].get("ts") or 0.0) if pts else 0.0)
+        except (TypeError, ValueError, AttributeError):
+            ts = 0.0
+        since = host_changed_at(state, key)
+        age = round(max(0.0, now_s - ts), 1) if ts > 0 else None
+        from_old_host = bool(since and ts > 0 and ts < since)
+        online = ts > 0 and not from_old_host and not reading_is_stale(ts, poll_s, now_s, since)
+        # Address just changed and the new one has not answered yet, but
+        # still has time to: neither "online" nor "offline".
+        waiting = bool(since and not online and (ts <= 0 or from_old_host)
+                       and (now_s - since) <= host_change_grace_s(poll_s))
+        return {"online": bool(online), "waiting": waiting, "sample_age_s": age}
 
     for d in state.cfg.devices:
         info: Dict[str, Any] = {
@@ -47,7 +76,7 @@ def list_devices():
             "model": getattr(d, "model", ""),
             "phases": getattr(d, "phases", 3),
             "supports_emdata": getattr(d, "supports_emdata", True),
-            "online": d.key in snap and bool(snap[d.key]),
+            **_live_status(d.key),
             # Auth metadata: never expose the actual password to the browser.
             "username": getattr(d, "username", "admin") or "admin",
             "has_password": bool(getattr(d, "password", "") or ""),
@@ -75,7 +104,10 @@ def list_devices():
                     "key": _k, "name": _n, "host": "", "em_id": 0,
                     "kind": "em", "gen": 0, "model": "external",
                     "phases": 3, "supports_emdata": False,
+                    # External PV/battery/grid values are pushed, not
+                    # polled: no age rule here, as on the Live tab.
                     "online": _k in snap and bool(snap.get(_k)),
+                    "waiting": False, "sample_age_s": None,
                     "username": "", "has_password": False,
                     "synthetic": True,
                 })
@@ -223,6 +255,19 @@ def update_device(key: str):
     new_cfg = replace(state.cfg, devices=new_devices)
     cfg_path = getattr(state, "_cfg_path", None) or Path("config.json")
     save_config(new_cfg, cfg_path)
+    # Issue #23: readings taken before an address change came from the old
+    # address; remember when it changed so the status does not keep calling
+    # the device online on the strength of the old address's last answer.
+    readdressed = (updated.host != d.host or int(updated.em_id) != int(d.em_id))
+    if readdressed:
+        try:
+            changed = getattr(state, "_host_changed_at", None)
+            if not isinstance(changed, dict):
+                changed = {}
+                state._host_changed_at = changed  # type: ignore[attr-defined]
+            changed[key] = time.time()
+        except Exception:
+            pass
     state.cfg = new_cfg
     state.reload_config(new_cfg)
     # Restart background services (live poller etc.) so the new device list
@@ -232,10 +277,17 @@ def update_device(key: str):
         bg = getattr(state, "_bg", None)
         if bg is not None:
             bg.reload(new_cfg)
+        else:
+            logger.warning("No background service manager: the device change "
+                           "takes effect after a restart")
     except Exception as e:
-        logger.warning("Background reload after device change failed: %s", e)
+        logger.warning("Background reload after device change failed (the change "
+                       "takes effect after a restart): %s", e)
 
-    logger.info("Device updated: %s", key)
+    if updated.host != d.host:
+        logger.info("Device updated: %s (host %s -> %s)", key, d.host, updated.host)
+    else:
+        logger.info("Device updated: %s", key)
     return jsonify({"ok": True})
 
 

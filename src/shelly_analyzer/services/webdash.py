@@ -1913,6 +1913,7 @@ _HTML_TEMPLATE = """<!doctype html>
     }}
     .switch-state.on {{ color: #16a34a; background: rgba(22,163,74,0.12); }}
     .switch-state.off {{ color: #dc2626; background: rgba(220,38,38,0.12); }}
+    .switch-state.unknown {{ color: var(--muted); background: rgba(148,163,184,0.14); cursor: help; }}
     .switch-btn {{
       margin-left: auto;
       padding: 4px 14px;
@@ -3587,7 +3588,11 @@ function _ctrlDeviceCard(d, cfgMap) {{
   h += '<label class="ctrl-toggle" style="flex:0 0 auto">';
   h += '<input type="checkbox" ' + (isOn ? 'checked' : '') + ' onchange="ctrlToggle(\\'' + d.key + '\\',this.checked)">';
   h += '<span class="ctrl-slider"></span></label>';
-  h += '<span class="ctrl-state" id="ctrl-state-' + d.key + '" style="font-size:.82rem;font-weight:600;color:' + (isOn ? 'var(--ok)' : 'var(--muted)') + '">' + (isOn ? t('live.switch.on', 'On') : t('live.switch.off', 'Off')) + '</span>';
+  // Issue #23: unknown state (no answer yet) is shown as such, not as "Off".
+  const known = (d.switch_on === true || d.switch_on === false);
+  h += '<span class="ctrl-state" id="ctrl-state-' + d.key + '" style="font-size:.82rem;font-weight:600;color:' + (isOn ? 'var(--ok)' : 'var(--muted)') + '"'
+    + (known ? '' : ' title="' + esc(t('live.switch.unknown_title', 'Switch state not known yet')) + '"') + '>'
+    + (known ? (isOn ? t('live.switch.on', 'On') : t('live.switch.off', 'Off')) : esc(t('live.switch.unknown', '\u2014'))) + '</span>';
   h += '</div>';
   if (cat === 'Dimmer' || cat === 'RGBW') {{
     h += '<div style="margin-bottom:10px">';
@@ -5792,6 +5797,17 @@ function _offBadgeHTML(d) {{
   if (!d || !d.offline) return '';
   return '<span class="off-badge" title="' + esc(_offBadgeTitle(d)) + '">\u26a0 ' + esc(t('live.cards.offline', 'Offline')) + '</span>';
 }}
+// Issue #23: a switch state that is not known yet (right after a restart the
+// cached live view holds no switch state) is not "Off".
+function _switchStateHTML(d) {{
+  if (d && d.switch_on === true)
+    return '<span class="switch-state on">' + esc(t('live.switch.on', 'On')) + '</span>';
+  if (d && d.switch_on === false)
+    return '<span class="switch-state off">' + esc(t('live.switch.off', 'Off')) + '</span>';
+  return '<span class="switch-state unknown" title="'
+    + esc(t('live.switch.unknown_title', 'Switch state not known yet'))
+    + '">' + esc(t('live.switch.unknown', '\u2014')) + '</span>';
+}}
 function devCardHTML(d) {{
   const pc = d.offline ? 'pwr-off' : pwrClass(d.power_w || 0);
   const phases = (d.phases && d.phases.length > 0) ? d.phases : null;
@@ -5847,7 +5863,7 @@ function devCardHTML(d) {{
       '</div>' +
       (function(){{ var c=d.offline ? '' : _flowCol(d.flow_role,d.power_w); return '<div class="dev-power ' + pc + '"' + (c?' style="color:'+c+'"':'') + '>' + _pwrText(d) + '</div>'; }})() +
     '</div>' +
-    (d.kind === 'switch' ? '<div class="switch-row" id="sw-' + d.key + '"><span class="switch-label">' + t('live.cards.switch', 'Switch') + ':</span> <span class="switch-state ' + (d.switch_on ? 'on' : 'off') + '">' + (d.switch_on ? t('live.switch.on', 'On') : t('live.switch.off', 'Off')) + '</span> <button class="switch-btn" data-devkey="' + d.key + '">' + t('live.switch.toggle', 'Toggle') + '</button></div>' : '') +
+    (d.kind === 'switch' ? '<div class="switch-row" id="sw-' + d.key + '"><span class="switch-label">' + t('live.cards.switch', 'Switch') + ':</span> ' + _switchStateHTML(d) + ' <button class="switch-btn" data-devkey="' + d.key + '">' + t('live.switch.toggle', 'Toggle') + '</button></div>' : '') +
     '<div class="sparkline-wrap" data-metric="w" data-devkey="' + d.key + '"><canvas class="sparkline" id="sp-' + d.key + '"></canvas></div>' +
     (hasElec ? ('<div class="dev-expand">' +
       '<div class="dev-metrics">' +

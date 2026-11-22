@@ -41,6 +41,63 @@ def live_stale_after_s(poll_seconds: Any = None) -> float:
     return max(LIVE_STALE_AFTER_S, 4.0 * poll)
 
 
+def host_change_grace_s(poll_seconds: Any = None) -> float:
+    """How long a device whose address was just changed may take to answer.
+
+    Readings taken before the change came from the old address. They stop
+    counting as "live" once the new address had this long to answer."""
+    try:
+        poll = float(poll_seconds or 0.0)
+    except (TypeError, ValueError):
+        poll = 0.0
+    if not math.isfinite(poll) or poll < 0.0:
+        poll = 0.0
+    return max(10.0, 3.0 * poll)
+
+
+def reading_is_stale(ts: Any, poll_seconds: Any = None,
+                     now: Optional[float] = None,
+                     since: Optional[float] = None) -> bool:
+    """True when a reading is too old to be called "live" (issue #23).
+
+    One rule for every endpoint (``/api/state`` and ``/api/devices``):
+
+    * older than the stale limit, and the process up longer than that limit
+      -- right after a start the live view comes from the restart cache,
+      which is old by nature and no outage;
+    * or taken before the device's address was changed (``since``), once the
+      new address had ``host_change_grace_s`` to answer -- that reading came
+      from the old address.
+
+    A missing reading (``ts`` empty or 0) is not "stale": there is nothing
+    to judge.
+    """
+    try:
+        ts_f = float(ts or 0.0)
+    except (TypeError, ValueError):
+        return False
+    if not math.isfinite(ts_f) or ts_f <= 0:
+        return False
+    now_s = float(now if now is not None else _time.time())
+    try:
+        since_f = float(since or 0.0)
+    except (TypeError, ValueError):
+        since_f = 0.0
+    if since_f > 0 and ts_f < since_f and (now_s - since_f) > host_change_grace_s(poll_seconds):
+        return True
+    limit = live_stale_after_s(poll_seconds)
+    return (now_s - ts_f) > limit and (now_s - _PROCESS_START_S) > limit
+
+
+def host_changed_at(state: Any, key: str) -> Optional[float]:
+    """When the address of device ``key`` was last changed in this process."""
+    try:
+        v = (getattr(state, "_host_changed_at", None) or {}).get(key)
+        return float(v) if v else None
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
 def _device_name(meta: Dict[str, Any], dkey: str, lang: str) -> str:
     if not meta.get("name") and dkey in _SYNTH_KEYS:
         return _t(lang, "live.synth." + dkey)
@@ -205,8 +262,7 @@ def api_state():
         if isinstance(d, dict) and d.get("key")
     }
 
-    _stale_after = live_stale_after_s(
-        getattr(getattr(getattr(state, "cfg", None), "ui", None), "live_poll_seconds", None))
+    _poll_s = getattr(getattr(getattr(state, "cfg", None), "ui", None), "live_poll_seconds", None)
     _now_s = _time.time()
 
     devices_list: List[Dict[str, Any]] = []
@@ -273,8 +329,7 @@ def api_state():
             _ts = 0.0
         _age = max(0.0, _now_s - _ts) if _ts > 0 else None
         _offline = bool(
-            _age is not None and _age > _stale_after
-            and _now_s - _PROCESS_START_S > _stale_after
+            reading_is_stale(_ts, _poll_s, _now_s, host_changed_at(state, dkey))
             and dkey not in _SYNTH_KEYS and bool(meta)
         )
 

@@ -32078,3 +32078,24 @@ for _l, (_off, _off_title) in {
     "ru": ("Не в сети", "Устройство не отвечает. Последнее измерение: {min} мин назад."),
 }.items():
     _I18N.setdefault(_l, {}).update({"live.cards.offline": _off, "live.cards.offline_title": _off_title})
+
+
+# 17.11.8 (issue #23 follow-up): a switch state that is not known yet is shown
+# as a dash, not as "Off"; a device whose address was just changed is shown as
+# waiting for its first reading instead of "Online" on the old address's data.
+for _l, (_unk_title, _waiting) in {
+    "en": ("Switch state not known yet", "Waiting for the first reading"),
+    "de": ("Schalterzustand noch unbekannt", "Warte auf den ersten Messwert"),
+    "es": ("Estado del interruptor aún desconocido", "Esperando la primera lectura"),
+    "fr": ("État du commutateur encore inconnu", "En attente de la première mesure"),
+    "pt": ("Estado do interruptor ainda desconhecido", "À espera da primeira leitura"),
+    "it": ("Stato dell'interruttore non ancora noto", "In attesa della prima lettura"),
+    "pl": ("Stan przełącznika jeszcze nieznany", "Oczekiwanie na pierwszy odczyt"),
+    "cs": ("Stav spínače zatím není známý", "Čeká se na první měření"),
+    "ru": ("Состояние реле пока неизвестно", "Ожидание первого измерения"),
+}.items():
+    _I18N.setdefault(_l, {}).update({
+        "live.switch.unknown": "—",
+        "live.switch.unknown_title": _unk_title,
+        "settings.devcard.waiting": _waiting,
+    })
