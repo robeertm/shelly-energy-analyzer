@@ -32099,3 +32099,20 @@ for _l, (_unk_title, _waiting) in {
         "live.switch.unknown_title": _unk_title,
         "settings.devcard.waiting": _waiting,
     })
+
+
+# 17.11.10 (issue #23 follow-up): right after a start, a device that has not
+# answered yet is "Waiting" on its Live card (grey badge, no power figure)
+# instead of showing the last reading from the restart cache as live.
+for _l, (_wait, _wait_title) in {
+    "en": ("Waiting", "No answer since the start yet. Waiting for the first reading."),
+    "de": ("Wartet", "Seit dem Start noch keine Antwort. Warte auf den ersten Messwert."),
+    "es": ("Esperando", "Sin respuesta desde el inicio. Esperando la primera lectura."),
+    "fr": ("En attente", "Aucune réponse depuis le démarrage. En attente de la première mesure."),
+    "pt": ("À espera", "Sem resposta desde o arranque. À espera da primeira leitura."),
+    "it": ("In attesa", "Nessuna risposta dall’avvio. In attesa della prima lettura."),
+    "pl": ("Oczekiwanie", "Brak odpowiedzi od uruchomienia. Oczekiwanie na pierwszy odczyt."),
+    "cs": ("Čeká", "Od spuštění žádná odpověď. Čeká se na první měření."),
+    "ru": ("Ожидание", "С момента запуска нет ответа. Ожидание первого измерения."),
+}.items():
+    _I18N.setdefault(_l, {}).update({"live.cards.waiting": _wait, "live.cards.waiting_title": _wait_title})

@@ -119,9 +119,15 @@ def test_api_devices_does_not_call_a_stale_device_online():
 def test_restart_cache_is_not_an_outage(monkeypatch):
     from shelly_analyzer.web.blueprints import api_state as mod
     monkeypatch.setattr(mod, "_PROCESS_START_S", time.time() - 5)
-    assert _listed(_app())["gone"]["online"] is True
+    # Right after a start the cached reading is no outage -- but no proof of
+    # life either (17.11.10): "waiting", and the Live card is not "offline".
+    app = _app()
+    gone = _listed(app)["gone"]
+    assert gone["online"] is False and gone["waiting"] is True
+    assert _live(app)["gone"]["offline"] is False
     monkeypatch.setattr(mod, "_PROCESS_START_S", time.time() - 3600)
-    assert _listed(_app())["gone"]["online"] is False
+    gone = _listed(_app())["gone"]
+    assert gone["online"] is False and gone["waiting"] is False
 
 
 def test_slow_poll_interval_stretches_the_limit_in_settings_too():

@@ -1,5 +1,34 @@
 # Changelog
 
+## 17.11.10
+
+### Fixed
+
+- **A device that has not answered since a start is no longer shown as live.** Right after
+  a restart or an update the Live view is restored from a cache written before the restart.
+  17.11.7 kept those cached readings from triggering a false "Offline" by switching the age
+  check off for the first two minutes (four poll intervals on a slow poll) -- but during that
+  time an old cached reading counted as current. A plug that did not answer after the
+  restart was shown as "Online" in Settings -> Devices, and its Live card showed the last
+  reading from before the restart (often 0 W) without a badge. A cached reading always
+  predates the start of the process, so during those first minutes such a device is now
+  **waiting**, the same state a device already gets after a Host/IP change:
+  - Settings -> Devices: "Waiting for the first reading" instead of "Online";
+  - Live card: a grey "Waiting" badge and "—" instead of a power figure (the Control tab
+    shows "—" as well); the device is left out of the "Right now" total and "Biggest draw";
+  - the first real answer turns it into "Online" with its power value; if nothing answers,
+    it becomes "Offline" after the same two minutes as before -- still no false "Offline"
+    right after a start.
+- `/api/state` reports `waiting` per device (next to `offline`); `/api/devices` reports it
+  for this case too.
+
+### Tests
+
+- `tests/test_issue23_restart_grace.py`: the Settings and Live status during and after the
+  start grace, placeholders and pushed external values, the rule itself (whole-second
+  readings, host change, slow poll), the Live card and its badge in node, the Aurora sums,
+  and both new texts in all nine languages. Fails without the fix.
+
 ## 17.11.9
 
 ### Changed

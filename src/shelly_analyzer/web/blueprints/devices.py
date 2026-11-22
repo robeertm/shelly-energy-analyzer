@@ -21,7 +21,7 @@ from shelly_analyzer.io.config import (
 )
 from shelly_analyzer.i18n import t as _t
 from shelly_analyzer.web.blueprints.api_state import (
-    host_change_grace_s,
+    awaiting_first_reading,
     host_changed_at,
     reading_is_stale,
 )
@@ -57,13 +57,12 @@ def list_devices():
             ts = 0.0
         since = host_changed_at(state, key)
         age = round(max(0.0, now_s - ts), 1) if ts > 0 else None
-        from_old_host = bool(since and ts > 0 and ts < since)
-        online = ts > 0 and not from_old_host and not reading_is_stale(ts, poll_s, now_s, since)
-        # Address just changed and the new one has not answered yet, but
-        # still has time to: neither "online" nor "offline".
-        waiting = bool(since and not online and (ts <= 0 or from_old_host)
-                       and (now_s - since) <= host_change_grace_s(poll_s))
-        return {"online": bool(online), "waiting": waiting, "sample_age_s": age}
+        # Right after a start every reading comes from the restart cache, and
+        # after a host change from the old address: no proof that the device
+        # answers now. Neither "online" nor "offline" while it still has time.
+        waiting = awaiting_first_reading(ts, poll_s, now_s, since)
+        online = ts > 0 and not waiting and not reading_is_stale(ts, poll_s, now_s, since)
+        return {"online": bool(online), "waiting": bool(waiting), "sample_age_s": age}
 
     for d in state.cfg.devices:
         info: Dict[str, Any] = {

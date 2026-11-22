@@ -395,14 +395,14 @@ def test_card_update_adds_and_removes_the_badge():
     upd = _js_function(s, "updateDeviceCard")
     assert "off-badge" in upd and "offEl.remove()" in upd
     assert "classList.toggle('dev-offline'" in upd
-    assert "d.offline ? 'pwr-off'" in upd                # no load colour on the dash
+    assert "(d.offline || d.waiting) ? 'pwr-off'" in upd                # no load colour on the dash
     assert "_offBadgeHTML(d)" in _js_function(s, "devCardHTML")
 
 
 def test_aurora_now_sum_leaves_an_offline_device_out():
     js = (ROOT / "src" / "shelly_analyzer" / "web" / "static" / "aurora.js").read_text(encoding="utf-8")
-    assert "var w = d.offline ? 0 : (Number(d.power_w) || 0);" in js
-    assert "if (!d.offline && (!out.top" in js           # never the "biggest draw"
+    assert "var w = (d.offline || d.waiting) ? 0 : (Number(d.power_w) || 0);" in js
+    assert "if (!d.offline && !d.waiting && (!out.top" in js           # never the "biggest draw"
     css = (ROOT / "src" / "shelly_analyzer" / "web" / "static" / "aurora.css").read_text(encoding="utf-8")
     assert '.off-badge' in css
 

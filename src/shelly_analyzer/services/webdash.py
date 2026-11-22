@@ -1815,6 +1815,7 @@ _HTML_TEMPLATE = """<!doctype html>
     .soc-badge {{ color: #4caf50; font-weight: 600; }}
     /* Issue #23: a device that stopped answering is marked, not shown as 0 W. */
     .off-badge {{ color: #b45309; background: rgba(245,158,11,.14); border: 1px solid rgba(245,158,11,.38); border-radius: 999px; padding: 0 8px; font-weight: 700; white-space: nowrap; }}
+    .off-badge.wait {{ color: var(--muted); background: rgba(148,163,184,.14); border-color: rgba(148,163,184,.38); }}
     .dev-card.dev-offline .dev-power {{ opacity: .45; }}
     .dev-expand {{ display: none; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }}
     .dev-expand.open {{ display: block; }}
@@ -3596,13 +3597,15 @@ function _ctrlDeviceCard(d, cfgMap) {{
   const ml = model.toLowerCase();
   const cat = _guessCategory(ml, cd);
   const isOn = d.switch_on === true;
-  const powerW = (d.power_w || 0).toFixed(1);
+  // No current power for a device that is offline or has not answered since
+  // the start yet (issue #23).
+  const powerW = (d.offline || d.waiting) ? '\u2014' : (d.power_w || 0).toFixed(1) + ' W';
   let h = '';
   h += '<div class="card" id="ctrl-' + d.key + '" style="padding:14px">';
   h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
   h += '<div><div style="font-weight:600;font-size:.95rem">' + esc(d.name) + '</div>';
   h += '<div style="font-size:.72rem;color:var(--muted)">' + (model ? esc(model) + ' · ' : '') + esc(t('control.cat.' + cat.toLowerCase(), cat)) + '</div></div>';
-  h += '<div style="font-size:.85rem;font-weight:600;color:var(--accent)">' + powerW + ' W</div>';
+  h += '<div style="font-size:.85rem;font-weight:600;color:var(--accent)">' + powerW + '</div>';
   h += '</div>';
   h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
   h += '<span style="font-size:.82rem;color:var(--muted)">' + t('control.power', 'Power') + '</span>';
@@ -4940,7 +4943,8 @@ function _pwrVal(d) {{
 function _pwrText(d) {{
   // A device that stopped answering has no current power — its last reading
   // is old, and a made-up 0 W would look like a device that is simply off.
-  if (d && d.offline) return '\u2014';
+  // Same while it has not answered since the start (reading from the cache).
+  if (d && (d.offline || d.waiting)) return '\u2014';
   // Battery: discharge shows a leading '−' (negative value); charge shows the
   // plain number (no '+') — direction is already conveyed by the tile colour.
   const v = _pwrVal(d);
@@ -5814,7 +5818,14 @@ function _offBadgeTitle(d) {{
   const min = (isFinite(age) && age > 0) ? Math.max(1, Math.round(age / 60)) : 0;
   return t('live.cards.offline_title', 'No answer from the device. Last reading {{min}} min ago.', {{min: min}});
 }}
+// "Waiting" badge: no answer since the start (or a host change) yet, and the
+// device still has time to answer -- neither live nor offline.
+function _waitBadgeTitle() {{
+  return t('live.cards.waiting_title', 'No answer since the start yet. Waiting for the first reading.');
+}}
 function _offBadgeHTML(d) {{
+  if (d && !d.offline && d.waiting)
+    return '<span class="off-badge wait" title="' + esc(_waitBadgeTitle()) + '">\u25cc ' + esc(t('live.cards.waiting', 'Waiting')) + '</span>';
   if (!d || !d.offline) return '';
   return '<span class="off-badge" title="' + esc(_offBadgeTitle(d)) + '">\u26a0 ' + esc(t('live.cards.offline', 'Offline')) + '</span>';
 }}
@@ -5830,7 +5841,7 @@ function _switchStateHTML(d) {{
     + '">' + esc(t('live.switch.unknown', '\u2014')) + '</span>';
 }}
 function devCardHTML(d) {{
-  const pc = d.offline ? 'pwr-off' : pwrClass(d.power_w || 0);
+  const pc = (d.offline || d.waiting) ? 'pwr-off' : pwrClass(d.power_w || 0);
   const phases = (d.phases && d.phases.length > 0) ? d.phases : null;
   // Three phases used to be three run-on strings ("229.3 V · 0.52 A · 112 W").
   // They are a table: one aligned row each, over a bar that shows the split.
@@ -5882,7 +5893,7 @@ function devCardHTML(d) {{
           _offBadgeHTML(d) +
         '</div>' +
       '</div>' +
-      (function(){{ var c=d.offline ? '' : _flowCol(d.flow_role,d.power_w); return '<div class="dev-power ' + pc + '"' + (c?' style="color:'+c+'"':'') + '>' + _pwrText(d) + '</div>'; }})() +
+      (function(){{ var c=(d.offline || d.waiting) ? '' : _flowCol(d.flow_role,d.power_w); return '<div class="dev-power ' + pc + '"' + (c?' style="color:'+c+'"':'') + '>' + _pwrText(d) + '</div>'; }})() +
     '</div>' +
     (d.kind === 'switch' ? '<div class="switch-row" id="sw-' + d.key + '"><span class="switch-label">' + t('live.cards.switch', 'Switch') + ':</span> ' + _switchStateHTML(d) + ' <button class="switch-btn" data-devkey="' + d.key + '">' + t('live.switch.toggle', 'Toggle') + '</button></div>' : '') +
     '<div class="sparkline-wrap" data-metric="w" data-devkey="' + d.key + '"><canvas class="sparkline" id="sp-' + d.key + '"></canvas></div>' +
@@ -5960,9 +5971,9 @@ function _drawCardSparks(d) {{
 }}
 
 function updateDeviceCard(card, d) {{
-  const pc = d.offline ? 'pwr-off' : pwrClass(d.power_w || 0);
+  const pc = (d.offline || d.waiting) ? 'pwr-off' : pwrClass(d.power_w || 0);
   flowRole[d.key] = d.flow_role || '';
-  const pwCol = d.offline ? '' : _flowCol(d.flow_role, d.power_w);
+  const pwCol = (d.offline || d.waiting) ? '' : _flowCol(d.flow_role, d.power_w);
   const pw = card.querySelector('.dev-power');
   if (pw) {{ pw.textContent = _pwrText(d); pw.className = 'dev-power ' + pc; pw.style.color = pwCol || ''; }}
   const meta = card.querySelector('.dev-meta');
@@ -5981,11 +5992,19 @@ function updateDeviceCard(card, d) {{
     }} else if (socEl) {{ socEl.remove(); }}
     // Offline badge (issue #23): added while the last reading is stale,
     // removed again with the first real answer.
+    // "Waiting" (no answer since the start yet) uses the same slot, grey.
     let offEl = meta.querySelector('.off-badge');
-    if (d.offline) {{
-      if (!offEl) {{ offEl = document.createElement('span'); offEl.className = 'off-badge'; meta.appendChild(offEl); }}
-      offEl.textContent = '\u26a0 ' + t('live.cards.offline', 'Offline');
-      offEl.title = _offBadgeTitle(d);
+    if (d.offline || d.waiting) {{
+      if (!offEl) {{ offEl = document.createElement('span'); meta.appendChild(offEl); }}
+      if (d.offline) {{
+        offEl.className = 'off-badge';
+        offEl.textContent = '\u26a0 ' + t('live.cards.offline', 'Offline');
+        offEl.title = _offBadgeTitle(d);
+      }} else {{
+        offEl.className = 'off-badge wait';
+        offEl.textContent = '\u25cc ' + t('live.cards.waiting', 'Waiting');
+        offEl.title = _waitBadgeTitle();
+      }}
     }} else if (offEl) {{ offEl.remove(); }}
   }}
   card.classList.toggle('dev-offline', !!d.offline);

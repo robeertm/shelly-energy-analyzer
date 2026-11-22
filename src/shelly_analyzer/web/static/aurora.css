@@ -672,6 +672,13 @@ html[data-skin="aurora"] .off-badge {
   border-color: color-mix(in srgb, var(--ctp-peach) 38%, transparent);
 }
 html[data-skin="aurora"][data-theme="light"] .off-badge { color: #b45309; }
+/* "Waiting" (no answer since the start yet): neutral, not a warning. */
+html[data-skin="aurora"] .off-badge.wait {
+  background: color-mix(in srgb, var(--ctp-overlay1) 14%, transparent);
+  color: var(--muted);
+  border-color: color-mix(in srgb, var(--ctp-overlay1) 38%, transparent);
+}
+html[data-skin="aurora"][data-theme="light"] .off-badge.wait { color: var(--muted); }
 
 html[data-skin="aurora"] .error-msg {
   color: var(--ctp-red);

@@ -89,6 +89,44 @@ def reading_is_stale(ts: Any, poll_seconds: Any = None,
     return (now_s - ts_f) > limit and (now_s - _PROCESS_START_S) > limit
 
 
+def awaiting_first_reading(ts: Any, poll_seconds: Any = None,
+                           now: Optional[float] = None,
+                           since: Optional[float] = None) -> bool:
+    """True while a device has not answered since the event that invalidated
+    its last reading, and that event's grace period is still running (issue
+    #23):
+
+    * its address was changed (``since``) and the new address still has
+      ``host_change_grace_s`` to answer;
+    * or this process started less than the stale limit ago -- the live view
+      is then restored from the cache written before the restart, so every
+      reading in it predates the start and says nothing about the device now.
+
+    Such a device is neither "online" nor "offline". Once the grace has run
+    out ``reading_is_stale`` takes over and it counts as offline. A missing
+    reading (``ts`` empty or 0) during the grace is waiting, too.
+    """
+    now_s = float(now if now is not None else _time.time())
+    try:
+        ts_f = float(ts or 0.0)
+    except (TypeError, ValueError):
+        ts_f = 0.0
+    if not math.isfinite(ts_f) or ts_f < 0:
+        ts_f = 0.0
+    try:
+        since_f = float(since or 0.0)
+    except (TypeError, ValueError):
+        since_f = 0.0
+    if not math.isfinite(since_f):
+        since_f = 0.0
+    if since_f > 0:
+        return ts_f < since_f and (now_s - since_f) <= host_change_grace_s(poll_seconds)
+    # Read at call time (tests move it). Live points carry whole seconds, so
+    # a first answer in the very second the process started still counts.
+    start = math.floor(_PROCESS_START_S)
+    return ts_f < start and (now_s - _PROCESS_START_S) <= live_stale_after_s(poll_seconds)
+
+
 def host_changed_at(state: Any, key: str) -> Optional[float]:
     """When the address of device ``key`` was last changed in this process."""
     try:
@@ -332,6 +370,12 @@ def api_state():
             reading_is_stale(_ts, _poll_s, _now_s, host_changed_at(state, dkey))
             and dkey not in _SYNTH_KEYS and bool(meta)
         )
+        # Right after a start (or a host change) a reading that predates it is
+        # no proof the device answers now: "waiting", not live, not offline.
+        _waiting = bool(
+            awaiting_first_reading(_ts, _poll_s, _now_s, host_changed_at(state, dkey))
+            and dkey not in _SYNTH_KEYS and bool(meta)
+        )
 
         devices_list.append({
             "key": dkey,
@@ -348,12 +392,13 @@ def api_state():
             "phases": phases,
             "q_phases": q_phases,
             # No appliance guess from a reading that is no longer current.
-            "appliances": ([] if _offline else appl_objs),
+            "appliances": ([] if (_offline or _waiting) else appl_objs),
             "i_n": _compute_i_n(float(latest.get("i_n") or 0), ia, ib, ic, va, vb, vc),
             "q_total_var": float(latest.get("q_total_var") or 0),
             "switch_on": switch_on,
             "sample_age_s": (round(_age, 1) if _age is not None else None),
             "offline": _offline,
+            "waiting": _waiting,
             "flow_role": _flow_role(dkey),
             "today_in_kwh": float((_daily.get(dkey) or {}).get("charge", 0.0)),
             "today_out_kwh": float((_daily.get(dkey) or {}).get("discharge", 0.0)),
@@ -390,6 +435,8 @@ def api_state():
             # A device that was just added is not "offline" yet.
             "sample_age_s": None,
             "offline": False,
+            "waiting": bool(k not in _SYNTH_KEYS and awaiting_first_reading(
+                0, _poll_s, _now_s, host_changed_at(state, k))),
             "flow_role": _flow_role(k),
             "today_in_kwh": 0.0,
             "today_out_kwh": 0.0,
