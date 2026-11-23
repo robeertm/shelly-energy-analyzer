@@ -152,20 +152,26 @@ layer. No real installation, meter reading or name appears here.
 
 ### Aurora — desktop
 
-| Live | Costs | Heatmap |
-|------|-------|---------|
-| ![Live](docs/screenshots/aurora_desktop_live.png) | ![Costs](docs/screenshots/aurora_desktop_costs.png) | ![Heatmap](docs/screenshots/aurora_desktop_heatmap.png) |
-| The live hero: what the house draws right now, over a circuit board whose charge runs at the speed of that same number — teal and slow when idle, red and fast under load. | Today / week / month / year with per-device breakdown and the month projection. | A year of consumption as a calendar, plus the hour-of-day grid. |
+<p><img src="docs/screenshots/aurora_desktop_live.png" width="100%" alt="Live"><br><sub><b>Live</b> &mdash; The live hero: what the house draws right now, over a circuit board whose charge runs at the speed of that same number — teal and slow when idle, red and fast under load.</sub></p>
 
-| NILM | Goals | Standby |
-|------|-------|---------|
-| ![NILM](docs/screenshots/aurora_desktop_nilm.png) | ![Goals](docs/screenshots/aurora_desktop_goals.png) | ![Standby](docs/screenshots/aurora_desktop_standby.png) |
-| Appliance signatures learned from the load curve alone. | Streaks, levels and savings targets. | What the house costs while nobody is using it. |
+<p><img src="docs/screenshots/aurora_desktop_costs.png" width="100%" alt="Costs"><br><sub><b>Costs</b> &mdash; Today / week / month / year with per-device breakdown and the month projection.</sub></p>
 
-| Forecast | CO₂ | Calibration |
-|----------|-----|-------------|
-| ![Forecast](docs/screenshots/aurora_desktop_forecast.png) | ![CO2](docs/screenshots/aurora_desktop_co2.png) | ![Calibration](docs/screenshots/aurora_desktop_calibration.png) |
-| Consumption forecast with a confidence band. | Live grid intensity, the 6 h forecast and the footprint by period. | Meter structure and dated correction factors. |
+<p><img src="docs/screenshots/aurora_desktop_heatmap.png" width="100%" alt="Heatmap"><br><sub><b>Heatmap</b> &mdash; A year of consumption as a calendar, plus the hour-of-day grid.</sub></p>
+
+
+<p><img src="docs/screenshots/aurora_desktop_nilm.png" width="100%" alt="NILM"><br><sub><b>NILM</b> &mdash; Appliance signatures learned from the load curve alone.</sub></p>
+
+<p><img src="docs/screenshots/aurora_desktop_goals.png" width="100%" alt="Goals"><br><sub><b>Goals</b> &mdash; Streaks, levels and savings targets.</sub></p>
+
+<p><img src="docs/screenshots/aurora_desktop_standby.png" width="100%" alt="Standby"><br><sub><b>Standby</b> &mdash; What the house costs while nobody is using it.</sub></p>
+
+
+<p><img src="docs/screenshots/aurora_desktop_forecast.png" width="100%" alt="Forecast"><br><sub><b>Forecast</b> &mdash; Consumption forecast with a confidence band.</sub></p>
+
+<p><img src="docs/screenshots/aurora_desktop_co2.png" width="100%" alt="CO2"><br><sub><b>CO₂</b> &mdash; Live grid intensity, the 6 h forecast and the footprint by period.</sub></p>
+
+<p><img src="docs/screenshots/aurora_desktop_calibration.png" width="100%" alt="Calibration"><br><sub><b>Calibration</b> &mdash; Meter structure and dated correction factors.</sub></p>
+
 
 ### ⚖️ One rule for every CO₂ figure
 
@@ -174,37 +180,51 @@ mix of grid import, direct PV and battery discharge. Feed-in is charged nothing 
 *avoided in the grid*. The same chain feeds the CO₂ tab, Costs, Plots, the heatmap, MQTT and the
 digests, so they always add up.
 
-| Origin & manufacturing | The last 24 hours, by source | Phone |
-|------------------------|------------------------------|-------|
-| ![CO2 origin](docs/screenshots/aurora_desktop_co2_origin.png) | ![Solar days](docs/screenshots/aurora_desktop_solar_days.png) | ![CO2 phone](docs/screenshots/aurora_phone_co2_origin.png) |
-| Grid, PV (panel manufacturing) and battery (what was stored + storage manufacturing) per period; owner + tenant = house, always. | The Solar tab's 30 days: PV split into direct use, storage and feed-in, grid import under the line, autarky as a dashed curve. | The same table at phone width. |
+<p><img src="docs/screenshots/aurora_desktop_co2_origin.png" width="100%" alt="CO2 origin"><br><sub><b>Origin & manufacturing</b> &mdash; Grid, PV (panel manufacturing) and battery (what was stored + storage manufacturing) per period; owner + tenant = house, always.</sub></p>
+
+<p><img src="docs/screenshots/aurora_desktop_solar_days.png" width="100%" alt="Solar days"><br><sub><b>The last 24 hours, by source</b> &mdash; The Solar tab's 30 days: PV split into direct use, storage and feed-in, grid import under the line, autarky as a dashed curve.</sub></p>
+
+<table>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/aurora_phone_co2_origin.png" width="150" alt="CO2 phone"><br><sub><b>Phone</b> &mdash; The same table at phone width.</sub></td><td width="50%"></td></tr>
+</table>
+
 
 ### ☀️ Solar, energy flow, outlook
 
-| Solar | Energy flow | Solar & storage outlook |
-|-------|-------------|-------------------------|
-| ![Solar](docs/screenshots/aurora_desktop_solar.png) | ![Energy flow](docs/screenshots/aurora_desktop_energy_flow.png) | ![Outlook](docs/screenshots/aurora_desktop_forecast_solar.png) |
-| From the roof into the house: what the production became and what served the load, autarky, self-consumption, money. | PV, battery, grid, house and every consumer as one hub — line width is energy, the dots run with the flow; live in watts or per period in kWh. | Seven days from the irradiance forecast, calibrated on the roof's own measured yield, then the season's average: PV, import, export, autarky and the month's end. |
+<p><img src="docs/screenshots/aurora_desktop_solar.png" width="100%" alt="Solar"><br><sub><b>Solar</b> &mdash; From the roof into the house: what the production became and what served the load, autarky, self-consumption, money.</sub></p>
 
-| Solar — light | Solar — phone | Energy flow — phone |
-|---------------|---------------|---------------------|
-| ![Solar light](docs/screenshots/aurora_light_solar.png) | ![Solar phone](docs/screenshots/aurora_phone_solar.png) | ![Flow phone](docs/screenshots/aurora_phone_energy_flow.png) |
+<p><img src="docs/screenshots/aurora_desktop_energy_flow.png" width="100%" alt="Energy flow"><br><sub><b>Energy flow</b> &mdash; PV, battery, grid, house and every consumer as one hub — line width is energy, the dots run with the flow; live in watts or per period in kWh.</sub></p>
+
+<p><img src="docs/screenshots/aurora_desktop_forecast_solar.png" width="100%" alt="Outlook"><br><sub><b>Solar & storage outlook</b> &mdash; Seven days from the irradiance forecast, calibrated on the roof's own measured yield, then the season's average: PV, import, export, autarky and the month's end.</sub></p>
+
+
+<p><img src="docs/screenshots/aurora_light_solar.png" width="100%" alt="Solar light"><br><sub><b>Solar — light</b></sub></p>
+
+<table>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/aurora_phone_solar.png" width="150" alt="Solar phone"><br><sub><b>Solar — phone</b></sub></td><td width="50%" align="center" valign="top"><img src="docs/screenshots/aurora_phone_energy_flow.png" width="150" alt="Flow phone"><br><sub><b>Energy flow — phone</b></sub></td></tr>
+</table>
+
 
 ### 🔋 Battery
 
-| Now, 24 h, 7 days | Day by day, rhythm of the day | Cycles, use, what it earns |
-|-------------------|-------------------------------|----------------------------|
-| ![Battery](docs/screenshots/aurora_desktop_battery.png) | ![Battery days](docs/screenshots/aurora_desktop_battery_days.png) | ![Battery cycles](docs/screenshots/aurora_desktop_battery_cycles.png) |
-| State of charge, power, today's in/out and the round-trip efficiency; the last 24 h of charge and discharge with the SOC on the right axis; a week of charge history — measured once the analyzer has stored it. | Thirty days of charged-from-the-sun / from-the-grid against discharged with each day's SOC range; the average day hour by hour, and when the battery is typically full or empty. | Full cycles with a per-year estimate, depth of discharge, capacity turnover, time spent full or empty, every detected cycle — and the euros: grid power replaced, feed-in given up, net benefit per month and per year. |
+<p><img src="docs/screenshots/aurora_desktop_battery.png" width="100%" alt="Battery"><br><sub><b>Now, 24 h, 7 days</b> &mdash; State of charge, power, today's in/out and the round-trip efficiency; the last 24 h of charge and discharge with the SOC on the right axis; a week of charge history — measured once the analyzer has stored it.</sub></p>
 
-| Light | Phone |
-|-------|-------|
-| ![Battery light](docs/screenshots/aurora_light_battery.png) | ![Battery phone](docs/screenshots/aurora_phone_battery.png) |
+<p><img src="docs/screenshots/aurora_desktop_battery_days.png" width="100%" alt="Battery days"><br><sub><b>Day by day, rhythm of the day</b> &mdash; Thirty days of charged-from-the-sun / from-the-grid against discharged with each day's SOC range; the average day hour by hour, and when the battery is typically full or empty.</sub></p>
 
-| Plots | Settings |
-|-------|----------|
-| ![Plots](docs/screenshots/aurora_desktop_plots.png) | ![Settings](docs/screenshots/aurora_desktop_settings.png) |
-| One row per device, its metrics side by side. | Every option the app has, including the skin picker. |
+<p><img src="docs/screenshots/aurora_desktop_battery_cycles.png" width="100%" alt="Battery cycles"><br><sub><b>Cycles, use, what it earns</b> &mdash; Full cycles with a per-year estimate, depth of discharge, capacity turnover, time spent full or empty, every detected cycle — and the euros: grid power replaced, feed-in given up, net benefit per month and per year.</sub></p>
+
+
+<p><img src="docs/screenshots/aurora_light_battery.png" width="100%" alt="Battery light"><br><sub><b>Light</b></sub></p>
+
+<table>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/aurora_phone_battery.png" width="150" alt="Battery phone"><br><sub><b>Phone</b></sub></td><td width="50%"></td></tr>
+</table>
+
+
+<p><img src="docs/screenshots/aurora_desktop_plots.png" width="100%" alt="Plots"><br><sub><b>Plots</b> &mdash; One row per device, its metrics side by side.</sub></p>
+
+<p><img src="docs/screenshots/aurora_desktop_settings.png" width="100%" alt="Settings"><br><sub><b>Settings</b> &mdash; Every option the app has, including the skin picker.</sub></p>
+
 
 ### ☀️ Where the energy came from
 
@@ -212,14 +232,17 @@ The EV log does not multiply kWh by a tariff. It reconstructs, from the grid met
 series and the battery, **what was feeding the car at every minute** — and charges only what
 was bought.
 
-| Charge log | One charge, unfolded |
-|------------|----------------------|
-| ![EV log](docs/screenshots/aurora_desktop_ev_log.png) | ![Charge curve](docs/screenshots/aurora_desktop_ev_curve.png) |
-| Solar / battery / grid for the window, what it cost, and what it would have cost bought entirely from the grid. Every charge carries its own three-colour bar and a *Surplus charge* badge when almost nothing was bought. | The curve of one charge, the area under it stacked by source: the sun carries it, the battery takes over as the sun drops, and the grid finishes the job. Hover for the exact kW per source at that minute; below it, how long each source actually ran. |
+<p><img src="docs/screenshots/aurora_desktop_ev_log.png" width="100%" alt="EV log"><br><sub><b>Charge log</b> &mdash; Solar / battery / grid for the window, what it cost, and what it would have cost bought entirely from the grid. Every charge carries its own three-colour bar and a *Surplus charge* badge when almost nothing was bought.</sub></p>
 
-| Light | Phone | Phone — curve |
-|-------|-------|---------------|
-| ![EV log light](docs/screenshots/aurora_light_ev_log.png) | ![EV log phone](docs/screenshots/aurora_phone_ev_log.png) | ![Charge curve phone](docs/screenshots/aurora_phone_ev_curve.png) |
+<p><img src="docs/screenshots/aurora_desktop_ev_curve.png" width="100%" alt="Charge curve"><br><sub><b>One charge, unfolded</b> &mdash; The curve of one charge, the area under it stacked by source: the sun carries it, the battery takes over as the sun drops, and the grid finishes the job. Hover for the exact kW per source at that minute; below it, how long each source actually ran.</sub></p>
+
+
+<p><img src="docs/screenshots/aurora_light_ev_log.png" width="100%" alt="EV log light"><br><sub><b>Light</b></sub></p>
+
+<table>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/aurora_phone_ev_log.png" width="150" alt="EV log phone"><br><sub><b>Phone</b></sub></td><td width="50%" align="center" valign="top"><img src="docs/screenshots/aurora_phone_ev_curve.png" width="150" alt="Charge curve phone"><br><sub><b>Phone — curve</b></sub></td></tr>
+</table>
+
 
 Set it under **Settings → EV Charging → Surplus charging**: *detect automatically* (default),
 *always split by source*, or *off*. A charge the meters did not cover keeps the full tariff
@@ -230,73 +253,105 @@ and says so — an unmeasured charge is never presented as free sunshine.
 Catppuccin Latte, not an inverted dark theme: its own palette, with accents darkened enough to
 hold contrast on a pale ground.
 
-| Live | Costs |
-|------|-------|
-| ![Live light](docs/screenshots/aurora_light_live.png) | ![Costs light](docs/screenshots/aurora_light_costs.png) |
+<p><img src="docs/screenshots/aurora_light_live.png" width="100%" alt="Live light"><br><sub><b>Live</b></sub></p>
+
+<p><img src="docs/screenshots/aurora_light_costs.png" width="100%" alt="Costs light"><br><sub><b>Costs</b></sub></p>
+
 
 ### Aurora — phone
 
-| Live | Costs | Heatmap | Goals |
-|------|-------|---------|-------|
-| ![Live](docs/screenshots/aurora_phone_live.png) | ![Costs](docs/screenshots/aurora_phone_costs.png) | ![Heatmap](docs/screenshots/aurora_phone_heatmap.png) | ![Goals](docs/screenshots/aurora_phone_goals.png) |
+<table>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/aurora_phone_live.png" width="150" alt="Live"><br><sub><b>Live</b></sub></td><td width="50%" align="center" valign="top"><img src="docs/screenshots/aurora_phone_costs.png" width="150" alt="Costs"><br><sub><b>Costs</b></sub></td></tr>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/aurora_phone_heatmap.png" width="150" alt="Heatmap"><br><sub><b>Heatmap</b></sub></td><td width="50%" align="center" valign="top"><img src="docs/screenshots/aurora_phone_goals.png" width="150" alt="Goals"><br><sub><b>Goals</b></sub></td></tr>
+</table>
+
 
 ### Classic
 
 The design shipped up to v16.70, still selectable in **Settings → Display → Design**. With the
 skin off the dashboard is byte-for-byte what it was — this is not a compatibility mode.
 
-| Classic live |
-|--------------|
-| ![Classic](docs/screenshots/classic_desktop_live.png) |
+<p><img src="docs/screenshots/classic_desktop_live.png" width="100%" alt="Classic"><br><sub><b>Classic live</b></sub></p>
+
 
 <details>
 <summary>More classic screenshots (desktop and phone, light and dark)</summary>
 
-| Live | Costs | Heatmap |
-|------|-------|---------|
-| ![Live](docs/screenshots/desktop_01_live.png) | ![Costs](docs/screenshots/desktop_02_costs.png) | ![Heatmap](docs/screenshots/desktop_03_heatmap.png) |
+<p><img src="docs/screenshots/desktop_01_live.png" width="100%" alt="Live"><br><sub><b>Live</b></sub></p>
 
-| Weather | CO₂ | Anomalies |
-|---------|-----|-----------|
-| ![Weather](docs/screenshots/desktop_05_weather.png) | ![CO2](docs/screenshots/desktop_06_co2.png) | ![Anomalies](docs/screenshots/desktop_07_anomalies.png) |
+<table>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/desktop_02_costs.png" width="150" alt="Costs"><br><sub><b>Costs</b></sub></td><td width="50%"></td></tr>
+</table>
 
-| Forecast | Standby | Energy Flow |
-|----------|---------|-------------|
-| ![Forecast](docs/screenshots/desktop_08_forecast.png) | ![Standby](docs/screenshots/desktop_09_standby.png) | ![Energy Flow](docs/screenshots/desktop_10_energy_flow.png) |
+<p><img src="docs/screenshots/desktop_03_heatmap.png" width="100%" alt="Heatmap"><br><sub><b>Heatmap</b></sub></p>
 
-| Goals | NILM |
-|-------|------|
-| ![Goals](docs/screenshots/desktop_12_goals.png) | ![NILM](docs/screenshots/desktop_14_nilm.png) |
 
-| Plots | Compare | Schedule |
-|-------|---------|----------|
-| ![Plots](docs/screenshots/desktop_04_plots.png) | ![Compare](docs/screenshots/desktop_11_compare.png) | ![Schedule](docs/screenshots/desktop_13_schedule.png) |
+<table>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/desktop_05_weather.png" width="150" alt="Weather"><br><sub><b>Weather</b></sub></td><td width="50%" align="center" valign="top"><img src="docs/screenshots/desktop_06_co2.png" width="150" alt="CO2"><br><sub><b>CO₂</b></sub></td></tr>
+</table>
 
-| Tariff comparison | Export | Control |
-|-------------------|--------|---------|
-| ![Tariff](docs/screenshots/desktop_16_tariff.png) | ![Export](docs/screenshots/desktop_15_export.png) | ![Control](docs/screenshots/desktop_17_control.png) |
+<p><img src="docs/screenshots/desktop_07_anomalies.png" width="100%" alt="Anomalies"><br><sub><b>Anomalies</b></sub></p>
 
-| Sync | Settings | Live (chart zoom) |
-|------|----------|-------------------|
-| ![Sync](docs/screenshots/desktop_18_sync.png) | ![Settings](docs/screenshots/desktop_19_settings.png) | ![Live detail](docs/screenshots/desktop_01_live_detail.png) |
+
+<p><img src="docs/screenshots/desktop_08_forecast.png" width="100%" alt="Forecast"><br><sub><b>Forecast</b></sub></p>
+
+<p><img src="docs/screenshots/desktop_09_standby.png" width="100%" alt="Standby"><br><sub><b>Standby</b></sub></p>
+
+<p><img src="docs/screenshots/desktop_10_energy_flow.png" width="100%" alt="Energy Flow"><br><sub><b>Energy Flow</b></sub></p>
+
+
+<p><img src="docs/screenshots/desktop_12_goals.png" width="100%" alt="Goals"><br><sub><b>Goals</b></sub></p>
+
+<table>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/desktop_14_nilm.png" width="150" alt="NILM"><br><sub><b>NILM</b></sub></td><td width="50%"></td></tr>
+</table>
+
+
+<table>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/desktop_04_plots.png" width="150" alt="Plots"><br><sub><b>Plots</b></sub></td><td width="50%"></td></tr>
+</table>
+
+<p><img src="docs/screenshots/desktop_11_compare.png" width="100%" alt="Compare"><br><sub><b>Compare</b></sub></p>
+
+<p><img src="docs/screenshots/desktop_13_schedule.png" width="100%" alt="Schedule"><br><sub><b>Schedule</b></sub></p>
+
+
+<p><img src="docs/screenshots/desktop_16_tariff.png" width="100%" alt="Tariff"><br><sub><b>Tariff comparison</b></sub></p>
+
+<p><img src="docs/screenshots/desktop_15_export.png" width="100%" alt="Export"><br><sub><b>Export</b></sub></p>
+
+<p><img src="docs/screenshots/desktop_17_control.png" width="100%" alt="Control"><br><sub><b>Control</b></sub></p>
+
+
+<p><img src="docs/screenshots/desktop_18_sync.png" width="100%" alt="Sync"><br><sub><b>Sync</b></sub></p>
+
+<p><img src="docs/screenshots/desktop_19_settings.png" width="100%" alt="Settings"><br><sub><b>Settings</b></sub></p>
+
+<p><img src="docs/screenshots/desktop_01_live_detail.png" width="100%" alt="Live detail"><br><sub><b>Live (chart zoom)</b></sub></p>
+
 
 Mobile:
 
-| Live | Costs | Heatmap |
-|------|-------|---------|
-| ![Live](docs/screenshots/mobile_01_live.png) | ![Costs](docs/screenshots/mobile_02_costs.png) | ![Heatmap](docs/screenshots/mobile_03_heatmap.png) |
+<table>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/mobile_01_live.png" width="150" alt="Live"><br><sub><b>Live</b></sub></td><td width="50%" align="center" valign="top"><img src="docs/screenshots/mobile_02_costs.png" width="150" alt="Costs"><br><sub><b>Costs</b></sub></td></tr>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/mobile_03_heatmap.png" width="150" alt="Heatmap"><br><sub><b>Heatmap</b></sub></td><td width="50%"></td></tr>
+</table>
 
-| Forecast | Standby | Energy Flow |
-|----------|---------|-------------|
-| ![Forecast](docs/screenshots/mobile_08_forecast.png) | ![Standby](docs/screenshots/mobile_09_standby.png) | ![Energy Flow](docs/screenshots/mobile_10_energy_flow.png) |
+
+<table>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/mobile_08_forecast.png" width="150" alt="Forecast"><br><sub><b>Forecast</b></sub></td><td width="50%" align="center" valign="top"><img src="docs/screenshots/mobile_09_standby.png" width="150" alt="Standby"><br><sub><b>Standby</b></sub></td></tr>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/mobile_10_energy_flow.png" width="150" alt="Energy Flow"><br><sub><b>Energy Flow</b></sub></td><td width="50%"></td></tr>
+</table>
+
 
 </details>
 
 ### Widgets (iOS Scriptable / Android PWA)
 
-| Web widget (`/w`) |
-|-------------------|
-| ![Web widget](docs/screenshots/widget_web.png) |
+<table>
+<tr><td width="50%" align="center" valign="top"><img src="docs/screenshots/widget_web.png" width="150" alt="Web widget"><br><sub><b>Web widget (`/w`)</b></sub></td><td width="50%"></td></tr>
+</table>
+
 
 The iOS Scriptable widget shows the same figures in three sizes (small, medium, large).
 
