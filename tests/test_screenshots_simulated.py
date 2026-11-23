@@ -47,7 +47,8 @@ def test_every_screenshot_is_stamped_as_simulated():
 
 def test_readme_image_links_exist():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
-    missing = [rel for rel in re.findall(r"\]\((docs/screenshots/[^)\s]+)\)", text) if not (ROOT / rel).exists()]
+    refs = re.findall(r"\]\((docs/screenshots/[^)\s]+)\)", text) + re.findall(r'<img[^>]*\ssrc="(docs/screenshots/[^"]+)"', text)
+    missing = [rel for rel in refs if not (ROOT / rel).exists()]
     assert not missing, f"README links to missing images: {missing}"
 
 

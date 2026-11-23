@@ -24,7 +24,9 @@ def _slug(heading: str) -> str:
 
 
 def test_every_image_the_readme_shows_exists():
+    # Markdown images and the HTML <img> tags the phone-friendly galleries use.
     refs = re.findall(r"!\[[^\]]*\]\((docs/screenshots/[^)]+)\)", README)
+    refs += re.findall(r'<img[^>]*\ssrc="(docs/screenshots/[^"]+)"', README)
     assert len(refs) > 30, f"only {len(refs)} images referenced — did the scan break?"
     missing = [r for r in refs if not os.path.exists(os.path.join(ROOT, r))]
     assert not missing, f"referenced but not in the repo: {missing}"
