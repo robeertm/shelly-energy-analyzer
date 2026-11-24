@@ -297,8 +297,8 @@ def _out(proc: subprocess.CompletedProcess) -> str:
 
 
 def normalize_repo(url_or_slug: str) -> str:
-    """``https://github.com/Owner/Repo.git`` / ``git@github.com:owner/repo`` /
-    ``owner/repo`` -> ``owner/repo`` (lower case); ``""`` if not GitHub."""
+    """An https URL, an scp-style or ssh:// GitHub URL, or a bare ``owner/repo``
+    -> ``owner/repo`` (lower case); ``""`` if not GitHub."""
     s = (url_or_slug or "").strip()
     m = _REPO_IN_URL.search(s)
     if m:

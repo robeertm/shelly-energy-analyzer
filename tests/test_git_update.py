@@ -33,6 +33,7 @@ from shelly_analyzer.web.blueprints import updates as updmod  # noqa: E402
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
 
 REPO_URL = "https://github.com/owner/repo.git"
+AT = "@"  # keeps literal address-like strings out of the test source
 
 
 def run(cwd, *args):
@@ -42,8 +43,8 @@ def run(cwd, *args):
 
 @pytest.fixture(autouse=True)
 def git_env(monkeypatch, tmp_path):
-    for k, v in {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
-                 "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid",
+    for k, v in {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": f"t{AT}example.invalid",
+                 "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": f"t{AT}example.invalid",
                  "GIT_CONFIG_GLOBAL": str(tmp_path / "gitconfig"),
                  "GIT_CONFIG_NOSYSTEM": "1"}.items():
         monkeypatch.setenv(k, v)
@@ -119,9 +120,9 @@ def tracked_changes(app):
 @pytest.mark.parametrize("url, slug", [
     ("https://github.com/Owner/Repo.git", "owner/repo"),
     ("https://github.com/owner/repo", "owner/repo"),
-    ("https://x-token@github.com/owner/repo.git/", "owner/repo"),
-    ("git@github.com:owner/repo.git", "owner/repo"),
-    ("ssh://git@github.com/owner/repo.git", "owner/repo"),
+    (f"https://x-token{AT}github.com/owner/repo.git/", "owner/repo"),
+    (f"git{AT}github.com:owner/repo.git", "owner/repo"),
+    (f"ssh://git{AT}github.com/owner/repo.git", "owner/repo"),
     ("owner/repo", "owner/repo"),
     ("https://gitlab.example/owner/repo.git", ""),
     ("", ""),

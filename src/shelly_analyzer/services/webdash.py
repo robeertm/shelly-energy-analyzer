@@ -2104,7 +2104,7 @@ _HTML_TEMPLATE = """<!doctype html>
     .hm-grid.portrait {{ flex-direction: column; width: max-content; margin-inline: auto; }}
     .hm-calendar.portrait .hm-day-head {{ width: max-content; margin-inline: auto; }}
     .hm-grid.portrait .hm-week {{ flex-direction: row; align-items: center; }}
-    .hm-wk-label {{ font-size: 9px; color: var(--muted); text-align: right; padding-right: 4px; flex-shrink: 0; white-space: nowrap; }}
+    .hm-week-label {{ font-size: 9px; color: var(--muted); text-align: right; padding-right: 4px; flex-shrink: 0; white-space: nowrap; }}
     .hm-day-head {{ display: flex; gap: 2px; font-size: 9px; color: var(--muted); margin-bottom: 3px; }}
     .hm-day-head span {{ text-align: center; flex-shrink: 0; }}
     .hm-day {{
@@ -7571,7 +7571,7 @@ function renderHeatmapCalendar(data, el, unit) {{
       const m = firstIn ? firstIn.getMonth() : -1;
       const lbl = (m >= 0 && m !== lastLabeled) ? monthNames[m] : '';
       if (lbl) lastLabeled = m;
-      gridHtml += '<span class="hm-wk-label" style="width:' + labelW + 'px">' + lbl + '</span>';
+      gridHtml += '<span class="hm-week-label" style="width:' + labelW + 'px">' + lbl + '</span>';
     }}
     week.forEach(function(day) {{
       const key = day.toISOString().slice(0,10);

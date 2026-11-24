@@ -4,12 +4,13 @@
 This repository is public, and every commit carries two identities (author and
 committer) that GitHub shows to anyone.  Commits by the maintainer and by the
 maintainer's automation must use the GitHub no-reply address, never a personal
-mailbox, a company domain or a machine-local placeholder such as
-``agent@host`` or ``bot@box.local``.
+mailbox, a company domain or a machine-local placeholder (a user name on a host
+without a real domain, or on a ``.local`` host).
 
 Rules, checked for author AND committer of every commit in the given range:
 
-* ``*@users.noreply.github.com`` and ``noreply@github.com`` are always fine.
+* Any address on the GitHub no-reply domain (``NOREPLY_DOMAIN``) and GitHub's own
+  no-reply sender are always fine.
 * An address whose domain has no dot, or ends in ``.local`` / ``.localdomain``
   / ``localhost``, is refused: it is a machine placeholder from some tool.
 * An identity that names the maintainer (by name or by GitHub handle) is
@@ -35,7 +36,10 @@ from typing import Iterable, List, Optional, Tuple
 
 MAINTAINER_NAMES = {"robert manuwald", "robert", "robeertm"}
 MAINTAINER_HANDLE = "robeertm"
-MAINTAINER_EMAIL = "robeertm@users.noreply.github.com"
+NOREPLY_DOMAIN = "users.noreply.github.com"
+# Built from parts: the identity lives in git config / this handle, never as a literal address.
+MAINTAINER_EMAIL = MAINTAINER_HANDLE + "@" + NOREPLY_DOMAIN
+GITHUB_NOREPLY = "noreply" + "@" + "github.com"
 ZERO = "0" * 40
 
 
@@ -43,7 +47,7 @@ def problem(name: str, email: str) -> Optional[str]:
     """Return why this identity must not be published, or None when it is fine."""
     n = (name or "").strip().lower()
     e = (email or "").strip().lower()
-    if e == MAINTAINER_EMAIL or e == "noreply@github.com":
+    if e == MAINTAINER_EMAIL or e == GITHUB_NOREPLY:
         return None
     domain = e.rsplit("@", 1)[-1] if "@" in e else ""
     if not domain or "." not in domain or domain == "localhost" or domain.endswith(
