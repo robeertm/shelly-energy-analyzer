@@ -1,5 +1,15 @@
 # Changelog
 
+## 17.11.11
+
+### Fixed
+
+- **Settings page no longer scrolls sideways on an iPhone.** At 390 px WebKit let the page grow
+  to the width of the scrolling section strip (27 px too wide); Chromium did not. The settings
+  layout now clips at the page width. A walk through Live, Costs, Weather, Forecast, CO2,
+  Heatmap, Standby, Plots, Compare and Settings in Chromium and WebKit, light and dark, 390 and
+  1512 px found nothing else. Guard: `tests/e2e/test_settings_webkit_390.py`.
+
 ## 17.11.10
 
 ### Fixed

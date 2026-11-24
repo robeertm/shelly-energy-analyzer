@@ -86,7 +86,8 @@ opacity:0;transform:translateY(10px);transition:all .2s}
 .toast.error{border-color:var(--danger)}
 .toast.success{border-color:var(--ok)}
 @media(max-width:760px){
-.layout{flex-direction:column}
+.layout{flex-direction:column;max-width:100%;overflow-x:clip}
+.layout>*{min-width:0;max-width:100%}
 .sidebar{width:100%;position:sticky;top:50px;max-height:none;display:flex;flex-wrap:nowrap;
 padding:6px 8px;overflow-x:auto;overflow-y:hidden;gap:4px;z-index:40;scrollbar-width:thin;
 border-right:none;border-bottom:1px solid var(--border)}
