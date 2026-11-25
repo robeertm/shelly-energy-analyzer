@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Settings page: three error messages and the upload failure text are translated.** They were fixed German/English strings in every language; they now come from the language tables (new key `settings.upload.failed` in all nine languages).
+
 ## 17.11.11
 
 ### Fixed

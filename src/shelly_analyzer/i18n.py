@@ -22683,6 +22683,7 @@ _I18N.setdefault("ru", {}).update({
 # Keys the settings page asked for without a table entry (it showed the English fallback in every language).
 _I18N.setdefault("en", {}).update({
     "settings.upload.too_large": "File too large (max 1 MB)",
+    "settings.upload.failed": "Upload failed",
     "settings.upload.success": "Logo uploaded",
     "settings.upload.cleared": "Logo removed — save to apply",
     "settings.upload.path_ph": "auto-filled after upload",
@@ -22690,6 +22691,7 @@ _I18N.setdefault("en", {}).update({
 
 _I18N.setdefault("de", {}).update({
     "settings.upload.too_large": "Datei zu groß (max. 1 MB)",
+    "settings.upload.failed": "Hochladen fehlgeschlagen",
     "settings.upload.success": "Logo hochgeladen",
     "settings.upload.cleared": "Logo entfernt — zum Übernehmen speichern",
     "settings.upload.path_ph": "wird nach dem Hochladen automatisch gefüllt",
@@ -22697,6 +22699,7 @@ _I18N.setdefault("de", {}).update({
 
 _I18N.setdefault("es", {}).update({
     "settings.upload.too_large": "Archivo demasiado grande (máx. 1 MB)",
+    "settings.upload.failed": "Error al subir el archivo",
     "settings.upload.success": "Logotipo subido",
     "settings.upload.cleared": "Logotipo eliminado — guarde para aplicar",
     "settings.upload.path_ph": "se rellena automáticamente tras la subida",
@@ -22704,6 +22707,7 @@ _I18N.setdefault("es", {}).update({
 
 _I18N.setdefault("fr", {}).update({
     "settings.upload.too_large": "Fichier trop volumineux (max. 1 Mo)",
+    "settings.upload.failed": "Échec du téléversement",
     "settings.upload.success": "Logo téléversé",
     "settings.upload.cleared": "Logo supprimé — enregistrez pour appliquer",
     "settings.upload.path_ph": "renseigné automatiquement après le téléversement",
@@ -22711,6 +22715,7 @@ _I18N.setdefault("fr", {}).update({
 
 _I18N.setdefault("pt", {}).update({
     "settings.upload.too_large": "Ficheiro demasiado grande (máx. 1 MB)",
+    "settings.upload.failed": "Falha no envio",
     "settings.upload.success": "Logótipo carregado",
     "settings.upload.cleared": "Logótipo removido — guarde para aplicar",
     "settings.upload.path_ph": "preenchido automaticamente após o carregamento",
@@ -22718,6 +22723,7 @@ _I18N.setdefault("pt", {}).update({
 
 _I18N.setdefault("it", {}).update({
     "settings.upload.too_large": "File troppo grande (max 1 MB)",
+    "settings.upload.failed": "Caricamento non riuscito",
     "settings.upload.success": "Logo caricato",
     "settings.upload.cleared": "Logo rimosso — salva per applicare",
     "settings.upload.path_ph": "compilato automaticamente dopo il caricamento",
@@ -22725,6 +22731,7 @@ _I18N.setdefault("it", {}).update({
 
 _I18N.setdefault("pl", {}).update({
     "settings.upload.too_large": "Plik jest za duży (maks. 1 MB)",
+    "settings.upload.failed": "Nie udało się przesłać pliku",
     "settings.upload.success": "Logo przesłane",
     "settings.upload.cleared": "Logo usunięte — zapisz, aby zastosować",
     "settings.upload.path_ph": "uzupełniane automatycznie po przesłaniu",
@@ -22732,6 +22739,7 @@ _I18N.setdefault("pl", {}).update({
 
 _I18N.setdefault("cs", {}).update({
     "settings.upload.too_large": "Soubor je příliš velký (max. 1 MB)",
+    "settings.upload.failed": "Nahrání se nezdařilo",
     "settings.upload.success": "Logo nahráno",
     "settings.upload.cleared": "Logo odebráno — uložte pro použití",
     "settings.upload.path_ph": "vyplní se automaticky po nahrání",
@@ -22739,6 +22747,7 @@ _I18N.setdefault("cs", {}).update({
 
 _I18N.setdefault("ru", {}).update({
     "settings.upload.too_large": "Файл слишком большой (макс. 1 МБ)",
+    "settings.upload.failed": "Не удалось загрузить файл",
     "settings.upload.success": "Логотип загружен",
     "settings.upload.cleared": "Логотип удалён — сохраните, чтобы применить",
     "settings.upload.path_ph": "заполняется автоматически после загрузки",

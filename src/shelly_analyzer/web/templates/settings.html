@@ -269,7 +269,7 @@ async function uploadLogo(fileInput, settingsKey) {
       toast("✓ " + T("settings.upload.success","Logo uploaded"));
       reload();
     } else {
-      toast(j.error || "Upload failed", "error");
+      toast(j.error || T("settings.upload.failed","Upload failed"), "error");
     }
   } catch(e) { toast(e.message, "error"); }
 }
@@ -3050,7 +3050,7 @@ async function runHealthCheck() {
       </div>`;
     }).join("");
     el.innerHTML = rows + `<p class="hint" style="margin-top:8px">Aktualisiert: ${new Date(j.ts*1000).toLocaleTimeString()}</p>`;
-  } catch(e) { el.innerHTML = `<p class="hint">Fehler: ${e.message}</p>`; }
+  } catch(e) { el.innerHTML = `<p class="hint">${T("settings.toast.error","Error: {err}",{err:e.message})}</p>`; }
 }
 
 const GROUP_KEYS = {
@@ -3266,14 +3266,14 @@ async function discoverDevices() {
   try {
     const r = await fetch(seaUrl("/api/devices/discover?timeout=5"),{method:"POST"});
     const j = await r.json();
-    if (!j.ok) { results.innerHTML = `<p class="hint">Fehler: ${j.error}</p>`; return; }
+    if (!j.ok) { results.innerHTML = `<p class="hint">${T("settings.toast.error","Error: {err}",{err:j.error})}</p>`; return; }
     if (!j.devices.length) { results.innerHTML = `<p class="hint">${T("settings.devices.none","No devices found")}</p>`; return; }
     results.innerHTML = j.devices.map(d=>`
       <div class="devcard">
         <div class="info"><h4>${d.name||d.host}</h4><p>${d.host} · ${d.kind} · ${d.model||""}</p></div>
         <button class="small" ${d.already_added?"disabled":""} onclick='addDiscovered(${JSON.stringify(d).replace(/'/g,"&#39;")})'>${d.already_added?"✓":"➕"}</button>
       </div>`).join("");
-  } catch(e) { results.innerHTML = `<p class="hint">Fehler: ${e.message}</p>`; }
+  } catch(e) { results.innerHTML = `<p class="hint">${T("settings.toast.error","Error: {err}",{err:e.message})}</p>`; }
 }
 
 async function addDiscovered(dev) {
