@@ -888,10 +888,37 @@ The GitHub Actions workflow will automatically build the release ZIP and publish
 
 ---
 
+## Network connections and privacy
+
+The dashboard runs entirely on your own machine. All scripts, styles, fonts and charts of the web interface are served by the app itself (the chart library comes with the `plotly` Python package); no page loads anything from a CDN or another third-party host. Your readings, database and configuration stay on your machine.
+
+**Never sent:** there is no telemetry, no analytics, no crash reporting and no account. The app does not contact any server of the developer.
+
+**Always local:** the connections to your Shelly devices, to a Home Assistant or Modbus PV source and to your own MQTT broker, InfluxDB or mail server stay on the networks you configure.
+
+**Optional outbound connections.** Each of these happens only when you switch the feature on (all of them are off by default unless noted):
+
+| Feature | Contacts | What is sent |
+|---|---|---|
+| Update check (local ZIP/git installs, **on by default**) | GitHub (`api.github.com`), every 30 minutes, started 5 seconds after launch | an ordinary HTTPS request for the latest releases of the configured repository; your IP address is visible to GitHub as with any web request |
+| Spot prices (`spot_price.enabled`) | Energy-Charts, aWATTar, EIA (needs your key) or AEMO, depending on the chosen provider; Frankfurter for the EUR exchange rate of non-EUR zones | the bidding zone (and your key for EIA) |
+| Grid CO₂ (`co2.enabled`) | ENTSO-E (token) or Electricity Maps (key); Open-Meteo for the CO₂ forecast | the zone, your token or key; for Open-Meteo the centre coordinates of the zone, rounded to 0.01° |
+| Weather (`weather.enabled`) | Open-Meteo (default), MET Norway or OpenWeatherMap (key), as chosen; OpenWeatherMap geocoding when you look up a city | the latitude/longitude from Settings (and the key, or the city name for geocoding) |
+| Solar outlook (PV system set up) | Open-Meteo | hourly irradiance request for the weather location from Settings, or the centre of the selected bidding zone if none is set, rounded to 0.001° |
+| US utility rate (see above) | OpenEI | only as described in the privacy note above |
+| Notifications (Telegram, e-mail) | the Telegram Bot API, or the SMTP server you enter | the notification text, your bot token or mail login |
+| AI Energy Advisor | a local language-model endpoint (default `127.0.0.1`), or a cloud language-model API if you pick one and enter a key | the advisor prompt and your key |
+| Container image with Tailscale | Tailscale, only if you give the container a key or identity | the usual Tailscale traffic of a device on your own tailnet |
+| Container updates | the container registry, by the Watchtower container of `docker-compose.yml` (optional, nightly) | an image pull |
+
+**Switching the update check off:** untick *Check on start* under Settings → Updates (`updates.check_on_start` in `config.json`). In the Docker image and in the Home Assistant add-on the in-app update check does not run at all. With the option off, GitHub is still contacted when you open the Updates section of the settings, press *Check now* or install a version.
+
+---
+
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
 ---
 
-Copyright (c) 2026 Robert Manuwald. Free to use. See `LICENSE` for details.
+Copyright (c) 2026 Robert Manuwald. Free to use. See `LICENSE` for details. Third-party components and their licences are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

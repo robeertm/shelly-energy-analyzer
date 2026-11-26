@@ -7,6 +7,7 @@ data
 exports
 *.md
 !README.md
+!THIRD-PARTY-NOTICES.md
 .gitignore
 .claude
 CLAUDE.md

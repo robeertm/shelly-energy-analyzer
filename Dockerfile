@@ -62,6 +62,11 @@ WORKDIR /app
 COPY . /app
 RUN pip install .
 
+# Licence and third-party notices travel with the image (see
+# scripts/drittlizenzen.py, which writes THIRD-PARTY-NOTICES.md).
+RUN mkdir -p /usr/share/doc/shelly-energy-analyzer \
+    && cp LICENSE THIRD-PARTY-NOTICES.md /usr/share/doc/shelly-energy-analyzer/
+
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 

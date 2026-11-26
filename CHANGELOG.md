@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Third-party notices.** `THIRD-PARTY-NOTICES.md` lists every Python dependency (including what pip installs for them), the bundled chart library and the extra parts of the container image with their licences and licence texts. `scripts/drittlizenzen.py` generates it from `requirements.txt`, `pyproject.toml` and the installed package metadata; `tests/test_third_party_notices.py` fails when a dependency is missing from the file. The container image and the source distribution now carry the licence and the notices.
+- **README: "Network connections and privacy".** Lists the optional outbound connections (update check, price, CO2, weather and solar data sources, notifications, AI advisor, container extras), what is never sent and how to switch the update check off.
+
 ## 17.11.12
 
 ### Fixed
