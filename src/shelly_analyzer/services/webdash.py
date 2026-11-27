@@ -2256,6 +2256,13 @@ _HTML_TEMPLATE = """<!doctype html>
       .solar-fc-table {{ font-size:11px; }}
       .co2-origin-table .col-pct, .co2-origin-table .col-fac {{ display:none; }}
       .co2-origin-table {{ font-size:11px; }}
+      /* Tables that are wider than a phone card: tighten cells so every column stays inside the card */
+      table.fit-table {{ display:table !important; table-layout:auto; width:100%; max-width:100%; overflow:visible !important; white-space:normal !important; }}
+      table.fit-table th, table.fit-table td {{ padding:4px 3px !important; font-size:11px !important; letter-spacing:0; overflow-wrap:normal; }}
+      table.fit-table select {{ width:92px; max-width:100%; min-width:0; text-overflow:ellipsis; padding:4px 2px; }}
+      /* Last card of an odd metric row spans the full width (no half row) */
+      .metric-grid > .metric-card:last-child:nth-child(odd) {{ grid-column: 1 / -1; }}
+      #update-banner {{ min-height:44px; box-sizing:border-box; display:flex; align-items:center; flex-wrap:wrap; }}
     }}
     .nilm-two-col {{
       display: grid;
@@ -8063,7 +8070,7 @@ function _co2OriginHtml(FP, period, data) {{
       + '<td style="text-align:right;padding:5px 4px;font-weight:650">' + kg.toFixed(2) + ' kg</td>'
       + '<td class="col-pct" style="text-align:right;padding:5px 4px;color:var(--muted)">' + pct(kg).toFixed(0) + '%</td></tr>';
   }};
-  h += '<div style="overflow-x:auto"><table class="co2-origin-table" style="width:100%;font-size:12px;border-collapse:collapse;margin-top:8px">';
+  h += '<div style="overflow-x:auto"><table class="co2-origin-table fit-table" style="width:100%;font-size:12px;border-collapse:collapse;margin-top:8px">';
   h += '<tr style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.4px"><th style="text-align:left;padding:2px 4px">' + t('web.co2.origin_col', 'Origin') + '</th><th style="text-align:right;padding:2px 4px">kWh</th><th style="text-align:right;padding:2px 4px">g/kWh</th><th style="text-align:right;padding:2px 4px">CO₂</th><th style="text-align:right;padding:2px 4px">%</th></tr>';
   h += row(SRC_COL.grid, t('web.co2.src_grid_import', 'Grid import'), F.grid_import_kwh, (F.grid_intensity||0).toFixed(0), gK, t('web.co2.src_grid_note', 'hourly grid mix (ENTSO-E)'));
   h += row(SRC_COL.solar, t('web.co2.src_pv_direct', 'PV used directly'), F.self_consumption_kwh, (F.pv_mfg_g_per_kwh||data.pv_embodied_g_per_kwh||0).toFixed(0), pK, t('web.co2.src_pv_note', 'manufacturing of the panels, per kWh produced'));
@@ -9440,7 +9447,7 @@ function initCompare() {{
     qhtml += '<button class="btn btn-outline btn-sm" onclick="loadComparePreset(\\'' + p[0] + '\\')">' + p[1] + '</button>';
   }});
   qhtml += '<label style="display:inline-flex;align-items:center;gap:4px;margin-left:12px;font-size:12px;cursor:pointer">' +
-    '<input type="checkbox" id="cmp-spot" onchange="loadCompare()"> \u26a1 ' + t('compare.vs_dynamic', 'vs. dynamic tariff') + '</label>';
+    '<input type="checkbox" id="cmp-spot" onchange="loadCompare()"> ' + t('compare.vs_dynamic', 'vs. dynamic tariff') + '</label>';
   qhtml += '</div>';
   quick.innerHTML = qhtml;
 }}
@@ -9771,7 +9778,7 @@ function renderAnomalies(data, el) {{
   html += '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">';
   html += '<span class="badge ' + (enabled ? 'badge-green' : 'badge-red') + '">' +
     (enabled ? t('web.dash.anomaly_enabled', 'Enabled') : t('web.dash.anomaly_disabled', 'Disabled')) + '</span>';
-  if (data.model) html += '<span class="badge badge-yellow">' + esc(data.model) + '</span>';
+  if (data.model) html += '<span class="badge badge-yellow">' + esc(t('anomaly.model.' + data.model, String(data.model).replace(/_/g, ' '))) + '</span>';
   if (data.sigma_threshold) html += '<span class="badge badge-yellow">\u03c3 \u2265 ' + data.sigma_threshold + '</span>';
   html += '<span class="badge badge-yellow">' + (data.total_count||0) + ' Events</span>';
   html += '</div>';
@@ -11816,6 +11823,7 @@ _loadLsSettings();
     // Die synthetische Vorzeit-Stufe (Notiz ":pre", ts=1) gehoert nicht in die
     // Kurve — sie wuerde die Zeitachse bis 1970 aufziehen.
     const real = (history || []).filter(h => !String(h.note || '').endsWith(':pre'));
+    if (!(history || []).length) return '';   // the table below already says "no entries yet"
     if (!real.length) {{
       return '<div style="color:var(--muted);font-size:12px;text-align:center;padding:30px 0">' +
         t('calibration.no_data', 'No calibration entries yet.') + '</div>';
@@ -11944,7 +11952,7 @@ _loadLsSettings();
     html += '<button class="btn btn-sm" onclick="addMainMeter()">➕ ' + t('cal.add_meter', 'Hauptzähler hinzufügen') + '</button>';
     html += '</div>';
     if (devs.length) {{
-      html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table style="width:100%;border-collapse:collapse;font-size:13px">';
+      html += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="fit-table" style="width:100%;border-collapse:collapse;font-size:13px">';
       html += '<tr style="color:var(--muted);font-size:11px;text-transform:uppercase">' +
         '<th style="text-align:left;padding:4px 6px">' + t('cal.device', 'Gerät') + '</th>' +
         '<th style="text-align:left;padding:4px 6px">' + t('cal.type', 'Typ') + '</th>' +

@@ -2,10 +2,22 @@
 
 ## [Unreleased]
 
+## 17.12.1
+
+
 ### Changed
 
 - **Tests and release checks (no change to the app):** the full walkthrough before a promotion now runs its four independent stages (API tour, browser walkthrough, disk-write budget, resource budget) as parallel jobs, about 11 minutes instead of 33; the quick run on every push splits the same way (browser guards, write budget, resource budget). Choosing the previous published version for the upgrade probe no longer asks the registry about every old tag (about 2.5 minutes saved).
 - The 390 px phone layout guards wait until the page is quiet (no request in flight, no DOM change, fonts ready) instead of fixed pauses, which made them fail on a busy machine while a device list was still empty. The live-state cost comparisons use the cheapest of several CPU-time runs.
+
+### Fixed
+
+- Phone layout: the table headers of Calibration (Device / Net view columns) and CO₂ (Origin table) no longer run out of the card; cells are tightened so every column stays inside it.
+- Phone layout: the last card of an odd Key-figure row (Solar, CO₂, EV Log, Weather, Control) spans the full width instead of sitting alone beside an empty slot.
+- Anomalies: the detection model shows a readable name in all nine languages instead of the internal identifier.
+- Calibration: "No calibration entries yet." is shown once per device instead of twice.
+- Compare: the "vs. dynamic tariff" switch no longer shows the lightning symbol twice.
+- Phones: the update banner is a full 44 px touch target.
 
 ## 17.12.0
 
