@@ -57,6 +57,12 @@ button.secondary{background:var(--btn-sec-bg);color:var(--fg)}
 button.danger{background:var(--danger)}
 button.small{padding:4px 8px;font-size:.78rem}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;align-items:start}
+.grid2>*{min-width:0}
+select{max-width:100%;min-width:0}
+/* WebKit counts the option list of a select as invisible overflow (O1: 417 px at 390);
+   clip it at the field, focus ring drawn inside so the clip never cuts it */
+.field:has(>select){overflow-x:clip}
+.field>select:focus-visible{outline-offset:-2px}
 .section-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;
 padding-top:12px;border-top:1px solid var(--border)}
 .hint{font-size:.75rem;color:var(--muted);margin-top:2px}
@@ -120,6 +126,14 @@ input[type=checkbox],input[type=radio]{width:22px;height:22px}
 label:has(>input[type=checkbox]),label:has(>input[type=radio]),label.field.row{min-height:44px !important}
 main a[style*=padding],a.primary{min-height:44px !important;display:inline-flex !important;align-items:center}
 label:has(>input[type=checkbox]):not(.field),label:has(>input[type=radio]):not(.field){display:inline-flex;align-items:center;gap:8px}
+.dev-eye{min-width:44px;justify-content:center}
+.section-actions>.dev-actions{display:grid !important;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}
+.dev-actions>*{justify-content:center;text-align:center}
+.dev-actions #probe-ip{grid-column:1/-1;width:100% !important;order:-2}
+.dev-actions .dev-add{order:-1}
+.iw-actions{display:grid !important;grid-template-columns:1fr}
+.iw-actions>*{justify-content:center}
+a.ext-link{display:inline-flex;align-items:center;min-height:44px}
 }
 </style>
 </head>
@@ -897,7 +911,10 @@ function renderField(f) {
     input = `<input type="${tp}" ${step} data-key="${f.key}" value="${val===null||val===undefined?"":String(val).replace(/"/g,"&quot;")}">`;
   }
   const hint = f.hint ? `<div class="hint">${tHint(f)}</div>` : "";
-  return `<div class="field"><label>${label}</label>${input}${hint}</div>`;
+  // WebKit reports the option list of a select as overflow of its field (nothing visible is cut,
+  // the field clips it): the reason stands at the element for the layout check.
+  const selOk = String(input).trimStart().startsWith("<select") ? ' data-layout-ok="select option list counted as overflow by WebKit, nothing visible is cut"' : "";
+  return `<div class="field"${selOk}><label>${label}</label>${input}${hint}</div>`;
 }
 
 function renderUrdbBlock() {
@@ -1121,7 +1138,7 @@ function renderDevices() {
         <span class="drag-handle" draggable="true" title="${T("settings.devices.drag_hint","Drag to reorder")}" style="cursor:grab;font-size:18px;color:var(--muted);user-select:none;padding:2px 6px">⋮⋮</span>
         <span class="list-item-title"><span class="dot ${d.online?"online":""}" data-devdot="${esckey}"></span>${esc(d.name||d.key)}</span>
         <div style="display:flex;gap:6px;align-items:center">
-          <label title="${T("settings.devices.show_on_live","Show on Live tab")}" style="display:inline-flex;align-items:center;gap:4px;font-size:.78rem;color:var(--muted);cursor:pointer">
+          <label class="dev-eye" title="${T("settings.devices.show_on_live","Show on Live tab")}" style="display:inline-flex;align-items:center;gap:4px;font-size:.78rem;color:var(--muted);cursor:pointer">
             <input type="checkbox" ${isHidden?"":"checked"} onchange="toggleDevHidden('${esckey}')" style="margin:0">
             👁
           </label>
@@ -1165,10 +1182,10 @@ function renderDevices() {
     <p class="hint" style="margin:-4px 0 8px 0">${T("settings.devices.hint_reorder","Drag the ⋮⋮ handle to reorder devices on the Live tab. Toggle 👁 to hide a device from the Live tab without deleting its data.")}</p>
     <div id="devices-list" style="display:flex;flex-direction:column;gap:8px">${rows || `<p class='hint'>${T("settings.health.no_devices","No devices configured")}</p>`}</div>
     <div class="section-actions" style="justify-content:space-between;flex-wrap:wrap">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <div class="dev-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="secondary" onclick="discoverDevices()">🔍 mDNS Scan</button>
         <input id="probe-ip" type="text" placeholder="${T("settings.devices.ip_placeholder","IP address")}" style="width:160px">
-        <button class="secondary" onclick="addByIp()">➕ ${T("settings.devices.add","Add")}</button>
+        <button class="secondary dev-add" onclick="addByIp()">➕ ${T("settings.devices.add","Add")}</button>
         <button class="secondary" onclick="probeAllDevices()">🔌 ${T("settings.devices.probe_all","Probe all")}</button>
         <a href="${seaUrl('/setup')}" style="display:inline-flex;align-items:center;gap:4px;padding:8px 14px;border:1px solid var(--border);background:var(--btn-sec-bg);color:var(--fg);border-radius:6px;font-size:.88rem;text-decoration:none">🪄 ${T("settings.devices.wizard","Setup wizard")}</a>
       </div>
@@ -1338,7 +1355,7 @@ function renderIosWidget() {
     +'<li>'+T("settings.ios_widget.step5","Pick the script and set Parameter to:")
     +' <code style="background:var(--input-bg);padding:2px 8px;border-radius:4px;font-size:.85rem;user-select:all">'+esc(host)+'</code></li>'
     +'</ol>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'
+    +'<div class="iw-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'
     +'<button class="primary" onclick="widgetCopyDefault()">'+T("settings.ios_widget.btn_copy","Copy default script")+'</button>'
     +'<button class="secondary" onclick="widgetPreview(-1)">'+T("settings.widget.preview","Preview")+'</button>'
     +'<button class="secondary" onclick="window.open(seaUrl(\'/widget.js\'),\'_blank\')">'+T("settings.ios_widget.btn_download","Download .js")+'</button>'
@@ -1795,7 +1812,7 @@ function renderSupportedDevices() {
           totalShown += items.length;
           html += `<div style="margin-bottom:16px">
             <h3 style="font-size:.85rem;color:var(--accent);margin:0 0 8px;padding-bottom:4px;border-bottom:1px solid var(--border)">${esc(serLabels[series]||series)} <span style="color:var(--muted);font-weight:400">(${items.length})</span></h3>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">`;
+            <div data-layout-ok="catalogue of device models: the last row holds whatever count is left" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">`;
           items.forEach(d => {
             const badges = [];
             if (d.has_power_metering) badges.push('<span style="background:rgba(34,197,94,.15);color:#22c55e;padding:1px 6px;border-radius:4px;font-size:.7rem">⚡ Power</span>');
@@ -1857,7 +1874,7 @@ function renderAbout() {
     <div style="margin-top:14px;padding:12px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--card-bg,rgba(59,130,246,0.05))">
       <div style="font-weight:600;margin-bottom:4px">🚗 EV Charge Tracker</div>
       <div class="hint">${T("settings.about.companion", "Charge a car at home? The EV Charge Tracker keeps its charges, trips and costs \u2014 and can pull the measurement of every wallbox charge from here, including the split into sun, battery and grid. Free, self-hosted, by the same author.")}</div>
-      <div style="margin-top:6px"><a href="https://github.com/robeertm/ev-charge-tracker" target="_blank" rel="noopener">github.com/robeertm/ev-charge-tracker</a></div>
+      <div style="margin-top:6px"><a class="ext-link" href="https://github.com/robeertm/ev-charge-tracker" target="_blank" rel="noopener">${T("settings.about.companion_link","EV Charge Tracker project page")} ↗</a></div>
     </div>
   </section>`;
 }
@@ -3147,10 +3164,17 @@ function navigateHash(scroll) {
   _markSection(id);
   if (!scroll) return;
   if (!id) { window.scrollTo(0, 0); return; }
+  // Instant jump, repeated once: WebKit dropped a smooth scroll that started
+  // right after the hash change, and cards above may still grow (async loads).
+  const jump = () => {
+    const t = document.getElementById("sec-" + id);
+    if (t && Math.abs(t.getBoundingClientRect().top - 60) > 4) t.scrollIntoView({block: "start"});
+  };
+  setTimeout(jump, 400);
   setTimeout(() => {
     const target = document.getElementById("sec-" + id);
     if (!target) return;
-    target.scrollIntoView({behavior: "smooth", block: "start"});
+    target.scrollIntoView({block: "start"});
     target.style.transition = "background 0.3s ease";
     const oldBg = target.style.background;
     target.style.background = "rgba(76,175,80,0.12)";

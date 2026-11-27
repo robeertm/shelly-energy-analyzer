@@ -32141,3 +32141,15 @@ for _l, (_show_all, _groups) in {
     "ru": ("Показать все", "Группы настроек"),
 }.items():
     _I18N.setdefault(_l, {}).update({"settings.nav.show_all": _show_all, "settings.nav.groups": _groups})
+for _l, _txt in {
+    "en": "EV Charge Tracker project page",
+    "de": "Projektseite des EV Charge Trackers",
+    "es": "Página del proyecto EV Charge Tracker",
+    "fr": "Page du projet EV Charge Tracker",
+    "pt": "Página do projeto EV Charge Tracker",
+    "it": "Pagina del progetto EV Charge Tracker",
+    "pl": "Strona projektu EV Charge Tracker",
+    "cs": "Stránka projektu EV Charge Tracker",
+    "ru": "Страница проекта EV Charge Tracker",
+}.items():
+    _I18N.setdefault(_l, {})["settings.about.companion_link"] = _txt
