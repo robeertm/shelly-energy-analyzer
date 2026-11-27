@@ -24,11 +24,15 @@ header h1{font-size:1rem;margin:0;flex:1;font-weight:600}
 .layout{display:flex;min-height:calc(100vh - 50px)}
 .sidebar{width:240px;background:var(--card);border-right:1px solid var(--border);
 padding:12px 0;overflow-y:auto;position:sticky;top:50px;max-height:calc(100vh - 50px);flex-shrink:0}
-.sidebar h3{font-size:.7rem;text-transform:uppercase;color:var(--muted);
-padding:8px 16px 4px;margin:0;letter-spacing:.05em}
 .sidebar a{display:block;padding:7px 16px;color:var(--fg);font-size:.88rem;border-left:3px solid transparent}
 .sidebar a:hover{background:var(--hover-bg)}
 .sidebar a.active{background:var(--active-bg);border-left-color:var(--accent);color:var(--accent)}
+/* Group pages (#25): a group heading is a link that shows only that group's cards */
+.sidebar a.grp{font-size:.7rem;text-transform:uppercase;color:var(--muted);letter-spacing:.05em;
+font-weight:600;padding:10px 16px 5px;margin-top:4px}
+.sidebar a.grp.active{color:var(--accent);background:var(--active-bg);border-left-color:var(--accent)}
+.sidebar a.grp-all{font-size:.88rem;text-transform:none;letter-spacing:0;font-weight:500;color:var(--fg);
+padding:7px 16px;margin:0 0 6px;border-bottom:1px solid var(--border)}
 main{flex:1;padding:20px;max-width:900px;min-width:0}
 section{margin-bottom:30px;background:var(--card);border:1px solid var(--border);
 border-radius:12px;padding:16px 20px;scroll-margin-top:60px}
@@ -88,18 +92,23 @@ opacity:0;transform:translateY(10px);transition:all .2s}
 @media(max-width:760px){
 .layout{flex-direction:column;max-width:100%;overflow-x:clip}
 .layout>*{min-width:0;max-width:100%}
-.sidebar{width:100%;position:sticky;top:50px;max-height:none;display:flex;flex-wrap:nowrap;
-padding:6px 8px;overflow-x:auto;overflow-y:hidden;gap:4px;z-index:40;scrollbar-width:thin;
+/* Phone/tablet: the group links become a tab grid that wraps (no sideways scrolling);
+   the single-card links stay on the wide menu only, the cards of the group follow below */
+.sidebar{width:100%;position:static;max-height:none;display:grid;
+grid-template-columns:repeat(3,minmax(0,1fr));padding:8px;overflow:visible;gap:6px;
 border-right:none;border-bottom:1px solid var(--border)}
-.sidebar::-webkit-scrollbar{height:4px}
-.sidebar h3{display:none}
-.sidebar a{border-left:none;border-bottom:2px solid transparent;padding:6px 12px;
-white-space:nowrap;font-size:.82rem;flex-shrink:0;border-radius:4px}
-.sidebar a.active{border-left:none;border-bottom-color:var(--accent);background:var(--active-bg)}
+.layout .sidebar a.sec{display:none}
+.layout .sidebar a.grp,.layout .sidebar a.grp-all{display:flex;align-items:center;justify-content:center;text-align:center;
+margin:0;padding:6px 8px;min-height:44px;border:1px solid var(--border);border-radius:10px;
+font-size:.82rem;font-weight:500;text-transform:none;letter-spacing:0;color:var(--fg);
+background:var(--input-bg);line-height:1.2;overflow-wrap:break-word}
+.layout .sidebar a.grp-all{grid-column:1/-1;order:99}
+.layout .sidebar a.grp.active,.layout .sidebar a.grp-all.active{border-color:var(--accent);color:var(--accent);background:var(--active-bg)}
 .grid2{grid-template-columns:1fr}
 main{padding:12px}
 section{padding:14px}
 }
+@media(max-width:480px){.sidebar{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* Narrow screens (phone): touch targets >= 44 px, inputs >= 16 px so iOS does not zoom (H1) */
 @media(max-width:640px){
 .list-item-hdr{flex-wrap:wrap}
@@ -3060,18 +3069,101 @@ const GROUP_KEYS = {
   "Energy":"energy", "Advanced":"advanced"
 };
 function tSection(s) { return T("settings.section."+s.id, s.title); }
-function tGroup(g) { return T("settings.group."+(GROUP_KEYS[g]||g), g); }
+function tGroup(g) { return T("settings.group."+_grpKey(g), g); }
+
+// ── Group pages (issue #25) ─────────────────────────────────────────────
+// The page shows one group of cards at a time, along the groups of the menu.
+// Every group has its own address (#grp-<key>, #grp-all = every card) and the
+// card links (#sec-<id>) pick their group by themselves, so bookmarks and the
+// links from the dashboard keep working. Cards of the other groups are only
+// hidden (one generated style rule), never removed: saving reads the cards
+// from the page and a card re-render must not bring a hidden card back.
+// GROUP-LOGIC-BEGIN
+function _grpKey(g) { return GROUP_KEYS[g] || String(g || "").toLowerCase(); }
+function groupOrder() {
+  const out = [];
+  SECTIONS.forEach(s => { const k = _grpKey(s.group); if (!out.includes(k)) out.push(k); });
+  return out;
+}
+function groupOfSection(id) {
+  const s = SECTIONS.find(x => x.id === id);
+  return s ? _grpKey(s.group) : null;
+}
+function groupFromHash(hash) {
+  const h = String(hash || "").replace(/^#/, "");
+  if (h.indexOf("grp-") === 0) {
+    const k = h.slice(4);
+    return (k === "all" || groupOrder().includes(k)) ? k : null;
+  }
+  if (h.indexOf("sec-") === 0) return groupOfSection(h.slice(4));
+  return null;
+}
+function hiddenSectionIds(key) {
+  if (key === "all") return [];
+  return SECTIONS.filter(s => _grpKey(s.group) !== key).map(s => s.id);
+}
+// GROUP-LOGIC-END
+let activeGroup = null;
 
 function renderNav() {
   const groups = {};
-  SECTIONS.forEach(s=>{(groups[s.group]=groups[s.group]||[]).push(s)});
-  let html = "";
-  for (const [grp, secs] of Object.entries(groups)) {
-    html += `<h3>${tGroup(grp)}</h3>`;
-    html += secs.map(s=>`<a href="#sec-${s.id}">${tSection(s)}</a>`).join("");
+  SECTIONS.forEach(s=>{(groups[_grpKey(s.group)]=groups[_grpKey(s.group)]||{name:s.group, secs:[]}).secs.push(s)});
+  let html = `<a href="#grp-all" class="grp-all" data-grp="all">${T("settings.nav.show_all","Show all")}</a>`;
+  for (const [key, g] of Object.entries(groups)) {
+    html += `<a href="#grp-${key}" class="grp" data-grp="${key}">${tGroup(g.name)}</a>`;
+    html += g.secs.map(s=>`<a href="#sec-${s.id}" class="sec" data-sec="${s.id}" data-grp="${key}">${tSection(s)}</a>`).join("");
   }
-  $("#nav").innerHTML = html;
+  const nav = $("#nav");
+  nav.innerHTML = html;
+  nav.setAttribute("aria-label", T("settings.nav.groups", "Settings groups"));
 }
+
+function applyGroup(key) {
+  const order = groupOrder();
+  if (key !== "all" && !order.includes(key)) key = order[0];
+  activeGroup = key;
+  let st = document.getElementById("grp-filter");
+  if (!st) { st = document.createElement("style"); st.id = "grp-filter"; document.head.appendChild(st); }
+  const hide = hiddenSectionIds(key).map(id => "#sec-" + id);
+  st.textContent = hide.length ? hide.join(",") + "{display:none!important}" : "";
+  $$("#nav a.grp, #nav a.grp-all").forEach(a => {
+    const on = a.dataset.grp === key;
+    a.classList.toggle("active", on);
+    if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  });
+}
+
+function _markSection(id) {
+  $$("#nav a.sec").forEach(a => a.classList.toggle("active", !!id && a.dataset.sec === id));
+}
+
+// Follow the address: pick the group, then jump to the card (with a short
+// green flash) or to the top of the group. scroll=false keeps the position
+// (a re-render after saving).
+function navigateHash(scroll) {
+  const h = location.hash || "";
+  applyGroup(groupFromHash(h) || activeGroup || groupOrder()[0]);
+  const id = h.indexOf("#sec-") === 0 ? h.slice(5) : null;
+  _markSection(id);
+  if (!scroll) return;
+  if (!id) { window.scrollTo(0, 0); return; }
+  setTimeout(() => {
+    const target = document.getElementById("sec-" + id);
+    if (!target) return;
+    target.scrollIntoView({behavior: "smooth", block: "start"});
+    target.style.transition = "background 0.3s ease";
+    const oldBg = target.style.background;
+    target.style.background = "rgba(76,175,80,0.12)";
+    setTimeout(() => { target.style.background = oldBg; }, 1500);
+  }, 50);
+}
+window.addEventListener("hashchange", () => navigateHash(true));
+// A second click on the link of the address that is already open fires no
+// hashchange; follow it all the same (jump back to the card or the top).
+document.addEventListener("click", ev => {
+  const a = ev.target.closest && ev.target.closest("#nav a[href^='#']");
+  if (a && a.getAttribute("href") === location.hash) { ev.preventDefault(); navigateHash(true); }
+});
 
 function wireListEvents(root) {
   (root || document).querySelectorAll('.list-field[data-list="1"]').forEach(fld => {
@@ -3107,8 +3199,11 @@ function wireListEvents(root) {
   });
 }
 function renderAll() {
-  $("#main").innerHTML = SECTIONS.map(renderSection).join("");
+  // Cards in menu order (group by group), so "Show all" reads like the menu.
+  const ordered = groupOrder().flatMap(k => SECTIONS.filter(s => _grpKey(s.group) === k));
+  $("#main").innerHTML = ordered.map(renderSection).join("");
   renderNav();
+  navigateHash(activeGroup === null);
   wireListEvents($("#main"));
   // Fetch real app version
   fetch(seaUrl("/api/version")).then(r=>r.json()).then(v=>{
@@ -3156,21 +3251,9 @@ function renderAll() {
   _bindSpotApiChange();
   // PV-source preset dropdown + connection-method field visibility.
   _bindPvSourceChange();
-  // If the URL had a hash (e.g. /settings#sec-tenant), scroll to it
-  // explicitly — the browser doesn't re-trigger anchor jumps after we
-  // replace #main innerHTML async via reload().
-  if (location.hash && location.hash.length > 1) {
-    setTimeout(() => {
-      const target = document.querySelector(location.hash);
-      if (target) {
-        target.scrollIntoView({behavior: "smooth", block: "start"});
-        target.style.transition = "background 0.3s ease";
-        const oldBg = target.style.background;
-        target.style.background = "rgba(76,175,80,0.12)";
-        setTimeout(() => { target.style.background = oldBg; }, 1500);
-      }
-    }, 50);
-  }
+  // The jump to /settings#sec-... (or #grp-...) happens in navigateHash()
+  // above: the browser does not re-trigger anchor jumps after #main is
+  // filled async by reload().
 }
 
 function _bindSpotApiChange() {

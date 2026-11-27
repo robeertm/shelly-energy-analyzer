@@ -32125,3 +32125,19 @@ for _l, (_wait, _wait_title) in {
     "ru": ("Ожидание", "С момента запуска нет ответа. Ожидание первого измерения."),
 }.items():
     _I18N.setdefault(_l, {}).update({"live.cards.waiting": _wait, "live.cards.waiting_title": _wait_title})
+
+
+# 17.12.0 (issue #25): the settings page shows one group of cards at a time;
+# the menu gets a "Show all" entry and a name for screen readers.
+for _l, (_show_all, _groups) in {
+    "en": ("Show all", "Settings groups"),
+    "de": ("Alle anzeigen", "Einstellungsgruppen"),
+    "es": ("Mostrar todo", "Grupos de ajustes"),
+    "fr": ("Tout afficher", "Groupes de paramètres"),
+    "pt": ("Mostrar tudo", "Grupos de definições"),
+    "it": ("Mostra tutto", "Gruppi di impostazioni"),
+    "pl": ("Pokaż wszystko", "Grupy ustawień"),
+    "cs": ("Zobrazit vše", "Skupiny nastavení"),
+    "ru": ("Показать все", "Группы настроек"),
+}.items():
+    _I18N.setdefault(_l, {}).update({"settings.nav.show_all": _show_all, "settings.nav.groups": _groups})
