@@ -17,7 +17,7 @@ sys.path.insert(0, str(HERE.parents[1] / "scripts"))
 
 pytest.importorskip("playwright.sync_api")
 from common import ROOT, Server, make_tmp, rm_tree  # noqa: E402
-from layout_audit import audit_pane  # noqa: E402
+from layout_audit import TRACK_JS, audit_pane, wait_settled  # noqa: E402
 
 PANES = ("live costs heatmap nilm goals standby forecast co2 calibration solar sankey plots battery "
          "ev_log advisor anomalies compare control smart_sched sync tariff tenants weather").split()
@@ -38,15 +38,16 @@ def test_phone_layout_390(lang):
                 pytest.skip(f"no browser: {e}")
             ctx = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True, locale=lang)
             pg = ctx.new_page()
+            pg.add_init_script(TRACK_JS)
             pg.goto(s.url)
-            pg.wait_for_timeout(2500)
+            wait_settled(pg, timeout_ms=10000)
             for pane in PANES + ["settings"]:
                 if pane == "settings":
                     pg.goto(s.url + "/settings")
-                    pg.wait_for_timeout(2500)
+                    wait_settled(pg, timeout_ms=10000)
                 else:
                     pg.evaluate("(p)=>{const b=[...document.querySelectorAll('.nav-btn')].find(b=>(b.getAttribute('onclick')||'').includes(\"'\"+p+\"'\"));switchPane(p,b)}", pane)
-                    pg.wait_for_timeout(1500)
+                    wait_settled(pg, timeout_ms=10000)
                 r = audit_pane(pg)
                 for key in ("hscroll", "clipped", "small_targets", "small_inputs"):
                     if r[key]:

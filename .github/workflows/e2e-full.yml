@@ -1,4 +1,5 @@
-# Full customer walkthrough (about 25 minutes + 11 for the write budget): every pane, every Plots select
+# Full customer walkthrough (about 11 minutes wall clock, four independent jobs that run side by
+# side; 33 minutes when they ran one after the other): every pane, every Plots select
 # combination, control, settings and setup, in all languages, desktop and phone,
 # light and dark, plus the ingress pass, the full API tour and the disk-write
 # budget (tests/e2e/write_load.py, 10 minutes) and the resource budget
@@ -26,6 +27,30 @@ on:
     - cron: "17 3 * * 1"
 
 jobs:
+  # Four independent stages, one runner each. They share nothing, and the two budget
+  # stages measure the machine they run on (disk writes, CPU), so a runner of their own
+  # also keeps the walkthrough's browsers out of their numbers.
+  api-tour:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install ".[charts]"
+      - name: API tour (full)
+        run: python tests/e2e/api_tour.py --report e2e-full-api.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-full-report-api
+          path: e2e-full-*.json
+          if-no-files-found: ignore
+
   walkthrough-full:
     runs-on: ubuntu-latest
     timeout-minutes: 75
@@ -36,20 +61,57 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
       - run: pip install ".[charts]" pytest playwright
       - run: playwright install --with-deps chromium webkit
-      - name: API tour (full)
-        run: python tests/e2e/api_tour.py --report e2e-full-api.json
       - name: Browser walkthrough (full)
         run: python tests/e2e/walkthrough.py --report e2e-full-walkthrough.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-full-report-walkthrough
+          path: e2e-full-*.json
+          if-no-files-found: ignore
+
+  write-budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install ".[charts]"
       - run: sudo apt-get install -y --no-install-recommends strace
       - name: Disk-write budget (8 plugs at 1 s, 10 min, per file)
         run: python -m tests.e2e.write_load --minutes 10 --json e2e-full-writeload.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-full-report-writeload
+          path: e2e-full-*.json
+          if-no-files-found: ignore
+
+  resource-budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install ".[charts]"
       - name: Resource budget (8 plugs at 1 s, one core, 5 min)
         run: python -m tests.e2e.perf_bench --minutes 5 --json e2e-full-perf.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: e2e-full-report
+          name: e2e-full-report-perf
           path: e2e-full-*.json
           if-no-files-found: ignore

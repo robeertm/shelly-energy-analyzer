@@ -23,12 +23,26 @@ newest values as the expensive one, and it must not grow with the history.
 import os
 import sys
 import time
+from functools import lru_cache
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from shelly_analyzer.services.webdash import LivePoint, LiveStateStore
 
 
+def _best(fn, n=3):
+    """Cheapest of ``n`` runs in CPU time of this process: a run that was pre-empted or
+    starved on a busy machine must not decide a cost comparison (the bounds below stay
+    as they were).  The work measured is pure Python, so CPU time is the cost."""
+    best = float("inf")
+    for _ in range(n):
+        t0 = time.process_time()
+        fn()
+        best = min(best, time.process_time() - t0)
+    return best
+
+
+@lru_cache(maxsize=None)
 def _store(devices=6, points=7200):
     """A store shaped like the reported installation: several meters, a
     two-hour window at one sample a second."""
@@ -77,15 +91,7 @@ def test_it_does_not_grow_with_the_history():
     short = _store(devices=4, points=200)
     long_ = _store(devices=4, points=8000)
 
-    def _timed(store, n=5):
-        best = float("inf")
-        for _ in range(n):
-            t0 = time.perf_counter()
-            store.latest_snapshot()
-            best = min(best, time.perf_counter() - t0)
-        return best
-
-    t_short, t_long = _timed(short), _timed(long_)
+    t_short, t_long = _best(short.latest_snapshot), _best(long_.latest_snapshot)
     # 40× the history. Anything near linear means the full materialisation is
     # back; the bound is loose enough not to fail on a busy machine.
     assert t_long < t_short * 8 + 0.01, f"short {t_short:.4f}s  long {t_long:.4f}s"
@@ -93,8 +99,7 @@ def test_it_does_not_grow_with_the_history():
 
 def test_the_cheap_call_really_is_cheaper():
     st = _store(devices=4, points=8000)
-    t0 = time.perf_counter(); st.latest_snapshot(); t_latest = time.perf_counter() - t0
-    t0 = time.perf_counter(); st.snapshot();        t_full = time.perf_counter() - t0
+    t_latest, t_full = _best(st.latest_snapshot), _best(st.snapshot)
     assert t_latest * 10 < t_full, f"latest {t_latest:.4f}s  full {t_full:.4f}s"
 
 
@@ -148,8 +153,6 @@ def test_a_short_window_is_left_alone():
 
 def test_thinning_in_the_store_is_faster_than_building_everything():
     st = _store(devices=4, points=7200)
-    t0 = time.perf_counter(); st.snapshot(tail_full_s=1200, head_pts=700)
-    t_thin = time.perf_counter() - t0
-    t0 = time.perf_counter(); st.snapshot()
-    t_full = time.perf_counter() - t0
+    t_thin = _best(lambda: st.snapshot(tail_full_s=1200, head_pts=700))
+    t_full = _best(st.snapshot)
     assert t_thin * 2 < t_full, f"thinned {t_thin:.4f}s  full {t_full:.4f}s"

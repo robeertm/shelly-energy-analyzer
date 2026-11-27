@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Three independent jobs that run side by side (the quick run took about 18 minutes when the
+# browser walkthrough and the two process budgets ran one after the other on one runner).
+# The budget jobs measure the machine they run on, so each has a runner of its own and the
+# browsers stay out of their numbers. The job called `walkthrough` keeps its name.
 jobs:
   walkthrough:
     runs-on: ubuntu-latest
@@ -15,17 +19,51 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
       - run: pip install ".[charts]" pytest playwright
       - run: playwright install --with-deps chromium
-      - run: sudo apt-get install -y --no-install-recommends strace
-      - name: Run walkthrough, API tour, write-load and resource budgets (quick)
+      - name: Run walkthrough, API tour and the browser guards (quick)
         env:
           SEA_E2E: "1"
           SEA_E2E_REPORT: ${{ github.workspace }}/e2e-report.json
-        run: python -m pytest tests/e2e -q
+        run: >
+          python -m pytest tests/e2e -q
+          --ignore=tests/e2e/test_write_load_budget.py
+          --ignore=tests/e2e/test_perf_budget.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: e2e-report
           path: e2e-report*.json
           if-no-files-found: ignore
+
+  write-budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install ".[charts]" pytest
+      - run: sudo apt-get install -y --no-install-recommends strace
+      - name: Disk-write budget (quick)
+        env:
+          SEA_E2E: "1"
+        run: python -m pytest tests/e2e/test_write_load_budget.py -q
+
+  resource-budget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install ".[charts]" pytest
+      - name: Resource budget (quick)
+        env:
+          SEA_E2E: "1"
+        run: python -m pytest tests/e2e/test_perf_budget.py -q

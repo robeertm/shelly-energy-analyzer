@@ -111,12 +111,16 @@ jobs:
           SLUG="ghcr.io/${{ steps.repo.outputs.slug }}"
           NEU="${{ inputs.version }}"
           kandidat=""
-          for t in $(git tag --list 'v*' | sed 's/^v//' | sort -V); do
+          # Newest first, stop at the first tag that has an image: the answer is the same as
+          # walking all ~690 tags upwards and keeping the last hit, but costs one or two
+          # registry calls instead of one per tag (about 2.5 minutes before).
+          for t in $(git tag --list 'v*' | sed 's/^v//' | sort -rV); do
             [ "$t" = "$NEU" ] && continue
             kleiner="$(printf '%s\n%s\n' "$t" "$NEU" | sort -V | head -1)"
             [ "$kleiner" = "$t" ] || continue
             if retry_registry docker buildx imagetools inspect "$SLUG:$t" >/dev/null 2>&1; then
               kandidat="$t"
+              break
             fi
           done
           if [ -z "$kandidat" ]; then

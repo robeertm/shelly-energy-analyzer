@@ -13,6 +13,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 pytest.importorskip("playwright.sync_api")
 from common import ROOT, Server, make_tmp, rm_tree  # noqa: E402
+from layout_audit import TRACK_JS, wait_settled  # noqa: E402
 
 
 def test_settings_390_webkit_no_hscroll():
@@ -27,8 +28,9 @@ def test_settings_390_webkit_no_hscroll():
             except Exception as e:
                 pytest.skip(f"no webkit: {e}")
             pg = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True).new_page()
+            pg.add_init_script(TRACK_JS)
             pg.goto(s.url + "/settings")
-            pg.wait_for_timeout(2000)
+            wait_settled(pg)
             over = pg.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
             b.close()
         assert over <= 1, f"settings scrolls sideways by {over}px"
