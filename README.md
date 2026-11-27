@@ -231,7 +231,7 @@ digests, so they always add up.
 
 <p><img src="docs/screenshots/aurora_desktop_plots.png" width="640" alt="Plots"><br><sub><b>Plots</b> &mdash; One row per device, its metrics side by side.</sub></p>
 
-<p><img src="docs/screenshots/aurora_desktop_settings.png" width="640" alt="Settings"><br><sub><b>Settings</b> &mdash; Every option the app has, including the skin picker.</sub></p>
+<p><img src="docs/screenshots/aurora_desktop_settings.png" width="640" alt="Settings"><br><sub><b>Settings</b> &mdash; Every option the app has, including the skin picker, one group per page (each group has its own link; <i>Show all</i> brings back the long page).</sub></p>
 
 </details>
 
@@ -327,7 +327,7 @@ skin off the dashboard is byte-for-byte what it was — this is not a compatibil
 
 <p><img src="docs/screenshots/desktop_18_sync.png" width="640" alt="Sync"><br><sub><b>Sync</b></sub></p>
 
-<p><img src="docs/screenshots/desktop_19_settings.png" width="640" alt="Settings"><br><sub><b>Settings</b></sub></p>
+<p><img src="docs/screenshots/desktop_19_settings.png" width="640" alt="Settings"><br><sub><b>Settings</b> &mdash; The Notifications group on its own page</sub></p>
 
 <p><img src="docs/screenshots/desktop_01_live_detail.png" width="640" alt="Live detail"><br><sub><b>Live (chart zoom)</b></sub></p>
 

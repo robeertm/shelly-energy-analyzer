@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## 17.12.0
+
+### Changed
+
+- **Settings: one group per page.** The settings page no longer shows every card on one long page. The group headings of the menu (Basic settings, Advanced, Notifications, Integrations, Energy, Features) are links that show only that group's cards; a card entry switches to its group and jumps to the card. The menu marks the open group and card. "Show all" at the top of the menu brings back the long page, now in menu order (Advanced cards follow Basic settings instead of coming last). Every group has its own address to bookmark (`/settings#grp-notify`, `#grp-energy`, `#grp-all`, ...); existing card links such as `/settings#sec-updates` pick their group by themselves. Settings and how they are saved are unchanged.
+- **Phones:** the group links form a grid of touch-sized tabs that wraps instead of scrolling sideways; the cards of the open group follow below.
+
+### Fixed
+
+- Settings at 390 px: the device action buttons and the iOS widget buttons no longer leave a single button on its own row, the "show on Live tab" toggle is 44 px wide, and the long inverter preset list no longer pushes the page sideways in WebKit.
+- Settings → About: the companion link reads as a name instead of a bare web address (all nine languages).
+- The "Features" group heading was not translated (it looked up a key that does not exist); it now uses the existing translations.
+
 ## 17.11.13
 
 ### Added

@@ -106,6 +106,11 @@ def capture(OUT: Path, ONLY: set) -> None:
             pg.evaluate("document.querySelector('#sec-tools_exports').scrollIntoView()"); pg.wait_for_timeout(500)
             box=pg.locator('#sec-tools_exports').bounding_box()
             pg.screenshot(path=OUT/'desktop_15_export.png', clip={'x':box['x']-10,'y':box['y']-10,'width':box['width']+20,'height':540})
+        if want('desktop_19_settings'):
+            # one group per page: the Notifications group with its menu entry marked
+            pg.set_viewport_size({'width':1510,'height':1000})
+            pg.goto(URL+'settings#grp-notify'); pg.wait_for_timeout(5000)
+            pg.screenshot(path=OUT/'desktop_19_settings.png')
         ctx.close()
         ctx=b.new_context(viewport={'width':1920,'height':1080},device_scale_factor=2,color_scheme='dark',locale='en-US')
         pg=ctx.new_page()
