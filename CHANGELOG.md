@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Tests (no change to the app):** 102 new checks for the places where a mistake costs money or data: the tariff comparison, the energy calculation and CSV reader, the release-ZIP update (user data, settings and logs stay untouched) and the storage layer (duplicate chunks, device removal, CSV migration, archive and re-import).
+
 ## 17.12.1
 
 
